@@ -29,12 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bottomPanel.setMmdManager(mmdManager);
 
   // Initialize UI controller (connects everything)
-  const uiController = new UIController(mmdManager, timeline, bottomPanel);
-
-  // Handle window resize
-  window.addEventListener("resize", () => {
-    mmdManager.resize();
-  });
+  new UIController(mmdManager, timeline, bottomPanel);
 
   console.log("🎬 MMD Motion Editor initialized");
 });

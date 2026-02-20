@@ -28,6 +28,8 @@ export class UIController {
     private statusDot: HTMLElement;
     private viewportOverlay: HTMLElement;
     private modelSelect: HTMLSelectElement;
+    private camFovSlider: HTMLInputElement | null = null;
+    private camFovValueEl: HTMLElement | null = null;
 
     constructor(mmdManager: MmdManager, timeline: Timeline, bottomPanel: BottomPanel) {
         this.mmdManager = mmdManager;
@@ -111,6 +113,7 @@ export class UIController {
         const camRotY = document.getElementById("cam-rot-y") as HTMLInputElement;
         const camRotZ = document.getElementById("cam-rot-z") as HTMLInputElement;
         const camFov = document.getElementById("cam-fov") as HTMLInputElement;
+        this.camFovSlider = camFov;
 
         const camPosXVal = document.getElementById("cam-pos-x-val")!;
         const camPosYVal = document.getElementById("cam-pos-y-val")!;
@@ -119,6 +122,7 @@ export class UIController {
         const camRotYVal = document.getElementById("cam-rot-y-val")!;
         const camRotZVal = document.getElementById("cam-rot-z-val")!;
         const camFovVal = document.getElementById("cam-fov-value")!;
+        this.camFovValueEl = camFovVal;
 
         const updateCameraPosition = () => {
             const x = Number(camPosX.value);
@@ -241,6 +245,14 @@ export class UIController {
             this.currentFrameEl.textContent = String(frame);
             this.totalFramesEl.textContent = String(total);
             this.timeline.setCurrentFrame(frame);
+
+            // Reflect runtime camera FOV (e.g. camera VMD playback) in the camera panel.
+            if (this.camFovSlider && this.camFovValueEl && document.activeElement !== this.camFovSlider) {
+                const fovDeg = this.mmdManager.getCameraFov();
+                const clamped = Math.max(Number(this.camFovSlider.min), Math.min(Number(this.camFovSlider.max), fovDeg));
+                this.camFovSlider.value = String(Math.round(clamped));
+                this.camFovValueEl.textContent = `${Math.round(fovDeg)}ﾂｰ`;
+            }
         };
 
         // Active model changed

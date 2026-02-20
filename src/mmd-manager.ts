@@ -46,6 +46,7 @@ import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
 import type { MmdRuntimeAnimationHandle } from "babylon-mmd/esm/Runtime/mmdRuntimeAnimationHandle";
 
 export class MmdManager {
+    private readonly renderingCanvas: HTMLCanvasElement;
     private engine: Engine;
     private scene: Scene;
     private camera: ArcRotateCamera;
@@ -75,6 +76,10 @@ export class MmdManager {
     private shadowEnabled = true;
     private shadowDarknessValue = 0.45;
     private shadowEdgeSoftnessValue = 0.035;
+    private resizeObserver: ResizeObserver | null = null;
+    private readonly onWindowResize = () => {
+        this.resize();
+    };
 
     // Callbacks
     public onFrameUpdate: ((frame: number, total: number) => void) | null = null;
@@ -122,6 +127,8 @@ export class MmdManager {
     }
 
     constructor(canvas: HTMLCanvasElement) {
+        this.renderingCanvas = canvas;
+
         // Register default material builder explicitly (avoids Vite tree-shaking side-effect imports)
         if (MmdModelLoader.SharedMaterialBuilder === null) {
             MmdModelLoader.SharedMaterialBuilder = new MmdStandardMaterialBuilder();
@@ -132,7 +139,12 @@ export class MmdManager {
             preserveDrawingBuffer: false,
             stencil: true,
             antialias: true,
+            alpha: false,
+            premultipliedAlpha: false,
+            desynchronized: false,
+            powerPreference: "high-performance",
         });
+        this.resizeToCanvasClientSize();
 
         // Create scene
         this.scene = new Scene(this.engine);
@@ -216,7 +228,7 @@ export class MmdManager {
             "groundGridTexture",
             { width: gridTextureSize, height: gridTextureSize },
             this.scene,
-            false
+            true
         );
         const gridCtx = groundGridTexture.getContext();
         for (let y = 0; y < gridTextureSize; y += gridCell) {
@@ -241,6 +253,9 @@ export class MmdManager {
         }
         groundGridTexture.wrapU = Texture.WRAP_ADDRESSMODE;
         groundGridTexture.wrapV = Texture.WRAP_ADDRESSMODE;
+        groundGridTexture.updateSamplingMode(Texture.TRILINEAR_SAMPLINGMODE);
+        const maxAnisotropy = this.engine.getCaps().maxAnisotropy ?? 1;
+        groundGridTexture.anisotropicFilteringLevel = Math.min(16, maxAnisotropy);
         groundGridTexture.uScale = 20;
         groundGridTexture.vScale = 20;
         groundGridTexture.update();
@@ -276,9 +291,12 @@ export class MmdManager {
         });
 
         // Handle resize
-        window.addEventListener("resize", () => {
-            this.engine.resize();
+        window.addEventListener("resize", this.onWindowResize);
+
+        this.resizeObserver = new ResizeObserver(() => {
+            this.resizeToCanvasClientSize();
         });
+        this.resizeObserver.observe(canvas.parentElement ?? canvas);
     }
 
     async loadPMX(filePath: string): Promise<ModelInfo | null> {
@@ -912,6 +930,8 @@ export class MmdManager {
     }
 
     private syncViewportCameraFromMmdCamera(): void {
+        // MmdCamera is not the active scene camera, so keep its position up to date explicitly.
+        this.mmdCamera.updatePosition();
         this.camera.setPosition(this.mmdCamera.position);
         this.camera.setTarget(this.mmdCamera.target);
         this.camera.fov = this.mmdCamera.fov;
@@ -967,10 +987,15 @@ export class MmdManager {
     }
 
     resize(): void {
-        this.engine.resize();
+        this.resizeToCanvasClientSize();
     }
 
     dispose(): void {
+        window.removeEventListener("resize", this.onWindowResize);
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
         if (this.audioBlobUrl) {
             URL.revokeObjectURL(this.audioBlobUrl);
         }
@@ -995,6 +1020,17 @@ export class MmdManager {
         this.mmdRuntime.dispose(this.scene);
         this.scene.dispose();
         this.engine.dispose();
+    }
+
+    private resizeToCanvasClientSize(): void {
+        const width = Math.max(1, Math.floor(this.renderingCanvas.clientWidth));
+        const height = Math.max(1, Math.floor(this.renderingCanvas.clientHeight));
+        if (width === 0 || height === 0) return;
+
+        // Keep drawing buffer aligned to CSS pixel size to avoid edge tearing artifacts.
+        if (this.engine.getRenderWidth() !== width || this.engine.getRenderHeight() !== height) {
+            this.engine.setSize(width, height);
+        }
     }
 }
 

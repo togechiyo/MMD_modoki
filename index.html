@@ -53,6 +53,12 @@
           </svg>
           <span>VMD読込</span>
         </button>
+        <button id="btn-load-camera-vmd" class="toolbar-btn" title="カメラVMDを読み込む">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2.5 5A1.5 1.5 0 0 1 4 3.5h5A1.5 1.5 0 0 1 10.5 5v1h1.2L14 4.5V11.5L11.7 10H10.5v1A1.5 1.5 0 0 1 9 12.5H4A1.5 1.5 0 0 1 2.5 11V5zm4 5A2.5 2.5 0 1 0 6.5 5a2.5 2.5 0 0 0 0 5z" />
+          </svg>
+          <span>カメラVMD</span>
+        </button>
         <button id="btn-load-mp3" class="toolbar-btn" title="音源ファイルを読み込む">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path
@@ -60,6 +66,13 @@
             <path fill-rule="evenodd" d="M15 3v8h-1V3H6v10H5V3a1 1 0 011-1h8a1 1 0 011 1z" />
           </svg>
           <span>音源読込</span>
+        </button>
+        <button id="btn-export-png" class="toolbar-btn" title="現在の描画をPNGで保存">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 2h8a1 1 0 0 1 1 1v2h-2V4H5v7h2v2H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+            <path d="M8 8h2V5l3 3-3 3V8H8z" />
+          </svg>
+          <span>PNG出力</span>
         </button>
         <button id="btn-toggle-ground" class="toolbar-btn toggle-on" title="地面表示を切り替える" aria-pressed="true">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -179,14 +192,39 @@
             <span>カメラ</span>
           </div>
           <div id="camera-controls" class="camera-controls">
-            <div class="control-row cam-row">
-              <label>X</label><input type="number" id="cam-x" class="cam-num" value="0" step="0.1">
-              <label>Y</label><input type="number" id="cam-y" class="cam-num" value="10" step="0.1">
-              <label>Z</label><input type="number" id="cam-z" class="cam-num" value="-30" step="0.1">
+            <div class="control-row cam-slider-row">
+              <label class="cam-axis-label">X移動</label>
+              <input type="range" id="cam-pos-x" class="cam-slider" min="-100" max="100" value="0" step="0.1">
+              <span id="cam-pos-x-val" class="value-display">0.0</span>
             </div>
-            <div class="control-row cam-row">
-              <label>FOV</label>
-              <input type="range" id="cam-fov" class="cam-fov-slider" min="10" max="120" value="30">
+            <div class="control-row cam-slider-row">
+              <label class="cam-axis-label">Y移動</label>
+              <input type="range" id="cam-pos-y" class="cam-slider" min="-50" max="150" value="10" step="0.1">
+              <span id="cam-pos-y-val" class="value-display">10.0</span>
+            </div>
+            <div class="control-row cam-slider-row">
+              <label class="cam-axis-label">Z移動</label>
+              <input type="range" id="cam-pos-z" class="cam-slider" min="-200" max="200" value="-30" step="0.1">
+              <span id="cam-pos-z-val" class="value-display">-30.0</span>
+            </div>
+            <div class="control-row cam-slider-row">
+              <label class="cam-axis-label">X回転</label>
+              <input type="range" id="cam-rot-x" class="cam-slider" min="-180" max="180" value="0" step="1">
+              <span id="cam-rot-x-val" class="value-display">0°</span>
+            </div>
+            <div class="control-row cam-slider-row">
+              <label class="cam-axis-label">Y回転</label>
+              <input type="range" id="cam-rot-y" class="cam-slider" min="-180" max="180" value="0" step="1">
+              <span id="cam-rot-y-val" class="value-display">0°</span>
+            </div>
+            <div class="control-row cam-slider-row">
+              <label class="cam-axis-label">Z回転</label>
+              <input type="range" id="cam-rot-z" class="cam-slider" min="-180" max="180" value="0" step="1">
+              <span id="cam-rot-z-val" class="value-display">0°</span>
+            </div>
+            <div class="control-row cam-slider-row">
+              <label class="cam-axis-label">FOV</label>
+              <input type="range" id="cam-fov" class="cam-slider" min="10" max="120" value="30">
               <span id="cam-fov-value" class="value-display">30°</span>
             </div>
           </div>

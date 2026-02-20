@@ -1,7 +1,7 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
@@ -10,6 +10,7 @@ import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { CreateScreenshotUsingRenderTargetAsync } from "@babylonjs/core/Misc/screenshotTools";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { ModelInfo, MotionInfo, KeyframeTrack, TrackCategory } from "./types";
 
@@ -30,6 +31,7 @@ import "@babylonjs/core/Materials/Textures/Loaders/tgaTextureLoader";
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
+import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
 import { MmdStandardMaterialProxy } from "babylon-mmd/esm/Runtime/mmdStandardMaterialProxy";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
@@ -41,11 +43,13 @@ import type { Skeleton } from "@babylonjs/core/Bones/skeleton";
 
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
 import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
+import type { MmdRuntimeAnimationHandle } from "babylon-mmd/esm/Runtime/mmdRuntimeAnimationHandle";
 
 export class MmdManager {
     private engine: Engine;
     private scene: Scene;
     private camera: ArcRotateCamera;
+    private mmdCamera: MmdCamera;
     private mmdRuntime: MmdRuntime;
     private vmdLoader: VmdLoader;
     private currentMesh: MmdMesh | null = null;
@@ -63,6 +67,11 @@ export class MmdManager {
     private dirLight!: DirectionalLight;
     private hemiLight!: HemisphericLight;
     private shadowGenerator!: ShadowGenerator;
+    private cameraRotationEulerDeg = new Vector3(0, 0, 0);
+    private cameraAnimationHandle: MmdRuntimeAnimationHandle | null = null;
+    private hasCameraMotion = false;
+    private modelKeyframeTracks: KeyframeTrack[] = [];
+    private cameraKeyframeTracks: KeyframeTrack[] = [];
     private shadowEnabled = true;
     private shadowDarknessValue = 0.45;
     private shadowEdgeSoftnessValue = 0.035;
@@ -72,6 +81,7 @@ export class MmdManager {
     public onModelLoaded: ((info: ModelInfo) => void) | null = null;
     public onSceneModelLoaded: ((info: ModelInfo, totalCount: number, active: boolean) => void) | null = null;
     public onMotionLoaded: ((info: MotionInfo) => void) | null = null;
+    public onCameraMotionLoaded: ((info: MotionInfo) => void) | null = null;
     public onKeyframesLoaded: ((tracks: KeyframeTrack[]) => void) | null = null;
     public onError: ((message: string) => void) | null = null;
     public onAudioLoaded: ((name: string) => void) | null = null;
@@ -145,6 +155,7 @@ export class MmdManager {
         this.camera.upperRadiusLimit = 100;
         this.camera.wheelDeltaPercentage = 0.01;
         this.camera.attachControl(canvas, true);
+        this.syncCameraRotationFromCurrentView();
 
         // Lights
         const hemiLight = this.hemiLight = new HemisphericLight(
@@ -241,8 +252,19 @@ export class MmdManager {
         this.mmdRuntime = new MmdRuntime(this.scene);
         this.mmdRuntime.register(this.scene);
 
+        // MMD camera runtime object (used for camera VMD evaluation)
+        this.mmdCamera = new MmdCamera("mmdRuntimeCamera", this.camera.target.clone(), this.scene, false);
+        this.syncMmdCameraFromViewportCamera();
+        this.mmdRuntime.addAnimatable(this.mmdCamera);
+
         // VMD Loader
         this.vmdLoader = new VmdLoader(this.scene);
+
+        this.scene.onBeforeRenderObservable.add(() => {
+            if (this.hasCameraMotion) {
+                this.syncViewportCameraFromMmdCamera();
+            }
+        });
 
         // Start render loop
         this.engine.runRenderLoop(() => {
@@ -491,36 +513,25 @@ export class MmdManager {
             );
             this._currentFrame = 0;
 
-            // Extract keyframe tracks from animation data
-            if (this.onKeyframesLoaded) {
-                const tracks: KeyframeTrack[] = [];
-
-                for (const t of animation.movableBoneTracks) {
-                    if (t.frameNumbers.length > 0) {
-                        tracks.push({ name: t.name, category: classifyBone(t.name), frames: t.frameNumbers });
-                    }
+            // Extract keyframe tracks from model animation data
+            const tracks: KeyframeTrack[] = [];
+            for (const t of animation.movableBoneTracks) {
+                if (t.frameNumbers.length > 0) {
+                    tracks.push({ name: t.name, category: classifyBone(t.name), frames: t.frameNumbers });
                 }
-                for (const t of animation.boneTracks) {
-                    if (t.frameNumbers.length > 0) {
-                        tracks.push({ name: t.name, category: classifyBone(t.name), frames: t.frameNumbers });
-                    }
-                }
-                for (const t of animation.morphTracks) {
-                    if (t.frameNumbers.length > 0) {
-                        tracks.push({ name: t.name, category: "morph", frames: t.frameNumbers });
-                    }
-                }
-
-                const order: Record<TrackCategory, number> = {
-                    root: 0,
-                    "semi-standard": 1,
-                    bone: 2,
-                    morph: 3,
-                };
-                tracks.sort((a, b) => order[a.category] - order[b.category]);
-
-                this.onKeyframesLoaded(tracks);
             }
+            for (const t of animation.boneTracks) {
+                if (t.frameNumbers.length > 0) {
+                    tracks.push({ name: t.name, category: classifyBone(t.name), frames: t.frameNumbers });
+                }
+            }
+            for (const t of animation.morphTracks) {
+                if (t.frameNumbers.length > 0) {
+                    tracks.push({ name: t.name, category: "morph", frames: t.frameNumbers });
+                }
+            }
+            this.modelKeyframeTracks = tracks;
+            this.emitMergedKeyframeTracks();
 
             const motionInfo: MotionInfo = {
                 name: fileName.replace(/\.vmd$/i, ""),
@@ -534,6 +545,76 @@ export class MmdManager {
             const message = err instanceof Error ? err.message : String(err);
             console.error("Failed to load VMD:", message);
             this.onError?.(`VMD load error: ${message}`);
+            return null;
+        }
+    }
+
+    async loadCameraVMD(filePath: string): Promise<MotionInfo | null> {
+        try {
+            const pathParts = filePath.replace(/\\/g, "/");
+            const lastSlash = pathParts.lastIndexOf("/");
+            const fileName = pathParts.substring(lastSlash + 1);
+
+            const buffer = await window.electronAPI.readBinaryFile(filePath);
+            if (!buffer) {
+                this.onError?.("Failed to read camera VMD file");
+                return null;
+            }
+
+            const uint8 = new Uint8Array(buffer as unknown as ArrayBuffer);
+            const blob = new Blob([uint8]);
+            const blobUrl = URL.createObjectURL(blob);
+
+            const animationPromise = this.vmdLoader.loadAsync("cameraMotion", blobUrl);
+            let animation: Awaited<typeof animationPromise>;
+            try {
+                animation = await animationPromise;
+            } finally {
+                URL.revokeObjectURL(blobUrl);
+            }
+
+            if (animation.cameraTrack.frameNumbers.length === 0) {
+                this.onError?.("This VMD has no camera track");
+                return null;
+            }
+
+            this.syncMmdCameraFromViewportCamera();
+
+            if (this.cameraAnimationHandle !== null) {
+                this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
+                this.cameraAnimationHandle = null;
+            }
+
+            this.cameraAnimationHandle = this.mmdCamera.createRuntimeAnimation(animation);
+            this.mmdCamera.setRuntimeAnimation(this.cameraAnimationHandle);
+            this.hasCameraMotion = true;
+            this.cameraKeyframeTracks = [{
+                name: "カメラ",
+                category: "camera",
+                frames: animation.cameraTrack.frameNumbers,
+            }];
+            this.emitMergedKeyframeTracks();
+
+            this._totalFrames = Math.max(
+                Math.floor(this.mmdRuntime.animationFrameTimeDuration),
+                300
+            );
+            this._currentFrame = 0;
+            this.mmdRuntime.seekAnimation(0, true);
+            this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
+
+            const motionInfo: MotionInfo = {
+                name: fileName.replace(/\.vmd$/i, ""),
+                path: filePath,
+                frameCount: this._totalFrames,
+            };
+
+            this.onCameraMotionLoaded?.(motionInfo);
+            return motionInfo;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("Failed to load camera VMD:", message);
+            this.onError?.(`Camera VMD load error: ${message}`);
             return null;
         }
     }
@@ -646,6 +727,26 @@ export class MmdManager {
         const ver = (this.engine as unknown as { webGLVersion?: number }).webGLVersion;
         if (ver === undefined) return "WebGPU";
         return ver >= 2 ? "WebGL2" : "WebGL1";
+    }
+
+    /** Capture current viewport as PNG data URL */
+    async capturePngDataUrl(precision = 1): Promise<string | null> {
+        try {
+            const clampedPrecision = Math.max(0.25, Math.min(4, precision));
+            return await CreateScreenshotUsingRenderTargetAsync(
+                this.engine,
+                this.camera,
+                { precision: clampedPrecision },
+                "image/png",
+                1,
+                true
+            );
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("Failed to capture PNG:", message);
+            this.onError?.(`PNG capture error: ${message}`);
+            return null;
+        }
     }
 
     /** Audio volume (0.0 鬯ｩ蛹・ｽｽ・ｯ郢晢ｽｻ繝ｻ・ｶ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ1.0) */
@@ -769,8 +870,30 @@ export class MmdManager {
         return { x: pos.x, y: pos.y, z: pos.z };
     }
 
+    setCameraPosition(x: number, y: number, z: number): void {
+        this.camera.setPosition(new Vector3(x, y, z));
+        this.applyCameraRotationFromEuler();
+        this.syncMmdCameraFromViewportCamera();
+    }
+
+    getCameraRotation(): { x: number; y: number; z: number } {
+        return {
+            x: this.cameraRotationEulerDeg.x,
+            y: this.cameraRotationEulerDeg.y,
+            z: this.cameraRotationEulerDeg.z,
+        };
+    }
+
+    setCameraRotation(xDeg: number, yDeg: number, zDeg: number): void {
+        this.cameraRotationEulerDeg.set(xDeg, yDeg, zDeg);
+        this.applyCameraRotationFromEuler();
+        this.syncMmdCameraFromViewportCamera();
+    }
+
     setCameraTarget(x: number, y: number, z: number): void {
         this.camera.target = new Vector3(x, y, z);
+        this.syncCameraRotationFromCurrentView();
+        this.syncMmdCameraFromViewportCamera();
     }
 
     getCameraFov(): number {
@@ -779,6 +902,68 @@ export class MmdManager {
 
     setCameraFov(degrees: number): void {
         this.camera.fov = (degrees * Math.PI) / 180;
+        this.syncMmdCameraFromViewportCamera();
+    }
+
+    private syncMmdCameraFromViewportCamera(): void {
+        this.mmdCamera.target.copyFrom(this.camera.target);
+        this.mmdCamera.position = this.camera.position.clone();
+        this.mmdCamera.fov = this.camera.fov;
+    }
+
+    private syncViewportCameraFromMmdCamera(): void {
+        this.camera.setPosition(this.mmdCamera.position);
+        this.camera.setTarget(this.mmdCamera.target);
+        this.camera.fov = this.mmdCamera.fov;
+        this.camera.upVector.copyFrom(this.mmdCamera.upVector);
+        this.syncCameraRotationFromCurrentView();
+    }
+
+    private applyCameraRotationFromEuler(): void {
+        const xRad = (this.cameraRotationEulerDeg.x * Math.PI) / 180;
+        const yRad = (this.cameraRotationEulerDeg.y * Math.PI) / 180;
+        const zRad = (this.cameraRotationEulerDeg.z * Math.PI) / 180;
+        const rot = Matrix.RotationYawPitchRoll(yRad, xRad, zRad);
+
+        const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), rot).normalize();
+        const up = Vector3.TransformNormal(new Vector3(0, 1, 0), rot).normalize();
+        const distance = Math.max(this.camera.radius, this.camera.lowerRadiusLimit ?? 2);
+        const target = this.camera.position.add(forward.scale(distance));
+
+        this.camera.upVector = up;
+        this.camera.target = target;
+    }
+
+    private syncCameraRotationFromCurrentView(): void {
+        const forward = this.camera.target.subtract(this.camera.position);
+        if (forward.lengthSquared() < 1e-8) return;
+
+        forward.normalize();
+        const yaw = Math.atan2(forward.x, forward.z);
+        const pitch = Math.atan2(-forward.y, Math.sqrt(forward.x * forward.x + forward.z * forward.z));
+        this.cameraRotationEulerDeg.x = (pitch * 180) / Math.PI;
+        this.cameraRotationEulerDeg.y = (yaw * 180) / Math.PI;
+        this.cameraRotationEulerDeg.z = 0;
+    }
+
+    private emitMergedKeyframeTracks(): void {
+        if (!this.onKeyframesLoaded) return;
+
+        const merged = [...this.cameraKeyframeTracks, ...this.modelKeyframeTracks];
+        const order: Record<TrackCategory, number> = {
+            root: 0,
+            camera: 1,
+            "semi-standard": 2,
+            bone: 3,
+            morph: 4,
+        };
+        merged.sort((a, b) => {
+            const categoryDiff = order[a.category] - order[b.category];
+            if (categoryDiff !== 0) return categoryDiff;
+            return a.name.localeCompare(b.name, "ja");
+        });
+
+        this.onKeyframesLoaded(merged);
     }
 
     resize(): void {
@@ -801,6 +986,12 @@ export class MmdManager {
             sceneModel.mesh.dispose();
         }
         this.sceneModels = [];
+        if (this.cameraAnimationHandle !== null) {
+            this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
+            this.cameraAnimationHandle = null;
+        }
+        this.mmdRuntime.removeAnimatable(this.mmdCamera);
+        this.mmdCamera.dispose();
         this.mmdRuntime.dispose(this.scene);
         this.scene.dispose();
         this.engine.dispose();

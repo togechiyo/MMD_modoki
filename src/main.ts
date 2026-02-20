@@ -76,6 +76,32 @@ ipcMain.handle('file:getInfo', async (_event, filePath: string) => {
   }
 });
 
+ipcMain.handle('file:savePng', async (_event, dataUrl: string, defaultFileName?: string) => {
+  try {
+    const safeName = (defaultFileName && defaultFileName.toLowerCase().endsWith('.png'))
+      ? defaultFileName
+      : `${defaultFileName ?? 'mmd_capture'}.png`;
+
+    const result = await dialog.showSaveDialog({
+      title: 'PNG画像を保存',
+      defaultPath: path.join(app.getPath('pictures'), safeName),
+      filters: [{ name: 'PNG Image', extensions: ['png'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return null;
+    }
+
+    const prefix = 'data:image/png;base64,';
+    const base64 = dataUrl.startsWith(prefix) ? dataUrl.slice(prefix.length) : dataUrl;
+    fs.writeFileSync(result.filePath, base64, 'base64');
+    return result.filePath;
+  } catch (err) {
+    console.error('Failed to save PNG:', err);
+    return null;
+  }
+});
+
 app.on('ready', createWindow);
 
 app.on('window-all-closed', () => {

@@ -558,30 +558,28 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 6px;
-  overflow: hidden;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .control-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
 }
 
-/* Camera: single-line compact row */
-.cam-row {
-  flex-wrap: nowrap;
-  gap: 4px;
+.cam-slider-row {
+  gap: 5px;
 }
 
-.cam-num {
-  width: 44px !important;
-  padding: 3px 4px !important;
-  font-size: 11px;
+.cam-axis-label {
+  min-width: 28px !important;
+  text-align: right;
+  font-size: 10px !important;
 }
 
-.cam-fov-slider {
+.cam-slider {
   flex: 1;
   min-width: 0;
 }
@@ -592,24 +590,6 @@ body {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   min-width: 24px;
-}
-
-.control-row input[type="number"] {
-  width: 64px;
-  padding: 4px 6px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  outline: none;
-  transition: border-color var(--transition-fast);
-}
-
-.control-row input[type="number"]:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
 .control-row input[type="range"] {
@@ -638,7 +618,7 @@ body {
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-tertiary);
-  min-width: 32px;
+  min-width: 36px;
   text-align: right;
 }
 

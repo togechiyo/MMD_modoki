@@ -7,7 +7,9 @@
 - Babylon Engine / Scene / Camera / Light の初期化
 - PMX/PMD の読み込みと MMD モデル化（複数モデル保持）
 - VMD の読み込みとランタイムアニメーション設定
+- カメラVMD の読み込みとカメラアニメーション設定
 - 音源（MP3/WAV/OGG）読み込みと再生同期
+- 現在描画の PNG キャプチャ
 - 再生制御（play/pause/stop/seek/speed）
 - モーフ操作、照明操作、床表示切替、FPS取得
 
@@ -38,6 +40,15 @@
 - `createRuntimeAnimation` / `setRuntimeAnimation` で適用
 - トラックを抽出して `onKeyframesLoaded` へ通知
 
+### カメラVMD
+
+- `loadCameraVMD(filePath)`
+- `MmdCamera` を `MmdRuntime` の animatable として登録
+- `VmdLoader.loadAsync` で解析し、`cameraTrack` を検証
+- `MmdCamera.createRuntimeAnimation` / `setRuntimeAnimation` で適用
+- 毎フレーム `MmdCamera -> ArcRotateCamera` 同期で表示カメラへ反映
+- キーフレームは `カメラ` レーンとしてタイムラインに別行表示
+
 ### 音源
 
 - `loadMP3(filePath)`
@@ -49,11 +60,13 @@
 
 - モデル管理: `getLoadedModels`, `setActiveModelByIndex`
 - 床表示: `isGroundVisible`, `setGroundVisible`, `toggleGroundVisible`
+- 出力: `capturePngDataUrl`
 - 再生: `play`, `pause`, `stop`, `seekTo`, `setPlaybackSpeed`
 - 状態: `isPlaying`, `currentFrame`, `totalFrames`
 - 描画情報: `getFps`, `getEngineType`
 - 音量: `volume`, `toggleMute`
 - 照明: `lightIntensity`, `ambientIntensity`, `shadowDarkness`, `shadowEdgeSoftness`, `setLightDirection`
+- カメラ: `getCameraPosition`, `setCameraPosition`, `getCameraRotation`, `setCameraRotation`, `getCameraFov`, `setCameraFov`
 - モーフ: `getMorphWeight`, `setMorphWeight`
 
 ## 影と材質の扱い（現仕様）

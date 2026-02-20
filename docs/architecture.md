@@ -35,6 +35,7 @@ Main 側でハンドラを提供します。
 - `dialog:openFile`: ファイル選択
 - `file:readBinary`: バイナリ読み込み
 - `file:getInfo`: ファイル情報取得
+- `file:savePng`: PNG保存ダイアログ + 書き込み
 
 Renderer は Preload 経由でのみこれらへアクセスします。
 

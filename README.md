@@ -8,7 +8,9 @@ PMX/PMD モデル、VMD モーション、音源（MP3/WAV/OGG）を読み込み
 - PMX/PMD モデル読み込み（複数同時読込）
 - アクティブモデル切替（下パネル「情報 > 対象」）
 - VMD モーション読み込み
+- カメラVMD読み込み（カメラモーション）
 - MP3/WAV/OGG 音源読み込み・同期再生
+- ワンクリック PNG 出力（現在の描画を保存）
 - キーフレーム可視化タイムライン（ボーン/モーフ別）
 - モーフスライダー操作（先頭30件表示）
 - ライティング調整（方位角/仰角/光の強さ/環境光/影の濃さ/境界幅）
@@ -27,6 +29,7 @@ PMX/PMD モデル、VMD モーション、音源（MP3/WAV/OGG）を読み込み
 - ドキュメント入口: [`docs/README.md`](docs/README.md)
 - アーキテクチャ概要: [`docs/architecture.md`](docs/architecture.md)
 - MmdManager 解説: [`docs/mmd-manager.md`](docs/mmd-manager.md)
+- カメラVMD対応メモ: [`docs/camera-vmd.md`](docs/camera-vmd.md)
 - UI と操作フロー: [`docs/ui-flow.md`](docs/ui-flow.md)
 - 影仕様と実装: [`docs/shadow-spec.md`](docs/shadow-spec.md)
 - トラブルシュート: [`docs/troubleshooting.md`](docs/troubleshooting.md)
@@ -66,9 +69,11 @@ npm run make
 
 1. `PMX読込` でモデル（`.pmx` / `.pmd`）を読み込む
 2. 必要なら追加で PMX を読み込み、`情報 > 対象` でアクティブモデルを切り替える
-3. `VMD読込` でモーション（`.vmd`）を読み込む
-4. 必要に応じて `音源読込` で音源を読み込む
-5. 再生コントロール・タイムライン・モーフ・照明を調整する
+3. `VMD読込` でモデルモーション（`.vmd`）を読み込む
+4. 必要に応じて `カメラVMD` でカメラモーション（`.vmd`）を読み込む
+5. 必要に応じて `音源読込` で音源を読み込む
+6. 必要に応じて `PNG出力` で現在描画を保存する
+7. 再生コントロール・タイムライン・モーフ・照明を調整する
 
 ## キーボードショートカット
 
@@ -79,7 +84,9 @@ npm run make
 - `Shift + ←` / `Shift + →`: 10フレーム移動
 - `Ctrl + O`: PMX/PMD を開く
 - `Ctrl + M`: VMD を開く
+- `Ctrl + Shift + M`: カメラVMD を開く
 - `Ctrl + Shift + A`: 音源を開く
+- `Ctrl + Shift + S`: PNG 出力
 
 ## プロジェクト構成
 
@@ -101,7 +108,7 @@ npm run make
 ## 既知の制限
 
 - 物理演算は現時点で未有効（初期実装）
-- カメラの X/Y/Z 数値入力は UI 上存在するが、現状は FOV スライダー中心
+- カメラは ArcRotate ベースのため、回転フェーダーは内部的に視線ベクトルへ変換して適用
 - ローカルファイル読み込みのため `webSecurity: false` を利用（`src/main.ts`）
 
 ## ライセンス

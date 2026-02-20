@@ -26,6 +26,7 @@ const PLAYHEAD_X = 24;
 // ── Category palette ───────────────────────────────────────────────
 const CAT = {
     root: { bg: "rgba(236,72,153,0.12)", kf: "#ec4899", text: "#f472b6", bar: "#ec4899" },
+    camera: { bg: "rgba(34,211,238,0.10)", kf: "#22d3ee", text: "#67e8f9", bar: "#22d3ee" },
     "semi-standard": { bg: "rgba(99,102,241,0.08)", kf: "#818cf8", text: "#a5b4fc", bar: "" },
     bone: { bg: "rgba(255,255,255,0.02)", kf: "#4ade80", text: "#86efac", bar: "" },
     morph: { bg: "rgba(251,191,36,0.07)", kf: "#fbbf24", text: "#fcd34d", bar: "" },
@@ -285,7 +286,7 @@ export class Timeline {
             const frames = track.frames;
             const lo = lowerBound(frames, visStart);
             const hi = upperBound(frames, visEnd);
-            const dotR = track.category === "root" ? 4 : 2.5;
+            const dotR = track.category === "root" ? 4 : track.category === "camera" ? 3.5 : 2.5;
             const midY = ry + ROW_H / 2;
 
             ctx.fillStyle = col.kf;
@@ -415,7 +416,7 @@ export class Timeline {
             ctx.beginPath();
             ctx.rect(4, y, w - 6, ROW_H);
             ctx.clip();
-            ctx.font = track.category === "root"
+            ctx.font = (track.category === "root" || track.category === "camera")
                 ? "600 10px 'Inter', sans-serif"
                 : "400 9px 'Inter', sans-serif";
             ctx.fillStyle = col.text;

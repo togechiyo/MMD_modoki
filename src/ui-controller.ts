@@ -11,7 +11,9 @@ export class UIController {
     // Button elements
     private btnLoadPmx: HTMLElement;
     private btnLoadVmd: HTMLElement;
+    private btnLoadCameraVmd: HTMLElement;
     private btnLoadMp3: HTMLElement;
+    private btnExportPng: HTMLElement;
     private btnToggleGround: HTMLElement;
     private groundToggleText: HTMLElement;
     private btnPlay: HTMLElement;
@@ -27,13 +29,6 @@ export class UIController {
     private viewportOverlay: HTMLElement;
     private modelSelect: HTMLSelectElement;
 
-    // Camera controls
-    private camX: HTMLInputElement;
-    private camY: HTMLInputElement;
-    private camZ: HTMLInputElement;
-    private camFov: HTMLInputElement;
-    private camFovValue: HTMLElement;
-
     constructor(mmdManager: MmdManager, timeline: Timeline, bottomPanel: BottomPanel) {
         this.mmdManager = mmdManager;
         this.timeline = timeline;
@@ -42,7 +37,9 @@ export class UIController {
         // Get DOM elements
         this.btnLoadPmx = document.getElementById("btn-load-pmx")!;
         this.btnLoadVmd = document.getElementById("btn-load-vmd")!;
+        this.btnLoadCameraVmd = document.getElementById("btn-load-camera-vmd")!;
         this.btnLoadMp3 = document.getElementById("btn-load-mp3")!;
+        this.btnExportPng = document.getElementById("btn-export-png")!;
         this.btnToggleGround = document.getElementById("btn-toggle-ground")!;
         this.groundToggleText = document.getElementById("ground-toggle-text")!;
         this.btnPlay = document.getElementById("btn-play")!;
@@ -58,12 +55,6 @@ export class UIController {
         this.viewportOverlay = document.getElementById("viewport-overlay")!;
         this.modelSelect = document.getElementById("info-model-select") as HTMLSelectElement;
 
-        this.camX = document.getElementById("cam-x") as HTMLInputElement;
-        this.camY = document.getElementById("cam-y") as HTMLInputElement;
-        this.camZ = document.getElementById("cam-z") as HTMLInputElement;
-        this.camFov = document.getElementById("cam-fov") as HTMLInputElement;
-        this.camFovValue = document.getElementById("cam-fov-value")!;
-
         this.setupEventListeners();
         this.setupCallbacks();
         this.setupKeyboard();
@@ -76,7 +67,9 @@ export class UIController {
         // File loading
         this.btnLoadPmx.addEventListener("click", () => this.loadPMX());
         this.btnLoadVmd.addEventListener("click", () => this.loadVMD());
+        this.btnLoadCameraVmd.addEventListener("click", () => this.loadCameraVMD());
         this.btnLoadMp3.addEventListener("click", () => this.loadMP3());
+        this.btnExportPng.addEventListener("click", () => this.exportPNG());
         this.btnToggleGround.addEventListener("click", () => {
             const visible = this.mmdManager.toggleGroundVisible();
             this.updateGroundToggleButton(visible);
@@ -111,11 +104,74 @@ export class UIController {
         });
 
         // Camera controls
-        this.camFov.addEventListener("input", () => {
-            const val = parseInt(this.camFov.value);
-            this.camFovValue.textContent = `${val} deg`;
+        const camPosX = document.getElementById("cam-pos-x") as HTMLInputElement;
+        const camPosY = document.getElementById("cam-pos-y") as HTMLInputElement;
+        const camPosZ = document.getElementById("cam-pos-z") as HTMLInputElement;
+        const camRotX = document.getElementById("cam-rot-x") as HTMLInputElement;
+        const camRotY = document.getElementById("cam-rot-y") as HTMLInputElement;
+        const camRotZ = document.getElementById("cam-rot-z") as HTMLInputElement;
+        const camFov = document.getElementById("cam-fov") as HTMLInputElement;
+
+        const camPosXVal = document.getElementById("cam-pos-x-val")!;
+        const camPosYVal = document.getElementById("cam-pos-y-val")!;
+        const camPosZVal = document.getElementById("cam-pos-z-val")!;
+        const camRotXVal = document.getElementById("cam-rot-x-val")!;
+        const camRotYVal = document.getElementById("cam-rot-y-val")!;
+        const camRotZVal = document.getElementById("cam-rot-z-val")!;
+        const camFovVal = document.getElementById("cam-fov-value")!;
+
+        const updateCameraPosition = () => {
+            const x = Number(camPosX.value);
+            const y = Number(camPosY.value);
+            const z = Number(camPosZ.value);
+            this.mmdManager.setCameraPosition(x, y, z);
+            camPosXVal.textContent = x.toFixed(1);
+            camPosYVal.textContent = y.toFixed(1);
+            camPosZVal.textContent = z.toFixed(1);
+        };
+
+        const updateCameraRotation = () => {
+            const x = Number(camRotX.value);
+            const y = Number(camRotY.value);
+            const z = Number(camRotZ.value);
+            this.mmdManager.setCameraRotation(x, y, z);
+            camRotXVal.textContent = `${Math.round(x)}°`;
+            camRotYVal.textContent = `${Math.round(y)}°`;
+            camRotZVal.textContent = `${Math.round(z)}°`;
+        };
+
+        camPosX.addEventListener("input", updateCameraPosition);
+        camPosY.addEventListener("input", updateCameraPosition);
+        camPosZ.addEventListener("input", updateCameraPosition);
+        camRotX.addEventListener("input", updateCameraRotation);
+        camRotY.addEventListener("input", updateCameraRotation);
+        camRotZ.addEventListener("input", updateCameraRotation);
+        camFov.addEventListener("input", () => {
+            const val = Number(camFov.value);
+            camFovVal.textContent = `${Math.round(val)}°`;
             this.mmdManager.setCameraFov(val);
         });
+
+        // Initialize camera UI from runtime values
+        const initialPos = this.mmdManager.getCameraPosition();
+        camPosX.value = initialPos.x.toFixed(1);
+        camPosY.value = initialPos.y.toFixed(1);
+        camPosZ.value = initialPos.z.toFixed(1);
+        camPosXVal.textContent = initialPos.x.toFixed(1);
+        camPosYVal.textContent = initialPos.y.toFixed(1);
+        camPosZVal.textContent = initialPos.z.toFixed(1);
+
+        const initialRot = this.mmdManager.getCameraRotation();
+        camRotX.value = String(Math.round(initialRot.x));
+        camRotY.value = String(Math.round(initialRot.y));
+        camRotZ.value = String(Math.round(initialRot.z));
+        camRotXVal.textContent = `${Math.round(initialRot.x)}°`;
+        camRotYVal.textContent = `${Math.round(initialRot.y)}°`;
+        camRotZVal.textContent = `${Math.round(initialRot.z)}°`;
+
+        const initialFov = this.mmdManager.getCameraFov();
+        camFov.value = String(Math.round(initialFov));
+        camFovVal.textContent = `${Math.round(initialFov)}°`;
 
         // Timeline seek
         this.timeline.onSeek = (frame) => {
@@ -213,6 +269,13 @@ export class UIController {
             this.showToast(`Loaded motion: ${info.name}`, "success");
         };
 
+        this.mmdManager.onCameraMotionLoaded = (info: MotionInfo) => {
+            this.setStatus("Camera motion loaded", false);
+            this.timeline.setTotalFrames(info.frameCount);
+            this.totalFramesEl.textContent = String(info.frameCount);
+            this.showToast(`Loaded camera motion: ${info.name}`, "success");
+        };
+
         // Keyframe data loaded
         this.mmdManager.onKeyframesLoaded = (tracks) => {
             this.timeline.setKeyframeTracks(tracks);
@@ -271,10 +334,22 @@ export class UIController {
                 this.loadVMD();
             }
 
+            // Ctrl+Shift+M = open camera VMD
+            if (e.ctrlKey && e.shiftKey && (e.key === "M" || e.key === "m")) {
+                e.preventDefault();
+                this.loadCameraVMD();
+            }
+
             // Ctrl+Shift+A = open MP3
             if (e.ctrlKey && e.shiftKey && e.key === "A") {
                 e.preventDefault();
                 this.loadMP3();
+            }
+
+            // Ctrl+Shift+S = export PNG
+            if (e.ctrlKey && e.shiftKey && (e.key === "S" || e.key === "s")) {
+                e.preventDefault();
+                void this.exportPNG();
             }
         });
     }
@@ -356,6 +431,18 @@ export class UIController {
         await this.mmdManager.loadVMD(filePath);
     }
 
+    private async loadCameraVMD(): Promise<void> {
+        const filePath = await window.electronAPI.openFileDialog([
+            { name: "VMD camera motion", extensions: ["vmd"] },
+            { name: "All files", extensions: ["*"] },
+        ]);
+
+        if (!filePath) return;
+
+        this.setStatus("Loading camera VMD...", true);
+        await this.mmdManager.loadCameraVMD(filePath);
+    }
+
     private async loadMP3(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
             { name: "Audio", extensions: ["mp3", "wav", "ogg"] },
@@ -366,6 +453,31 @@ export class UIController {
 
         this.setStatus("Loading audio...", true);
         await this.mmdManager.loadMP3(filePath);
+    }
+
+    private async exportPNG(): Promise<void> {
+        this.setStatus("Exporting PNG...", true);
+
+        const dataUrl = await this.mmdManager.capturePngDataUrl(1);
+        if (!dataUrl) {
+            this.setStatus("PNG export failed", false);
+            return;
+        }
+
+        const now = new Date();
+        const pad = (v: number) => String(v).padStart(2, "0");
+        const fileName = `mmd_capture_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
+
+        const savedPath = await window.electronAPI.savePngFile(dataUrl, fileName);
+        if (!savedPath) {
+            this.setStatus("Ready", false);
+            this.showToast("PNG export canceled", "info");
+            return;
+        }
+
+        const basename = savedPath.replace(/^.*[\\/]/, "");
+        this.setStatus("PNG saved", false);
+        this.showToast(`Saved PNG: ${basename}`, "success");
     }
 
     private refreshModelSelector(): void {

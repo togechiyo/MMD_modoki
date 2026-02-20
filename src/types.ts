@@ -2,6 +2,7 @@ export interface ElectronAPI {
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
     readBinaryFile: (filePath: string) => Promise<Buffer | null>;
     getFileInfo: (filePath: string) => Promise<{ name: string; path: string; size: number; extension: string } | null>;
+    savePngFile: (dataUrl: string, defaultFileName?: string) => Promise<string | null>;
 }
 
 declare global {
@@ -26,7 +27,7 @@ export interface MotionInfo {
 }
 
 /** Track category for timeline row ordering */
-export type TrackCategory = 'root' | 'semi-standard' | 'bone' | 'morph';
+export type TrackCategory = 'root' | 'camera' | 'semi-standard' | 'bone' | 'morph';
 
 /** A single row in the keyframe timeline */
 export interface KeyframeTrack {

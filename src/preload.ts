@@ -4,6 +4,7 @@ export interface ElectronAPI {
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
     readBinaryFile: (filePath: string) => Promise<Buffer | null>;
     getFileInfo: (filePath: string) => Promise<{ name: string; path: string; size: number; extension: string } | null>;
+    savePngFile: (dataUrl: string, defaultFileName?: string) => Promise<string | null>;
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -13,4 +14,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('file:readBinary', filePath),
     getFileInfo: (filePath: string) =>
         ipcRenderer.invoke('file:getInfo', filePath),
+    savePngFile: (dataUrl: string, defaultFileName?: string) =>
+        ipcRenderer.invoke('file:savePng', dataUrl, defaultFileName),
 } as ElectronAPI);

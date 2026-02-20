@@ -12,6 +12,8 @@ export class UIController {
     private btnLoadPmx: HTMLElement;
     private btnLoadVmd: HTMLElement;
     private btnLoadMp3: HTMLElement;
+    private btnToggleGround: HTMLElement;
+    private groundToggleText: HTMLElement;
     private btnPlay: HTMLElement;
     private btnPause: HTMLElement;
     private btnStop: HTMLElement;
@@ -23,6 +25,7 @@ export class UIController {
     private statusText: HTMLElement;
     private statusDot: HTMLElement;
     private viewportOverlay: HTMLElement;
+    private modelSelect: HTMLSelectElement;
 
     // Camera controls
     private camX: HTMLInputElement;
@@ -40,6 +43,8 @@ export class UIController {
         this.btnLoadPmx = document.getElementById("btn-load-pmx")!;
         this.btnLoadVmd = document.getElementById("btn-load-vmd")!;
         this.btnLoadMp3 = document.getElementById("btn-load-mp3")!;
+        this.btnToggleGround = document.getElementById("btn-toggle-ground")!;
+        this.groundToggleText = document.getElementById("ground-toggle-text")!;
         this.btnPlay = document.getElementById("btn-play")!;
         this.btnPause = document.getElementById("btn-pause")!;
         this.btnStop = document.getElementById("btn-stop")!;
@@ -51,6 +56,7 @@ export class UIController {
         this.statusText = document.getElementById("status-text")!;
         this.statusDot = document.querySelector(".status-dot")!;
         this.viewportOverlay = document.getElementById("viewport-overlay")!;
+        this.modelSelect = document.getElementById("info-model-select") as HTMLSelectElement;
 
         this.camX = document.getElementById("cam-x") as HTMLInputElement;
         this.camY = document.getElementById("cam-y") as HTMLInputElement;
@@ -62,6 +68,8 @@ export class UIController {
         this.setupCallbacks();
         this.setupKeyboard();
         this.setupPerfDisplay();
+        this.refreshModelSelector();
+        this.updateGroundToggleButton(this.mmdManager.isGroundVisible());
     }
 
     private setupEventListeners(): void {
@@ -69,6 +77,11 @@ export class UIController {
         this.btnLoadPmx.addEventListener("click", () => this.loadPMX());
         this.btnLoadVmd.addEventListener("click", () => this.loadVMD());
         this.btnLoadMp3.addEventListener("click", () => this.loadMP3());
+        this.btnToggleGround.addEventListener("click", () => {
+            const visible = this.mmdManager.toggleGroundVisible();
+            this.updateGroundToggleButton(visible);
+            this.showToast(visible ? "床表示: ON" : "床表示: OFF", "info");
+        });
 
         // Playback
         this.btnPlay.addEventListener("click", () => this.play());
@@ -84,10 +97,23 @@ export class UIController {
             this.mmdManager.setPlaybackSpeed(parseFloat(this.playbackSpeed.value));
         });
 
+        // Active model selector
+        this.modelSelect.addEventListener("change", () => {
+            const index = Number.parseInt(this.modelSelect.value, 10);
+            if (Number.isNaN(index)) return;
+            const ok = this.mmdManager.setActiveModelByIndex(index);
+            if (!ok) {
+                this.showToast("Failed to switch active model", "error");
+                return;
+            }
+            this.refreshModelSelector();
+            this.showToast("Active model switched", "success");
+        });
+
         // Camera controls
         this.camFov.addEventListener("input", () => {
             const val = parseInt(this.camFov.value);
-            this.camFovValue.textContent = `${val}°`;
+            this.camFovValue.textContent = `${val} deg`;
             this.mmdManager.setCameraFov(val);
         });
 
@@ -96,23 +122,25 @@ export class UIController {
             this.mmdManager.seekTo(frame);
         };
 
-        // ── Lighting controls ───────────────────────────────────────
+        // Lighting controls
         const elAzimuth = document.getElementById("light-azimuth") as HTMLInputElement;
         const elElevation = document.getElementById("light-elevation") as HTMLInputElement;
         const elIntensity = document.getElementById("light-intensity") as HTMLInputElement;
         const elAmbient = document.getElementById("light-ambient") as HTMLInputElement;
         const elShadow = document.getElementById("light-shadow") as HTMLInputElement;
+        const elShadowSoftness = document.getElementById("light-shadow-softness") as HTMLInputElement;
         const valAz = document.getElementById("light-azimuth-val")!;
         const valEl = document.getElementById("light-elevation-val")!;
         const valInt = document.getElementById("light-intensity-val")!;
         const valAmb = document.getElementById("light-ambient-val")!;
         const valSh = document.getElementById("light-shadow-val")!;
+        const valShSoftness = document.getElementById("light-shadow-softness-val")!;
 
         const updateDir = () => {
             const az = Number(elAzimuth.value);
             const el = Number(elElevation.value);
-            valAz.textContent = `${az}°`;
-            valEl.textContent = `${el}°`;
+            valAz.textContent = `${az} deg`;
+            valEl.textContent = `${el} deg`;
             this.mmdManager.setLightDirection(az, el);
         };
 
@@ -134,6 +162,18 @@ export class UIController {
             valSh.textContent = v.toFixed(2);
             this.mmdManager.shadowDarkness = v;
         });
+        elShadowSoftness.addEventListener("input", () => {
+            const v = Number(elShadowSoftness.value) / 1000;
+            valShSoftness.textContent = v.toFixed(3);
+            this.mmdManager.shadowEdgeSoftness = v;
+        });
+
+        // Shadow is always enabled in UI.
+        this.mmdManager.setShadowEnabled(true);
+        elShadow.value = String(Math.round(this.mmdManager.shadowDarkness * 100));
+        valSh.textContent = this.mmdManager.shadowDarkness.toFixed(2);
+        elShadowSoftness.value = String(Math.round(this.mmdManager.shadowEdgeSoftness * 1000));
+        valShSoftness.textContent = this.mmdManager.shadowEdgeSoftness.toFixed(3);
 
         // Initialize direction from HTML default values
         updateDir();
@@ -147,37 +187,46 @@ export class UIController {
             this.timeline.setCurrentFrame(frame);
         };
 
-        // Model loaded
+        // Active model changed
         this.mmdManager.onModelLoaded = (info: ModelInfo) => {
-            this.setStatus("モデル読込完了", false);
+            this.setStatus("Model ready", false);
             this.viewportOverlay.classList.add("hidden");
             this.bottomPanel.updateMorphControls(info);
             this.bottomPanel.updateModelInfo(info);
-            this.showToast(`モデル「${info.name}」を読み込みました`, "success");
+            this.refreshModelSelector();
+        };
+
+        // Any model loaded into scene
+        this.mmdManager.onSceneModelLoaded = (info: ModelInfo, totalCount: number, active: boolean) => {
+            this.setStatus("Model loaded", false);
+            this.viewportOverlay.classList.add("hidden");
+            this.refreshModelSelector();
+            const activeLabel = active ? " [active]" : "";
+            this.showToast(`Loaded model: ${info.name} (${totalCount})${activeLabel}`, "success");
         };
 
         // Motion loaded
         this.mmdManager.onMotionLoaded = (info: MotionInfo) => {
-            this.setStatus("モーション読込完了", false);
+            this.setStatus("Motion loaded", false);
             this.timeline.setTotalFrames(info.frameCount);
             this.totalFramesEl.textContent = String(info.frameCount);
-            this.showToast(`モーション「${info.name}」を読み込みました`, "success");
+            this.showToast(`Loaded motion: ${info.name}`, "success");
         };
 
-        // Keyframe data loaded – pass to timeline
+        // Keyframe data loaded
         this.mmdManager.onKeyframesLoaded = (tracks) => {
             this.timeline.setKeyframeTracks(tracks);
         };
 
         // Audio loaded
         this.mmdManager.onAudioLoaded = (name: string) => {
-            this.setStatus("音源読込完了", false);
-            this.showToast(`音源「${name}」を読み込みました`, "success");
+            this.setStatus("Audio loaded", false);
+            this.showToast(`Loaded audio: ${name}`, "success");
         };
 
         // Error
         this.mmdManager.onError = (message: string) => {
-            this.setStatus("エラー", false);
+            this.setStatus("Error", false);
             this.showToast(message, "error");
         };
     }
@@ -252,13 +301,12 @@ export class UIController {
         setInterval(() => {
             const fps = this.mmdManager.getFps();
             fpsEl.textContent = String(fps);
-            // Color by performance
             fpsEl.style.color = fps >= 55 ? "var(--accent-green)"
                 : fps >= 30 ? "var(--accent-amber)"
                     : "var(--accent-red)";
         }, 1000);
 
-        // ── Volume fader ──────────────────────────────────────────
+        // Volume fader
         const slider = document.getElementById("volume-slider") as HTMLInputElement;
         const volLabel = document.getElementById("volume-value")!;
         const muteBtn = document.getElementById("btn-mute")!;
@@ -286,59 +334,97 @@ export class UIController {
 
     private async loadPMX(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "PMXモデル", extensions: ["pmx", "pmd"] },
-            { name: "すべてのファイル", extensions: ["*"] },
+            { name: "PMX model", extensions: ["pmx", "pmd"] },
+            { name: "All files", extensions: ["*"] },
         ]);
 
         if (!filePath) return;
 
-        this.setStatus("PMX読み込み中...", true);
+        this.setStatus("Loading PMX...", true);
         await this.mmdManager.loadPMX(filePath);
     }
 
     private async loadVMD(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "VMDモーション", extensions: ["vmd"] },
-            { name: "すべてのファイル", extensions: ["*"] },
+            { name: "VMD motion", extensions: ["vmd"] },
+            { name: "All files", extensions: ["*"] },
         ]);
 
         if (!filePath) return;
 
-        this.setStatus("VMD読み込み中...", true);
+        this.setStatus("Loading VMD...", true);
         await this.mmdManager.loadVMD(filePath);
     }
 
     private async loadMP3(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "MP3音源", extensions: ["mp3", "wav", "ogg"] },
-            { name: "すべてのファイル", extensions: ["*"] },
+            { name: "Audio", extensions: ["mp3", "wav", "ogg"] },
+            { name: "All files", extensions: ["*"] },
         ]);
 
         if (!filePath) return;
 
-        this.setStatus("音源読み込み中...", true);
+        this.setStatus("Loading audio...", true);
         await this.mmdManager.loadMP3(filePath);
+    }
+
+    private refreshModelSelector(): void {
+        const models = this.mmdManager.getLoadedModels();
+        this.modelSelect.innerHTML = "";
+
+        if (models.length === 0) {
+            const emptyOption = document.createElement("option");
+            emptyOption.value = "";
+            emptyOption.textContent = "-";
+            this.modelSelect.appendChild(emptyOption);
+            this.modelSelect.disabled = true;
+            return;
+        }
+
+        let selected = false;
+        for (const model of models) {
+            const option = document.createElement("option");
+            option.value = String(model.index);
+            option.textContent = `${model.index + 1}: ${model.name}`;
+            option.title = model.path;
+            if (model.active) {
+                option.selected = true;
+                selected = true;
+            }
+            this.modelSelect.appendChild(option);
+        }
+
+        if (!selected) {
+            this.modelSelect.selectedIndex = 0;
+        }
+        this.modelSelect.disabled = models.length < 2;
+    }
+
+    private updateGroundToggleButton(visible: boolean): void {
+        this.groundToggleText.textContent = visible ? "床表示ON" : "床表示OFF";
+        this.btnToggleGround.setAttribute("aria-pressed", visible ? "true" : "false");
+        this.btnToggleGround.classList.toggle("toggle-on", visible);
     }
 
     private play(): void {
         this.mmdManager.play();
         this.btnPlay.style.display = "none";
         this.btnPause.style.display = "flex";
-        this.setStatus("再生中", false);
+        this.setStatus("Playing", false);
     }
 
     private pause(): void {
         this.mmdManager.pause();
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
-        this.setStatus("一時停止", false);
+        this.setStatus("Paused", false);
     }
 
     private stop(): void {
         this.mmdManager.stop();
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
-        this.setStatus("停止", false);
+        this.setStatus("Stopped", false);
     }
 
     private setStatus(text: string, loading: boolean): void {

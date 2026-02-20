@@ -170,6 +170,12 @@ body {
   background: var(--bg-active);
 }
 
+.toolbar-btn.toggle-on {
+  background: var(--bg-active);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
 .status-badge {
   display: flex;
   align-items: center;
@@ -769,6 +775,28 @@ body {
   color: var(--text-secondary);
 }
 
+.info-model-select {
+  width: 120px;
+  max-width: 120px;
+  padding: 2px 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.info-model-select:focus {
+  border-color: var(--accent-primary);
+}
+
+.info-model-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ============================================
    Loading / Notification Toasts
    ============================================ */
@@ -953,20 +981,51 @@ body {
 .lighting-controls {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 4px 0;
+  gap: 4px;
+  padding: 2px 4px 4px 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.lighting-controls::-webkit-scrollbar {
+  width: 4px;
+}
+
+.lighting-controls::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 2px;
 }
 
 .light-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.light-row-check {
+  align-items: center;
+}
+
+.light-check-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.light-check {
+  accent-color: var(--accent-amber, #f59e0b);
+  width: 12px;
+  height: 12px;
 }
 
 .light-label {
   font-size: 10px;
   color: var(--text-tertiary);
-  width: 52px;
+  width: 48px;
   flex-shrink: 0;
   text-align: right;
 }

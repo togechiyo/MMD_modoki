@@ -53,13 +53,20 @@
           </svg>
           <span>VMD読込</span>
         </button>
-        <button id="btn-load-mp3" class="toolbar-btn" title="MP3音源を読み込む">
+        <button id="btn-load-mp3" class="toolbar-btn" title="音源ファイルを読み込む">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path
               d="M6 13c0 1.105-1.12 2-2.5 2S1 14.105 1 13s1.12-2 2.5-2S6 11.895 6 13zm9-2c0 1.105-1.12 2-2.5 2S10 12.105 10 11s1.12-2 2.5-2S15 9.895 15 11z" />
             <path fill-rule="evenodd" d="M15 3v8h-1V3H6v10H5V3a1 1 0 011-1h8a1 1 0 011 1z" />
           </svg>
-          <span>MP3読込</span>
+          <span>音源読込</span>
+        </button>
+        <button id="btn-toggle-ground" class="toolbar-btn toggle-on" title="地面表示を切り替える" aria-pressed="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1 4h14v8H1z" />
+            <path d="M1 8h14M8 4v8" stroke="currentColor" stroke-width="1" fill="none" />
+          </svg>
+          <span id="ground-toggle-text">床表示ON</span>
         </button>
       </div>
       <div class="toolbar-right">
@@ -132,6 +139,12 @@
             <span>情報</span>
           </div>
           <div id="model-info" class="model-info">
+            <div class="info-row">
+              <span class="info-label">対象</span>
+              <select id="info-model-select" class="info-model-select" disabled>
+                <option value="">-</option>
+              </select>
+            </div>
             <div class="info-row"><span class="info-label">モデル</span><span id="info-model-name"
                 class="info-value">-</span></div>
             <div class="info-row"><span class="info-label">頂点</span><span id="info-vertices" class="info-value">-</span>
@@ -193,13 +206,13 @@
           <div class="lighting-controls">
             <div class="light-row">
               <span class="light-label">方位角</span>
-              <input type="range" id="light-azimuth" class="light-slider" min="-180" max="180" value="27" step="1">
-              <span id="light-azimuth-val" class="light-value">27°</span>
+              <input type="range" id="light-azimuth" class="light-slider" min="-180" max="180" value="20" step="1">
+              <span id="light-azimuth-val" class="light-value">20°</span>
             </div>
             <div class="light-row">
               <span class="light-label">仰角</span>
-              <input type="range" id="light-elevation" class="light-slider" min="-85" max="-5" value="-45" step="1">
-              <span id="light-elevation-val" class="light-value">-45°</span>
+              <input type="range" id="light-elevation" class="light-slider" min="-85" max="-5" value="-50" step="1">
+              <span id="light-elevation-val" class="light-value">-50°</span>
             </div>
             <div class="light-row">
               <span class="light-label">光の強さ</span>
@@ -208,13 +221,18 @@
             </div>
             <div class="light-row">
               <span class="light-label">環境光</span>
-              <input type="range" id="light-ambient" class="light-slider" min="0" max="200" value="60" step="1">
-              <span id="light-ambient-val" class="light-value">0.6</span>
+              <input type="range" id="light-ambient" class="light-slider" min="0" max="200" value="20" step="1">
+              <span id="light-ambient-val" class="light-value">0.2</span>
             </div>
             <div class="light-row">
               <span class="light-label">影の濃さ</span>
-              <input type="range" id="light-shadow" class="light-slider" min="0" max="100" value="0" step="1">
-              <span id="light-shadow-val" class="light-value">0.0</span>
+              <input type="range" id="light-shadow" class="light-slider" min="0" max="100" value="45" step="1">
+              <span id="light-shadow-val" class="light-value">0.45</span>
+            </div>
+            <div class="light-row">
+              <span class="light-label">境界幅</span>
+              <input type="range" id="light-shadow-softness" class="light-slider" min="5" max="120" value="35" step="1">
+              <span id="light-shadow-softness-val" class="light-value">0.035</span>
             </div>
           </div>
         </section>

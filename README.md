@@ -5,12 +5,14 @@ PMX/PMD モデル、VMD モーション、音源（MP3/WAV/OGG）を読み込み
 
 ## 特徴
 
-- PMX/PMD モデル読み込み
+- PMX/PMD モデル読み込み（複数同時読込）
+- アクティブモデル切替（下パネル「情報 > 対象」）
 - VMD モーション読み込み
 - MP3/WAV/OGG 音源読み込み・同期再生
 - キーフレーム可視化タイムライン（ボーン/モーフ別）
 - モーフスライダー操作（先頭30件表示）
-- ライティング調整（方位角/仰角/強度/環境光/影）
+- ライティング調整（方位角/仰角/光の強さ/環境光/影の濃さ/境界幅）
+- 床表示 ON/OFF（上部ツールバー）
 - 再生速度変更、シーク、フレーム表示
 
 ## 技術スタック
@@ -19,6 +21,15 @@ PMX/PMD モデル、VMD モーション、音源（MP3/WAV/OGG）を読み込み
 - TypeScript
 - Babylon.js (`@babylonjs/core`, `@babylonjs/loaders`, `@babylonjs/gui`)
 - babylon-mmd
+
+## ドキュメント
+
+- ドキュメント入口: [`docs/README.md`](docs/README.md)
+- アーキテクチャ概要: [`docs/architecture.md`](docs/architecture.md)
+- MmdManager 解説: [`docs/mmd-manager.md`](docs/mmd-manager.md)
+- UI と操作フロー: [`docs/ui-flow.md`](docs/ui-flow.md)
+- 影仕様と実装: [`docs/shadow-spec.md`](docs/shadow-spec.md)
+- トラブルシュート: [`docs/troubleshooting.md`](docs/troubleshooting.md)
 
 ## 動作要件
 
@@ -54,9 +65,10 @@ npm run make
 ## 使い方
 
 1. `PMX読込` でモデル（`.pmx` / `.pmd`）を読み込む
-2. `VMD読込` でモーション（`.vmd`）を読み込む
-3. 必要に応じて `MP3読込` で音源を読み込む
-4. 再生コントロール・タイムライン・モーフ・照明を調整する
+2. 必要なら追加で PMX を読み込み、`情報 > 対象` でアクティブモデルを切り替える
+3. `VMD読込` でモーション（`.vmd`）を読み込む
+4. 必要に応じて `音源読込` で音源を読み込む
+5. 再生コントロール・タイムライン・モーフ・照明を調整する
 
 ## キーボードショートカット
 

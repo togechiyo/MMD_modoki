@@ -1,103 +1,68 @@
-﻿# MmdManager 解説
+# MmdManager 実装メモ
 
-`src/mmd-manager.ts` は 3D 描画・モデル/モーション・音声同期をまとめて担当します。
+対象: `src/mmd-manager.ts`
 
-## 主な責務
+## 役割
 
-- Babylon Engine / Scene / Camera / Light の初期化
-- Ammo ベース物理（babylon-mmd）初期化と ON/OFF 制御
-- PMX/PMD の読み込みと MMD モデル化（複数モデル保持）
-- VMD の読み込みとランタイムアニメーション設定
-- カメラVMD の読み込みとカメラアニメーション設定
-- 音源（MP3/WAV/OGG）読み込みと再生同期
-- 現在描画の PNG キャプチャ
-- 再生制御（play/pause/stop/seek/speed）
-- モーフ操作、照明操作、床表示切替、FPS取得、物理切替
+- Babylon.js の初期化（Engine/Scene/Camera/Light）
+- MMD ランタイム管理（PMX/PMD, VMD, カメラVMD, 音源）
+- 物理（Ammo + babylon-mmd）初期化と有効/無効切替
+- ポストエフェクト管理（DoF、レンズ系、ガンマ、AA）
+- UI 層からの値適用とフレーム同期通知
 
-## 初期化の要点
+## 現在の描画パイプライン
 
-- `MmdModelLoader.SharedMaterialBuilder` を明示設定
-- `SdefInjector.OverrideEngineCreateEffect` で SDEF 対応
-- `MmdRuntime` を `scene` に登録
-- 非同期で `initializePhysics()` を開始
-  - `ammo.wasm.wasm` を `?url` で解決して `fetch`
-  - `Ammo({ wasmBinary })` で wasm バイナリを明示注入
-  - `MmdAmmoJSPlugin` を作成し `scene.enablePhysics` を設定
-  - `MmdAmmoPhysics` を runtime 側へ差し込み
-- `runRenderLoop` 内でフレーム更新コールバックを通知
+このプロジェクトでは DoF とレンズ系を分離している。
 
-## ロード処理
+1. `DefaultRenderingPipeline` で主 DoF を実行
+2. `LensRenderingPipeline` はハイライト/エッジブラー用途で使用
+3. 収差は独自 `PostProcess`（`finalLensDistortionPostProcess`）で最終段近くに適用
+4. AA は `FxaaPostProcess` を最後に適用
 
-### PMX/PMD
+補足:
 
-- `loadPMX(filePath)`
-- 先に `physicsInitializationPromise` 完了を待機
-- `ImportMeshAsync` で読み込み
-- `createMmdModel` でランタイムモデルを作成
-  - 物理利用可なら `buildPhysics: { disableOffsetForConstraintFrame: true }`
-  - 物理利用不可なら `buildPhysics: false`
-- `applyPhysicsStateToModel` で現在の物理 ON/OFF 状態を反映
-- モーフ名/頂点数/ボーン数を集計
-- `sceneModels` に追加して複数モデルを保持
-- 条件に応じてアクティブモデルを切替
-- `onSceneModelLoaded` / `onModelLoaded` を通知
+- 収差と AA の順序は `enforceFinalPostProcessOrder()` で固定
+- 常に `収差 -> AA` になるよう再アタッチしている
 
-### VMD
+## DoF / レンズの要点
 
-- `loadVMD(filePath)`
-- `window.electronAPI.readBinaryFile` でバイナリ取得
-- `VmdLoader.loadAsync` で解析
-- `createRuntimeAnimation` / `setRuntimeAnimation` で適用
-- トラックを抽出して `onKeyframesLoaded` へ通知
+- 主 DoF: `DefaultRenderingPipeline.depthOfField`
+- `dofBlurLevelValue` 既定: `Medium`
+- `dofFStopValue` 既定: `2.8`
+- `dofLensSizeValue` 既定: `30`
+- `dofAutoFocusToCameraTarget` は `true`
+- `dofAutoFocusInFocusRadiusMm` は `6000`（約 6m）
+- `dofNearSuppressionScaleValue` は `4.0`
+- `dofAutoFocusNearOffsetMmValue` は `10000`（10m）
 
-### カメラVMD
+### 収差
 
-- `loadCameraVMD(filePath)`
-- `MmdCamera` を `MmdRuntime` の animatable として登録
-- `VmdLoader.loadAsync` で解析し、`cameraTrack` を検証
-- `MmdCamera.createRuntimeAnimation` / `setRuntimeAnimation` で適用
-- 毎フレーム `MmdCamera -> ArcRotateCamera` 同期で表示カメラへ反映
-- キーフレームは `カメラ` レーンとしてタイムラインに別行表示
+- FoV 連動は有効（`dofLensDistortionFollowsCameraFov = true`）
+- 中立 FoV: `30`
+- 望遠端 FoV: `10` -> `-100%` 側
+- 広角端 FoV: `120` -> `+100%` 側
+- 影響度: `dofLensDistortionInfluenceValue`（`0..1`、既定 `0`）
+- LensRenderingPipeline 側の `distortion` は `0` 固定
+- 実際の収差適用は独自最終パスで実施
 
-### 音源
+## ポスト補正
 
-- `loadMP3(filePath)`
-- Blob URL + `StreamAudioPlayer` を作成
-- `mmdRuntime.setAudioPlayer` で同期再生
-- 拡張子から MIME を判定（MP3/WAV/OGG）
+- `postEffectContrastValue` 既定: `1`
+- `postEffectGammaValue` 既定: `2`
+- ガンマは専用 PostProcess で補正
+- AA は `antialiasEnabledValue` で切替（既定 `true`）
 
-## 公開 API（抜粋）
+## UI 反映の現状（2026-02-21）
 
-- モデル管理: `getLoadedModels`, `setActiveModelByIndex`
-- 床表示: `isGroundVisible`, `setGroundVisible`, `toggleGroundVisible`
-- 物理: `isPhysicsAvailable`, `getPhysicsEnabled`, `setPhysicsEnabled`, `togglePhysicsEnabled`
-- 出力: `capturePngDataUrl`
-- 再生: `play`, `pause`, `stop`, `seekTo`, `setPlaybackSpeed`
-- 状態: `isPlaying`, `currentFrame`, `totalFrames`
-- 描画情報: `getFps`, `getEngineType`
-- 音量: `volume`, `toggleMute`
-- 照明: `lightIntensity`, `ambientIntensity`, `shadowDarkness`, `shadowEdgeSoftness`, `setLightDirection`
-- カメラ: `getCameraPosition`, `setCameraPosition`, `getCameraRotation`, `setCameraRotation`, `getCameraFov`, `setCameraFov`
-- モーフ: `getMorphWeight`, `setMorphWeight`
+HTML 側で `dof-row-hidden` により複数項目を非表示運用している。
 
-## 影と材質の扱い（現仕様）
+- 非表示: カメラ距離、DoF品質、DoFフォーカス、DoF F-stop、前抑制、焦点距離反転、DoF焦点距離
+- 非表示: コントラスト、収差
+- 表示: ガンマ、収差影響度、レンズブラー、エッジブラー、輪郭線 など
 
-- 方向ライト影は全メッシュを caster/receiver として扱う
-- `ShadowGenerator` は高品質設定（`PCF + Contact Hardening`）
-- 影の境界幅は `shadowEdgeSoftness` で UI から調整
-- トゥーン影色は PMX 側 `toonTexture` を優先し、共通 ramp で上書きしない
+詳細な UI 項目は `docs/camera-implementation-spec.md` を参照。
 
-## 物理仕様（現実装）
+## 注意点
 
-- 物理エンジン: `MmdAmmoJSPlugin` + `MmdAmmoPhysics`
-- 重力: `Vector3(0, -98, 0)`
-- ステップ: `setMaxSteps(120)` / `setFixedTimeStep(1/120)`
-- モデル物理生成: `buildPhysics` をロード時に切替
-- 剛体有効/無効: `model.rigidBodyStates` を `1/0` で一括反映
-- 物理状態通知: `onPhysicsStateChanged(enabled, available)`
-
-## 現状の制限
-
-- 物理初期化に失敗した環境では `available=false` となり UI は `物理不可` 表示になる
-- 物理パラメータは現状ハードコード（設定 UI / 設定ファイル化は未実装）
-- MMD 編集機能（キーフレーム編集保存など）は未実装
+- `src/mmd-manager.ts` は CP932 系エンコーディングのため、編集時は文字化けに注意
+- 収差は最終段適用なので、Lens 側の歪みパラメータを触っても見た目に反映されない（意図仕様）

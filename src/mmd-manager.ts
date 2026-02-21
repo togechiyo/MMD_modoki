@@ -7,28 +7,39 @@ import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
+import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { Effect } from "@babylonjs/core/Materials/effect";
 import { CreateScreenshotUsingRenderTargetAsync } from "@babylonjs/core/Misc/screenshotTools";
+import { ImageProcessingPostProcess } from "@babylonjs/core/PostProcesses/imageProcessingPostProcess";
+import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
+import { FxaaPostProcess } from "@babylonjs/core/PostProcesses/fxaaPostProcess";
+import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
+import { LensRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/lensRenderingPipeline";
+import { DepthOfFieldEffectBlurLevel } from "@babylonjs/core/PostProcesses/depthOfFieldEffect";
+import type { DepthRenderer } from "@babylonjs/core/Rendering/depthRenderer";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { ModelInfo, MotionInfo, KeyframeTrack, TrackCategory } from "./types";
 
-/** 鬯ｮ・ｮ闕ｵ譏ｴ繝ｻ髫ｰ譴ｧ・ｺ蛟･繝ｻ郢晢ｽｻ繝ｻ・ｨ鬮ｯ・ｷ繝ｻ・ｻ鬮ｮ諛ｶ・ｽ・｣郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｺ鬮ｫ・ｰ髮具ｽｻ繝ｻ・ｽ繝ｻ・ｶ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｼ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻMD鬯ｮ・ｫ繝ｻ・ｶ髴難ｽ｣陋滂ｽ｡繝ｻ・ｶ隲帷ｿｫ繝ｻ郢晢ｽｻ繝ｻ・ｺ鬮ｯ讓奇ｽｻ阮吶・郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｪ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｫ繝ｻ・ｴ郢晢ｽｻ繝ｻ・ｬ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬮ｯ譎｢・ｽ・ｲ郢晢ｽｻ繝ｻ・ｨ郢晢ｽｻ陷ｿ謔ｶ貂夂ｹ晢ｽｻ繝ｻ・ｹ郢晢ｽｻ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｹ鬯ｩ蟷｢・ｽ・｢髫ｴ謫ｾ・ｽ・ｴ驛｢譎｢・ｽ・ｻ*/
+/** 鬯�E�・�E�闕ｵ譏ｴ繝ｻ髫�E�譴�E�・�E�蛟･繝ｻ郢晢�E��E�繝ｻ・�E�鬮�E�・�E�繝ｻ・�E�鬮�E�諛ｶ・�E�・�E�郢晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�鬮�E�・�E�髮具�E��E�繝ｻ・�E�繝ｻ・�E�鬩幢�E��E�隴趣�E��E�繝ｻ・�E�繝ｻ・�E�鬯�E�蟷�E�・�E�・�E�髫�E�雜｣・�E�・�E�郢晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�鬯�E�蟷�E�・�E�・�E�髫�E�雜｣・�E�・�E�郢晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�鬩幢�E��E�隴趣�E��E�繝ｻ・�E�繝ｻ・�E�鬩幢�E��E�隴趣�E��E�繝ｻ・�E�繝ｻ・�E�MD鬯�E�・�E�繝ｻ・�E�髴難�E��E�陋滂ｽ�E�繝ｻ・�E�隲帷�E��E�繝ｻ郢晢�E��E�繝ｻ・�E�鬮�E�讓奁E���E�阮吶・郢晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�驛｢譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�鬯�E�・�E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�驛｢譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�鬩幢�E��E�隴趣�E��E�繝ｻ・�E�繝ｻ・�E�鬮�E�譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�郢晢�E��E�陷�E�謔ｶ貂夂ｹ晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�驛｢譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�鬯�E�蟷�E�・�E�・�E�髫�E�謫�E�・�E�・�E�驛｢譎｢・�E�・�E�*/
 const SEMI_STANDARD_BONES = new Set<string>();
 
 function classifyBone(name: string): TrackCategory {
-    if (name === "髯ｷ闌ｨ・ｽ・ｨ驍ｵ・ｺ繝ｻ・ｦ驍ｵ・ｺ繝ｻ・ｮ鬮ｫ蛹・ｽｽ・ｪ") return "root";
+    if (name === "髯�E�闌ｨ・�E�・�E�驍ｵ・�E�繝ｻ・�E�驍ｵ・�E�繝ｻ・�E�鬮�E�蛹・�E��E�・�E�") return "root";
     if (SEMI_STANDARD_BONES.has(name)) return "semi-standard";
     return "bone";
 }
 
 // Side effects - register loaders
 import "babylon-mmd/esm/Loader/pmxLoader";
+import "babylon-mmd/esm/Loader/mmdOutlineRenderer";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import "@babylonjs/core/Materials/Textures/Loaders/tgaTextureLoader";
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
+import "@babylonjs/core/Rendering/depthRendererSceneComponent";
 
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
@@ -67,6 +78,7 @@ export class MmdManager {
     private _totalFrames = 0;
     private _playbackSpeed = 1;
     private ground: Mesh | null = null;
+    private skydome: Mesh | null = null;
     private audioPlayer: StreamAudioPlayer | null = null;
     private audioBlobUrl: string | null = null;
     // Lighting references
@@ -83,9 +95,57 @@ export class MmdManager {
     private physicsInitializationPromise: Promise<boolean>;
     private physicsAvailable = false;
     private physicsEnabled = true;
+    private physicsGravityAcceleration = 98;
+    private physicsGravityDirection = new Vector3(0, -100, 0);
     private shadowEnabled = true;
     private shadowDarknessValue = 0.45;
     private shadowEdgeSoftnessValue = 0.035;
+    private lightColorTemperatureKelvin = 6500;
+    private postEffectContrastValue = 1;
+    private postEffectGammaValue = 2;
+    private antialiasEnabledValue = true;
+    private postEffectFarDofStrengthValue = 0;
+    private readonly farDofEnabled = false;
+    private readonly farDofFocusSharpRadiusMm = 1000;
+    private modelEdgeWidthValue = 0;
+    private readonly modelEdgeMaterialDefaults = new WeakMap<object, { enabled: boolean; width: number; alpha: number; colorR: number; colorG: number; colorB: number }>();
+    private imageProcessingPostProcess: ImageProcessingPostProcess | null = null;
+    private gammaPostProcess: PostProcess | null = null;
+    private finalAntialiasPostProcess: FxaaPostProcess | null = null;
+    private finalLensDistortionPostProcess: PostProcess | null = null;
+    private dofPostProcess: PostProcess | null = null;
+    private depthRenderer: DepthRenderer | null = null;
+    private defaultRenderingPipeline: DefaultRenderingPipeline | null = null;
+    private lensRenderingPipeline: LensRenderingPipeline | null = null;
+    private dofEnabledValue = false;
+    private dofBlurLevelValue = DepthOfFieldEffectBlurLevel.Medium;
+    private dofFocusDistanceMmValue = 55000;
+    private dofFStopValue = 2.8;
+    private dofEffectiveFStopValue = 2.8;
+    private dofLensBlurStrengthValue = 0;
+    private dofLensBlurEnabledValue = true;
+    private dofLensEdgeBlurValue = 0;
+    private dofLensDistortionValue = 0;
+    private readonly dofLensDistortionFollowsCameraFov = true;
+    private readonly dofLensDistortionNeutralFovDeg = 30;
+    private readonly dofLensDistortionMinTeleFovDeg = 10;
+    private readonly dofLensDistortionMaxWideFovDeg = 120;
+    private dofLensDistortionInfluenceValue = 0;
+    private readonly dofLensHighlightsBaseGain = 0.8;
+    private readonly dofLensHighlightsGainRange = 6.2;
+    private readonly dofLensHighlightsBaseThreshold = 0.92;
+    private readonly dofLensHighlightsThresholdRange = 0.87;
+    private dofLensSizeValue = 30;
+    private dofFocalLengthValue = 50;
+    private readonly dofFocalLengthFollowsCameraFov = true;
+    private readonly dofFovLinkSensorWidthMm = 36;
+    private dofFocalLengthDistanceInvertedValue = false;
+    private readonly dofAutoFocusToCameraTarget = true;
+    private readonly dofAutoFocusInFocusRadiusMm = 6000;
+    private readonly dofAutoFocusCocAtRangeEdge = 0.05;
+    private readonly dofAutoFocusLensCompensationExponent = 0.72;
+    private dofNearSuppressionScaleValue = 4.0;
+    private dofAutoFocusNearOffsetMmValue = 10000;
     private resizeObserver: ResizeObserver | null = null;
     private readonly onWindowResize = () => {
         this.resize();
@@ -137,6 +197,20 @@ export class MmdManager {
         return next;
     }
 
+    public isSkydomeVisible(): boolean {
+        return this.skydome?.isEnabled() ?? false;
+    }
+
+    public setSkydomeVisible(visible: boolean): void {
+        if (!this.skydome) return;
+        this.skydome.setEnabled(visible);
+    }
+
+    public toggleSkydomeVisible(): boolean {
+        const next = !this.isSkydomeVisible();
+        this.setSkydomeVisible(next);
+        return next;
+    }
     public isPhysicsAvailable(): boolean {
         return this.physicsAvailable;
     }
@@ -162,6 +236,30 @@ export class MmdManager {
         return this.setPhysicsEnabled(!this.getPhysicsEnabled());
     }
 
+    public getPhysicsGravityAcceleration(): number {
+        return this.physicsGravityAcceleration;
+    }
+
+    public setPhysicsGravityAcceleration(value: number): void {
+        this.physicsGravityAcceleration = Math.max(0, Math.min(200, value));
+        this.applyPhysicsGravity();
+    }
+
+    public getPhysicsGravityDirection(): { x: number; y: number; z: number } {
+        return {
+            x: this.physicsGravityDirection.x,
+            y: this.physicsGravityDirection.y,
+            z: this.physicsGravityDirection.z,
+        };
+    }
+
+    public setPhysicsGravityDirection(x: number, y: number, z: number): void {
+        this.physicsGravityDirection.x = Math.max(-100, Math.min(100, x));
+        this.physicsGravityDirection.y = Math.max(-100, Math.min(100, y));
+        this.physicsGravityDirection.z = Math.max(-100, Math.min(100, z));
+        this.applyPhysicsGravity();
+    }
+
     constructor(canvas: HTMLCanvasElement) {
         this.renderingCanvas = canvas;
 
@@ -171,10 +269,10 @@ export class MmdManager {
         }
 
         // Create engine
-        this.engine = new Engine(canvas, true, {
+        this.engine = new Engine(canvas, false, {
             preserveDrawingBuffer: false,
             stencil: true,
-            antialias: true,
+            antialias: false,
             alpha: false,
             premultipliedAlpha: false,
             desynchronized: false,
@@ -186,6 +284,9 @@ export class MmdManager {
         this.scene = new Scene(this.engine);
         this.scene.clearColor = new Color4(0.04, 0.04, 0.06, 1);
         this.scene.ambientColor = new Color3(0.5, 0.5, 0.5);
+        this.scene.imageProcessingConfiguration.isEnabled = true;
+        this.scene.imageProcessingConfiguration.applyByPostProcess = false;
+        this.scene.imageProcessingConfiguration.contrast = this.postEffectContrastValue;
 
         // SDEF support
         SdefInjector.OverrideEngineCreateEffect(this.engine);
@@ -204,6 +305,21 @@ export class MmdManager {
         this.camera.wheelDeltaPercentage = 0.01;
         this.camera.attachControl(canvas, true);
         this.syncCameraRotationFromCurrentView();
+        this.updateDofFocalLengthFromCameraFov();
+        this.imageProcessingPostProcess = new ImageProcessingPostProcess(
+            "imageProcessing",
+            1.0,
+            this.camera,
+            Texture.BILINEAR_SAMPLINGMODE,
+            this.engine,
+            false,
+            0,
+            this.scene.imageProcessingConfiguration
+        );
+        this.setupGammaPostProcess();
+        this.setupFarDofPostProcess();
+        this.dofFocusDistanceMmValue = this.getCameraFocusDistanceMm();
+        this.setupEditorDofPipeline();
 
         // Lights
         const hemiLight = this.hemiLight = new HemisphericLight(
@@ -228,6 +344,7 @@ export class MmdManager {
         dirLight.shadowMaxZ = 300;
         dirLight.autoUpdateExtends = true;
         dirLight.autoCalcShadowZBounds = true;
+        this.applyLightColorTemperature();
 
         // Shadow generator (high-quality profile, clamped by device capability)
         const maxTextureSize = this.engine.getCaps().maxTextureSize ?? 4096;
@@ -299,6 +416,22 @@ export class MmdManager {
         this.ground.material = groundMat;
         this.ground.receiveShadows = true;
 
+        this.skydome = CreateSphere("skydome", {
+            diameter: 320,
+            segments: 24,
+            updatable: false,
+        }, this.scene);
+        const skydomeMat = new StandardMaterial("skydomeMat", this.scene);
+        const skydomeColor = new Color3(0.6, 0.6, 0.6);
+        skydomeMat.diffuseColor = skydomeColor;
+        skydomeMat.emissiveColor = skydomeColor;
+        skydomeMat.specularColor = new Color3(0, 0, 0);
+        skydomeMat.disableLighting = true;
+        skydomeMat.backFaceCulling = false;
+        this.skydome.material = skydomeMat;
+        this.skydome.infiniteDistance = true;
+        this.skydome.isPickable = false;
+        this.skydome.receiveShadows = false;
         // MMD Runtime (without physics for initial version)
         this.mmdRuntime = new MmdRuntime(this.scene);
         this.mmdRuntime.register(this.scene);
@@ -316,6 +449,7 @@ export class MmdManager {
             if (this.hasCameraMotion) {
                 this.syncViewportCameraFromMmdCamera();
             }
+            this.updateEditorDofFocusAndFStop();
         });
 
         // Start render loop
@@ -347,12 +481,13 @@ export class MmdManager {
             const plugin = new MmdAmmoJSPlugin(true, ammoInstance);
             plugin.setMaxSteps(120);
             plugin.setFixedTimeStep(1 / 120);
-            this.scene.enablePhysics(new Vector3(0, -98, 0), plugin);
+            this.scene.enablePhysics(new Vector3(0, -this.physicsGravityAcceleration, 0), plugin);
 
             this.physicsPlugin = plugin;
             this.physicsRuntime = new MmdAmmoPhysics(this.scene);
             (this.mmdRuntime as unknown as { _physics: MmdAmmoPhysics | null })._physics = this.physicsRuntime;
             this.physicsAvailable = true;
+            this.applyPhysicsGravity();
 
             this.applyPhysicsStateToAllModels();
             this.onPhysicsStateChanged?.(this.physicsEnabled, true);
@@ -381,6 +516,20 @@ export class MmdManager {
         for (const sceneModel of this.sceneModels) {
             this.applyPhysicsStateToModel(sceneModel.model);
         }
+    }
+
+    private applyPhysicsGravity(): void {
+        const physicsEngine = this.scene.getPhysicsEngine();
+        if (!physicsEngine) return;
+
+        const direction = this.physicsGravityDirection.clone();
+        if (direction.lengthSquared() < 1e-6) {
+            direction.set(0, -1, 0);
+        } else {
+            direction.normalize();
+        }
+        const gravity = direction.scale(this.physicsGravityAcceleration);
+        physicsEngine.setGravity(gravity);
     }
 
     async loadPMX(filePath: string): Promise<ModelInfo | null> {
@@ -453,6 +602,7 @@ export class MmdManager {
                 }
             }
 
+            this.applyModelEdgeToMeshes(result.meshes as Mesh[]);
             this.applyCelShadingToMeshes(result.meshes as Mesh[]);
 
             // Create MMD model
@@ -533,7 +683,7 @@ export class MmdManager {
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             console.error("Failed to load PMX:", message);
-            this.onError?.(`PMX鬯ｯ・ｮ繝ｻ・ｫ郢晢ｽｻ繝ｻ・ｱ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ鬯ｩ謳ｾ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｿ鬯ｯ・ｮ繝ｻ・ｴ鬮ｮ諛ｶ・ｽ・｣郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｼ鬯ｩ謳ｾ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｿ鬯ｩ蟷｢・ｽ・｢郢晢ｽｻ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｩ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｼ: ${message}`);
+            this.onError?.(`PMX鬯�E�・�E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�驛｢譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�鬯�E�謳�E�・�E�・�E�郢晢�E��E�繝ｻ・�E�驛｢譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�鬯�E�・�E�繝ｻ・�E�鬮�E�諛ｶ・�E�・�E�郢晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�鬯�E�謳�E�・�E�・�E�郢晢�E��E�繝ｻ・�E�驛｢譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�鬯�E�蟷�E�・�E�・�E�郢晢�E��E�繝ｻ・�E�驛｢譎｢・�E�・�E�郢晢�E��E�繝ｻ・�E�鬯�E�蟷�E�・�E�・�E�髫�E�雜｣・�E�・�E�郢晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�鬯�E�蟷�E�・�E�・�E�髫�E�雜｣・�E�・�E�郢晢�E��E�繝ｻ・�E�郢晢�E��E�繝ｻ・�E�: ${message}`);
             return null;
         }
     }
@@ -553,6 +703,57 @@ export class MmdManager {
         }
 
         return false;
+    }
+
+    private applyModelEdgeToAllModels(): void {
+        for (const sceneModel of this.sceneModels) {
+            const meshes = [sceneModel.mesh, ...sceneModel.mesh.getChildMeshes()];
+            this.applyModelEdgeToMeshes(meshes as Mesh[]);
+        }
+    }
+
+    private applyModelEdgeToMeshes(meshes: Mesh[]): void {
+        const scale = this.modelEdgeWidthValue;
+        const materials = new Set<any>();
+
+        for (const mesh of meshes) {
+            const material = mesh.material as any;
+            if (!material) continue;
+            if (Array.isArray(material.subMaterials)) {
+                for (const sub of material.subMaterials) {
+                    if (sub) materials.add(sub);
+                }
+            } else {
+                materials.add(material);
+            }
+        }
+
+        for (const mat of materials) {
+            if (!("renderOutline" in mat) || !("outlineWidth" in mat)) continue;
+
+            let defaults = this.modelEdgeMaterialDefaults.get(mat as object);
+            if (!defaults) {
+                defaults = {
+                    enabled: Boolean(mat.renderOutline),
+                    width: Number(mat.outlineWidth) || 0,
+                    alpha: Number(mat.outlineAlpha ?? 1),
+                    colorR: Number(mat.outlineColor?.r ?? 0),
+                    colorG: Number(mat.outlineColor?.g ?? 0),
+                    colorB: Number(mat.outlineColor?.b ?? 0),
+                };
+                this.modelEdgeMaterialDefaults.set(mat as object, defaults);
+            }
+
+            const enabled = defaults.enabled && scale > 0;
+            mat.renderOutline = enabled;
+            mat.outlineWidth = enabled ? defaults.width * scale : 0;
+            if ("outlineAlpha" in mat) {
+                mat.outlineAlpha = defaults.alpha;
+            }
+            if ("outlineColor" in mat && mat.outlineColor?.set) {
+                mat.outlineColor.set(defaults.colorR, defaults.colorG, defaults.colorB);
+            }
+        }
     }
 
     private applyCelShadingToMeshes(meshes: Mesh[]): void {
@@ -857,7 +1058,7 @@ export class MmdManager {
         }
     }
 
-    /** Audio volume (0.0 鬯ｩ蛹・ｽｽ・ｯ郢晢ｽｻ繝ｻ・ｶ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ1.0) */
+    /** Audio volume (0.0 鬯�E�蛹・�E��E�・�E�郢晢�E��E�繝ｻ・�E�鬩幢�E��E�隴趣�E��E�繝ｻ・�E�繝ｻ・�E�1.0) */
     get volume(): number {
         return this.audioPlayer?.volume ?? 1;
     }
@@ -880,13 +1081,256 @@ export class MmdManager {
         }
     }
 
-    // 鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ Lighting API 鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ鬯ｮ・ｫ繝ｻ・ｨ髮九ｇ蠎・ｾつ
+    // 鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ Lighting API 鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ鬯�E�・�E�繝ｻ・�E�髮九ａE���E�E�つ
 
-    /** Directional light intensity (0.0 鬯ｩ蛹・ｽｽ・ｯ郢晢ｽｻ繝ｻ・ｶ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ2.0) */
+    /** Post-process contrast (0.0=flat, 1.0=neutral, up to 3.0 for stronger effect) */
+    get postEffectContrast(): number {
+        return this.postEffectContrastValue;
+    }
+    set postEffectContrast(v: number) {
+        this.postEffectContrastValue = Math.max(0, Math.min(3, v));
+        this.scene.imageProcessingConfiguration.contrast = this.postEffectContrastValue;
+        if (this.imageProcessingPostProcess) {
+            this.imageProcessingPostProcess.contrast = this.postEffectContrastValue;
+        }
+    }
+
+    /** Gamma power for mid-tone correction (1.0 = neutral). */
+    get postEffectGamma(): number {
+        return this.postEffectGammaValue;
+    }
+    set postEffectGamma(v: number) {
+        this.postEffectGammaValue = Math.max(0.25, Math.min(4, v));
+    }
+
+    /** Post-process anti-aliasing enabled state. */
+    get antialiasEnabled(): boolean {
+        return this.antialiasEnabledValue;
+    }
+    set antialiasEnabled(v: boolean) {
+        this.antialiasEnabledValue = v;
+        this.applyAntialiasSettings();
+    }
+
+    /** Editor-style depth of field enabled state. */
+    get dofEnabled(): boolean {
+        return this.dofEnabledValue;
+    }
+    set dofEnabled(v: boolean) {
+        this.dofEnabledValue = v;
+        if (this.dofEnabledValue) {
+            this.configureDofDepthRenderer();
+            this.updateEditorDofFocusAndFStop();
+        }
+        if (this.defaultRenderingPipeline) {
+            if (this.depthRenderer) {
+                this.defaultRenderingPipeline.depthOfField.depthTexture = this.depthRenderer.getDepthMap();
+            }
+            this.defaultRenderingPipeline.depthOfFieldEnabled = this.dofEnabledValue;
+        }
+        this.applyDofLensBlurSettings();
+        this.applyAntialiasSettings();
+    }
+
+    /** Editor-style depth of field blur quality (0=Low, 1=Medium, 2=High). */
+    get dofBlurLevel(): number {
+        return this.dofBlurLevelValue;
+    }
+    set dofBlurLevel(v: number) {
+        const level = v <= 0 ? DepthOfFieldEffectBlurLevel.Low : v === 1 ? DepthOfFieldEffectBlurLevel.Medium : DepthOfFieldEffectBlurLevel.High;
+        this.dofBlurLevelValue = level;
+        if (this.defaultRenderingPipeline) {
+            this.defaultRenderingPipeline.depthOfFieldBlurLevel = level;
+            this.applyEditorDofSettings();
+        }
+        this.applyAntialiasSettings();
+    }
+
+    /** DoF focus distance in scene units/1000 (mm). */
+    get dofFocusDistanceMm(): number {
+        return this.dofFocusDistanceMmValue;
+    }
+    set dofFocusDistanceMm(v: number) {
+        this.dofFocusDistanceMmValue = Math.max(0, Math.min(1000000000, v));
+        this.updateEditorDofFocusAndFStop();
+    }
+
+    /** Whether focus distance follows camera target each frame. */
+    get dofAutoFocusEnabled(): boolean {
+        return this.dofAutoFocusToCameraTarget;
+    }
+    /** In-focus radius used by auto-focus mode (meters). */
+    get dofAutoFocusRangeMeters(): number {
+        return this.dofAutoFocusInFocusRadiusMm / 1000;
+    }
+    /** Auto-focus offset toward camera in mm. */
+    get dofAutoFocusNearOffsetMm(): number {
+        return this.dofAutoFocusNearOffsetMmValue;
+    }
+    set dofAutoFocusNearOffsetMm(v: number) {
+        this.dofAutoFocusNearOffsetMmValue = Math.max(0, Math.min(1000000000, v));
+        this.updateEditorDofFocusAndFStop();
+    }
+    /** Foreground blur suppression scale for auto-focus near side. */
+    get dofNearSuppressionScale(): number {
+        return this.dofNearSuppressionScaleValue;
+    }
+    set dofNearSuppressionScale(v: number) {
+        this.dofNearSuppressionScaleValue = Math.max(0, Math.min(10, v));
+        this.updateEditorDofFocusAndFStop();
+    }
+    /** Current effective F-stop after auto-focus compensation. */
+    get dofEffectiveFStop(): number {
+        return this.dofEffectiveFStopValue;
+    }
+
+    /** DoF F-stop. Smaller value means stronger blur. */
+    get dofFStop(): number {
+        return this.dofFStopValue;
+    }
+    set dofFStop(v: number) {
+        this.dofFStopValue = Math.max(0.01, Math.min(32, v));
+        this.updateEditorDofFocusAndFStop();
+    }
+
+
+
+    /** Whether lens-blur highlights are enabled. */
+    get dofLensBlurEnabled(): boolean {
+        return this.dofLensBlurEnabledValue;
+    }
+    set dofLensBlurEnabled(v: boolean) {
+        this.dofLensBlurEnabledValue = v;
+        this.applyDofLensBlurSettings();
+    }
+
+    /** Additional lens-blur strength for bright highlights (0.0..1.0). */
+    get dofLensBlurStrength(): number {
+        return this.dofLensBlurStrengthValue;
+    }
+    set dofLensBlurStrength(v: number) {
+        this.dofLensBlurStrengthValue = Math.max(0, Math.min(1, v));
+        this.applyDofLensBlurSettings();
+    }
+
+
+    /** Lens edge blur strength (0.0..3.0). */
+    get dofLensEdgeBlur(): number {
+        return this.dofLensEdgeBlurValue;
+    }
+    set dofLensEdgeBlur(v: number) {
+        this.dofLensEdgeBlurValue = Math.max(0, Math.min(3, v));
+        this.applyDofLensOpticsSettings();
+    }
+
+    /** Lens distortion strength (-1.0..1.0). */
+    get dofLensDistortion(): number {
+        return this.dofLensDistortionValue;
+    }
+    set dofLensDistortion(v: number) {
+        if (this.dofLensDistortionFollowsCameraFov) {
+            this.updateDofLensDistortionFromCameraFov();
+            return;
+        }
+        this.dofLensDistortionValue = Math.max(-1, Math.min(1, v));
+        this.applyDofLensOpticsSettings();
+    }
+    get dofLensDistortionLinkedToCameraFov(): boolean {
+        return this.dofLensDistortionFollowsCameraFov;
+    }
+    /** Distortion influence scale for FoV-linked distortion (0.0..1.0). */
+    get dofLensDistortionInfluence(): number {
+        return this.dofLensDistortionInfluenceValue;
+    }
+    set dofLensDistortionInfluence(v: number) {
+        this.dofLensDistortionInfluenceValue = Math.max(0, Math.min(1, v));
+        if (this.dofLensDistortionFollowsCameraFov) {
+            this.updateDofLensDistortionFromCameraFov();
+            return;
+        }
+        this.applyDofLensOpticsSettings();
+    }
+    /** DoF lens size in scene units/1000 (mm). */
+    get dofLensSize(): number {
+        return this.dofLensSizeValue;
+    }
+    set dofLensSize(v: number) {
+        this.dofLensSizeValue = Math.max(0, Math.min(8192, v));
+        if (this.defaultRenderingPipeline) {
+            this.defaultRenderingPipeline.depthOfField.lensSize = this.dofLensSizeValue;
+        }
+        this.updateEditorDofFocusAndFStop();
+    }
+
+    /** DoF focal length in scene units/1000 (mm). */
+    get dofFocalLength(): number {
+        return this.dofFocalLengthValue;
+    }
+    /** Whether camera-distance-linked DoF focal length mapping is inverted. */
+    get dofFocalLengthDistanceInverted(): boolean {
+        return this.dofFocalLengthDistanceInvertedValue;
+    }
+    set dofFocalLengthDistanceInverted(v: boolean) {
+        this.dofFocalLengthDistanceInvertedValue = v;
+        if (this.dofFocalLengthFollowsCameraFov) {
+            this.updateDofFocalLengthFromCameraFov();
+            this.updateEditorDofFocusAndFStop();
+        }
+    }
+    /** Whether DoF focal length is linked to camera FoV. */
+    /** @deprecated Use dofFocalLengthLinkedToCameraFov. */
+    get dofFocalLengthLinkedToCameraDistance(): boolean {
+        return this.dofFocalLengthLinkedToCameraFov;
+    }
+    get dofFocalLengthLinkedToCameraFov(): boolean {
+        return this.dofFocalLengthFollowsCameraFov;
+    }
+    set dofFocalLength(v: number) {
+        if (this.dofFocalLengthFollowsCameraFov) {
+            this.updateDofFocalLengthFromCameraFov();
+            this.updateEditorDofFocusAndFStop();
+            return;
+        }
+        this.dofFocalLengthValue = Math.max(1, Math.min(1000, v));
+        if (this.defaultRenderingPipeline) {
+            this.defaultRenderingPipeline.depthOfField.focalLength = this.dofFocalLengthValue;
+        }
+        this.updateEditorDofFocusAndFStop();
+    }
+    /** Far background depth-of-field strength (0.0..1.0). */
+    get postEffectFarDofStrength(): number {
+        return this.postEffectFarDofStrengthValue;
+    }
+    set postEffectFarDofStrength(v: number) {
+        if (!this.farDofEnabled) {
+            this.postEffectFarDofStrengthValue = 0;
+            return;
+        }
+        this.postEffectFarDofStrengthValue = Math.max(0, Math.min(1, v));
+    }
+
+    /** Model outline scale. 1.0 keeps PMX edge color/visibility/width as-is. */
+    get modelEdgeWidth(): number {
+        return this.modelEdgeWidthValue;
+    }
+    set modelEdgeWidth(v: number) {
+        this.modelEdgeWidthValue = Math.max(0, Math.min(2, v));
+        this.applyModelEdgeToAllModels();
+    }
+
+    /** Light color temperature in Kelvin (1000..20000). */
+    get lightColorTemperature(): number {
+        return this.lightColorTemperatureKelvin;
+    }
+    set lightColorTemperature(kelvin: number) {
+        this.lightColorTemperatureKelvin = Math.max(1000, Math.min(20000, Math.round(kelvin)));
+        this.applyLightColorTemperature();
+    }
+
     get lightIntensity(): number { return this.dirLight.intensity; }
     set lightIntensity(v: number) { this.dirLight.intensity = Math.max(0, Math.min(2, v)); }
 
-    /** Ambient (hemispheric) light intensity (0.0 鬯ｩ蛹・ｽｽ・ｯ郢晢ｽｻ繝ｻ・ｶ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ2.0) */
+    /** Ambient (hemispheric) light intensity (0.0 鬯�E�蛹・�E��E�・�E�郢晢�E��E�繝ｻ・�E�鬩幢�E��E�隴趣�E��E�繝ｻ・�E�繝ｻ・�E�2.0) */
     get ambientIntensity(): number { return this.hemiLight.intensity; }
     set ambientIntensity(v: number) { this.hemiLight.intensity = Math.max(0, Math.min(2, v)); }
 
@@ -945,6 +1389,504 @@ export class MmdManager {
         return (Math.asin(d.y) * 180) / Math.PI;
     }
 
+    private applyLightColorTemperature(): void {
+        const color = this.kelvinToColor(this.lightColorTemperatureKelvin);
+        this.dirLight.diffuse = color.clone();
+        this.dirLight.specular = color.clone();
+        this.hemiLight.diffuse = color.scale(0.85);
+    }
+
+    private kelvinToColor(kelvin: number): Color3 {
+        const temp = Math.max(10, Math.min(200, kelvin / 100));
+        let red: number;
+        let green: number;
+        let blue: number;
+
+        if (temp <= 66) {
+            red = 255;
+            green = 99.4708025861 * Math.log(temp) - 161.1195681661;
+            blue = temp <= 19 ? 0 : 138.5177312231 * Math.log(temp - 10) - 305.0447927307;
+        } else {
+            red = 329.698727446 * Math.pow(temp - 60, -0.1332047592);
+            green = 288.1221695283 * Math.pow(temp - 60, -0.0755148492);
+            blue = 255;
+        }
+
+        const clamp01 = (v: number) => Math.max(0, Math.min(1, v / 255));
+        return new Color3(clamp01(red), clamp01(green), clamp01(blue));
+    }
+
+    private setupGammaPostProcess(): void {
+        const shaderKey = "mmdGammaCorrectionFragmentShader";
+        if (!Effect.ShadersStore[shaderKey]) {
+            Effect.ShadersStore[shaderKey] = `
+                precision highp float;
+                varying vec2 vUV;
+                uniform sampler2D textureSampler;
+                uniform float gammaPower;
+
+                void main(void) {
+                    vec4 color = texture2D(textureSampler, vUV);
+                    color.rgb = pow(max(color.rgb, vec3(0.0)), vec3(gammaPower));
+                    gl_FragColor = color;
+                }
+            `;
+        }
+
+        this.gammaPostProcess = new PostProcess(
+            "gammaCorrection",
+            "mmdGammaCorrection",
+            ["gammaPower"],
+            null,
+            1.0,
+            this.camera,
+            Texture.BILINEAR_SAMPLINGMODE,
+            this.engine,
+            false
+        );
+        this.gammaPostProcess.onApplyObservable.add((effect) => {
+            effect.setFloat("gammaPower", this.postEffectGammaValue);
+        });
+    }
+
+    private setupEditorDofPipeline(): void {
+        if (this.defaultRenderingPipeline) {
+            this.defaultRenderingPipeline.dispose();
+            this.defaultRenderingPipeline = null;
+        }
+        if (this.lensRenderingPipeline) {
+            this.lensRenderingPipeline.dispose(false);
+            this.lensRenderingPipeline = null;
+        }
+
+        this.defaultRenderingPipeline = new DefaultRenderingPipeline(
+            "DefaultRenderingPipeline",
+            false,
+            this.scene,
+            [this.camera]
+        );
+
+        this.defaultRenderingPipeline.samples = 1;
+        this.defaultRenderingPipeline.fxaaEnabled = false;
+        this.defaultRenderingPipeline.imageProcessingEnabled = false;
+        this.defaultRenderingPipeline.bloomEnabled = false;
+        this.defaultRenderingPipeline.sharpenEnabled = false;
+        this.defaultRenderingPipeline.grainEnabled = false;
+        this.defaultRenderingPipeline.chromaticAberrationEnabled = false;
+        this.defaultRenderingPipeline.glowLayerEnabled = false;
+
+        this.configureDofDepthRenderer();
+        if (this.dofLensDistortionFollowsCameraFov) {
+            this.updateDofLensDistortionFromCameraFov();
+        }
+        this.setupLensHighlightsPipeline();
+        this.defaultRenderingPipeline.depthOfFieldBlurLevel = this.dofBlurLevelValue;
+        this.applyEditorDofSettings();
+        this.setupFinalLensDistortionPostProcess();
+        this.applyAntialiasSettings();
+    }
+
+    private setupFinalLensDistortionPostProcess(): void {
+        const shaderKey = "mmdFinalLensDistortionFragmentShader";
+        if (!Effect.ShadersStore[shaderKey]) {
+            Effect.ShadersStore[shaderKey] = `
+                precision highp float;
+                varying vec2 vUV;
+                uniform sampler2D textureSampler;
+                uniform float distortion;
+
+                void main(void) {
+                    if (abs(distortion) < 0.0001) {
+                        gl_FragColor = texture2D(textureSampler, vUV);
+                        return;
+                    }
+
+                    vec2 centered = vUV - vec2(0.5);
+                    float radius2 = dot(centered, centered);
+                    if (radius2 < 1e-8) {
+                        gl_FragColor = texture2D(textureSampler, vUV);
+                        return;
+                    }
+
+                    vec2 direction = normalize(centered);
+                    float amount = clamp(abs(distortion) * 0.23, 0.0, 1.0);
+
+                    vec2 barrelUv = vec2(0.5) + direction * radius2;
+                    barrelUv = mix(vUV, barrelUv, amount);
+
+                    vec2 pincushionUv = vec2(0.5) - direction * radius2;
+                    pincushionUv = mix(vUV, pincushionUv, amount);
+
+                    vec2 finalUv = distortion >= 0.0 ? barrelUv : pincushionUv;
+                    finalUv = clamp(finalUv, vec2(0.0), vec2(1.0));
+                    gl_FragColor = texture2D(textureSampler, finalUv);
+                }
+            `;
+        }
+
+        if (this.finalLensDistortionPostProcess) {
+            this.finalLensDistortionPostProcess.dispose(this.camera);
+            this.finalLensDistortionPostProcess = null;
+        }
+
+        this.finalLensDistortionPostProcess = new PostProcess(
+            "finalLensDistortion",
+            "mmdFinalLensDistortion",
+            ["distortion"],
+            null,
+            1.0,
+            this.camera,
+            Texture.BILINEAR_SAMPLINGMODE,
+            this.engine,
+            false
+        );
+        this.finalLensDistortionPostProcess.onApplyObservable.add((effect) => {
+            effect.setFloat("distortion", this.dofLensDistortionValue);
+        });
+        this.enforceFinalPostProcessOrder();
+    }
+
+    private applyAntialiasSettings(): void {
+        if (this.finalAntialiasPostProcess) {
+            this.finalAntialiasPostProcess.dispose(this.camera);
+            this.finalAntialiasPostProcess = null;
+        }
+        if (!this.antialiasEnabledValue) {
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+        this.finalAntialiasPostProcess = new FxaaPostProcess(
+            "finalFxaa",
+            1.0,
+            this.camera,
+            Texture.BILINEAR_SAMPLINGMODE,
+            this.engine,
+            false
+        );
+        this.enforceFinalPostProcessOrder();
+    }
+
+    private enforceFinalPostProcessOrder(): void {
+        if (!this.finalLensDistortionPostProcess) return;
+
+        const distortion = this.finalLensDistortionPostProcess;
+        const antialias = this.finalAntialiasPostProcess;
+
+        if (antialias) {
+            this.camera.detachPostProcess(distortion);
+            this.camera.detachPostProcess(antialias);
+            this.camera.attachPostProcess(distortion);
+            this.camera.attachPostProcess(antialias);
+            return;
+        }
+
+        // Keep distortion near the tail when AA is disabled.
+        this.camera.detachPostProcess(distortion);
+        this.camera.attachPostProcess(distortion);
+    }
+
+    private ensureSignedLensDistortionShader(): void {
+        const shaderKey = "depthOfFieldPixelShader";
+        const source = Effect.ShadersStore[shaderKey];
+        if (!source || source.includes("mmdSignedLensDistortion")) {
+            return;
+        }
+
+        const from = "float dist_amount=clamp(distortion*0.23,0.0,1.0);dist_coords=mix(coords,dist_coords,dist_amount);return dist_coords;}";
+        const to = "float dist_amount=clamp(abs(distortion)*0.23,0.0,1.0);dist_coords=mix(coords,dist_coords,dist_amount);vec2 inv_coords=vec2(0.5,0.5);inv_coords.x=0.5-direction.x*radius2*1.0;inv_coords.y=0.5-direction.y*radius2*1.0;inv_coords=mix(coords,inv_coords,dist_amount);dist_coords=distortion>=0.0?dist_coords:inv_coords;return dist_coords;}/*mmdSignedLensDistortion*/";
+
+        if (source.includes(from)) {
+            Effect.ShadersStore[shaderKey] = source.replace(from, to);
+        }
+    }
+
+    private setupLensHighlightsPipeline(): void {
+        this.ensureSignedLensDistortionShader();
+        this.lensRenderingPipeline = new LensRenderingPipeline(
+            "DofLensHighlightsPipeline",
+            {
+                edge_blur: this.dofLensEdgeBlurValue,
+                grain_amount: 0,
+                chromatic_aberration: 0,
+                distortion: 0,
+                dof_focus_distance: Math.max(0.1, this.dofFocusDistanceMmValue / 1000),
+                dof_aperture: 0.8,
+                dof_darken: 0,
+                dof_pentagon: true,
+                dof_gain: 0,
+                dof_threshold: 1,
+                blur_noise: false,
+            },
+            this.scene,
+            1.0,
+            [this.camera]
+        );
+        this.applyDofLensOpticsSettings();
+    }
+    private applyDofLensOpticsSettings(): void {
+        if (!this.lensRenderingPipeline) return;
+        this.lensRenderingPipeline.setEdgeBlur(this.dofLensEdgeBlurValue);
+        // Distortion is applied in a dedicated final pass so DoF output and highlights stay aligned.
+        this.lensRenderingPipeline.setEdgeDistortion(0);
+    }
+    private applyEditorDofSettings(): void {
+        if (!this.defaultRenderingPipeline) return;
+        const dof = this.defaultRenderingPipeline.depthOfField;
+        if (this.depthRenderer) {
+            dof.depthTexture = this.depthRenderer.getDepthMap();
+        }
+        dof.lensSize = this.dofLensSizeValue;
+        dof.focalLength = this.dofFocalLengthValue;
+        this.updateEditorDofFocusAndFStop();
+        this.defaultRenderingPipeline.depthOfFieldEnabled = this.dofEnabledValue;
+        this.applyDofLensBlurSettings();
+    }
+    private applyDofLensBlurSettings(): void {
+        if (!this.lensRenderingPipeline) return;
+        this.applyDofLensOpticsSettings();
+        const strength = this.dofLensBlurStrengthValue;
+        const enabled = this.dofEnabledValue && strength > 0.0001;
+
+        if (!enabled) {
+            this.lensRenderingPipeline.setHighlightsGain(0);
+            this.lensRenderingPipeline.setFocusDistance(-1);
+            return;
+        }
+
+        const focusDistance = Math.max(0.1, this.dofFocusDistanceMmValue / 1000);
+        const boostedStrength = Math.pow(strength, 0.7);
+        const highlightsGain = this.dofLensHighlightsBaseGain + boostedStrength * this.dofLensHighlightsGainRange;
+        const highlightsThreshold = Math.max(
+            0.08,
+            this.dofLensHighlightsBaseThreshold - boostedStrength * this.dofLensHighlightsThresholdRange
+        );
+
+        const aperture = Math.max(0.35, 0.55 + boostedStrength * 1.1);
+        this.lensRenderingPipeline.setFocusDistance(focusDistance);
+        this.lensRenderingPipeline.setAperture(aperture);
+        this.lensRenderingPipeline.setHighlightsGain(highlightsGain);
+        this.lensRenderingPipeline.setHighlightsThreshold(highlightsThreshold);
+    }
+    private updateEditorDofFocusAndFStop(): void {
+        if (this.dofFocalLengthFollowsCameraFov) {
+            this.updateDofFocalLengthFromCameraFov();
+        }
+        if (this.dofLensDistortionFollowsCameraFov) {
+            this.updateDofLensDistortionFromCameraFov();
+        }
+        if (this.dofAutoFocusToCameraTarget) {
+            const targetFocusMm = this.getCameraFocusDistanceMm();
+            const minFocusMm = this.camera.minZ * 1000;
+            this.dofFocusDistanceMmValue = Math.max(minFocusMm, targetFocusMm - this.dofAutoFocusNearOffsetMmValue);
+        }
+        const autoMinFStop = this.dofAutoFocusToCameraTarget
+            ? this.computeAutoFocusMinFStop(this.dofFocusDistanceMmValue)
+            : 0;
+        this.dofEffectiveFStopValue = Math.max(
+            0.01,
+            Math.min(32, Math.max(this.dofFStopValue, autoMinFStop))
+        );
+        if (!this.defaultRenderingPipeline) return;
+        const dof = this.defaultRenderingPipeline.depthOfField;
+        dof.focusDistance = this.dofFocusDistanceMmValue;
+        dof.fStop = this.dofEffectiveFStopValue;
+        this.applyDofLensBlurSettings();
+    }
+    private updateDofLensDistortionFromCameraFov(): void {
+        const fovDeg = (this.camera.fov * 180) / Math.PI;
+        const minTele = this.dofLensDistortionMinTeleFovDeg;
+        const neutral = this.dofLensDistortionNeutralFovDeg;
+        const maxWide = this.dofLensDistortionMaxWideFovDeg;
+        const clampedFovDeg = Math.max(minTele, Math.min(maxWide, fovDeg));
+
+        let distortion = 0;
+        if (clampedFovDeg >= neutral) {
+            const wideSpan = Math.max(0.0001, maxWide - neutral);
+            distortion = (clampedFovDeg - neutral) / wideSpan;
+        } else {
+            const teleSpan = Math.max(0.0001, neutral - minTele);
+            distortion = -((neutral - clampedFovDeg) / teleSpan);
+        }
+
+        const influencedDistortion = distortion * this.dofLensDistortionInfluenceValue;
+        this.dofLensDistortionValue = Math.max(-1, Math.min(1, influencedDistortion));
+        this.applyDofLensOpticsSettings();
+    }
+    private updateDofFocalLengthFromCameraFov(): void {
+        const fovRad = Math.max(0.01, this.camera.fov);
+        const baseFocalLengthMm = (0.5 * this.dofFovLinkSensorWidthMm) / Math.tan(fovRad * 0.5);
+        let focalLengthMm = baseFocalLengthMm;
+
+        if (this.dofFocalLengthDistanceInvertedValue) {
+            const minFovRad = (10 * Math.PI) / 180;
+            const maxFovRad = (120 * Math.PI) / 180;
+            const focalAtTeleMm = (0.5 * this.dofFovLinkSensorWidthMm) / Math.tan(minFovRad * 0.5);
+            const focalAtWideMm = (0.5 * this.dofFovLinkSensorWidthMm) / Math.tan(maxFovRad * 0.5);
+            focalLengthMm = focalAtWideMm + focalAtTeleMm - baseFocalLengthMm;
+        }
+
+        this.dofFocalLengthValue = Math.max(1, Math.min(1000, focalLengthMm));
+        if (this.defaultRenderingPipeline) {
+            this.defaultRenderingPipeline.depthOfField.focalLength = this.dofFocalLengthValue;
+        }
+    }
+    private computeAutoFocusMinFStop(focusDistanceMm: number): number {
+        const focalLengthMm = Math.max(1, this.dofFocalLengthValue);
+        const lensSizeMm = Math.max(0.001, this.dofLensSizeValue);
+        const safeFocusDistanceMm = Math.max(focalLengthMm + 1, focusDistanceMm);
+        const focusBandRadiusMm = Math.max(1, this.dofAutoFocusInFocusRadiusMm);
+        // Expand near-side in-focus protection to suppress foreground blur.
+        const nearFocusBandRadiusMm = focusBandRadiusMm * this.dofNearSuppressionScaleValue;
+        const nearBandDistanceMm = Math.max(focalLengthMm + 1, safeFocusDistanceMm - nearFocusBandRadiusMm);
+        // Keep focus assistance active, but avoid fully canceling lens-size impact.
+        const compensatedLensSizeMm = Math.pow(lensSizeMm, this.dofAutoFocusLensCompensationExponent);
+        const numerator = compensatedLensSizeMm * focalLengthMm * focusBandRadiusMm;
+        const denominator = this.dofAutoFocusCocAtRangeEdge * nearBandDistanceMm * (safeFocusDistanceMm - focalLengthMm);
+        if (denominator <= 1e-6) {
+            return 32;
+        }
+        return Math.max(0.01, Math.min(32, numerator / denominator));
+    }
+    private configureDofDepthRenderer(): void {
+        const depthRenderer = this.scene.enableDepthRenderer(this.camera, false);
+        depthRenderer.useOnlyInActiveCamera = true;
+        depthRenderer.forceDepthWriteTransparentMeshes = true;
+        this.depthRenderer = depthRenderer;
+    }
+    private setupFarDofPostProcess(): void {
+        if (!this.farDofEnabled) {
+            this.postEffectFarDofStrengthValue = 0;
+            return;
+        }
+        this.depthRenderer = this.scene.enableDepthRenderer(this.camera, false, true);
+
+        const shaderKey = "mmdFarDofFragmentShader";
+        if (!Effect.ShadersStore[shaderKey]) {
+            Effect.ShadersStore[shaderKey] = `
+                precision highp float;
+                varying vec2 vUV;
+                uniform sampler2D textureSampler;
+                uniform sampler2D depthSampler;
+                uniform vec2 cameraNearFar;
+                uniform vec2 texelSize;
+                uniform float focusDistance;
+                uniform float focusSharpRadius;
+                uniform float farDofStrength;
+
+                void main(void) {
+                    vec4 sharp = texture2D(textureSampler, vUV);
+                    if (farDofStrength <= 0.0001) {
+                        gl_FragColor = sharp;
+                        return;
+                    }
+
+                    float depthMetric = clamp(texture2D(depthSampler, vUV).r, 0.0, 1.0);
+                    float pixelDistance = mix(cameraNearFar.x, cameraNearFar.y, depthMetric) * 1000.0;
+
+                    // Keep about 1m around focus pin-sharp, then blur increases linearly with distance.
+                    float farStart = focusDistance + focusSharpRadius;
+                    float farSpan = max(cameraNearFar.y * 1000.0 - farStart, 1.0);
+                    float blurFactor = clamp((pixelDistance - farStart) / farSpan, 0.0, 1.0) * farDofStrength;
+
+                    if (blurFactor <= 0.0001) {
+                        gl_FragColor = sharp;
+                        return;
+                    }
+
+                    // Ease-in to avoid hard transition while preserving distance proportionality.
+                    blurFactor = blurFactor * blurFactor * (3.0 - 2.0 * blurFactor);
+
+                    vec2 baseRadius = texelSize * (1.8 + 42.0 * blurFactor);
+
+                    const int DIR_COUNT = 16;
+                    vec2 dirs[DIR_COUNT];
+                    dirs[0] = vec2(1.0, 0.0);
+                    dirs[1] = vec2(0.9239, 0.3827);
+                    dirs[2] = vec2(0.7071, 0.7071);
+                    dirs[3] = vec2(0.3827, 0.9239);
+                    dirs[4] = vec2(0.0, 1.0);
+                    dirs[5] = vec2(-0.3827, 0.9239);
+                    dirs[6] = vec2(-0.7071, 0.7071);
+                    dirs[7] = vec2(-0.9239, 0.3827);
+                    dirs[8] = vec2(-1.0, 0.0);
+                    dirs[9] = vec2(-0.9239, -0.3827);
+                    dirs[10] = vec2(-0.7071, -0.7071);
+                    dirs[11] = vec2(-0.3827, -0.9239);
+                    dirs[12] = vec2(0.0, -1.0);
+                    dirs[13] = vec2(0.3827, -0.9239);
+                    dirs[14] = vec2(0.7071, -0.7071);
+                    dirs[15] = vec2(0.9239, -0.3827);
+
+                    float ringScale[4];
+                    ringScale[0] = 0.55;
+                    ringScale[1] = 1.1;
+                    ringScale[2] = 1.85;
+                    ringScale[3] = 2.75;
+
+                    float ringWeight[4];
+                    ringWeight[0] = 0.020;
+                    ringWeight[1] = 0.017;
+                    ringWeight[2] = 0.014;
+                    ringWeight[3] = 0.011;
+
+                    float depthWeightScale = mix(240.0, 90.0, blurFactor);
+
+                    vec4 blur = sharp * 0.18;
+                    float blurWeight = 0.18;
+
+                    for (int ring = 0; ring < 4; ++ring) {
+                        vec2 radius = baseRadius * ringScale[ring];
+                        float baseWeight = ringWeight[ring];
+
+                        for (int i = 0; i < DIR_COUNT; ++i) {
+                            vec2 sampleUv = clamp(vUV + dirs[i] * radius, vec2(0.001), vec2(0.999));
+                            float sampleDepthMetric = texture2D(depthSampler, sampleUv).r;
+                            float depthWeight = exp(-abs(sampleDepthMetric - depthMetric) * depthWeightScale);
+                            float sampleWeight = baseWeight * depthWeight;
+                            blur += texture2D(textureSampler, sampleUv) * sampleWeight;
+                            blurWeight += sampleWeight;
+                        }
+                    }
+
+                    vec4 blurColor = blur / max(blurWeight, 0.0001);
+                    gl_FragColor = mix(sharp, blurColor, blurFactor);
+                }
+            `;
+        }
+
+        this.dofPostProcess = new PostProcess(
+            "farDepthOfField",
+            "mmdFarDof",
+            ["cameraNearFar", "texelSize", "focusDistance", "focusSharpRadius", "farDofStrength"],
+            ["depthSampler"],
+            1.6,
+            this.camera,
+            Texture.TRILINEAR_SAMPLINGMODE,
+            this.engine,
+            false
+        );
+
+        this.dofPostProcess.onApplyObservable.add((effect) => {
+            const depthMap = this.depthRenderer?.getDepthMap();
+            if (!depthMap) return;
+
+            effect.setTexture("depthSampler", depthMap);
+            effect.setFloat2("cameraNearFar", this.camera.minZ, this.camera.maxZ);
+            effect.setFloat2(
+                "texelSize",
+                1 / Math.max(1, this.dofPostProcess?.width ?? this.engine.getRenderWidth()),
+                1 / Math.max(1, this.dofPostProcess?.height ?? this.engine.getRenderHeight())
+            );
+            effect.setFloat("focusDistance", this.getCameraFocusDistanceMm());
+            effect.setFloat("focusSharpRadius", this.farDofFocusSharpRadiusMm);
+            effect.setFloat("farDofStrength", this.postEffectFarDofStrengthValue);
+        });
+    }
+
+    private getCameraFocusDistanceMm(): number {
+        const distance = Vector3.Distance(this.camera.globalPosition, this.camera.target);
+        return Math.max(this.camera.minZ, distance) * 1000;
+    }
     getMorphWeight(morphName: string): number {
         if (!this.currentMesh || !this.currentMesh.morphTargetManager) return 0;
         try {
@@ -1008,8 +1950,52 @@ export class MmdManager {
         return (this.camera.fov * 180) / Math.PI;
     }
 
+    getCameraDistance(): number {
+        return Math.max(this.camera.minZ, Vector3.Distance(this.camera.position, this.camera.target));
+    }
+
+    setCameraDistance(distance: number): void {
+        const min = Math.max(0.1, this.camera.lowerRadiusLimit ?? this.camera.minZ);
+        const max = this.camera.upperRadiusLimit ?? 1000000;
+        this.camera.radius = Math.max(min, Math.min(max, distance));
+        this.syncCameraRotationFromCurrentView();
+        this.syncMmdCameraFromViewportCamera();
+        this.updateEditorDofFocusAndFStop();
+    }
+
     setCameraFov(degrees: number): void {
         this.camera.fov = (degrees * Math.PI) / 180;
+        this.syncMmdCameraFromViewportCamera();
+        this.updateEditorDofFocusAndFStop();
+    }
+
+    setCameraView(view: "left" | "front" | "right"): void {
+        const target = this.camera.target.clone();
+        const horizontalDistance = Math.max(
+            5,
+            Math.hypot(this.camera.position.x - target.x, this.camera.position.z - target.z)
+        );
+        const yOffset = Math.max(2, this.camera.position.y - target.y);
+
+        const nextPosition = target.clone();
+        switch (view) {
+            case "left":
+                nextPosition.x -= horizontalDistance;
+                break;
+            case "right":
+                nextPosition.x += horizontalDistance;
+                break;
+            case "front":
+            default:
+                nextPosition.z -= horizontalDistance;
+                break;
+        }
+        nextPosition.y += yOffset;
+
+        this.camera.upVector = new Vector3(0, 1, 0);
+        this.camera.setPosition(nextPosition);
+        this.camera.setTarget(target);
+        this.syncCameraRotationFromCurrentView();
         this.syncMmdCameraFromViewportCamera();
     }
 
@@ -1025,6 +2011,7 @@ export class MmdManager {
         this.camera.setPosition(this.mmdCamera.position);
         this.camera.setTarget(this.mmdCamera.target);
         this.camera.fov = this.mmdCamera.fov;
+        this.updateDofFocalLengthFromCameraFov();
         this.camera.upVector.copyFrom(this.mmdCamera.upVector);
         this.syncCameraRotationFromCurrentView();
     }
@@ -1113,6 +2100,42 @@ export class MmdManager {
         }
         this.physicsPlugin = null;
         this.physicsRuntime = null;
+        if (this.defaultRenderingPipeline) {
+            this.defaultRenderingPipeline.dispose();
+            this.defaultRenderingPipeline = null;
+        }
+        if (this.lensRenderingPipeline) {
+            this.lensRenderingPipeline.dispose(false);
+            this.lensRenderingPipeline = null;
+        }
+        if (this.gammaPostProcess) {
+            this.gammaPostProcess.dispose(this.camera);
+            this.gammaPostProcess = null;
+        }
+        if (this.finalLensDistortionPostProcess) {
+            this.finalLensDistortionPostProcess.dispose(this.camera);
+            this.finalLensDistortionPostProcess = null;
+        }
+        if (this.finalAntialiasPostProcess) {
+            this.finalAntialiasPostProcess.dispose(this.camera);
+            this.finalAntialiasPostProcess = null;
+        }
+        if (this.dofPostProcess) {
+            this.dofPostProcess.dispose(this.camera);
+            this.dofPostProcess = null;
+        }
+        if (this.depthRenderer) {
+            this.depthRenderer.dispose();
+            this.depthRenderer = null;
+        }
+        if (this.imageProcessingPostProcess) {
+            this.imageProcessingPostProcess.dispose(this.camera);
+            this.imageProcessingPostProcess = null;
+        }
+        if (this.skydome) {
+            this.skydome.dispose();
+            this.skydome = null;
+        }
         this.scene.dispose();
         this.engine.dispose();
     }
@@ -1128,5 +2151,6 @@ export class MmdManager {
         }
     }
 }
+
 
 

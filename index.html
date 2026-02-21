@@ -81,11 +81,19 @@
           </svg>
           <span id="ground-toggle-text">床表示ON</span>
         </button>
-        <button id="btn-toggle-physics" class="toolbar-btn toggle-on" title="物理演算の有効/無効を切り替える" aria-pressed="true">
+        <button id="btn-toggle-skydome" class="toolbar-btn toggle-on" title="スカイドーム表示を切り替える" aria-pressed="true">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 1.5a3 3 0 0 1 3 3v1h1.5a2 2 0 0 1 0 4H11v1a3 3 0 0 1-6 0v-1H3.5a2 2 0 0 1 0-4H5v-1a3 3 0 0 1 3-3z" />
+            <path d="M2 10a6 6 0 1 1 12 0v4H2v-4z" />
+            <path d="M2 10h12" stroke="currentColor" stroke-width="1" fill="none" />
           </svg>
-          <span id="physics-toggle-text">物理ON</span>
+          <span id="skydome-toggle-text">空表示ON</span>
+        </button>
+        <button id="btn-toggle-aa" class="toolbar-btn toggle-on" title="アンチエイリアスの有効/無効を切り替える" aria-pressed="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 12l3-8h2l3 8h-2l-.6-1.8H4.6L4 12H2zm3.1-3.3h1.8L6 6z" />
+            <path d="M11 5h3v1h-3zM11 8h3v1h-3zM11 11h3v1h-3z" />
+          </svg>
+          <span id="aa-toggle-text">AA ON</span>
         </button>
       </div>
       <div class="toolbar-right">
@@ -198,40 +206,77 @@
             <span>カメラ</span>
           </div>
           <div id="camera-controls" class="camera-controls">
-            <div class="control-row cam-slider-row">
-              <label class="cam-axis-label">X移動</label>
-              <input type="range" id="cam-pos-x" class="cam-slider" min="-100" max="100" value="0" step="0.1">
-              <span id="cam-pos-x-val" class="value-display">0.0</span>
+            <div class="camera-view-buttons" role="group" aria-label="カメラ視点">
+              <button id="btn-cam-left" class="camera-view-btn" type="button" aria-pressed="false">左面</button>
+              <button id="btn-cam-front" class="camera-view-btn camera-view-btn--active" type="button" aria-pressed="true">正面</button>
+              <button id="btn-cam-right" class="camera-view-btn" type="button" aria-pressed="false">右面</button>
             </div>
-            <div class="control-row cam-slider-row">
-              <label class="cam-axis-label">Y移動</label>
-              <input type="range" id="cam-pos-y" class="cam-slider" min="-50" max="150" value="10" step="0.1">
-              <span id="cam-pos-y-val" class="value-display">10.0</span>
-            </div>
-            <div class="control-row cam-slider-row">
-              <label class="cam-axis-label">Z移動</label>
-              <input type="range" id="cam-pos-z" class="cam-slider" min="-200" max="200" value="-30" step="0.1">
-              <span id="cam-pos-z-val" class="value-display">-30.0</span>
-            </div>
-            <div class="control-row cam-slider-row">
-              <label class="cam-axis-label">X回転</label>
-              <input type="range" id="cam-rot-x" class="cam-slider" min="-180" max="180" value="0" step="1">
-              <span id="cam-rot-x-val" class="value-display">0°</span>
-            </div>
-            <div class="control-row cam-slider-row">
-              <label class="cam-axis-label">Y回転</label>
-              <input type="range" id="cam-rot-y" class="cam-slider" min="-180" max="180" value="0" step="1">
-              <span id="cam-rot-y-val" class="value-display">0°</span>
-            </div>
-            <div class="control-row cam-slider-row">
-              <label class="cam-axis-label">Z回転</label>
-              <input type="range" id="cam-rot-z" class="cam-slider" min="-180" max="180" value="0" step="1">
-              <span id="cam-rot-z-val" class="value-display">0°</span>
-            </div>
-            <div class="control-row cam-slider-row">
+            <div class="control-row cam-slider-row cam-fov-row">
               <label class="cam-axis-label">FOV</label>
               <input type="range" id="cam-fov" class="cam-slider" min="10" max="120" value="30">
               <span id="cam-fov-value" class="value-display">30°</span>
+            </div>
+            <div class="control-row cam-slider-row dof-row-hidden">
+              <label class="cam-axis-label">距離</label>
+              <input type="range" id="cam-distance" class="cam-slider" min="5" max="400" value="45" step="1">
+              <span id="cam-distance-value" class="value-display">45.0m</span>
+            </div>
+            <div class="camera-dof-controls">
+              <div class="effect-row effect-row-check">
+                <span class="effect-label">DoF</span>
+                <label class="effect-check-wrap">
+                  <input type="checkbox" id="effect-dof-enabled" class="effect-check">
+                  <span>有効</span>
+                </label>
+                <span id="effect-dof-enabled-val" class="effect-value">OFF</span>
+              </div>
+              <div class="effect-row dof-row-hidden">
+                <span class="effect-label">DoF品質</span>
+                <select id="effect-dof-quality" class="effect-select">
+                  <option value="0">Low</option>
+                  <option value="1" selected>Medium</option>
+                  <option value="2">High</option>
+                </select>
+                <span id="effect-dof-quality-val" class="effect-value">Medium</span>
+              </div>
+              <div class="effect-row dof-row-hidden">
+                <span class="effect-label">DoFフォーカス</span>
+                <input type="range" id="effect-dof-focus" class="effect-slider" min="100" max="300000" value="55000" step="100">
+                <span id="effect-dof-focus-val" class="effect-value">55.0m</span>
+              </div>
+              <div class="effect-row">
+                <span class="effect-label">前方補正</span>
+                <input type="range" id="effect-dof-focus-offset" class="effect-slider" min="0" max="20000" value="10000" step="100">
+                <span id="effect-dof-focus-offset-val" class="effect-value">10.0m</span>
+              </div>
+              <div class="effect-row dof-row-hidden">
+                <span class="effect-label">DoF F-stop</span>
+                <input type="range" id="effect-dof-fstop" class="effect-slider" min="0" max="400" value="280" step="1">
+                <span id="effect-dof-fstop-val" class="effect-value">2.80</span>
+              </div>
+              <div class="effect-row dof-row-hidden">
+                <span class="effect-label">前抑制</span>
+                <input type="range" id="effect-dof-near-suppression" class="effect-slider" min="0" max="1000" value="400" step="1">
+                <span id="effect-dof-near-suppression-val" class="effect-value">400%</span>
+              </div>
+              <div class="effect-row effect-row-check dof-row-hidden">
+                <span class="effect-label">焦点距離反転</span>
+                <label class="effect-check-wrap">
+                  <input type="checkbox" id="effect-dof-focal-invert" class="effect-check">
+                  <span>有効</span>
+                </label>
+                <span id="effect-dof-focal-invert-val" class="effect-value">OFF</span>
+              </div>
+              <div class="effect-row">
+                <span class="effect-label">DoFレンズ</span>
+                <input type="range" id="effect-dof-lens-size" class="effect-slider" min="1" max="4096" value="30" step="1">
+                <span id="effect-dof-lens-size-val" class="effect-value">30</span>
+              </div>
+              <div class="effect-row dof-row-hidden">
+                <span class="effect-label">DoF焦点距離</span>
+                <input type="range" id="effect-dof-focal-length" class="effect-slider" min="1" max="300" value="50" step="1">
+                <span id="effect-dof-focal-length-val" class="effect-value">50</span>
+              </div>
             </div>
           </div>
         </section>
@@ -268,20 +313,126 @@
               <input type="range" id="light-ambient" class="light-slider" min="0" max="200" value="20" step="1">
               <span id="light-ambient-val" class="light-value">0.2</span>
             </div>
-            <div class="light-row">
-              <span class="light-label">影の濃さ</span>
-              <input type="range" id="light-shadow" class="light-slider" min="0" max="100" value="45" step="1">
-              <span id="light-shadow-val" class="light-value">0.45</span>
+          </div>
+        </section>
+
+        <!-- 5: Shadow Controls -->
+        <section id="shadow-section" class="bottom-section">
+          <div class="section-header">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <circle cx="7" cy="7" r="3.5" />
+              <path d="M7 1.5c2.6 2.1 3.8 4 3.8 5.8A3.8 3.8 0 1 1 3.2 7.3c0-1.8 1.2-3.7 3.8-5.8z" fill="none"
+                stroke="currentColor" stroke-width="1.2" />
+            </svg>
+            <span>影</span>
+          </div>
+          <div class="shadow-controls">
+            <div class="shadow-row">
+              <span class="shadow-label">濃さ</span>
+              <input type="range" id="light-shadow" class="shadow-slider" min="0" max="100" value="45" step="1">
+              <span id="light-shadow-val" class="shadow-value">0.45</span>
             </div>
-            <div class="light-row">
-              <span class="light-label">境界幅</span>
-              <input type="range" id="light-shadow-softness" class="light-slider" min="5" max="120" value="35" step="1">
-              <span id="light-shadow-softness-val" class="light-value">0.035</span>
+            <div class="shadow-row">
+              <span class="shadow-label">境界幅</span>
+              <input type="range" id="light-shadow-softness" class="shadow-slider" min="5" max="120" value="35" step="1">
+              <span id="light-shadow-softness-val" class="shadow-value">0.035</span>
             </div>
           </div>
         </section>
 
-        <!-- 5: Playback Controls -->
+        <!-- 6: Physics Controls -->
+        <section id="physics-section" class="bottom-section">
+          <div class="section-header">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <path d="M7 1.5a2.7 2.7 0 0 1 2.7 2.7v.8H11a1.8 1.8 0 1 1 0 3.6H9.7v.8a2.7 2.7 0 0 1-5.4 0v-.8H3a1.8 1.8 0 0 1 0-3.6h1.3v-.8A2.7 2.7 0 0 1 7 1.5z" />
+            </svg>
+            <span>物理</span>
+          </div>
+          <div class="physics-controls">
+            <button id="btn-toggle-physics" class="physics-toggle-btn toggle-on" title="物理演算の有効/無効を切り替える" aria-pressed="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1.5a3 3 0 0 1 3 3v1h1.5a2 2 0 0 1 0 4H11v1a3 3 0 0 1-6 0v-1H3.5a2 2 0 0 1 0-4H5v-1a3 3 0 0 1 3-3z" />
+              </svg>
+              <span id="physics-toggle-text">物理ON</span>
+            </button>
+            <div class="physics-row">
+              <span class="physics-label">重力加速度</span>
+              <input type="range" id="physics-gravity-accel" class="physics-slider" min="0" max="200" value="98" step="1">
+              <span id="physics-gravity-accel-val" class="physics-value">98</span>
+            </div>
+            <div class="physics-row">
+              <span class="physics-label">重力方向X</span>
+              <input type="range" id="physics-gravity-dir-x" class="physics-slider" min="-100" max="100" value="0" step="1">
+              <span id="physics-gravity-dir-x-val" class="physics-value">0</span>
+            </div>
+            <div class="physics-row">
+              <span class="physics-label">重力方向Y</span>
+              <input type="range" id="physics-gravity-dir-y" class="physics-slider" min="-100" max="100" value="-100" step="1">
+              <span id="physics-gravity-dir-y-val" class="physics-value">-100</span>
+            </div>
+            <div class="physics-row">
+              <span class="physics-label">重力方向Z</span>
+              <input type="range" id="physics-gravity-dir-z" class="physics-slider" min="-100" max="100" value="0" step="1">
+              <span id="physics-gravity-dir-z-val" class="physics-value">0</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7: Effect Controls -->
+        <section id="effect-section" class="bottom-section">
+          <div class="section-header">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <circle cx="7" cy="7" r="2.2" />
+              <path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3 3l1.3 1.3M9.7 9.7L11 11M3 11l1.3-1.3M9.7 4.3L11 3"
+                stroke="currentColor" stroke-width="1.1" fill="none" />
+            </svg>
+            <span>エフェクト</span>
+          </div>
+          <div class="effect-controls">
+            <div class="effect-row">
+              <span class="effect-label">色温度</span>
+              <input type="range" id="effect-color-temp" class="effect-slider" min="3750" max="13250" value="6500" step="25">
+              <span id="effect-color-temp-val" class="effect-value">6500 K</span>
+            </div>
+            <div class="effect-row dof-row-hidden">
+              <span class="effect-label">コントラスト</span>
+              <input type="range" id="effect-contrast" class="effect-slider" min="-50" max="50" value="0" step="1">
+              <span id="effect-contrast-val" class="effect-value">0%</span>
+            </div>
+            <div class="effect-row">
+              <span class="effect-label">ガンマ補正</span>
+              <input type="range" id="effect-gamma" class="effect-slider" min="-50" max="50" value="0" step="1">
+              <span id="effect-gamma-val" class="effect-value">0%</span>
+            </div>
+            <div class="effect-row dof-row-hidden">
+              <span class="effect-label">収差</span>
+              <input type="range" id="effect-lens-distortion" class="effect-slider" min="-100" max="100" value="0" step="1">
+              <span id="effect-lens-distortion-val" class="effect-value">0%</span>
+            </div>
+            <div class="effect-row">
+              <span class="effect-label">収差影響度</span>
+              <input type="range" id="effect-lens-distortion-influence" class="effect-slider" min="0" max="100" value="0" step="1">
+              <span id="effect-lens-distortion-influence-val" class="effect-value">0%</span>
+            </div>
+            <div class="effect-row">
+              <span class="effect-label">レンズブラー</span>
+              <input type="range" id="effect-dof-lens-blur" class="effect-slider" min="0" max="20" value="0" step="1">
+              <span id="effect-dof-lens-blur-val" class="effect-value">0%</span>
+            </div>
+            <div class="effect-row">
+              <span class="effect-label">エッジブラー</span>
+              <input type="range" id="effect-lens-edge-blur" class="effect-slider" min="0" max="300" value="0" step="1">
+              <span id="effect-lens-edge-blur-val" class="effect-value">0%</span>
+            </div>
+            <div class="effect-row">
+              <span class="effect-label">輪郭線</span>
+              <input type="range" id="effect-edge-width" class="effect-slider" min="0" max="100" value="0" step="1">
+              <span id="effect-edge-width-val" class="effect-value">0%</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8: Playback Controls -->
         <section id="playback-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -353,11 +504,6 @@
             </div>
           </div>
         </section>
-
-        <!-- 6〜8: 空き（将来の拡張用） -->
-        <section id="panel-slot-6" class="bottom-section bottom-section--empty"></section>
-        <section id="panel-slot-7" class="bottom-section bottom-section--empty"></section>
-        <section id="panel-slot-8" class="bottom-section bottom-section--empty"></section>
 
       </div>
     </footer>

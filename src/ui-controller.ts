@@ -3,6 +3,8 @@ import type { Timeline } from "./timeline";
 import type { BottomPanel } from "./bottom-panel";
 import type { ModelInfo, MotionInfo } from "./types";
 
+type CameraViewPreset = "left" | "front" | "right";
+
 export class UIController {
     private mmdManager: MmdManager;
     private timeline: Timeline;
@@ -16,6 +18,8 @@ export class UIController {
     private btnExportPng: HTMLElement;
     private btnToggleGround: HTMLElement;
     private groundToggleText: HTMLElement;
+    private btnToggleSkydome: HTMLElement;
+    private skydomeToggleText: HTMLElement;
     private btnTogglePhysics: HTMLElement;
     private physicsToggleText: HTMLElement;
     private btnPlay: HTMLElement;
@@ -32,6 +36,22 @@ export class UIController {
     private modelSelect: HTMLSelectElement;
     private camFovSlider: HTMLInputElement | null = null;
     private camFovValueEl: HTMLElement | null = null;
+    private camDistanceSlider: HTMLInputElement | null = null;
+    private camDistanceValueEl: HTMLElement | null = null;
+    private camViewLeftBtn: HTMLButtonElement | null = null;
+    private camViewFrontBtn: HTMLButtonElement | null = null;
+    private camViewRightBtn: HTMLButtonElement | null = null;
+    private physicsGravityAccelSlider: HTMLInputElement | null = null;
+    private physicsGravityDirXSlider: HTMLInputElement | null = null;
+    private physicsGravityDirYSlider: HTMLInputElement | null = null;
+    private physicsGravityDirZSlider: HTMLInputElement | null = null;
+    private dofFocusSlider: HTMLInputElement | null = null;
+    private dofFocusValueEl: HTMLElement | null = null;
+    private dofFStopValueEl: HTMLElement | null = null;
+    private dofFocalLengthSlider: HTMLInputElement | null = null;
+    private dofFocalLengthValueEl: HTMLElement | null = null;
+    private lensDistortionSlider: HTMLInputElement | null = null;
+    private lensDistortionValueEl: HTMLElement | null = null;
 
     constructor(mmdManager: MmdManager, timeline: Timeline, bottomPanel: BottomPanel) {
         this.mmdManager = mmdManager;
@@ -46,6 +66,8 @@ export class UIController {
         this.btnExportPng = document.getElementById("btn-export-png")!;
         this.btnToggleGround = document.getElementById("btn-toggle-ground")!;
         this.groundToggleText = document.getElementById("ground-toggle-text")!;
+        this.btnToggleSkydome = document.getElementById("btn-toggle-skydome")!;
+        this.skydomeToggleText = document.getElementById("skydome-toggle-text")!;
         this.btnTogglePhysics = document.getElementById("btn-toggle-physics")!;
         this.physicsToggleText = document.getElementById("physics-toggle-text")!;
         this.btnPlay = document.getElementById("btn-play")!;
@@ -67,6 +89,7 @@ export class UIController {
         this.setupPerfDisplay();
         this.refreshModelSelector();
         this.updateGroundToggleButton(this.mmdManager.isGroundVisible());
+        this.updateSkydomeToggleButton(this.mmdManager.isSkydomeVisible());
         this.updatePhysicsToggleButton(
             this.mmdManager.getPhysicsEnabled(),
             this.mmdManager.isPhysicsAvailable()
@@ -85,6 +108,27 @@ export class UIController {
             this.updateGroundToggleButton(visible);
             this.showToast(visible ? "床表示: ON" : "床表示: OFF", "info");
         });
+        this.btnToggleSkydome.addEventListener("click", () => {
+            const visible = this.mmdManager.toggleSkydomeVisible();
+            this.updateSkydomeToggleButton(visible);
+            this.showToast(visible ? "Sky dome: ON" : "Sky dome: OFF", "info");
+        });
+        const btnToggleAa = document.getElementById("btn-toggle-aa") as HTMLButtonElement | null;
+        const aaToggleText = document.getElementById("aa-toggle-text");
+        if (btnToggleAa && aaToggleText) {
+            const updateAaButton = () => {
+                const enabled = this.mmdManager.antialiasEnabled;
+                aaToggleText.textContent = enabled ? "AA ON" : "AA OFF";
+                btnToggleAa.setAttribute("aria-pressed", enabled ? "true" : "false");
+                btnToggleAa.classList.toggle("toggle-on", enabled);
+            };
+            updateAaButton();
+            btnToggleAa.addEventListener("click", () => {
+                this.mmdManager.antialiasEnabled = !this.mmdManager.antialiasEnabled;
+                updateAaButton();
+                this.showToast(this.mmdManager.antialiasEnabled ? "AA: ON" : "AA: OFF", "info");
+            });
+        }
         this.btnTogglePhysics.addEventListener("click", () => {
             if (!this.mmdManager.isPhysicsAvailable()) {
                 this.updatePhysicsToggleButton(false, false);
@@ -96,6 +140,60 @@ export class UIController {
             this.updatePhysicsToggleButton(enabled, true);
             this.showToast(enabled ? "Physics: ON" : "Physics: OFF", "info");
         });
+        const physicsGravityAccel = document.getElementById("physics-gravity-accel") as HTMLInputElement | null;
+        const physicsGravityAccelVal = document.getElementById("physics-gravity-accel-val");
+        const physicsGravityDirX = document.getElementById("physics-gravity-dir-x") as HTMLInputElement | null;
+        const physicsGravityDirXVal = document.getElementById("physics-gravity-dir-x-val");
+        const physicsGravityDirY = document.getElementById("physics-gravity-dir-y") as HTMLInputElement | null;
+        const physicsGravityDirYVal = document.getElementById("physics-gravity-dir-y-val");
+        const physicsGravityDirZ = document.getElementById("physics-gravity-dir-z") as HTMLInputElement | null;
+        const physicsGravityDirZVal = document.getElementById("physics-gravity-dir-z-val");
+        this.physicsGravityAccelSlider = physicsGravityAccel;
+        this.physicsGravityDirXSlider = physicsGravityDirX;
+        this.physicsGravityDirYSlider = physicsGravityDirY;
+        this.physicsGravityDirZSlider = physicsGravityDirZ;
+
+        if (physicsGravityAccel && physicsGravityAccelVal) {
+            const initialAccel = Math.round(this.mmdManager.getPhysicsGravityAcceleration());
+            physicsGravityAccel.value = String(initialAccel);
+            physicsGravityAccelVal.textContent = String(initialAccel);
+            physicsGravityAccel.addEventListener("input", () => {
+                const next = Number(physicsGravityAccel.value);
+                this.mmdManager.setPhysicsGravityAcceleration(next);
+                physicsGravityAccelVal.textContent = String(Math.round(next));
+            });
+        }
+
+        if (
+            physicsGravityDirX &&
+            physicsGravityDirXVal &&
+            physicsGravityDirY &&
+            physicsGravityDirYVal &&
+            physicsGravityDirZ &&
+            physicsGravityDirZVal
+        ) {
+            const initialDir = this.mmdManager.getPhysicsGravityDirection();
+            physicsGravityDirX.value = String(Math.round(initialDir.x));
+            physicsGravityDirY.value = String(Math.round(initialDir.y));
+            physicsGravityDirZ.value = String(Math.round(initialDir.z));
+            physicsGravityDirXVal.textContent = String(Math.round(initialDir.x));
+            physicsGravityDirYVal.textContent = String(Math.round(initialDir.y));
+            physicsGravityDirZVal.textContent = String(Math.round(initialDir.z));
+
+            const applyGravityDirection = () => {
+                const x = Number(physicsGravityDirX.value);
+                const y = Number(physicsGravityDirY.value);
+                const z = Number(physicsGravityDirZ.value);
+                this.mmdManager.setPhysicsGravityDirection(x, y, z);
+                physicsGravityDirXVal.textContent = String(Math.round(x));
+                physicsGravityDirYVal.textContent = String(Math.round(y));
+                physicsGravityDirZVal.textContent = String(Math.round(z));
+            };
+
+            physicsGravityDirX.addEventListener("input", applyGravityDirection);
+            physicsGravityDirY.addEventListener("input", applyGravityDirection);
+            physicsGravityDirZ.addEventListener("input", applyGravityDirection);
+        }
         // Playback
         this.btnPlay.addEventListener("click", () => this.play());
         this.btnPause.addEventListener("click", () => this.pause());
@@ -124,76 +222,55 @@ export class UIController {
         });
 
         // Camera controls
-        const camPosX = document.getElementById("cam-pos-x") as HTMLInputElement;
-        const camPosY = document.getElementById("cam-pos-y") as HTMLInputElement;
-        const camPosZ = document.getElementById("cam-pos-z") as HTMLInputElement;
-        const camRotX = document.getElementById("cam-rot-x") as HTMLInputElement;
-        const camRotY = document.getElementById("cam-rot-y") as HTMLInputElement;
-        const camRotZ = document.getElementById("cam-rot-z") as HTMLInputElement;
+        const btnCamLeft = document.getElementById("btn-cam-left") as HTMLButtonElement | null;
+        const btnCamFront = document.getElementById("btn-cam-front") as HTMLButtonElement | null;
+        const btnCamRight = document.getElementById("btn-cam-right") as HTMLButtonElement | null;
         const camFov = document.getElementById("cam-fov") as HTMLInputElement;
-        this.camFovSlider = camFov;
-
-        const camPosXVal = document.getElementById("cam-pos-x-val")!;
-        const camPosYVal = document.getElementById("cam-pos-y-val")!;
-        const camPosZVal = document.getElementById("cam-pos-z-val")!;
-        const camRotXVal = document.getElementById("cam-rot-x-val")!;
-        const camRotYVal = document.getElementById("cam-rot-y-val")!;
-        const camRotZVal = document.getElementById("cam-rot-z-val")!;
+        const camDistance = document.getElementById("cam-distance") as HTMLInputElement | null;
         const camFovVal = document.getElementById("cam-fov-value")!;
+        const camDistanceVal = document.getElementById("cam-distance-value");
+        this.camViewLeftBtn = btnCamLeft;
+        this.camViewFrontBtn = btnCamFront;
+        this.camViewRightBtn = btnCamRight;
+        this.camFovSlider = camFov;
         this.camFovValueEl = camFovVal;
-
-        const updateCameraPosition = () => {
-            const x = Number(camPosX.value);
-            const y = Number(camPosY.value);
-            const z = Number(camPosZ.value);
-            this.mmdManager.setCameraPosition(x, y, z);
-            camPosXVal.textContent = x.toFixed(1);
-            camPosYVal.textContent = y.toFixed(1);
-            camPosZVal.textContent = z.toFixed(1);
+        this.camDistanceSlider = camDistance;
+        this.camDistanceValueEl = camDistanceVal;
+        const switchCameraView = (view: CameraViewPreset) => {
+            this.mmdManager.setCameraView(view);
+            this.updateCameraViewButtons(view);
         };
-
-        const updateCameraRotation = () => {
-            const x = Number(camRotX.value);
-            const y = Number(camRotY.value);
-            const z = Number(camRotZ.value);
-            this.mmdManager.setCameraRotation(x, y, z);
-            camRotXVal.textContent = `${Math.round(x)}°`;
-            camRotYVal.textContent = `${Math.round(y)}°`;
-            camRotZVal.textContent = `${Math.round(z)}°`;
-        };
-
-        camPosX.addEventListener("input", updateCameraPosition);
-        camPosY.addEventListener("input", updateCameraPosition);
-        camPosZ.addEventListener("input", updateCameraPosition);
-        camRotX.addEventListener("input", updateCameraRotation);
-        camRotY.addEventListener("input", updateCameraRotation);
-        camRotZ.addEventListener("input", updateCameraRotation);
+        btnCamLeft?.addEventListener("click", () => switchCameraView("left"));
+        btnCamFront?.addEventListener("click", () => switchCameraView("front"));
+        btnCamRight?.addEventListener("click", () => switchCameraView("right"));
         camFov.addEventListener("input", () => {
             const val = Number(camFov.value);
-            camFovVal.textContent = `${Math.round(val)}°`;
+            camFovVal.textContent = `${Math.round(val)} deg`;
             this.mmdManager.setCameraFov(val);
+            this.refreshDofAutoFocusReadout();
+            this.refreshLensDistortionAutoReadout();
         });
-
+        if (camDistance && camDistanceVal) {
+            camDistance.addEventListener("input", () => {
+                const val = Number(camDistance.value);
+                this.mmdManager.setCameraDistance(val);
+                camDistanceVal.textContent = `${this.mmdManager.getCameraDistance().toFixed(1)}m`;
+                this.refreshDofAutoFocusReadout();
+            });
+        }
         // Initialize camera UI from runtime values
-        const initialPos = this.mmdManager.getCameraPosition();
-        camPosX.value = initialPos.x.toFixed(1);
-        camPosY.value = initialPos.y.toFixed(1);
-        camPosZ.value = initialPos.z.toFixed(1);
-        camPosXVal.textContent = initialPos.x.toFixed(1);
-        camPosYVal.textContent = initialPos.y.toFixed(1);
-        camPosZVal.textContent = initialPos.z.toFixed(1);
-
-        const initialRot = this.mmdManager.getCameraRotation();
-        camRotX.value = String(Math.round(initialRot.x));
-        camRotY.value = String(Math.round(initialRot.y));
-        camRotZ.value = String(Math.round(initialRot.z));
-        camRotXVal.textContent = `${Math.round(initialRot.x)}°`;
-        camRotYVal.textContent = `${Math.round(initialRot.y)}°`;
-        camRotZVal.textContent = `${Math.round(initialRot.z)}°`;
-
+        this.updateCameraViewButtons("front");
         const initialFov = this.mmdManager.getCameraFov();
         camFov.value = String(Math.round(initialFov));
-        camFovVal.textContent = `${Math.round(initialFov)}°`;
+        camFovVal.textContent = `${Math.round(initialFov)} deg`;
+        if (camDistance && camDistanceVal) {
+            const initialDistance = this.mmdManager.getCameraDistance();
+            const min = Number(camDistance.min);
+            const max = Number(camDistance.max);
+            const clamped = Math.max(min, Math.min(max, initialDistance));
+            camDistance.value = String(Math.round(clamped));
+            camDistanceVal.textContent = `${initialDistance.toFixed(1)}m`;
+        }
 
         // Timeline seek
         this.timeline.onSeek = (frame) => {
@@ -213,6 +290,40 @@ export class UIController {
         const valAmb = document.getElementById("light-ambient-val")!;
         const valSh = document.getElementById("light-shadow-val")!;
         const valShSoftness = document.getElementById("light-shadow-softness-val")!;
+        const elEffectColorTemp = document.getElementById("effect-color-temp") as HTMLInputElement | null;
+        const valEffectColorTemp = document.getElementById("effect-color-temp-val");
+        const elEffectContrast = document.getElementById("effect-contrast") as HTMLInputElement | null;
+        const valEffectContrast = document.getElementById("effect-contrast-val");
+        const elEffectGamma = document.getElementById("effect-gamma") as HTMLInputElement | null;
+        const valEffectGamma = document.getElementById("effect-gamma-val");
+        const elEffectLensDistortion = document.getElementById("effect-lens-distortion") as HTMLInputElement | null;
+        const valEffectLensDistortion = document.getElementById("effect-lens-distortion-val");
+        const elEffectLensDistortionInfluence = document.getElementById("effect-lens-distortion-influence") as HTMLInputElement | null;
+        const valEffectLensDistortionInfluence = document.getElementById("effect-lens-distortion-influence-val");
+        const elEffectLensEdgeBlur = document.getElementById("effect-lens-edge-blur") as HTMLInputElement | null;
+        const valEffectLensEdgeBlur = document.getElementById("effect-lens-edge-blur-val");
+        const elEffectDofEnabled = document.getElementById("effect-dof-enabled") as HTMLInputElement | null;
+        const valEffectDofEnabled = document.getElementById("effect-dof-enabled-val");
+        const elEffectDofQuality = document.getElementById("effect-dof-quality") as HTMLSelectElement | null;
+        const valEffectDofQuality = document.getElementById("effect-dof-quality-val");
+        const elEffectDofFocus = document.getElementById("effect-dof-focus") as HTMLInputElement | null;
+        const valEffectDofFocus = document.getElementById("effect-dof-focus-val");
+        const elEffectDofFocusOffset = document.getElementById("effect-dof-focus-offset") as HTMLInputElement | null;
+        const valEffectDofFocusOffset = document.getElementById("effect-dof-focus-offset-val");
+        const elEffectDofFStop = document.getElementById("effect-dof-fstop") as HTMLInputElement | null;
+        const valEffectDofFStop = document.getElementById("effect-dof-fstop-val");
+        const elEffectDofNearSuppression = document.getElementById("effect-dof-near-suppression") as HTMLInputElement | null;
+        const valEffectDofNearSuppression = document.getElementById("effect-dof-near-suppression-val");
+        const elEffectDofFocalInvert = document.getElementById("effect-dof-focal-invert") as HTMLInputElement | null;
+        const valEffectDofFocalInvert = document.getElementById("effect-dof-focal-invert-val");
+        const elEffectDofLensBlur = document.getElementById("effect-dof-lens-blur") as HTMLInputElement | null;
+        const valEffectDofLensBlur = document.getElementById("effect-dof-lens-blur-val");
+        const elEffectDofLensSize = document.getElementById("effect-dof-lens-size") as HTMLInputElement | null;
+        const valEffectDofLensSize = document.getElementById("effect-dof-lens-size-val");
+        const elEffectDofFocalLength = document.getElementById("effect-dof-focal-length") as HTMLInputElement | null;
+        const valEffectDofFocalLength = document.getElementById("effect-dof-focal-length-val");
+        const elEffectEdgeWidth = document.getElementById("effect-edge-width") as HTMLInputElement | null;
+        const valEffectEdgeWidth = document.getElementById("effect-edge-width-val");
 
         const updateDir = () => {
             const az = Number(elAzimuth.value);
@@ -253,6 +364,262 @@ export class UIController {
         elShadowSoftness.value = String(Math.round(this.mmdManager.shadowEdgeSoftness * 1000));
         valShSoftness.textContent = this.mmdManager.shadowEdgeSoftness.toFixed(3);
 
+        if (elEffectColorTemp && valEffectColorTemp) {
+            const applyColorTemperature = () => {
+                const kelvin = Number(elEffectColorTemp.value);
+                this.mmdManager.lightColorTemperature = kelvin;
+                valEffectColorTemp.textContent = `${Math.round(this.mmdManager.lightColorTemperature)} K`;
+            };
+            elEffectColorTemp.value = String(Math.round(this.mmdManager.lightColorTemperature));
+            applyColorTemperature();
+            elEffectColorTemp.addEventListener("input", applyColorTemperature);
+        }
+
+        if (elEffectContrast && valEffectContrast) {
+            const applyContrast = () => {
+                const offsetPercent = Number(elEffectContrast.value);
+                const contrast = 1 + offsetPercent / 100;
+                this.mmdManager.postEffectContrast = contrast;
+                const roundedOffset = Math.round((this.mmdManager.postEffectContrast - 1) * 100);
+                valEffectContrast.textContent = `${roundedOffset}%`;
+            };
+            elEffectContrast.value = String(Math.round((this.mmdManager.postEffectContrast - 1) * 100));
+            applyContrast();
+            elEffectContrast.addEventListener("input", applyContrast);
+        }
+
+        if (elEffectGamma && valEffectGamma) {
+            const applyGamma = () => {
+                const offsetPercent = Number(elEffectGamma.value);
+                // 0% keeps the current baseline gamma (2.0), then adjusts within +/-50%.
+                const gammaPower = Math.pow(2, 1 - offsetPercent / 100);
+                this.mmdManager.postEffectGamma = gammaPower;
+                const roundedOffset = Math.round((1 - Math.log2(this.mmdManager.postEffectGamma)) * 100);
+                valEffectGamma.textContent = `${roundedOffset}%`;
+            };
+            elEffectGamma.value = String(Math.round((1 - Math.log2(this.mmdManager.postEffectGamma)) * 100));
+            applyGamma();
+            elEffectGamma.addEventListener("input", applyGamma);
+        }
+
+        if (elEffectLensDistortion && valEffectLensDistortion) {
+            const distortionLinkedToFov = this.mmdManager.dofLensDistortionLinkedToCameraFov;
+            this.lensDistortionSlider = elEffectLensDistortion;
+            this.lensDistortionValueEl = valEffectLensDistortion;
+            const applyLensDistortion = () => {
+                if (distortionLinkedToFov) {
+                    this.refreshLensDistortionAutoReadout();
+                    return;
+                }
+                const scale = Number(elEffectLensDistortion.value) / 100;
+                this.mmdManager.dofLensDistortion = scale;
+                valEffectLensDistortion.textContent = `${Math.round(this.mmdManager.dofLensDistortion * 100)}%`;
+            };
+            elEffectLensDistortion.value = String(Math.round(this.mmdManager.dofLensDistortion * 100));
+            if (distortionLinkedToFov) {
+                elEffectLensDistortion.disabled = true;
+                elEffectLensDistortion.title = "Auto distortion (linked to camera FoV; 30deg = 0%)";
+            }
+            applyLensDistortion();
+            if (!distortionLinkedToFov) {
+                elEffectLensDistortion.addEventListener("input", applyLensDistortion);
+            }
+        }
+
+        if (elEffectLensDistortionInfluence && valEffectLensDistortionInfluence) {
+            const applyLensDistortionInfluence = () => {
+                const scale = Number(elEffectLensDistortionInfluence.value) / 100;
+                this.mmdManager.dofLensDistortionInfluence = scale;
+                valEffectLensDistortionInfluence.textContent = `${Math.round(this.mmdManager.dofLensDistortionInfluence * 100)}%`;
+                this.refreshLensDistortionAutoReadout();
+            };
+            elEffectLensDistortionInfluence.value = String(
+                Math.round(this.mmdManager.dofLensDistortionInfluence * 100)
+            );
+            applyLensDistortionInfluence();
+            elEffectLensDistortionInfluence.addEventListener("input", applyLensDistortionInfluence);
+        }
+
+        if (elEffectLensEdgeBlur && valEffectLensEdgeBlur) {
+            const applyLensEdgeBlur = () => {
+                const scale = Number(elEffectLensEdgeBlur.value) / 100;
+                this.mmdManager.dofLensEdgeBlur = scale;
+                valEffectLensEdgeBlur.textContent = `${Math.round(this.mmdManager.dofLensEdgeBlur * 100)}%`;
+            };
+            elEffectLensEdgeBlur.value = String(Math.round(this.mmdManager.dofLensEdgeBlur * 100));
+            applyLensEdgeBlur();
+            elEffectLensEdgeBlur.addEventListener("input", applyLensEdgeBlur);
+        }
+
+        if (
+            elEffectDofEnabled &&
+            valEffectDofEnabled &&
+            elEffectDofQuality &&
+            valEffectDofQuality &&
+            elEffectDofFocus &&
+            valEffectDofFocus &&
+            elEffectDofFocusOffset &&
+            valEffectDofFocusOffset &&
+            elEffectDofFStop &&
+            valEffectDofFStop &&
+            elEffectDofNearSuppression &&
+            valEffectDofNearSuppression &&
+            elEffectDofFocalInvert &&
+            valEffectDofFocalInvert &&
+            elEffectDofLensBlur &&
+            valEffectDofLensBlur &&
+            elEffectDofLensSize &&
+            valEffectDofLensSize &&
+            elEffectDofFocalLength &&
+            valEffectDofFocalLength
+        ) {
+            const blurLabels = ["Low", "Medium", "High"];
+            const autoFocusEnabled = this.mmdManager.dofAutoFocusEnabled;
+            const focalLengthLinkedToFov = this.mmdManager.dofFocalLengthLinkedToCameraFov;
+            this.dofFocusSlider = elEffectDofFocus;
+            this.dofFocusValueEl = valEffectDofFocus;
+            this.dofFStopValueEl = valEffectDofFStop;
+            this.dofFocalLengthSlider = elEffectDofFocalLength;
+            this.dofFocalLengthValueEl = valEffectDofFocalLength;
+
+            const applyDofEnabled = () => {
+                this.mmdManager.dofEnabled = elEffectDofEnabled.checked;
+                valEffectDofEnabled.textContent = this.mmdManager.dofEnabled ? "ON" : "OFF";
+            };
+            const applyDofQuality = () => {
+                const level = Number(elEffectDofQuality.value);
+                this.mmdManager.dofBlurLevel = level;
+                valEffectDofQuality.textContent = blurLabels[this.mmdManager.dofBlurLevel] ?? "High";
+            };
+            const applyDofFocus = () => {
+                if (autoFocusEnabled) {
+                    this.refreshDofAutoFocusReadout();
+                    return;
+                }
+                const mm = Number(elEffectDofFocus.value);
+                this.mmdManager.dofFocusDistanceMm = mm;
+                valEffectDofFocus.textContent = `${(this.mmdManager.dofFocusDistanceMm / 1000).toFixed(1)}m`;
+            };
+            const applyDofFocusOffset = () => {
+                const mm = Number(elEffectDofFocusOffset.value);
+                this.mmdManager.dofAutoFocusNearOffsetMm = mm;
+                valEffectDofFocusOffset.textContent = `${(this.mmdManager.dofAutoFocusNearOffsetMm / 1000).toFixed(1)}m`;
+                if (autoFocusEnabled) {
+                    this.refreshDofAutoFocusReadout();
+                }
+            };
+            const applyDofFStop = () => {
+                const fStop = Number(elEffectDofFStop.value) / 100;
+                this.mmdManager.dofFStop = fStop;
+                if (autoFocusEnabled) {
+                    this.refreshDofAutoFocusReadout();
+                    return;
+                }
+                valEffectDofFStop.textContent = this.mmdManager.dofFStop.toFixed(2);
+            };
+            const applyDofNearSuppression = () => {
+                const scale = Number(elEffectDofNearSuppression.value) / 100;
+                this.mmdManager.dofNearSuppressionScale = scale;
+                valEffectDofNearSuppression.textContent = `${Math.round(this.mmdManager.dofNearSuppressionScale * 100)}%`;
+                if (autoFocusEnabled) {
+                    this.refreshDofAutoFocusReadout();
+                }
+            };
+            const applyDofFocalInvert = () => {
+                this.mmdManager.dofFocalLengthDistanceInverted = elEffectDofFocalInvert.checked;
+                valEffectDofFocalInvert.textContent = this.mmdManager.dofFocalLengthDistanceInverted ? "ON" : "OFF";
+                if (focalLengthLinkedToFov) {
+                    elEffectDofFocalLength.title = this.mmdManager.dofFocalLengthDistanceInverted
+                        ? "Auto focal length (linked to camera FoV, inverted)"
+                        : "Auto focal length (linked to camera FoV)";
+                    this.refreshDofAutoFocusReadout();
+                }
+            };
+            const applyDofLensBlur = () => {
+                const strength = Number(elEffectDofLensBlur.value) / 100;
+                this.mmdManager.dofLensBlurStrength = strength;
+                valEffectDofLensBlur.textContent = `${Math.round(this.mmdManager.dofLensBlurStrength * 100)}%`;
+            };
+            const applyDofLensSize = () => {
+                const lensSize = Number(elEffectDofLensSize.value);
+                this.mmdManager.dofLensSize = lensSize;
+                valEffectDofLensSize.textContent = `${Math.round(this.mmdManager.dofLensSize)}`;
+                if (autoFocusEnabled) {
+                    this.refreshDofAutoFocusReadout();
+                }
+            };
+            const applyDofFocalLength = () => {
+                if (focalLengthLinkedToFov) {
+                    this.refreshDofAutoFocusReadout();
+                    return;
+                }
+                const focalLength = Number(elEffectDofFocalLength.value);
+                this.mmdManager.dofFocalLength = focalLength;
+                valEffectDofFocalLength.textContent = `${Math.round(this.mmdManager.dofFocalLength)}`;
+                if (autoFocusEnabled) {
+                    this.refreshDofAutoFocusReadout();
+                }
+            };
+
+            elEffectDofEnabled.checked = this.mmdManager.dofEnabled;
+            elEffectDofQuality.value = String(this.mmdManager.dofBlurLevel);
+            elEffectDofFocus.value = String(Math.round(this.mmdManager.dofFocusDistanceMm));
+            elEffectDofFocusOffset.value = String(Math.round(this.mmdManager.dofAutoFocusNearOffsetMm));
+            elEffectDofFStop.value = String(Math.round(this.mmdManager.dofFStop * 100));
+            elEffectDofNearSuppression.value = String(Math.round(this.mmdManager.dofNearSuppressionScale * 100));
+            elEffectDofFocalInvert.checked = this.mmdManager.dofFocalLengthDistanceInverted;
+            elEffectDofLensBlur.value = String(Math.round(this.mmdManager.dofLensBlurStrength * 100));
+            elEffectDofLensSize.value = String(Math.round(this.mmdManager.dofLensSize));
+            elEffectDofFocalLength.value = String(Math.round(this.mmdManager.dofFocalLength));
+            if (autoFocusEnabled) {
+                elEffectDofFocus.disabled = true;
+                elEffectDofFocus.title = `Auto focus (camera target, ${this.mmdManager.dofAutoFocusRangeMeters.toFixed(1)}m radius in focus)`;
+            }
+            if (focalLengthLinkedToFov) {
+                elEffectDofFocalLength.disabled = true;
+                elEffectDofFocalLength.title = "Auto focal length (linked to camera FoV)";
+            }
+
+            applyDofEnabled();
+            applyDofQuality();
+            applyDofFocus();
+            applyDofFocusOffset();
+            applyDofFStop();
+            applyDofNearSuppression();
+            applyDofFocalInvert();
+            applyDofLensBlur();
+            applyDofLensSize();
+            applyDofFocalLength();
+            this.refreshDofAutoFocusReadout();
+
+            elEffectDofEnabled.addEventListener("change", applyDofEnabled);
+            elEffectDofQuality.addEventListener("change", applyDofQuality);
+            if (!autoFocusEnabled) {
+                elEffectDofFocus.addEventListener("input", applyDofFocus);
+            }
+            elEffectDofFocusOffset.addEventListener("input", applyDofFocusOffset);
+            elEffectDofFStop.addEventListener("input", applyDofFStop);
+            elEffectDofNearSuppression.addEventListener("input", applyDofNearSuppression);
+            elEffectDofFocalInvert.addEventListener("change", applyDofFocalInvert);
+            elEffectDofLensBlur.addEventListener("input", applyDofLensBlur);
+            elEffectDofLensSize.addEventListener("input", applyDofLensSize);
+            if (!focalLengthLinkedToFov) {
+                elEffectDofFocalLength.addEventListener("input", applyDofFocalLength);
+            }
+        }
+
+        if (elEffectEdgeWidth && valEffectEdgeWidth) {
+            const applyEdgeWidth = () => {
+                const sliderValue = Number(elEffectEdgeWidth.value);
+                const scale = sliderValue / 100;
+                this.mmdManager.modelEdgeWidth = scale;
+                valEffectEdgeWidth.textContent = `${Math.round(this.mmdManager.modelEdgeWidth * 100)}%`;
+            };
+            elEffectEdgeWidth.value = String(Math.round(this.mmdManager.modelEdgeWidth * 100));
+            applyEdgeWidth();
+            elEffectEdgeWidth.addEventListener("input", applyEdgeWidth);
+        }
+
         // Initialize direction from HTML default values
         updateDir();
     }
@@ -269,8 +636,16 @@ export class UIController {
                 const fovDeg = this.mmdManager.getCameraFov();
                 const clamped = Math.max(Number(this.camFovSlider.min), Math.min(Number(this.camFovSlider.max), fovDeg));
                 this.camFovSlider.value = String(Math.round(clamped));
-                this.camFovValueEl.textContent = `${Math.round(fovDeg)}ﾂｰ`;
+                this.camFovValueEl.textContent = `${Math.round(fovDeg)} deg`;
             }
+            if (this.camDistanceSlider && this.camDistanceValueEl && document.activeElement !== this.camDistanceSlider) {
+                const distance = this.mmdManager.getCameraDistance();
+                const clamped = Math.max(Number(this.camDistanceSlider.min), Math.min(Number(this.camDistanceSlider.max), distance));
+                this.camDistanceSlider.value = String(Math.round(clamped));
+                this.camDistanceValueEl.textContent = `${distance.toFixed(1)}m`;
+            }
+            this.refreshDofAutoFocusReadout();
+            this.refreshLensDistortionAutoReadout();
         };
 
         // Active model changed
@@ -413,6 +788,7 @@ export class UIController {
             fpsEl.style.color = fps >= 55 ? "var(--accent-green)"
                 : fps >= 30 ? "var(--accent-amber)"
                     : "var(--accent-red)";
+            this.refreshDofAutoFocusReadout();
         }, 1000);
 
         // Volume fader
@@ -552,12 +928,84 @@ export class UIController {
         this.btnToggleGround.classList.toggle("toggle-on", visible);
     }
 
+    private updateSkydomeToggleButton(visible: boolean): void {
+        this.skydomeToggleText.textContent = visible ? "空表示ON" : "空表示OFF";
+        this.btnToggleSkydome.setAttribute("aria-pressed", visible ? "true" : "false");
+        this.btnToggleSkydome.classList.toggle("toggle-on", visible);
+    }
+
     private updatePhysicsToggleButton(enabled: boolean, available: boolean): void {
         const active = available && enabled;
         this.physicsToggleText.textContent = available ? (active ? "物理ON" : "物理OFF") : "物理不可";
         this.btnTogglePhysics.setAttribute("aria-pressed", active ? "true" : "false");
         this.btnTogglePhysics.classList.toggle("toggle-on", active);
         (this.btnTogglePhysics as HTMLButtonElement).disabled = !available;
+        if (this.physicsGravityAccelSlider) {
+            this.physicsGravityAccelSlider.disabled = !available;
+        }
+        if (this.physicsGravityDirXSlider) this.physicsGravityDirXSlider.disabled = !available;
+        if (this.physicsGravityDirYSlider) this.physicsGravityDirYSlider.disabled = !available;
+        if (this.physicsGravityDirZSlider) this.physicsGravityDirZSlider.disabled = !available;
+    }
+
+    private updateCameraViewButtons(active: CameraViewPreset): void {
+        const left = active === "left";
+        const front = active === "front";
+        const right = active === "right";
+        this.camViewLeftBtn?.classList.toggle("camera-view-btn--active", left);
+        this.camViewFrontBtn?.classList.toggle("camera-view-btn--active", front);
+        this.camViewRightBtn?.classList.toggle("camera-view-btn--active", right);
+        this.camViewLeftBtn?.setAttribute("aria-pressed", left ? "true" : "false");
+        this.camViewFrontBtn?.setAttribute("aria-pressed", front ? "true" : "false");
+        this.camViewRightBtn?.setAttribute("aria-pressed", right ? "true" : "false");
+    }
+
+    private refreshDofAutoFocusReadout(): void {
+        if (!this.mmdManager.dofAutoFocusEnabled) return;
+
+        if (this.dofFocusSlider && this.dofFocusValueEl) {
+            const focusMm = this.mmdManager.dofFocusDistanceMm;
+            const sliderMin = Number(this.dofFocusSlider.min);
+            const sliderMax = Number(this.dofFocusSlider.max);
+            const clamped = Math.max(sliderMin, Math.min(sliderMax, focusMm));
+            this.dofFocusSlider.value = String(Math.round(clamped));
+            this.dofFocusValueEl.textContent = `${(focusMm / 1000).toFixed(1)}m (auto)`;
+        }
+
+        if (this.dofFStopValueEl) {
+            const baseFStop = this.mmdManager.dofFStop;
+            const effectiveFStop = this.mmdManager.dofEffectiveFStop;
+            const hasCompensation = effectiveFStop > baseFStop + 0.01;
+            this.dofFStopValueEl.textContent = hasCompensation
+                ? `${baseFStop.toFixed(2)} -> ${effectiveFStop.toFixed(2)}`
+                : effectiveFStop.toFixed(2);
+        }
+
+        if (
+            this.mmdManager.dofFocalLengthLinkedToCameraFov &&
+            this.dofFocalLengthSlider &&
+            this.dofFocalLengthValueEl
+        ) {
+            const focalLength = this.mmdManager.dofFocalLength;
+            const sliderMin = Number(this.dofFocalLengthSlider.min);
+            const sliderMax = Number(this.dofFocalLengthSlider.max);
+            const clamped = Math.max(sliderMin, Math.min(sliderMax, focalLength));
+            this.dofFocalLengthSlider.value = String(Math.round(clamped));
+            this.dofFocalLengthValueEl.textContent = this.mmdManager.dofFocalLengthDistanceInverted
+                ? `${Math.round(focalLength)} (auto, inv)`
+                : `${Math.round(focalLength)} (auto)`;
+        }
+    }
+
+    private refreshLensDistortionAutoReadout(): void {
+        if (!this.mmdManager.dofLensDistortionLinkedToCameraFov) return;
+        if (!this.lensDistortionSlider || !this.lensDistortionValueEl) return;
+        const distortionPercent = this.mmdManager.dofLensDistortion * 100;
+        const sliderMin = Number(this.lensDistortionSlider.min);
+        const sliderMax = Number(this.lensDistortionSlider.max);
+        const clamped = Math.max(sliderMin, Math.min(sliderMax, distortionPercent));
+        this.lensDistortionSlider.value = String(Math.round(clamped));
+        this.lensDistortionValueEl.textContent = `${Math.round(distortionPercent)}% (auto)`;
     }
 
     private play(): void {

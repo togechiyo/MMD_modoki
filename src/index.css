@@ -438,7 +438,7 @@ body {
 
 .bottom-panel-inner {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   height: 100%;
   gap: 0;
 }
@@ -489,6 +489,10 @@ body {
 }
 
 /* Morph Controls */
+#morph-section {
+  display: none;
+}
+
 .morph-controls {
   flex: 1;
   overflow-y: auto;
@@ -570,9 +574,28 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 4px;
-  overflow-y: auto;
+  gap: 8px;
+  flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.camera-controls::-webkit-scrollbar {
+  width: 4px;
+}
+
+.camera-controls::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 2px;
+}
+
+.camera-dof-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
 }
 
 .control-row {
@@ -594,6 +617,49 @@ body {
 .cam-slider {
   flex: 1;
   min-width: 0;
+}
+
+.camera-view-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.camera-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.camera-view-btn:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.camera-view-btn:active {
+  transform: scale(0.97);
+}
+
+.camera-view-btn.camera-view-btn--active {
+  border-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.14);
+  color: #8de8f7;
+}
+
+.cam-fov-row {
+  margin-top: 2px;
 }
 
 .control-row label {
@@ -991,9 +1057,12 @@ body {
 }
 
 .light-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 26% minmax(0, 1fr) 22%;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .light-row-check {
@@ -1017,15 +1086,18 @@ body {
 .light-label {
   font-size: 10px;
   color: var(--text-tertiary);
-  width: 48px;
-  flex-shrink: 0;
   text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .light-slider {
   -webkit-appearance: none;
   appearance: none;
-  flex: 1;
+  width: 100%;
+  min-width: 0;
   height: 3px;
   border-radius: 2px;
   background: var(--bg-hover);
@@ -1053,6 +1125,353 @@ body {
   font-size: 10px;
   font-family: var(--font-mono);
   color: var(--text-tertiary);
-  min-width: 3.5ch;
   text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================
+   Shadow Controls
+   ============================================ */
+
+.shadow-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.shadow-controls::-webkit-scrollbar {
+  width: 4px;
+}
+
+.shadow-controls::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 2px;
+}
+
+.shadow-row {
+  display: grid;
+  grid-template-columns: 26% minmax(0, 1fr) 22%;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.shadow-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shadow-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.shadow-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(99, 102, 241, 0.5);
+  transition: transform var(--transition-fast);
+}
+
+.shadow-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+.shadow-value {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================
+   Physics Controls
+   ============================================ */
+
+.physics-controls {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.physics-controls::-webkit-scrollbar {
+  width: 4px;
+}
+
+.physics-controls::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 2px;
+}
+
+.physics-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
+  gap: 4px;
+  width: auto;
+  max-width: 110px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.physics-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.physics-toggle-btn:active {
+  transform: scale(0.97);
+  background: var(--bg-active);
+}
+
+.physics-toggle-btn.toggle-on {
+  background: var(--bg-active);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.physics-toggle-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.physics-toggle-btn:disabled:hover {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.physics-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.physics-row {
+  display: grid;
+  grid-template-columns: 34% minmax(0, 1fr) 20%;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.physics-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.physics-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--accent-green);
+}
+
+.physics-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
+  transition: transform var(--transition-fast);
+}
+
+.physics-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+.physics-value {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================
+   Effect Controls
+   ============================================ */
+
+.effect-controls {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(236, 72, 153, 0.45) transparent;
+}
+
+.effect-controls::-webkit-scrollbar {
+  width: 6px;
+}
+
+.effect-controls::-webkit-scrollbar-thumb {
+  background: rgba(236, 72, 153, 0.45);
+  border-radius: 3px;
+}
+
+.effect-row {
+  display: grid;
+  grid-template-columns: 34% minmax(0, 1fr) 20%;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dof-row-hidden {
+  display: none;
+}
+
+.effect-row-check {
+  align-items: center;
+}
+
+.effect-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.effect-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--accent-pink);
+}
+
+.effect-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent-pink);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(236, 72, 153, 0.5);
+  transition: transform var(--transition-fast);
+}
+
+.effect-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+.effect-check-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.effect-check {
+  accent-color: var(--accent-pink);
+}
+
+.effect-select {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.effect-select:focus {
+  outline: none;
+  border-color: var(--accent-pink);
+  box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.15);
+}
+
+.effect-value {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

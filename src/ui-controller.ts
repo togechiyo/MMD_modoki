@@ -16,6 +16,8 @@ export class UIController {
     private btnExportPng: HTMLElement;
     private btnToggleGround: HTMLElement;
     private groundToggleText: HTMLElement;
+    private btnTogglePhysics: HTMLElement;
+    private physicsToggleText: HTMLElement;
     private btnPlay: HTMLElement;
     private btnPause: HTMLElement;
     private btnStop: HTMLElement;
@@ -44,6 +46,8 @@ export class UIController {
         this.btnExportPng = document.getElementById("btn-export-png")!;
         this.btnToggleGround = document.getElementById("btn-toggle-ground")!;
         this.groundToggleText = document.getElementById("ground-toggle-text")!;
+        this.btnTogglePhysics = document.getElementById("btn-toggle-physics")!;
+        this.physicsToggleText = document.getElementById("physics-toggle-text")!;
         this.btnPlay = document.getElementById("btn-play")!;
         this.btnPause = document.getElementById("btn-pause")!;
         this.btnStop = document.getElementById("btn-stop")!;
@@ -63,6 +67,10 @@ export class UIController {
         this.setupPerfDisplay();
         this.refreshModelSelector();
         this.updateGroundToggleButton(this.mmdManager.isGroundVisible());
+        this.updatePhysicsToggleButton(
+            this.mmdManager.getPhysicsEnabled(),
+            this.mmdManager.isPhysicsAvailable()
+        );
     }
 
     private setupEventListeners(): void {
@@ -77,7 +85,17 @@ export class UIController {
             this.updateGroundToggleButton(visible);
             this.showToast(visible ? "床表示: ON" : "床表示: OFF", "info");
         });
+        this.btnTogglePhysics.addEventListener("click", () => {
+            if (!this.mmdManager.isPhysicsAvailable()) {
+                this.updatePhysicsToggleButton(false, false);
+                this.showToast("Physics is unavailable in this environment", "error");
+                return;
+            }
 
+            const enabled = this.mmdManager.togglePhysicsEnabled();
+            this.updatePhysicsToggleButton(enabled, true);
+            this.showToast(enabled ? "Physics: ON" : "Physics: OFF", "info");
+        });
         // Playback
         this.btnPlay.addEventListener("click", () => this.play());
         this.btnPause.addEventListener("click", () => this.pause());
@@ -304,6 +322,10 @@ export class UIController {
             this.setStatus("Error", false);
             this.showToast(message, "error");
         };
+
+        this.mmdManager.onPhysicsStateChanged = (enabled: boolean, available: boolean) => {
+            this.updatePhysicsToggleButton(enabled, available);
+        };
     }
 
     private setupKeyboard(): void {
@@ -528,6 +550,14 @@ export class UIController {
         this.groundToggleText.textContent = visible ? "床表示ON" : "床表示OFF";
         this.btnToggleGround.setAttribute("aria-pressed", visible ? "true" : "false");
         this.btnToggleGround.classList.toggle("toggle-on", visible);
+    }
+
+    private updatePhysicsToggleButton(enabled: boolean, available: boolean): void {
+        const active = available && enabled;
+        this.physicsToggleText.textContent = available ? (active ? "物理ON" : "物理OFF") : "物理不可";
+        this.btnTogglePhysics.setAttribute("aria-pressed", active ? "true" : "false");
+        this.btnTogglePhysics.classList.toggle("toggle-on", active);
+        (this.btnTogglePhysics as HTMLButtonElement).disabled = !available;
     }
 
     private play(): void {

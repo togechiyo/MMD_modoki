@@ -38,3 +38,23 @@ npm run lint
 ```
 
 `error` が 0 であれば開発は継続可能です。
+
+## 上パネルが `物理不可` のままになる
+
+### 症状
+
+- 物理ボタンが `物理不可` のまま
+- コンソールに `expected magic word 00 61 73 6d` など wasm 読み込みエラーが出る
+
+### 代表的な原因
+
+- `ammo.wasm.wasm` 取得時に wasm ではなく HTML が返っている
+- Dev サーバーのキャッシュで古いバンドルを参照している
+
+### 対処
+
+1. 開発サーバーを再起動する（`electron-forge start` を再起動）
+2. それでも直らない場合は `node_modules/.vite` を消して再起動する
+3. コンソールに `Physics initialization failed` が出ていないか確認する
+
+現実装では `ammo.wasm.wasm` を URL 明示で `fetch` し、`Ammo({ wasmBinary })` へ渡して初期化する仕様です。

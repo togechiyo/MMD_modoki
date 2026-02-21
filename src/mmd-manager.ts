@@ -39,6 +39,11 @@ import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
 import { SdefInjector } from "babylon-mmd/esm/Loader/sdefInjector";
 import { ImportMeshAsync } from "@babylonjs/core/Loading/sceneLoader";
 import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer";
+import { MmdAmmoJSPlugin } from "babylon-mmd/esm/Runtime/Physics/mmdAmmoJSPlugin";
+import { MmdAmmoPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdAmmoPhysics";
+import Ammo from "babylon-mmd/esm/Runtime/Physics/External/ammo.wasm";
+// eslint-disable-next-line import/no-unresolved
+import ammoWasmBinaryUrl from "babylon-mmd/esm/Runtime/Physics/External/ammo.wasm.wasm?url";
 import type { Skeleton } from "@babylonjs/core/Bones/skeleton";
 
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
@@ -73,6 +78,11 @@ export class MmdManager {
     private hasCameraMotion = false;
     private modelKeyframeTracks: KeyframeTrack[] = [];
     private cameraKeyframeTracks: KeyframeTrack[] = [];
+    private physicsPlugin: MmdAmmoJSPlugin | null = null;
+    private physicsRuntime: MmdAmmoPhysics | null = null;
+    private physicsInitializationPromise: Promise<boolean>;
+    private physicsAvailable = false;
+    private physicsEnabled = true;
     private shadowEnabled = true;
     private shadowDarknessValue = 0.45;
     private shadowEdgeSoftnessValue = 0.035;
@@ -90,6 +100,7 @@ export class MmdManager {
     public onKeyframesLoaded: ((tracks: KeyframeTrack[]) => void) | null = null;
     public onError: ((message: string) => void) | null = null;
     public onAudioLoaded: ((name: string) => void) | null = null;
+    public onPhysicsStateChanged: ((enabled: boolean, available: boolean) => void) | null = null;
 
     public getLoadedModels(): { index: number; name: string; path: string; active: boolean }[] {
         return this.sceneModels.map((entry, index) => ({
@@ -124,6 +135,31 @@ export class MmdManager {
         const next = !this.isGroundVisible();
         this.setGroundVisible(next);
         return next;
+    }
+
+    public isPhysicsAvailable(): boolean {
+        return this.physicsAvailable;
+    }
+
+    public getPhysicsEnabled(): boolean {
+        return this.physicsAvailable && this.physicsEnabled;
+    }
+
+    public setPhysicsEnabled(enabled: boolean): boolean {
+        if (!this.physicsAvailable) {
+            this.physicsEnabled = false;
+            this.onPhysicsStateChanged?.(false, false);
+            return false;
+        }
+
+        this.physicsEnabled = enabled;
+        this.applyPhysicsStateToAllModels();
+        this.onPhysicsStateChanged?.(this.physicsEnabled, true);
+        return this.physicsEnabled;
+    }
+
+    public togglePhysicsEnabled(): boolean {
+        return this.setPhysicsEnabled(!this.getPhysicsEnabled());
     }
 
     constructor(canvas: HTMLCanvasElement) {
@@ -266,6 +302,7 @@ export class MmdManager {
         // MMD Runtime (without physics for initial version)
         this.mmdRuntime = new MmdRuntime(this.scene);
         this.mmdRuntime.register(this.scene);
+        this.physicsInitializationPromise = this.initializePhysics();
 
         // MMD camera runtime object (used for camera VMD evaluation)
         this.mmdCamera = new MmdCamera("mmdRuntimeCamera", this.camera.target.clone(), this.scene, false);
@@ -299,8 +336,57 @@ export class MmdManager {
         this.resizeObserver.observe(canvas.parentElement ?? canvas);
     }
 
+    private async initializePhysics(): Promise<boolean> {
+        try {
+            const wasmResponse = await fetch(ammoWasmBinaryUrl);
+            if (!wasmResponse.ok) {
+                throw new Error(`Failed to fetch ammo wasm binary: ${wasmResponse.status} ${wasmResponse.statusText}`);
+            }
+            const wasmBinary = new Uint8Array(await wasmResponse.arrayBuffer());
+            const ammoInstance = await Ammo({ wasmBinary });
+            const plugin = new MmdAmmoJSPlugin(true, ammoInstance);
+            plugin.setMaxSteps(120);
+            plugin.setFixedTimeStep(1 / 120);
+            this.scene.enablePhysics(new Vector3(0, -98, 0), plugin);
+
+            this.physicsPlugin = plugin;
+            this.physicsRuntime = new MmdAmmoPhysics(this.scene);
+            (this.mmdRuntime as unknown as { _physics: MmdAmmoPhysics | null })._physics = this.physicsRuntime;
+            this.physicsAvailable = true;
+
+            this.applyPhysicsStateToAllModels();
+            this.onPhysicsStateChanged?.(this.physicsEnabled, true);
+            return true;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn("Physics initialization failed:", message);
+            this.physicsAvailable = false;
+            this.physicsEnabled = false;
+            this.onPhysicsStateChanged?.(false, false);
+            this.onError?.(`Physics init warning: ${message}`);
+            return false;
+        }
+    }
+
+    private applyPhysicsStateToModel(model: MmdModel): void {
+        if (model.rigidBodyStates.length === 0) return;
+
+        model.rigidBodyStates.fill(this.getPhysicsEnabled() ? 1 : 0);
+        if (this.getPhysicsEnabled()) {
+            this.mmdRuntime.initializeMmdModelPhysics(model);
+        }
+    }
+
+    private applyPhysicsStateToAllModels(): void {
+        for (const sceneModel of this.sceneModels) {
+            this.applyPhysicsStateToModel(sceneModel.model);
+        }
+    }
+
     async loadPMX(filePath: string): Promise<ModelInfo | null> {
         try {
+            await this.physicsInitializationPromise;
+
             // Get directory and filename from path
             const pathParts = filePath.replace(/\\/g, '/');
             const lastSlash = pathParts.lastIndexOf('/');
@@ -372,7 +458,11 @@ export class MmdManager {
             // Create MMD model
             const mmdModel = this.mmdRuntime.createMmdModel(mmdMesh, {
                 materialProxyConstructor: MmdStandardMaterialProxy,
+                buildPhysics: this.physicsAvailable
+                    ? { disableOffsetForConstraintFrame: true }
+                    : false,
             });
+            this.applyPhysicsStateToModel(mmdModel);
 
             console.log("[PMX] MmdModel created, morph:", !!mmdModel.morph);
 
@@ -1018,6 +1108,11 @@ export class MmdManager {
         this.mmdRuntime.removeAnimatable(this.mmdCamera);
         this.mmdCamera.dispose();
         this.mmdRuntime.dispose(this.scene);
+        if (this.scene.getPhysicsEngine()) {
+            this.scene.disablePhysicsEngine();
+        }
+        this.physicsPlugin = null;
+        this.physicsRuntime = null;
         this.scene.dispose();
         this.engine.dispose();
     }

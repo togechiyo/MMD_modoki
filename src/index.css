@@ -170,6 +170,18 @@ body {
   background: var(--bg-active);
 }
 
+.toolbar-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.toolbar-btn:disabled:hover {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
 .toolbar-btn.toggle-on {
   background: var(--bg-active);
   border-color: var(--border-accent);

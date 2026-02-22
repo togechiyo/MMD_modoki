@@ -1,13 +1,15 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
-import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Space } from "@babylonjs/core/Maths/math.axis";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
@@ -19,12 +21,25 @@ import { FxaaPostProcess } from "@babylonjs/core/PostProcesses/fxaaPostProcess";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
 import { LensRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/lensRenderingPipeline";
 import { DepthOfFieldEffectBlurLevel } from "@babylonjs/core/PostProcesses/depthOfFieldEffect";
+import { GizmoManager } from "@babylonjs/core/Gizmos/gizmoManager";
 import type { DepthRenderer } from "@babylonjs/core/Rendering/depthRenderer";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
-import type { ModelInfo, MotionInfo, KeyframeTrack, TrackCategory } from "./types";
+import type { BoneControlInfo, ModelInfo, MotionInfo, KeyframeTrack, TrackCategory } from "./types";
+import type { IMmdRuntimeBone } from "babylon-mmd/esm/Runtime/IMmdRuntimeBone";
+
+type EditorRuntimeBone = IMmdRuntimeBone & {
+    getAnimationPositionOffsetToRef(target: Vector3): Vector3;
+    getAnimatedRotationToRef(target: Quaternion): Quaternion;
+};
 
 /** 鬯ｯ・ｮ繝ｻ・ｮ髣包ｽｵ隴擾ｽｴ郢晢ｽｻ鬮ｫ・ｰ隴ｴ・ｧ繝ｻ・ｺ陋滂ｽ･郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｻ鬯ｮ・ｮ隲幢ｽｶ繝ｻ・ｽ繝ｻ・｣驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｺ鬯ｮ・ｫ繝ｻ・ｰ鬮ｮ蜈ｷ・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｶ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｻ鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・｢鬮ｫ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・｢驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・｢鬮ｫ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・｢驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｳ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｻ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｻMD鬯ｯ・ｮ繝ｻ・ｫ郢晢ｽｻ繝ｻ・ｶ鬮ｴ髮｣・ｽ・｣髯区ｻゑｽｽ・｡郢晢ｽｻ繝ｻ・ｶ髫ｲ蟶ｷ・ｿ・ｫ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｺ鬯ｮ・ｯ隶灘･・ｽｽ・ｻ髦ｮ蜷ｶ繝ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｯ・ｮ繝ｻ・ｫ郢晢ｽｻ繝ｻ・ｴ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｬ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ鬯ｩ蟷｢・ｽ・｢髫ｴ雜｣・ｽ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｻ鬯ｮ・ｯ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｲ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ驛｢譎｢・ｽ・ｻ髯ｷ・ｿ隰費ｽｶ雋ょ､ゑｽｹ譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｹ鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・｢鬮ｫ・ｴ隰ｫ・ｾ繝ｻ・ｽ繝ｻ・ｴ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ*/
 const SEMI_STANDARD_BONES = new Set<string>();
+const EMPTY_KEYFRAME_FRAMES = new Uint32Array(0);
+const TRACK_KEY_SEPARATOR = "\u001f";
+const PMX_BONE_FLAG_VISIBLE = 0x0008;
+const PMX_BONE_FLAG_ROTATABLE = 0x0002;
+const PMX_BONE_FLAG_MOVABLE = 0x0004;
+const PMX_RIGID_BODY_MODE_FOLLOW_BONE = 0;
 
 function classifyBone(name: string): TrackCategory {
     if (name === "鬮ｯ・ｷ髣鯉ｽｨ繝ｻ・ｽ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｮ・ｫ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｪ") return "root";
@@ -32,8 +47,105 @@ function classifyBone(name: string): TrackCategory {
     return "bone";
 }
 
+
+function mergeFrameNumbers(a: Uint32Array, b: Uint32Array): Uint32Array {
+    if (a.length === 0) return b;
+    if (b.length === 0) return a;
+
+    const merged = new Uint32Array(a.length + b.length);
+    let i = 0;
+    let j = 0;
+    let k = 0;
+    let last = -1;
+
+    while (i < a.length || j < b.length) {
+        const pickA = j >= b.length || (i < a.length && a[i] <= b[j]);
+        const value = pickA ? a[i++] : b[j++];
+        if (value === last) continue;
+        merged[k++] = value;
+        last = value;
+    }
+
+    return merged.subarray(0, k);
+}
+
+function hasFrameNumber(frames: Uint32Array, frame: number): boolean {
+    let lo = 0;
+    let hi = frames.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (frames[mid] < frame) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo < frames.length && frames[lo] === frame;
+}
+
+function addFrameNumber(frames: Uint32Array, frame: number): Uint32Array {
+    if (frames.length === 0) return new Uint32Array([frame]);
+
+    let lo = 0;
+    let hi = frames.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (frames[mid] < frame) lo = mid + 1;
+        else hi = mid;
+    }
+
+    if (lo < frames.length && frames[lo] === frame) {
+        return frames;
+    }
+
+    const next = new Uint32Array(frames.length + 1);
+    if (lo > 0) next.set(frames.subarray(0, lo), 0);
+    next[lo] = frame;
+    if (lo < frames.length) next.set(frames.subarray(lo), lo + 1);
+    return next;
+}
+
+function removeFrameNumber(frames: Uint32Array, frame: number): Uint32Array {
+    if (frames.length === 0) return frames;
+
+    let lo = 0;
+    let hi = frames.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (frames[mid] < frame) lo = mid + 1;
+        else hi = mid;
+    }
+    if (lo >= frames.length || frames[lo] !== frame) {
+        return frames;
+    }
+    if (frames.length === 1) return EMPTY_KEYFRAME_FRAMES;
+
+    const next = new Uint32Array(frames.length - 1);
+    if (lo > 0) next.set(frames.subarray(0, lo), 0);
+    if (lo < frames.length - 1) next.set(frames.subarray(lo + 1), lo);
+    return next;
+}
+
+function moveFrameNumber(frames: Uint32Array, fromFrame: number, toFrame: number): Uint32Array {
+    if (fromFrame === toFrame) return frames;
+    const removed = removeFrameNumber(frames, fromFrame);
+    if (removed === frames) return frames;
+    return addFrameNumber(removed, toFrame);
+}
+
+function createTrackKey(category: TrackCategory, name: string): string {
+    return `${category}${TRACK_KEY_SEPARATOR}${name}`;
+}
+
+function parseTrackKey(key: string): { category: TrackCategory; name: string } | null {
+    const separatorIndex = key.indexOf(TRACK_KEY_SEPARATOR);
+    if (separatorIndex <= 0) return null;
+    const category = key.slice(0, separatorIndex) as TrackCategory;
+    const name = key.slice(separatorIndex + TRACK_KEY_SEPARATOR.length);
+    if (!name) return null;
+    return { category, name };
+}
+
 // Side effects - register loaders
 import "babylon-mmd/esm/Loader/pmxLoader";
+import "babylon-mmd/esm/Loader/pmdLoader";
 import "babylon-mmd/esm/Loader/mmdOutlineRenderer";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
@@ -44,6 +156,9 @@ import "@babylonjs/core/Rendering/depthRendererSceneComponent";
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
+import { VpdLoader } from "babylon-mmd/esm/Loader/vpdLoader";
+import { MmdAnimation } from "babylon-mmd/esm/Loader/Animation/mmdAnimation";
+import { MmdBoneAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
 import { MmdStandardMaterialProxy } from "babylon-mmd/esm/Runtime/mmdStandardMaterialProxy";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
@@ -69,14 +184,18 @@ export class MmdManager {
     private mmdCamera: MmdCamera;
     private mmdRuntime: MmdRuntime;
     private vmdLoader: VmdLoader;
+    private vpdLoader: VpdLoader;
     private currentMesh: MmdMesh | null = null;
     private currentModel: MmdModel | null = null;
     private activeModelInfo: ModelInfo | null = null;
     private sceneModels: { mesh: MmdMesh; model: MmdModel; info: ModelInfo }[] = [];
     private _isPlaying = false;
     private _currentFrame = 0;
-    private _totalFrames = 0;
+    private _totalFrames = 300;
     private _playbackSpeed = 1;
+    private manualPlaybackWithoutAudio = false;
+    private manualPlaybackFrameCursor = 0;
+    private lastRenderTimestampMs = performance.now();
     private ground: Mesh | null = null;
     private skydome: Mesh | null = null;
     private audioPlayer: StreamAudioPlayer | null = null;
@@ -88,8 +207,35 @@ export class MmdManager {
     private cameraRotationEulerDeg = new Vector3(0, 0, 0);
     private cameraAnimationHandle: MmdRuntimeAnimationHandle | null = null;
     private hasCameraMotion = false;
-    private modelKeyframeTracks: KeyframeTrack[] = [];
-    private cameraKeyframeTracks: KeyframeTrack[] = [];
+    private readonly modelKeyframeTracksByModel = new WeakMap<MmdModel, Map<string, Uint32Array>>();
+    private readonly modelSourceAnimationsByModel = new WeakMap<MmdModel, MmdAnimation>();
+    private cameraKeyframeFrames: Uint32Array = EMPTY_KEYFRAME_FRAMES;
+    private timelineTarget: "model" | "camera" = "model";
+    private boneVisualizerTarget: { mesh: Mesh; skeleton: Skeleton | null; pairs: Array<[number, number]>; positionMesh: Mesh; runtimeBones: readonly IMmdRuntimeBone[] | null; runtimeUseMeshWorldMatrix: boolean; boneControlInfoByName: ReadonlyMap<string, BoneControlInfo> } | null = null;
+    private boneOverlayCanvas: HTMLCanvasElement | null = null;
+    private boneOverlayCtx: CanvasRenderingContext2D | null = null;
+    private boneOverlayDpr = 1;
+    private readonly boneOverlayChildWorld = new Vector3();
+    private readonly boneOverlayParentWorld = new Vector3();
+    private readonly boneOverlayChildScreen = new Vector3();
+    private readonly boneOverlayParentScreen = new Vector3();
+    private readonly boneOverlayIdentity = Matrix.Identity();
+    private boneVisualizerSelectedBoneName: string | null = null;
+    private boneVisualizerPickPoints: { boneName: string; x: number; y: number }[] = [];
+    private bonePickPointerDown: { pointerId: number; clientX: number; clientY: number } | null = null;
+    private boneGizmoManager: GizmoManager | null = null;
+    private boneGizmoRuntimeBone: EditorRuntimeBone | null = null;
+    private boneGizmoProxyNode: TransformNode | null = null;
+    private readonly boneGizmoTempMatrix = Matrix.Identity();
+    private readonly boneGizmoTempMatrix2 = Matrix.Identity();
+    private readonly boneGizmoTempScale = new Vector3(1, 1, 1);
+    private readonly boneGizmoTempScale2 = new Vector3(1, 1, 1);
+    private readonly boneGizmoTempPosition = new Vector3();
+    private readonly boneGizmoTempPosition2 = new Vector3();
+    private readonly boneGizmoTempPosition3 = new Vector3();
+    private readonly boneGizmoTempRotation = Quaternion.Identity();
+    private readonly boneGizmoTempRotation2 = Quaternion.Identity();
+    private physicsEnabledBeforeBoneGizmoDrag: boolean | null = null;
     private physicsPlugin: MmdAmmoJSPlugin | null = null;
     private physicsRuntime: MmdAmmoPhysics | null = null;
     private physicsInitializationPromise: Promise<boolean>;
@@ -150,6 +296,29 @@ export class MmdManager {
     private readonly onWindowResize = () => {
         this.resize();
     };
+    private readonly onCanvasPointerDown = (event: PointerEvent) => {
+        if (event.button !== 0) return;
+        this.bonePickPointerDown = {
+            pointerId: event.pointerId,
+            clientX: event.clientX,
+            clientY: event.clientY,
+        };
+    };
+    private readonly onCanvasPointerUp = (event: PointerEvent) => {
+        if (event.button !== 0) return;
+
+        const pointerDown = this.bonePickPointerDown;
+        this.bonePickPointerDown = null;
+        if (!pointerDown || pointerDown.pointerId !== event.pointerId) return;
+
+        const movedDistance = Math.hypot(event.clientX - pointerDown.clientX, event.clientY - pointerDown.clientY);
+        if (movedDistance > 6) return;
+
+        this.tryPickBoneVisualizerAtClientPosition(event.clientX, event.clientY);
+    };
+    private readonly onCanvasPointerCancel = () => {
+        this.bonePickPointerDown = null;
+    };
 
     // Callbacks
     public onFrameUpdate: ((frame: number, total: number) => void) | null = null;
@@ -161,6 +330,7 @@ export class MmdManager {
     public onError: ((message: string) => void) | null = null;
     public onAudioLoaded: ((name: string) => void) | null = null;
     public onPhysicsStateChanged: ((enabled: boolean, available: boolean) => void) | null = null;
+    public onBoneVisualizerBonePicked: ((boneName: string) => void) | null = null;
 
     public getLoadedModels(): { index: number; name: string; path: string; active: boolean }[] {
         return this.sceneModels.map((entry, index) => ({
@@ -171,6 +341,79 @@ export class MmdManager {
         }));
     }
 
+    public getActiveModelVisibility(): boolean {
+        if (!this.currentMesh) return false;
+        if (this.currentMesh.isEnabled() && this.currentMesh.isVisible) return true;
+
+        for (const childMesh of this.currentMesh.getChildMeshes()) {
+            if (childMesh.isEnabled() && childMesh.isVisible) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public setActiveModelVisibility(visible: boolean): boolean {
+        if (!this.currentMesh) return false;
+
+        this.currentMesh.setEnabled(visible);
+        this.currentMesh.isVisible = visible;
+
+        for (const childMesh of this.currentMesh.getChildMeshes()) {
+            childMesh.setEnabled(visible);
+            childMesh.isVisible = visible;
+        }
+
+        this.syncBoneVisualizerVisibility();
+        this.updateBoneGizmoTarget();
+        return visible;
+    }
+
+    public toggleActiveModelVisibility(): boolean {
+        const next = !this.getActiveModelVisibility();
+        this.setActiveModelVisibility(next);
+        return next;
+    }
+
+    public removeActiveModel(): boolean {
+        if (!this.currentModel || !this.currentMesh) return false;
+
+        const removeIndex = this.sceneModels.findIndex((entry) => entry.model === this.currentModel);
+        if (removeIndex < 0) return false;
+
+        const removed = this.sceneModels[removeIndex];
+
+        try {
+            this.mmdRuntime.destroyMmdModel(removed.model);
+        } catch {
+            // no-op
+        }
+
+        this.modelKeyframeTracksByModel.delete(removed.model);
+        this.modelSourceAnimationsByModel.delete(removed.model);
+        removed.mesh.dispose();
+        this.sceneModels.splice(removeIndex, 1);
+
+        if (this.sceneModels.length === 0) {
+            this.currentMesh = null;
+            this.currentModel = null;
+            this.activeModelInfo = null;
+        } else {
+            const nextIndex = Math.min(removeIndex, this.sceneModels.length - 1);
+            const nextModel = this.sceneModels[nextIndex];
+            this.currentMesh = nextModel.mesh;
+            this.currentModel = nextModel.model;
+            this.activeModelInfo = nextModel.info;
+            this.timelineTarget = "model";
+            this.onModelLoaded?.(nextModel.info);
+        }
+
+        this.refreshBoneVisualizerTarget();
+        this.updateBoneGizmoTarget();
+        this.emitMergedKeyframeTracks();
+        return true;
+    }
     public setActiveModelByIndex(index: number): boolean {
         const target = this.sceneModels[index];
         if (!target) return false;
@@ -178,7 +421,829 @@ export class MmdManager {
         this.currentMesh = target.mesh;
         this.currentModel = target.model;
         this.activeModelInfo = target.info;
+        this.timelineTarget = "model";
+        this.refreshBoneVisualizerTarget();
+        this.updateBoneGizmoTarget();
         this.onModelLoaded?.(target.info);
+        this.emitMergedKeyframeTracks();
+        return true;
+    }
+
+    public setTimelineTarget(target: "model" | "camera"): void {
+        this.timelineTarget = target;
+        this.syncBoneVisualizerVisibility();
+        this.updateBoneGizmoTarget();
+        this.emitMergedKeyframeTracks();
+    }
+
+    public getTimelineTarget(): "model" | "camera" {
+        return this.timelineTarget;
+    }
+
+    public setBoneVisualizerSelectedBone(boneName: string | null): void {
+        this.boneVisualizerSelectedBoneName = boneName && boneName.length > 0 ? boneName : null;
+        this.updateBoneGizmoTarget();
+    }
+
+    private getActiveBoneControlInfo(boneName: string): BoneControlInfo | undefined {
+        return this.activeModelInfo?.boneControlInfos?.find((info) => info.name === boneName);
+    }
+
+    private updateBoneGizmoTarget(): void {
+        const gizmoManager = this.boneGizmoManager;
+        const proxyNode = this.boneGizmoProxyNode;
+        if (!gizmoManager || !proxyNode) return;
+
+        if (this.timelineTarget !== "model" || this._isPlaying || !this.getActiveModelVisibility()) {
+            this.disableBoneGizmo();
+            return;
+        }
+
+        const boneName = this.boneVisualizerSelectedBoneName;
+        if (!boneName) {
+            this.disableBoneGizmo();
+            return;
+        }
+
+        const runtimeBone = this.getRuntimeBoneByName(boneName);
+        if (!runtimeBone) {
+            this.disableBoneGizmo();
+            return;
+        }
+
+        const controlInfo = this.getActiveBoneControlInfo(boneName);
+        const movable = controlInfo?.movable ?? true;
+        const rotatable = controlInfo?.rotatable ?? true;
+
+        if (!movable && !rotatable) {
+            this.disableBoneGizmo();
+            return;
+        }
+
+        this.syncBoneGizmoProxyToRuntimeBone(runtimeBone);
+
+        gizmoManager.scaleGizmoEnabled = false;
+        gizmoManager.boundingBoxGizmoEnabled = false;
+        gizmoManager.positionGizmoEnabled = movable;
+        gizmoManager.rotationGizmoEnabled = rotatable;
+        proxyNode.setEnabled(true);
+        gizmoManager.attachToNode(proxyNode);
+
+        this.boneGizmoRuntimeBone = runtimeBone;
+        this.invalidateBoneVisualizerPose(runtimeBone);
+    }
+
+    private disableBoneGizmo(): void {
+        const gizmoManager = this.boneGizmoManager;
+        if (gizmoManager) {
+            gizmoManager.attachToNode(null);
+            gizmoManager.positionGizmoEnabled = false;
+            gizmoManager.rotationGizmoEnabled = false;
+        }
+
+        this.boneGizmoRuntimeBone = null;
+        this.boneGizmoProxyNode?.setEnabled(false);
+    }
+
+    private syncBoneGizmoProxyToRuntimeBone(runtimeBone: EditorRuntimeBone): void {
+        const proxyNode = this.boneGizmoProxyNode;
+        if (!proxyNode) return;
+
+        runtimeBone.getWorldMatrixToRef(this.boneGizmoTempMatrix);
+        this.boneGizmoTempMatrix.decompose(
+            this.boneGizmoTempScale,
+            this.boneGizmoTempRotation,
+            this.boneGizmoTempPosition
+        );
+
+        const useMeshWorldMatrix = this.boneVisualizerTarget?.runtimeUseMeshWorldMatrix === true && this.currentMesh !== null;
+        if (useMeshWorldMatrix && this.currentMesh) {
+            const meshWorldMatrix = this.currentMesh.computeWorldMatrix(true);
+            Vector3.TransformCoordinatesToRef(this.boneGizmoTempPosition, meshWorldMatrix, this.boneGizmoTempPosition2);
+            meshWorldMatrix.decompose(
+                this.boneGizmoTempScale2,
+                this.boneGizmoTempRotation2,
+                this.boneGizmoTempPosition3
+            );
+            this.boneGizmoTempRotation2.multiplyToRef(
+                this.boneGizmoTempRotation,
+                this.boneGizmoTempRotation
+            );
+            proxyNode.position.copyFrom(this.boneGizmoTempPosition2);
+        } else {
+            proxyNode.position.copyFrom(this.boneGizmoTempPosition);
+        }
+
+        if (!proxyNode.rotationQuaternion) {
+            proxyNode.rotationQuaternion = Quaternion.Identity();
+        }
+        proxyNode.rotationQuaternion.copyFrom(this.boneGizmoTempRotation);
+    }
+
+    private applyBoneGizmoProxyToRuntimeBone(runtimeBone: EditorRuntimeBone): void {
+        const proxyNode = this.boneGizmoProxyNode;
+        if (!proxyNode) return;
+
+        const controlInfo = this.getActiveBoneControlInfo(runtimeBone.name);
+        const movable = controlInfo?.movable ?? true;
+        const rotatable = controlInfo?.rotatable ?? true;
+        if (!movable && !rotatable) return;
+
+        proxyNode.computeWorldMatrix(true);
+        proxyNode.getWorldMatrix().decompose(
+            this.boneGizmoTempScale,
+            this.boneGizmoTempRotation,
+            this.boneGizmoTempPosition
+        );
+
+        const useMeshWorldMatrix = this.boneVisualizerTarget?.runtimeUseMeshWorldMatrix === true && this.currentMesh !== null;
+        if (useMeshWorldMatrix && this.currentMesh) {
+            const meshWorldMatrix = this.currentMesh.computeWorldMatrix(true);
+            meshWorldMatrix.invertToRef(this.boneGizmoTempMatrix2);
+            Vector3.TransformCoordinatesToRef(this.boneGizmoTempPosition, this.boneGizmoTempMatrix2, this.boneGizmoTempPosition2);
+
+            meshWorldMatrix.decompose(
+                this.boneGizmoTempScale2,
+                this.boneGizmoTempRotation2,
+                this.boneGizmoTempPosition3
+            );
+            Quaternion.InverseToRef(this.boneGizmoTempRotation2, this.boneGizmoTempRotation2);
+            this.boneGizmoTempRotation2.multiplyToRef(
+                this.boneGizmoTempRotation,
+                this.boneGizmoTempRotation
+            );
+        } else {
+            this.boneGizmoTempPosition2.copyFrom(this.boneGizmoTempPosition);
+        }
+
+        let localPositionX = this.boneGizmoTempPosition2.x;
+        let localPositionY = this.boneGizmoTempPosition2.y;
+        let localPositionZ = this.boneGizmoTempPosition2.z;
+        let localRotation = this.boneGizmoTempRotation;
+
+        const parentBone = runtimeBone.parentBone as EditorRuntimeBone | null;
+        if (parentBone) {
+            parentBone.getWorldMatrixToRef(this.boneGizmoTempMatrix);
+            this.boneGizmoTempMatrix.invertToRef(this.boneGizmoTempMatrix2);
+            Vector3.TransformCoordinatesToRef(
+                this.boneGizmoTempPosition2,
+                this.boneGizmoTempMatrix2,
+                this.boneGizmoTempPosition3
+            );
+            localPositionX = this.boneGizmoTempPosition3.x;
+            localPositionY = this.boneGizmoTempPosition3.y;
+            localPositionZ = this.boneGizmoTempPosition3.z;
+
+            this.boneGizmoTempMatrix.decompose(
+                this.boneGizmoTempScale2,
+                this.boneGizmoTempRotation2,
+                this.boneGizmoTempPosition3
+            );
+            Quaternion.InverseToRef(this.boneGizmoTempRotation2, this.boneGizmoTempRotation2);
+            this.boneGizmoTempRotation2.multiplyToRef(this.boneGizmoTempRotation, this.boneGizmoTempRotation2);
+            localRotation = this.boneGizmoTempRotation2;
+        }
+
+        if (movable && Number.isFinite(localPositionX) && Number.isFinite(localPositionY) && Number.isFinite(localPositionZ)) {
+            runtimeBone.linkedBone.position.set(localPositionX, localPositionY, localPositionZ);
+        }
+
+        if (rotatable && Number.isFinite(localRotation.x) && Number.isFinite(localRotation.y) && Number.isFinite(localRotation.z) && Number.isFinite(localRotation.w)) {
+            if (!runtimeBone.linkedBone.rotationQuaternion) {
+                runtimeBone.linkedBone.rotationQuaternion = Quaternion.Identity();
+            }
+            localRotation.normalize();
+            runtimeBone.linkedBone.rotationQuaternion.copyFrom(localRotation);
+        }
+    }
+    private refreshBoneVisualizerTarget(): void {
+        this.disposeBoneVisualizer();
+
+        const sourceMesh = this.currentMesh;
+        if (!sourceMesh) return;
+
+        const visibleBoneNameSet = this.activeModelInfo
+            ? new Set(this.activeModelInfo.boneNames)
+            : null;
+        const boneControlInfoByName = new Map<string, BoneControlInfo>(
+            (this.activeModelInfo?.boneControlInfos ?? []).map((info) => [info.name, info] as const)
+        );
+
+        const runtimeBones = this.currentModel?.runtimeBones as readonly IMmdRuntimeBone[] | undefined;
+        if (runtimeBones && runtimeBones.length > 0) {
+            const runtimeBoneIndexMap = new Map(runtimeBones.map((bone, index) => [bone, index] as const));
+            const runtimePairs: Array<[number, number]> = [];
+            for (let i = 0; i < runtimeBones.length; ++i) {
+                const childName = runtimeBones[i].name;
+                if (visibleBoneNameSet && !visibleBoneNameSet.has(childName)) continue;
+
+                const parent = runtimeBones[i].parentBone;
+                if (!parent) continue;
+                if (visibleBoneNameSet && !visibleBoneNameSet.has(parent.name)) continue;
+
+                const parentIndex = runtimeBoneIndexMap.get(parent);
+                if (parentIndex === undefined) continue;
+                runtimePairs.push([i, parentIndex]);
+            }
+
+            if (runtimePairs.length > 0) {
+                sourceMesh.computeWorldMatrix(true);
+                const sampleLocal = new Vector3();
+                const sampleWorld = new Vector3();
+                runtimeBones[0].getWorldTranslationToRef(sampleLocal);
+                Vector3.TransformCoordinatesToRef(sampleLocal, sourceMesh.getWorldMatrix(), sampleWorld);
+                const meshWorld = sourceMesh.getAbsolutePosition();
+                const rawDistance = Vector3.DistanceSquared(sampleLocal, meshWorld);
+                const transformedDistance = Vector3.DistanceSquared(sampleWorld, meshWorld);
+                const runtimeUseMeshWorldMatrix = transformedDistance <= rawDistance;
+
+                console.log("[BoneViz] Overlay target:", {
+                    mode: "runtime",
+                    mesh: sourceMesh.name,
+                    bones: runtimeBones.length,
+                    visibleBones: visibleBoneNameSet?.size ?? runtimeBones.length,
+                    pairs: runtimePairs.length,
+                    runtimeUseMeshWorldMatrix,
+                });
+
+                this.boneVisualizerTarget = {
+                    mesh: sourceMesh,
+                    skeleton: sourceMesh.skeleton ?? null,
+                    pairs: runtimePairs,
+                    positionMesh: sourceMesh,
+                    runtimeBones,
+                    runtimeUseMeshWorldMatrix,
+                    boneControlInfoByName,
+                };
+                this.ensureBoneOverlayCanvas();
+                this.syncBoneVisualizerVisibility();
+                return;
+            }
+        }
+
+        const skeletonHost = (
+            sourceMesh.skeleton
+                ? sourceMesh
+                : sourceMesh.getChildMeshes().find((child) => !!child.skeleton)
+        ) as Mesh | undefined;
+        const skeleton = skeletonHost?.skeleton;
+        if (!skeletonHost || !skeleton || skeleton.bones.length === 0) return;
+
+        const bones = skeleton.bones;
+        const boneIndexMap = new Map(skeleton.bones.map((bone, index) => [bone, index] as const));
+        const pairs: Array<[number, number]> = [];
+        for (let i = 0; i < bones.length; ++i) {
+            const childName = bones[i].name;
+            if (visibleBoneNameSet && !visibleBoneNameSet.has(childName)) continue;
+
+            const parent = bones[i].getParent();
+            if (!parent) continue;
+            if (visibleBoneNameSet && !visibleBoneNameSet.has(parent.name)) continue;
+
+            const parentIndex = boneIndexMap.get(parent);
+            if (parentIndex === undefined) continue;
+            pairs.push([i, parentIndex]);
+        }
+        if (pairs.length === 0) return;
+
+        skeleton.computeAbsoluteMatrices(true);
+
+        const skeletonMeshes: Mesh[] = [];
+        const pushMesh = (mesh: Mesh | null | undefined): void => {
+            if (!mesh) return;
+            if (mesh.skeleton !== skeleton) return;
+            if (skeletonMeshes.includes(mesh)) return;
+            skeletonMeshes.push(mesh);
+        };
+
+        pushMesh(sourceMesh);
+        pushMesh(skeletonHost);
+        for (const child of sourceMesh.getChildMeshes() as Mesh[]) {
+            pushMesh(child);
+        }
+
+        let positionMesh = skeletonHost;
+        let positionMeshVertices = -1;
+        for (const candidate of skeletonMeshes) {
+            const vertices = candidate.getTotalVertices?.() ?? 0;
+            if (vertices > positionMeshVertices) {
+                positionMeshVertices = vertices;
+                positionMesh = candidate;
+            }
+        }
+
+        console.log("[BoneViz] Overlay target:", {
+            mode: "skeleton",
+            mesh: skeletonHost.name,
+            bones: bones.length,
+            visibleBones: visibleBoneNameSet?.size ?? bones.length,
+            pairs: pairs.length,
+            positionMesh: positionMesh.name,
+            positionMeshVertices,
+            skeletonMeshes: skeletonMeshes.length,
+        });
+
+        this.boneVisualizerTarget = {
+            mesh: skeletonHost,
+            skeleton,
+            pairs,
+            positionMesh,
+            runtimeBones: null,
+            runtimeUseMeshWorldMatrix: false,
+            boneControlInfoByName,
+        };
+        this.ensureBoneOverlayCanvas();
+        this.syncBoneVisualizerVisibility();
+    }
+
+    private updateBoneVisualizer(): void {
+        const target = this.boneVisualizerTarget;
+        if (!target || !this.boneOverlayCanvas || !this.boneOverlayCtx) return;
+
+        if (this._isPlaying || this.timelineTarget !== "model" || !this.getActiveModelVisibility()) {
+            this.clearBoneOverlay();
+            return;
+        }
+
+        const { mesh, skeleton, pairs, positionMesh, runtimeBones, runtimeUseMeshWorldMatrix, boneControlInfoByName } = target;
+        const ctx = this.boneOverlayCtx;
+        const width = this.boneOverlayCanvas.width / this.boneOverlayDpr;
+        const height = this.boneOverlayCanvas.height / this.boneOverlayDpr;
+        const viewport = this.camera.viewport.toGlobal(this.engine.getRenderWidth(), this.engine.getRenderHeight());
+        const transformMatrix = this.scene.getTransformMatrix();
+        const selectedBoneName = this.boneVisualizerSelectedBoneName;
+
+        mesh.computeWorldMatrix(true);
+        const meshWorldMatrix = mesh.getWorldMatrix();
+
+        if (!runtimeBones || runtimeBones.length === 0) {
+            if (!skeleton) {
+                this.clearBoneOverlay();
+                return;
+            }
+            positionMesh.computeWorldMatrix(true);
+            skeleton.computeAbsoluteMatrices(true);
+        }
+
+        ctx.clearRect(0, 0, width, height);
+        this.boneVisualizerPickPoints = [];
+
+        if (runtimeBones && runtimeBones.length > 0) {
+            const projectedPositions = new Map<number, { x: number; y: number }>();
+            const segmentCommands: Array<{ fromX: number; fromY: number; toX: number; toY: number; selected: boolean; lineColor: string; lineWidth: number }> = [];
+
+            for (const [childIndex, parentIndex] of pairs) {
+                runtimeBones[childIndex].getWorldTranslationToRef(this.boneOverlayChildWorld);
+                runtimeBones[parentIndex].getWorldTranslationToRef(this.boneOverlayParentWorld);
+
+                if (runtimeUseMeshWorldMatrix) {
+                    Vector3.TransformCoordinatesToRef(this.boneOverlayChildWorld, meshWorldMatrix, this.boneOverlayChildWorld);
+                    Vector3.TransformCoordinatesToRef(this.boneOverlayParentWorld, meshWorldMatrix, this.boneOverlayParentWorld);
+                }
+
+                Vector3.ProjectToRef(this.boneOverlayChildWorld, this.boneOverlayIdentity, transformMatrix, viewport, this.boneOverlayChildScreen);
+                Vector3.ProjectToRef(this.boneOverlayParentWorld, this.boneOverlayIdentity, transformMatrix, viewport, this.boneOverlayParentScreen);
+
+                if (!Number.isFinite(this.boneOverlayChildScreen.x) || !Number.isFinite(this.boneOverlayChildScreen.y)) continue;
+                if (!Number.isFinite(this.boneOverlayParentScreen.x) || !Number.isFinite(this.boneOverlayParentScreen.y)) continue;
+
+                projectedPositions.set(childIndex, { x: this.boneOverlayChildScreen.x, y: this.boneOverlayChildScreen.y });
+                projectedPositions.set(parentIndex, { x: this.boneOverlayParentScreen.x, y: this.boneOverlayParentScreen.y });                const parentName = runtimeBones[parentIndex].name;
+                const selected = selectedBoneName === parentName;
+                const style = this.resolveBoneVisualizerStyle(
+                    boneControlInfoByName.get(parentName),
+                    selected
+                );
+
+                segmentCommands.push({
+                    fromX: this.boneOverlayParentScreen.x,
+                    fromY: this.boneOverlayParentScreen.y,
+                    toX: this.boneOverlayChildScreen.x,
+                    toY: this.boneOverlayChildScreen.y,
+                    selected,
+                    lineColor: style.lineColor,
+                    lineWidth: style.lineWidth,
+                });
+            }
+
+            for (const command of segmentCommands) {
+                if (command.selected) continue;
+                this.drawBoneVisualizerSegment(
+                    ctx,
+                    { x: command.fromX, y: command.fromY },
+                    { x: command.toX, y: command.toY },
+                    command.lineColor,
+                    command.lineWidth
+                );
+            }
+            for (const command of segmentCommands) {
+                if (!command.selected) continue;
+                this.drawBoneVisualizerSegment(
+                    ctx,
+                    { x: command.fromX, y: command.fromY },
+                    { x: command.toX, y: command.toY },
+                    command.lineColor,
+                    command.lineWidth
+                );
+            }
+
+            const markerCommands: Array<{ boneName: string; x: number; y: number; selected: boolean; markerShape: "circle" | "square"; markerColor: string }> = [];
+            for (const [boneIndex, projected] of projectedPositions) {
+                const boneName = runtimeBones[boneIndex].name;
+                const selected = selectedBoneName === boneName;
+                const style = this.resolveBoneVisualizerStyle(boneControlInfoByName.get(boneName), selected);
+                markerCommands.push({
+                    boneName,
+                    x: projected.x,
+                    y: projected.y,
+                    selected,
+                    markerShape: style.markerShape,
+                    markerColor: style.markerColor,
+                });
+            }
+
+            for (const marker of markerCommands) {
+                if (marker.selected) continue;
+                this.drawBoneVisualizerMarker(ctx, marker.x, marker.y, marker.markerShape, marker.markerColor, false);
+            }
+            for (const marker of markerCommands) {
+                if (!marker.selected) continue;
+                this.drawBoneVisualizerMarker(ctx, marker.x, marker.y, marker.markerShape, marker.markerColor, true);
+            }
+            for (const marker of markerCommands) {
+                this.boneVisualizerPickPoints.push({ boneName: marker.boneName, x: marker.x, y: marker.y });
+            }
+        } else if (skeleton) {
+            const bones = skeleton.bones;
+            const projectedPositions = new Map<number, { x: number; y: number }>();
+            const segmentCommands: Array<{ fromX: number; fromY: number; toX: number; toY: number; selected: boolean; lineColor: string; lineWidth: number }> = [];
+
+            for (const [childIndex, parentIndex] of pairs) {
+                this.getBoneWorldPositionToRef(bones[childIndex], positionMesh, this.boneOverlayChildWorld);
+                this.getBoneWorldPositionToRef(bones[parentIndex], positionMesh, this.boneOverlayParentWorld);
+
+                Vector3.ProjectToRef(this.boneOverlayChildWorld, this.boneOverlayIdentity, transformMatrix, viewport, this.boneOverlayChildScreen);
+                Vector3.ProjectToRef(this.boneOverlayParentWorld, this.boneOverlayIdentity, transformMatrix, viewport, this.boneOverlayParentScreen);
+
+                if (!Number.isFinite(this.boneOverlayChildScreen.x) || !Number.isFinite(this.boneOverlayChildScreen.y)) continue;
+                if (!Number.isFinite(this.boneOverlayParentScreen.x) || !Number.isFinite(this.boneOverlayParentScreen.y)) continue;
+
+                projectedPositions.set(childIndex, { x: this.boneOverlayChildScreen.x, y: this.boneOverlayChildScreen.y });
+                projectedPositions.set(parentIndex, { x: this.boneOverlayParentScreen.x, y: this.boneOverlayParentScreen.y });                const parentName = bones[parentIndex].name;
+                const selected = selectedBoneName === parentName;
+                const style = this.resolveBoneVisualizerStyle(
+                    boneControlInfoByName.get(parentName),
+                    selected
+                );
+
+                segmentCommands.push({
+                    fromX: this.boneOverlayParentScreen.x,
+                    fromY: this.boneOverlayParentScreen.y,
+                    toX: this.boneOverlayChildScreen.x,
+                    toY: this.boneOverlayChildScreen.y,
+                    selected,
+                    lineColor: style.lineColor,
+                    lineWidth: style.lineWidth,
+                });
+            }
+
+            for (const command of segmentCommands) {
+                if (command.selected) continue;
+                this.drawBoneVisualizerSegment(
+                    ctx,
+                    { x: command.fromX, y: command.fromY },
+                    { x: command.toX, y: command.toY },
+                    command.lineColor,
+                    command.lineWidth
+                );
+            }
+            for (const command of segmentCommands) {
+                if (!command.selected) continue;
+                this.drawBoneVisualizerSegment(
+                    ctx,
+                    { x: command.fromX, y: command.fromY },
+                    { x: command.toX, y: command.toY },
+                    command.lineColor,
+                    command.lineWidth
+                );
+            }
+
+            const markerCommands: Array<{ boneName: string; x: number; y: number; selected: boolean; markerShape: "circle" | "square"; markerColor: string }> = [];
+            for (const [boneIndex, projected] of projectedPositions) {
+                const boneName = bones[boneIndex].name;
+                const selected = selectedBoneName === boneName;
+                const style = this.resolveBoneVisualizerStyle(boneControlInfoByName.get(boneName), selected);
+                markerCommands.push({
+                    boneName,
+                    x: projected.x,
+                    y: projected.y,
+                    selected,
+                    markerShape: style.markerShape,
+                    markerColor: style.markerColor,
+                });
+            }
+
+            for (const marker of markerCommands) {
+                if (marker.selected) continue;
+                this.drawBoneVisualizerMarker(ctx, marker.x, marker.y, marker.markerShape, marker.markerColor, false);
+            }
+            for (const marker of markerCommands) {
+                if (!marker.selected) continue;
+                this.drawBoneVisualizerMarker(ctx, marker.x, marker.y, marker.markerShape, marker.markerColor, true);
+            }
+            for (const marker of markerCommands) {
+                this.boneVisualizerPickPoints.push({ boneName: marker.boneName, x: marker.x, y: marker.y });
+            }
+        }
+    }
+
+    private tryPickBoneVisualizerAtClientPosition(clientX: number, clientY: number): void {
+        if (this._isPlaying || this.timelineTarget !== "model" || !this.getActiveModelVisibility()) return;
+        if (this.boneVisualizerTarget === null) return;
+        if (this.boneVisualizerPickPoints.length === 0) return;
+
+        const rect = this.renderingCanvas.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+
+        const pickRadius = 14;
+        const pickRadiusSq = pickRadius * pickRadius;
+
+        let pickedBoneName: string | null = null;
+        let pickedDistanceSq = Number.POSITIVE_INFINITY;
+
+        for (const point of this.boneVisualizerPickPoints) {
+            const dx = point.x - x;
+            const dy = point.y - y;
+            const distanceSq = dx * dx + dy * dy;
+            if (distanceSq > pickRadiusSq) continue;
+            if (distanceSq >= pickedDistanceSq) continue;
+
+            pickedBoneName = point.boneName;
+            pickedDistanceSq = distanceSq;
+        }
+
+        if (!pickedBoneName) return;
+
+        this.setBoneVisualizerSelectedBone(pickedBoneName);
+        this.onBoneVisualizerBonePicked?.(pickedBoneName);
+    }
+    private resolveBoneVisualizerStyle(
+        boneInfo: BoneControlInfo | undefined,
+        isSelected: boolean
+    ): { lineColor: string; markerColor: string; markerShape: "circle" | "square"; lineWidth: number } {
+        const normalBlue = "rgba(120, 132, 255, 0.95)";
+        const normalOrange = "rgba(255, 182, 74, 0.96)";
+        const selectedColor = "rgba(255, 94, 108, 1)";
+
+        const isIk = boneInfo?.isIk === true;
+        const isIkAffected = boneInfo?.isIkAffected === true;
+
+        const markerShape = isIk
+            ? "square"
+            : isIkAffected
+                ? "circle"
+                : boneInfo?.movable
+                    ? "square"
+                    : "circle";
+
+        const baseColor = (isIk || isIkAffected) ? normalOrange : normalBlue;
+        const color = isSelected ? selectedColor : baseColor;
+
+        return {
+            lineColor: color,
+            markerColor: color,
+            markerShape,
+            lineWidth: isSelected ? 2.3 : 1.6,
+        };
+    }
+
+    private drawBoneVisualizerSegment(
+        ctx: CanvasRenderingContext2D,
+        from: { x: number; y: number },
+        to: { x: number; y: number },
+        color: string,
+        lineWidth: number
+    ): void {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const length = Math.hypot(dx, dy);
+        if (length <= 0.0001) return;
+
+        const nx = -dy / length;
+        const ny = dx / length;
+        const halfWidth = Math.max(1.2, Math.min(6, length * 0.08));
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+
+        ctx.beginPath();
+        ctx.moveTo(from.x + nx * halfWidth, from.y + ny * halfWidth);
+        ctx.lineTo(to.x, to.y);
+        ctx.moveTo(from.x - nx * halfWidth, from.y - ny * halfWidth);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+    }
+
+    private drawBoneVisualizerMarker(
+        ctx: CanvasRenderingContext2D,
+        x: number,
+        y: number,
+        markerShape: "circle" | "square",
+        color: string,
+        selected: boolean
+    ): void {
+        const size = selected ? 10 : 8;
+        const half = size / 2;
+        const innerSize = selected ? 4.2 : 3.2;
+
+        ctx.lineWidth = selected ? 2.3 : 1.8;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+
+        if (markerShape === "square") {
+            ctx.beginPath();
+            ctx.rect(x - half, y - half, size, size);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = color;
+            ctx.fillRect(x - innerSize / 2, y - innerSize / 2, innerSize, innerSize);
+            return;
+        }
+
+        ctx.beginPath();
+        ctx.arc(x, y, half, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, innerSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    private getBoneWorldPositionToRef(bone: Skeleton["bones"][number], mesh: Mesh, result: Vector3): void {
+        bone.getAbsolutePositionToRef(mesh, result);
+        if (!Number.isFinite(result.x) || !Number.isFinite(result.y) || !Number.isFinite(result.z)) {
+            bone.getPositionToRef(Space.WORLD, mesh, result);
+        }
+        if (!Number.isFinite(result.x) || !Number.isFinite(result.y) || !Number.isFinite(result.z)) {
+            Vector3.TransformCoordinatesFromFloatsToRef(0, 0, 0, bone.getAbsoluteMatrix(), result);
+            Vector3.TransformCoordinatesToRef(result, mesh.getWorldMatrix(), result);
+        }
+    }
+
+    private syncBoneVisualizerVisibility(): void {
+        if (!this.boneOverlayCanvas) return;
+
+        const visible = this.timelineTarget === "model" && this.boneVisualizerTarget !== null && this.getActiveModelVisibility() && !this._isPlaying;
+        this.boneOverlayCanvas.style.display = visible ? "block" : "none";
+        if (!visible) {
+            this.clearBoneOverlay();
+        }
+    }
+
+    private clearBoneOverlay(): void {
+        this.boneVisualizerPickPoints = [];
+        if (!this.boneOverlayCanvas || !this.boneOverlayCtx) return;
+        const width = this.boneOverlayCanvas.width / this.boneOverlayDpr;
+        const height = this.boneOverlayCanvas.height / this.boneOverlayDpr;
+        this.boneOverlayCtx.clearRect(0, 0, width, height);
+    }
+
+    private ensureBoneOverlayCanvas(): void {
+        if (this.boneOverlayCanvas && this.boneOverlayCtx) return;
+
+        const container = this.renderingCanvas.parentElement;
+        if (!container) return;
+
+        const overlay = document.createElement("canvas");
+        overlay.id = "bone-overlay-canvas";
+        overlay.style.position = "absolute";
+        overlay.style.inset = "0";
+        overlay.style.width = "100%";
+        overlay.style.height = "100%";
+        overlay.style.pointerEvents = "none";
+        overlay.style.zIndex = "8";
+        overlay.style.opacity = "0.5";
+
+        const ctx = overlay.getContext("2d");
+        if (!ctx) return;
+
+        container.appendChild(overlay);
+        this.boneOverlayCanvas = overlay;
+        this.boneOverlayCtx = ctx;
+        this.resizeBoneOverlayCanvas();
+    }
+
+    private resizeBoneOverlayCanvas(): void {
+        if (!this.boneOverlayCanvas || !this.boneOverlayCtx) return;
+
+        const width = Math.max(1, Math.floor(this.renderingCanvas.clientWidth));
+        const height = Math.max(1, Math.floor(this.renderingCanvas.clientHeight));
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+
+        this.boneOverlayDpr = dpr;
+        const targetWidth = Math.floor(width * dpr);
+        const targetHeight = Math.floor(height * dpr);
+
+        if (this.boneOverlayCanvas.width !== targetWidth || this.boneOverlayCanvas.height !== targetHeight) {
+            this.boneOverlayCanvas.width = targetWidth;
+            this.boneOverlayCanvas.height = targetHeight;
+        }
+
+        this.boneOverlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    private disposeBoneVisualizer(): void {
+        this.boneVisualizerTarget = null;
+        this.clearBoneOverlay();
+    }
+
+    public hasTimelineKeyframe(track: Pick<KeyframeTrack, "name" | "category">, frame: number): boolean {
+        const normalized = Math.max(0, Math.floor(frame));
+
+        if (track.category === "camera") {
+            return hasFrameNumber(this.cameraKeyframeFrames, normalized);
+        }
+
+        if (!this.currentModel) return false;
+        const frameMap = this.getOrCreateModelTrackFrameMap(this.currentModel);
+        const key = createTrackKey(track.category, track.name);
+        const frames = frameMap.get(key) ?? EMPTY_KEYFRAME_FRAMES;
+        return hasFrameNumber(frames, normalized);
+    }
+
+    public addTimelineKeyframe(track: Pick<KeyframeTrack, "name" | "category">, frame: number): boolean {
+        const normalized = Math.max(0, Math.floor(frame));
+
+        if (track.category === "camera") {
+            const nextFrames = addFrameNumber(this.cameraKeyframeFrames, normalized);
+            if (nextFrames === this.cameraKeyframeFrames) return false;
+            this.cameraKeyframeFrames = nextFrames;
+            this.emitMergedKeyframeTracks();
+            return true;
+        }
+
+        if (!this.currentModel) return false;
+        const frameMap = this.getOrCreateModelTrackFrameMap(this.currentModel);
+        const key = createTrackKey(track.category, track.name);
+        const currentFrames = frameMap.get(key) ?? EMPTY_KEYFRAME_FRAMES;
+        const nextFrames = addFrameNumber(currentFrames, normalized);
+        if (nextFrames === currentFrames) return false;
+        frameMap.set(key, nextFrames);
+        this.emitMergedKeyframeTracks();
+        return true;
+    }
+
+    public removeTimelineKeyframe(track: Pick<KeyframeTrack, "name" | "category">, frame: number): boolean {
+        const normalized = Math.max(0, Math.floor(frame));
+
+        if (track.category === "camera") {
+            const nextFrames = removeFrameNumber(this.cameraKeyframeFrames, normalized);
+            if (nextFrames === this.cameraKeyframeFrames) return false;
+            this.cameraKeyframeFrames = nextFrames;
+            this.emitMergedKeyframeTracks();
+            return true;
+        }
+
+        if (!this.currentModel) return false;
+        const frameMap = this.getOrCreateModelTrackFrameMap(this.currentModel);
+        const key = createTrackKey(track.category, track.name);
+        const currentFrames = frameMap.get(key) ?? EMPTY_KEYFRAME_FRAMES;
+        const nextFrames = removeFrameNumber(currentFrames, normalized);
+        if (nextFrames === currentFrames) return false;
+        frameMap.set(key, nextFrames);
+        this.emitMergedKeyframeTracks();
+        return true;
+    }
+
+    public moveTimelineKeyframe(
+        track: Pick<KeyframeTrack, "name" | "category">,
+        fromFrame: number,
+        toFrame: number,
+    ): boolean {
+        const normalizedFrom = Math.max(0, Math.floor(fromFrame));
+        const normalizedTo = Math.max(0, Math.floor(toFrame));
+
+        if (track.category === "camera") {
+            const nextFrames = moveFrameNumber(this.cameraKeyframeFrames, normalizedFrom, normalizedTo);
+            if (nextFrames === this.cameraKeyframeFrames) return false;
+            this.cameraKeyframeFrames = nextFrames;
+            this.emitMergedKeyframeTracks();
+            return true;
+        }
+
+        if (!this.currentModel) return false;
+        const frameMap = this.getOrCreateModelTrackFrameMap(this.currentModel);
+        const key = createTrackKey(track.category, track.name);
+        const currentFrames = frameMap.get(key) ?? EMPTY_KEYFRAME_FRAMES;
+        const nextFrames = moveFrameNumber(currentFrames, normalizedFrom, normalizedTo);
+        if (nextFrames === currentFrames) return false;
+        frameMap.set(key, nextFrames);
+        this.emitMergedKeyframeTracks();
         return true;
     }
 
@@ -279,6 +1344,7 @@ export class MmdManager {
             powerPreference: "high-performance",
         });
         this.resizeToCanvasClientSize();
+        this.ensureBoneOverlayCanvas();
 
         // Create scene
         this.scene = new Scene(this.engine);
@@ -287,6 +1353,16 @@ export class MmdManager {
         this.scene.imageProcessingConfiguration.isEnabled = true;
         this.scene.imageProcessingConfiguration.applyByPostProcess = false;
         this.scene.imageProcessingConfiguration.contrast = this.postEffectContrastValue;
+        this.boneGizmoManager = new GizmoManager(this.scene, 1.8);
+        this.boneGizmoManager.usePointerToAttachGizmos = false;
+        this.boneGizmoManager.clearGizmoOnEmptyPointerEvent = false;
+        this.boneGizmoManager.scaleGizmoEnabled = false;
+        this.boneGizmoManager.boundingBoxGizmoEnabled = false;
+        this.boneGizmoManager.positionGizmoEnabled = false;
+        this.boneGizmoManager.rotationGizmoEnabled = false;
+        this.boneGizmoProxyNode = new TransformNode("boneGizmoProxy", this.scene);
+        this.boneGizmoProxyNode.rotationQuaternion = Quaternion.Identity();
+        this.boneGizmoProxyNode.setEnabled(false);
 
         // SDEF support
         SdefInjector.OverrideEngineCreateEffect(this.engine);
@@ -304,6 +1380,9 @@ export class MmdManager {
         this.camera.upperRadiusLimit = 100;
         this.camera.wheelDeltaPercentage = 0.01;
         this.camera.attachControl(canvas, true);
+        canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
+        canvas.addEventListener("pointerup", this.onCanvasPointerUp);
+        canvas.addEventListener("pointercancel", this.onCanvasPointerCancel);
         this.syncCameraRotationFromCurrentView();
         this.updateDofFocalLengthFromCameraFov();
         this.imageProcessingPostProcess = new ImageProcessingPostProcess(
@@ -327,7 +1406,7 @@ export class MmdManager {
             new Vector3(0, 1, 0),
             this.scene
         );
-        hemiLight.intensity = 0.2;
+        hemiLight.intensity = 0.0;
         hemiLight.diffuse = new Color3(0.9, 0.9, 1.0);
         hemiLight.groundColor = new Color3(0.15, 0.15, 0.2);
 
@@ -336,7 +1415,7 @@ export class MmdManager {
             new Vector3(0.5, -1, 1),
             this.scene
         );
-        dirLight.intensity = 0.8;
+        dirLight.intensity = 1.0;
         dirLight.position = new Vector3(-20, 30, -20);
         // Keep a wide fixed shadow frustum so shadows can cover the whole 80x80 ground.
         dirLight.shadowFrustumSize = 140;
@@ -444,21 +1523,66 @@ export class MmdManager {
 
         // VMD Loader
         this.vmdLoader = new VmdLoader(this.scene);
+        this.vpdLoader = new VpdLoader(this.scene);
 
         this.scene.onBeforeRenderObservable.add(() => {
             if (this.hasCameraMotion) {
                 this.syncViewportCameraFromMmdCamera();
             }
+            const boneRuntime = this.boneGizmoRuntimeBone;
+            const boneGizmoDragging = this.boneGizmoManager?.isDragging === true && boneRuntime !== null;
+            if (boneGizmoDragging && boneRuntime) {
+                if (this.physicsEnabledBeforeBoneGizmoDrag === null) {
+                    const currentPhysicsState = this.getPhysicsEnabled();
+                    this.physicsEnabledBeforeBoneGizmoDrag = currentPhysicsState;
+                    if (currentPhysicsState) {
+                        this.setPhysicsEnabled(false);
+                    }
+                }
+
+                this.applyBoneGizmoProxyToRuntimeBone(boneRuntime);
+                this.invalidateBoneVisualizerPose(boneRuntime);
+            } else {
+                if (this.physicsEnabledBeforeBoneGizmoDrag !== null) {
+                    const resumePhysics = this.physicsEnabledBeforeBoneGizmoDrag;
+                    this.physicsEnabledBeforeBoneGizmoDrag = null;
+                    if (resumePhysics) {
+                        this.setPhysicsEnabled(true);
+                    }
+                }
+
+                if (boneRuntime) {
+                    this.syncBoneGizmoProxyToRuntimeBone(boneRuntime);
+                }
+            }
+            this.updateBoneVisualizer();
             this.updateEditorDofFocusAndFStop();
         });
 
         // Start render loop
         this.engine.runRenderLoop(() => {
+            const nowMs = performance.now();
+            const deltaMs = Math.max(0, Math.min(100, nowMs - this.lastRenderTimestampMs));
+            this.lastRenderTimestampMs = nowMs;
+
             this.scene.render();
-            if (this._isPlaying) {
-                this._currentFrame = Math.floor(this.mmdRuntime.currentFrameTime);
+            if (!this._isPlaying) return;
+
+            if (this.manualPlaybackWithoutAudio) {
+                const deltaFrames = (deltaMs / (1000 / 30)) * this._playbackSpeed;
+                this.manualPlaybackFrameCursor = Math.min(this._totalFrames, this.manualPlaybackFrameCursor + deltaFrames);
+                const nextFrame = Math.floor(this.manualPlaybackFrameCursor);
+                if (nextFrame !== this._currentFrame) {
+                    this._currentFrame = nextFrame;
+                    this.mmdRuntime.seekAnimation(this._currentFrame, true);
+                }
                 this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
+                return;
             }
+
+            const runtimeFrame = Math.floor(this.mmdRuntime.currentFrameTime);
+            this._currentFrame = Math.min(runtimeFrame, this._totalFrames);
+            this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
         });
 
         // Handle resize
@@ -605,6 +1729,14 @@ export class MmdManager {
             this.applyModelEdgeToMeshes(result.meshes as Mesh[]);
             this.applyCelShadingToMeshes(result.meshes as Mesh[]);
 
+            // Capture metadata before runtime model creation (metadata may be trimmed).
+            const mmdMetadata = mmdMesh.metadata as typeof mmdMesh.metadata & {
+                displayFrames?: readonly {
+                    name: string;
+                    frames: readonly { type: number; index: number }[];
+                }[];
+            };
+
             // Create MMD model
             const mmdModel = this.mmdRuntime.createMmdModel(mmdMesh, {
                 materialProxyConstructor: MmdStandardMaterialProxy,
@@ -613,22 +1745,19 @@ export class MmdManager {
                     : false,
             });
             this.applyPhysicsStateToModel(mmdModel);
+            this.modelKeyframeTracksByModel.set(mmdModel, new Map());
+            this.modelSourceAnimationsByModel.delete(mmdModel);
 
             console.log("[PMX] MmdModel created, morph:", !!mmdModel.morph);
 
-            // Gather model info from the morph controller
+            // Gather model info in PMX order from mmd metadata.
             const morphNames: string[] = [];
-
-            // Get morph names from morphTargetManagers across all meshes
-            for (const mesh of result.meshes) {
-                if (mesh.morphTargetManager) {
-                    const mtm = mesh.morphTargetManager;
-                    for (let i = 0; i < mtm.numTargets; i++) {
-                        const name = mtm.getTarget(i).name;
-                        if (!morphNames.includes(name)) {
-                            morphNames.push(name);
-                        }
-                    }
+            const metadataMorphs = Array.isArray(mmdMetadata.morphs) ? mmdMetadata.morphs : [];
+            const seenMorphNames = new Set<string>();
+            for (const morph of metadataMorphs) {
+                if (!seenMorphNames.has(morph.name)) {
+                    seenMorphNames.add(morph.name);
+                    morphNames.push(morph.name);
                 }
             }
 
@@ -653,13 +1782,102 @@ export class MmdManager {
                 return Math.max(max, skeleton.bones.length);
             }, 0);
 
+            const boneNames: string[] = [];
+            const boneControlInfos: BoneControlInfo[] = [];
+            const metadataBones = Array.isArray(mmdMetadata.bones) ? mmdMetadata.bones : [];
+            const metadataRigidBodies = Array.isArray(mmdMetadata.rigidBodies) ? mmdMetadata.rigidBodies : [];
+            const physicsBoneIndices = new Set<number>();
+            for (const rigidBody of metadataRigidBodies) {
+                if (!rigidBody) continue;
+                if (rigidBody.physicsMode === PMX_RIGID_BODY_MODE_FOLLOW_BONE) continue;
+                if (typeof rigidBody.boneIndex !== "number" || rigidBody.boneIndex < 0) continue;
+                physicsBoneIndices.add(rigidBody.boneIndex);
+            }
+
+            const ikBoneIndices = new Set<number>();
+            const ikAffectedBoneIndices = new Set<number>();
+            for (let boneIndex = 0; boneIndex < metadataBones.length; boneIndex += 1) {
+                const bone = metadataBones[boneIndex];
+                if (!bone?.ik) continue;
+
+                ikBoneIndices.add(boneIndex);
+
+                if (typeof bone.ik.target === "number" && bone.ik.target >= 0) {
+                    ikAffectedBoneIndices.add(bone.ik.target);
+                }
+
+                for (const ikLink of bone.ik.links) {
+                    if (typeof ikLink.target !== "number" || ikLink.target < 0) continue;
+                    ikAffectedBoneIndices.add(ikLink.target);
+                }
+            }
+
+            const seenBoneNames = new Set<string>();
+            for (let boneIndex = 0; boneIndex < metadataBones.length; boneIndex += 1) {
+                const bone = metadataBones[boneIndex];
+                if (!bone) continue;
+
+                const isVisible = (bone.flag & PMX_BONE_FLAG_VISIBLE) !== 0;
+                if (!isVisible) continue;
+                if (physicsBoneIndices.has(boneIndex)) continue;
+
+                const isRotatable = (bone.flag & PMX_BONE_FLAG_ROTATABLE) !== 0;
+                const isMovable = (bone.flag & PMX_BONE_FLAG_MOVABLE) !== 0;
+                const isIk = ikBoneIndices.has(boneIndex);
+                const isIkAffected = ikAffectedBoneIndices.has(boneIndex);
+
+                if (!seenBoneNames.has(bone.name)) {
+                    seenBoneNames.add(bone.name);
+                    boneNames.push(bone.name);
+                    boneControlInfos.push({
+                        name: bone.name,
+                        movable: isMovable,
+                        rotatable: isRotatable,
+                        isIk,
+                        isIkAffected,
+                    });
+                }
+            }
+
+            const morphDisplayFrames: { name: string; morphNames: string[] }[] = [];
+            const metadataDisplayFrames = Array.isArray(mmdMetadata.displayFrames) ? mmdMetadata.displayFrames : [];
+            for (const displayFrame of metadataDisplayFrames) {
+                const frameMorphNames: string[] = [];
+                const seenFrameMorphNames = new Set<string>();
+
+                for (const frameEntry of displayFrame.frames) {
+                    if (frameEntry.type !== 1) continue;
+                    const morph = metadataMorphs[frameEntry.index];
+                    if (!morph) continue;
+                    if (seenFrameMorphNames.has(morph.name)) continue;
+                    seenFrameMorphNames.add(morph.name);
+                    frameMorphNames.push(morph.name);
+                }
+
+                if (frameMorphNames.length > 0) {
+                    morphDisplayFrames.push({
+                        name: displayFrame.name,
+                        morphNames: frameMorphNames,
+                    });
+                }
+            }
+
+            if (morphDisplayFrames.length === 0 && morphNames.length > 0) {
+                morphDisplayFrames.push({
+                    name: "All",
+                    morphNames: [...morphNames],
+                });
+            }
             const modelInfo: ModelInfo = {
                 name: fileName.replace(/\.(pmx|pmd)$/i, ''),
                 path: filePath,
                 vertexCount,
                 boneCount,
+                boneNames,
+                boneControlInfos,
                 morphCount: morphNames.length,
                 morphNames,
+                morphDisplayFrames,
             };
 
             console.log("[PMX] Model info:", modelInfo);
@@ -675,15 +1893,18 @@ export class MmdManager {
                 this.currentMesh = mmdMesh;
                 this.currentModel = mmdModel;
                 this.activeModelInfo = modelInfo;
+                this.refreshBoneVisualizerTarget();
+                this.updateBoneGizmoTarget();
                 this.onModelLoaded?.(modelInfo);
+                this.emitMergedKeyframeTracks();
             }
 
             this.onSceneModelLoaded?.(modelInfo, this.sceneModels.length, activateAsCurrent);
             return modelInfo;
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
-            console.error("Failed to load PMX:", message);
-            this.onError?.(`PMX鬯ｯ・ｯ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｫ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｱ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ鬯ｯ・ｩ隰ｳ・ｾ繝ｻ・ｽ繝ｻ・ｵ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｺ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｿ鬯ｯ・ｯ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｴ鬯ｮ・ｮ隲幢ｽｶ繝ｻ・ｽ繝ｻ・｣驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ鬯ｯ・ｩ隰ｳ・ｾ繝ｻ・ｽ繝ｻ・ｵ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｺ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｿ鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・｢驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・｢鬮ｫ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・｢驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｩ鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・｢鬮ｫ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・｢驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ: ${message}`);
+            console.error("Failed to load PMX/PMD:", message);
+            this.onError?.(`PMX/PMD load error: ${message}`);
             return null;
         }
     }
@@ -786,16 +2007,23 @@ export class MmdManager {
     }
 
     async loadVMD(filePath: string): Promise<MotionInfo | null> {
+        const pathParts = filePath.replace(/\\/g, "/");
+        const lastSlash = pathParts.lastIndexOf("/");
+        const fileName = pathParts.substring(lastSlash + 1);
+        const extensionMatch = fileName.match(/\.([^.]+)$/);
+        const extension = extensionMatch ? extensionMatch[1].toLowerCase() : "";
+
+        if (extension === "vpd") {
+            return await this.loadVPD(filePath);
+        }
+
         try {
-            if (!this.currentModel) {
+            const targetModel = this.currentModel;
+            if (!targetModel) {
                 this.onError?.("Load a PMX model first");
                 return null;
             }
-
-            const pathParts = filePath.replace(/\\/g, "/");
-            const lastSlash = pathParts.lastIndexOf("/");
-            const fileName = pathParts.substring(lastSlash + 1);
-
+            const loadFrame = this._currentFrame;
             // Read the file via electron API
             const buffer = await window.electronAPI.readBinaryFile(filePath);
             if (!buffer) {
@@ -812,34 +2040,22 @@ export class MmdManager {
 
             URL.revokeObjectURL(blobUrl);
 
-            const animHandle = this.currentModel.createRuntimeAnimation(animation);
-            this.currentModel.setRuntimeAnimation(animHandle);
+            this.modelSourceAnimationsByModel.set(targetModel, animation);
+            const animHandle = targetModel.createRuntimeAnimation(animation);
+            targetModel.setRuntimeAnimation(animHandle);
 
             // Get frame count from runtime animation duration
             this._totalFrames = Math.max(
                 Math.floor(this.mmdRuntime.animationFrameTimeDuration),
                 300
             );
-            this._currentFrame = 0;
+            this.seekTo(loadFrame);
 
             // Extract keyframe tracks from model animation data
-            const tracks: KeyframeTrack[] = [];
-            for (const t of animation.movableBoneTracks) {
-                if (t.frameNumbers.length > 0) {
-                    tracks.push({ name: t.name, category: classifyBone(t.name), frames: t.frameNumbers });
-                }
-            }
-            for (const t of animation.boneTracks) {
-                if (t.frameNumbers.length > 0) {
-                    tracks.push({ name: t.name, category: classifyBone(t.name), frames: t.frameNumbers });
-                }
-            }
-            for (const t of animation.morphTracks) {
-                if (t.frameNumbers.length > 0) {
-                    tracks.push({ name: t.name, category: "morph", frames: t.frameNumbers });
-                }
-            }
-            this.modelKeyframeTracks = tracks;
+            this.modelKeyframeTracksByModel.set(
+                targetModel,
+                this.buildModelTrackFrameMapFromAnimation(animation)
+            );
             this.emitMergedKeyframeTracks();
 
             const motionInfo: MotionInfo = {
@@ -854,6 +2070,71 @@ export class MmdManager {
             const message = err instanceof Error ? err.message : String(err);
             console.error("Failed to load VMD:", message);
             this.onError?.(`VMD load error: ${message}`);
+            return null;
+        }
+    }
+
+    async loadVPD(filePath: string): Promise<MotionInfo | null> {
+        try {
+            const targetModel = this.currentModel;
+            if (!targetModel) {
+                this.onError?.("Load a PMX model first");
+                return null;
+            }
+            const loadFrame = this._currentFrame;
+            const previousTotalFrames = this._totalFrames;
+            const pathParts = filePath.replace(/\\/g, "/");
+            const lastSlash = pathParts.lastIndexOf("/");
+            const fileName = pathParts.substring(lastSlash + 1);
+
+            const buffer = await window.electronAPI.readBinaryFile(filePath);
+            if (!buffer) {
+                this.onError?.("Failed to read pose file");
+                return null;
+            }
+
+            const uint8 = new Uint8Array(buffer as unknown as ArrayBuffer);
+            const arrayBuffer = uint8.buffer.slice(
+                uint8.byteOffset,
+                uint8.byteOffset + uint8.byteLength
+            );
+            const poseAnimation = this.vpdLoader.loadFromBuffer("modelPose", arrayBuffer);
+            const shiftedPoseAnimation = this.createOffsetModelAnimation(poseAnimation, loadFrame);
+            const baseAnimation = this.modelSourceAnimationsByModel.get(targetModel);
+            const mergedAnimation = baseAnimation
+                ? this.mergeModelAnimations(baseAnimation, shiftedPoseAnimation)
+                : shiftedPoseAnimation;
+            this.modelSourceAnimationsByModel.set(targetModel, mergedAnimation);
+
+            const animHandle = targetModel.createRuntimeAnimation(mergedAnimation);
+            targetModel.setRuntimeAnimation(animHandle);
+
+            this._totalFrames = Math.max(
+                previousTotalFrames,
+                Math.floor(this.mmdRuntime.animationFrameTimeDuration),
+                loadFrame,
+                300
+            );
+            this.seekTo(loadFrame);
+
+            this.modelKeyframeTracksByModel.set(
+                targetModel,
+                this.buildModelTrackFrameMapFromAnimation(mergedAnimation)
+            );
+            this.emitMergedKeyframeTracks();
+
+            const motionInfo: MotionInfo = {
+                name: fileName.replace(/\.vpd$/i, ""),
+                path: filePath,
+                frameCount: this._totalFrames,
+            };
+
+            this.onMotionLoaded?.(motionInfo);
+            return motionInfo;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("Failed to load pose:", message);
+            this.onError?.(`Pose load error: ${message}`);
             return null;
         }
     }
@@ -897,11 +2178,7 @@ export class MmdManager {
             this.cameraAnimationHandle = this.mmdCamera.createRuntimeAnimation(animation);
             this.mmdCamera.setRuntimeAnimation(this.cameraAnimationHandle);
             this.hasCameraMotion = true;
-            this.cameraKeyframeTracks = [{
-                name: "繧ｫ繝｡繝ｩ",
-                category: "camera",
-                frames: animation.cameraTrack.frameNumbers,
-            }];
+            this.cameraKeyframeFrames = new Uint32Array(animation.cameraTrack.frameNumbers);
             this.emitMergedKeyframeTracks();
 
             this._totalFrames = Math.max(
@@ -986,16 +2263,32 @@ export class MmdManager {
     play(): void {
         if (!this.currentModel) return;
         this._isPlaying = true;
-        this.mmdRuntime.playAnimation();
+        this.manualPlaybackWithoutAudio = this.audioPlayer === null;
+        if (this.manualPlaybackWithoutAudio) {
+            this.manualPlaybackFrameCursor = this._currentFrame;
+            this.mmdRuntime.pauseAnimation();
+            this.mmdRuntime.seekAnimation(this._currentFrame, true);
+        } else {
+            this.mmdRuntime.playAnimation();
+        }
+        this.syncBoneVisualizerVisibility();
+        this.updateBoneGizmoTarget();
     }
 
     pause(): void {
         this._isPlaying = false;
+        this.manualPlaybackWithoutAudio = false;
+        this.syncBoneVisualizerVisibility();
+        this.updateBoneGizmoTarget();
         this.mmdRuntime.pauseAnimation();
     }
 
     stop(): void {
         this._isPlaying = false;
+        this.manualPlaybackWithoutAudio = false;
+        this.manualPlaybackFrameCursor = 0;
+        this.syncBoneVisualizerVisibility();
+        this.updateBoneGizmoTarget();
         this.mmdRuntime.pauseAnimation();
         this.mmdRuntime.seekAnimation(0, true);
         this._currentFrame = 0;
@@ -1003,9 +2296,38 @@ export class MmdManager {
     }
 
     seekTo(frame: number): void {
-        this._currentFrame = Math.max(0, Math.min(frame, this._totalFrames));
+        const targetFrame = Math.max(0, Math.floor(frame));
+        if (targetFrame > this._totalFrames) {
+            this._totalFrames = targetFrame;
+        }
+        this._currentFrame = targetFrame;
         this.mmdRuntime.seekAnimation(this._currentFrame, true);
+        if (this.manualPlaybackWithoutAudio) {
+            this.manualPlaybackFrameCursor = this._currentFrame;
+        }
         this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
+    }
+
+    seekToBoundary(frame: number): void {
+        const wasPlaying = this._isPlaying;
+        if (wasPlaying) {
+            this.pause();
+        }
+
+        this.seekTo(frame);
+        this.stabilizePhysicsAfterHardSeek();
+
+        if (wasPlaying) {
+            this.play();
+        }
+    }
+
+    private stabilizePhysicsAfterHardSeek(): void {
+        if (!this.getPhysicsEnabled()) return;
+
+        // Reinitialize rigid bodies from current animation pose to avoid explosive inertia after large jumps.
+        this.applyPhysicsStateToAllModels();
+        this.mmdRuntime.seekAnimation(this._currentFrame, true);
     }
 
     setPlaybackSpeed(speed: number): void {
@@ -1152,7 +2474,7 @@ export class MmdManager {
     }
     set dofFocusDistanceMm(v: number) {
         this.dofFocusDistanceMmValue = Math.max(0, Math.min(1000000000, v));
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
     }
 
     /** Whether focus distance follows camera target each frame. */
@@ -1169,7 +2491,7 @@ export class MmdManager {
     }
     set dofAutoFocusNearOffsetMm(v: number) {
         this.dofAutoFocusNearOffsetMmValue = Math.max(0, Math.min(1000000000, v));
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
     }
     /** Foreground blur suppression scale for auto-focus near side. */
     get dofNearSuppressionScale(): number {
@@ -1177,7 +2499,7 @@ export class MmdManager {
     }
     set dofNearSuppressionScale(v: number) {
         this.dofNearSuppressionScaleValue = Math.max(0, Math.min(10, v));
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
     }
     /** Current effective F-stop after auto-focus compensation. */
     get dofEffectiveFStop(): number {
@@ -1190,7 +2512,7 @@ export class MmdManager {
     }
     set dofFStop(v: number) {
         this.dofFStopValue = Math.max(0.01, Math.min(32, v));
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
     }
 
 
@@ -1259,12 +2581,24 @@ export class MmdManager {
         if (this.defaultRenderingPipeline) {
             this.defaultRenderingPipeline.depthOfField.lensSize = this.dofLensSizeValue;
         }
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
     }
 
     /** DoF focal length in scene units/1000 (mm). */
     get dofFocalLength(): number {
         return this.dofFocalLengthValue;
+    }
+    set dofFocalLength(v: number) {
+        if (this.dofFocalLengthFollowsCameraFov) {
+            this.updateDofFocalLengthFromCameraFov();
+            this.updateEditorDofFocusAndFStop();
+            return;
+        }
+        this.dofFocalLengthValue = Math.max(1, Math.min(1000, v));
+        if (this.defaultRenderingPipeline) {
+            this.defaultRenderingPipeline.depthOfField.focalLength = this.dofFocalLengthValue;
+        }
+            this.updateEditorDofFocusAndFStop();
     }
     /** Whether camera-distance-linked DoF focal length mapping is inverted. */
     get dofFocalLengthDistanceInverted(): boolean {
@@ -1284,18 +2618,6 @@ export class MmdManager {
     }
     get dofFocalLengthLinkedToCameraFov(): boolean {
         return this.dofFocalLengthFollowsCameraFov;
-    }
-    set dofFocalLength(v: number) {
-        if (this.dofFocalLengthFollowsCameraFov) {
-            this.updateDofFocalLengthFromCameraFov();
-            this.updateEditorDofFocusAndFStop();
-            return;
-        }
-        this.dofFocalLengthValue = Math.max(1, Math.min(1000, v));
-        if (this.defaultRenderingPipeline) {
-            this.defaultRenderingPipeline.depthOfField.focalLength = this.dofFocalLengthValue;
-        }
-        this.updateEditorDofFocusAndFStop();
     }
     /** Far background depth-of-field strength (0.0..1.0). */
     get postEffectFarDofStrength(): number {
@@ -1637,7 +2959,7 @@ export class MmdManager {
         }
         dof.lensSize = this.dofLensSizeValue;
         dof.focalLength = this.dofFocalLengthValue;
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
         this.defaultRenderingPipeline.depthOfFieldEnabled = this.dofEnabledValue;
         this.applyDofLensBlurSettings();
     }
@@ -1915,6 +3237,80 @@ export class MmdManager {
         } catch { /* ignore */ }
     }
 
+    private getRuntimeBoneByName(boneName: string): EditorRuntimeBone | null {
+        const runtimeBones = this.currentModel?.runtimeBones;
+        if (!runtimeBones) return null;
+
+        for (const runtimeBone of runtimeBones as readonly EditorRuntimeBone[]) {
+            if (runtimeBone.name === boneName) {
+                return runtimeBone;
+            }
+        }
+
+        return null;
+    }
+
+    getBoneTransform(boneName: string): { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number } } | null {
+        const runtimeBone = this.getRuntimeBoneByName(boneName);
+        if (!runtimeBone) return null;
+
+        const positionOffset = new Vector3();
+        runtimeBone.getAnimationPositionOffsetToRef(positionOffset);
+
+        const rotationQuaternion = runtimeBone.getAnimatedRotationToRef(Quaternion.Identity());
+        const rotationEuler = rotationQuaternion.toEulerAngles();
+        const radToDeg = 180 / Math.PI;
+
+        return {
+            position: {
+                x: positionOffset.x,
+                y: positionOffset.y,
+                z: positionOffset.z,
+            },
+            rotation: {
+                x: rotationEuler.x * radToDeg,
+                y: rotationEuler.y * radToDeg,
+                z: rotationEuler.z * radToDeg,
+            },
+        };
+    }
+
+    setBoneTranslation(boneName: string, x: number, y: number, z: number): void {
+        const runtimeBone = this.getRuntimeBoneByName(boneName);
+        if (!runtimeBone) return;
+
+        const restMatrix = runtimeBone.linkedBone.getRestMatrix();
+        const restX = restMatrix.m[12];
+        const restY = restMatrix.m[13];
+        const restZ = restMatrix.m[14];
+
+        runtimeBone.linkedBone.position.set(restX + x, restY + y, restZ + z);
+        this.invalidateBoneVisualizerPose(runtimeBone);
+    }
+
+    setBoneRotation(boneName: string, xDeg: number, yDeg: number, zDeg: number): void {
+        const runtimeBone = this.getRuntimeBoneByName(boneName);
+        if (!runtimeBone) return;
+
+        const xRad = (xDeg * Math.PI) / 180;
+        const yRad = (yDeg * Math.PI) / 180;
+        const zRad = (zDeg * Math.PI) / 180;
+        const rotation = Quaternion.RotationYawPitchRoll(yRad, xRad, zRad);
+
+        runtimeBone.linkedBone.rotationQuaternion.copyFrom(rotation);
+        this.invalidateBoneVisualizerPose(runtimeBone);
+    }
+
+    private invalidateBoneVisualizerPose(runtimeBone: EditorRuntimeBone): void {
+        const linkedBone = runtimeBone.linkedBone;
+        const linkedBoneInternal = linkedBone as unknown as {
+            markAsDirty?: () => void;
+            getSkeleton?: () => Skeleton;
+        };
+        linkedBoneInternal.markAsDirty?.();
+        linkedBoneInternal.getSkeleton?.()?.computeAbsoluteMatrices(true);
+        this.boneVisualizerTarget?.skeleton?.computeAbsoluteMatrices(true);
+    }
     getCameraPosition(): { x: number; y: number; z: number } {
         const pos = this.camera.position;
         return { x: pos.x, y: pos.y, z: pos.z };
@@ -1960,13 +3356,13 @@ export class MmdManager {
         this.camera.radius = Math.max(min, Math.min(max, distance));
         this.syncCameraRotationFromCurrentView();
         this.syncMmdCameraFromViewportCamera();
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
     }
 
     setCameraFov(degrees: number): void {
         this.camera.fov = (degrees * Math.PI) / 180;
         this.syncMmdCameraFromViewportCamera();
-        this.updateEditorDofFocusAndFStop();
+            this.updateEditorDofFocusAndFStop();
     }
 
     setCameraView(view: "left" | "front" | "right"): void {
@@ -2043,24 +3439,481 @@ export class MmdManager {
         this.cameraRotationEulerDeg.z = 0;
     }
 
-    private emitMergedKeyframeTracks(): void {
-        if (!this.onKeyframesLoaded) return;
+    private getOrCreateModelTrackFrameMap(model: MmdModel): Map<string, Uint32Array> {
+        let frameMap = this.modelKeyframeTracksByModel.get(model);
+        if (!frameMap) {
+            frameMap = new Map<string, Uint32Array>();
+            this.modelKeyframeTracksByModel.set(model, frameMap);
+        }
+        return frameMap;
+    }
 
-        const merged = [...this.cameraKeyframeTracks, ...this.modelKeyframeTracks];
-        const order: Record<TrackCategory, number> = {
-            root: 0,
-            camera: 1,
-            "semi-standard": 2,
-            bone: 3,
-            morph: 4,
+    private createFrameIndexMap(frames: Uint32Array): Map<number, number> {
+        const indexMap = new Map<number, number>();
+        for (let i = 0; i < frames.length; i += 1) {
+            indexMap.set(frames[i], i);
+        }
+        return indexMap;
+    }
+
+    private copyFloatFrameBlock(
+        source: Float32Array,
+        sourceFrameIndex: number,
+        stride: number,
+        destination: Float32Array,
+        destinationFrameIndex: number,
+    ): void {
+        const sourceOffset = sourceFrameIndex * stride;
+        const destinationOffset = destinationFrameIndex * stride;
+        destination.set(source.subarray(sourceOffset, sourceOffset + stride), destinationOffset);
+    }
+
+    private copyUint8FrameBlock(
+        source: Uint8Array,
+        sourceFrameIndex: number,
+        stride: number,
+        destination: Uint8Array,
+        destinationFrameIndex: number,
+    ): void {
+        const sourceOffset = sourceFrameIndex * stride;
+        const destinationOffset = destinationFrameIndex * stride;
+        destination.set(source.subarray(sourceOffset, sourceOffset + stride), destinationOffset);
+    }
+
+    private createOffsetModelAnimation(animation: MmdAnimation, frameOffset: number): MmdAnimation {
+        const offset = Math.max(0, Math.floor(frameOffset));
+        if (offset === 0) return animation;
+
+        const offsetFrames = (frames: Uint32Array): Uint32Array => {
+            const shifted = new Uint32Array(frames.length);
+            for (let i = 0; i < frames.length; i += 1) {
+                shifted[i] = frames[i] + offset;
+            }
+            return shifted;
         };
-        merged.sort((a, b) => {
-            const categoryDiff = order[a.category] - order[b.category];
-            if (categoryDiff !== 0) return categoryDiff;
-            return a.name.localeCompare(b.name, "ja");
+
+        const movableBoneTracks = animation.movableBoneTracks.map((track) => {
+            const nextTrack = new MmdMovableBoneAnimationTrack(track.name, track.frameNumbers.length);
+            nextTrack.frameNumbers.set(offsetFrames(track.frameNumbers));
+            nextTrack.positions.set(track.positions);
+            nextTrack.positionInterpolations.set(track.positionInterpolations);
+            nextTrack.rotations.set(track.rotations);
+            nextTrack.rotationInterpolations.set(track.rotationInterpolations);
+            nextTrack.physicsToggles.set(track.physicsToggles);
+            return nextTrack;
         });
 
-        this.onKeyframesLoaded(merged);
+        const boneTracks = animation.boneTracks.map((track) => {
+            const nextTrack = new MmdBoneAnimationTrack(track.name, track.frameNumbers.length);
+            nextTrack.frameNumbers.set(offsetFrames(track.frameNumbers));
+            nextTrack.rotations.set(track.rotations);
+            nextTrack.rotationInterpolations.set(track.rotationInterpolations);
+            nextTrack.physicsToggles.set(track.physicsToggles);
+            return nextTrack;
+        });
+
+        const morphTracks = animation.morphTracks.map((track) => {
+            const nextTrack = new MmdMorphAnimationTrack(track.name, track.frameNumbers.length);
+            nextTrack.frameNumbers.set(offsetFrames(track.frameNumbers));
+            nextTrack.weights.set(track.weights);
+            return nextTrack;
+        });
+
+        return new MmdAnimation(
+            `${animation.name}@${offset}`,
+            boneTracks,
+            movableBoneTracks,
+            morphTracks,
+            animation.propertyTrack,
+            animation.cameraTrack,
+        );
+    }
+
+    private mergeModelAnimations(baseAnimation: MmdAnimation, overlayAnimation: MmdAnimation): MmdAnimation {
+        const mergedBoneTracks = this.mergeBoneTrackArrays(baseAnimation.boneTracks, overlayAnimation.boneTracks);
+        const mergedMovableBoneTracks = this.mergeMovableBoneTrackArrays(baseAnimation.movableBoneTracks, overlayAnimation.movableBoneTracks);
+        const mergedMorphTracks = this.mergeMorphTrackArrays(baseAnimation.morphTracks, overlayAnimation.morphTracks);
+
+        return new MmdAnimation(
+            `${baseAnimation.name}+${overlayAnimation.name}`,
+            mergedBoneTracks,
+            mergedMovableBoneTracks,
+            mergedMorphTracks,
+            baseAnimation.propertyTrack,
+            baseAnimation.cameraTrack,
+        );
+    }
+
+    private mergeMovableBoneTrackArrays(
+        baseTracks: readonly MmdMovableBoneAnimationTrack[],
+        overlayTracks: readonly MmdMovableBoneAnimationTrack[],
+    ): MmdMovableBoneAnimationTrack[] {
+        const overlayByName = new Map<string, MmdMovableBoneAnimationTrack>();
+        for (const track of overlayTracks) {
+            overlayByName.set(track.name, track);
+        }
+
+        const mergedTracks: MmdMovableBoneAnimationTrack[] = [];
+        const mergedNames = new Set<string>();
+
+        for (const baseTrack of baseTracks) {
+            const overlayTrack = overlayByName.get(baseTrack.name);
+            if (!overlayTrack) {
+                mergedTracks.push(baseTrack);
+                continue;
+            }
+            mergedNames.add(baseTrack.name);
+            mergedTracks.push(this.mergeMovableBoneTrack(baseTrack, overlayTrack));
+        }
+
+        for (const overlayTrack of overlayTracks) {
+            if (mergedNames.has(overlayTrack.name)) continue;
+            mergedTracks.push(overlayTrack);
+        }
+
+        return mergedTracks;
+    }
+
+    private mergeBoneTrackArrays(
+        baseTracks: readonly MmdBoneAnimationTrack[],
+        overlayTracks: readonly MmdBoneAnimationTrack[],
+    ): MmdBoneAnimationTrack[] {
+        const overlayByName = new Map<string, MmdBoneAnimationTrack>();
+        for (const track of overlayTracks) {
+            overlayByName.set(track.name, track);
+        }
+
+        const mergedTracks: MmdBoneAnimationTrack[] = [];
+        const mergedNames = new Set<string>();
+
+        for (const baseTrack of baseTracks) {
+            const overlayTrack = overlayByName.get(baseTrack.name);
+            if (!overlayTrack) {
+                mergedTracks.push(baseTrack);
+                continue;
+            }
+            mergedNames.add(baseTrack.name);
+            mergedTracks.push(this.mergeBoneTrack(baseTrack, overlayTrack));
+        }
+
+        for (const overlayTrack of overlayTracks) {
+            if (mergedNames.has(overlayTrack.name)) continue;
+            mergedTracks.push(overlayTrack);
+        }
+
+        return mergedTracks;
+    }
+
+    private mergeMorphTrackArrays(
+        baseTracks: readonly MmdMorphAnimationTrack[],
+        overlayTracks: readonly MmdMorphAnimationTrack[],
+    ): MmdMorphAnimationTrack[] {
+        const overlayByName = new Map<string, MmdMorphAnimationTrack>();
+        for (const track of overlayTracks) {
+            overlayByName.set(track.name, track);
+        }
+
+        const mergedTracks: MmdMorphAnimationTrack[] = [];
+        const mergedNames = new Set<string>();
+
+        for (const baseTrack of baseTracks) {
+            const overlayTrack = overlayByName.get(baseTrack.name);
+            if (!overlayTrack) {
+                mergedTracks.push(baseTrack);
+                continue;
+            }
+            mergedNames.add(baseTrack.name);
+            mergedTracks.push(this.mergeMorphTrack(baseTrack, overlayTrack));
+        }
+
+        for (const overlayTrack of overlayTracks) {
+            if (mergedNames.has(overlayTrack.name)) continue;
+            mergedTracks.push(overlayTrack);
+        }
+
+        return mergedTracks;
+    }
+
+    private mergeMovableBoneTrack(
+        baseTrack: MmdMovableBoneAnimationTrack,
+        overlayTrack: MmdMovableBoneAnimationTrack,
+    ): MmdMovableBoneAnimationTrack {
+        const mergedFrames = mergeFrameNumbers(baseTrack.frameNumbers, overlayTrack.frameNumbers);
+        const mergedTrack = new MmdMovableBoneAnimationTrack(baseTrack.name, mergedFrames.length);
+        mergedTrack.frameNumbers.set(mergedFrames);
+
+        const baseIndexMap = this.createFrameIndexMap(baseTrack.frameNumbers);
+        const overlayIndexMap = this.createFrameIndexMap(overlayTrack.frameNumbers);
+
+        for (let i = 0; i < mergedFrames.length; i += 1) {
+            const frame = mergedFrames[i];
+            const overlayIndex = overlayIndexMap.get(frame);
+            if (overlayIndex !== undefined) {
+                this.copyFloatFrameBlock(overlayTrack.positions, overlayIndex, 3, mergedTrack.positions, i);
+                this.copyUint8FrameBlock(overlayTrack.positionInterpolations, overlayIndex, 12, mergedTrack.positionInterpolations, i);
+                this.copyFloatFrameBlock(overlayTrack.rotations, overlayIndex, 4, mergedTrack.rotations, i);
+                this.copyUint8FrameBlock(overlayTrack.rotationInterpolations, overlayIndex, 4, mergedTrack.rotationInterpolations, i);
+                this.copyUint8FrameBlock(overlayTrack.physicsToggles, overlayIndex, 1, mergedTrack.physicsToggles, i);
+                continue;
+            }
+
+            const baseIndex = baseIndexMap.get(frame);
+            if (baseIndex === undefined) continue;
+            this.copyFloatFrameBlock(baseTrack.positions, baseIndex, 3, mergedTrack.positions, i);
+            this.copyUint8FrameBlock(baseTrack.positionInterpolations, baseIndex, 12, mergedTrack.positionInterpolations, i);
+            this.copyFloatFrameBlock(baseTrack.rotations, baseIndex, 4, mergedTrack.rotations, i);
+            this.copyUint8FrameBlock(baseTrack.rotationInterpolations, baseIndex, 4, mergedTrack.rotationInterpolations, i);
+            this.copyUint8FrameBlock(baseTrack.physicsToggles, baseIndex, 1, mergedTrack.physicsToggles, i);
+        }
+
+        return mergedTrack;
+    }
+
+    private mergeBoneTrack(
+        baseTrack: MmdBoneAnimationTrack,
+        overlayTrack: MmdBoneAnimationTrack,
+    ): MmdBoneAnimationTrack {
+        const mergedFrames = mergeFrameNumbers(baseTrack.frameNumbers, overlayTrack.frameNumbers);
+        const mergedTrack = new MmdBoneAnimationTrack(baseTrack.name, mergedFrames.length);
+        mergedTrack.frameNumbers.set(mergedFrames);
+
+        const baseIndexMap = this.createFrameIndexMap(baseTrack.frameNumbers);
+        const overlayIndexMap = this.createFrameIndexMap(overlayTrack.frameNumbers);
+
+        for (let i = 0; i < mergedFrames.length; i += 1) {
+            const frame = mergedFrames[i];
+            const overlayIndex = overlayIndexMap.get(frame);
+            if (overlayIndex !== undefined) {
+                this.copyFloatFrameBlock(overlayTrack.rotations, overlayIndex, 4, mergedTrack.rotations, i);
+                this.copyUint8FrameBlock(overlayTrack.rotationInterpolations, overlayIndex, 4, mergedTrack.rotationInterpolations, i);
+                this.copyUint8FrameBlock(overlayTrack.physicsToggles, overlayIndex, 1, mergedTrack.physicsToggles, i);
+                continue;
+            }
+
+            const baseIndex = baseIndexMap.get(frame);
+            if (baseIndex === undefined) continue;
+            this.copyFloatFrameBlock(baseTrack.rotations, baseIndex, 4, mergedTrack.rotations, i);
+            this.copyUint8FrameBlock(baseTrack.rotationInterpolations, baseIndex, 4, mergedTrack.rotationInterpolations, i);
+            this.copyUint8FrameBlock(baseTrack.physicsToggles, baseIndex, 1, mergedTrack.physicsToggles, i);
+        }
+
+        return mergedTrack;
+    }
+
+    private mergeMorphTrack(
+        baseTrack: MmdMorphAnimationTrack,
+        overlayTrack: MmdMorphAnimationTrack,
+    ): MmdMorphAnimationTrack {
+        const mergedFrames = mergeFrameNumbers(baseTrack.frameNumbers, overlayTrack.frameNumbers);
+        const mergedTrack = new MmdMorphAnimationTrack(baseTrack.name, mergedFrames.length);
+        mergedTrack.frameNumbers.set(mergedFrames);
+
+        const baseIndexMap = this.createFrameIndexMap(baseTrack.frameNumbers);
+        const overlayIndexMap = this.createFrameIndexMap(overlayTrack.frameNumbers);
+
+        for (let i = 0; i < mergedFrames.length; i += 1) {
+            const frame = mergedFrames[i];
+            const overlayIndex = overlayIndexMap.get(frame);
+            if (overlayIndex !== undefined) {
+                mergedTrack.weights[i] = overlayTrack.weights[overlayIndex];
+                continue;
+            }
+
+            const baseIndex = baseIndexMap.get(frame);
+            if (baseIndex === undefined) continue;
+            mergedTrack.weights[i] = baseTrack.weights[baseIndex];
+        }
+
+        return mergedTrack;
+    }
+    private buildModelTrackFrameMapFromAnimation(animation: any, frameOffset = 0): Map<string, Uint32Array> {
+        const frameMap = new Map<string, Uint32Array>();
+        const normalizedOffset = Math.max(0, Math.floor(frameOffset));
+
+        const applyFrameOffset = (frames: Uint32Array): Uint32Array => {
+            if (normalizedOffset === 0) {
+                return new Uint32Array(frames);
+            }
+            const shiftedFrames = new Uint32Array(frames.length);
+            for (let i = 0; i < frames.length; i += 1) {
+                shiftedFrames[i] = frames[i] + normalizedOffset;
+            }
+            return shiftedFrames;
+        };
+
+        const upsertTrack = (name: string, category: TrackCategory, frames: Uint32Array): void => {
+            if (!frames || frames.length === 0) return;
+            const key = createTrackKey(category, name);
+            const copiedFrames = applyFrameOffset(frames);
+            const existing = frameMap.get(key);
+            frameMap.set(key, existing ? mergeFrameNumbers(existing, copiedFrames) : copiedFrames);
+        };
+
+        for (const track of animation.movableBoneTracks ?? []) {
+            upsertTrack(track.name, classifyBone(track.name), track.frameNumbers);
+        }
+        for (const track of animation.boneTracks ?? []) {
+            upsertTrack(track.name, classifyBone(track.name), track.frameNumbers);
+        }
+        for (const track of animation.morphTracks ?? []) {
+            upsertTrack(track.name, "morph", track.frameNumbers);
+        }
+
+        return frameMap;
+    }
+
+    private getActiveModelTimelineTracks(): KeyframeTrack[] {
+        if (!this.currentModel || !this.activeModelInfo) return [];
+
+        const visibleBoneNameSet = new Set(this.activeModelInfo.boneNames);
+        const isVisibleBoneCategory = (category: TrackCategory): boolean => {
+            return category === "root" || category === "semi-standard" || category === "bone";
+        };
+
+        const frameMap = this.getOrCreateModelTrackFrameMap(this.currentModel);
+        const trackMap = new Map<string, KeyframeTrack>();
+
+        for (const [key, frames] of frameMap.entries()) {
+            const parsed = parseTrackKey(key);
+            if (!parsed) continue;
+            if (isVisibleBoneCategory(parsed.category) && !visibleBoneNameSet.has(parsed.name)) {
+                continue;
+            }
+            trackMap.set(key, {
+                name: parsed.name,
+                category: parsed.category,
+                frames,
+            });
+        }
+
+        for (const boneName of this.activeModelInfo.boneNames) {
+            const category = classifyBone(boneName);
+            const key = createTrackKey(category, boneName);
+            if (!trackMap.has(key)) {
+                trackMap.set(key, {
+                    name: boneName,
+                    category,
+                    frames: EMPTY_KEYFRAME_FRAMES,
+                });
+            }
+        }
+
+        for (const morphName of this.activeModelInfo.morphNames) {
+            const key = createTrackKey("morph", morphName);
+            if (!trackMap.has(key)) {
+                trackMap.set(key, {
+                    name: morphName,
+                    category: "morph",
+                    frames: EMPTY_KEYFRAME_FRAMES,
+                });
+            }
+        }
+
+        const ordered: KeyframeTrack[] = [];
+        const consumed = new Set<string>();
+
+        const appendByKey = (key: string): void => {
+            const track = trackMap.get(key);
+            if (!track) return;
+            ordered.push(track);
+            consumed.add(key);
+        };
+
+        for (const boneName of this.activeModelInfo.boneNames) {
+            if (classifyBone(boneName) !== "root") continue;
+            appendByKey(createTrackKey("root", boneName));
+        }
+
+        for (const boneName of this.activeModelInfo.boneNames) {
+            const category = classifyBone(boneName);
+            if (category === "root") continue;
+            appendByKey(createTrackKey(category, boneName));
+        }
+
+        for (const morphName of this.activeModelInfo.morphNames) {
+            appendByKey(createTrackKey("morph", morphName));
+        }
+
+        for (const [key, track] of trackMap) {
+            if (consumed.has(key)) continue;
+            ordered.push(track);
+        }
+
+        return ordered;
+    }
+    private createCameraChannelTracks(frames: Uint32Array): KeyframeTrack[] {
+        const cameraFrames = frames.length > 0 ? frames : EMPTY_KEYFRAME_FRAMES;
+        return [
+            { name: "Cam Pos X", category: "camera", frames: cameraFrames },
+            { name: "Cam Pos Y", category: "camera", frames: cameraFrames },
+            { name: "Cam Pos Z", category: "camera", frames: cameraFrames },
+            { name: "Cam Rot X", category: "camera", frames: cameraFrames },
+            { name: "Cam Rot Y", category: "camera", frames: cameraFrames },
+            { name: "Cam Rot Z", category: "camera", frames: cameraFrames },
+            { name: "Cam Distance", category: "camera", frames: cameraFrames },
+            { name: "Cam FoV", category: "camera", frames: cameraFrames },
+        ];
+    }
+
+    private getCameraTimelineTracks(): KeyframeTrack[] {
+        return this.createCameraChannelTracks(this.cameraKeyframeFrames);
+    }
+
+    private getRegisteredKeyframeStats(): { hasAnyKeyframe: boolean; maxFrame: number } {
+        let hasAnyKeyframe = false;
+        let maxFrame = 0;
+
+        if (this.cameraKeyframeFrames.length > 0) {
+            hasAnyKeyframe = true;
+            maxFrame = this.cameraKeyframeFrames[this.cameraKeyframeFrames.length - 1];
+        }
+
+        for (const sceneModel of this.sceneModels) {
+            const frameMap = this.modelKeyframeTracksByModel.get(sceneModel.model);
+            if (!frameMap) continue;
+            for (const frames of frameMap.values()) {
+                if (frames.length === 0) continue;
+                hasAnyKeyframe = true;
+                const trackMaxFrame = frames[frames.length - 1];
+                if (trackMaxFrame > maxFrame) {
+                    maxFrame = trackMaxFrame;
+                }
+            }
+        }
+
+        return { hasAnyKeyframe, maxFrame };
+    }
+
+    private refreshTotalFramesFromContent(): void {
+        const runtimeDurationFrame = Math.max(0, Math.floor(this.mmdRuntime.animationFrameTimeDuration));
+        const { hasAnyKeyframe, maxFrame } = this.getRegisteredKeyframeStats();
+        const hasAudio = this.audioPlayer !== null;
+        const nextTotalFrames = hasAnyKeyframe && !hasAudio
+            ? Math.max(maxFrame, 1)
+            : Math.max(runtimeDurationFrame, maxFrame, hasAnyKeyframe ? 0 : 300);
+        if (nextTotalFrames === this._totalFrames) return;
+
+        this._totalFrames = nextTotalFrames;
+        if (this._currentFrame > this._totalFrames) {
+            this._currentFrame = this._totalFrames;
+            this.mmdRuntime.seekAnimation(this._currentFrame, true);
+            if (this.manualPlaybackWithoutAudio) {
+                this.manualPlaybackFrameCursor = this._currentFrame;
+            }
+        }
+        this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
+    }
+
+    private emitMergedKeyframeTracks(): void {
+        this.refreshTotalFramesFromContent();
+        if (!this.onKeyframesLoaded) return;
+
+        if (this.timelineTarget === "camera") {
+            this.onKeyframesLoaded(this.getCameraTimelineTracks());
+            return;
+        }
+
+        this.onKeyframesLoaded(this.getActiveModelTimelineTracks());
     }
 
     resize(): void {
@@ -2068,6 +3921,16 @@ export class MmdManager {
     }
 
     dispose(): void {
+        this.renderingCanvas.removeEventListener("pointerdown", this.onCanvasPointerDown);
+        this.renderingCanvas.removeEventListener("pointerup", this.onCanvasPointerUp);
+        this.renderingCanvas.removeEventListener("pointercancel", this.onCanvasPointerCancel);
+        if (this.boneGizmoManager) {
+            this.boneGizmoManager.dispose();
+            this.boneGizmoManager = null;
+        }
+        this.boneGizmoRuntimeBone = null;
+        this.boneGizmoProxyNode?.dispose();
+        this.boneGizmoProxyNode = null;
         window.removeEventListener("resize", this.onWindowResize);
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();
@@ -2088,6 +3951,12 @@ export class MmdManager {
             sceneModel.mesh.dispose();
         }
         this.sceneModels = [];
+        this.disposeBoneVisualizer();
+        if (this.boneOverlayCanvas) {
+            this.boneOverlayCanvas.remove();
+            this.boneOverlayCanvas = null;
+            this.boneOverlayCtx = null;
+        }
         if (this.cameraAnimationHandle !== null) {
             this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
             this.cameraAnimationHandle = null;
@@ -2145,12 +4014,30 @@ export class MmdManager {
         const height = Math.max(1, Math.floor(this.renderingCanvas.clientHeight));
         if (width === 0 || height === 0) return;
 
+        this.resizeBoneOverlayCanvas();
+
         // Keep drawing buffer aligned to CSS pixel size to avoid edge tearing artifacts.
         if (this.engine.getRenderWidth() !== width || this.engine.getRenderHeight() !== height) {
             this.engine.setSize(width, height);
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

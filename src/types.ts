@@ -16,7 +16,23 @@ export interface ModelInfo {
     path: string;
     vertexCount: number;
     boneCount: number;
+    boneNames: string[];
+    boneControlInfos?: BoneControlInfo[];
     morphCount: number;
+    morphNames: string[];
+    morphDisplayFrames: MorphDisplayFrameInfo[];
+}
+
+export interface BoneControlInfo {
+    name: string;
+    movable: boolean;
+    rotatable: boolean;
+    isIk?: boolean;
+    isIkAffected?: boolean;
+}
+
+export interface MorphDisplayFrameInfo {
+    name: string;
     morphNames: string[];
 }
 

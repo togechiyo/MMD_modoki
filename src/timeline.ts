@@ -15,7 +15,7 @@
  *   - Label canvas (#timeline-label-canvas): redraws on setKeyframeTracks / resize
  *   - Bidirectional scroll sync: labelsEl ↔ trackScrollEl
  */
-import type { KeyframeTrack } from "./types";
+import type { KeyframeTrack, TrackCategory } from "./types";
 
 // ── Layout ─────────────────────────────────────────────────────────
 const RULER_H = 20;
@@ -44,6 +44,11 @@ function upperBound(a: Uint32Array, v: number): number {
     return lo - 1;
 }
 
+function hasFrame(a: Uint32Array, v: number): boolean {
+    const i = lowerBound(a, v);
+    return i < a.length && a[i] === v;
+}
+
 export class Timeline {
     // DOM
     private staticCanvas: HTMLCanvasElement;
@@ -60,6 +65,8 @@ export class Timeline {
     private totalFrames = 300;
     private tracks: KeyframeTrack[] = [];
     private viewOffset = 0;   // currentFrame * PX_PER_F
+    private selectedTrackIndex = -1;
+    private selectedFrame: number | null = null;
 
     // Drag-seek
     private isDragging = false;
@@ -75,6 +82,7 @@ export class Timeline {
     private syncingScroll = false;
 
     public onSeek: ((frame: number) => void) | null = null;
+    public onSelectionChanged: ((track: KeyframeTrack | null, frame: number | null) => void) | null = null;
 
     // ── Constructor ─────────────────────────────────────────────────
 
@@ -105,21 +113,35 @@ export class Timeline {
     // ── Events ──────────────────────────────────────────────────────
 
     private setupEvents(): void {
-        // Seek: track canvas (static layer)
-        for (const el of [this.staticCanvas, this.overlayCanvas]) {
-            el.style.pointerEvents = "auto";
-            el.addEventListener("mousedown", (e) => {
-                this.isDragging = true;
-                this.dragBaseFrame = this.currentFrame;
-                this.dragBaseX = e.clientX;
-                this.seekFromEvent(e, el as HTMLCanvasElement);
-            });
-        }
+        // Seek and select: static layer
+        this.staticCanvas.style.pointerEvents = "auto";
+        this.staticCanvas.addEventListener("mousedown", (e) => {
+            this.selectTrackFromStaticEvent(e);
+            this.isDragging = true;
+            this.dragBaseFrame = this.currentFrame;
+            this.dragBaseX = e.clientX;
+            this.seekFromEvent(e, this.staticCanvas);
+        });
+
+        // Seek only: overlay layer
+        this.overlayCanvas.style.pointerEvents = "auto";
+        this.overlayCanvas.addEventListener("mousedown", (e) => {
+            this.isDragging = true;
+            this.dragBaseFrame = this.currentFrame;
+            this.dragBaseX = e.clientX;
+            this.seekFromEvent(e, this.overlayCanvas);
+        });
+
+        // Select from labels
+        this.labelCanvas.style.pointerEvents = "auto";
+        this.labelCanvas.addEventListener("mousedown", (e) => {
+            this.selectTrackFromLabelEvent(e);
+        });
         window.addEventListener("mousemove", (e) => {
             if (!this.isDragging) return;
             const dx = e.clientX - this.dragBaseX;
             const delta = Math.round(-dx / PX_PER_F);
-            const frame = clamp(this.dragBaseFrame + delta, 0, this.totalFrames);
+            const frame = Math.max(0, this.dragBaseFrame + delta);
             if (frame !== this.currentFrame) {
                 this.currentFrame = frame;
                 this.viewOffset = frame * PX_PER_F;
@@ -150,9 +172,9 @@ export class Timeline {
 
     private seekFromEvent(e: MouseEvent, canvas: HTMLCanvasElement): void {
         const rect = canvas.getBoundingClientRect();
-        const frame = clamp(
-            Math.round(this.currentFrame + (e.clientX - rect.left - PLAYHEAD_X) / PX_PER_F),
-            0, this.totalFrames
+        const frame = Math.max(
+            0,
+            Math.round(this.currentFrame + (e.clientX - rect.left - PLAYHEAD_X) / PX_PER_F)
         );
         this.currentFrame = frame;
         this.viewOffset = frame * PX_PER_F;
@@ -177,8 +199,59 @@ export class Timeline {
     }
 
     setKeyframeTracks(tracks: KeyframeTrack[]): void {
+        const prevSelectedTrack = this.getSelectedTrack();
         this.tracks = tracks;
+        this.reconcileSelection(prevSelectedTrack);
         this.resize();
+    }
+
+    getSelectedTrack(): KeyframeTrack | null {
+        if (this.selectedTrackIndex < 0 || this.selectedTrackIndex >= this.tracks.length) {
+            return null;
+        }
+        return this.tracks[this.selectedTrackIndex];
+    }
+
+    getSelectedFrame(): number | null {
+        return this.selectedFrame;
+    }
+
+    setSelectedFrame(frame: number | null): void {
+        const track = this.getSelectedTrack();
+        if (!track) {
+            this.selectedFrame = null;
+            this.emitSelectionChanged();
+            return;
+        }
+
+        if (frame === null || !hasFrame(track.frames, frame)) {
+            this.selectedFrame = null;
+        } else {
+            this.selectedFrame = frame;
+        }
+        this.scheduleStatic();
+        this.emitSelectionChanged();
+    }
+
+    selectTrackByNameAndCategory(name: string, categories: readonly TrackCategory[]): boolean {
+        if (this.tracks.length === 0) return false;
+
+        let targetIndex = -1;
+        for (const category of categories) {
+            targetIndex = this.tracks.findIndex((track) => track.name === name && track.category === category);
+            if (targetIndex >= 0) break;
+        }
+        if (targetIndex < 0) return false;
+
+        const changed = this.selectedTrackIndex !== targetIndex || this.selectedFrame !== null;
+        this.selectedTrackIndex = targetIndex;
+        this.selectedFrame = null;
+        this.scheduleStatic();
+        this.scheduleLabel();
+        if (changed) {
+            this.emitSelectionChanged();
+        }
+        return true;
     }
 
     // ── Resize ───────────────────────────────────────────────────────
@@ -269,9 +342,15 @@ export class Timeline {
             const track = this.tracks[i];
             const ry = i * ROW_H;   // NO ruler offset – ruler is outside scroll
             const col = CAT[track.category];
+            const isSelectedRow = i === this.selectedTrackIndex;
 
             ctx.fillStyle = col.bg;
             ctx.fillRect(0, ry, w, ROW_H);
+
+            if (isSelectedRow) {
+                ctx.fillStyle = "rgba(99,102,241,0.18)";
+                ctx.fillRect(0, ry, w, ROW_H);
+            }
 
             if (col.bar) {
                 ctx.fillStyle = col.bar;
@@ -296,6 +375,16 @@ export class Timeline {
                 ctx.beginPath();
                 ctx.arc(sx, midY, dotR, 0, Math.PI * 2);
                 ctx.fill();
+
+                if (isSelectedRow && this.selectedFrame !== null && frames[k] === this.selectedFrame) {
+                    ctx.save();
+                    ctx.strokeStyle = "#ffffff";
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.arc(sx, midY, dotR + 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
             }
         }
 
@@ -403,9 +492,15 @@ export class Timeline {
             const track = this.tracks[i];
             const y = RULER_H + i * ROW_H;
             const col = CAT[track.category];
+            const isSelectedRow = i === this.selectedTrackIndex;
 
             ctx.fillStyle = col.bg;
             ctx.fillRect(0, y, w, ROW_H);
+
+            if (isSelectedRow) {
+                ctx.fillStyle = "rgba(99,102,241,0.18)";
+                ctx.fillRect(0, y, w, ROW_H);
+            }
 
             if (col.bar) {
                 ctx.fillStyle = col.bar;
@@ -429,8 +524,93 @@ export class Timeline {
             ctx.fillRect(0, y + ROW_H - 1, w, 1);
         }
     }
+
+    private selectTrackFromStaticEvent(e: MouseEvent): void {
+        const rect = this.staticCanvas.getBoundingClientRect();
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
+        const y = localY + this.trackScrollEl.scrollTop;
+        const row = Math.floor(y / ROW_H);
+        if (row < 0 || row >= this.tracks.length) return;
+
+        this.selectedTrackIndex = row;
+        const pickedFrame = this.pickFrameOnTrackFromX(this.tracks[row], localX);
+        this.selectedFrame = pickedFrame;
+        this.scheduleStatic();
+        this.scheduleLabel();
+        this.emitSelectionChanged();
+    }
+
+    private selectTrackFromLabelEvent(e: MouseEvent): void {
+        const rect = this.labelCanvas.getBoundingClientRect();
+        const localY = e.clientY - rect.top;
+        const y = localY - RULER_H + this.labelsEl.scrollTop;
+        const row = Math.floor(y / ROW_H);
+        if (row < 0 || row >= this.tracks.length) return;
+
+        this.selectedTrackIndex = row;
+        this.selectedFrame = null;
+        this.scheduleStatic();
+        this.scheduleLabel();
+        this.emitSelectionChanged();
+    }
+
+    private pickFrameOnTrackFromX(track: KeyframeTrack, localX: number): number | null {
+        if (track.frames.length === 0) return null;
+
+        const frameAtCursor = this.currentFrame + (localX - PLAYHEAD_X) / PX_PER_F;
+        const nearestFrame = Math.round(frameAtCursor);
+        const idx = lowerBound(track.frames, nearestFrame);
+
+        const candidates: number[] = [];
+        if (idx < track.frames.length) candidates.push(track.frames[idx]);
+        if (idx > 0) candidates.push(track.frames[idx - 1]);
+
+        let bestFrame: number | null = null;
+        let bestDist = Number.POSITIVE_INFINITY;
+        for (const frame of candidates) {
+            const sx = frame * PX_PER_F - this.viewOffset + PLAYHEAD_X;
+            const dist = Math.abs(sx - localX);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestFrame = frame;
+            }
+        }
+
+        return bestDist <= 8 ? bestFrame : null;
+    }
+
+    private reconcileSelection(previousTrack: KeyframeTrack | null): void {
+        if (this.tracks.length === 0) {
+            this.selectedTrackIndex = -1;
+            this.selectedFrame = null;
+            this.emitSelectionChanged();
+            return;
+        }
+
+        if (previousTrack) {
+            const nextIndex = this.tracks.findIndex((track) =>
+                track.name === previousTrack.name && track.category === previousTrack.category
+            );
+            if (nextIndex >= 0) {
+                this.selectedTrackIndex = nextIndex;
+            } else if (this.selectedTrackIndex < 0 || this.selectedTrackIndex >= this.tracks.length) {
+                this.selectedTrackIndex = 0;
+            }
+        } else if (this.selectedTrackIndex < 0 || this.selectedTrackIndex >= this.tracks.length) {
+            this.selectedTrackIndex = 0;
+        }
+
+        const track = this.getSelectedTrack();
+        if (!track || this.selectedFrame === null || !hasFrame(track.frames, this.selectedFrame)) {
+            this.selectedFrame = null;
+        }
+
+        this.emitSelectionChanged();
+    }
+
+    private emitSelectionChanged(): void {
+        this.onSelectionChanged?.(this.getSelectedTrack(), this.selectedFrame);
+    }
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-    return v < lo ? lo : v > hi ? hi : v;
-}

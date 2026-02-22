@@ -1,11 +1,13 @@
 import type { MmdManager } from "./mmd-manager";
 import type { Timeline } from "./timeline";
 import type { BottomPanel } from "./bottom-panel";
-import type { ModelInfo, MotionInfo } from "./types";
+import type { KeyframeTrack, ModelInfo, MotionInfo } from "./types";
 
 type CameraViewPreset = "left" | "front" | "right";
 
 export class UIController {
+    private static readonly CAMERA_SELECT_VALUE = "__camera__";
+
     private mmdManager: MmdManager;
     private timeline: Timeline;
     private bottomPanel: BottomPanel;
@@ -33,7 +35,14 @@ export class UIController {
     private statusText: HTMLElement;
     private statusDot: HTMLElement;
     private viewportOverlay: HTMLElement;
+    private btnKeyframeAdd: HTMLButtonElement;
+    private btnKeyframeDelete: HTMLButtonElement;
+    private btnKeyframeNudgeLeft: HTMLButtonElement;
+    private btnKeyframeNudgeRight: HTMLButtonElement;
+    private timelineSelectionLabel: HTMLElement;
     private modelSelect: HTMLSelectElement;
+    private btnModelVisibility: HTMLButtonElement;
+    private btnModelDelete: HTMLButtonElement;
     private camFovSlider: HTMLInputElement | null = null;
     private camFovValueEl: HTMLElement | null = null;
     private camDistanceSlider: HTMLInputElement | null = null;
@@ -52,6 +61,7 @@ export class UIController {
     private dofFocalLengthValueEl: HTMLElement | null = null;
     private lensDistortionSlider: HTMLInputElement | null = null;
     private lensDistortionValueEl: HTMLElement | null = null;
+    private syncingBoneSelection = false;
 
     constructor(mmdManager: MmdManager, timeline: Timeline, bottomPanel: BottomPanel) {
         this.mmdManager = mmdManager;
@@ -81,7 +91,14 @@ export class UIController {
         this.statusText = document.getElementById("status-text")!;
         this.statusDot = document.querySelector(".status-dot")!;
         this.viewportOverlay = document.getElementById("viewport-overlay")!;
+        this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
+        this.btnKeyframeDelete = document.getElementById("btn-kf-delete") as HTMLButtonElement;
+        this.btnKeyframeNudgeLeft = document.getElementById("btn-kf-nudge-left") as HTMLButtonElement;
+        this.btnKeyframeNudgeRight = document.getElementById("btn-kf-nudge-right") as HTMLButtonElement;
+        this.timelineSelectionLabel = document.getElementById("timeline-selection-label")!;
         this.modelSelect = document.getElementById("info-model-select") as HTMLSelectElement;
+        this.btnModelVisibility = document.getElementById("btn-model-visibility") as HTMLButtonElement;
+        this.btnModelDelete = document.getElementById("btn-model-delete") as HTMLButtonElement;
 
         this.setupEventListeners();
         this.setupCallbacks();
@@ -94,6 +111,8 @@ export class UIController {
             this.mmdManager.getPhysicsEnabled(),
             this.mmdManager.isPhysicsAvailable()
         );
+        this.updateInfoActionButtons();
+        this.updateTimelineEditState();
     }
 
     private setupEventListeners(): void {
@@ -198,9 +217,9 @@ export class UIController {
         this.btnPlay.addEventListener("click", () => this.play());
         this.btnPause.addEventListener("click", () => this.pause());
         this.btnStop.addEventListener("click", () => this.stop());
-        this.btnSkipStart.addEventListener("click", () => this.mmdManager.seekTo(0));
+        this.btnSkipStart.addEventListener("click", () => this.mmdManager.seekToBoundary(0));
         this.btnSkipEnd.addEventListener("click", () =>
-            this.mmdManager.seekTo(this.mmdManager.totalFrames)
+            this.mmdManager.seekToBoundary(this.mmdManager.totalFrames)
         );
 
         // Speed
@@ -210,15 +229,53 @@ export class UIController {
 
         // Active model selector
         this.modelSelect.addEventListener("change", () => {
-            const index = Number.parseInt(this.modelSelect.value, 10);
+            const value = this.modelSelect.value;
+            if (value === UIController.CAMERA_SELECT_VALUE) {
+                this.mmdManager.setTimelineTarget("camera");
+                this.applyCameraSelectionUI();
+                this.refreshModelSelector();
+                this.showToast("Timeline target: Camera", "success");
+                return;
+            }
+
+            const index = Number.parseInt(value, 10);
             if (Number.isNaN(index)) return;
             const ok = this.mmdManager.setActiveModelByIndex(index);
             if (!ok) {
                 this.showToast("Failed to switch active model", "error");
                 return;
             }
+
+            this.mmdManager.setTimelineTarget("model");
             this.refreshModelSelector();
             this.showToast("Active model switched", "success");
+        });
+
+        this.btnModelVisibility.addEventListener("click", () => {
+            if (this.mmdManager.getTimelineTarget() !== "model") return;
+            const visible = this.mmdManager.toggleActiveModelVisibility();
+            this.updateInfoActionButtons();
+            this.showToast(visible ? "Model visible" : "Model hidden", "info");
+        });
+
+        this.btnModelDelete.addEventListener("click", () => {
+            if (this.mmdManager.getTimelineTarget() !== "model") return;
+            const ok = window.confirm("Delete selected model?");
+            if (!ok) return;
+
+            const removed = this.mmdManager.removeActiveModel();
+            if (!removed) {
+                this.showToast("Failed to delete model", "error");
+                return;
+            }
+
+            if (this.mmdManager.getLoadedModels().length === 0) {
+                this.mmdManager.setTimelineTarget("camera");
+                this.applyCameraSelectionUI();
+            }
+
+            this.refreshModelSelector();
+            this.showToast("Model deleted", "success");
         });
 
         // Camera controls
@@ -276,6 +333,19 @@ export class UIController {
         this.timeline.onSeek = (frame) => {
             this.mmdManager.seekTo(frame);
         };
+        this.timeline.onSelectionChanged = (track) => {
+            this.syncBoneVisualizerSelection(track);
+            this.syncBottomBoneSelectionFromTimeline(track);
+            this.updateTimelineEditState();
+        };
+        this.bottomPanel.onBoneSelectionChanged = (boneName) => {
+            this.syncTimelineBoneSelectionFromBottomPanel(boneName);
+        };
+
+        this.btnKeyframeAdd.addEventListener("click", () => this.addKeyframeAtCurrentFrame());
+        this.btnKeyframeDelete.addEventListener("click", () => this.deleteSelectedKeyframe());
+        this.btnKeyframeNudgeLeft.addEventListener("click", () => this.nudgeSelectedKeyframe(-1));
+        this.btnKeyframeNudgeRight.addEventListener("click", () => this.nudgeSelectedKeyframe(1));
 
         // Lighting controls
         const elAzimuth = document.getElementById("light-azimuth") as HTMLInputElement;
@@ -346,6 +416,13 @@ export class UIController {
             valAmb.textContent = v.toFixed(1);
             this.mmdManager.ambientIntensity = v;
         });
+
+        // Initialize lighting sliders from runtime defaults.
+        elIntensity.value = String(Math.round(this.mmdManager.lightIntensity * 100));
+        valInt.textContent = this.mmdManager.lightIntensity.toFixed(1);
+        elAmbient.value = String(Math.round(this.mmdManager.ambientIntensity * 100));
+        valAmb.textContent = this.mmdManager.ambientIntensity.toFixed(1);
+
         elShadow.addEventListener("input", () => {
             const v = Number(elShadow.value) / 100;
             valSh.textContent = v.toFixed(2);
@@ -630,6 +707,7 @@ export class UIController {
             this.currentFrameEl.textContent = String(frame);
             this.totalFramesEl.textContent = String(total);
             this.timeline.setCurrentFrame(frame);
+            this.updateTimelineEditState();
 
             // Reflect runtime camera FOV (e.g. camera VMD playback) in the camera panel.
             if (this.camFovSlider && this.camFovValueEl && document.activeElement !== this.camFovSlider) {
@@ -646,14 +724,25 @@ export class UIController {
             }
             this.refreshDofAutoFocusReadout();
             this.refreshLensDistortionAutoReadout();
+
+            if (this.mmdManager.isPlaying && total > 0 && frame >= total) {
+                this.stopAtPlaybackEnd();
+            }
         };
 
         // Active model changed
         this.mmdManager.onModelLoaded = (info: ModelInfo) => {
             this.setStatus("Model ready", false);
             this.viewportOverlay.classList.add("hidden");
-            this.bottomPanel.updateMorphControls(info);
-            this.bottomPanel.updateModelInfo(info);
+            if (this.mmdManager.getTimelineTarget() === "camera") {
+                this.applyCameraSelectionUI();
+            } else {
+                this.bottomPanel.updateBoneControls(info);
+                this.bottomPanel.updateMorphControls(info);
+                this.bottomPanel.updateModelInfo(info);
+                this.syncBoneVisualizerSelection(this.timeline.getSelectedTrack());
+                this.syncBottomBoneSelectionFromTimeline(this.timeline.getSelectedTrack());
+            }
             this.refreshModelSelector();
         };
 
@@ -684,6 +773,9 @@ export class UIController {
         // Keyframe data loaded
         this.mmdManager.onKeyframesLoaded = (tracks) => {
             this.timeline.setKeyframeTracks(tracks);
+            this.syncBoneVisualizerSelection(this.timeline.getSelectedTrack());
+            this.syncBottomBoneSelectionFromTimeline(this.timeline.getSelectedTrack());
+            this.updateTimelineEditState();
         };
 
         // Audio loaded
@@ -701,12 +793,55 @@ export class UIController {
         this.mmdManager.onPhysicsStateChanged = (enabled: boolean, available: boolean) => {
             this.updatePhysicsToggleButton(enabled, available);
         };
+
+        this.mmdManager.onBoneVisualizerBonePicked = (boneName: string) => {
+            if (this.mmdManager.getTimelineTarget() !== "model") return;
+            const selected = this.bottomPanel.setSelectedBone(boneName);
+            if (!selected) return;
+            this.syncTimelineBoneSelectionFromBottomPanel(boneName);
+        };
     }
 
     private setupKeyboard(): void {
         document.addEventListener("keydown", (e) => {
             // Don't handle keys when focused on input
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+
+            const isAddKeyShortcut =
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.altKey &&
+                (
+                    e.key === "i" ||
+                    e.key === "I" ||
+                    e.key === "k" ||
+                    e.key === "K" ||
+                    e.key === "+" ||
+                    e.code === "NumpadAdd"
+                );
+            if (isAddKeyShortcut) {
+                e.preventDefault();
+                this.addKeyframeAtCurrentFrame();
+                return;
+            }
+
+            if (e.key === "Delete") {
+                e.preventDefault();
+                this.deleteSelectedKeyframe();
+                return;
+            }
+
+            if (e.altKey && e.key === "ArrowLeft") {
+                e.preventDefault();
+                this.nudgeSelectedKeyframe(-1);
+                return;
+            }
+
+            if (e.altKey && e.key === "ArrowRight") {
+                e.preventDefault();
+                this.nudgeSelectedKeyframe(1);
+                return;
+            }
 
             switch (e.key) {
                 case " ":
@@ -718,10 +853,10 @@ export class UIController {
                     }
                     break;
                 case "Home":
-                    this.mmdManager.seekTo(0);
+                    this.mmdManager.seekToBoundary(0);
                     break;
                 case "End":
-                    this.mmdManager.seekTo(this.mmdManager.totalFrames);
+                    this.mmdManager.seekToBoundary(this.mmdManager.totalFrames);
                     break;
                 case "ArrowLeft":
                     this.mmdManager.seekTo(this.mmdManager.currentFrame - (e.shiftKey ? 10 : 1));
@@ -731,13 +866,13 @@ export class UIController {
                     break;
             }
 
-            // Ctrl+O = open PMX
+            // Ctrl+O = open PMX/PMD
             if (e.ctrlKey && e.key === "o") {
                 e.preventDefault();
                 this.loadPMX();
             }
 
-            // Ctrl+M = open VMD
+            // Ctrl+M = open VMD/VPD
             if (e.ctrlKey && e.key === "m") {
                 e.preventDefault();
                 this.loadVMD();
@@ -819,25 +954,25 @@ export class UIController {
 
     private async loadPMX(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "PMX model", extensions: ["pmx", "pmd"] },
+            { name: "PMX/PMD model", extensions: ["pmx", "pmd"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
         if (!filePath) return;
 
-        this.setStatus("Loading PMX...", true);
+        this.setStatus("Loading PMX/PMD...", true);
         await this.mmdManager.loadPMX(filePath);
     }
 
     private async loadVMD(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "VMD motion", extensions: ["vmd"] },
+            { name: "VMD/VPD motion or pose", extensions: ["vmd", "vpd"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
         if (!filePath) return;
 
-        this.setStatus("Loading VMD...", true);
+        this.setStatus("Loading motion/pose...", true);
         await this.mmdManager.loadVMD(filePath);
     }
 
@@ -890,26 +1025,68 @@ export class UIController {
         this.showToast(`Saved PNG: ${basename}`, "success");
     }
 
-    private refreshModelSelector(): void {
-        const models = this.mmdManager.getLoadedModels();
-        this.modelSelect.innerHTML = "";
+    private getCameraPanelInfo(): ModelInfo {
+        return {
+            name: "Camera",
+            path: "",
+            vertexCount: 0,
+            boneCount: 0,
+            boneNames: [],
+            boneControlInfos: [],
+            morphCount: 0,
+            morphNames: [],
+            morphDisplayFrames: [],
+        };
+    }
 
-        if (models.length === 0) {
-            const emptyOption = document.createElement("option");
-            emptyOption.value = "";
-            emptyOption.textContent = "-";
-            this.modelSelect.appendChild(emptyOption);
-            this.modelSelect.disabled = true;
+    private applyCameraSelectionUI(): void {
+        const cameraInfo = this.getCameraPanelInfo();
+        this.bottomPanel.updateBoneControls(cameraInfo);
+        this.bottomPanel.updateMorphControls(cameraInfo);
+        this.bottomPanel.updateModelInfo(cameraInfo);
+        this.mmdManager.setBoneVisualizerSelectedBone(null);
+        this.updateInfoActionButtons();
+    }
+
+    private updateInfoActionButtons(): void {
+        const isModelTarget = this.mmdManager.getTimelineTarget() === "model";
+        const hasModel = this.mmdManager.getLoadedModels().length > 0;
+        const enabled = isModelTarget && hasModel;
+
+        this.btnModelVisibility.disabled = !enabled;
+        this.btnModelDelete.disabled = !enabled;
+
+        if (!enabled) {
+            this.btnModelVisibility.textContent = "非表示";
             return;
         }
 
+        const visible = this.mmdManager.getActiveModelVisibility();
+        this.btnModelVisibility.textContent = visible ? "非表示" : "表示";
+    }
+
+    private refreshModelSelector(): void {
+        const models = this.mmdManager.getLoadedModels();
+        const timelineTarget = this.mmdManager.getTimelineTarget();
+        this.modelSelect.innerHTML = "";
+
+        const cameraOption = document.createElement("option");
+        cameraOption.value = UIController.CAMERA_SELECT_VALUE;
+        cameraOption.textContent = "0: Camera";
+        this.modelSelect.appendChild(cameraOption);
+
         let selected = false;
+        if (timelineTarget === "camera") {
+            cameraOption.selected = true;
+            selected = true;
+        }
+
         for (const model of models) {
             const option = document.createElement("option");
             option.value = String(model.index);
             option.textContent = `${model.index + 1}: ${model.name}`;
             option.title = model.path;
-            if (model.active) {
+            if (!selected && timelineTarget === "model" && model.active) {
                 option.selected = true;
                 selected = true;
             }
@@ -917,9 +1094,11 @@ export class UIController {
         }
 
         if (!selected) {
-            this.modelSelect.selectedIndex = 0;
+            cameraOption.selected = true;
         }
-        this.modelSelect.disabled = models.length < 2;
+
+        this.modelSelect.disabled = models.length === 0;
+        this.updateInfoActionButtons();
     }
 
     private updateGroundToggleButton(visible: boolean): void {
@@ -1008,6 +1187,151 @@ export class UIController {
         this.lensDistortionValueEl.textContent = `${Math.round(distortionPercent)}% (auto)`;
     }
 
+    private getSelectedTimelineTrack(): KeyframeTrack | null {
+        const track = this.timeline.getSelectedTrack();
+        if (!track) return null;
+        return track;
+    }
+
+    private isBoneTrackForEditor(track: KeyframeTrack | null): track is KeyframeTrack {
+        if (!track) return false;
+        return track.category === "root" || track.category === "semi-standard" || track.category === "bone";
+    }
+
+    private syncBottomBoneSelectionFromTimeline(track: KeyframeTrack | null): void {
+        if (!this.isBoneTrackForEditor(track)) return;
+        if (this.mmdManager.getTimelineTarget() !== "model") return;
+        if (this.syncingBoneSelection) return;
+
+        this.syncingBoneSelection = true;
+        try {
+            this.bottomPanel.setSelectedBone(track.name);
+        } finally {
+            this.syncingBoneSelection = false;
+        }
+    }
+
+    private syncTimelineBoneSelectionFromBottomPanel(boneName: string | null): void {
+        if (!boneName) return;
+        if (this.mmdManager.getTimelineTarget() !== "model") return;
+        if (this.syncingBoneSelection) return;
+
+        this.mmdManager.setBoneVisualizerSelectedBone(boneName);
+        this.syncingBoneSelection = true;
+        try {
+            this.timeline.selectTrackByNameAndCategory(boneName, ["root", "semi-standard", "bone"]);
+        } finally {
+            this.syncingBoneSelection = false;
+        }
+    }
+
+    private syncBoneVisualizerSelection(track: KeyframeTrack | null): void {
+        if (this.mmdManager.getTimelineTarget() !== "model") {
+            this.mmdManager.setBoneVisualizerSelectedBone(null);
+            return;
+        }
+
+        if (this.isBoneTrackForEditor(track)) {
+            this.mmdManager.setBoneVisualizerSelectedBone(track.name);
+            return;
+        }
+
+        this.mmdManager.setBoneVisualizerSelectedBone(this.bottomPanel.getSelectedBone());
+    }
+
+    private updateTimelineEditState(): void {
+        const track = this.getSelectedTimelineTrack();
+        const selectedFrame = this.timeline.getSelectedFrame();
+        const currentFrame = this.mmdManager.currentFrame;
+
+        if (!track) {
+            this.timelineSelectionLabel.textContent = "トラック未選択";
+            this.btnKeyframeAdd.disabled = true;
+            this.btnKeyframeDelete.disabled = true;
+            this.btnKeyframeNudgeLeft.disabled = false;
+            this.btnKeyframeNudgeRight.disabled = false;
+            return;
+        }
+
+        const frameLabel = selectedFrame !== null ? ` @${selectedFrame}` : "";
+        this.timelineSelectionLabel.textContent = `${track.name}${frameLabel}`;
+        this.btnKeyframeAdd.disabled = false;
+
+        const hasCurrentFrameKey = this.mmdManager.hasTimelineKeyframe(track, currentFrame);
+        const canDelete = selectedFrame !== null || hasCurrentFrameKey;
+        this.btnKeyframeDelete.disabled = !canDelete;
+
+        this.btnKeyframeNudgeLeft.disabled = false;
+        this.btnKeyframeNudgeRight.disabled = false;
+    }
+
+    private addKeyframeAtCurrentFrame(): void {
+        const track = this.getSelectedTimelineTrack();
+        if (!track) {
+            this.showToast("トラックを選択してください", "error");
+            return;
+        }
+
+        const frame = this.mmdManager.currentFrame;
+        const created = this.mmdManager.addTimelineKeyframe(track, frame);
+        if (!created) {
+            this.showToast(`Frame ${frame} は既に登録済み`, "info");
+            return;
+        }
+
+        this.timeline.setSelectedFrame(null);
+        this.updateTimelineEditState();
+        this.showToast(`Frame ${frame} にキーを登録`, "success");
+    }
+
+    private deleteSelectedKeyframe(): void {
+        const track = this.getSelectedTimelineTrack();
+        if (!track) {
+            this.showToast("トラックを選択してください", "error");
+            return;
+        }
+
+        const frame = this.timeline.getSelectedFrame() ?? this.mmdManager.currentFrame;
+        const removed = this.mmdManager.removeTimelineKeyframe(track, frame);
+        if (!removed) {
+            this.showToast(`Frame ${frame} にキーがありません`, "info");
+            return;
+        }
+
+        if (this.timeline.getSelectedFrame() === frame) {
+            this.timeline.setSelectedFrame(null);
+        }
+        this.updateTimelineEditState();
+        this.showToast(`Frame ${frame} のキーを削除`, "success");
+    }
+
+    private nudgeSelectedKeyframe(deltaFrame: number): void {
+        const seekByDelta = (): void => {
+            const toFrame = Math.max(0, this.mmdManager.currentFrame + deltaFrame);
+            this.mmdManager.seekTo(toFrame);
+            this.updateTimelineEditState();
+        };
+
+        const track = this.getSelectedTimelineTrack();
+        const fromFrame = this.timeline.getSelectedFrame();
+        if (!track || fromFrame === null) {
+            seekByDelta();
+            return;
+        }
+
+        const toFrame = Math.max(0, fromFrame + deltaFrame);
+        const moved = this.mmdManager.moveTimelineKeyframe(track, fromFrame, toFrame);
+        if (!moved) {
+            seekByDelta();
+            return;
+        }
+
+        this.timeline.setSelectedFrame(toFrame);
+        this.mmdManager.seekTo(toFrame);
+        this.updateTimelineEditState();
+        this.showToast(`キー移動: ${fromFrame} -> ${toFrame}`, "success");
+    }
+
     private play(): void {
         this.mmdManager.play();
         this.btnPlay.style.display = "none";
@@ -1024,6 +1348,14 @@ export class UIController {
 
     private stop(): void {
         this.mmdManager.stop();
+        this.btnPlay.style.display = "flex";
+        this.btnPause.style.display = "none";
+        this.setStatus("Stopped", false);
+    }
+
+    private stopAtPlaybackEnd(): void {
+        this.mmdManager.pause();
+        this.mmdManager.seekTo(this.mmdManager.totalFrames);
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
         this.setStatus("Stopped", false);

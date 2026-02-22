@@ -44,14 +44,14 @@
           </svg>
           <span>PMX読込</span>
         </button>
-        <button id="btn-load-vmd" class="toolbar-btn" title="VMDモーションを読み込む">
+        <button id="btn-load-vmd" class="toolbar-btn" title="VMDモーション/ポーズを読み込む">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path
               d="M6.804 8l.353-3.291A1.5 1.5 0 0 1 8.644 3.5h1.212a1.5 1.5 0 0 1 1.487 1.209L11.697 8H14.5a.5.5 0 0 1 0 1H1.5a.5.5 0 0 1 0-1H6.804z" />
             <path
               d="M2 12.5A1.5 1.5 0 0 1 3.5 11h9a1.5 1.5 0 0 1 1.5 1.5v.5a.5.5 0 0 1-1 0v-.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v.5a.5.5 0 0 1-1 0v-.5z" />
           </svg>
-          <span>VMD読込</span>
+          <span>VMD/POSE読込</span>
         </button>
         <button id="btn-load-camera-vmd" class="toolbar-btn" title="カメラVMDを読み込む">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -95,6 +95,12 @@
           </svg>
           <span id="aa-toggle-text">AA ON</span>
         </button>
+        <button id="btn-toggle-physics" class="toolbar-btn toggle-on" title="物理演算の有効/無効を切り替える" aria-pressed="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1.5a3 3 0 0 1 3 3v1h1.5a2 2 0 0 1 0 4H11v1a3 3 0 0 1-6 0v-1H3.5a2 2 0 0 1 0-4H5v-1a3 3 0 0 1 3-3z" />
+          </svg>
+          <span id="physics-toggle-text">物理ON</span>
+        </button>
       </div>
       <div class="toolbar-right">
         <div id="perf-display" class="perf-badge">
@@ -119,6 +125,15 @@
             <path d="M1 1h12v2H1V1zm0 4h12v2H1V5zm0 4h12v2H1V9z" />
           </svg>
           <span>タイムライン</span>
+        </div>
+        <div id="timeline-edit-toolbar">
+          <div class="timeline-edit-buttons">
+            <button id="btn-kf-add" class="timeline-edit-btn" type="button" title="現在フレームにキーフレームを登録">登録</button>
+            <button id="btn-kf-delete" class="timeline-edit-btn" type="button" title="選択キーフレームを削除">削除</button>
+            <button id="btn-kf-nudge-left" class="timeline-edit-btn" type="button" title="選択キーフレームを1フレーム前へ">&larr;</button>
+            <button id="btn-kf-nudge-right" class="timeline-edit-btn" type="button" title="選択キーフレームを1フレーム後へ">&rarr;</button>
+          </div>
+          <span id="timeline-selection-label" class="timeline-selection-label">トラック未選択</span>
         </div>
         <div id="timeline-container">
           <!-- Fixed left: frame labels -->
@@ -172,6 +187,10 @@
                 <option value="">-</option>
               </select>
             </div>
+            <div class="info-actions">
+              <button id="btn-model-visibility" class="info-action-btn" type="button" disabled>非表示</button>
+              <button id="btn-model-delete" class="info-action-btn info-action-btn--danger" type="button" disabled>削除</button>
+            </div>
             <div class="info-row"><span class="info-label">モデル</span><span id="info-model-name"
                 class="info-value">-</span></div>
             <div class="info-row"><span class="info-label">頂点</span><span id="info-vertices" class="info-value">-</span>
@@ -183,7 +202,26 @@
           </div>
         </section>
 
-        <!-- 2: Morph Controls -->
+        <!-- 2: Bone Controls -->
+        <section id="bone-section" class="bottom-section">
+          <div class="section-header">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <path d="M3 4.5a1.5 1.5 0 1 1 3 0v1.2h2V4.5a1.5 1.5 0 1 1 3 0V9a1.5 1.5 0 1 1-3 0V7.9H6V9a1.5 1.5 0 1 1-3 0V4.5z" />
+            </svg>
+            <span>ボーン</span>
+          </div>
+          <div class="panel-select-row">
+            <span class="panel-select-label">対象</span>
+            <select id="bone-select" class="panel-select" disabled>
+              <option value="">-</option>
+            </select>
+          </div>
+          <div id="bone-controls" class="bone-controls">
+            <div class="panel-empty-state">モデル未読込</div>
+          </div>
+        </section>
+
+        <!-- 3: Morph Controls -->
         <section id="morph-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -192,12 +230,18 @@
             </svg>
             <span>モーフ</span>
           </div>
+          <div class="panel-select-row">
+            <span class="panel-select-label">表示枠</span>
+            <select id="morph-frame-select" class="panel-select" disabled>
+              <option value="">-</option>
+            </select>
+          </div>
           <div id="morph-controls" class="morph-controls">
-            <div class="morph-empty-state">モデル未読込</div>
+            <div class="panel-empty-state">モデル未読込</div>
           </div>
         </section>
 
-        <!-- 3: Camera Controls -->
+        <!-- 4: Camera Controls -->
         <section id="camera-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -281,7 +325,7 @@
           </div>
         </section>
 
-        <!-- 4: Lighting Controls -->
+        <!-- 5: Lighting Controls -->
         <section id="lighting-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -305,80 +349,28 @@
             </div>
             <div class="light-row">
               <span class="light-label">光の強さ</span>
-              <input type="range" id="light-intensity" class="light-slider" min="0" max="200" value="80" step="1">
-              <span id="light-intensity-val" class="light-value">0.8</span>
+              <input type="range" id="light-intensity" class="light-slider" min="0" max="200" value="100" step="1">
+              <span id="light-intensity-val" class="light-value">1.0</span>
             </div>
             <div class="light-row">
               <span class="light-label">環境光</span>
-              <input type="range" id="light-ambient" class="light-slider" min="0" max="200" value="20" step="1">
-              <span id="light-ambient-val" class="light-value">0.2</span>
+              <input type="range" id="light-ambient" class="light-slider" min="0" max="200" value="0" step="1">
+              <span id="light-ambient-val" class="light-value">0.0</span>
+            </div>
+            <div class="light-row">
+              <span class="light-label">影の濃さ</span>
+              <input type="range" id="light-shadow" class="light-slider" min="0" max="100" value="45" step="1">
+              <span id="light-shadow-val" class="light-value">0.45</span>
+            </div>
+            <div class="light-row">
+              <span class="light-label">影の境界幅</span>
+              <input type="range" id="light-shadow-softness" class="light-slider" min="5" max="120" value="35" step="1">
+              <span id="light-shadow-softness-val" class="light-value">0.035</span>
             </div>
           </div>
         </section>
 
-        <!-- 5: Shadow Controls -->
-        <section id="shadow-section" class="bottom-section">
-          <div class="section-header">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-              <circle cx="7" cy="7" r="3.5" />
-              <path d="M7 1.5c2.6 2.1 3.8 4 3.8 5.8A3.8 3.8 0 1 1 3.2 7.3c0-1.8 1.2-3.7 3.8-5.8z" fill="none"
-                stroke="currentColor" stroke-width="1.2" />
-            </svg>
-            <span>影</span>
-          </div>
-          <div class="shadow-controls">
-            <div class="shadow-row">
-              <span class="shadow-label">濃さ</span>
-              <input type="range" id="light-shadow" class="shadow-slider" min="0" max="100" value="45" step="1">
-              <span id="light-shadow-val" class="shadow-value">0.45</span>
-            </div>
-            <div class="shadow-row">
-              <span class="shadow-label">境界幅</span>
-              <input type="range" id="light-shadow-softness" class="shadow-slider" min="5" max="120" value="35" step="1">
-              <span id="light-shadow-softness-val" class="shadow-value">0.035</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- 6: Physics Controls -->
-        <section id="physics-section" class="bottom-section">
-          <div class="section-header">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-              <path d="M7 1.5a2.7 2.7 0 0 1 2.7 2.7v.8H11a1.8 1.8 0 1 1 0 3.6H9.7v.8a2.7 2.7 0 0 1-5.4 0v-.8H3a1.8 1.8 0 0 1 0-3.6h1.3v-.8A2.7 2.7 0 0 1 7 1.5z" />
-            </svg>
-            <span>物理</span>
-          </div>
-          <div class="physics-controls">
-            <button id="btn-toggle-physics" class="physics-toggle-btn toggle-on" title="物理演算の有効/無効を切り替える" aria-pressed="true">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 1.5a3 3 0 0 1 3 3v1h1.5a2 2 0 0 1 0 4H11v1a3 3 0 0 1-6 0v-1H3.5a2 2 0 0 1 0-4H5v-1a3 3 0 0 1 3-3z" />
-              </svg>
-              <span id="physics-toggle-text">物理ON</span>
-            </button>
-            <div class="physics-row">
-              <span class="physics-label">重力加速度</span>
-              <input type="range" id="physics-gravity-accel" class="physics-slider" min="0" max="200" value="98" step="1">
-              <span id="physics-gravity-accel-val" class="physics-value">98</span>
-            </div>
-            <div class="physics-row">
-              <span class="physics-label">重力方向X</span>
-              <input type="range" id="physics-gravity-dir-x" class="physics-slider" min="-100" max="100" value="0" step="1">
-              <span id="physics-gravity-dir-x-val" class="physics-value">0</span>
-            </div>
-            <div class="physics-row">
-              <span class="physics-label">重力方向Y</span>
-              <input type="range" id="physics-gravity-dir-y" class="physics-slider" min="-100" max="100" value="-100" step="1">
-              <span id="physics-gravity-dir-y-val" class="physics-value">-100</span>
-            </div>
-            <div class="physics-row">
-              <span class="physics-label">重力方向Z</span>
-              <input type="range" id="physics-gravity-dir-z" class="physics-slider" min="-100" max="100" value="0" step="1">
-              <span id="physics-gravity-dir-z-val" class="physics-value">0</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- 7: Effect Controls -->
+        <!-- 6: Effect Controls -->
         <section id="effect-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -432,7 +424,7 @@
           </div>
         </section>
 
-        <!-- 8: Playback Controls -->
+        <!-- 7: Playback Controls -->
         <section id="playback-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">

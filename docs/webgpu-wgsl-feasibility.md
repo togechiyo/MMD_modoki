@@ -144,3 +144,43 @@
 - `node_modules/@babylonjs/core/PostProcesses/postProcess.d.ts`
 - `node_modules/babylon-mmd/README.md`
 - `node_modules/babylon-mmd/CHANGELOG.md`
+
+## 11. 実装まとめ（2026-02-23時点）
+
+### 11-1. 実装済み
+
+- WebGPU優先の初期化経路を実装
+  - `MmdManager.create(canvas)` を追加し、`renderer.ts` 側で `await` 初期化する構成に変更。
+  - 起動フロー: `WebGPUEngine.IsSupportedAsync` -> `WebGPUEngine.CreateAsync(...)` -> 失敗時は WebGL2 フォールバック。
+- WebGPU初期化オプションを適用
+  - `glslang` / `twgsl` のローカルアセット URL を `CreateAsync` に渡す。
+  - `WebGPUTintWASM.DisableUniformityAnalysis = true` を設定。
+  - `engine.compatibilityMode = true` を設定。
+- WebGPUで不足しやすい shader/拡張を side-effect import で事前登録
+  - `@babylonjs/core/Engines/WebGPU/Extensions/engine.dynamicTexture`
+  - `@babylonjs/core/ShadersWGSL/*`（postprocess/fxaa/dof 周辺）
+- UI表示対応
+  - `getEngineType()` による `WebGPU / WebGL2 / WebGL1` 判定を実装済み。
+  - 右上バッジで実際のレンダラー種別を表示。
+- 色補正系を再整理
+  - 旧 `ImageProcessingPostProcess + gamma専用pass` を整理し、`contrast + gamma` を単一のカラ―補正 PostProcess に統合。
+  - 起動時濃度問題に対して、`scene.imageProcessingConfiguration.isEnabled = true` を維持しつつ、追加補正は自前PostProcessで制御。
+
+### 11-2. 互換対応（プロジェクト読込）
+
+- `effects.gamma` の扱いを新仕様に合わせて正規化。
+- 新規保存時は `effects.gammaEncodingVersion: 2` を保存。
+- 旧プロジェクト（version未記録）読込時は互換補正を入れて暗化を回避。
+
+### 11-3. 現在の制限・注意
+
+- WebGPU経路では DoF 系を一部抑制している（安定化優先）。
+- 独自PostProcess/shaderの一部は依然として GLSL 前提で、完全WGSL化は未完了。
+- そのため現状は「WebGPU優先 + 互換モード + 必要時WebGL2フォールバック」が運用方針。
+
+### 11-4. 主な変更ファイル
+
+- `src/mmd-manager.ts`
+- `src/renderer.ts`
+- `src/ui-controller.ts`
+- `src/types.ts`

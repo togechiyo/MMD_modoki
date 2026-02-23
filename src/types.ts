@@ -156,6 +156,7 @@ export interface ProjectEffectState {
     dofLensDistortionInfluence: number;
     modelEdgeWidth: number;
     gamma: number;
+    gammaEncodingVersion?: 2;
 }
 
 export interface ProjectSerializedBoneTrack {

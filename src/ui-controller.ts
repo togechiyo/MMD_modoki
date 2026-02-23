@@ -624,13 +624,13 @@ export class UIController {
         if (elEffectGamma && valEffectGamma) {
             const applyGamma = () => {
                 const offsetPercent = Number(elEffectGamma.value);
-                // 0% keeps the current baseline gamma (2.0), then adjusts within +/-50%.
-                const gammaPower = Math.pow(2, 1 - offsetPercent / 100);
+                // 0% is neutral (gamma=1.0). Positive values brighten, negative values darken.
+                const gammaPower = Math.pow(2, -offsetPercent / 100);
                 this.mmdManager.postEffectGamma = gammaPower;
-                const roundedOffset = Math.round((1 - Math.log2(this.mmdManager.postEffectGamma)) * 100);
+                const roundedOffset = Math.round(-Math.log2(this.mmdManager.postEffectGamma) * 100);
                 valEffectGamma.textContent = `${roundedOffset}%`;
             };
-            elEffectGamma.value = String(Math.round((1 - Math.log2(this.mmdManager.postEffectGamma)) * 100));
+            elEffectGamma.value = String(Math.round(-Math.log2(this.mmdManager.postEffectGamma) * 100));
             applyGamma();
             elEffectGamma.addEventListener("input", applyGamma);
         }

@@ -1,4 +1,6 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
+import { WebGPUTintWASM } from "@babylonjs/core/Engines/WebGPU/webgpuTintWASM";
 import { Scene } from "@babylonjs/core/scene";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -15,7 +17,6 @@ import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { CreateScreenshotUsingRenderTargetAsync } from "@babylonjs/core/Misc/screenshotTools";
-import { ImageProcessingPostProcess } from "@babylonjs/core/PostProcesses/imageProcessingPostProcess";
 import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
 import { FxaaPostProcess } from "@babylonjs/core/PostProcesses/fxaaPostProcess";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
@@ -169,6 +170,15 @@ import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import "@babylonjs/core/Materials/Textures/Loaders/tgaTextureLoader";
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import "@babylonjs/core/Rendering/depthRendererSceneComponent";
+import "@babylonjs/core/Engines/WebGPU/Extensions/engine.dynamicTexture";
+import "@babylonjs/core/ShadersWGSL/postprocess.vertex";
+import "@babylonjs/core/ShadersWGSL/imageProcessing.fragment";
+import "@babylonjs/core/ShadersWGSL/fxaa.vertex";
+import "@babylonjs/core/ShadersWGSL/fxaa.fragment";
+import "@babylonjs/core/ShadersWGSL/circleOfConfusion.fragment";
+import "@babylonjs/core/ShadersWGSL/depthOfFieldMerge.fragment";
+import "@babylonjs/core/ShadersWGSL/kernelBlur.vertex";
+import "@babylonjs/core/ShadersWGSL/kernelBlur.fragment";
 
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
@@ -187,6 +197,14 @@ import { MmdAmmoPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdAmmoPhysics";
 import Ammo from "babylon-mmd/esm/Runtime/Physics/External/ammo.wasm";
 // eslint-disable-next-line import/no-unresolved
 import ammoWasmBinaryUrl from "babylon-mmd/esm/Runtime/Physics/External/ammo.wasm.wasm?url";
+// eslint-disable-next-line import/no-unresolved
+import glslangJsUrl from "@babylonjs/core/assets/glslang/glslang.js?url";
+// eslint-disable-next-line import/no-unresolved
+import glslangWasmUrl from "@babylonjs/core/assets/glslang/glslang.wasm?url";
+// eslint-disable-next-line import/no-unresolved
+import twgslJsUrl from "@babylonjs/core/assets/twgsl/twgsl.js?url";
+// eslint-disable-next-line import/no-unresolved
+import twgslWasmUrl from "@babylonjs/core/assets/twgsl/twgsl.wasm?url";
 import type { Skeleton } from "@babylonjs/core/Bones/skeleton";
 
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
@@ -194,8 +212,18 @@ import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
 import type { MmdRuntimeAnimationHandle } from "babylon-mmd/esm/Runtime/mmdRuntimeAnimationHandle";
 
 export class MmdManager {
+    private static readonly RENDER_ENGINE_OPTIONS = {
+        preserveDrawingBuffer: false,
+        stencil: true,
+        antialias: false,
+        alpha: false,
+        premultipliedAlpha: false,
+        desynchronized: false,
+        powerPreference: "high-performance" as const,
+    };
+
     private readonly renderingCanvas: HTMLCanvasElement;
-    private engine: Engine;
+    private engine: Engine | WebGPUEngine;
     private scene: Scene;
     private camera: ArcRotateCamera;
     private mmdCamera: MmdCamera;
@@ -270,15 +298,14 @@ export class MmdManager {
     private occlusionShadowEdgeSoftnessValue = 0.035;
     private lightColorTemperatureKelvin = 6500;
     private postEffectContrastValue = 1;
-    private postEffectGammaValue = 2;
+    private postEffectGammaValue = 1;
     private antialiasEnabledValue = true;
     private postEffectFarDofStrengthValue = 0;
     private readonly farDofEnabled = false;
     private readonly farDofFocusSharpRadiusMm = 1000;
     private modelEdgeWidthValue = 0;
     private readonly modelEdgeMaterialDefaults = new WeakMap<object, { enabled: boolean; width: number; alpha: number; colorR: number; colorG: number; colorB: number }>();
-    private imageProcessingPostProcess: ImageProcessingPostProcess | null = null;
-    private gammaPostProcess: PostProcess | null = null;
+    private colorCorrectionPostProcess: PostProcess | null = null;
     private finalAntialiasPostProcess: FxaaPostProcess | null = null;
     private finalLensDistortionPostProcess: PostProcess | null = null;
     private dofPostProcess: PostProcess | null = null;
@@ -313,7 +340,7 @@ export class MmdManager {
     private readonly dofAutoFocusCocAtRangeEdge = 0.05;
     private readonly dofAutoFocusLensCompensationExponent = 0.72;
     private dofNearSuppressionScaleValue = 4.0;
-    private dofAutoFocusNearOffsetMmValue = 10000;
+    private dofAutoFocusNearOffsetMmValue = 0;
     private resizeObserver: ResizeObserver | null = null;
     private readonly onWindowResize = () => {
         this.resize();
@@ -1373,7 +1400,46 @@ export class MmdManager {
         this.applyPhysicsGravity();
     }
 
-    constructor(canvas: HTMLCanvasElement) {
+    static async create(canvas: HTMLCanvasElement): Promise<MmdManager> {
+        const engine = await MmdManager.createPreferredEngine(canvas);
+        return new MmdManager(canvas, engine);
+    }
+
+    private static createWebGlEngine(canvas: HTMLCanvasElement): Engine {
+        return new Engine(canvas, false, MmdManager.RENDER_ENGINE_OPTIONS);
+    }
+
+    private static async createPreferredEngine(canvas: HTMLCanvasElement): Promise<Engine | WebGPUEngine> {
+        try {
+            const isWebGpuSupported = await WebGPUEngine.IsSupportedAsync;
+            if (!isWebGpuSupported) {
+                console.info("WebGPU unavailable. Falling back to WebGL2.");
+                return MmdManager.createWebGlEngine(canvas);
+            }
+
+            WebGPUTintWASM.DisableUniformityAnalysis = true;
+            const engine = await WebGPUEngine.CreateAsync(canvas, {
+                ...MmdManager.RENDER_ENGINE_OPTIONS,
+                glslangOptions: {
+                    jsPath: glslangJsUrl,
+                    wasmPath: glslangWasmUrl,
+                },
+                twgslOptions: {
+                    jsPath: twgslJsUrl,
+                    wasmPath: twgslWasmUrl,
+                },
+            });
+            engine.compatibilityMode = true;
+            console.info("Using WebGPU renderer.");
+            return engine;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`WebGPU initialization failed. Falling back to WebGL2. Reason: ${message}`);
+            return MmdManager.createWebGlEngine(canvas);
+        }
+    }
+
+    constructor(canvas: HTMLCanvasElement, engine?: Engine | WebGPUEngine) {
         this.renderingCanvas = canvas;
 
         // Register default material builder explicitly (avoids Vite tree-shaking side-effect imports)
@@ -1381,16 +1447,8 @@ export class MmdManager {
             MmdModelLoader.SharedMaterialBuilder = new MmdStandardMaterialBuilder();
         }
 
-        // Create engine
-        this.engine = new Engine(canvas, false, {
-            preserveDrawingBuffer: false,
-            stencil: true,
-            antialias: false,
-            alpha: false,
-            premultipliedAlpha: false,
-            desynchronized: false,
-            powerPreference: "high-performance",
-        });
+        // Create engine (WebGPU preferred path is handled by MmdManager.create)
+        this.engine = engine ?? MmdManager.createWebGlEngine(canvas);
         this.resizeToCanvasClientSize();
         this.ensureBoneOverlayCanvas();
 
@@ -1400,7 +1458,7 @@ export class MmdManager {
         this.scene.ambientColor = new Color3(0.5, 0.5, 0.5);
         this.scene.imageProcessingConfiguration.isEnabled = true;
         this.scene.imageProcessingConfiguration.applyByPostProcess = false;
-        this.scene.imageProcessingConfiguration.contrast = this.postEffectContrastValue;
+        this.scene.imageProcessingConfiguration.contrast = 1;
         this.boneGizmoManager = new GizmoManager(this.scene, 1.8);
         this.boneGizmoManager.usePointerToAttachGizmos = false;
         this.boneGizmoManager.clearGizmoOnEmptyPointerEvent = false;
@@ -1433,20 +1491,16 @@ export class MmdManager {
         canvas.addEventListener("pointercancel", this.onCanvasPointerCancel);
         this.syncCameraRotationFromCurrentView();
         this.updateDofFocalLengthFromCameraFov();
-        this.imageProcessingPostProcess = new ImageProcessingPostProcess(
-            "imageProcessing",
-            1.0,
-            this.camera,
-            Texture.BILINEAR_SAMPLINGMODE,
-            this.engine,
-            false,
-            0,
-            this.scene.imageProcessingConfiguration
-        );
-        this.setupGammaPostProcess();
-        this.setupFarDofPostProcess();
-        this.dofFocusDistanceMmValue = this.getCameraFocusDistanceMm();
-        this.setupEditorDofPipeline();
+        const isWebGpuEngine = (this.engine as unknown as { webGLVersion?: number }).webGLVersion === undefined;
+        if (isWebGpuEngine) {
+            this.dofEnabledValue = false;
+            this.farDofEnabled = false;
+        } else {
+            this.setupFarDofPostProcess();
+            this.dofFocusDistanceMmValue = this.getCameraFocusDistanceMm();
+            this.setupEditorDofPipeline();
+        }
+        this.setupColorCorrectionPostProcess();
 
         // Lights
         const hemiLight = this.hemiLight = new HemisphericLight(
@@ -2828,6 +2882,7 @@ export class MmdManager {
                 dofLensDistortionInfluence: this.dofLensDistortionInfluence,
                 modelEdgeWidth: this.modelEdgeWidth,
                 gamma: this.postEffectGamma,
+                gammaEncodingVersion: 2,
             },
             keyframes,
         };
@@ -3006,7 +3061,12 @@ export class MmdManager {
         this.dofLensEdgeBlur = data.effects.dofLensEdgeBlur;
         this.dofLensDistortionInfluence = data.effects.dofLensDistortionInfluence;
         this.modelEdgeWidth = data.effects.modelEdgeWidth;
-        this.postEffectGamma = data.effects.gamma;
+        const importedGamma = data.effects.gamma;
+        const gammaEncodingVersion = (data.effects as { gammaEncodingVersion?: unknown }).gammaEncodingVersion;
+        const normalizedGamma = gammaEncodingVersion === 2
+            ? importedGamma
+            : importedGamma * 0.5;
+        this.postEffectGamma = normalizedGamma;
 
         this.camera.setPosition(
             new Vector3(
@@ -3165,10 +3225,6 @@ export class MmdManager {
     }
     set postEffectContrast(v: number) {
         this.postEffectContrastValue = Math.max(0, Math.min(3, v));
-        this.scene.imageProcessingConfiguration.contrast = this.postEffectContrastValue;
-        if (this.imageProcessingPostProcess) {
-            this.imageProcessingPostProcess.contrast = this.postEffectContrastValue;
-        }
     }
 
     /** Gamma power for mid-tone correction (1.0 = neutral). */
@@ -3522,27 +3578,30 @@ export class MmdManager {
         return new Color3(clamp01(red), clamp01(green), clamp01(blue));
     }
 
-    private setupGammaPostProcess(): void {
-        const shaderKey = "mmdGammaCorrectionFragmentShader";
+    private setupColorCorrectionPostProcess(): void {
+        const shaderKey = "mmdColorCorrectionFragmentShader";
         if (!Effect.ShadersStore[shaderKey]) {
             Effect.ShadersStore[shaderKey] = `
                 precision highp float;
                 varying vec2 vUV;
                 uniform sampler2D textureSampler;
+                uniform float contrast;
                 uniform float gammaPower;
 
                 void main(void) {
                     vec4 color = texture2D(textureSampler, vUV);
-                    color.rgb = pow(max(color.rgb, vec3(0.0)), vec3(gammaPower));
-                    gl_FragColor = color;
+                    vec3 contrasted = ((color.rgb - vec3(0.5)) * contrast) + vec3(0.5);
+                    contrasted = clamp(contrasted, vec3(0.0), vec3(1.0));
+                    vec3 corrected = pow(max(contrasted, vec3(0.0)), vec3(gammaPower));
+                    gl_FragColor = vec4(corrected, color.a);
                 }
             `;
         }
 
-        this.gammaPostProcess = new PostProcess(
-            "gammaCorrection",
-            "mmdGammaCorrection",
-            ["gammaPower"],
+        this.colorCorrectionPostProcess = new PostProcess(
+            "colorCorrection",
+            "mmdColorCorrection",
+            ["contrast", "gammaPower"],
             null,
             1.0,
             this.camera,
@@ -3550,7 +3609,8 @@ export class MmdManager {
             this.engine,
             false
         );
-        this.gammaPostProcess.onApplyObservable.add((effect) => {
+        this.colorCorrectionPostProcess.onApplyObservable.add((effect) => {
+            effect.setFloat("contrast", this.postEffectContrastValue);
             effect.setFloat("gammaPower", this.postEffectGammaValue);
         });
     }
@@ -4754,9 +4814,9 @@ export class MmdManager {
             this.lensRenderingPipeline.dispose(false);
             this.lensRenderingPipeline = null;
         }
-        if (this.gammaPostProcess) {
-            this.gammaPostProcess.dispose(this.camera);
-            this.gammaPostProcess = null;
+        if (this.colorCorrectionPostProcess) {
+            this.colorCorrectionPostProcess.dispose(this.camera);
+            this.colorCorrectionPostProcess = null;
         }
         if (this.finalLensDistortionPostProcess) {
             this.finalLensDistortionPostProcess.dispose(this.camera);
@@ -4773,10 +4833,6 @@ export class MmdManager {
         if (this.depthRenderer) {
             this.depthRenderer.dispose();
             this.depthRenderer = null;
-        }
-        if (this.imageProcessingPostProcess) {
-            this.imageProcessingPostProcess.dispose(this.camera);
-            this.imageProcessingPostProcess = null;
         }
         if (this.skydome) {
             this.skydome.dispose();
@@ -4799,4 +4855,7 @@ export class MmdManager {
         }
     }
 }
+
+
+
 

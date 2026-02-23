@@ -1,6 +1,6 @@
 # タイムライン 仕様と実装メモ
 
-更新日: 2026-02-22
+更新日: 2026-02-23
 対象:
 - `src/timeline.ts`
 - `src/ui-controller.ts`
@@ -79,13 +79,10 @@
 参照: `src/mmd-manager.ts:3765`
 
 ### 4-2. カメラ対象
-カメラ対象時は 8 チャンネルを固定表示する。
-- `Cam Pos X/Y/Z`
-- `Cam Rot X/Y/Z`
-- `Cam Distance`
-- `Cam FoV`
+カメラ対象時は `Camera` 1行を固定表示する。
+- `Camera`
 
-各行は同一の `cameraKeyframeFrames` を共有する。
+カメラ行は `cameraKeyframeFrames` を共有し、補間表示は `X/Y/Z/回転/距離/FoV` の6chで扱う。
 
 参照: `src/mmd-manager.ts:3844`
 
@@ -125,6 +122,7 @@
 - 登録:
 - 現在フレームに登録
 - 既存フレームなら無変更
+- ボーン/カメラは登録時に source animation 側へ実値スナップショットと補間値も挿入
 - 削除:
 - 選択キーがあればそのフレーム、なければ現在フレームを削除対象
 - 移動:
@@ -178,7 +176,7 @@
 - 現在フレームを `frameOffset` としてポーズをオフセット挿入
 - 既存アニメーションへマージ
 - カメラVMD:
-- `cameraKeyframeFrames` を更新し、カメラ8chトラックへ反映
+- `cameraKeyframeFrames` を更新し、カメラ行へ反映
 
 参照: `src/mmd-manager.ts:2026`, `src/mmd-manager.ts:2077`, `src/mmd-manager.ts:2148`
 
@@ -190,8 +188,8 @@
 参照: `src/ui-controller.ts:336`, `src/ui-controller.ts:1201`, `src/ui-controller.ts:1214`, `src/ui-controller.ts:1228`
 
 ## 10. 現在の制約
-- キー編集はフレーム番号の追加/削除/移動が中心で、チャンネル値編集は未実装。
-- 補間曲線編集（ボーン4ch/カメラ6ch）は未実装。
+- キー編集の範囲操作（複数選択/コピー/貼り付け/スケール）は未実装。
+- 補間は編集可能だが、Property（表示/IK）のステップ編集UIは未実装。
 - Property（表示/IK）トラック編集は未実装。
 - VMDエクスポートは未実装。
 

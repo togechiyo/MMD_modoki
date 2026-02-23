@@ -1,9 +1,118 @@
 import type { MmdManager } from "./mmd-manager";
 import type { Timeline } from "./timeline";
 import type { BottomPanel } from "./bottom-panel";
-import type { KeyframeTrack, ModelInfo, MotionInfo } from "./types";
+import { Quaternion } from "@babylonjs/core/Maths/math.vector";
+import type {
+    InterpolationChannelPreview,
+    InterpolationCurve,
+    KeyframeTrack,
+    ModelInfo,
+    MotionInfo,
+    TimelineInterpolationPreview,
+} from "./types";
 
 type CameraViewPreset = "left" | "front" | "right";
+type NumericArrayLike = ArrayLike<number> | null | undefined;
+
+type RuntimeMovableBoneTrackLike = {
+    name: string;
+    frameNumbers: ArrayLike<number>;
+    positions: ArrayLike<number>;
+    positionInterpolations: ArrayLike<number>;
+    rotations: ArrayLike<number>;
+    rotationInterpolations: ArrayLike<number>;
+    physicsToggles: ArrayLike<number>;
+};
+
+type RuntimeBoneTrackLike = {
+    name: string;
+    frameNumbers: ArrayLike<number>;
+    rotations: ArrayLike<number>;
+    rotationInterpolations: ArrayLike<number>;
+    physicsToggles: ArrayLike<number>;
+};
+
+type RuntimeCameraTrackLike = {
+    frameNumbers: ArrayLike<number>;
+    positions: ArrayLike<number>;
+    positionInterpolations: ArrayLike<number>;
+    rotations: ArrayLike<number>;
+    rotationInterpolations: ArrayLike<number>;
+    distances: ArrayLike<number>;
+    distanceInterpolations: ArrayLike<number>;
+    fovs: ArrayLike<number>;
+    fovInterpolations: ArrayLike<number>;
+};
+
+type RuntimeMovableBoneTrackMutable = {
+    frameNumbers: Uint32Array;
+    positions: Float32Array;
+    positionInterpolations: Uint8Array;
+    rotations: Float32Array;
+    rotationInterpolations: Uint8Array;
+    physicsToggles: Uint8Array;
+};
+
+type RuntimeBoneTrackMutable = {
+    frameNumbers: Uint32Array;
+    rotations: Float32Array;
+    rotationInterpolations: Uint8Array;
+    physicsToggles: Uint8Array;
+};
+
+type RuntimeCameraTrackMutable = {
+    frameNumbers: Uint32Array;
+    positions: Float32Array;
+    positionInterpolations: Uint8Array;
+    rotations: Float32Array;
+    rotationInterpolations: Uint8Array;
+    distances: Float32Array;
+    distanceInterpolations: Uint8Array;
+    fovs: Float32Array;
+    fovInterpolations: Uint8Array;
+};
+
+type RuntimeModelAnimationLike = {
+    movableBoneTracks: readonly RuntimeMovableBoneTrackLike[];
+    boneTracks: readonly RuntimeBoneTrackLike[];
+};
+
+type RuntimeCameraAnimationLike = {
+    cameraTrack: RuntimeCameraTrackLike;
+};
+
+type RuntimeAnimatableLike = {
+    createRuntimeAnimation: (animation: unknown) => unknown;
+    setRuntimeAnimation: (handle: unknown) => void;
+};
+
+type RuntimeCameraLike = RuntimeAnimatableLike & {
+    destroyRuntimeAnimation: (handle: unknown) => void;
+};
+
+type NumericWritableArray = {
+    length: number;
+    [index: number]: number;
+};
+
+type InterpolationChannelBinding = {
+    values: NumericWritableArray;
+    offset: number;
+};
+
+type InterpolationDragState = {
+    channelId: string;
+    pointIndex: 1 | 2;
+    changed: boolean;
+};
+
+type MmdManagerInternalView = {
+    currentModel: (object & RuntimeAnimatableLike) | null;
+    modelSourceAnimationsByModel: WeakMap<object, RuntimeModelAnimationLike>;
+    cameraSourceAnimation: RuntimeCameraAnimationLike | null;
+    mmdCamera: RuntimeCameraLike;
+    cameraAnimationHandle: unknown | null;
+};
 
 export class UIController {
     private static readonly CAMERA_SELECT_VALUE = "__camera__";
@@ -42,6 +151,11 @@ export class UIController {
     private btnKeyframeNudgeLeft: HTMLButtonElement;
     private btnKeyframeNudgeRight: HTMLButtonElement;
     private timelineSelectionLabel: HTMLElement;
+    private interpolationTrackNameLabel: HTMLElement;
+    private interpolationFrameLabel: HTMLElement;
+    private interpolationTypeSelect: HTMLSelectElement;
+    private interpolationStatusLabel: HTMLElement;
+    private interpolationCurveList: HTMLElement;
     private modelSelect: HTMLSelectElement;
     private btnModelVisibility: HTMLButtonElement;
     private btnModelDelete: HTMLButtonElement;
@@ -64,6 +178,8 @@ export class UIController {
     private lensDistortionSlider: HTMLInputElement | null = null;
     private lensDistortionValueEl: HTMLElement | null = null;
     private syncingBoneSelection = false;
+    private readonly interpolationChannelBindings = new Map<string, InterpolationChannelBinding>();
+    private interpolationDragState: InterpolationDragState | null = null;
 
     constructor(mmdManager: MmdManager, timeline: Timeline, bottomPanel: BottomPanel) {
         this.mmdManager = mmdManager;
@@ -100,6 +216,11 @@ export class UIController {
         this.btnKeyframeNudgeLeft = document.getElementById("btn-kf-nudge-left") as HTMLButtonElement;
         this.btnKeyframeNudgeRight = document.getElementById("btn-kf-nudge-right") as HTMLButtonElement;
         this.timelineSelectionLabel = document.getElementById("timeline-selection-label")!;
+        this.interpolationTrackNameLabel = document.getElementById("interp-track-name")!;
+        this.interpolationFrameLabel = document.getElementById("interp-frame")!;
+        this.interpolationTypeSelect = document.getElementById("interp-type") as HTMLSelectElement;
+        this.interpolationStatusLabel = document.getElementById("interp-status")!;
+        this.interpolationCurveList = document.getElementById("interp-curve-list")!;
         this.modelSelect = document.getElementById("info-model-select") as HTMLSelectElement;
         this.btnModelVisibility = document.getElementById("btn-model-visibility") as HTMLButtonElement;
         this.btnModelDelete = document.getElementById("btn-model-delete") as HTMLButtonElement;
@@ -128,6 +249,7 @@ export class UIController {
         this.btnSaveProject.addEventListener("click", () => this.saveProject());
         this.btnLoadProject.addEventListener("click", () => this.loadProject());
         this.btnExportPng.addEventListener("click", () => this.exportPNG());
+        this.interpolationTypeSelect.addEventListener("change", () => this.updateTimelineEditState());
         this.btnToggleGround.addEventListener("click", () => {
             const visible = this.mmdManager.toggleGroundVisible();
             this.updateGroundToggleButton(visible);
@@ -715,6 +837,7 @@ export class UIController {
             this.timeline.setTotalFrames(total);
             this.timeline.setCurrentFrame(frame);
             this.updateTimelineEditState();
+            this.bottomPanel.syncSelectedBoneSlidersFromRuntime();
 
             // Reflect runtime camera FOV (e.g. camera VMD playback) in the camera panel.
             if (this.camFovSlider && this.camFovValueEl && document.activeElement !== this.camFovSlider) {
@@ -1133,9 +1256,9 @@ export class UIController {
             name: "Camera",
             path: "",
             vertexCount: 0,
-            boneCount: 0,
-            boneNames: [],
-            boneControlInfos: [],
+            boneCount: 1,
+            boneNames: ["Camera"],
+            boneControlInfos: [{ name: "Camera", movable: true, rotatable: true }],
             morphCount: 0,
             morphNames: [],
             morphDisplayFrames: [],
@@ -1349,6 +1472,11 @@ export class UIController {
 
         if (!track) {
             this.timelineSelectionLabel.textContent = "トラック未選択";
+            this.interpolationTrackNameLabel.textContent = "-";
+            this.interpolationFrameLabel.textContent = "-";
+            this.resetInterpolationTypeSelect();
+            this.interpolationStatusLabel.textContent = "トラック未選択";
+            this.renderInterpolationCurves(null);
             this.btnKeyframeAdd.disabled = true;
             this.btnKeyframeDelete.disabled = true;
             this.btnKeyframeNudgeLeft.disabled = false;
@@ -1358,6 +1486,10 @@ export class UIController {
 
         const frameLabel = selectedFrame !== null ? ` @${selectedFrame}` : "";
         this.timelineSelectionLabel.textContent = `${track.name}${frameLabel}`;
+        const interpolationFrame = selectedFrame ?? currentFrame;
+        this.interpolationTrackNameLabel.textContent = track.name;
+        this.interpolationFrameLabel.textContent = String(interpolationFrame);
+        this.updateInterpolationPreview(track, interpolationFrame);
         this.btnKeyframeAdd.disabled = false;
 
         const hasCurrentFrameKey = this.mmdManager.hasTimelineKeyframe(track, currentFrame);
@@ -1368,6 +1500,555 @@ export class UIController {
         this.btnKeyframeNudgeRight.disabled = false;
     }
 
+    private updateInterpolationPreview(track: KeyframeTrack, frame: number): void {
+        const preview = this.buildInterpolationPreviewFromRuntime(track, frame);
+        this.syncInterpolationTypeSelect(preview);
+
+        if (preview.source === "morph") {
+            this.interpolationStatusLabel.textContent = "モーフは線形補間";
+        } else if (!preview.hasKeyframe) {
+            this.interpolationStatusLabel.textContent = "このフレームにキーなし";
+        } else if (preview.hasCurveData) {
+            this.interpolationStatusLabel.textContent = "キー補間を表示";
+        } else {
+            this.interpolationStatusLabel.textContent = "補間値未取得（線形表示）";
+        }
+
+        this.renderInterpolationCurves(preview);
+    }
+
+    private buildInterpolationPreviewFromRuntime(track: KeyframeTrack, frame: number): TimelineInterpolationPreview {
+        this.interpolationChannelBindings.clear();
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        const managerInternal = this.mmdManager as unknown as Partial<MmdManagerInternalView>;
+        const linear = this.createLinearCurve();
+        const cameraFrames = managerInternal.cameraSourceAnimation?.cameraTrack?.frameNumbers;
+        const previewSourceFrames =
+            track.category === "camera" && cameraFrames && cameraFrames.length > 0
+                ? cameraFrames
+                : track.frames;
+        const previewFrame = this.resolveInterpolationReferenceFrame(
+            previewSourceFrames,
+            normalizedFrame,
+            track.category === "camera",
+            false,
+        );
+        const hasKeyframe = previewFrame !== null;
+
+        if (previewFrame === null) {
+            return {
+                source: "none",
+                frame: normalizedFrame,
+                hasKeyframe: false,
+                hasCurveData: false,
+                channels: [],
+            };
+        }
+
+        if (track.category === "camera") {
+            const cameraTrack = managerInternal.cameraSourceAnimation?.cameraTrack;
+            const keyIndex = this.findFrameIndex(cameraTrack?.frameNumbers, previewFrame);
+            const hasCurveData = keyIndex >= 0;
+            this.bindInterpolationChannel("cam-x", cameraTrack?.positionInterpolations, keyIndex, 12, 0);
+            this.bindInterpolationChannel("cam-y", cameraTrack?.positionInterpolations, keyIndex, 12, 4);
+            this.bindInterpolationChannel("cam-z", cameraTrack?.positionInterpolations, keyIndex, 12, 8);
+            this.bindInterpolationChannel("cam-rot", cameraTrack?.rotationInterpolations, keyIndex, 4, 0);
+            this.bindInterpolationChannel("cam-dist", cameraTrack?.distanceInterpolations, keyIndex, 4, 0);
+            this.bindInterpolationChannel("cam-fov", cameraTrack?.fovInterpolations, keyIndex, 4, 0);
+            return {
+                source: "camera",
+                frame: previewFrame,
+                hasKeyframe,
+                hasCurveData,
+                channels: [
+                    this.createCurveChannel("cam-x", "Pos X", this.readCurve(cameraTrack?.positionInterpolations, keyIndex, 12, 0, linear), hasCurveData),
+                    this.createCurveChannel("cam-y", "Pos Y", this.readCurve(cameraTrack?.positionInterpolations, keyIndex, 12, 4, linear), hasCurveData),
+                    this.createCurveChannel("cam-z", "Pos Z", this.readCurve(cameraTrack?.positionInterpolations, keyIndex, 12, 8, linear), hasCurveData),
+                    this.createCurveChannel("cam-rot", "Rot", this.readCurve(cameraTrack?.rotationInterpolations, keyIndex, 4, 0, linear), hasCurveData),
+                    this.createCurveChannel("cam-dist", "Dist", this.readCurve(cameraTrack?.distanceInterpolations, keyIndex, 4, 0, linear), hasCurveData),
+                    this.createCurveChannel("cam-fov", "FoV", this.readCurve(cameraTrack?.fovInterpolations, keyIndex, 4, 0, linear), hasCurveData),
+                ],
+            };
+        }
+
+        if (track.category === "morph") {
+            return {
+                source: "morph",
+                frame: previewFrame,
+                hasKeyframe,
+                hasCurveData: false,
+                channels: [
+                    this.createCurveChannel("morph", "Weight", linear, true),
+                ],
+            };
+        }
+
+        const currentModel = managerInternal.currentModel ?? null;
+        const modelAnimation = currentModel
+            ? managerInternal.modelSourceAnimationsByModel?.get(currentModel) ?? null
+            : null;
+
+        const movableTrack = modelAnimation?.movableBoneTracks?.find((candidate) => candidate.name === track.name) ?? null;
+        if (movableTrack) {
+            const keyIndex = this.findFrameIndex(movableTrack.frameNumbers, previewFrame);
+            const hasCurveData = keyIndex >= 0;
+            this.bindInterpolationChannel("bone-x", movableTrack.positionInterpolations, keyIndex, 12, 0);
+            this.bindInterpolationChannel("bone-y", movableTrack.positionInterpolations, keyIndex, 12, 4);
+            this.bindInterpolationChannel("bone-z", movableTrack.positionInterpolations, keyIndex, 12, 8);
+            this.bindInterpolationChannel("bone-rot", movableTrack.rotationInterpolations, keyIndex, 4, 0);
+            return {
+                source: "bone-movable",
+                frame: previewFrame,
+                hasKeyframe,
+                hasCurveData,
+                channels: [
+                    this.createCurveChannel("bone-x", "Pos X", this.readCurve(movableTrack.positionInterpolations, keyIndex, 12, 0, linear), hasCurveData),
+                    this.createCurveChannel("bone-y", "Pos Y", this.readCurve(movableTrack.positionInterpolations, keyIndex, 12, 4, linear), hasCurveData),
+                    this.createCurveChannel("bone-z", "Pos Z", this.readCurve(movableTrack.positionInterpolations, keyIndex, 12, 8, linear), hasCurveData),
+                    this.createCurveChannel("bone-rot", "Rot", this.readCurve(movableTrack.rotationInterpolations, keyIndex, 4, 0, linear), hasCurveData),
+                ],
+            };
+        }
+
+        const boneTrack = modelAnimation?.boneTracks?.find((candidate) => candidate.name === track.name) ?? null;
+        if (boneTrack) {
+            const keyIndex = this.findFrameIndex(boneTrack.frameNumbers, previewFrame);
+            const hasCurveData = keyIndex >= 0;
+            this.bindInterpolationChannel("bone-rot", boneTrack.rotationInterpolations, keyIndex, 4, 0);
+            return {
+                source: "bone-rotation-only",
+                frame: previewFrame,
+                hasKeyframe,
+                hasCurveData,
+                channels: [
+                    this.createCurveChannel("bone-x", "Pos X", linear, false),
+                    this.createCurveChannel("bone-y", "Pos Y", linear, false),
+                    this.createCurveChannel("bone-z", "Pos Z", linear, false),
+                    this.createCurveChannel("bone-rot", "Rot", this.readCurve(boneTrack.rotationInterpolations, keyIndex, 4, 0, linear), hasCurveData),
+                ],
+            };
+        }
+
+        return {
+            source: "none",
+            frame: previewFrame,
+            hasKeyframe,
+            hasCurveData: false,
+            channels: [
+                this.createCurveChannel("bone-x", "Pos X", linear, false),
+                this.createCurveChannel("bone-y", "Pos Y", linear, false),
+                this.createCurveChannel("bone-z", "Pos Z", linear, false),
+                this.createCurveChannel("bone-rot", "Rot", linear, false),
+            ],
+        };
+    }
+
+    private resolveInterpolationReferenceFrame(
+        frames: NumericArrayLike,
+        frame: number,
+        allowLeadingFallback = false,
+        allowTrailingFallback = false,
+    ): number | null {
+        if (!frames || frames.length === 0) return null;
+        let lo = 0;
+        let hi = frames.length;
+        while (lo < hi) {
+            const mid = (lo + hi) >>> 1;
+            if (frames[mid] < frame) lo = mid + 1;
+            else hi = mid;
+        }
+        if (lo < frames.length && frames[lo] === frame) {
+            return frames[lo];
+        }
+        if (lo === 0) {
+            return allowLeadingFallback ? frames[0] : null;
+        }
+        if (lo < frames.length) {
+            // MMD の区間 A->B は到着側 B キーの補間を使う。
+            return frames[lo];
+        }
+        return allowTrailingFallback ? frames[frames.length - 1] : null;
+    }
+
+    private createLinearCurve(): InterpolationCurve {
+        return { x1: 20, x2: 107, y1: 20, y2: 107 };
+    }
+
+    private createCurveChannel(
+        id: string,
+        label: string,
+        curve: InterpolationCurve,
+        available: boolean,
+    ): InterpolationChannelPreview {
+        return { id, label, curve, available };
+    }
+
+    private bindInterpolationChannel(
+        channelId: string,
+        values: NumericArrayLike,
+        frameIndex: number,
+        stride: number,
+        baseOffset: number,
+    ): void {
+        if (!values || frameIndex < 0) return;
+        const writable = values as unknown as NumericWritableArray;
+        const offset = frameIndex * stride + baseOffset;
+        if (offset + 3 >= writable.length) return;
+        this.interpolationChannelBindings.set(channelId, { values: writable, offset });
+    }
+
+    private isInterpolationChannelEditable(channelId: string): boolean {
+        return this.interpolationChannelBindings.has(channelId);
+    }
+
+    private startInterpolationCurveDrag(event: PointerEvent, channelId: string, pointIndex: 1 | 2): void {
+        if (!this.isInterpolationChannelEditable(channelId)) return;
+        if (!(event.currentTarget instanceof SVGElement)) return;
+        const svg = event.currentTarget.ownerSVGElement;
+        if (!svg) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        this.interpolationDragState = { channelId, pointIndex, changed: false };
+        const onMove = (moveEvent: PointerEvent) => this.handleInterpolationCurveDragMove(moveEvent, svg);
+        const onUp = () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            const changed = this.interpolationDragState?.changed ?? false;
+            this.interpolationDragState = null;
+            if (changed) {
+                this.refreshRuntimeAnimationFromInterpolationEdit();
+            }
+        };
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        this.handleInterpolationCurveDragMove(event, svg);
+    }
+
+    private handleInterpolationCurveDragMove(event: PointerEvent, svg: SVGSVGElement): void {
+        const dragState = this.interpolationDragState;
+        if (!dragState) return;
+
+        const rect = svg.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
+        // Matches createInterpolationCurveSvg() viewBox geometry.
+        const width = 132;
+        const height = 52;
+        const left = 8;
+        const right = width - 8;
+        const top = 6;
+        const bottom = height - 6;
+        const innerWidth = right - left;
+        const innerHeight = bottom - top;
+
+        const viewX = ((event.clientX - rect.left) / rect.width) * width;
+        const viewY = ((event.clientY - rect.top) / rect.height) * height;
+        const x = this.clampInterpolationValue(((viewX - left) / innerWidth) * 127, 0);
+        const y = this.clampInterpolationValue(((bottom - viewY) / innerHeight) * 127, 0);
+
+        const binding = this.interpolationChannelBindings.get(dragState.channelId);
+        if (!binding) return;
+
+        const oldX = dragState.pointIndex === 1 ? binding.values[binding.offset + 0] : binding.values[binding.offset + 1];
+        const oldY = dragState.pointIndex === 1 ? binding.values[binding.offset + 2] : binding.values[binding.offset + 3];
+        if (oldX === x && oldY === y) return;
+
+        if (dragState.pointIndex === 1) {
+            binding.values[binding.offset + 0] = x;
+            binding.values[binding.offset + 2] = y;
+        } else {
+            binding.values[binding.offset + 1] = x;
+            binding.values[binding.offset + 3] = y;
+        }
+
+        dragState.changed = true;
+        this.updateTimelineEditState();
+    }
+
+    private refreshRuntimeAnimationFromInterpolationEdit(): void {
+        const track = this.getSelectedTimelineTrack();
+        if (!track || track.category === "morph") return;
+
+        const managerInternal = this.mmdManager as unknown as Partial<MmdManagerInternalView>;
+        if (track.category === "camera") {
+            const animation = managerInternal.cameraSourceAnimation;
+            const mmdCamera = managerInternal.mmdCamera;
+            if (!animation || !mmdCamera) return;
+
+            if (managerInternal.cameraAnimationHandle !== null && managerInternal.cameraAnimationHandle !== undefined) {
+                mmdCamera.destroyRuntimeAnimation(managerInternal.cameraAnimationHandle);
+            }
+            const handle = mmdCamera.createRuntimeAnimation(animation as unknown);
+            mmdCamera.setRuntimeAnimation(handle);
+            managerInternal.cameraAnimationHandle = handle;
+            this.mmdManager.seekTo(this.mmdManager.currentFrame);
+            return;
+        }
+
+        const currentModel = managerInternal.currentModel;
+        const animation = currentModel ? managerInternal.modelSourceAnimationsByModel?.get(currentModel) : null;
+        if (!currentModel || !animation) return;
+        const handle = currentModel.createRuntimeAnimation(animation);
+        currentModel.setRuntimeAnimation(handle);
+        this.mmdManager.seekTo(this.mmdManager.currentFrame);
+    }
+
+    private clampInterpolationValue(value: number, fallback: number): number {
+        if (!Number.isFinite(value)) return fallback;
+        return Math.max(0, Math.min(127, Math.round(value)));
+    }
+
+    private readCurve(
+        values: NumericArrayLike,
+        frameIndex: number,
+        stride: number,
+        baseOffset: number,
+        fallback: InterpolationCurve,
+    ): InterpolationCurve {
+        if (!values || frameIndex < 0) {
+            return { ...fallback };
+        }
+        const offset = frameIndex * stride + baseOffset;
+        if (offset + 3 >= values.length) {
+            return { ...fallback };
+        }
+        return {
+            x1: this.clampInterpolationValue(values[offset + 0], fallback.x1),
+            x2: this.clampInterpolationValue(values[offset + 1], fallback.x2),
+            y1: this.clampInterpolationValue(values[offset + 2], fallback.y1),
+            y2: this.clampInterpolationValue(values[offset + 3], fallback.y2),
+        };
+    }
+
+    private findFrameIndex(frames: NumericArrayLike, frame: number): number {
+        if (!frames || frames.length === 0) return -1;
+        let lo = 0;
+        let hi = frames.length;
+        while (lo < hi) {
+            const mid = (lo + hi) >>> 1;
+            if (frames[mid] < frame) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo < frames.length && frames[lo] === frame ? lo : -1;
+    }
+
+    private renderInterpolationCurves(preview: TimelineInterpolationPreview | null): void {
+        this.interpolationCurveList.textContent = "";
+
+        if (!preview || preview.channels.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "interp-curve-empty";
+            empty.textContent = "補間を表示できるキーがありません";
+            this.interpolationCurveList.appendChild(empty);
+            return;
+        }
+
+        const renderChannels = this.getInterpolationChannelsForRender(preview);
+        if (renderChannels.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "interp-curve-empty";
+            empty.textContent = "選択中の種別に該当するチャンネルがありません";
+            this.interpolationCurveList.appendChild(empty);
+            return;
+        }
+
+        this.interpolationCurveList.appendChild(this.createInterpolationCurveCard(renderChannels));
+    }
+
+    private resetInterpolationTypeSelect(): void {
+        this.interpolationTypeSelect.textContent = "";
+        const option = document.createElement("option");
+        option.value = "__all__";
+        option.textContent = "全て";
+        this.interpolationTypeSelect.appendChild(option);
+        this.interpolationTypeSelect.value = "__all__";
+        this.interpolationTypeSelect.disabled = true;
+    }
+
+    private syncInterpolationTypeSelect(preview: TimelineInterpolationPreview): void {
+        const previous = this.interpolationTypeSelect.value;
+        const selectableChannels = this.getSelectableInterpolationChannels(preview.channels);
+
+        this.interpolationTypeSelect.textContent = "";
+
+        const allOption = document.createElement("option");
+        allOption.value = "__all__";
+        allOption.textContent = `全て (${selectableChannels.length}ch)`;
+        this.interpolationTypeSelect.appendChild(allOption);
+
+        for (const channel of selectableChannels) {
+            const option = document.createElement("option");
+            option.value = channel.id;
+            option.textContent = channel.label;
+            this.interpolationTypeSelect.appendChild(option);
+        }
+
+        this.interpolationTypeSelect.disabled = selectableChannels.length === 0;
+        const hasPrevious = Array.from(this.interpolationTypeSelect.options).some((option) => option.value === previous);
+        this.interpolationTypeSelect.value = hasPrevious ? previous : "__all__";
+    }
+
+    private getSelectableInterpolationChannels(channels: InterpolationChannelPreview[]): InterpolationChannelPreview[] {
+        const visibleChannels = channels.filter((channel) => channel.available);
+        return (visibleChannels.length > 0 ? visibleChannels : channels)
+            .slice()
+            .sort((a, b) => this.getCurveChannelOrder(a) - this.getCurveChannelOrder(b));
+    }
+
+    private getInterpolationChannelsForRender(preview: TimelineInterpolationPreview): InterpolationChannelPreview[] {
+        const selectableChannels = this.getSelectableInterpolationChannels(preview.channels);
+        const filter = this.interpolationTypeSelect.value;
+        if (filter === "__all__") {
+            return selectableChannels;
+        }
+        return selectableChannels.filter((channel) => channel.id === filter);
+    }
+
+    private createInterpolationCurveCard(channels: InterpolationChannelPreview[]): HTMLElement {
+        const visibleChannels = channels.filter((channel) => channel.available);
+        const targetChannels = (visibleChannels.length > 0 ? visibleChannels : channels)
+            .slice()
+            .sort((a, b) => this.getCurveChannelOrder(a) - this.getCurveChannelOrder(b));
+
+        const card = document.createElement("div");
+        card.className = "interp-curve-card";
+
+        const legend = document.createElement("div");
+        legend.className = "interp-curve-legend";
+
+        for (const channel of targetChannels) {
+            const item = document.createElement("div");
+            item.className = "interp-curve-legend-item";
+            if (!channel.available) {
+                item.classList.add("interp-curve-legend-item--muted");
+            }
+            const color = this.getCurveChannelColor(channel);
+
+            const name = document.createElement("span");
+            name.className = "interp-curve-name";
+            name.textContent = channel.label;
+            name.style.color = color;
+
+            const value = document.createElement("span");
+            value.className = "interp-curve-value";
+            value.textContent = `${channel.curve.x1},${channel.curve.x2},${channel.curve.y1},${channel.curve.y2}`;
+
+            item.appendChild(name);
+            item.appendChild(value);
+            legend.appendChild(item);
+        }
+
+        card.appendChild(this.createInterpolationCurveSvg(targetChannels));
+        card.appendChild(legend);
+
+        return card;
+    }
+
+    private getCurveChannelOrder(channel: InterpolationChannelPreview): number {
+        const id = channel.id.toLowerCase();
+        if (id.includes("-x")) return 0;
+        if (id.includes("-y")) return 1;
+        if (id.includes("-z")) return 2;
+        if (id.includes("rot")) return 3;
+        if (id.includes("dist")) return 4;
+        if (id.includes("fov")) return 5;
+        return 9;
+    }
+
+    private getCurveChannelColor(channel: InterpolationChannelPreview): string {
+        const id = channel.id.toLowerCase();
+        if (id.includes("-x")) return "var(--axis-x-color)";
+        if (id.includes("-y")) return "var(--axis-y-color)";
+        if (id.includes("-z")) return "var(--axis-z-color)";
+        if (id.includes("rot")) return "var(--accent-amber)";
+        if (id.includes("dist")) return "var(--accent-cyan)";
+        if (id.includes("fov")) return "var(--accent-pink)";
+        return "var(--text-accent)";
+    }
+
+    private createInterpolationCurveSvg(channels: InterpolationChannelPreview[]): SVGSVGElement {
+        const width = 132;
+        const height = 52;
+        const left = 8;
+        const right = width - 8;
+        const top = 6;
+        const bottom = height - 6;
+        const innerWidth = right - left;
+        const innerHeight = bottom - top;
+
+        const svgNs = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNs, "svg");
+        svg.classList.add("interp-curve-svg");
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        svg.setAttribute("preserveAspectRatio", "none");
+
+        const guide = document.createElementNS(svgNs, "line");
+        guide.classList.add("interp-curve-guide");
+        guide.setAttribute("x1", String(left));
+        guide.setAttribute("y1", String(bottom));
+        guide.setAttribute("x2", String(right));
+        guide.setAttribute("y2", String(top));
+
+        svg.appendChild(guide);
+        for (const channel of channels) {
+            const curve = channel.curve;
+            const channelPx1 = left + (curve.x1 / 127) * innerWidth;
+            const channelPx2 = left + (curve.x2 / 127) * innerWidth;
+            const channelPy1 = bottom - (curve.y1 / 127) * innerHeight;
+            const channelPy2 = bottom - (curve.y2 / 127) * innerHeight;
+            const color = this.getCurveChannelColor(channel);
+
+            const path = document.createElementNS(svgNs, "path");
+            path.classList.add("interp-curve-path");
+            path.setAttribute("d", `M ${left} ${bottom} C ${channelPx1} ${channelPy1}, ${channelPx2} ${channelPy2}, ${right} ${top}`);
+            path.setAttribute("stroke", color);
+            if (!channel.available) {
+                path.setAttribute("stroke-dasharray", "3 2");
+                path.setAttribute("opacity", "0.45");
+            }
+
+            const p1 = document.createElementNS(svgNs, "circle");
+            p1.classList.add("interp-curve-point");
+            p1.setAttribute("cx", String(channelPx1));
+            p1.setAttribute("cy", String(channelPy1));
+            p1.setAttribute("r", "2");
+            p1.setAttribute("fill", color);
+            if (!channel.available) {
+                p1.setAttribute("opacity", "0.5");
+            } else if (this.isInterpolationChannelEditable(channel.id)) {
+                p1.classList.add("interp-curve-point--editable");
+                p1.style.cursor = "grab";
+                p1.addEventListener("pointerdown", (event) =>
+                    this.startInterpolationCurveDrag(event, channel.id, 1)
+                );
+            }
+
+            const p2 = document.createElementNS(svgNs, "circle");
+            p2.classList.add("interp-curve-point");
+            p2.setAttribute("cx", String(channelPx2));
+            p2.setAttribute("cy", String(channelPy2));
+            p2.setAttribute("r", "2");
+            p2.setAttribute("fill", color);
+            if (!channel.available) {
+                p2.setAttribute("opacity", "0.5");
+            } else if (this.isInterpolationChannelEditable(channel.id)) {
+                p2.classList.add("interp-curve-point--editable");
+                p2.style.cursor = "grab";
+                p2.addEventListener("pointerdown", (event) =>
+                    this.startInterpolationCurveDrag(event, channel.id, 2)
+                );
+            }
+
+            svg.appendChild(path);
+            svg.appendChild(p1);
+            svg.appendChild(p2);
+        }
+        return svg;
+    }
+
     private addKeyframeAtCurrentFrame(): void {
         const track = this.getSelectedTimelineTrack();
         if (!track) {
@@ -1376,15 +2057,397 @@ export class UIController {
         }
 
         const frame = this.mmdManager.currentFrame;
+        const interpolationSnapshot = this.captureInterpolationCurveSnapshot(track, frame);
         const created = this.mmdManager.addTimelineKeyframe(track, frame);
         if (!created) {
             this.showToast(`Frame ${frame} は既に登録済み`, "info");
             return;
         }
 
+        const persistedInterpolation = this.persistInterpolationForNewKeyframe(track, frame, interpolationSnapshot);
+        if (persistedInterpolation) {
+            this.refreshRuntimeAnimationFromInterpolationEdit();
+        }
+
         this.timeline.setSelectedFrame(null);
         this.updateTimelineEditState();
         this.showToast(`Frame ${frame} にキーを登録`, "success");
+    }
+
+    private captureInterpolationCurveSnapshot(track: KeyframeTrack, frame: number): Map<string, InterpolationCurve> {
+        const preview = this.buildInterpolationPreviewFromRuntime(track, frame);
+        const snapshot = new Map<string, InterpolationCurve>();
+        for (const channel of preview.channels) {
+            snapshot.set(channel.id, { ...channel.curve });
+        }
+        return snapshot;
+    }
+
+    private persistInterpolationForNewKeyframe(
+        track: KeyframeTrack,
+        frame: number,
+        curves: ReadonlyMap<string, InterpolationCurve>,
+    ): boolean {
+        if (track.category === "morph") return false;
+
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        const managerInternal = this.mmdManager as unknown as Partial<MmdManagerInternalView>;
+
+        if (track.category === "camera") {
+            const cameraTrackLike = managerInternal.cameraSourceAnimation?.cameraTrack;
+            if (!cameraTrackLike) return false;
+            return this.persistCameraKeyframeInterpolation(
+                cameraTrackLike as RuntimeCameraTrackLike & RuntimeCameraTrackMutable,
+                normalizedFrame,
+                curves,
+            );
+        }
+
+        const currentModel = managerInternal.currentModel;
+        if (!currentModel) return false;
+        const modelAnimation = managerInternal.modelSourceAnimationsByModel?.get(currentModel);
+        if (!modelAnimation) return false;
+
+        const movableTrackLike = modelAnimation.movableBoneTracks.find((candidate) => candidate.name === track.name);
+        if (movableTrackLike) {
+            return this.persistMovableBoneKeyframeInterpolation(
+                track.name,
+                movableTrackLike as RuntimeMovableBoneTrackLike & RuntimeMovableBoneTrackMutable,
+                normalizedFrame,
+                curves,
+            );
+        }
+
+        const boneTrackLike = modelAnimation.boneTracks.find((candidate) => candidate.name === track.name);
+        if (boneTrackLike) {
+            return this.persistBoneKeyframeInterpolation(
+                track.name,
+                boneTrackLike as RuntimeBoneTrackLike & RuntimeBoneTrackMutable,
+                normalizedFrame,
+                curves,
+            );
+        }
+
+        return false;
+    }
+
+    private persistCameraKeyframeInterpolation(
+        track: RuntimeCameraTrackMutable,
+        frame: number,
+        curves: ReadonlyMap<string, InterpolationCurve>,
+    ): boolean {
+        const frameEdit = this.upsertFrameNumber(track.frameNumbers, frame);
+        track.frameNumbers = frameEdit.frames;
+
+        const cameraPosition = this.mmdManager.getCameraPosition();
+        const cameraRotationDeg = this.mmdManager.getCameraRotation();
+        const cameraDistance = this.mmdManager.getCameraDistance();
+        const cameraFovRad = (this.mmdManager.getCameraFov() * Math.PI) / 180;
+        const degToRad = Math.PI / 180;
+
+        track.positions = this.upsertFloatValues(track.positions, 3, frameEdit.index, frameEdit.exists, [
+            cameraPosition.x,
+            cameraPosition.y,
+            cameraPosition.z,
+        ]);
+        track.rotations = this.upsertFloatValues(track.rotations, 3, frameEdit.index, frameEdit.exists, [
+            cameraRotationDeg.x * degToRad,
+            cameraRotationDeg.y * degToRad,
+            cameraRotationDeg.z * degToRad,
+        ]);
+        track.distances = this.upsertFloatValues(track.distances, 1, frameEdit.index, frameEdit.exists, [cameraDistance]);
+        track.fovs = this.upsertFloatValues(track.fovs, 1, frameEdit.index, frameEdit.exists, [cameraFovRad]);
+        track.positionInterpolations = this.upsertUint8Values(
+            track.positionInterpolations,
+            12,
+            frameEdit.index,
+            frameEdit.exists,
+            this.composePositionInterpolationBlock(curves, "cam-x", "cam-y", "cam-z"),
+        );
+        track.rotationInterpolations = this.upsertUint8Values(
+            track.rotationInterpolations,
+            4,
+            frameEdit.index,
+            frameEdit.exists,
+            this.curveToBlock(this.getCurveFromSnapshot(curves, "cam-rot")),
+        );
+        track.distanceInterpolations = this.upsertUint8Values(
+            track.distanceInterpolations,
+            4,
+            frameEdit.index,
+            frameEdit.exists,
+            this.curveToBlock(this.getCurveFromSnapshot(curves, "cam-dist")),
+        );
+        track.fovInterpolations = this.upsertUint8Values(
+            track.fovInterpolations,
+            4,
+            frameEdit.index,
+            frameEdit.exists,
+            this.curveToBlock(this.getCurveFromSnapshot(curves, "cam-fov")),
+        );
+        return true;
+    }
+
+    private persistMovableBoneKeyframeInterpolation(
+        boneName: string,
+        track: RuntimeMovableBoneTrackMutable,
+        frame: number,
+        curves: ReadonlyMap<string, InterpolationCurve>,
+    ): boolean {
+        const frameEdit = this.upsertFrameNumber(track.frameNumbers, frame);
+        const referenceIndex = this.resolveInsertReferenceIndex(track.frameNumbers, frame);
+        track.frameNumbers = frameEdit.frames;
+
+        const transform = this.mmdManager.getBoneTransform(boneName);
+        const fallbackPosition = this.readFloatBlock(track.positions, referenceIndex, 3, [0, 0, 0]);
+        const fallbackRotation = this.readFloatBlock(track.rotations, referenceIndex, 4, [0, 0, 0, 1]);
+        const fallbackPhysicsToggle = this.readUint8Block(track.physicsToggles, referenceIndex, 1, [0]);
+
+        const positionBlock = transform
+            ? [transform.position.x, transform.position.y, transform.position.z]
+            : fallbackPosition;
+
+        const rotationBlock = transform
+            ? this.rotationDegreesToQuaternionBlock(transform.rotation.x, transform.rotation.y, transform.rotation.z)
+            : fallbackRotation;
+
+        track.positions = this.upsertFloatValues(track.positions, 3, frameEdit.index, frameEdit.exists, positionBlock);
+        track.rotations = this.upsertFloatValues(track.rotations, 4, frameEdit.index, frameEdit.exists, rotationBlock);
+        track.physicsToggles = this.upsertUint8Values(
+            track.physicsToggles,
+            1,
+            frameEdit.index,
+            frameEdit.exists,
+            fallbackPhysicsToggle,
+        );
+        track.positionInterpolations = this.upsertUint8Values(
+            track.positionInterpolations,
+            12,
+            frameEdit.index,
+            frameEdit.exists,
+            this.composePositionInterpolationBlock(curves, "bone-x", "bone-y", "bone-z"),
+        );
+        track.rotationInterpolations = this.upsertUint8Values(
+            track.rotationInterpolations,
+            4,
+            frameEdit.index,
+            frameEdit.exists,
+            this.curveToBlock(this.getCurveFromSnapshot(curves, "bone-rot")),
+        );
+        return true;
+    }
+
+    private persistBoneKeyframeInterpolation(
+        boneName: string,
+        track: RuntimeBoneTrackMutable,
+        frame: number,
+        curves: ReadonlyMap<string, InterpolationCurve>,
+    ): boolean {
+        const frameEdit = this.upsertFrameNumber(track.frameNumbers, frame);
+        const referenceIndex = this.resolveInsertReferenceIndex(track.frameNumbers, frame);
+        track.frameNumbers = frameEdit.frames;
+
+        const transform = this.mmdManager.getBoneTransform(boneName);
+        const fallbackRotation = this.readFloatBlock(track.rotations, referenceIndex, 4, [0, 0, 0, 1]);
+        const fallbackPhysicsToggle = this.readUint8Block(track.physicsToggles, referenceIndex, 1, [0]);
+        const rotationBlock = transform
+            ? this.rotationDegreesToQuaternionBlock(transform.rotation.x, transform.rotation.y, transform.rotation.z)
+            : fallbackRotation;
+
+        track.rotations = this.upsertFloatValues(track.rotations, 4, frameEdit.index, frameEdit.exists, rotationBlock);
+        track.physicsToggles = this.upsertUint8Values(
+            track.physicsToggles,
+            1,
+            frameEdit.index,
+            frameEdit.exists,
+            fallbackPhysicsToggle,
+        );
+        track.rotationInterpolations = this.upsertUint8Values(
+            track.rotationInterpolations,
+            4,
+            frameEdit.index,
+            frameEdit.exists,
+            this.curveToBlock(this.getCurveFromSnapshot(curves, "bone-rot")),
+        );
+        return true;
+    }
+
+    private rotationDegreesToQuaternionBlock(xDeg: number, yDeg: number, zDeg: number): number[] {
+        const degToRad = Math.PI / 180;
+        const rotation = Quaternion.RotationYawPitchRoll(yDeg * degToRad, xDeg * degToRad, zDeg * degToRad);
+        return [rotation.x, rotation.y, rotation.z, rotation.w];
+    }
+
+    private composePositionInterpolationBlock(
+        curves: ReadonlyMap<string, InterpolationCurve>,
+        xChannelId: string,
+        yChannelId: string,
+        zChannelId: string,
+    ): number[] {
+        const x = this.curveToBlock(this.getCurveFromSnapshot(curves, xChannelId));
+        const y = this.curveToBlock(this.getCurveFromSnapshot(curves, yChannelId));
+        const z = this.curveToBlock(this.getCurveFromSnapshot(curves, zChannelId));
+        return [...x, ...y, ...z];
+    }
+
+    private getCurveFromSnapshot(curves: ReadonlyMap<string, InterpolationCurve>, channelId: string): InterpolationCurve {
+        const curve = curves.get(channelId);
+        if (curve) return curve;
+        return this.createLinearCurve();
+    }
+
+    private curveToBlock(curve: InterpolationCurve): number[] {
+        return [
+            this.clampInterpolationValue(curve.x1, 20),
+            this.clampInterpolationValue(curve.x2, 107),
+            this.clampInterpolationValue(curve.y1, 20),
+            this.clampInterpolationValue(curve.y2, 107),
+        ];
+    }
+
+    private resolveInsertReferenceIndex(frames: NumericArrayLike, frame: number): number {
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        const exactIndex = this.findFrameIndex(frames, normalizedFrame);
+        if (exactIndex >= 0) return exactIndex;
+        const referenceFrame = this.resolveInterpolationReferenceFrame(frames, normalizedFrame, true, true);
+        if (referenceFrame === null) return -1;
+        return this.findFrameIndex(frames, referenceFrame);
+    }
+
+    private upsertFrameNumber(
+        frames: ArrayLike<number>,
+        frame: number,
+    ): { frames: Uint32Array; index: number; exists: boolean } {
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        const sourceLength = frames?.length ?? 0;
+
+        let lo = 0;
+        let hi = sourceLength;
+        while (lo < hi) {
+            const mid = (lo + hi) >>> 1;
+            if ((frames[mid] ?? 0) < normalizedFrame) lo = mid + 1;
+            else hi = mid;
+        }
+
+        const exists = lo < sourceLength && (frames[lo] ?? 0) === normalizedFrame;
+        if (exists) {
+            const nextFrames = new Uint32Array(sourceLength);
+            for (let i = 0; i < sourceLength; i += 1) nextFrames[i] = Math.max(0, Math.floor(frames[i] ?? 0));
+            return { frames: nextFrames, index: lo, exists: true };
+        }
+
+        const nextFrames = new Uint32Array(sourceLength + 1);
+        for (let i = 0; i < lo; i += 1) nextFrames[i] = Math.max(0, Math.floor(frames[i] ?? 0));
+        nextFrames[lo] = normalizedFrame;
+        for (let i = lo; i < sourceLength; i += 1) nextFrames[i + 1] = Math.max(0, Math.floor(frames[i] ?? 0));
+        return { frames: nextFrames, index: lo, exists: false };
+    }
+
+    private upsertFloatValues(
+        values: ArrayLike<number>,
+        stride: number,
+        frameIndex: number,
+        exists: boolean,
+        block: readonly number[],
+    ): Float32Array {
+        const sourceFrameCount = Math.floor((values?.length ?? 0) / stride);
+        const targetFrameCount = sourceFrameCount + (exists ? 0 : 1);
+        const target = new Float32Array(targetFrameCount * stride);
+
+        for (let sourceFrameIndex = 0; sourceFrameIndex < sourceFrameCount; sourceFrameIndex += 1) {
+            const targetFrameIndex = !exists && sourceFrameIndex >= frameIndex
+                ? sourceFrameIndex + 1
+                : sourceFrameIndex;
+            const sourceOffset = sourceFrameIndex * stride;
+            const targetOffset = targetFrameIndex * stride;
+            for (let i = 0; i < stride; i += 1) {
+                const value = values[sourceOffset + i];
+                target[targetOffset + i] = Number.isFinite(value) ? value : 0;
+            }
+        }
+
+        const writeOffset = frameIndex * stride;
+        for (let i = 0; i < stride; i += 1) {
+            const value = block[i] ?? 0;
+            target[writeOffset + i] = Number.isFinite(value) ? value : 0;
+        }
+
+        return target;
+    }
+
+    private upsertUint8Values(
+        values: ArrayLike<number>,
+        stride: number,
+        frameIndex: number,
+        exists: boolean,
+        block: readonly number[],
+    ): Uint8Array {
+        const sourceFrameCount = Math.floor((values?.length ?? 0) / stride);
+        const targetFrameCount = sourceFrameCount + (exists ? 0 : 1);
+        const target = new Uint8Array(targetFrameCount * stride);
+
+        for (let sourceFrameIndex = 0; sourceFrameIndex < sourceFrameCount; sourceFrameIndex += 1) {
+            const targetFrameIndex = !exists && sourceFrameIndex >= frameIndex
+                ? sourceFrameIndex + 1
+                : sourceFrameIndex;
+            const sourceOffset = sourceFrameIndex * stride;
+            const targetOffset = targetFrameIndex * stride;
+            for (let i = 0; i < stride; i += 1) {
+                const value = values[sourceOffset + i];
+                const normalized = Number.isFinite(value) ? Math.round(value) : 0;
+                target[targetOffset + i] = Math.max(0, Math.min(255, normalized));
+            }
+        }
+
+        const writeOffset = frameIndex * stride;
+        for (let i = 0; i < stride; i += 1) {
+            const value = block[i] ?? 0;
+            const normalized = Number.isFinite(value) ? Math.round(value) : 0;
+            target[writeOffset + i] = Math.max(0, Math.min(255, normalized));
+        }
+
+        return target;
+    }
+
+    private readFloatBlock(
+        values: ArrayLike<number>,
+        frameIndex: number,
+        stride: number,
+        fallback: readonly number[],
+    ): number[] {
+        const block = new Array<number>(stride);
+        for (let i = 0; i < stride; i += 1) block[i] = Number.isFinite(fallback[i]) ? fallback[i] : 0;
+        if (frameIndex < 0) return block;
+
+        const offset = frameIndex * stride;
+        for (let i = 0; i < stride; i += 1) {
+            const value = values[offset + i];
+            if (Number.isFinite(value)) block[i] = value;
+        }
+        return block;
+    }
+
+    private readUint8Block(
+        values: ArrayLike<number>,
+        frameIndex: number,
+        stride: number,
+        fallback: readonly number[],
+    ): number[] {
+        const block = new Array<number>(stride);
+        for (let i = 0; i < stride; i += 1) {
+            const value = Number.isFinite(fallback[i]) ? Math.round(fallback[i]) : 0;
+            block[i] = Math.max(0, Math.min(255, value));
+        }
+        if (frameIndex < 0) return block;
+
+        const offset = frameIndex * stride;
+        for (let i = 0; i < stride; i += 1) {
+            const raw = values[offset + i];
+            if (!Number.isFinite(raw)) continue;
+            const normalized = Math.round(raw);
+            block[i] = Math.max(0, Math.min(255, normalized));
+        }
+        return block;
     }
 
     private deleteSelectedKeyframe(): void {
@@ -1432,7 +2495,7 @@ export class UIController {
         this.timeline.setSelectedFrame(toFrame);
         this.mmdManager.seekTo(toFrame);
         this.updateTimelineEditState();
-        this.showToast(`キー移動: ${fromFrame} -> ${toFrame}`, "success");
+        this.showToast(`キー移動 ${fromFrame} -> ${toFrame}`, "success");
     }
 
     private play(): void {
@@ -1485,3 +2548,12 @@ export class UIController {
         }, 3000);
     }
 }
+
+
+
+
+
+
+
+
+

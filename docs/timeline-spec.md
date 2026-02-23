@@ -115,13 +115,14 @@
 - 選択状態:
 - `selectedTrackIndex`
 - `selectedFrame`（未ヒットなら `null`）
+- 選択ラベルはキー種別を明示（`[Bone]` / `[Morph]` / `[Camera]`）
 
 参照: `src/timeline.ts:528`, `src/timeline.ts:544`, `src/timeline.ts:558`
 
 ### 5-3. キー編集
 - 登録:
 - 現在フレームに登録
-- 既存フレームなら無変更
+- 既存フレームでは最新登録を優先して上書き（後勝ち）
 - ボーン/カメラは登録時に source animation 側へ実値スナップショットと補間値も挿入
 - 削除:
 - 選択キーがあればそのフレーム、なければ現在フレームを削除対象
@@ -192,6 +193,7 @@
 - 補間は編集可能だが、Property（表示/IK）のステップ編集UIは未実装。
 - Property（表示/IK）トラック編集は未実装。
 - VMDエクスポートは未実装。
+- 回転補間のMMD実機比較テストは未整備。
 
 関連:
 - `docs/mmd-basic-task-checklist.md`

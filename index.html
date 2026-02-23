@@ -380,35 +380,48 @@
             <span>照明</span>
           </div>
           <div class="lighting-controls">
-            <div class="light-row">
+            <div class="light-row light-row-select">
+              <span class="light-label">種別</span>
+              <select id="light-mode-select" class="light-select">
+                <option value="light" selected>光</option>
+                <option value="shadow">影</option>
+              </select>
+              <span class="light-value">-</span>
+            </div>
+            <div class="light-row light-row--light">
               <span class="light-label">方位角</span>
               <input type="range" id="light-azimuth" class="light-slider" min="-180" max="180" value="20" step="1">
               <span id="light-azimuth-val" class="light-value">20°</span>
             </div>
-            <div class="light-row">
+            <div class="light-row light-row--light">
               <span class="light-label">仰角</span>
               <input type="range" id="light-elevation" class="light-slider" min="-85" max="-5" value="-50" step="1">
               <span id="light-elevation-val" class="light-value">-50°</span>
             </div>
-            <div class="light-row">
+            <div class="light-row light-row--light">
               <span class="light-label">光の強さ</span>
               <input type="range" id="light-intensity" class="light-slider" min="0" max="200" value="100" step="1">
               <span id="light-intensity-val" class="light-value">1.0</span>
             </div>
-            <div class="light-row">
+            <div class="light-row light-row--light">
               <span class="light-label">環境光</span>
               <input type="range" id="light-ambient" class="light-slider" min="0" max="200" value="0" step="1">
               <span id="light-ambient-val" class="light-value">0.0</span>
             </div>
-            <div class="light-row">
+            <div class="light-row light-row--shadow">
               <span class="light-label">影の濃さ</span>
               <input type="range" id="light-shadow" class="light-slider" min="0" max="100" value="45" step="1">
               <span id="light-shadow-val" class="light-value">0.45</span>
             </div>
-            <div class="light-row">
-              <span class="light-label">影の境界幅</span>
-              <input type="range" id="light-shadow-softness" class="light-slider" min="5" max="120" value="35" step="1">
-              <span id="light-shadow-softness-val" class="light-value">0.035</span>
+            <div class="light-row light-row--shadow">
+              <span class="light-label">セルフ影境界</span>
+              <input type="range" id="light-self-shadow-softness" class="light-slider" min="5" max="120" value="35" step="1">
+              <span id="light-self-shadow-softness-val" class="light-value">0.035</span>
+            </div>
+            <div class="light-row light-row--shadow">
+              <span class="light-label">遮蔽影境界</span>
+              <input type="range" id="light-occlusion-shadow-softness" class="light-slider" min="5" max="120" value="35" step="1">
+              <span id="light-occlusion-shadow-softness-val" class="light-value">0.035</span>
             </div>
           </div>
         </section>

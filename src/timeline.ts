@@ -186,16 +186,18 @@ export class Timeline {
     // ── Public API ───────────────────────────────────────────────────
 
     setCurrentFrame(frame: number): void {
-        if (this.currentFrame === frame) return;
-        this.currentFrame = frame;
-        this.viewOffset = frame * PX_PER_F;
+        const normalized = Math.max(0, Math.floor(frame));
+        if (this.currentFrame === normalized) return;
+        this.currentFrame = normalized;
+        this.viewOffset = normalized * PX_PER_F;
         this.scheduleOverlay(); // ruler + playhead
         this.scheduleStatic();  // keyframe dots scroll with playhead
     }
 
     setTotalFrames(total: number): void {
-        if (this.totalFrames === total) return;
-        this.totalFrames = total;
+        const normalized = Math.max(0, Math.floor(total));
+        if (this.totalFrames === normalized) return;
+        this.totalFrames = normalized;
         this.scheduleOverlay();
     }
 
@@ -225,10 +227,11 @@ export class Timeline {
             return;
         }
 
-        if (frame === null || !hasFrame(track.frames, frame)) {
+        const normalizedFrame = frame === null ? null : Math.max(0, Math.floor(frame));
+        if (normalizedFrame === null || !hasFrame(track.frames, normalizedFrame)) {
             this.selectedFrame = null;
         } else {
-            this.selectedFrame = frame;
+            this.selectedFrame = normalizedFrame;
         }
         this.scheduleStatic();
         this.emitSelectionChanged();

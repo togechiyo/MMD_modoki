@@ -266,7 +266,8 @@ export class MmdManager {
     private physicsGravityDirection = new Vector3(0, -100, 0);
     private shadowEnabled = true;
     private shadowDarknessValue = 0.45;
-    private shadowEdgeSoftnessValue = 0.035;
+    private selfShadowEdgeSoftnessValue = 0.035;
+    private occlusionShadowEdgeSoftnessValue = 0.035;
     private lightColorTemperatureKelvin = 6500;
     private postEffectContrastValue = 1;
     private postEffectGammaValue = 2;
@@ -1479,7 +1480,7 @@ export class MmdManager {
         this.shadowGenerator.usePercentageCloserFiltering = true;
         this.shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_HIGH;
         this.shadowGenerator.useContactHardeningShadow = true;
-        this.shadowGenerator.contactHardeningLightSizeUVRatio = this.shadowEdgeSoftnessValue;
+        this.applyShadowEdgeSoftness();
         this.shadowGenerator.bias = 0.00015;
         this.shadowGenerator.normalBias = 0.0006;
         this.shadowGenerator.frustumEdgeFalloff = 0.2;
@@ -2800,6 +2801,8 @@ export class MmdManager {
                 shadowEnabled: this.shadowEnabled,
                 shadowDarkness: this.shadowDarkness,
                 shadowEdgeSoftness: this.shadowEdgeSoftness,
+                selfShadowEdgeSoftness: this.selfShadowEdgeSoftness,
+                occlusionShadowEdgeSoftness: this.occlusionShadowEdgeSoftness,
             },
             viewport: {
                 groundVisible: this.isGroundVisible(),
@@ -2966,7 +2969,21 @@ export class MmdManager {
         this.ambientIntensity = data.lighting.ambientIntensity;
         this.lightColorTemperature = data.lighting.temperatureKelvin;
         this.shadowDarkness = data.lighting.shadowDarkness;
-        this.shadowEdgeSoftness = data.lighting.shadowEdgeSoftness;
+        const legacyShadowEdgeSoftness = typeof data.lighting.shadowEdgeSoftness === "number" && Number.isFinite(data.lighting.shadowEdgeSoftness)
+            ? data.lighting.shadowEdgeSoftness
+            : null;
+        const selfShadowEdgeSoftness = typeof data.lighting.selfShadowEdgeSoftness === "number" && Number.isFinite(data.lighting.selfShadowEdgeSoftness)
+            ? data.lighting.selfShadowEdgeSoftness
+            : legacyShadowEdgeSoftness;
+        const occlusionShadowEdgeSoftness = typeof data.lighting.occlusionShadowEdgeSoftness === "number" && Number.isFinite(data.lighting.occlusionShadowEdgeSoftness)
+            ? data.lighting.occlusionShadowEdgeSoftness
+            : legacyShadowEdgeSoftness ?? selfShadowEdgeSoftness;
+        if (typeof selfShadowEdgeSoftness === "number") {
+            this.selfShadowEdgeSoftness = selfShadowEdgeSoftness;
+        }
+        if (typeof occlusionShadowEdgeSoftness === "number") {
+            this.occlusionShadowEdgeSoftness = occlusionShadowEdgeSoftness;
+        }
         this.setShadowEnabled(Boolean(data.lighting.shadowEnabled));
 
         this.setPhysicsGravityAcceleration(data.physics.gravityAcceleration);
@@ -3412,11 +3429,41 @@ export class MmdManager {
 
     /** Shadow edge softness for contact hardening (0.005..0.12) */
     get shadowEdgeSoftness(): number {
-        return this.shadowEdgeSoftnessValue;
+        return this.getEffectiveShadowEdgeSoftness();
     }
     set shadowEdgeSoftness(v: number) {
-        this.shadowEdgeSoftnessValue = Math.max(0.005, Math.min(0.12, v));
-        this.shadowGenerator.contactHardeningLightSizeUVRatio = this.shadowEdgeSoftnessValue;
+        const clamped = this.clampShadowEdgeSoftness(v);
+        this.selfShadowEdgeSoftnessValue = clamped;
+        this.occlusionShadowEdgeSoftnessValue = clamped;
+        this.applyShadowEdgeSoftness();
+    }
+
+    get selfShadowEdgeSoftness(): number {
+        return this.selfShadowEdgeSoftnessValue;
+    }
+    set selfShadowEdgeSoftness(v: number) {
+        this.selfShadowEdgeSoftnessValue = this.clampShadowEdgeSoftness(v);
+        this.applyShadowEdgeSoftness();
+    }
+
+    get occlusionShadowEdgeSoftness(): number {
+        return this.occlusionShadowEdgeSoftnessValue;
+    }
+    set occlusionShadowEdgeSoftness(v: number) {
+        this.occlusionShadowEdgeSoftnessValue = this.clampShadowEdgeSoftness(v);
+        this.applyShadowEdgeSoftness();
+    }
+
+    private clampShadowEdgeSoftness(v: number): number {
+        return Math.max(0.005, Math.min(0.12, v));
+    }
+
+    private getEffectiveShadowEdgeSoftness(): number {
+        return (this.selfShadowEdgeSoftnessValue + this.occlusionShadowEdgeSoftnessValue) * 0.5;
+    }
+
+    private applyShadowEdgeSoftness(): void {
+        this.shadowGenerator.contactHardeningLightSizeUVRatio = this.getEffectiveShadowEdgeSoftness();
     }
 
     /**

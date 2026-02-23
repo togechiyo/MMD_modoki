@@ -129,7 +129,9 @@ export interface ProjectLightingState {
     temperatureKelvin: number;
     shadowEnabled: boolean;
     shadowDarkness: number;
-    shadowEdgeSoftness: number;
+    shadowEdgeSoftness?: number;
+    selfShadowEdgeSoftness?: number;
+    occlusionShadowEdgeSoftness?: number;
 }
 
 export interface ProjectViewportState {

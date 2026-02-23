@@ -10,6 +10,7 @@
 - [UI と操作フロー](./ui-flow.md)
 - [影仕様と実装](./shadow-spec.md)
 - [MMD基本機能チェックリスト](./mmd-basic-task-checklist.md)
+- [WebGPU/WGSL 調査と実装方針（現行）](./webgpu-wgsl-feasibility.md)
 - [MMDキーフレーム/ボーン/補間 調査メモ](./mmd-keyframe-bone-interpolation-research.md)
 - [現行MMD 補間曲線の扱い調査メモ](./mmd-interpolation-curve-research.md)
 - [補間曲線 仕様と実装まとめ（現行）](./interpolation-curve-spec-implementation.md)
@@ -52,3 +53,4 @@
 20. 物理の現行仕様を確認したい: `physics-runtime-spec.md`
 21. 物理演算の実装順を確認したい: `physics-task-list.md`
 22. 起動時エラーを確認したい: `troubleshooting.md`
+23. WebGPU/WGSL 導入方針を確認したい: `webgpu-wgsl-feasibility.md`

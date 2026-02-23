@@ -1419,6 +1419,14 @@ body {
   min-width: 0;
 }
 
+.light-row--hidden {
+  display: none;
+}
+
+.light-row-select .light-value {
+  visibility: hidden;
+}
+
 .light-row-check {
   align-items: center;
 }
@@ -1473,6 +1481,24 @@ body {
 
 .light-slider::-webkit-slider-thumb:hover {
   transform: scale(1.3);
+}
+
+.light-select {
+  width: 100%;
+  min-width: 0;
+  height: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 0 6px;
+  outline: none;
+}
+
+.light-select:focus {
+  border-color: var(--accent-amber, #f59e0b);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
 }
 
 .light-value {

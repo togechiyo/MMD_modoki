@@ -481,13 +481,18 @@ export class UIController {
         const elIntensity = document.getElementById("light-intensity") as HTMLInputElement;
         const elAmbient = document.getElementById("light-ambient") as HTMLInputElement;
         const elShadow = document.getElementById("light-shadow") as HTMLInputElement;
-        const elShadowSoftness = document.getElementById("light-shadow-softness") as HTMLInputElement;
+        const elSelfShadowSoftness = document.getElementById("light-self-shadow-softness") as HTMLInputElement;
+        const elOcclusionShadowSoftness = document.getElementById("light-occlusion-shadow-softness") as HTMLInputElement;
+        const elLightMode = document.getElementById("light-mode-select") as HTMLSelectElement | null;
         const valAz = document.getElementById("light-azimuth-val")!;
         const valEl = document.getElementById("light-elevation-val")!;
         const valInt = document.getElementById("light-intensity-val")!;
         const valAmb = document.getElementById("light-ambient-val")!;
         const valSh = document.getElementById("light-shadow-val")!;
-        const valShSoftness = document.getElementById("light-shadow-softness-val")!;
+        const valSelfShSoftness = document.getElementById("light-self-shadow-softness-val")!;
+        const valOcclusionShSoftness = document.getElementById("light-occlusion-shadow-softness-val")!;
+        const lightRows = Array.from(document.querySelectorAll(".light-row--light"));
+        const shadowRows = Array.from(document.querySelectorAll(".light-row--shadow"));
         const elEffectColorTemp = document.getElementById("effect-color-temp") as HTMLInputElement | null;
         const valEffectColorTemp = document.getElementById("effect-color-temp-val");
         const elEffectContrast = document.getElementById("effect-contrast") as HTMLInputElement | null;
@@ -531,6 +536,22 @@ export class UIController {
             this.mmdManager.setLightDirection(az, el);
         };
 
+        const applyLightMode = () => {
+            const mode = elLightMode?.value === "shadow" ? "shadow" : "light";
+            for (const row of lightRows) {
+                row.classList.toggle("light-row--hidden", mode !== "light");
+            }
+            for (const row of shadowRows) {
+                row.classList.toggle("light-row--hidden", mode !== "shadow");
+            }
+        };
+
+        if (elLightMode) {
+            elLightMode.value = "light";
+            elLightMode.addEventListener("change", applyLightMode);
+        }
+        applyLightMode();
+
         elAzimuth.addEventListener("input", updateDir);
         elElevation.addEventListener("input", updateDir);
 
@@ -556,18 +577,25 @@ export class UIController {
             valSh.textContent = v.toFixed(2);
             this.mmdManager.shadowDarkness = v;
         });
-        elShadowSoftness.addEventListener("input", () => {
-            const v = Number(elShadowSoftness.value) / 1000;
-            valShSoftness.textContent = v.toFixed(3);
-            this.mmdManager.shadowEdgeSoftness = v;
+        elSelfShadowSoftness.addEventListener("input", () => {
+            const v = Number(elSelfShadowSoftness.value) / 1000;
+            valSelfShSoftness.textContent = v.toFixed(3);
+            this.mmdManager.selfShadowEdgeSoftness = v;
+        });
+        elOcclusionShadowSoftness.addEventListener("input", () => {
+            const v = Number(elOcclusionShadowSoftness.value) / 1000;
+            valOcclusionShSoftness.textContent = v.toFixed(3);
+            this.mmdManager.occlusionShadowEdgeSoftness = v;
         });
 
         // Shadow is always enabled in UI.
         this.mmdManager.setShadowEnabled(true);
         elShadow.value = String(Math.round(this.mmdManager.shadowDarkness * 100));
         valSh.textContent = this.mmdManager.shadowDarkness.toFixed(2);
-        elShadowSoftness.value = String(Math.round(this.mmdManager.shadowEdgeSoftness * 1000));
-        valShSoftness.textContent = this.mmdManager.shadowEdgeSoftness.toFixed(3);
+        elSelfShadowSoftness.value = String(Math.round(this.mmdManager.selfShadowEdgeSoftness * 1000));
+        valSelfShSoftness.textContent = this.mmdManager.selfShadowEdgeSoftness.toFixed(3);
+        elOcclusionShadowSoftness.value = String(Math.round(this.mmdManager.occlusionShadowEdgeSoftness * 1000));
+        valOcclusionShSoftness.textContent = this.mmdManager.occlusionShadowEdgeSoftness.toFixed(3);
 
         if (elEffectColorTemp && valEffectColorTemp) {
             const applyColorTemperature = () => {
@@ -1419,6 +1447,21 @@ export class UIController {
         return track;
     }
 
+    private getTrackTypeLabel(track: Pick<KeyframeTrack, "category">): string {
+        switch (track.category) {
+            case "camera":
+                return "Camera";
+            case "morph":
+                return "Morph";
+            case "root":
+            case "semi-standard":
+            case "bone":
+                return "Bone";
+            default:
+                return "Property";
+        }
+    }
+
     private isBoneTrackForEditor(track: KeyframeTrack | null): track is KeyframeTrack {
         if (!track) return false;
         return track.category === "root" || track.category === "semi-standard" || track.category === "bone";
@@ -1485,9 +1528,10 @@ export class UIController {
         }
 
         const frameLabel = selectedFrame !== null ? ` @${selectedFrame}` : "";
-        this.timelineSelectionLabel.textContent = `${track.name}${frameLabel}`;
+        const trackTypeLabel = this.getTrackTypeLabel(track);
+        this.timelineSelectionLabel.textContent = `[${trackTypeLabel}] ${track.name}${frameLabel}`;
         const interpolationFrame = selectedFrame ?? currentFrame;
-        this.interpolationTrackNameLabel.textContent = track.name;
+        this.interpolationTrackNameLabel.textContent = `${trackTypeLabel}: ${track.name}`;
         this.interpolationFrameLabel.textContent = String(interpolationFrame);
         this.updateInterpolationPreview(track, interpolationFrame);
         this.btnKeyframeAdd.disabled = false;
@@ -2060,7 +2104,15 @@ export class UIController {
         const interpolationSnapshot = this.captureInterpolationCurveSnapshot(track, frame);
         const created = this.mmdManager.addTimelineKeyframe(track, frame);
         if (!created) {
-            this.showToast(`Frame ${frame} は既に登録済み`, "info");
+            const overwritten = this.persistInterpolationForNewKeyframe(track, frame, interpolationSnapshot);
+            if (overwritten) {
+                this.refreshRuntimeAnimationFromInterpolationEdit();
+                this.timeline.setSelectedFrame(null);
+                this.updateTimelineEditState();
+                this.showToast(`Frame ${frame} keyframe updated`, "success");
+                return;
+            }
+            this.showToast(`Frame ${frame} already has a keyframe`, "info");
             return;
         }
 

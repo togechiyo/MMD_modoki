@@ -61,6 +61,35 @@ export interface KeyframeTrack {
     frames: Uint32Array;
 }
 
+export interface InterpolationCurve {
+    x1: number;
+    x2: number;
+    y1: number;
+    y2: number;
+}
+
+export interface InterpolationChannelPreview {
+    id: string;
+    label: string;
+    curve: InterpolationCurve;
+    available: boolean;
+}
+
+export type InterpolationPreviewSource =
+    | "none"
+    | "bone-movable"
+    | "bone-rotation-only"
+    | "camera"
+    | "morph";
+
+export interface TimelineInterpolationPreview {
+    source: InterpolationPreviewSource;
+    frame: number;
+    hasKeyframe: boolean;
+    hasCurveData: boolean;
+    channels: InterpolationChannelPreview[];
+}
+
 export interface AppState {
     modelLoaded: boolean;
     motionLoaded: boolean;

@@ -4581,14 +4581,7 @@ export class MmdManager {
     private createCameraChannelTracks(frames: Uint32Array): KeyframeTrack[] {
         const cameraFrames = frames.length > 0 ? frames : EMPTY_KEYFRAME_FRAMES;
         return [
-            { name: "Cam Pos X", category: "camera", frames: cameraFrames },
-            { name: "Cam Pos Y", category: "camera", frames: cameraFrames },
-            { name: "Cam Pos Z", category: "camera", frames: cameraFrames },
-            { name: "Cam Rot X", category: "camera", frames: cameraFrames },
-            { name: "Cam Rot Y", category: "camera", frames: cameraFrames },
-            { name: "Cam Rot Z", category: "camera", frames: cameraFrames },
-            { name: "Cam Distance", category: "camera", frames: cameraFrames },
-            { name: "Cam FoV", category: "camera", frames: cameraFrames },
+            { name: "Camera", category: "camera", frames: cameraFrames },
         ];
     }
 
@@ -4759,22 +4752,4 @@ export class MmdManager {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

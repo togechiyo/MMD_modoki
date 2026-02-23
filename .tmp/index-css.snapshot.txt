@@ -1,4 +1,4 @@
-/* ============================================
+﻿/* ============================================
    MMD Motion Editor - Design System
    ============================================ */
 
@@ -19,9 +19,6 @@
   --accent-green: #22c55e;
   --accent-amber: #f59e0b;
   --accent-red: #ef4444;
-  --axis-x-color: #ff2b2b;
-  --axis-y-color: #00d83a;
-  --axis-z-color: #1b4dff;
 
   /* Gradients */
   --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
@@ -996,9 +993,9 @@ body {
 .interpolation-meta {
   display: grid;
   gap: 0;
-  margin-bottom: 4px;
-  padding-bottom: 3px;
-  border-bottom: 1px solid var(--border-color);
+  margin-top: 1px;
+  padding-top: 1px;
+  border-top: 1px solid var(--border-color);
 }
 
 .interp-curve-list::-webkit-scrollbar {
@@ -1042,7 +1039,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 10px;
-  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 .interp-curve-legend-item {
@@ -1056,6 +1053,14 @@ body {
   opacity: 0.6;
 }
 
+.interp-curve-legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
 .interp-curve-name {
   font-size: 10px;
   color: var(--text-secondary);
@@ -1066,28 +1071,6 @@ body {
   font-size: 10px;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-}
-
-.interp-type-select {
-  width: 124px;
-  max-width: 124px;
-  padding: 2px 6px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-family: var(--font-mono);
-  outline: none;
-}
-
-.interp-type-select:focus {
-  border-color: var(--accent-primary);
-}
-
-.interp-type-select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .interp-curve-svg {
@@ -1105,20 +1088,6 @@ body {
 .interp-curve-path {
   stroke-width: 1.6;
   fill: none;
-}
-
-.interp-curve-point {
-  pointer-events: none;
-}
-
-.interp-curve-point--editable {
-  pointer-events: auto;
-  stroke: rgba(15, 23, 42, 0.9);
-  stroke-width: 0.9;
-}
-
-.interp-curve-point--editable:hover {
-  stroke-width: 1.2;
 }
 
 .info-row {

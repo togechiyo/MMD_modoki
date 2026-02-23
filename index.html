@@ -205,16 +205,47 @@
             </div>
             <div class="info-row"><span class="info-label">モデル</span><span id="info-model-name"
                 class="info-value">-</span></div>
-            <div class="info-row"><span class="info-label">頂点</span><span id="info-vertices" class="info-value">-</span>
-            </div>
-            <div class="info-row"><span class="info-label">ボーン</span><span id="info-bones" class="info-value">-</span>
+            <div class="info-row">
+              <span class="info-label">頂点/ボーン</span>
+              <span class="info-value info-value-combo">
+                V:<span id="info-vertices" class="info-value-inline">-</span>
+                B:<span id="info-bones" class="info-value-inline">-</span>
+              </span>
             </div>
             <div class="info-row"><span class="info-label">モーフ</span><span id="info-morphs" class="info-value">-</span>
             </div>
           </div>
         </section>
 
-        <!-- 2: Bone Controls -->
+        <!-- 2: Interpolation -->
+        <section id="interpolation-section" class="bottom-section">
+          <div class="section-header">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2">
+              <path d="M1.5 11.5C4 2.5 10 2.5 12.5 11.5" />
+              <circle cx="2.5" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
+              <circle cx="11.5" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
+            </svg>
+            <span>補間</span>
+          </div>
+          <div class="model-info interpolation-info">
+            <div class="info-row interpolation-row--hidden"><span class="info-label">対象</span><span id="interp-track-name" class="info-value">-</span></div>
+            <div class="info-row interpolation-row--hidden"><span class="info-label">フレーム</span><span id="interp-frame" class="info-value">-</span></div>
+            <div class="interpolation-meta">
+              <div class="info-row">
+                <span class="info-label">種別</span>
+                <select id="interp-type" class="interp-type-select" disabled>
+                  <option value="__all__">全て</option>
+                </select>
+              </div>
+              <div class="info-row interpolation-row--hidden"><span class="info-label">状態</span><span id="interp-status" class="info-value">準備中</span></div>
+            </div>
+            <div id="interp-curve-list" class="interp-curve-list">
+              <div class="interp-curve-empty">トラックを選択すると表示されます</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3: Bone Controls -->
         <section id="bone-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -233,7 +264,7 @@
           </div>
         </section>
 
-        <!-- 3: Morph Controls -->
+        <!-- 4: Morph Controls -->
         <section id="morph-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -253,7 +284,7 @@
           </div>
         </section>
 
-        <!-- 4: Camera Controls -->
+        <!-- 5: Camera Controls -->
         <section id="camera-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">

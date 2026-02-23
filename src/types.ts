@@ -1,7 +1,13 @@
 export interface ElectronAPI {
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
     readBinaryFile: (filePath: string) => Promise<Buffer | null>;
+    readTextFile: (filePath: string) => Promise<string | null>;
     getFileInfo: (filePath: string) => Promise<{ name: string; path: string; size: number; extension: string } | null>;
+    saveTextFile: (
+        content: string,
+        defaultFileName?: string,
+        filters?: { name: string; extensions: string[] }[],
+    ) => Promise<string | null>;
     savePngFile: (dataUrl: string, defaultFileName?: string) => Promise<string | null>;
 }
 
@@ -63,4 +69,153 @@ export interface AppState {
     totalFrames: number;
     modelInfo: ModelInfo | null;
     motionInfo: MotionInfo | null;
+}
+
+export interface ProjectMotionImport {
+    type: "vmd" | "vpd";
+    path: string;
+    frame?: number;
+}
+
+export interface ProjectModelState {
+    path: string;
+    visible: boolean;
+    motionImports: ProjectMotionImport[];
+    animation?: ProjectSerializedModelAnimation | null;
+}
+
+export interface ProjectCameraState {
+    position: { x: number; y: number; z: number };
+    target: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    fov: number;
+    distance: number;
+}
+
+export interface ProjectLightingState {
+    azimuth: number;
+    elevation: number;
+    intensity: number;
+    ambientIntensity: number;
+    temperatureKelvin: number;
+    shadowEnabled: boolean;
+    shadowDarkness: number;
+    shadowEdgeSoftness: number;
+}
+
+export interface ProjectViewportState {
+    groundVisible: boolean;
+    skydomeVisible: boolean;
+    antialiasEnabled: boolean;
+}
+
+export interface ProjectPhysicsState {
+    enabled: boolean;
+    gravityAcceleration: number;
+    gravityDirection: { x: number; y: number; z: number };
+}
+
+export interface ProjectEffectState {
+    dofEnabled: boolean;
+    dofFocusDistanceMm: number;
+    dofFStop: number;
+    dofLensSize: number;
+    dofLensBlurStrength: number;
+    dofLensEdgeBlur: number;
+    dofLensDistortionInfluence: number;
+    modelEdgeWidth: number;
+    gamma: number;
+}
+
+export interface ProjectSerializedBoneTrack {
+    name: string;
+    frameNumbers: ProjectNumberArray;
+    rotations: ProjectNumberArray;
+    rotationInterpolations: ProjectNumberArray;
+    physicsToggles: ProjectNumberArray;
+}
+
+export interface ProjectSerializedMovableBoneTrack {
+    name: string;
+    frameNumbers: ProjectNumberArray;
+    positions: ProjectNumberArray;
+    positionInterpolations: ProjectNumberArray;
+    rotations: ProjectNumberArray;
+    rotationInterpolations: ProjectNumberArray;
+    physicsToggles: ProjectNumberArray;
+}
+
+export interface ProjectSerializedMorphTrack {
+    name: string;
+    frameNumbers: ProjectNumberArray;
+    weights: ProjectNumberArray;
+}
+
+export interface ProjectSerializedPropertyTrack {
+    frameNumbers: ProjectNumberArray;
+    visibles: ProjectNumberArray;
+    ikBoneNames: string[];
+    ikStates: ProjectNumberArray[];
+}
+
+export interface ProjectSerializedCameraTrack {
+    frameNumbers: ProjectNumberArray;
+    positions: ProjectNumberArray;
+    positionInterpolations: ProjectNumberArray;
+    rotations: ProjectNumberArray;
+    rotationInterpolations: ProjectNumberArray;
+    distances: ProjectNumberArray;
+    distanceInterpolations: ProjectNumberArray;
+    fovs: ProjectNumberArray;
+    fovInterpolations: ProjectNumberArray;
+}
+
+export interface ProjectPackedArray {
+    encoding: "u8-b64" | "f32-b64" | "u32-delta-varint-b64";
+    length: number;
+    data: string;
+}
+
+export type ProjectNumberArray = number[] | ProjectPackedArray;
+
+export interface ProjectSerializedModelAnimation {
+    name: string;
+    boneTracks: ProjectSerializedBoneTrack[];
+    movableBoneTracks: ProjectSerializedMovableBoneTrack[];
+    morphTracks: ProjectSerializedMorphTrack[];
+    propertyTrack: ProjectSerializedPropertyTrack;
+}
+
+export interface ProjectKeyframeModelAnimation {
+    modelPath: string;
+    animation: ProjectSerializedModelAnimation | null;
+}
+
+export interface ProjectKeyframeBundle {
+    modelAnimations: ProjectKeyframeModelAnimation[];
+    cameraAnimation: ProjectSerializedCameraTrack | null;
+}
+
+export interface MmdModokiProjectFileV1 {
+    format: "mmd_modoki_project";
+    version: 1;
+    savedAt: string;
+    scene: {
+        models: ProjectModelState[];
+        activeModelPath: string | null;
+        timelineTarget: "model" | "camera";
+        currentFrame: number;
+        playbackSpeed: number;
+    };
+    assets: {
+        cameraVmdPath: string | null;
+        audioPath: string | null;
+        cameraAnimation?: ProjectSerializedCameraTrack | null;
+    };
+    camera: ProjectCameraState;
+    lighting: ProjectLightingState;
+    viewport: ProjectViewportState;
+    physics: ProjectPhysicsState;
+    effects: ProjectEffectState;
+    keyframes?: ProjectKeyframeBundle;
 }

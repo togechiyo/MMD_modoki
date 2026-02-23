@@ -17,6 +17,8 @@ export class UIController {
     private btnLoadVmd: HTMLElement;
     private btnLoadCameraVmd: HTMLElement;
     private btnLoadMp3: HTMLElement;
+    private btnSaveProject: HTMLElement;
+    private btnLoadProject: HTMLElement;
     private btnExportPng: HTMLElement;
     private btnToggleGround: HTMLElement;
     private groundToggleText: HTMLElement;
@@ -73,6 +75,8 @@ export class UIController {
         this.btnLoadVmd = document.getElementById("btn-load-vmd")!;
         this.btnLoadCameraVmd = document.getElementById("btn-load-camera-vmd")!;
         this.btnLoadMp3 = document.getElementById("btn-load-mp3")!;
+        this.btnSaveProject = document.getElementById("btn-save-project")!;
+        this.btnLoadProject = document.getElementById("btn-load-project")!;
         this.btnExportPng = document.getElementById("btn-export-png")!;
         this.btnToggleGround = document.getElementById("btn-toggle-ground")!;
         this.groundToggleText = document.getElementById("ground-toggle-text")!;
@@ -121,6 +125,8 @@ export class UIController {
         this.btnLoadVmd.addEventListener("click", () => this.loadVMD());
         this.btnLoadCameraVmd.addEventListener("click", () => this.loadCameraVMD());
         this.btnLoadMp3.addEventListener("click", () => this.loadMP3());
+        this.btnSaveProject.addEventListener("click", () => this.saveProject());
+        this.btnLoadProject.addEventListener("click", () => this.loadProject());
         this.btnExportPng.addEventListener("click", () => this.exportPNG());
         this.btnToggleGround.addEventListener("click", () => {
             const visible = this.mmdManager.toggleGroundVisible();
@@ -706,6 +712,7 @@ export class UIController {
         this.mmdManager.onFrameUpdate = (frame, total) => {
             this.currentFrameEl.textContent = String(frame);
             this.totalFramesEl.textContent = String(total);
+            this.timeline.setTotalFrames(total);
             this.timeline.setCurrentFrame(frame);
             this.updateTimelineEditState();
 
@@ -866,32 +873,44 @@ export class UIController {
                     break;
             }
 
+            // Ctrl+Alt+O = open project file
+            if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === "O" || e.key === "o")) {
+                e.preventDefault();
+                this.loadProject();
+            }
+
+            // Ctrl+Alt+S = save project file
+            if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === "S" || e.key === "s")) {
+                e.preventDefault();
+                this.saveProject();
+            }
+
             // Ctrl+O = open PMX/PMD
-            if (e.ctrlKey && e.key === "o") {
+            if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "O" || e.key === "o")) {
                 e.preventDefault();
                 this.loadPMX();
             }
 
             // Ctrl+M = open VMD/VPD
-            if (e.ctrlKey && e.key === "m") {
+            if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "M" || e.key === "m")) {
                 e.preventDefault();
                 this.loadVMD();
             }
 
             // Ctrl+Shift+M = open camera VMD
-            if (e.ctrlKey && e.shiftKey && (e.key === "M" || e.key === "m")) {
+            if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === "M" || e.key === "m")) {
                 e.preventDefault();
                 this.loadCameraVMD();
             }
 
             // Ctrl+Shift+A = open MP3
-            if (e.ctrlKey && e.shiftKey && e.key === "A") {
+            if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === "A" || e.key === "a")) {
                 e.preventDefault();
                 this.loadMP3();
             }
 
             // Ctrl+Shift+S = export PNG
-            if (e.ctrlKey && e.shiftKey && (e.key === "S" || e.key === "s")) {
+            if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === "S" || e.key === "s")) {
                 e.preventDefault();
                 void this.exportPNG();
             }
@@ -950,6 +969,90 @@ export class UIController {
             await this.mmdManager.toggleMute();
             updateVolumeUI(this.mmdManager.muted);
         });
+    }
+
+    private async saveProject(): Promise<void> {
+        this.setStatus("Saving project...", true);
+        try {
+            const project = this.mmdManager.exportProjectState();
+            const json = JSON.stringify(project, null, 2);
+
+            const now = new Date();
+            const pad = (v: number) => String(v).padStart(2, "0");
+            const fileName = `mmd_project_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.mmdproj.json`;
+
+            const savedPath = await window.electronAPI.saveTextFile(json, fileName, [
+                { name: "MMD Modoki Project", extensions: ["mmdproj", "json"] },
+                { name: "All files", extensions: ["*"] },
+            ]);
+            if (!savedPath) {
+                this.setStatus("Ready", false);
+                this.showToast("Project save canceled", "info");
+                return;
+            }
+
+            const basename = savedPath.replace(/^.*[\\/]/, "");
+            this.setStatus("Project saved", false);
+            this.showToast(`Saved project: ${basename}`, "success");
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus("Project save failed", false);
+            this.showToast(`Project save error: ${message}`, "error");
+        }
+    }
+
+    private async loadProject(): Promise<void> {
+        const filePath = await window.electronAPI.openFileDialog([
+            { name: "MMD Modoki Project", extensions: ["mmdproj", "json"] },
+            { name: "All files", extensions: ["*"] },
+        ]);
+        if (!filePath) return;
+
+        this.setStatus("Loading project...", true);
+        try {
+            const text = await window.electronAPI.readTextFile(filePath);
+            if (!text) {
+                this.setStatus("Project load failed", false);
+                this.showToast("Failed to read project file", "error");
+                return;
+            }
+
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(text);
+            } catch {
+                this.setStatus("Project load failed", false);
+                this.showToast("Project JSON parse failed", "error");
+                return;
+            }
+
+            const result = await this.mmdManager.importProjectState(parsed);
+            this.refreshModelSelector();
+            if (this.mmdManager.getTimelineTarget() === "camera") {
+                this.applyCameraSelectionUI();
+            } else {
+                const activeModel = this.mmdManager.getLoadedModels().find((item) => item.active);
+                if (activeModel) {
+                    this.mmdManager.setActiveModelByIndex(activeModel.index);
+                }
+            }
+            this.updateTimelineEditState();
+
+            if (result.warnings.length > 0) {
+                this.setStatus("Project loaded (with warnings)", false);
+                this.showToast(
+                    `Project loaded (${result.loadedModels} models, ${result.warnings.length} warnings)`,
+                    "info",
+                );
+            } else {
+                this.setStatus("Project loaded", false);
+                this.showToast(`Project loaded (${result.loadedModels} models)`, "success");
+            }
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus("Project load failed", false);
+            this.showToast(`Project load error: ${message}`, "error");
+        }
     }
 
     private async loadPMX(): Promise<void> {

@@ -24,7 +24,24 @@ import { DepthOfFieldEffectBlurLevel } from "@babylonjs/core/PostProcesses/depth
 import { GizmoManager } from "@babylonjs/core/Gizmos/gizmoManager";
 import type { DepthRenderer } from "@babylonjs/core/Rendering/depthRenderer";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
-import type { BoneControlInfo, ModelInfo, MotionInfo, KeyframeTrack, TrackCategory } from "./types";
+import type {
+    BoneControlInfo,
+    MmdModokiProjectFileV1,
+    ModelInfo,
+    MotionInfo,
+    ProjectMotionImport,
+    ProjectKeyframeBundle,
+    ProjectNumberArray,
+    ProjectPackedArray,
+    ProjectSerializedBoneTrack,
+    ProjectSerializedCameraTrack,
+    ProjectSerializedModelAnimation,
+    ProjectSerializedMorphTrack,
+    ProjectSerializedMovableBoneTrack,
+    ProjectSerializedPropertyTrack,
+    KeyframeTrack,
+    TrackCategory,
+} from "./types";
 import type { IMmdRuntimeBone } from "babylon-mmd/esm/Runtime/IMmdRuntimeBone";
 
 type EditorRuntimeBone = IMmdRuntimeBone & {
@@ -158,7 +175,7 @@ import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
 import { VpdLoader } from "babylon-mmd/esm/Loader/vpdLoader";
 import { MmdAnimation } from "babylon-mmd/esm/Loader/Animation/mmdAnimation";
-import { MmdBoneAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
+import { MmdBoneAnimationTrack, MmdCameraAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack, MmdPropertyAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
 import { MmdStandardMaterialProxy } from "babylon-mmd/esm/Runtime/mmdStandardMaterialProxy";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
@@ -209,6 +226,10 @@ export class MmdManager {
     private hasCameraMotion = false;
     private readonly modelKeyframeTracksByModel = new WeakMap<MmdModel, Map<string, Uint32Array>>();
     private readonly modelSourceAnimationsByModel = new WeakMap<MmdModel, MmdAnimation>();
+    private cameraSourceAnimation: MmdAnimation | null = null;
+    private readonly modelMotionImportsByModel = new WeakMap<MmdModel, ProjectMotionImport[]>();
+    private cameraMotionPath: string | null = null;
+    private audioSourcePath: string | null = null;
     private cameraKeyframeFrames: Uint32Array = EMPTY_KEYFRAME_FRAMES;
     private timelineTarget: "model" | "camera" = "model";
     private boneVisualizerTarget: { mesh: Mesh; skeleton: Skeleton | null; pairs: Array<[number, number]>; positionMesh: Mesh; runtimeBones: readonly IMmdRuntimeBone[] | null; runtimeUseMeshWorldMatrix: boolean; boneControlInfoByName: ReadonlyMap<string, BoneControlInfo> } | null = null;
@@ -340,6 +361,31 @@ export class MmdManager {
             active: entry.model === this.currentModel,
         }));
     }
+    private getModelVisibility(mesh: MmdMesh): boolean {
+        if (mesh.isEnabled() && mesh.isVisible) return true;
+
+        for (const childMesh of mesh.getChildMeshes()) {
+            if (childMesh.isEnabled() && childMesh.isVisible) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private setModelMotionImports(model: MmdModel, imports: ProjectMotionImport[]): void {
+        this.modelMotionImportsByModel.set(model, imports.map((item) => ({ ...item })));
+    }
+
+    private appendModelMotionImport(model: MmdModel, value: ProjectMotionImport): void {
+        const current = this.modelMotionImportsByModel.get(model) ?? [];
+        current.push({ ...value });
+        this.modelMotionImportsByModel.set(model, current);
+    }
+
+    private normalizePathForCompare(value: string): string {
+        return value.replace(/\\/g, "/").toLowerCase();
+    }
 
     public getActiveModelVisibility(): boolean {
         if (!this.currentMesh) return false;
@@ -392,6 +438,7 @@ export class MmdManager {
 
         this.modelKeyframeTracksByModel.delete(removed.model);
         this.modelSourceAnimationsByModel.delete(removed.model);
+        this.modelMotionImportsByModel.delete(removed.model);
         removed.mesh.dispose();
         this.sceneModels.splice(removeIndex, 1);
 
@@ -1747,6 +1794,7 @@ export class MmdManager {
             this.applyPhysicsStateToModel(mmdModel);
             this.modelKeyframeTracksByModel.set(mmdModel, new Map());
             this.modelSourceAnimationsByModel.delete(mmdModel);
+            this.setModelMotionImports(mmdModel, []);
 
             console.log("[PMX] MmdModel created, morph:", !!mmdModel.morph);
 
@@ -2041,6 +2089,7 @@ export class MmdManager {
             URL.revokeObjectURL(blobUrl);
 
             this.modelSourceAnimationsByModel.set(targetModel, animation);
+            this.setModelMotionImports(targetModel, [{ type: "vmd", path: filePath }]);
             const animHandle = targetModel.createRuntimeAnimation(animation);
             targetModel.setRuntimeAnimation(animHandle);
 
@@ -2105,6 +2154,7 @@ export class MmdManager {
                 ? this.mergeModelAnimations(baseAnimation, shiftedPoseAnimation)
                 : shiftedPoseAnimation;
             this.modelSourceAnimationsByModel.set(targetModel, mergedAnimation);
+            this.appendModelMotionImport(targetModel, { type: "vpd", path: filePath, frame: loadFrame });
 
             const animHandle = targetModel.createRuntimeAnimation(mergedAnimation);
             targetModel.setRuntimeAnimation(animHandle);
@@ -2178,13 +2228,11 @@ export class MmdManager {
             this.cameraAnimationHandle = this.mmdCamera.createRuntimeAnimation(animation);
             this.mmdCamera.setRuntimeAnimation(this.cameraAnimationHandle);
             this.hasCameraMotion = true;
+            this.cameraMotionPath = filePath;
+            this.cameraSourceAnimation = animation;
             this.cameraKeyframeFrames = new Uint32Array(animation.cameraTrack.frameNumbers);
             this.emitMergedKeyframeTracks();
 
-            this._totalFrames = Math.max(
-                Math.floor(this.mmdRuntime.animationFrameTimeDuration),
-                300
-            );
             this._currentFrame = 0;
             this.mmdRuntime.seekAnimation(0, true);
             this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
@@ -2235,6 +2283,7 @@ export class MmdManager {
             this.audioPlayer = new StreamAudioPlayer(this.scene);
             this.audioPlayer.source = this.audioBlobUrl;
             await this.mmdRuntime.setAudioPlayer(this.audioPlayer);
+            this.audioSourcePath = filePath;
 
             this.onAudioLoaded?.(fileName.replace(/\.(mp3|wav|wave|ogg)$/i, ""));
             return true;
@@ -2347,6 +2396,694 @@ export class MmdManager {
         return this._totalFrames;
     }
 
+    private isPackedProjectArray(value: unknown): value is ProjectPackedArray {
+        if (!value || typeof value !== "object") return false;
+        const packed = value as Partial<ProjectPackedArray>;
+        if (typeof packed.data !== "string") return false;
+        if (typeof packed.length !== "number" || !Number.isFinite(packed.length) || packed.length < 0) return false;
+        return packed.encoding === "u8-b64" || packed.encoding === "f32-b64" || packed.encoding === "u32-delta-varint-b64";
+    }
+
+    private encodeUint8ToBase64(bytes: Uint8Array): string {
+        if (bytes.length === 0) return "";
+        const chunkSize = 0x8000;
+        const parts: string[] = [];
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, i + chunkSize);
+            let binary = "";
+            for (let j = 0; j < chunk.length; j += 1) {
+                binary += String.fromCharCode(chunk[j]);
+            }
+            parts.push(binary);
+        }
+        return btoa(parts.join(""));
+    }
+
+    private decodeBase64ToUint8(value: string): Uint8Array {
+        if (value.length === 0) return new Uint8Array(0);
+        try {
+            const binary = atob(value);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) {
+                bytes[i] = binary.charCodeAt(i) & 0xff;
+            }
+            return bytes;
+        } catch {
+            return new Uint8Array(0);
+        }
+    }
+
+    private getProjectArrayLength(source: ProjectNumberArray | null | undefined): number {
+        if (Array.isArray(source)) return source.length;
+        if (!this.isPackedProjectArray(source)) return 0;
+        return Math.max(0, Math.floor(source.length));
+    }
+
+    private packUint8Array(source: Uint8Array): ProjectNumberArray {
+        return {
+            encoding: "u8-b64",
+            length: source.length,
+            data: this.encodeUint8ToBase64(source),
+        };
+    }
+
+    private packFloat32Array(source: Float32Array): ProjectNumberArray {
+        const bytes = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+        return {
+            encoding: "f32-b64",
+            length: source.length,
+            data: this.encodeUint8ToBase64(bytes),
+        };
+    }
+
+    private packFrameNumbers(source: Uint32Array): ProjectNumberArray {
+        if (source.length === 0) {
+            return {
+                encoding: "u32-delta-varint-b64",
+                length: 0,
+                data: "",
+            };
+        }
+
+        const encoded: number[] = [];
+        let previous = 0;
+        for (let i = 0; i < source.length; i += 1) {
+            const current = source[i];
+            if (i > 0 && current < previous) {
+                // Fallback for unexpected unsorted input.
+                return Array.from(source);
+            }
+            let delta = i === 0 ? current : current - previous;
+            previous = current;
+
+            while (delta >= 0x80) {
+                encoded.push((delta & 0x7f) | 0x80);
+                delta = Math.floor(delta / 128);
+            }
+            encoded.push(delta & 0x7f);
+        }
+
+        return {
+            encoding: "u32-delta-varint-b64",
+            length: source.length,
+            data: this.encodeUint8ToBase64(Uint8Array.from(encoded)),
+        };
+    }
+
+    private copyProjectArrayToFloat32(source: ProjectNumberArray | null | undefined, destination: Float32Array): void {
+        if (Array.isArray(source)) {
+            const count = Math.min(source.length, destination.length);
+            for (let i = 0; i < count; i += 1) {
+                const value = source[i];
+                destination[i] = Number.isFinite(value) ? value : 0;
+            }
+            return;
+        }
+        if (!this.isPackedProjectArray(source) || source.encoding !== "f32-b64") return;
+
+        const bytes = this.decodeBase64ToUint8(source.data);
+        const available = Math.floor(bytes.length / 4);
+        const count = Math.min(destination.length, this.getProjectArrayLength(source), available);
+        const dataView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        for (let i = 0; i < count; i += 1) {
+            destination[i] = dataView.getFloat32(i * 4, true);
+        }
+    }
+
+    private copyProjectArrayToUint8(source: ProjectNumberArray | null | undefined, destination: Uint8Array): void {
+        if (Array.isArray(source)) {
+            const count = Math.min(source.length, destination.length);
+            for (let i = 0; i < count; i += 1) {
+                const value = source[i];
+                const normalized = Number.isFinite(value) ? Math.round(value) : 0;
+                destination[i] = Math.max(0, Math.min(255, normalized));
+            }
+            return;
+        }
+        if (!this.isPackedProjectArray(source) || source.encoding !== "u8-b64") return;
+
+        const bytes = this.decodeBase64ToUint8(source.data);
+        const count = Math.min(destination.length, this.getProjectArrayLength(source), bytes.length);
+        for (let i = 0; i < count; i += 1) {
+            destination[i] = bytes[i];
+        }
+    }
+
+    private copyProjectArrayToUint32(source: ProjectNumberArray | null | undefined, destination: Uint32Array): void {
+        if (Array.isArray(source)) {
+            const count = Math.min(source.length, destination.length);
+            for (let i = 0; i < count; i += 1) {
+                const value = source[i];
+                destination[i] = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+            }
+            return;
+        }
+        if (!this.isPackedProjectArray(source) || source.encoding !== "u32-delta-varint-b64") return;
+
+        const bytes = this.decodeBase64ToUint8(source.data);
+        const targetCount = Math.min(destination.length, this.getProjectArrayLength(source));
+        let byteOffset = 0;
+        let previous = 0;
+
+        for (let i = 0; i < targetCount; i += 1) {
+            let delta = 0;
+            let base = 1;
+            let completed = false;
+            while (byteOffset < bytes.length) {
+                const byteValue = bytes[byteOffset++];
+                delta += (byteValue & 0x7f) * base;
+                if ((byteValue & 0x80) === 0) {
+                    completed = true;
+                    break;
+                }
+                base *= 128;
+            }
+            if (!completed) break;
+
+            const frame = i === 0 ? delta : previous + delta;
+            const normalized = Number.isFinite(frame) ? Math.max(0, Math.floor(frame)) : 0;
+            destination[i] = normalized;
+            previous = normalized;
+        }
+    }
+
+    private serializePropertyTrack(track: MmdPropertyAnimationTrack): ProjectSerializedPropertyTrack {
+        const ikStates: ProjectNumberArray[] = [];
+        for (let i = 0; i < track.ikBoneNames.length; i += 1) {
+            ikStates.push(this.packUint8Array(track.getIkState(i)));
+        }
+
+        return {
+            frameNumbers: this.packFrameNumbers(track.frameNumbers),
+            visibles: this.packUint8Array(track.visibles),
+            ikBoneNames: [...track.ikBoneNames],
+            ikStates,
+        };
+    }
+
+    private serializeCameraTrack(track: MmdCameraAnimationTrack | null | undefined): ProjectSerializedCameraTrack | null {
+        if (!track || track.frameNumbers.length === 0) return null;
+
+        return {
+            frameNumbers: this.packFrameNumbers(track.frameNumbers),
+            positions: this.packFloat32Array(track.positions),
+            positionInterpolations: this.packUint8Array(track.positionInterpolations),
+            rotations: this.packFloat32Array(track.rotations),
+            rotationInterpolations: this.packUint8Array(track.rotationInterpolations),
+            distances: this.packFloat32Array(track.distances),
+            distanceInterpolations: this.packUint8Array(track.distanceInterpolations),
+            fovs: this.packFloat32Array(track.fovs),
+            fovInterpolations: this.packUint8Array(track.fovInterpolations),
+        };
+    }
+
+    private serializeModelAnimation(animation: MmdAnimation | undefined): ProjectSerializedModelAnimation | null {
+        if (!animation) return null;
+
+        const boneTracks: ProjectSerializedBoneTrack[] = animation.boneTracks.map((track) => ({
+            name: track.name,
+            frameNumbers: this.packFrameNumbers(track.frameNumbers),
+            rotations: this.packFloat32Array(track.rotations),
+            rotationInterpolations: this.packUint8Array(track.rotationInterpolations),
+            physicsToggles: this.packUint8Array(track.physicsToggles),
+        }));
+
+        const movableBoneTracks: ProjectSerializedMovableBoneTrack[] = animation.movableBoneTracks.map((track) => ({
+            name: track.name,
+            frameNumbers: this.packFrameNumbers(track.frameNumbers),
+            positions: this.packFloat32Array(track.positions),
+            positionInterpolations: this.packUint8Array(track.positionInterpolations),
+            rotations: this.packFloat32Array(track.rotations),
+            rotationInterpolations: this.packUint8Array(track.rotationInterpolations),
+            physicsToggles: this.packUint8Array(track.physicsToggles),
+        }));
+
+        const morphTracks: ProjectSerializedMorphTrack[] = animation.morphTracks.map((track) => ({
+            name: track.name,
+            frameNumbers: this.packFrameNumbers(track.frameNumbers),
+            weights: this.packFloat32Array(track.weights),
+        }));
+
+        return {
+            name: animation.name,
+            boneTracks,
+            movableBoneTracks,
+            morphTracks,
+            propertyTrack: this.serializePropertyTrack(animation.propertyTrack),
+        };
+    }
+
+    private deserializePropertyTrack(data: ProjectSerializedPropertyTrack | null | undefined): MmdPropertyAnimationTrack {
+        const frameCount = this.getProjectArrayLength(data?.frameNumbers);
+        const ikBoneNames = Array.isArray(data?.ikBoneNames)
+            ? data.ikBoneNames.filter((name): name is string => typeof name === "string")
+            : [];
+        const ikStates = Array.isArray(data?.ikStates) ? data.ikStates : [];
+
+        const track = new MmdPropertyAnimationTrack(frameCount, ikBoneNames);
+        this.copyProjectArrayToUint32(data?.frameNumbers, track.frameNumbers);
+        this.copyProjectArrayToUint8(data?.visibles, track.visibles);
+        for (let i = 0; i < ikBoneNames.length; i += 1) {
+            this.copyProjectArrayToUint8(ikStates[i], track.getIkState(i));
+        }
+        return track;
+    }
+
+    private deserializeCameraTrack(data: ProjectSerializedCameraTrack | null | undefined): MmdCameraAnimationTrack {
+        const frameCount = this.getProjectArrayLength(data?.frameNumbers);
+        const track = new MmdCameraAnimationTrack(frameCount);
+
+        this.copyProjectArrayToUint32(data?.frameNumbers, track.frameNumbers);
+        this.copyProjectArrayToFloat32(data?.positions, track.positions);
+        this.copyProjectArrayToUint8(data?.positionInterpolations, track.positionInterpolations);
+        this.copyProjectArrayToFloat32(data?.rotations, track.rotations);
+        this.copyProjectArrayToUint8(data?.rotationInterpolations, track.rotationInterpolations);
+        this.copyProjectArrayToFloat32(data?.distances, track.distances);
+        this.copyProjectArrayToUint8(data?.distanceInterpolations, track.distanceInterpolations);
+        this.copyProjectArrayToFloat32(data?.fovs, track.fovs);
+        this.copyProjectArrayToUint8(data?.fovInterpolations, track.fovInterpolations);
+
+        return track;
+    }
+
+    private deserializeModelAnimation(data: ProjectSerializedModelAnimation | null | undefined, fallbackName: string): MmdAnimation | null {
+        if (!data || typeof data !== "object") return null;
+
+        const boneTracks: MmdBoneAnimationTrack[] = [];
+        for (const sourceTrack of Array.isArray(data.boneTracks) ? data.boneTracks : []) {
+            if (!sourceTrack || typeof sourceTrack.name !== "string") continue;
+            const track = new MmdBoneAnimationTrack(sourceTrack.name, this.getProjectArrayLength(sourceTrack.frameNumbers));
+            this.copyProjectArrayToUint32(sourceTrack.frameNumbers, track.frameNumbers);
+            this.copyProjectArrayToFloat32(sourceTrack.rotations, track.rotations);
+            this.copyProjectArrayToUint8(sourceTrack.rotationInterpolations, track.rotationInterpolations);
+            this.copyProjectArrayToUint8(sourceTrack.physicsToggles, track.physicsToggles);
+            boneTracks.push(track);
+        }
+
+        const movableBoneTracks: MmdMovableBoneAnimationTrack[] = [];
+        for (const sourceTrack of Array.isArray(data.movableBoneTracks) ? data.movableBoneTracks : []) {
+            if (!sourceTrack || typeof sourceTrack.name !== "string") continue;
+            const track = new MmdMovableBoneAnimationTrack(sourceTrack.name, this.getProjectArrayLength(sourceTrack.frameNumbers));
+            this.copyProjectArrayToUint32(sourceTrack.frameNumbers, track.frameNumbers);
+            this.copyProjectArrayToFloat32(sourceTrack.positions, track.positions);
+            this.copyProjectArrayToUint8(sourceTrack.positionInterpolations, track.positionInterpolations);
+            this.copyProjectArrayToFloat32(sourceTrack.rotations, track.rotations);
+            this.copyProjectArrayToUint8(sourceTrack.rotationInterpolations, track.rotationInterpolations);
+            this.copyProjectArrayToUint8(sourceTrack.physicsToggles, track.physicsToggles);
+            movableBoneTracks.push(track);
+        }
+
+        const morphTracks: MmdMorphAnimationTrack[] = [];
+        for (const sourceTrack of Array.isArray(data.morphTracks) ? data.morphTracks : []) {
+            if (!sourceTrack || typeof sourceTrack.name !== "string") continue;
+            const track = new MmdMorphAnimationTrack(sourceTrack.name, this.getProjectArrayLength(sourceTrack.frameNumbers));
+            this.copyProjectArrayToUint32(sourceTrack.frameNumbers, track.frameNumbers);
+            this.copyProjectArrayToFloat32(sourceTrack.weights, track.weights);
+            morphTracks.push(track);
+        }
+
+        const propertyTrack = this.deserializePropertyTrack(data.propertyTrack);
+        const cameraTrack = new MmdCameraAnimationTrack(0);
+        const animationName = typeof data.name === "string" && data.name.length > 0 ? data.name : fallbackName;
+
+        return new MmdAnimation(
+            animationName,
+            boneTracks,
+            movableBoneTracks,
+            morphTracks,
+            propertyTrack,
+            cameraTrack,
+        );
+    }
+
+    private createCameraAnimationFromTrack(cameraTrack: MmdCameraAnimationTrack, name: string): MmdAnimation {
+        const propertyTrack = new MmdPropertyAnimationTrack(0, []);
+        return new MmdAnimation(name, [], [], [], propertyTrack, cameraTrack);
+    }
+
+    private applyCameraAnimation(animation: MmdAnimation, sourcePath: string | null): void {
+        this.syncMmdCameraFromViewportCamera();
+
+        if (this.cameraAnimationHandle !== null) {
+            this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
+            this.cameraAnimationHandle = null;
+        }
+
+        this.cameraAnimationHandle = this.mmdCamera.createRuntimeAnimation(animation);
+        this.mmdCamera.setRuntimeAnimation(this.cameraAnimationHandle);
+        this.hasCameraMotion = true;
+        this.cameraSourceAnimation = animation;
+        this.cameraMotionPath = sourcePath;
+        this.cameraKeyframeFrames = new Uint32Array(animation.cameraTrack.frameNumbers);
+        this.emitMergedKeyframeTracks();
+
+        this._currentFrame = 0;
+        this.mmdRuntime.seekAnimation(0, true);
+        this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
+    }
+
+    public exportProjectState(): MmdModokiProjectFileV1 {
+        const models = this.sceneModels.map((entry) => ({
+            path: entry.info.path,
+            visible: this.getModelVisibility(entry.mesh),
+            motionImports: (this.modelMotionImportsByModel.get(entry.model) ?? []).map((item) => ({ ...item })),
+        }));
+
+        const keyframes: ProjectKeyframeBundle = {
+            modelAnimations: this.sceneModels.map((entry) => ({
+                modelPath: entry.info.path,
+                animation: this.serializeModelAnimation(this.modelSourceAnimationsByModel.get(entry.model)),
+            })),
+            cameraAnimation: this.serializeCameraTrack(this.cameraSourceAnimation?.cameraTrack),
+        };
+
+        return {
+            format: "mmd_modoki_project",
+            version: 1,
+            savedAt: new Date().toISOString(),
+            scene: {
+                models,
+                activeModelPath: this.activeModelInfo?.path ?? null,
+                timelineTarget: this.timelineTarget,
+                currentFrame: this._currentFrame,
+                playbackSpeed: this._playbackSpeed,
+            },
+            assets: {
+                cameraVmdPath: this.cameraMotionPath,
+                audioPath: this.audioSourcePath,
+            },
+            camera: {
+                position: {
+                    x: this.camera.position.x,
+                    y: this.camera.position.y,
+                    z: this.camera.position.z,
+                },
+                target: {
+                    x: this.camera.target.x,
+                    y: this.camera.target.y,
+                    z: this.camera.target.z,
+                },
+                rotation: {
+                    x: this.cameraRotationEulerDeg.x,
+                    y: this.cameraRotationEulerDeg.y,
+                    z: this.cameraRotationEulerDeg.z,
+                },
+                fov: this.getCameraFov(),
+                distance: this.getCameraDistance(),
+            },
+            lighting: {
+                azimuth: this.getLightAzimuth(),
+                elevation: this.getLightElevation(),
+                intensity: this.lightIntensity,
+                ambientIntensity: this.ambientIntensity,
+                temperatureKelvin: this.lightColorTemperature,
+                shadowEnabled: this.shadowEnabled,
+                shadowDarkness: this.shadowDarkness,
+                shadowEdgeSoftness: this.shadowEdgeSoftness,
+            },
+            viewport: {
+                groundVisible: this.isGroundVisible(),
+                skydomeVisible: this.isSkydomeVisible(),
+                antialiasEnabled: this.antialiasEnabled,
+            },
+            physics: {
+                enabled: this.physicsEnabled,
+                gravityAcceleration: this.physicsGravityAcceleration,
+                gravityDirection: {
+                    x: this.physicsGravityDirection.x,
+                    y: this.physicsGravityDirection.y,
+                    z: this.physicsGravityDirection.z,
+                },
+            },
+            effects: {
+                dofEnabled: this.dofEnabled,
+                dofFocusDistanceMm: this.dofFocusDistanceMm,
+                dofFStop: this.dofFStop,
+                dofLensSize: this.dofLensSize,
+                dofLensBlurStrength: this.dofLensBlurStrength,
+                dofLensEdgeBlur: this.dofLensEdgeBlur,
+                dofLensDistortionInfluence: this.dofLensDistortionInfluence,
+                modelEdgeWidth: this.modelEdgeWidth,
+                gamma: this.postEffectGamma,
+            },
+            keyframes,
+        };
+    }
+
+    public async importProjectState(data: unknown): Promise<{ loadedModels: number; warnings: string[] }> {
+        if (!this.isProjectFileV1(data)) {
+            throw new Error("Invalid project file format or version");
+        }
+
+        const warnings: string[] = [];
+        this.clearProjectForImport();
+
+        let loadedModels = 0;
+        const embeddedModelAnimationsByPath = new Map<string, ProjectSerializedModelAnimation | null>();
+        const keyframeModelAnimations = Array.isArray(data.keyframes?.modelAnimations)
+            ? data.keyframes.modelAnimations
+            : [];
+        for (const keyframeModel of keyframeModelAnimations) {
+            if (!keyframeModel || typeof keyframeModel.modelPath !== "string") continue;
+            embeddedModelAnimationsByPath.set(
+                this.normalizePathForCompare(keyframeModel.modelPath),
+                keyframeModel.animation ?? null,
+            );
+        }
+        for (const modelState of data.scene.models) {
+            const modelInfo = await this.loadPMX(modelState.path);
+            if (!modelInfo) {
+                warnings.push(`Model load failed: ${modelState.path}`);
+                continue;
+            }
+
+            loadedModels += 1;
+            const modelIndex = this.sceneModels.length - 1;
+            if (modelIndex < 0) {
+                continue;
+            }
+
+            this.setActiveModelByIndex(modelIndex);
+            this.setActiveModelVisibility(Boolean(modelState.visible));
+
+            const targetModel = this.currentModel;
+            if (!targetModel) {
+                warnings.push(`Failed to activate model for motion restore: ${modelState.path}`);
+                continue;
+            }
+
+            this.setModelMotionImports(targetModel, (modelState.motionImports ?? []).map((item) => ({ ...item })));
+
+            let restoredEmbeddedAnimation = false;
+            const embeddedAnimationData = embeddedModelAnimationsByPath.get(
+                this.normalizePathForCompare(modelState.path),
+            ) ?? modelState.animation ?? null;
+            if (embeddedAnimationData) {
+                const embeddedAnimation = this.deserializeModelAnimation(embeddedAnimationData, `${modelInfo.name}@project`);
+                if (embeddedAnimation) {
+                    this.modelSourceAnimationsByModel.set(targetModel, embeddedAnimation);
+                    const animHandle = targetModel.createRuntimeAnimation(embeddedAnimation);
+                    targetModel.setRuntimeAnimation(animHandle);
+                    this.modelKeyframeTracksByModel.set(
+                        targetModel,
+                        this.buildModelTrackFrameMapFromAnimation(embeddedAnimation),
+                    );
+                    this.emitMergedKeyframeTracks();
+                    restoredEmbeddedAnimation = true;
+                } else {
+                    warnings.push(`Embedded model animation restore failed: ${modelState.path}`);
+                }
+            }
+
+            if (!restoredEmbeddedAnimation) {
+                for (const motionImport of modelState.motionImports ?? []) {
+                    if (motionImport.type === "vmd") {
+                        const motion = await this.loadVMD(motionImport.path);
+                        if (!motion) {
+                            warnings.push(`Model VMD load failed: ${motionImport.path}`);
+                        }
+                        continue;
+                    }
+
+                    if (motionImport.type === "vpd") {
+                        if (typeof motionImport.frame === "number" && Number.isFinite(motionImport.frame)) {
+                            this.seekTo(Math.max(0, Math.floor(motionImport.frame)));
+                        }
+                        const pose = await this.loadVPD(motionImport.path);
+                        if (!pose) {
+                            warnings.push(`Model VPD load failed: ${motionImport.path}`);
+                        }
+                    }
+                }
+            }
+        }
+
+        let restoredEmbeddedCamera = false;
+        const embeddedCameraAnimationData = data.keyframes?.cameraAnimation ?? data.assets.cameraAnimation ?? null;
+        if (embeddedCameraAnimationData) {
+            const cameraTrack = this.deserializeCameraTrack(embeddedCameraAnimationData);
+            if (cameraTrack.frameNumbers.length > 0) {
+                const cameraAnimation = this.createCameraAnimationFromTrack(cameraTrack, "projectCamera");
+                this.applyCameraAnimation(cameraAnimation, data.assets.cameraVmdPath ?? null);
+                restoredEmbeddedCamera = true;
+            } else {
+                warnings.push("Embedded camera animation is empty");
+            }
+        }
+
+        if (!restoredEmbeddedCamera && data.assets.cameraVmdPath) {
+            const loaded = await this.loadCameraVMD(data.assets.cameraVmdPath);
+            if (!loaded) {
+                warnings.push(`Camera VMD load failed: ${data.assets.cameraVmdPath}`);
+            }
+        }
+
+        if (data.assets.audioPath) {
+            const loaded = await this.loadMP3(data.assets.audioPath);
+            if (!loaded) {
+                warnings.push(`Audio load failed: ${data.assets.audioPath}`);
+            }
+        }
+
+        if (data.scene.activeModelPath) {
+            const targetPath = this.normalizePathForCompare(data.scene.activeModelPath);
+            const targetIndex = this.sceneModels.findIndex(
+                (entry) => this.normalizePathForCompare(entry.info.path) === targetPath,
+            );
+            if (targetIndex >= 0) {
+                this.setActiveModelByIndex(targetIndex);
+            } else {
+                warnings.push(`Active model path not found: ${data.scene.activeModelPath}`);
+            }
+        }
+
+        this.setGroundVisible(Boolean(data.viewport.groundVisible));
+        this.setSkydomeVisible(Boolean(data.viewport.skydomeVisible));
+        this.antialiasEnabled = Boolean(data.viewport.antialiasEnabled);
+
+        this.setLightDirection(data.lighting.azimuth, data.lighting.elevation);
+        this.lightIntensity = data.lighting.intensity;
+        this.ambientIntensity = data.lighting.ambientIntensity;
+        this.lightColorTemperature = data.lighting.temperatureKelvin;
+        this.shadowDarkness = data.lighting.shadowDarkness;
+        this.shadowEdgeSoftness = data.lighting.shadowEdgeSoftness;
+        this.setShadowEnabled(Boolean(data.lighting.shadowEnabled));
+
+        this.setPhysicsGravityAcceleration(data.physics.gravityAcceleration);
+        this.setPhysicsGravityDirection(
+            data.physics.gravityDirection.x,
+            data.physics.gravityDirection.y,
+            data.physics.gravityDirection.z,
+        );
+        if (this.physicsAvailable) {
+            this.setPhysicsEnabled(Boolean(data.physics.enabled));
+        } else if (data.physics.enabled) {
+            warnings.push("Physics was enabled in project, but physics is unavailable in this environment");
+        }
+
+        this.dofEnabled = Boolean(data.effects.dofEnabled);
+        this.dofFocusDistanceMm = data.effects.dofFocusDistanceMm;
+        this.dofFStop = data.effects.dofFStop;
+        this.dofLensSize = data.effects.dofLensSize;
+        this.dofLensBlurStrength = data.effects.dofLensBlurStrength;
+        this.dofLensEdgeBlur = data.effects.dofLensEdgeBlur;
+        this.dofLensDistortionInfluence = data.effects.dofLensDistortionInfluence;
+        this.modelEdgeWidth = data.effects.modelEdgeWidth;
+        this.postEffectGamma = data.effects.gamma;
+
+        this.camera.setPosition(
+            new Vector3(
+                data.camera.position.x,
+                data.camera.position.y,
+                data.camera.position.z,
+            ),
+        );
+        this.camera.setTarget(
+            new Vector3(
+                data.camera.target.x,
+                data.camera.target.y,
+                data.camera.target.z,
+            ),
+        );
+        this.camera.fov = (data.camera.fov * Math.PI) / 180;
+        this.syncCameraRotationFromCurrentView();
+        this.syncMmdCameraFromViewportCamera();
+        this.updateEditorDofFocusAndFStop();
+
+        this.setPlaybackSpeed(Math.max(0.01, data.scene.playbackSpeed));
+
+        if (data.scene.timelineTarget === "model" && this.currentModel) {
+            this.setTimelineTarget("model");
+        } else {
+            if (data.scene.timelineTarget === "model" && !this.currentModel) {
+                warnings.push("Timeline target was model, but no model is loaded");
+            }
+            this.setTimelineTarget("camera");
+        }
+
+        this.seekTo(Math.max(0, Math.floor(data.scene.currentFrame)));
+        return { loadedModels, warnings };
+    }
+
+    private clearProjectForImport(): void {
+        this.pause();
+
+        if (this.cameraAnimationHandle !== null) {
+            this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
+            this.cameraAnimationHandle = null;
+        }
+        this.hasCameraMotion = false;
+        this.cameraKeyframeFrames = EMPTY_KEYFRAME_FRAMES;
+        this.cameraMotionPath = null;
+        this.cameraSourceAnimation = null;
+
+        if (this.audioBlobUrl) {
+            URL.revokeObjectURL(this.audioBlobUrl);
+            this.audioBlobUrl = null;
+        }
+        if (this.audioPlayer) {
+            this.audioPlayer.dispose();
+            this.audioPlayer = null;
+        }
+        this.audioSourcePath = null;
+
+        for (const entry of this.sceneModels) {
+            try {
+                this.mmdRuntime.destroyMmdModel(entry.model);
+            } catch {
+                // no-op
+            }
+            this.modelKeyframeTracksByModel.delete(entry.model);
+            this.modelSourceAnimationsByModel.delete(entry.model);
+            this.modelMotionImportsByModel.delete(entry.model);
+            entry.mesh.dispose();
+        }
+
+        this.sceneModels = [];
+        this.currentMesh = null;
+        this.currentModel = null;
+        this.activeModelInfo = null;
+        this.timelineTarget = "camera";
+
+        this._isPlaying = false;
+        this.manualPlaybackWithoutAudio = false;
+        this.manualPlaybackFrameCursor = 0;
+        this._currentFrame = 0;
+        this._totalFrames = 300;
+        this.mmdRuntime.pauseAnimation();
+        this.mmdRuntime.seekAnimation(0, true);
+
+        this.refreshBoneVisualizerTarget();
+        this.updateBoneGizmoTarget();
+        this.emitMergedKeyframeTracks();
+        this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
+    }
+
+    private isProjectFileV1(value: unknown): value is MmdModokiProjectFileV1 {
+        if (!value || typeof value !== "object") return false;
+        const maybeProject = value as Partial<MmdModokiProjectFileV1>;
+        return maybeProject.format === "mmd_modoki_project" && maybeProject.version === 1;
+    }
     /** Current render FPS (rounded) */
     getFps(): number {
         return Math.round(this.engine.getFps());

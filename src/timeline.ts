@@ -194,6 +194,7 @@ export class Timeline {
     }
 
     setTotalFrames(total: number): void {
+        if (this.totalFrames === total) return;
         this.totalFrames = total;
         this.scheduleOverlay();
     }

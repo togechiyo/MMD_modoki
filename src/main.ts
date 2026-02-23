@@ -76,6 +76,49 @@ ipcMain.handle('file:getInfo', async (_event, filePath: string) => {
   }
 });
 
+ipcMain.handle('file:readText', async (_event, filePath: string) => {
+  try {
+    return fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    console.error('Failed to read text file:', err);
+    return null;
+  }
+});
+
+ipcMain.handle(
+  'file:saveText',
+  async (
+    _event,
+    content: string,
+    defaultFileName?: string,
+    filters?: { name: string; extensions: string[] }[],
+  ) => {
+    try {
+      const safeName = defaultFileName?.trim() ? defaultFileName : 'mmd_project.mmdproj.json';
+      const result = await dialog.showSaveDialog({
+        title: 'Save Project',
+        defaultPath: path.join(app.getPath('documents'), safeName),
+        filters: filters && filters.length > 0
+          ? filters
+          : [
+            { name: 'MMD Modoki Project', extensions: ['mmdproj', 'json'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return null;
+      }
+
+      fs.writeFileSync(result.filePath, content, 'utf-8');
+      return result.filePath;
+    } catch (err) {
+      console.error('Failed to save text file:', err);
+      return null;
+    }
+  },
+);
+
 ipcMain.handle('file:savePng', async (_event, dataUrl: string, defaultFileName?: string) => {
   try {
     const safeName = (defaultFileName && defaultFileName.toLowerCase().endsWith('.png'))

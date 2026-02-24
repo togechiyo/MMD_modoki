@@ -1,4 +1,4 @@
-import type { MmdManager } from "./mmd-manager";
+import type { MmdManager, WgslMaterialShaderPresetId } from "./mmd-manager";
 import type { Timeline } from "./timeline";
 import type { BottomPanel } from "./bottom-panel";
 import { Quaternion } from "@babylonjs/core/Maths/math.vector";
@@ -8,6 +8,8 @@ import type {
     KeyframeTrack,
     ModelInfo,
     MotionInfo,
+    PngSequenceExportProgress,
+    PngSequenceExportState,
     TimelineInterpolationPreview,
 } from "./types";
 
@@ -116,31 +118,34 @@ type MmdManagerInternalView = {
 
 export class UIController {
     private static readonly CAMERA_SELECT_VALUE = "__camera__";
+    private static readonly MIN_TIMELINE_WIDTH = 160;
+    private static readonly MIN_VIEWPORT_WIDTH = 360;
 
     private mmdManager: MmdManager;
     private timeline: Timeline;
     private bottomPanel: BottomPanel;
 
     // Button elements
-    private btnLoadPmx: HTMLElement;
-    private btnLoadVmd: HTMLElement;
-    private btnLoadCameraVmd: HTMLElement;
-    private btnLoadMp3: HTMLElement;
+    private btnLoadFile: HTMLElement;
     private btnSaveProject: HTMLElement;
     private btnLoadProject: HTMLElement;
     private btnExportPng: HTMLElement;
+    private btnExportPngSeq: HTMLElement | null = null;
     private btnToggleGround: HTMLElement;
     private groundToggleText: HTMLElement;
     private btnToggleSkydome: HTMLElement;
     private skydomeToggleText: HTMLElement;
     private btnTogglePhysics: HTMLElement;
     private physicsToggleText: HTMLElement;
+    private btnToggleShaderPanel: HTMLButtonElement | null = null;
+    private shaderPanelToggleText: HTMLElement | null = null;
+    private btnToggleFullscreenUi: HTMLButtonElement | null = null;
+    private fullscreenUiToggleText: HTMLElement | null = null;
     private btnPlay: HTMLElement;
     private btnPause: HTMLElement;
     private btnStop: HTMLElement;
     private btnSkipStart: HTMLElement;
     private btnSkipEnd: HTMLElement;
-    private playbackSpeed: HTMLSelectElement;
     private currentFrameEl: HTMLElement;
     private totalFramesEl: HTMLElement;
     private statusText: HTMLElement;
@@ -159,6 +164,18 @@ export class UIController {
     private modelSelect: HTMLSelectElement;
     private btnModelVisibility: HTMLButtonElement;
     private btnModelDelete: HTMLButtonElement;
+    private shaderModelNameEl: HTMLElement | null = null;
+    private shaderPresetSelect: HTMLSelectElement | null = null;
+    private shaderApplyButton: HTMLButtonElement | null = null;
+    private shaderResetButton: HTMLButtonElement | null = null;
+    private shaderPanelNote: HTMLElement | null = null;
+    private shaderMaterialList: HTMLElement | null = null;
+    private readonly shaderSelectedMaterialKeys = new Map<number, string>();
+    private mainContentEl: HTMLElement;
+    private timelinePanelEl: HTMLElement | null = null;
+    private timelineResizerEl: HTMLElement | null = null;
+    private shaderPanelEl: HTMLElement | null = null;
+    private isTimelineResizing = false;
     private camFovSlider: HTMLInputElement | null = null;
     private camFovValueEl: HTMLElement | null = null;
     private camDistanceSlider: HTMLInputElement | null = null;
@@ -180,6 +197,14 @@ export class UIController {
     private syncingBoneSelection = false;
     private readonly interpolationChannelBindings = new Map<string, InterpolationChannelBinding>();
     private interpolationDragState: InterpolationDragState | null = null;
+    private appRootEl: HTMLElement;
+    private busyOverlayEl: HTMLElement | null = null;
+    private busyTextEl: HTMLElement | null = null;
+    private pngSequenceExportStateUnsubscribe: (() => void) | null = null;
+    private pngSequenceExportProgressUnsubscribe: (() => void) | null = null;
+    private isPngSequenceExportActive = false;
+    private latestPngSequenceExportProgress: PngSequenceExportProgress | null = null;
+    private isUiFullscreenActive = false;
 
     constructor(mmdManager: MmdManager, timeline: Timeline, bottomPanel: BottomPanel) {
         this.mmdManager = mmdManager;
@@ -187,25 +212,26 @@ export class UIController {
         this.bottomPanel = bottomPanel;
 
         // Get DOM elements
-        this.btnLoadPmx = document.getElementById("btn-load-pmx")!;
-        this.btnLoadVmd = document.getElementById("btn-load-vmd")!;
-        this.btnLoadCameraVmd = document.getElementById("btn-load-camera-vmd")!;
-        this.btnLoadMp3 = document.getElementById("btn-load-mp3")!;
+        this.btnLoadFile = document.getElementById("btn-load-file")!;
         this.btnSaveProject = document.getElementById("btn-save-project")!;
         this.btnLoadProject = document.getElementById("btn-load-project")!;
         this.btnExportPng = document.getElementById("btn-export-png")!;
+        this.btnExportPngSeq = document.getElementById("btn-export-png-seq");
         this.btnToggleGround = document.getElementById("btn-toggle-ground")!;
         this.groundToggleText = document.getElementById("ground-toggle-text")!;
         this.btnToggleSkydome = document.getElementById("btn-toggle-skydome")!;
         this.skydomeToggleText = document.getElementById("skydome-toggle-text")!;
         this.btnTogglePhysics = document.getElementById("btn-toggle-physics")!;
         this.physicsToggleText = document.getElementById("physics-toggle-text")!;
+        this.btnToggleShaderPanel = document.getElementById("btn-toggle-shader-panel") as HTMLButtonElement | null;
+        this.shaderPanelToggleText = document.getElementById("shader-panel-toggle-text");
+        this.btnToggleFullscreenUi = document.getElementById("btn-toggle-fullscreen-ui") as HTMLButtonElement | null;
+        this.fullscreenUiToggleText = document.getElementById("fullscreen-ui-toggle-text");
         this.btnPlay = document.getElementById("btn-play")!;
         this.btnPause = document.getElementById("btn-pause")!;
         this.btnStop = document.getElementById("btn-stop")!;
         this.btnSkipStart = document.getElementById("btn-skip-start")!;
         this.btnSkipEnd = document.getElementById("btn-skip-end")!;
-        this.playbackSpeed = document.getElementById("playback-speed") as HTMLSelectElement;
         this.currentFrameEl = document.getElementById("current-frame")!;
         this.totalFramesEl = document.getElementById("total-frames")!;
         this.statusText = document.getElementById("status-text")!;
@@ -224,10 +250,25 @@ export class UIController {
         this.modelSelect = document.getElementById("info-model-select") as HTMLSelectElement;
         this.btnModelVisibility = document.getElementById("btn-model-visibility") as HTMLButtonElement;
         this.btnModelDelete = document.getElementById("btn-model-delete") as HTMLButtonElement;
+        this.shaderModelNameEl = document.getElementById("shader-model-name");
+        this.shaderPresetSelect = document.getElementById("shader-preset-select") as HTMLSelectElement | null;
+        this.shaderApplyButton = document.getElementById("btn-shader-apply") as HTMLButtonElement | null;
+        this.shaderResetButton = document.getElementById("btn-shader-reset") as HTMLButtonElement | null;
+        this.shaderPanelNote = document.getElementById("shader-panel-note");
+        this.shaderMaterialList = document.getElementById("shader-material-list");
+        this.appRootEl = document.getElementById("app") as HTMLElement;
+        this.busyOverlayEl = document.getElementById("ui-busy-overlay");
+        this.busyTextEl = document.getElementById("ui-busy-text");
+        this.mainContentEl = document.getElementById("main-content") as HTMLElement;
+        this.timelinePanelEl = document.getElementById("timeline-panel");
+        this.timelineResizerEl = document.getElementById("timeline-resizer");
+        this.shaderPanelEl = document.getElementById("shader-panel");
 
         this.setupEventListeners();
         this.setupCallbacks();
         this.setupKeyboard();
+        this.setupFileDrop();
+        this.setupPngSequenceExportStateBridge();
         this.setupPerfDisplay();
         this.refreshModelSelector();
         this.updateGroundToggleButton(this.mmdManager.isGroundVisible());
@@ -237,28 +278,46 @@ export class UIController {
             this.mmdManager.isPhysicsAvailable()
         );
         this.updateInfoActionButtons();
+        this.updateShaderPanelToggleButton(this.isShaderPanelExpanded());
+        this.updateFullscreenUiToggleButton(false);
+        this.setupTimelineResizer();
+        this.refreshShaderPanel();
         this.updateTimelineEditState();
+
+        window.addEventListener("beforeunload", (event) => {
+            if (this.isPngSequenceExportActive) {
+                event.preventDefault();
+                event.returnValue = "";
+                return;
+            }
+            this.pngSequenceExportStateUnsubscribe?.();
+            this.pngSequenceExportStateUnsubscribe = null;
+            this.pngSequenceExportProgressUnsubscribe?.();
+            this.pngSequenceExportProgressUnsubscribe = null;
+        });
     }
 
     private setupEventListeners(): void {
         // File loading
-        this.btnLoadPmx.addEventListener("click", () => this.loadPMX());
-        this.btnLoadVmd.addEventListener("click", () => this.loadVMD());
-        this.btnLoadCameraVmd.addEventListener("click", () => this.loadCameraVMD());
-        this.btnLoadMp3.addEventListener("click", () => this.loadMP3());
+        this.btnLoadFile.addEventListener("click", () => {
+            void this.loadFileFromDialog();
+        });
         this.btnSaveProject.addEventListener("click", () => this.saveProject());
         this.btnLoadProject.addEventListener("click", () => this.loadProject());
         this.btnExportPng.addEventListener("click", () => this.exportPNG());
+        this.btnExportPngSeq?.addEventListener("click", () => {
+            void this.exportPNGSequence();
+        });
         this.interpolationTypeSelect.addEventListener("change", () => this.updateTimelineEditState());
         this.btnToggleGround.addEventListener("click", () => {
             const visible = this.mmdManager.toggleGroundVisible();
             this.updateGroundToggleButton(visible);
-            this.showToast(visible ? "床表示: ON" : "床表示: OFF", "info");
+            this.showToast(visible ? "Ground: ON" : "Ground: OFF", "info");
         });
         this.btnToggleSkydome.addEventListener("click", () => {
             const visible = this.mmdManager.toggleSkydomeVisible();
             this.updateSkydomeToggleButton(visible);
-            this.showToast(visible ? "Sky dome: ON" : "Sky dome: OFF", "info");
+            this.showToast(visible ? "Skydome: ON" : "Skydome: OFF", "info");
         });
         const btnToggleAa = document.getElementById("btn-toggle-aa") as HTMLButtonElement | null;
         const aaToggleText = document.getElementById("aa-toggle-text");
@@ -286,6 +345,14 @@ export class UIController {
             const enabled = this.mmdManager.togglePhysicsEnabled();
             this.updatePhysicsToggleButton(enabled, true);
             this.showToast(enabled ? "Physics: ON" : "Physics: OFF", "info");
+        });
+        this.btnToggleShaderPanel?.addEventListener("click", () => {
+            const nextVisible = !this.isShaderPanelExpanded();
+            this.setShaderPanelVisible(nextVisible);
+            this.showToast(nextVisible ? "Shader panel shown" : "Shader panel hidden", "info");
+        });
+        this.btnToggleFullscreenUi?.addEventListener("click", () => {
+            this.toggleUiFullscreenMode();
         });
         const physicsGravityAccel = document.getElementById("physics-gravity-accel") as HTMLInputElement | null;
         const physicsGravityAccelVal = document.getElementById("physics-gravity-accel-val");
@@ -350,11 +417,6 @@ export class UIController {
             this.mmdManager.seekToBoundary(this.mmdManager.totalFrames)
         );
 
-        // Speed
-        this.playbackSpeed.addEventListener("change", () => {
-            this.mmdManager.setPlaybackSpeed(parseFloat(this.playbackSpeed.value));
-        });
-
         // Active model selector
         this.modelSelect.addEventListener("change", () => {
             const value = this.modelSelect.value;
@@ -362,6 +424,7 @@ export class UIController {
                 this.mmdManager.setTimelineTarget("camera");
                 this.applyCameraSelectionUI();
                 this.refreshModelSelector();
+                this.refreshShaderPanel();
                 this.showToast("Timeline target: Camera", "success");
                 return;
             }
@@ -376,6 +439,7 @@ export class UIController {
 
             this.mmdManager.setTimelineTarget("model");
             this.refreshModelSelector();
+            this.refreshShaderPanel();
             this.showToast("Active model switched", "success");
         });
 
@@ -403,7 +467,15 @@ export class UIController {
             }
 
             this.refreshModelSelector();
+            this.refreshShaderPanel();
             this.showToast("Model deleted", "success");
+        });
+
+        this.shaderApplyButton?.addEventListener("click", () => {
+            this.applyShaderPresetFromPanel(false);
+        });
+        this.shaderResetButton?.addEventListener("click", () => {
+            this.applyShaderPresetFromPanel(true);
         });
 
         // Camera controls
@@ -902,6 +974,7 @@ export class UIController {
                 this.syncBottomBoneSelectionFromTimeline(this.timeline.getSelectedTrack());
             }
             this.refreshModelSelector();
+            this.refreshShaderPanel();
         };
 
         // Any model loaded into scene
@@ -909,6 +982,7 @@ export class UIController {
             this.setStatus("Model loaded", false);
             this.viewportOverlay.classList.add("hidden");
             this.refreshModelSelector();
+            this.refreshShaderPanel();
             const activeLabel = active ? " [active]" : "";
             this.showToast(`Loaded model: ${info.name} (${totalCount})${activeLabel}`, "success");
         };
@@ -958,10 +1032,186 @@ export class UIController {
             if (!selected) return;
             this.syncTimelineBoneSelectionFromBottomPanel(boneName);
         };
+
+        this.mmdManager.onMaterialShaderStateChanged = () => {
+            this.refreshShaderPanel();
+        };
+    }
+
+    private setupPngSequenceExportStateBridge(): void {
+        this.pngSequenceExportStateUnsubscribe?.();
+        this.pngSequenceExportStateUnsubscribe = window.electronAPI.onPngSequenceExportState((state) => {
+            this.applyPngSequenceExportState(state);
+        });
+        this.pngSequenceExportProgressUnsubscribe?.();
+        this.pngSequenceExportProgressUnsubscribe = window.electronAPI.onPngSequenceExportProgress((progress) => {
+            this.applyPngSequenceExportProgress(progress);
+        });
+    }
+
+    private applyPngSequenceExportState(state: PngSequenceExportState): void {
+        const active = Boolean(state?.active);
+        const activeCount = Math.max(0, Math.floor(state?.activeCount ?? 0));
+        this.setPngSequenceExportLock(active, activeCount);
+    }
+
+    private applyPngSequenceExportProgress(progress: PngSequenceExportProgress): void {
+        if (!this.isPngSequenceExportActive) return;
+        const total = Math.max(0, Math.floor(progress?.total ?? 0));
+        const saved = Math.max(0, Math.floor(progress?.saved ?? 0));
+        const frame = Math.max(0, Math.floor(progress?.frame ?? 0));
+        if (total <= 0) return;
+
+        this.latestPngSequenceExportProgress = progress;
+        if (!this.busyTextEl) return;
+        const ratio = Math.min(100, Math.max(0, (saved / total) * 100));
+        this.busyTextEl.textContent = `PNG sequence exporting... ${saved}/${total} (${ratio.toFixed(1)}%) frame ${frame}`;
+    }
+
+    private setPngSequenceExportLock(active: boolean, activeCount: number): void {
+        if (this.isPngSequenceExportActive === active) {
+            if (active) {
+                this.updatePngSequenceBusyMessage(activeCount);
+            }
+            return;
+        }
+
+        this.isPngSequenceExportActive = active;
+        this.appRootEl.classList.toggle("ui-export-lock", active);
+        this.busyOverlayEl?.classList.toggle("hidden", !active);
+        this.busyOverlayEl?.setAttribute("aria-hidden", active ? "false" : "true");
+
+        if (active) {
+            this.updatePngSequenceBusyMessage(activeCount);
+            if (this.mmdManager.isPlaying) {
+                this.pause(false);
+            }
+            return;
+        }
+
+        if (this.busyTextEl) {
+            this.busyTextEl.textContent = "Exporting PNG sequence...";
+        }
+        this.latestPngSequenceExportProgress = null;
+    }
+
+    private updatePngSequenceBusyMessage(activeCount: number): void {
+        if (!this.busyTextEl) return;
+        const progress = this.latestPngSequenceExportProgress;
+        if (progress) {
+            const total = Math.max(0, Math.floor(progress.total));
+            const saved = Math.max(0, Math.floor(progress.saved));
+            const frame = Math.max(0, Math.floor(progress.frame));
+            if (total > 0) {
+                const ratio = Math.min(100, Math.max(0, (saved / total) * 100));
+                this.busyTextEl.textContent = `PNG sequence exporting... ${saved}/${total} (${ratio.toFixed(1)}%) frame ${frame}`;
+                return;
+            }
+        }
+        if (activeCount > 1) {
+            this.busyTextEl.textContent = `PNG sequence exporting in background (${activeCount} jobs).`;
+            return;
+        }
+        this.busyTextEl.textContent = "PNG sequence exporting in background. Main controls are locked.";
+    }
+
+    private setupFileDrop(): void {
+        let dragDepth = 0;
+        const setDragActive = (active: boolean): void => {
+            document.body.classList.toggle("file-drag-active", active);
+        };
+        const isFileDragEvent = (event: DragEvent): boolean => {
+            const types = event.dataTransfer?.types;
+            if (!types) return false;
+            return Array.from(types).includes("Files");
+        };
+
+        document.addEventListener("dragenter", (event) => {
+            if (!isFileDragEvent(event)) return;
+            event.preventDefault();
+            dragDepth += 1;
+            setDragActive(true);
+        });
+
+        document.addEventListener("dragover", (event) => {
+            if (!isFileDragEvent(event)) return;
+            event.preventDefault();
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = "copy";
+            }
+        });
+
+        document.addEventListener("dragleave", (event) => {
+            if (!isFileDragEvent(event)) return;
+            event.preventDefault();
+            dragDepth = Math.max(0, dragDepth - 1);
+            if (dragDepth === 0) {
+                setDragActive(false);
+            }
+        });
+
+        document.addEventListener("drop", (event) => {
+            event.preventDefault();
+            dragDepth = 0;
+            setDragActive(false);
+
+            if (this.isPngSequenceExportActive) {
+                this.showToast("Cannot load files during PNG sequence export", "error");
+                return;
+            }
+
+            const files = Array.from(event.dataTransfer?.files ?? []);
+            if (files.length === 0) return;
+
+            void (async () => {
+                const entries = files
+                    .map((file) => {
+                        const resolvedPath =
+                            window.electronAPI.getPathForDroppedFile(file) ??
+                            (file as File & { path?: string }).path ??
+                            "";
+                        if (!resolvedPath) return null;
+                        const filePath = resolvedPath;
+                        const ext = this.getFileExtension(filePath);
+                        const priority = ext === "pmx" || ext === "pmd"
+                            ? 0
+                            : ext === "vmd" || ext === "vpd"
+                                ? 1
+                                : ext === "mp3" || ext === "wav" || ext === "ogg"
+                                    ? 2
+                                    : 3;
+                        return { filePath, priority };
+                    })
+                    .filter((entry): entry is { filePath: string; priority: number } => entry !== null)
+                    .sort((a, b) => a.priority - b.priority);
+
+                if (entries.length === 0) {
+                    this.showToast("Could not resolve dropped file path", "error");
+                    return;
+                }
+
+                for (const entry of entries) {
+                    const filePath = entry.filePath;
+                    if (!filePath) continue;
+                    await this.loadFileByPath(filePath, "drop");
+                }
+            })();
+        });
     }
 
     private setupKeyboard(): void {
         document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && this.isUiFullscreenActive) {
+                e.preventDefault();
+                this.exitUiFullscreenMode();
+                return;
+            }
+
+            if (this.isPngSequenceExportActive) {
+                e.preventDefault();
+                return;
+            }
+
             // Don't handle keys when focused on input
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
 
@@ -1074,7 +1324,7 @@ export class UIController {
 
         // Engine type - detect once on startup
         const engineType = this.mmdManager.getEngineType();
-        engineEl.textContent = engineType;
+        engineEl.textContent = engineType === "WebGPU" ? "WebGPU (WGSL)" : engineType;
         // Color-code by type
         if (engineType === "WebGPU") {
             engineEl.style.background = "rgba(139,92,246,0.15)";
@@ -1179,6 +1429,7 @@ export class UIController {
 
             const result = await this.mmdManager.importProjectState(parsed);
             this.refreshModelSelector();
+            this.refreshShaderPanel();
             if (this.mmdManager.getTimelineTarget() === "camera") {
                 this.applyCameraSelectionUI();
             } else {
@@ -1203,6 +1454,78 @@ export class UIController {
             const message = err instanceof Error ? err.message : String(err);
             this.setStatus("Project load failed", false);
             this.showToast(`Project load error: ${message}`, "error");
+        }
+    }
+
+    private async loadFileFromDialog(): Promise<void> {
+        const filePath = await window.electronAPI.openFileDialog([
+            { name: "Supported files", extensions: ["pmx", "pmd", "vmd", "vpd", "mp3", "wav", "ogg"] },
+            { name: "All files", extensions: ["*"] },
+        ]);
+
+        if (!filePath) return;
+        await this.loadFileByPath(filePath, "dialog");
+    }
+
+    private getFileExtension(filePath: string): string {
+        const normalized = filePath.replace(/\\/g, "/");
+        const fileName = normalized.substring(normalized.lastIndexOf("/") + 1);
+        const dot = fileName.lastIndexOf(".");
+        if (dot < 0) return "";
+        return fileName.substring(dot + 1).toLowerCase();
+    }
+
+    private isLikelyCameraVmdPath(filePath: string): boolean {
+        if (this.mmdManager.getTimelineTarget() === "camera") return true;
+        if (this.mmdManager.getLoadedModels().length === 0) return true;
+        const normalized = filePath.replace(/\\/g, "/").toLowerCase();
+        const fileName = normalized.substring(normalized.lastIndexOf("/") + 1);
+        return fileName.includes("camera") || fileName.includes("cam") || fileName.includes("カメラ");
+    }
+
+    private async loadFileByPath(filePath: string, source: "dialog" | "drop"): Promise<void> {
+        const ext = this.getFileExtension(filePath);
+        switch (ext) {
+            case "pmx":
+            case "pmd":
+                this.setStatus("Loading PMX/PMD...", true);
+                await this.mmdManager.loadPMX(filePath);
+                return;
+            case "vpd":
+                this.setStatus("Loading motion/pose...", true);
+                await this.mmdManager.loadVMD(filePath);
+                return;
+            case "vmd": {
+                const preferCamera = this.isLikelyCameraVmdPath(filePath);
+                if (preferCamera) {
+                    this.setStatus("Loading camera VMD...", true);
+                    const cameraInfo = await this.mmdManager.loadCameraVMD(filePath);
+                    if (cameraInfo) return;
+                    this.setStatus("Loading motion/pose...", true);
+                    await this.mmdManager.loadVMD(filePath);
+                    return;
+                }
+
+                this.setStatus("Loading motion/pose...", true);
+                const motionInfo = await this.mmdManager.loadVMD(filePath);
+                if (motionInfo) return;
+                this.setStatus("Loading camera VMD...", true);
+                await this.mmdManager.loadCameraVMD(filePath);
+                return;
+            }
+            case "mp3":
+            case "wav":
+            case "ogg":
+                this.setStatus("Loading audio...", true);
+                await this.mmdManager.loadMP3(filePath);
+                return;
+            default:
+                if (source === "drop") {
+                    this.showToast(`Unsupported file: ${filePath.replace(/^.*[\\/]/, "")}`, "error");
+                } else {
+                    this.showToast("Unsupported file type", "error");
+                }
+                return;
         }
     }
 
@@ -1279,6 +1602,89 @@ export class UIController {
         this.showToast(`Saved PNG: ${basename}`, "success");
     }
 
+    private async exportPNGSequence(): Promise<void> {
+        const directoryPath = await window.electronAPI.openDirectoryDialog();
+        if (!directoryPath) {
+            this.showToast("PNG sequence export canceled", "info");
+            return;
+        }
+
+        const startFrame = Math.max(0, this.mmdManager.currentFrame);
+        const endFrame = Math.max(startFrame, this.mmdManager.totalFrames);
+        const step = 1;
+        const prefix = "mmd_seq";
+
+        const frameList: number[] = [];
+        for (let frame = startFrame; frame <= endFrame; frame += step) {
+            frameList.push(frame);
+        }
+        if (frameList.length === 0) {
+            this.showToast("No frames to export", "error");
+            return;
+        }
+
+        const outputFolderName = this.buildPngSequenceFolderName(
+            prefix,
+            startFrame,
+            endFrame,
+            step
+        );
+        const outputDirectoryPath = this.joinPathForRenderer(directoryPath, outputFolderName);
+
+        const project = this.mmdManager.exportProjectState();
+        project.assets.audioPath = null;
+
+        this.setStatus("Launching PNG sequence export window...", true);
+        const result = await window.electronAPI.startPngSequenceExportWindow({
+            project,
+            outputDirectoryPath,
+            startFrame,
+            endFrame,
+            step,
+            prefix,
+            fps: 30,
+            precision: 1,
+            outputWidth: 1920,
+            outputHeight: 1080,
+        });
+
+        if (!result) {
+            this.setStatus("PNG sequence export launch failed", false);
+            this.showToast("Failed to start PNG sequence export window", "error");
+            return;
+        }
+
+        this.setStatus("PNG sequence export started", false);
+        this.showToast(`PNG sequence export started (${frameList.length} files)`, "success");
+    }
+
+    private sanitizeFileNameSegment(value: string): string {
+        const source = value.replace(/\s+/g, "_");
+        let sanitized = "";
+        for (const ch of source) {
+            const code = ch.charCodeAt(0);
+            if (code <= 31 || '<>:"/\\|?*'.includes(ch)) {
+                sanitized += "_";
+            } else {
+                sanitized += ch;
+            }
+        }
+        return sanitized.length > 0 ? sanitized : "mmd_seq";
+    }
+
+    private buildPngSequenceFolderName(prefix: string, startFrame: number, endFrame: number, step: number): string {
+        const now = new Date();
+        const pad = (value: number): string => String(value).padStart(2, "0");
+        const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        return this.sanitizeFileNameSegment(`${prefix}_${timestamp}_${startFrame}-${endFrame}_s${step}`);
+    }
+
+    private joinPathForRenderer(basePath: string, childName: string): string {
+        const separator = basePath.includes("\\") ? "\\" : "/";
+        const normalizedBase = basePath.replace(/[\\/]+$/, "");
+        return `${normalizedBase}${separator}${childName}`;
+    }
+
     private getCameraPanelInfo(): ModelInfo {
         return {
             name: "Camera",
@@ -1311,12 +1717,12 @@ export class UIController {
         this.btnModelDelete.disabled = !enabled;
 
         if (!enabled) {
-            this.btnModelVisibility.textContent = "非表示";
+            this.btnModelVisibility.textContent = "Hide";
             return;
         }
 
         const visible = this.mmdManager.getActiveModelVisibility();
-        this.btnModelVisibility.textContent = visible ? "非表示" : "表示";
+        this.btnModelVisibility.textContent = visible ? "Hide" : "Show";
     }
 
     private refreshModelSelector(): void {
@@ -1355,21 +1761,334 @@ export class UIController {
         this.updateInfoActionButtons();
     }
 
+    private isShaderPanelExpanded(): boolean {
+        return !this.mainContentEl.classList.contains("shader-panel-collapsed");
+    }
+
+    private setShaderPanelVisible(visible: boolean): void {
+        this.mainContentEl.classList.toggle("shader-panel-collapsed", !visible);
+        this.clampTimelineWidthToLayout();
+        this.updateShaderPanelToggleButton(visible);
+    }
+
+    private updateShaderPanelToggleButton(visible: boolean): void {
+        if (!this.btnToggleShaderPanel) return;
+        this.btnToggleShaderPanel.setAttribute("aria-pressed", visible ? "true" : "false");
+        this.btnToggleShaderPanel.classList.toggle("toggle-on", visible);
+        if (this.shaderPanelToggleText) {
+            this.shaderPanelToggleText.textContent = visible ? "Shader ON" : "Shader OFF";
+        }
+    }
+
+    private toggleUiFullscreenMode(): void {
+        if (this.isUiFullscreenActive) {
+            this.exitUiFullscreenMode();
+            return;
+        }
+        this.enterUiFullscreenMode();
+    }
+
+    private enterUiFullscreenMode(): void {
+        this.setUiFullscreenVisualState(true);
+        this.showToast("UIを非表示にしました。ESCで戻れます", "info");
+    }
+
+    private exitUiFullscreenMode(): void {
+        this.setUiFullscreenVisualState(false);
+    }
+
+    private setUiFullscreenVisualState(active: boolean): void {
+        this.isUiFullscreenActive = active;
+        this.appRootEl.classList.toggle("ui-presentation-mode", active);
+        this.updateFullscreenUiToggleButton(active);
+    }
+
+    private updateFullscreenUiToggleButton(active: boolean): void {
+        if (!this.btnToggleFullscreenUi) return;
+        this.btnToggleFullscreenUi.setAttribute("aria-pressed", active ? "true" : "false");
+        this.btnToggleFullscreenUi.classList.toggle("toggle-on", active);
+        if (this.fullscreenUiToggleText) {
+            this.fullscreenUiToggleText.textContent = active ? "UI非表示ON" : "UI非表示OFF";
+        }
+    }
+
+    private setupTimelineResizer(): void {
+        if (!this.timelineResizerEl || !this.timelinePanelEl) return;
+
+        let startX = 0;
+        let startWidth = 0;
+
+        const stopResize = (): void => {
+            if (!this.isTimelineResizing) return;
+            this.isTimelineResizing = false;
+            document.body.classList.remove("timeline-resizing");
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", onPointerUp);
+            window.removeEventListener("pointercancel", onPointerUp);
+        };
+
+        const onPointerMove = (event: PointerEvent): void => {
+            if (!this.isTimelineResizing) return;
+
+            const delta = event.clientX - startX;
+            const maxWidth = this.computeTimelineMaxWidth();
+            const nextWidth = Math.max(
+                UIController.MIN_TIMELINE_WIDTH,
+                Math.min(maxWidth, startWidth + delta)
+            );
+
+            document.documentElement.style.setProperty("--timeline-width", `${Math.round(nextWidth)}px`);
+        };
+
+        const onPointerUp = (): void => {
+            stopResize();
+        };
+
+        this.timelineResizerEl.addEventListener("pointerdown", (event: PointerEvent) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            startX = event.clientX;
+            startWidth = this.timelinePanelEl?.getBoundingClientRect().width ?? UIController.MIN_TIMELINE_WIDTH;
+            this.isTimelineResizing = true;
+            document.body.classList.add("timeline-resizing");
+            window.addEventListener("pointermove", onPointerMove);
+            window.addEventListener("pointerup", onPointerUp);
+            window.addEventListener("pointercancel", onPointerUp);
+        });
+
+        window.addEventListener("resize", () => {
+            this.clampTimelineWidthToLayout();
+        });
+    }
+
+    private computeTimelineMaxWidth(): number {
+        const panelWidth = this.mainContentEl.clientWidth;
+        const resizerWidth = this.timelineResizerEl?.getBoundingClientRect().width ?? 6;
+        const shaderWidth = this.isShaderPanelExpanded()
+            ? (this.shaderPanelEl?.getBoundingClientRect().width ?? 0)
+            : 0;
+        return Math.max(
+            UIController.MIN_TIMELINE_WIDTH,
+            panelWidth - resizerWidth - shaderWidth - UIController.MIN_VIEWPORT_WIDTH
+        );
+    }
+
+    private clampTimelineWidthToLayout(): void {
+        if (!this.timelinePanelEl) return;
+        const currentWidth = this.timelinePanelEl.getBoundingClientRect().width;
+        const maxWidth = this.computeTimelineMaxWidth();
+        const nextWidth = Math.max(
+            UIController.MIN_TIMELINE_WIDTH,
+            Math.min(maxWidth, currentWidth)
+        );
+        document.documentElement.style.setProperty("--timeline-width", `${Math.round(nextWidth)}px`);
+    }
+
+    private refreshShaderPanel(): void {
+        if (
+            !this.shaderModelNameEl ||
+            !this.shaderPresetSelect ||
+            !this.shaderApplyButton ||
+            !this.shaderResetButton ||
+            !this.shaderPanelNote ||
+            !this.shaderMaterialList
+        ) {
+            return;
+        }
+
+        const isAvailable = this.mmdManager.isWgslMaterialShaderAssignmentAvailable();
+        const presets = this.mmdManager.getWgslMaterialShaderPresets();
+        const models = this.mmdManager.getWgslModelShaderStates();
+
+        this.shaderPresetSelect.innerHTML = "";
+        for (const preset of presets) {
+            const option = document.createElement("option");
+            option.value = preset.id;
+            option.textContent = preset.label;
+            this.shaderPresetSelect.appendChild(option);
+        }
+
+        if (!isAvailable) {
+            this.shaderModelNameEl.textContent = "-";
+            this.shaderPresetSelect.disabled = true;
+            this.shaderApplyButton.disabled = true;
+            this.shaderResetButton.disabled = true;
+            this.shaderPanelNote.textContent = "WebGPU (WGSL)時のみ有効";
+            this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">WGSL unavailable</div>';
+            return;
+        }
+
+        if (models.length === 0) {
+            this.shaderModelNameEl.textContent = "-";
+            this.shaderPresetSelect.disabled = true;
+            this.shaderApplyButton.disabled = true;
+            this.shaderResetButton.disabled = true;
+            this.shaderPanelNote.textContent = "モデルを読み込んでください";
+            this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">No model</div>';
+            return;
+        }
+
+        if (this.modelSelect.value === UIController.CAMERA_SELECT_VALUE) {
+            this.shaderModelNameEl.textContent = "Camera";
+            this.shaderPresetSelect.disabled = true;
+            this.shaderApplyButton.disabled = true;
+            this.shaderResetButton.disabled = true;
+            this.shaderPanelNote.textContent = "情報欄でモデルを選択すると有効になります";
+            this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">Model target is camera</div>';
+            return;
+        }
+
+        let selectedModelIndex = Number.parseInt(this.modelSelect.value, 10);
+        if (Number.isNaN(selectedModelIndex) || !models.some((model) => model.modelIndex === selectedModelIndex)) {
+            selectedModelIndex = models.find((model) => model.active)?.modelIndex ?? models[0].modelIndex;
+        }
+
+        const selectedModel = models.find((model) => model.modelIndex === selectedModelIndex) ?? models[0];
+        this.shaderModelNameEl.textContent = `${selectedModel.modelIndex + 1}: ${selectedModel.modelName}`;
+
+        if (selectedModel.materials.length === 0) {
+            this.shaderPresetSelect.disabled = true;
+            this.shaderApplyButton.disabled = true;
+            this.shaderResetButton.disabled = true;
+            this.shaderPanelNote.textContent = "このモデルには割り当て可能な材質がありません";
+            this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">No material</div>';
+            return;
+        }
+
+        const rememberedMaterialKey = this.shaderSelectedMaterialKeys.get(selectedModel.modelIndex);
+        const selectedMaterial = rememberedMaterialKey
+            ? selectedModel.materials.find((material) => material.key === rememberedMaterialKey) ?? null
+            : null;
+        if (rememberedMaterialKey && !selectedMaterial) {
+            this.shaderSelectedMaterialKeys.delete(selectedModel.modelIndex);
+        }
+
+        let selectedPresetId = presets[0]?.id ?? "wgsl-mmd-standard";
+        let mixedPresets = false;
+        if (selectedMaterial) {
+            selectedPresetId = selectedMaterial.presetId;
+        } else {
+            const allPresetIds = Array.from(new Set(selectedModel.materials.map((material) => material.presetId)));
+            if (allPresetIds.length === 1) {
+                selectedPresetId = allPresetIds[0];
+            } else {
+                mixedPresets = true;
+            }
+        }
+        if (!presets.some((preset) => preset.id === selectedPresetId)) {
+            selectedPresetId = presets[0]?.id ?? "wgsl-mmd-standard";
+        }
+        this.shaderPresetSelect.value = selectedPresetId;
+
+        const presetLabelById = new Map(presets.map((preset) => [preset.id, preset.label]));
+        this.shaderMaterialList.innerHTML = "";
+        for (const material of selectedModel.materials) {
+            const item = document.createElement("div");
+            item.className = "shader-material-item";
+            if (selectedMaterial?.key === material.key) {
+                item.classList.add("active");
+            }
+            item.title = material.key;
+            item.addEventListener("click", () => {
+                const current = this.shaderSelectedMaterialKeys.get(selectedModel.modelIndex);
+                if (current === material.key) {
+                    this.shaderSelectedMaterialKeys.delete(selectedModel.modelIndex);
+                } else {
+                    this.shaderSelectedMaterialKeys.set(selectedModel.modelIndex, material.key);
+                }
+                this.refreshShaderPanel();
+            });
+
+            const nameEl = document.createElement("span");
+            nameEl.className = "shader-material-name";
+            nameEl.textContent = material.name;
+            item.appendChild(nameEl);
+
+            const presetEl = document.createElement("span");
+            presetEl.className = "shader-material-preset";
+            presetEl.textContent = presetLabelById.get(material.presetId) ?? material.presetId;
+            item.appendChild(presetEl);
+
+            this.shaderMaterialList.appendChild(item);
+        }
+
+        this.shaderApplyButton.textContent = selectedMaterial ? "選択へ割り当て" : "全材質へ割り当て";
+        this.shaderResetButton.textContent = selectedMaterial ? "選択を標準化" : "全材質を標準化";
+
+        if (selectedMaterial) {
+            this.shaderPanelNote.textContent = `選択材質: ${selectedMaterial.name}`;
+        } else if (mixedPresets) {
+            this.shaderPanelNote.textContent = "材質未選択: 全材質に適用（現在は混在）";
+        } else {
+            const selectedPreset = presets.find((preset) => preset.id === selectedPresetId);
+            this.shaderPanelNote.textContent = selectedPreset?.description ?? "材質未選択: 全材質に適用";
+        }
+
+        this.shaderPresetSelect.disabled = presets.length === 0;
+        this.shaderApplyButton.disabled = presets.length === 0;
+        this.shaderResetButton.disabled = false;
+    }
+
+    private applyShaderPresetFromPanel(resetToDefault: boolean): void {
+        if (!this.shaderPresetSelect) {
+            return;
+        }
+        if (!this.mmdManager.isWgslMaterialShaderAssignmentAvailable()) {
+            this.showToast("WGSL shader assignment is unavailable", "error");
+            return;
+        }
+        if (this.modelSelect.value === UIController.CAMERA_SELECT_VALUE) {
+            this.showToast("Select a model in the info panel first", "error");
+            return;
+        }
+
+        const models = this.mmdManager.getWgslModelShaderStates();
+        let modelIndex = Number.parseInt(this.modelSelect.value, 10);
+        if (Number.isNaN(modelIndex) || !models.some((model) => model.modelIndex === modelIndex)) {
+            modelIndex = models.find((model) => model.active)?.modelIndex ?? -1;
+        }
+        if (modelIndex < 0) {
+            this.showToast("Model is not selected", "error");
+            return;
+        }
+
+        const materialKey = this.shaderSelectedMaterialKeys.get(modelIndex) ?? null;
+        const presetId = resetToDefault ? "wgsl-mmd-standard" : this.shaderPresetSelect.value;
+        if (!presetId) {
+            this.showToast("Shader preset is not selected", "error");
+            return;
+        }
+
+        const ok = this.mmdManager.setWgslMaterialShaderPreset(
+            modelIndex,
+            materialKey,
+            presetId as WgslMaterialShaderPresetId,
+        );
+        if (!ok) {
+            this.showToast("Shader assignment failed", "error");
+            return;
+        }
+
+        this.refreshShaderPanel();
+        const targetLabel = materialKey === null ? "all materials" : "selected material";
+        this.showToast(`Shader assigned (${targetLabel})`, "success");
+    }
+
     private updateGroundToggleButton(visible: boolean): void {
-        this.groundToggleText.textContent = visible ? "床表示ON" : "床表示OFF";
+        this.groundToggleText.textContent = visible ? "Ground ON" : "Ground OFF";
         this.btnToggleGround.setAttribute("aria-pressed", visible ? "true" : "false");
         this.btnToggleGround.classList.toggle("toggle-on", visible);
     }
 
     private updateSkydomeToggleButton(visible: boolean): void {
-        this.skydomeToggleText.textContent = visible ? "空表示ON" : "空表示OFF";
+        this.skydomeToggleText.textContent = visible ? "Sky ON" : "Sky OFF";
         this.btnToggleSkydome.setAttribute("aria-pressed", visible ? "true" : "false");
         this.btnToggleSkydome.classList.toggle("toggle-on", visible);
     }
 
     private updatePhysicsToggleButton(enabled: boolean, available: boolean): void {
         const active = available && enabled;
-        this.physicsToggleText.textContent = available ? (active ? "物理ON" : "物理OFF") : "物理不可";
+        this.physicsToggleText.textContent = available ? (active ? "Physics ON" : "Physics OFF") : "Physics N/A";
         this.btnTogglePhysics.setAttribute("aria-pressed", active ? "true" : "false");
         this.btnTogglePhysics.classList.toggle("toggle-on", active);
         (this.btnTogglePhysics as HTMLButtonElement).disabled = !available;
@@ -1514,11 +2233,11 @@ export class UIController {
         const currentFrame = this.mmdManager.currentFrame;
 
         if (!track) {
-            this.timelineSelectionLabel.textContent = "トラック未選択";
+            this.timelineSelectionLabel.textContent = "No track selected";
             this.interpolationTrackNameLabel.textContent = "-";
             this.interpolationFrameLabel.textContent = "-";
             this.resetInterpolationTypeSelect();
-            this.interpolationStatusLabel.textContent = "トラック未選択";
+            this.interpolationStatusLabel.textContent = "No track selected";
             this.renderInterpolationCurves(null);
             this.btnKeyframeAdd.disabled = true;
             this.btnKeyframeDelete.disabled = true;
@@ -1549,13 +2268,13 @@ export class UIController {
         this.syncInterpolationTypeSelect(preview);
 
         if (preview.source === "morph") {
-            this.interpolationStatusLabel.textContent = "モーフは線形補間";
+            this.interpolationStatusLabel.textContent = "Morph curves are not editable";
         } else if (!preview.hasKeyframe) {
-            this.interpolationStatusLabel.textContent = "このフレームにキーなし";
+            this.interpolationStatusLabel.textContent = "No keyframe at this frame";
         } else if (preview.hasCurveData) {
-            this.interpolationStatusLabel.textContent = "キー補間を表示";
+            this.interpolationStatusLabel.textContent = "Interpolation curve shown";
         } else {
-            this.interpolationStatusLabel.textContent = "補間値未取得（線形表示）";
+            this.interpolationStatusLabel.textContent = "Curve data is not available for this track";
         }
 
         this.renderInterpolationCurves(preview);
@@ -1708,7 +2427,7 @@ export class UIController {
             return allowLeadingFallback ? frames[0] : null;
         }
         if (lo < frames.length) {
-            // MMD の区間 A->B は到着側 B キーの補間を使う。
+            // MMD interpolation for segment A->B uses keyframe B's curve.
             return frames[lo];
         }
         return allowTrailingFallback ? frames[frames.length - 1] : null;
@@ -1885,7 +2604,7 @@ export class UIController {
         if (!preview || preview.channels.length === 0) {
             const empty = document.createElement("div");
             empty.className = "interp-curve-empty";
-            empty.textContent = "補間を表示できるキーがありません";
+            empty.textContent = "No keyframes with interpolation data";
             this.interpolationCurveList.appendChild(empty);
             return;
         }
@@ -1894,7 +2613,7 @@ export class UIController {
         if (renderChannels.length === 0) {
             const empty = document.createElement("div");
             empty.className = "interp-curve-empty";
-            empty.textContent = "選択中の種別に該当するチャンネルがありません";
+            empty.textContent = "No channels available for the selected type";
             this.interpolationCurveList.appendChild(empty);
             return;
         }
@@ -1906,7 +2625,7 @@ export class UIController {
         this.interpolationTypeSelect.textContent = "";
         const option = document.createElement("option");
         option.value = "__all__";
-        option.textContent = "全て";
+        option.textContent = "All";
         this.interpolationTypeSelect.appendChild(option);
         this.interpolationTypeSelect.value = "__all__";
         this.interpolationTypeSelect.disabled = true;
@@ -1920,7 +2639,7 @@ export class UIController {
 
         const allOption = document.createElement("option");
         allOption.value = "__all__";
-        allOption.textContent = `全て (${selectableChannels.length}ch)`;
+        allOption.textContent = `All (${selectableChannels.length}ch)`;
         this.interpolationTypeSelect.appendChild(allOption);
 
         for (const channel of selectableChannels) {
@@ -2096,7 +2815,7 @@ export class UIController {
     private addKeyframeAtCurrentFrame(): void {
         const track = this.getSelectedTimelineTrack();
         if (!track) {
-            this.showToast("トラックを選択してください", "error");
+            this.showToast("Please select a track", "error");
             return;
         }
 
@@ -2123,7 +2842,7 @@ export class UIController {
 
         this.timeline.setSelectedFrame(null);
         this.updateTimelineEditState();
-        this.showToast(`Frame ${frame} にキーを登録`, "success");
+        this.showToast(`Frame ${frame}: keyframe added`, "success");
     }
 
     private captureInterpolationCurveSnapshot(track: KeyframeTrack, frame: number): Map<string, InterpolationCurve> {
@@ -2505,14 +3224,14 @@ export class UIController {
     private deleteSelectedKeyframe(): void {
         const track = this.getSelectedTimelineTrack();
         if (!track) {
-            this.showToast("トラックを選択してください", "error");
+            this.showToast("Please select a track", "error");
             return;
         }
 
         const frame = this.timeline.getSelectedFrame() ?? this.mmdManager.currentFrame;
         const removed = this.mmdManager.removeTimelineKeyframe(track, frame);
         if (!removed) {
-            this.showToast(`Frame ${frame} にキーがありません`, "info");
+            this.showToast(`Frame ${frame}: no keyframe`, "info");
             return;
         }
 
@@ -2520,7 +3239,7 @@ export class UIController {
             this.timeline.setSelectedFrame(null);
         }
         this.updateTimelineEditState();
-        this.showToast(`Frame ${frame} のキーを削除`, "success");
+        this.showToast(`Frame ${frame}: keyframe deleted`, "success");
     }
 
     private nudgeSelectedKeyframe(deltaFrame: number): void {
@@ -2547,21 +3266,21 @@ export class UIController {
         this.timeline.setSelectedFrame(toFrame);
         this.mmdManager.seekTo(toFrame);
         this.updateTimelineEditState();
-        this.showToast(`キー移動 ${fromFrame} -> ${toFrame}`, "success");
+        this.showToast(`Key moved: ${fromFrame} -> ${toFrame}`, "success");
     }
 
-    private play(): void {
+    private play(updateStatus = true): void {
         this.mmdManager.play();
         this.btnPlay.style.display = "none";
         this.btnPause.style.display = "flex";
-        this.setStatus("Playing", false);
+        if (updateStatus) this.setStatus("Playing", false);
     }
 
-    private pause(): void {
+    private pause(updateStatus = true): void {
         this.mmdManager.pause();
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
-        this.setStatus("Paused", false);
+        if (updateStatus) this.setStatus("Paused", false);
     }
 
     private stop(): void {
@@ -2600,6 +3319,7 @@ export class UIController {
         }, 3000);
     }
 }
+
 
 
 

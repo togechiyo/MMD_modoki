@@ -16,6 +16,8 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Effect } from "@babylonjs/core/Materials/effect";
+import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
+import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { CreateScreenshotUsingRenderTargetAsync } from "@babylonjs/core/Misc/screenshotTools";
 import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
 import { FxaaPostProcess } from "@babylonjs/core/PostProcesses/fxaaPostProcess";
@@ -40,6 +42,7 @@ import type {
     ProjectSerializedMorphTrack,
     ProjectSerializedMovableBoneTrack,
     ProjectSerializedPropertyTrack,
+    ProjectModelMaterialShaderState,
     KeyframeTrack,
     TrackCategory,
 } from "./types";
@@ -211,6 +214,51 @@ import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
 import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
 import type { MmdRuntimeAnimationHandle } from "babylon-mmd/esm/Runtime/mmdRuntimeAnimationHandle";
 
+export type WgslMaterialShaderPresetId =
+    | "wgsl-mmd-standard"
+    | "wgsl-unlit"
+    | "wgsl-soft-lit"
+    | "wgsl-specular";
+
+export interface WgslMaterialShaderPresetInfo {
+    id: WgslMaterialShaderPresetId;
+    label: string;
+    description: string;
+}
+
+export interface WgslMaterialShaderInfo {
+    key: string;
+    name: string;
+    presetId: WgslMaterialShaderPresetId;
+}
+
+export interface WgslModelShaderInfo {
+    modelIndex: number;
+    modelName: string;
+    modelPath: string;
+    active: boolean;
+    materials: WgslMaterialShaderInfo[];
+}
+
+type SceneModelMaterialEntry = {
+    key: string;
+    name: string;
+    material: any;
+};
+
+type SceneModelEntry = {
+    mesh: MmdMesh;
+    model: MmdModel;
+    info: ModelInfo;
+    materials: SceneModelMaterialEntry[];
+};
+
+type MaterialShaderDefaults = {
+    disableLighting: boolean | null;
+    specularPower: number | null;
+    emissiveColor: Color3 | null;
+};
+
 export class MmdManager {
     private static readonly RENDER_ENGINE_OPTIONS = {
         preserveDrawingBuffer: false,
@@ -219,8 +267,31 @@ export class MmdManager {
         alpha: false,
         premultipliedAlpha: false,
         desynchronized: false,
-        powerPreference: "high-performance" as const,
     };
+    private static readonly WEBGPU_COMPATIBILITY_MODE = true;
+    private static readonly DEFAULT_WGSL_MATERIAL_SHADER_PRESET: WgslMaterialShaderPresetId = "wgsl-mmd-standard";
+    private static readonly WGSL_MATERIAL_SHADER_PRESETS: readonly WgslMaterialShaderPresetInfo[] = [
+        {
+            id: "wgsl-mmd-standard",
+            label: "MMD Standard",
+            description: "Default MMD shading",
+        },
+        {
+            id: "wgsl-unlit",
+            label: "Unlit Flat",
+            description: "Disable lighting for flat anime-like output",
+        },
+        {
+            id: "wgsl-soft-lit",
+            label: "Soft Lit",
+            description: "Softer highlights with gentle emissive lift",
+        },
+        {
+            id: "wgsl-specular",
+            label: "Specular Boost",
+            description: "Sharper highlights for glossy materials",
+        },
+    ];
 
     private readonly renderingCanvas: HTMLCanvasElement;
     private engine: Engine | WebGPUEngine;
@@ -233,7 +304,7 @@ export class MmdManager {
     private currentMesh: MmdMesh | null = null;
     private currentModel: MmdModel | null = null;
     private activeModelInfo: ModelInfo | null = null;
-    private sceneModels: { mesh: MmdMesh; model: MmdModel; info: ModelInfo }[] = [];
+    private sceneModels: SceneModelEntry[] = [];
     private _isPlaying = false;
     private _currentFrame = 0;
     private _totalFrames = 300;
@@ -241,6 +312,8 @@ export class MmdManager {
     private manualPlaybackWithoutAudio = false;
     private manualPlaybackFrameCursor = 0;
     private lastRenderTimestampMs = performance.now();
+    private nextRenderDueTimestampMs = performance.now();
+    private renderFpsLimit = 0;
     private ground: Mesh | null = null;
     private skydome: Mesh | null = null;
     private audioPlayer: StreamAudioPlayer | null = null;
@@ -305,6 +378,8 @@ export class MmdManager {
     private readonly farDofFocusSharpRadiusMm = 1000;
     private modelEdgeWidthValue = 0;
     private readonly modelEdgeMaterialDefaults = new WeakMap<object, { enabled: boolean; width: number; alpha: number; colorR: number; colorG: number; colorB: number }>();
+    private readonly materialShaderDefaultsByMaterial = new WeakMap<object, MaterialShaderDefaults>();
+    private readonly materialShaderPresetByMaterial = new WeakMap<object, WgslMaterialShaderPresetId>();
     private colorCorrectionPostProcess: PostProcess | null = null;
     private finalAntialiasPostProcess: FxaaPostProcess | null = null;
     private finalLensDistortionPostProcess: PostProcess | null = null;
@@ -342,6 +417,7 @@ export class MmdManager {
     private dofNearSuppressionScaleValue = 4.0;
     private dofAutoFocusNearOffsetMmValue = 0;
     private resizeObserver: ResizeObserver | null = null;
+    private autoRenderEnabled = true;
     private readonly onWindowResize = () => {
         this.resize();
     };
@@ -380,6 +456,7 @@ export class MmdManager {
     public onAudioLoaded: ((name: string) => void) | null = null;
     public onPhysicsStateChanged: ((enabled: boolean, available: boolean) => void) | null = null;
     public onBoneVisualizerBonePicked: ((boneName: string) => void) | null = null;
+    public onMaterialShaderStateChanged: (() => void) | null = null;
 
     public getLoadedModels(): { index: number; name: string; path: string; active: boolean }[] {
         return this.sceneModels.map((entry, index) => ({
@@ -389,6 +466,299 @@ export class MmdManager {
             active: entry.model === this.currentModel,
         }));
     }
+
+    public isWgslMaterialShaderAssignmentAvailable(): boolean {
+        return this.isWebGpuEngine();
+    }
+
+    public getWgslMaterialShaderPresets(): readonly WgslMaterialShaderPresetInfo[] {
+        return MmdManager.WGSL_MATERIAL_SHADER_PRESETS;
+    }
+
+    public getWgslModelShaderStates(): WgslModelShaderInfo[] {
+        return this.sceneModels.map((entry, modelIndex) => ({
+            modelIndex,
+            modelName: entry.info.name,
+            modelPath: entry.info.path,
+            active: entry.model === this.currentModel,
+            materials: entry.materials.map((material) => ({
+                key: material.key,
+                name: material.name,
+                presetId: this.getWgslMaterialShaderPresetForMaterial(material.material),
+            })),
+        }));
+    }
+
+    public setWgslMaterialShaderPreset(
+        modelIndex: number,
+        materialKey: string | null,
+        presetId: WgslMaterialShaderPresetId,
+    ): boolean {
+        if (!this.isWgslMaterialShaderAssignmentAvailable()) return false;
+        if (!MmdManager.WGSL_MATERIAL_SHADER_PRESETS.some((item) => item.id === presetId)) return false;
+
+        const entry = this.sceneModels[modelIndex];
+        if (!entry) return false;
+
+        const targets = materialKey === null
+            ? entry.materials
+            : entry.materials.filter((material) => material.key === materialKey);
+        if (targets.length === 0) return false;
+
+        for (const target of targets) {
+            this.applyWgslShaderPresetToMaterial(target.material, presetId);
+        }
+
+        this.onMaterialShaderStateChanged?.();
+        return true;
+    }
+
+    private getWgslMaterialShaderPresetForMaterial(material: any): WgslMaterialShaderPresetId {
+        if (!material || typeof material !== "object") {
+            return MmdManager.DEFAULT_WGSL_MATERIAL_SHADER_PRESET;
+        }
+
+        return this.materialShaderPresetByMaterial.get(material as object)
+            ?? MmdManager.DEFAULT_WGSL_MATERIAL_SHADER_PRESET;
+    }
+
+    private cloneColor3OrNull(value: any): Color3 | null {
+        if (!value || typeof value !== "object") return null;
+        const r = Number(value.r);
+        const g = Number(value.g);
+        const b = Number(value.b);
+        if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return null;
+        return new Color3(r, g, b);
+    }
+
+    private setMaterialColorProperty(material: any, propertyName: string, color: Color3): void {
+        if (!material || typeof material !== "object") return;
+
+        const current = material[propertyName];
+        if (current && typeof current.set === "function") {
+            current.set(color.r, color.g, color.b);
+            return;
+        }
+
+        material[propertyName] = new Color3(color.r, color.g, color.b);
+    }
+
+    private ensureMaterialShaderDefaults(material: any): MaterialShaderDefaults {
+        let defaults = this.materialShaderDefaultsByMaterial.get(material as object);
+        if (!defaults) {
+            defaults = {
+                disableLighting: "disableLighting" in material ? Boolean(material.disableLighting) : null,
+                specularPower: "specularPower" in material && Number.isFinite(Number(material.specularPower))
+                    ? Number(material.specularPower)
+                    : null,
+                emissiveColor: this.cloneColor3OrNull(material.emissiveColor),
+            };
+            this.materialShaderDefaultsByMaterial.set(material as object, defaults);
+        }
+
+        return defaults;
+    }
+
+    private restoreMaterialShaderDefaults(material: any, defaults: MaterialShaderDefaults): void {
+        if (!material || typeof material !== "object") return;
+
+        if (defaults.disableLighting !== null && "disableLighting" in material) {
+            material.disableLighting = defaults.disableLighting;
+        }
+
+        if (defaults.specularPower !== null && "specularPower" in material) {
+            material.specularPower = defaults.specularPower;
+        }
+
+        if (defaults.emissiveColor) {
+            this.setMaterialColorProperty(material, "emissiveColor", defaults.emissiveColor);
+        } else if ("emissiveColor" in material) {
+            this.setMaterialColorProperty(material, "emissiveColor", new Color3(0, 0, 0));
+        }
+    }
+
+    private markMaterialShaderDirty(material: any): void {
+        if (!material || typeof material !== "object") return;
+
+        if (typeof material.markAsDirty === "function") {
+            try {
+                material.markAsDirty(1);
+                return;
+            } catch {
+                try {
+                    material.markAsDirty();
+                    return;
+                } catch {
+                    // ignore
+                }
+            }
+        }
+
+        if (typeof material._markAllSubMeshesAsTexturesDirty === "function") {
+            material._markAllSubMeshesAsTexturesDirty();
+        }
+    }
+
+    private applyWgslShaderPresetToMaterial(material: any, presetId: WgslMaterialShaderPresetId): void {
+        if (!material || typeof material !== "object") return;
+
+        const defaults = this.ensureMaterialShaderDefaults(material);
+        this.restoreMaterialShaderDefaults(material, defaults);
+
+        switch (presetId) {
+            case "wgsl-unlit": {
+                if ("disableLighting" in material) {
+                    material.disableLighting = true;
+                }
+                if ("specularPower" in material) {
+                    material.specularPower = 0;
+                }
+                const diffuse = this.cloneColor3OrNull(material.diffuseColor);
+                if (diffuse) {
+                    this.setMaterialColorProperty(
+                        material,
+                        "emissiveColor",
+                        new Color3(
+                            Math.min(1, diffuse.r * 0.95),
+                            Math.min(1, diffuse.g * 0.95),
+                            Math.min(1, diffuse.b * 0.95),
+                        ),
+                    );
+                }
+                break;
+            }
+            case "wgsl-soft-lit": {
+                if ("disableLighting" in material) {
+                    material.disableLighting = false;
+                }
+                if ("specularPower" in material) {
+                    const base = defaults.specularPower ?? 32;
+                    material.specularPower = Math.max(8, base * 0.4);
+                }
+                const baseEmissive = defaults.emissiveColor ?? new Color3(0, 0, 0);
+                this.setMaterialColorProperty(
+                    material,
+                    "emissiveColor",
+                    new Color3(
+                        Math.min(1, baseEmissive.r + 0.04),
+                        Math.min(1, baseEmissive.g + 0.04),
+                        Math.min(1, baseEmissive.b + 0.04),
+                    ),
+                );
+                break;
+            }
+            case "wgsl-specular": {
+                if ("disableLighting" in material) {
+                    material.disableLighting = false;
+                }
+                if ("specularPower" in material) {
+                    const base = defaults.specularPower ?? 32;
+                    material.specularPower = Math.min(512, Math.max(32, base * 1.85));
+                }
+                break;
+            }
+            case "wgsl-mmd-standard":
+            default:
+                break;
+        }
+
+        this.materialShaderPresetByMaterial.set(material as object, presetId);
+        this.markMaterialShaderDirty(material);
+    }
+
+    private collectSceneModelMaterials(meshes: Mesh[]): SceneModelMaterialEntry[] {
+        const materialMap = new Map<object, SceneModelMaterialEntry>();
+        let materialIndex = 0;
+
+        const registerMaterial = (material: any, fallbackName: string): void => {
+            if (!material || typeof material !== "object") return;
+            if (materialMap.has(material as object)) return;
+
+            const materialName = typeof material.name === "string" && material.name.trim().length > 0
+                ? material.name
+                : fallbackName;
+            const key = String(materialIndex) + ":" + materialName;
+            materialIndex += 1;
+
+            materialMap.set(material as object, {
+                key,
+                name: materialName,
+                material,
+            });
+
+            this.ensureMaterialShaderDefaults(material);
+            if (!this.materialShaderPresetByMaterial.has(material as object)) {
+                this.materialShaderPresetByMaterial.set(
+                    material as object,
+                    MmdManager.DEFAULT_WGSL_MATERIAL_SHADER_PRESET,
+                );
+            }
+        };
+
+        for (const mesh of meshes) {
+            const material = mesh.material as any;
+            if (!material) continue;
+
+            if (Array.isArray(material.subMaterials)) {
+                for (let subIndex = 0; subIndex < material.subMaterials.length; subIndex += 1) {
+                    const subMaterial = material.subMaterials[subIndex];
+                    registerMaterial(subMaterial, (mesh.name || "mesh") + "#" + String(subIndex + 1));
+                }
+            } else {
+                registerMaterial(material, mesh.name || ("material_" + String(materialIndex)));
+            }
+        }
+
+        return Array.from(materialMap.values());
+    }
+
+    private getSerializedMaterialShaderStates(entry: SceneModelEntry): ProjectModelMaterialShaderState[] {
+        const states: ProjectModelMaterialShaderState[] = [];
+
+        for (const material of entry.materials) {
+            const presetId = this.getWgslMaterialShaderPresetForMaterial(material.material);
+            if (presetId === MmdManager.DEFAULT_WGSL_MATERIAL_SHADER_PRESET) continue;
+            states.push({
+                materialKey: material.key,
+                presetId,
+            });
+        }
+
+        return states;
+    }
+
+    private applyImportedMaterialShaderStates(
+        modelIndex: number,
+        states: ProjectModelMaterialShaderState[] | undefined,
+        warnings: string[],
+        modelPath: string,
+    ): void {
+        if (!Array.isArray(states) || states.length === 0) return;
+        if (!this.isWgslMaterialShaderAssignmentAvailable()) return;
+
+        const entry = this.sceneModels[modelIndex];
+        if (!entry) return;
+
+        for (const state of states) {
+            if (!state || typeof state.materialKey !== "string" || typeof state.presetId !== "string") {
+                warnings.push("Invalid material shader assignment: " + modelPath);
+                continue;
+            }
+
+            const presetId = state.presetId as WgslMaterialShaderPresetId;
+            const exists = MmdManager.WGSL_MATERIAL_SHADER_PRESETS.some((preset) => preset.id === presetId);
+            if (!exists) {
+                warnings.push("Unknown shader preset '" + state.presetId + "' for " + modelPath);
+                continue;
+            }
+
+            const ok = this.setWgslMaterialShaderPreset(modelIndex, state.materialKey, presetId);
+            if (!ok) {
+                warnings.push("Material shader target not found: " + state.materialKey + " (" + modelPath + ")");
+            }
+        }
+    }
+
     private getModelVisibility(mesh: MmdMesh): boolean {
         if (mesh.isEnabled() && mesh.isVisible) return true;
 
@@ -1429,8 +1799,9 @@ export class MmdManager {
                     wasmPath: twgslWasmUrl,
                 },
             });
-            engine.compatibilityMode = true;
-            console.info("Using WebGPU renderer.");
+            engine.compatibilityMode = MmdManager.WEBGPU_COMPATIBILITY_MODE;
+            const webGpuMode = engine.compatibilityMode ? "compatibility" : "native";
+            console.info(`Using WebGPU renderer (${webGpuMode}, WGSL-first).`);
             return engine;
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -1491,15 +1862,8 @@ export class MmdManager {
         canvas.addEventListener("pointercancel", this.onCanvasPointerCancel);
         this.syncCameraRotationFromCurrentView();
         this.updateDofFocalLengthFromCameraFov();
-        const isWebGpuEngine = (this.engine as unknown as { webGLVersion?: number }).webGLVersion === undefined;
-        if (isWebGpuEngine) {
-            this.dofEnabledValue = false;
-            this.farDofEnabled = false;
-        } else {
-            this.setupFarDofPostProcess();
-            this.dofFocusDistanceMmValue = this.getCameraFocusDistanceMm();
-            this.setupEditorDofPipeline();
-        }
+        this.dofFocusDistanceMmValue = this.getCameraFocusDistanceMm();
+        this.initializeDofPipeline();
         this.setupColorCorrectionPostProcess();
 
         // Lights
@@ -1664,6 +2028,19 @@ export class MmdManager {
         // Start render loop
         this.engine.runRenderLoop(() => {
             const nowMs = performance.now();
+            if (!this.autoRenderEnabled) {
+                this.lastRenderTimestampMs = nowMs;
+                this.nextRenderDueTimestampMs = nowMs;
+                return;
+            }
+
+            if (this.renderFpsLimit > 0) {
+                if (nowMs < this.nextRenderDueTimestampMs) {
+                    return;
+                }
+                this.nextRenderDueTimestampMs = nowMs + (1000 / this.renderFpsLimit);
+            }
+
             const deltaMs = Math.max(0, Math.min(100, nowMs - this.lastRenderTimestampMs));
             this.lastRenderTimestampMs = nowMs;
 
@@ -1703,7 +2080,19 @@ export class MmdManager {
                 throw new Error(`Failed to fetch ammo wasm binary: ${wasmResponse.status} ${wasmResponse.statusText}`);
             }
             const wasmBinary = new Uint8Array(await wasmResponse.arrayBuffer());
-            const ammoInstance = await Ammo({ wasmBinary });
+            const ammoInstance = await Ammo({
+                wasmBinary,
+                printErr: (message: unknown) => {
+                    const text = String(message);
+                    if (
+                        text.includes("wasm streaming compile failed") ||
+                        text.includes("falling back to ArrayBuffer instantiation")
+                    ) {
+                        return;
+                    }
+                    console.warn(text);
+                },
+            });
             const plugin = new MmdAmmoJSPlugin(true, ammoInstance);
             plugin.setMaxSteps(120);
             plugin.setFixedTimeStep(1 / 120);
@@ -1830,6 +2219,7 @@ export class MmdManager {
 
             this.applyModelEdgeToMeshes(result.meshes as Mesh[]);
             this.applyCelShadingToMeshes(result.meshes as Mesh[]);
+            const sceneMaterials = this.collectSceneModelMaterials(result.meshes as Mesh[]);
 
             // Capture metadata before runtime model creation (metadata may be trimmed).
             const mmdMetadata = mmdMesh.metadata as typeof mmdMesh.metadata & {
@@ -1989,6 +2379,7 @@ export class MmdManager {
                 mesh: mmdMesh,
                 model: mmdModel,
                 info: modelInfo,
+                materials: sceneMaterials,
             });
 
             const activateAsCurrent = this.shouldActivateAsCurrent(modelInfo);
@@ -2802,6 +3193,7 @@ export class MmdManager {
             path: entry.info.path,
             visible: this.getModelVisibility(entry.mesh),
             motionImports: (this.modelMotionImportsByModel.get(entry.model) ?? []).map((item) => ({ ...item })),
+            materialShaders: this.getSerializedMaterialShaderStates(entry),
         }));
 
         const keyframes: ProjectKeyframeBundle = {
@@ -2931,6 +3323,7 @@ export class MmdManager {
             }
 
             this.setModelMotionImports(targetModel, (modelState.motionImports ?? []).map((item) => ({ ...item })));
+            this.applyImportedMaterialShaderStates(modelIndex, modelState.materialShaders, warnings, modelState.path);
 
             let restoredEmbeddedAnimation = false;
             const embeddedAnimationData = embeddedModelAnimationsByPath.get(
@@ -3166,12 +3559,18 @@ export class MmdManager {
         return Math.round(this.engine.getFps());
     }
 
+    private isWebGpuEngine(): boolean {
+        return this.engine instanceof WebGPUEngine;
+    }
+
+    private getPostProcessShaderLanguage(): ShaderLanguage {
+        return this.isWebGpuEngine() ? ShaderLanguage.WGSL : ShaderLanguage.GLSL;
+    }
+
     /** Engine type string: "WebGL2", "WebGL1", or "WebGPU" */
     getEngineType(): string {
-        // WebGPUEngine has no webGLVersion
-        const ver = (this.engine as unknown as { webGLVersion?: number }).webGLVersion;
-        if (ver === undefined) return "WebGPU";
-        return ver >= 2 ? "WebGL2" : "WebGL1";
+        if (this.isWebGpuEngine()) return "WebGPU";
+        return (this.engine as Engine).webGLVersion >= 2 ? "WebGL2" : "WebGL1";
     }
 
     /** Capture current viewport as PNG data URL */
@@ -3249,6 +3648,14 @@ export class MmdManager {
         return this.dofEnabledValue;
     }
     set dofEnabled(v: boolean) {
+        if (v && !this.defaultRenderingPipeline) {
+            this.initializeDofPipeline();
+        }
+        if (v && !this.defaultRenderingPipeline) {
+            this.dofEnabledValue = false;
+            return;
+        }
+
         this.dofEnabledValue = v;
         if (this.dofEnabledValue) {
             this.configureDofDepthRenderer();
@@ -3578,6 +3985,48 @@ export class MmdManager {
         return new Color3(clamp01(red), clamp01(green), clamp01(blue));
     }
 
+    private initializeDofPipeline(): void {
+        try {
+            this.setupEditorDofPipeline();
+            if (this.farDofEnabled) {
+                this.setupFarDofPostProcess();
+            } else {
+                this.postEffectFarDofStrengthValue = 0;
+            }
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`DoF pipeline initialization failed on ${this.getEngineType()}. DoF features were disabled. Reason: ${message}`);
+
+            this.dofEnabledValue = false;
+            this.postEffectFarDofStrengthValue = 0;
+
+            if (this.dofPostProcess) {
+                this.dofPostProcess.dispose(this.camera);
+                this.dofPostProcess = null;
+            }
+            if (this.finalAntialiasPostProcess) {
+                this.finalAntialiasPostProcess.dispose(this.camera);
+                this.finalAntialiasPostProcess = null;
+            }
+            if (this.finalLensDistortionPostProcess) {
+                this.finalLensDistortionPostProcess.dispose(this.camera);
+                this.finalLensDistortionPostProcess = null;
+            }
+            if (this.lensRenderingPipeline) {
+                this.lensRenderingPipeline.dispose(false);
+                this.lensRenderingPipeline = null;
+            }
+            if (this.defaultRenderingPipeline) {
+                this.defaultRenderingPipeline.dispose();
+                this.defaultRenderingPipeline = null;
+            }
+            if (this.depthRenderer) {
+                this.depthRenderer.dispose();
+                this.depthRenderer = null;
+            }
+        }
+    }
+
     private setupColorCorrectionPostProcess(): void {
         const shaderKey = "mmdColorCorrectionFragmentShader";
         if (!Effect.ShadersStore[shaderKey]) {
@@ -3597,17 +4046,39 @@ export class MmdManager {
                 }
             `;
         }
+        if (!ShaderStore.ShadersStoreWGSL[shaderKey]) {
+            ShaderStore.ShadersStoreWGSL[shaderKey] = `
+                varying vUV: vec2f;
+                var textureSamplerSampler: sampler;
+                var textureSampler: texture_2d<f32>;
+                uniform contrast: f32;
+                uniform gammaPower: f32;
+
+                #define CUSTOM_FRAGMENT_DEFINITIONS
+                @fragment
+                fn main(input: FragmentInputs)->FragmentOutputs {
+                    let color: vec4f = textureSample(textureSampler, textureSamplerSampler, input.vUV);
+                    var contrasted: vec3f = ((color.rgb - vec3f(0.5)) * uniforms.contrast) + vec3f(0.5);
+                    contrasted = clamp(contrasted, vec3f(0.0), vec3f(1.0));
+                    let safeGamma: f32 = max(uniforms.gammaPower, 0.0001);
+                    let corrected: vec3f = pow(max(contrasted, vec3f(0.0)), vec3f(safeGamma));
+                    fragmentOutputs.color = vec4f(corrected, color.a);
+                }
+            `;
+        }
 
         this.colorCorrectionPostProcess = new PostProcess(
             "colorCorrection",
             "mmdColorCorrection",
-            ["contrast", "gammaPower"],
-            null,
-            1.0,
-            this.camera,
-            Texture.BILINEAR_SAMPLINGMODE,
-            this.engine,
-            false
+            {
+                uniforms: ["contrast", "gammaPower"],
+                size: 1.0,
+                camera: this.camera,
+                samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                engine: this.engine,
+                reusable: false,
+                shaderLanguage: this.getPostProcessShaderLanguage(),
+            },
         );
         this.colorCorrectionPostProcess.onApplyObservable.add((effect) => {
             effect.setFloat("contrast", this.postEffectContrastValue);
@@ -3689,6 +4160,41 @@ export class MmdManager {
                 }
             `;
         }
+        if (!ShaderStore.ShadersStoreWGSL[shaderKey]) {
+            ShaderStore.ShadersStoreWGSL[shaderKey] = `
+                varying vUV: vec2f;
+                var textureSamplerSampler: sampler;
+                var textureSampler: texture_2d<f32>;
+                uniform distortion: f32;
+
+                #define CUSTOM_FRAGMENT_DEFINITIONS
+                @fragment
+                fn main(input: FragmentInputs)->FragmentOutputs {
+                    let centered: vec2f = input.vUV - vec2f(0.5);
+                    let radius2: f32 = dot(centered, centered);
+
+                    var finalUv: vec2f = input.vUV;
+                    if (abs(uniforms.distortion) >= 0.0001 && radius2 >= 1e-8) {
+                        let direction: vec2f = normalize(centered);
+                        let amount: f32 = clamp(abs(uniforms.distortion) * 0.23, 0.0, 1.0);
+
+                        var barrelUv: vec2f = vec2f(0.5) + direction * radius2;
+                        barrelUv = mix(input.vUV, barrelUv, amount);
+
+                        var pincushionUv: vec2f = vec2f(0.5) - direction * radius2;
+                        pincushionUv = mix(input.vUV, pincushionUv, amount);
+
+                        finalUv = pincushionUv;
+                        if (uniforms.distortion >= 0.0) {
+                            finalUv = barrelUv;
+                        }
+                        finalUv = clamp(finalUv, vec2f(0.0), vec2f(1.0));
+                    }
+
+                    fragmentOutputs.color = textureSample(textureSampler, textureSamplerSampler, finalUv);
+                }
+            `;
+        }
 
         if (this.finalLensDistortionPostProcess) {
             this.finalLensDistortionPostProcess.dispose(this.camera);
@@ -3698,13 +4204,15 @@ export class MmdManager {
         this.finalLensDistortionPostProcess = new PostProcess(
             "finalLensDistortion",
             "mmdFinalLensDistortion",
-            ["distortion"],
-            null,
-            1.0,
-            this.camera,
-            Texture.BILINEAR_SAMPLINGMODE,
-            this.engine,
-            false
+            {
+                uniforms: ["distortion"],
+                size: 1.0,
+                camera: this.camera,
+                samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                engine: this.engine,
+                reusable: false,
+                shaderLanguage: this.getPostProcessShaderLanguage(),
+            },
         );
         this.finalLensDistortionPostProcess.onApplyObservable.add((effect) => {
             effect.setFloat("distortion", this.dofLensDistortionValue);
@@ -3752,6 +4260,9 @@ export class MmdManager {
     }
 
     private ensureSignedLensDistortionShader(): void {
+        if (this.isWebGpuEngine()) {
+            return;
+        }
         const shaderKey = "depthOfFieldPixelShader";
         const source = Effect.ShadersStore[shaderKey];
         if (!source || source.includes("mmdSignedLensDistortion")) {
@@ -3767,6 +4278,15 @@ export class MmdManager {
     }
 
     private setupLensHighlightsPipeline(): void {
+        if (this.lensRenderingPipeline) {
+            this.lensRenderingPipeline.dispose(false);
+            this.lensRenderingPipeline = null;
+        }
+        if (this.isWebGpuEngine()) {
+            // LensRenderingPipeline currently depends on GLSL-only shaders.
+            return;
+        }
+
         this.ensureSignedLensDistortionShader();
         this.lensRenderingPipeline = new LensRenderingPipeline(
             "DofLensHighlightsPipeline",
@@ -3845,8 +4365,11 @@ export class MmdManager {
             const minFocusMm = this.camera.minZ * 1000;
             this.dofFocusDistanceMmValue = Math.max(minFocusMm, targetFocusMm - this.dofAutoFocusNearOffsetMmValue);
         }
-        const autoMinFStop = this.dofAutoFocusToCameraTarget
+        const autoMinFStopRaw = this.dofAutoFocusToCameraTarget
             ? this.computeAutoFocusMinFStop(this.dofFocusDistanceMmValue)
+            : 0;
+        const autoMinFStop = this.dofAutoFocusToCameraTarget
+            ? this.computeAdjustedAutoMinFStop(this.dofFStopValue, autoMinFStopRaw, this.dofFocusDistanceMmValue)
             : 0;
         this.dofEffectiveFStopValue = Math.max(
             0.01,
@@ -3896,6 +4419,24 @@ export class MmdManager {
             this.defaultRenderingPipeline.depthOfField.focalLength = this.dofFocalLengthValue;
         }
     }
+    private computeAdjustedAutoMinFStop(baseFStop: number, autoMinFStop: number, focusDistanceMm: number): number {
+        if (autoMinFStop <= baseFStop) {
+            return autoMinFStop;
+        }
+
+        // Soften auto compensation near the camera to keep distant background blur.
+        const focusBandRadiusMm = Math.max(1, this.dofAutoFocusInFocusRadiusMm);
+        const compensationStartMm = focusBandRadiusMm * 1.5;
+        const compensationFullMm = focusBandRadiusMm * 6.0;
+        const blendDenominator = Math.max(1, compensationFullMm - compensationStartMm);
+        const t = Math.max(0, Math.min(1, (focusDistanceMm - compensationStartMm) / blendDenominator));
+        const distanceWeight = t * t * (3 - 2 * t);
+
+        const softenedAutoMinFStop = baseFStop + (autoMinFStop - baseFStop) * distanceWeight;
+        const maxCompensationBoost = 2.0;
+        return Math.min(baseFStop + maxCompensationBoost, softenedAutoMinFStop);
+    }
+
     private computeAutoFocusMinFStop(focusDistanceMm: number): number {
         const focalLengthMm = Math.max(1, this.dofFocalLengthValue);
         const lensSizeMm = Math.max(0.001, this.dofLensSizeValue);
@@ -3925,6 +4466,8 @@ export class MmdManager {
             return;
         }
         this.depthRenderer = this.scene.enableDepthRenderer(this.camera, false, true);
+        this.depthRenderer.useOnlyInActiveCamera = true;
+        this.depthRenderer.forceDepthWriteTransparentMeshes = true;
 
         const shaderKey = "mmdFarDofFragmentShader";
         if (!Effect.ShadersStore[shaderKey]) {
@@ -4019,17 +4562,118 @@ export class MmdManager {
                 }
             `;
         }
+        if (!ShaderStore.ShadersStoreWGSL[shaderKey]) {
+            ShaderStore.ShadersStoreWGSL[shaderKey] = `
+                varying vUV: vec2f;
+                var textureSamplerSampler: sampler;
+                var textureSampler: texture_2d<f32>;
+                var depthSamplerSampler: sampler;
+                var depthSampler: texture_2d<f32>;
+                uniform cameraNearFar: vec2f;
+                uniform texelSize: vec2f;
+                uniform focusDistance: f32;
+                uniform focusSharpRadius: f32;
+                uniform farDofStrength: f32;
+
+                fn directionForIndex(index: i32) -> vec2f {
+                    switch index {
+                        case 0: { return vec2f(1.0, 0.0); }
+                        case 1: { return vec2f(0.9239, 0.3827); }
+                        case 2: { return vec2f(0.7071, 0.7071); }
+                        case 3: { return vec2f(0.3827, 0.9239); }
+                        case 4: { return vec2f(0.0, 1.0); }
+                        case 5: { return vec2f(-0.3827, 0.9239); }
+                        case 6: { return vec2f(-0.7071, 0.7071); }
+                        case 7: { return vec2f(-0.9239, 0.3827); }
+                        case 8: { return vec2f(-1.0, 0.0); }
+                        case 9: { return vec2f(-0.9239, -0.3827); }
+                        case 10: { return vec2f(-0.7071, -0.7071); }
+                        case 11: { return vec2f(-0.3827, -0.9239); }
+                        case 12: { return vec2f(0.0, -1.0); }
+                        case 13: { return vec2f(0.3827, -0.9239); }
+                        case 14: { return vec2f(0.7071, -0.7071); }
+                        default: { return vec2f(0.9239, -0.3827); }
+                    }
+                }
+
+                fn ringScaleForIndex(index: i32) -> f32 {
+                    switch index {
+                        case 0: { return 0.55; }
+                        case 1: { return 1.1; }
+                        case 2: { return 1.85; }
+                        default: { return 2.75; }
+                    }
+                }
+
+                fn ringWeightForIndex(index: i32) -> f32 {
+                    switch index {
+                        case 0: { return 0.020; }
+                        case 1: { return 0.017; }
+                        case 2: { return 0.014; }
+                        default: { return 0.011; }
+                    }
+                }
+
+                #define CUSTOM_FRAGMENT_DEFINITIONS
+                @fragment
+                fn main(input: FragmentInputs)->FragmentOutputs {
+                    let sharp: vec4f = textureSampleLevel(textureSampler, textureSamplerSampler, input.vUV, 0.0);
+                    var finalColor: vec4f = sharp;
+
+                    if (uniforms.farDofStrength > 0.0001) {
+                        let depthMetric: f32 = clamp(textureSampleLevel(depthSampler, depthSamplerSampler, input.vUV, 0.0).r, 0.0, 1.0);
+                        let pixelDistance: f32 = mix(uniforms.cameraNearFar.x, uniforms.cameraNearFar.y, depthMetric) * 1000.0;
+
+                        let farStart: f32 = uniforms.focusDistance + uniforms.focusSharpRadius;
+                        let farSpan: f32 = max(uniforms.cameraNearFar.y * 1000.0 - farStart, 1.0);
+                        var blurFactor: f32 = clamp((pixelDistance - farStart) / farSpan, 0.0, 1.0) * uniforms.farDofStrength;
+
+                        if (blurFactor > 0.0001) {
+                            blurFactor = blurFactor * blurFactor * (3.0 - 2.0 * blurFactor);
+                            let baseRadius: vec2f = uniforms.texelSize * (1.8 + 42.0 * blurFactor);
+                            let depthWeightScale: f32 = mix(240.0, 90.0, blurFactor);
+
+                            var blur: vec4f = sharp * 0.18;
+                            var blurWeight: f32 = 0.18;
+
+                            for (var ring: i32 = 0; ring < 4; ring = ring + 1) {
+                                let radius: vec2f = baseRadius * ringScaleForIndex(ring);
+                                let baseWeight: f32 = ringWeightForIndex(ring);
+
+                                for (var i: i32 = 0; i < 16; i = i + 1) {
+                                    let dir: vec2f = directionForIndex(i);
+                                    let sampleUv: vec2f = clamp(input.vUV + dir * radius, vec2f(0.001), vec2f(0.999));
+                                    let sampleDepthMetric: f32 = textureSampleLevel(depthSampler, depthSamplerSampler, sampleUv, 0.0).r;
+                                    let depthWeight: f32 = exp(-abs(sampleDepthMetric - depthMetric) * depthWeightScale);
+                                    let sampleWeight: f32 = baseWeight * depthWeight;
+                                    blur = blur + textureSampleLevel(textureSampler, textureSamplerSampler, sampleUv, 0.0) * sampleWeight;
+                                    blurWeight = blurWeight + sampleWeight;
+                                }
+                            }
+
+                            let blurColor: vec4f = blur / max(blurWeight, 0.0001);
+                            finalColor = mix(sharp, blurColor, blurFactor);
+                        }
+                    }
+
+                    fragmentOutputs.color = finalColor;
+                }
+            `;
+        }
 
         this.dofPostProcess = new PostProcess(
             "farDepthOfField",
             "mmdFarDof",
-            ["cameraNearFar", "texelSize", "focusDistance", "focusSharpRadius", "farDofStrength"],
-            ["depthSampler"],
-            1.6,
-            this.camera,
-            Texture.TRILINEAR_SAMPLINGMODE,
-            this.engine,
-            false
+            {
+                uniforms: ["cameraNearFar", "texelSize", "focusDistance", "focusSharpRadius", "farDofStrength"],
+                samplers: ["depthSampler"],
+                size: 1.6,
+                camera: this.camera,
+                samplingMode: Texture.TRILINEAR_SAMPLINGMODE,
+                engine: this.engine,
+                reusable: false,
+                shaderLanguage: this.getPostProcessShaderLanguage(),
+            },
         );
 
         this.dofPostProcess.onApplyObservable.add((effect) => {
@@ -4755,6 +5399,24 @@ export class MmdManager {
 
     resize(): void {
         this.resizeToCanvasClientSize();
+    }
+
+    public setAutoRenderEnabled(enabled: boolean): void {
+        this.autoRenderEnabled = Boolean(enabled);
+        const now = performance.now();
+        this.lastRenderTimestampMs = now;
+        this.nextRenderDueTimestampMs = now;
+    }
+
+    public setRenderFpsLimit(limit: number): void {
+        if (!Number.isFinite(limit)) {
+            this.renderFpsLimit = 0;
+        } else {
+            this.renderFpsLimit = Math.max(0, Math.floor(limit));
+        }
+        const now = performance.now();
+        this.lastRenderTimestampMs = now;
+        this.nextRenderDueTimestampMs = now;
     }
 
     dispose(): void {

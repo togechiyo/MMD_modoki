@@ -8,6 +8,7 @@ import { MmdManager } from "./mmd-manager";
 import { Timeline } from "./timeline";
 import { BottomPanel } from "./bottom-panel";
 import { UIController } from "./ui-controller";
+import { runPngSequenceExportJob } from "./png-sequence-exporter";
 
 // Wait for DOM
 document.addEventListener("DOMContentLoaded", () => {
@@ -15,6 +16,13 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initializeApp(): Promise<void> {
+  const searchParams = new URLSearchParams(window.location.search);
+  const mode = searchParams.get("mode");
+  if (mode === "exporter") {
+    await initializePngSequenceExporter(searchParams);
+    return;
+  }
+
   const canvas = document.getElementById("render-canvas") as HTMLCanvasElement;
   if (!canvas) {
     console.error("Canvas not found");
@@ -54,5 +62,87 @@ async function initializeApp(): Promise<void> {
       if (title) title.textContent = "初期化に失敗しました";
       if (hint) hint.textContent = `詳細: ${message}`;
     }
+  }
+}
+
+async function initializePngSequenceExporter(searchParams: URLSearchParams): Promise<void> {
+  document.body.classList.add("exporter-mode");
+
+  const canvas = document.getElementById("render-canvas") as HTMLCanvasElement | null;
+  const busyOverlay = document.getElementById("ui-busy-overlay");
+  const busyText = document.getElementById("ui-busy-text");
+  const viewportOverlay = document.getElementById("viewport-overlay");
+  const statusText = document.getElementById("status-text");
+
+  const setStatus = (message: string): void => {
+    if (statusText) statusText.textContent = message;
+    if (busyText) busyText.textContent = message;
+    document.title = `PNG Sequence Export - ${message}`;
+  };
+
+  const closeExporterWindowSoon = (): void => {
+    window.setTimeout(() => {
+      window.close();
+    }, 300);
+  };
+
+  if (!canvas) {
+    console.error("Canvas not found");
+    setStatus("Canvas not found");
+    closeExporterWindowSoon();
+    return;
+  }
+
+  if (viewportOverlay) {
+    viewportOverlay.classList.add("hidden");
+  }
+  if (busyOverlay) {
+    busyOverlay.classList.remove("hidden");
+    busyOverlay.setAttribute("aria-hidden", "false");
+  }
+
+  const jobId = searchParams.get("jobId");
+  if (!jobId) {
+    setStatus("Export job id is missing");
+    closeExporterWindowSoon();
+    return;
+  }
+
+  try {
+    const request = await window.electronAPI.takePngSequenceExportJob(jobId);
+    if (!request) {
+      setStatus("Export job is unavailable");
+      closeExporterWindowSoon();
+      return;
+    }
+
+    let lastProgressReportAt = 0;
+    const result = await runPngSequenceExportJob(canvas, request, {
+      onStatus: (message) => {
+        setStatus(message);
+      },
+      onProgress: (saved, total, frame, captured) => {
+        setStatus(`Exporting... ${saved}/${total} (frame ${frame})`);
+        const now = performance.now();
+        if (saved === total || now - lastProgressReportAt >= 200) {
+          lastProgressReportAt = now;
+          window.electronAPI.reportPngSequenceExportProgress({
+            jobId,
+            saved,
+            captured,
+            total,
+            frame,
+          });
+        }
+      },
+    });
+
+    setStatus(`Done: ${result.exportedFrames} frame(s)`);
+    closeExporterWindowSoon();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("PNG sequence export failed:", message);
+    setStatus(`Export failed: ${message}`);
+    closeExporterWindowSoon();
   }
 }

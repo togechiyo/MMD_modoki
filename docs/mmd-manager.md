@@ -62,6 +62,20 @@ HTML 側で `dof-row-hidden` により複数項目を非表示運用している
 
 詳細な UI 項目は `docs/camera-implementation-spec.md` を参照。
 
+## UI/入出力メモ（2026-02-24）
+
+- ツールバー読込は `ファイル読込` ボタンへ統合済み
+  - 対応: `pmx/pmd/vmd/vpd/mp3/wav/ogg`
+  - VMD は状況とファイル名を見て、`カメラVMD -> モーション` または `モーション -> カメラVMD` の順にフォールバック
+- ドラッグ&ドロップ読込は `UIController.setupFileDrop()` で処理
+  - `pmx/pmd` を先に、次に `vmd/vpd`、次に音源を順次ロード
+  - PNG 連番出力中は読込をブロック
+- Electron 環境差分対応として、ドロップファイルのパスは `preload.ts` の
+  `webUtils.getPathForFile(file)` で解決する
+  - 旧来の `File.path` はフォールバック扱い
+- シェーダー欄は現行UIから撤去（右パネル非表示運用）
+- UI非表示モード開始時に「ESCで戻れる」トーストを表示
+
 ## 注意点
 
 - `src/mmd-manager.ts` は CP932 系エンコーディングのため、編集時は文字化けに注意

@@ -1,5 +1,7 @@
 export interface ElectronAPI {
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
+    openDirectoryDialog: () => Promise<string | null>;
+    getPathForDroppedFile: (file: File) => string | null;
     readBinaryFile: (filePath: string) => Promise<Buffer | null>;
     readTextFile: (filePath: string) => Promise<string | null>;
     getFileInfo: (filePath: string) => Promise<{ name: string; path: string; size: number; extension: string } | null>;
@@ -9,6 +11,21 @@ export interface ElectronAPI {
         filters?: { name: string; extensions: string[] }[],
     ) => Promise<string | null>;
     savePngFile: (dataUrl: string, defaultFileName?: string) => Promise<string | null>;
+    savePngFileToPath: (dataUrl: string, directoryPath: string, fileName: string) => Promise<string | null>;
+    savePngRgbaFileToPath: (
+        rgbaData: Uint8Array,
+        width: number,
+        height: number,
+        directoryPath: string,
+        fileName: string,
+    ) => Promise<string | null>;
+    startPngSequenceExportWindow: (
+        request: PngSequenceExportRequest,
+    ) => Promise<PngSequenceExportLaunchResult | null>;
+    takePngSequenceExportJob: (jobId: string) => Promise<PngSequenceExportRequest | null>;
+    reportPngSequenceExportProgress: (progress: PngSequenceExportProgress) => void;
+    onPngSequenceExportState: (callback: (state: PngSequenceExportState) => void) => () => void;
+    onPngSequenceExportProgress: (callback: (progress: PngSequenceExportProgress) => void) => () => void;
 }
 
 declare global {
@@ -106,10 +123,16 @@ export interface ProjectMotionImport {
     frame?: number;
 }
 
+export interface ProjectModelMaterialShaderState {
+    materialKey: string;
+    presetId: string;
+}
+
 export interface ProjectModelState {
     path: string;
     visible: boolean;
     motionImports: ProjectMotionImport[];
+    materialShaders?: ProjectModelMaterialShaderState[];
     animation?: ProjectSerializedModelAnimation | null;
 }
 
@@ -250,4 +273,34 @@ export interface MmdModokiProjectFileV1 {
     physics: ProjectPhysicsState;
     effects: ProjectEffectState;
     keyframes?: ProjectKeyframeBundle;
+}
+
+export interface PngSequenceExportRequest {
+    project: MmdModokiProjectFileV1;
+    outputDirectoryPath: string;
+    startFrame: number;
+    endFrame: number;
+    step: number;
+    prefix: string;
+    fps: number;
+    precision: number;
+    outputWidth: number;
+    outputHeight: number;
+}
+
+export interface PngSequenceExportLaunchResult {
+    jobId: string;
+}
+
+export interface PngSequenceExportState {
+    active: boolean;
+    activeCount: number;
+}
+
+export interface PngSequenceExportProgress {
+    jobId: string;
+    saved: number;
+    captured: number;
+    total: number;
+    frame: number;
 }

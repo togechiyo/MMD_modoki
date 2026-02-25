@@ -3,6 +3,30 @@
 Babylon.js + [babylon-mmd](https://github.com/noname0310/babylon-mmd) をベースに、MMDライクな操作感へ寄せた Electron デスクトップアプリです。  
 PMX/PMD モデル、VMD モーション、音源（MP3/WAV/OGG）を読み込み、タイムライン付きで再生・確認できます。
 
+## アプリ概要
+
+- 目的: MMD資産（モデル/モーション/音源）をデスクトップ上で読み込み、編集前の確認と再生検証を行う
+- 中心機能: モデル表示、VMD/カメラVMD再生、タイムライン操作、PNG書き出し
+- 想定利用: 制作中モーションのチェック、カメラ確認、ライティング確認
+
+## 主要依存ライブラリ
+
+| ライブラリ | 用途 | リンク |
+| --- | --- | --- |
+| Electron | デスクトップアプリ実行基盤 | https://www.electronjs.org/ |
+| Electron Forge | 開発/パッケージング | https://www.electronforge.io/ |
+| Vite | レンダラ開発ビルド | https://vitejs.dev/ |
+| TypeScript | 型付き実装 | https://www.typescriptlang.org/ |
+| Babylon.js | 3D描画・シーン制御 | https://www.babylonjs.com/ |
+| babylon-mmd | MMDローダー/アニメーション連携 | https://github.com/noname0310/babylon-mmd |
+
+## 借用・参考リンク
+
+- Babylon.js ドキュメント: https://doc.babylonjs.com/
+- babylon-mmd ドキュメント: https://noname0310.github.io/babylon-mmd/docs/
+- Electron ドキュメント: https://www.electronjs.org/docs/latest
+- MMD関連アセット（モデル/モーション/音源）は本リポジトリに同梱していません。利用時は各配布元の利用規約を確認してください。
+
 ## 特徴
 
 - PMX/PMD モデル読み込み（複数同時読込）
@@ -113,4 +137,5 @@ npm run make
 
 ## ライセンス
 
-MIT
+- This project: [MIT](./LICENSE)
+- Third-party notices: [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)

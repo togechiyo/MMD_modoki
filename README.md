@@ -109,7 +109,7 @@ npm run make
 - `End`: 最終フレームへ
 - `←` / `→`: 1フレーム移動
 - `Shift + ←` / `Shift + →`: 10フレーム移動
-- `Ctrl + O`: PMX/PMD/X/VMD/VPD/Audio を開く
+- `Ctrl + O`: PMX/PMD を開く
 - `Ctrl + M`: VMD を開く
 - `Ctrl + Shift + M`: カメラVMD を開く
 - `Ctrl + Shift + A`: 音源を開く

@@ -94,3 +94,4 @@ out/
 # Local backup artifacts
 .git copy/
 .gitignore copy
+.tmp/

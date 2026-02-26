@@ -66,7 +66,7 @@
 - `End`: 末尾へ
 - `← / →`: 1フレーム移動
 - `Shift + ← / →`: 10フレーム移動
-- `Ctrl + O`: PMX/PMD/X/VMD/VPD/Audio 読み込み
+- `Ctrl + O`: PMX/PMD 読み込み
 - `Ctrl + M`: VMD 読み込み
 - `Ctrl + Shift + M`: カメラVMD 読み込み
 - `Ctrl + Shift + A`: 音源読み込み

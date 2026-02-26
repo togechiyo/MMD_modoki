@@ -5,6 +5,7 @@
 
 import "./index.css";
 import { MmdManager } from "./mmd-manager";
+import "./mmd-manager-x-extension";
 import { Timeline } from "./timeline";
 import { BottomPanel } from "./bottom-panel";
 import { UIController } from "./ui-controller";

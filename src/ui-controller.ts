@@ -14,6 +14,7 @@ import type {
 } from "./types";
 
 type CameraViewPreset = "left" | "front" | "right";
+type AccessoryTransformSliderKey = "px" | "py" | "pz" | "rx" | "ry" | "rz" | "s";
 type NumericArrayLike = ArrayLike<number> | null | undefined;
 
 type RuntimeMovableBoneTrackLike = {
@@ -194,6 +195,16 @@ export class UIController {
     private dofFocalLengthValueEl: HTMLElement | null = null;
     private lensDistortionSlider: HTMLInputElement | null = null;
     private lensDistortionValueEl: HTMLElement | null = null;
+    private accessorySelect: HTMLSelectElement | null = null;
+    private accessoryParentModelSelect: HTMLSelectElement | null = null;
+    private accessoryParentBoneSelect: HTMLSelectElement | null = null;
+    private btnAccessoryVisibility: HTMLButtonElement | null = null;
+    private btnAccessoryDelete: HTMLButtonElement | null = null;
+    private accessoryEmptyStateEl: HTMLElement | null = null;
+    private readonly accessoryTransformSliders = new Map<AccessoryTransformSliderKey, HTMLInputElement>();
+    private readonly accessoryTransformValueEls = new Map<AccessoryTransformSliderKey, HTMLElement>();
+    private isSyncingAccessoryUi = false;
+    private isSyncingAccessoryParentUi = false;
     private syncingBoneSelection = false;
     private readonly interpolationChannelBindings = new Map<string, InterpolationChannelBinding>();
     private interpolationDragState: InterpolationDragState | null = null;
@@ -256,6 +267,12 @@ export class UIController {
         this.shaderResetButton = document.getElementById("btn-shader-reset") as HTMLButtonElement | null;
         this.shaderPanelNote = document.getElementById("shader-panel-note");
         this.shaderMaterialList = document.getElementById("shader-material-list");
+        this.accessorySelect = document.getElementById("accessory-select") as HTMLSelectElement | null;
+        this.accessoryParentModelSelect = document.getElementById("accessory-parent-model") as HTMLSelectElement | null;
+        this.accessoryParentBoneSelect = document.getElementById("accessory-parent-bone") as HTMLSelectElement | null;
+        this.btnAccessoryVisibility = document.getElementById("btn-accessory-visibility") as HTMLButtonElement | null;
+        this.btnAccessoryDelete = document.getElementById("btn-accessory-delete") as HTMLButtonElement | null;
+        this.accessoryEmptyStateEl = document.getElementById("accessory-empty-state");
         this.appRootEl = document.getElementById("app") as HTMLElement;
         this.busyOverlayEl = document.getElementById("ui-busy-overlay");
         this.busyTextEl = document.getElementById("ui-busy-text");
@@ -271,6 +288,7 @@ export class UIController {
         this.setupPngSequenceExportStateBridge();
         this.setupPerfDisplay();
         this.refreshModelSelector();
+        this.refreshAccessoryPanel();
         this.updateGroundToggleButton(this.mmdManager.isGroundVisible());
         this.updateSkydomeToggleButton(this.mmdManager.isSkydomeVisible());
         this.updatePhysicsToggleButton(
@@ -470,6 +488,8 @@ export class UIController {
             this.refreshShaderPanel();
             this.showToast("Model deleted", "success");
         });
+
+        this.setupAccessoryControls();
 
         this.shaderApplyButton?.addEventListener("click", () => {
             this.applyShaderPresetFromPanel(false);
@@ -1175,6 +1195,8 @@ export class UIController {
                         const ext = this.getFileExtension(filePath);
                         const priority = ext === "pmx" || ext === "pmd"
                             ? 0
+                            : ext === "x"
+                                ? 0
                             : ext === "vmd" || ext === "vpd"
                                 ? 1
                                 : ext === "mp3" || ext === "wav" || ext === "ogg"
@@ -1459,7 +1481,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: ["pmx", "pmd", "vmd", "vpd", "mp3", "wav", "ogg"] },
+            { name: "Supported files", extensions: ["pmx", "pmd", "x", "vmd", "vpd", "mp3", "wav", "ogg"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -1491,6 +1513,18 @@ export class UIController {
                 this.setStatus("Loading PMX/PMD...", true);
                 await this.mmdManager.loadPMX(filePath);
                 return;
+            case "x": {
+                this.setStatus("Loading X model...", true);
+                const ok = await this.mmdManager.loadX(filePath);
+                if (ok) {
+                    this.setStatus("X model loaded", false);
+                    this.refreshAccessoryPanel();
+                    this.showToast(`Loaded X model: ${filePath.replace(/^.*[\\/]/, "")}`, "success");
+                } else {
+                    this.setStatus("X model load failed", false);
+                }
+                return;
+            }
             case "vpd":
                 this.setStatus("Loading motion/pose...", true);
                 await this.mmdManager.loadVMD(filePath);
@@ -1759,6 +1793,387 @@ export class UIController {
 
         this.modelSelect.disabled = models.length === 0;
         this.updateInfoActionButtons();
+        this.refreshAccessoryPanel();
+    }
+
+    private setupAccessoryControls(): void {
+        const select = this.accessorySelect;
+        const parentModelSelect = this.accessoryParentModelSelect;
+        const parentBoneSelect = this.accessoryParentBoneSelect;
+        const btnVisibility = this.btnAccessoryVisibility;
+        const btnDelete = this.btnAccessoryDelete;
+
+        const registerSlider = (
+            key: AccessoryTransformSliderKey,
+            sliderId: string,
+            valueId: string,
+        ): void => {
+            const slider = document.getElementById(sliderId) as HTMLInputElement | null;
+            const valueEl = document.getElementById(valueId);
+            if (!slider || !valueEl) return;
+            this.accessoryTransformSliders.set(key, slider);
+            this.accessoryTransformValueEls.set(key, valueEl);
+
+            slider.addEventListener("input", () => {
+                this.updateAccessoryValueLabelsFromSliders();
+                if (this.isSyncingAccessoryUi) return;
+
+                const selectedIndex = this.getSelectedAccessoryIndex();
+                if (selectedIndex === null) return;
+
+                const position = {
+                    x: Number(this.accessoryTransformSliders.get("px")?.value ?? 0),
+                    y: Number(this.accessoryTransformSliders.get("py")?.value ?? 0),
+                    z: Number(this.accessoryTransformSliders.get("pz")?.value ?? 0),
+                };
+                const rotationDeg = {
+                    x: Number(this.accessoryTransformSliders.get("rx")?.value ?? 0),
+                    y: Number(this.accessoryTransformSliders.get("ry")?.value ?? 0),
+                    z: Number(this.accessoryTransformSliders.get("rz")?.value ?? 0),
+                };
+                const scalePercent = Number(this.accessoryTransformSliders.get("s")?.value ?? 100);
+
+                this.mmdManager.setAccessoryTransform(selectedIndex, {
+                    position,
+                    rotationDeg,
+                    scale: scalePercent / 100,
+                });
+            });
+        };
+
+        registerSlider("px", "accessory-pos-x", "accessory-pos-x-val");
+        registerSlider("py", "accessory-pos-y", "accessory-pos-y-val");
+        registerSlider("pz", "accessory-pos-z", "accessory-pos-z-val");
+        registerSlider("rx", "accessory-rot-x", "accessory-rot-x-val");
+        registerSlider("ry", "accessory-rot-y", "accessory-rot-y-val");
+        registerSlider("rz", "accessory-rot-z", "accessory-rot-z-val");
+        registerSlider("s", "accessory-scale", "accessory-scale-val");
+
+        select?.addEventListener("change", () => {
+            this.syncAccessoryTransformSlidersFromSelection();
+            this.syncAccessoryParentControlsFromSelection();
+            this.updateAccessoryActionButtons();
+        });
+
+        parentModelSelect?.addEventListener("change", () => {
+            if (this.isSyncingAccessoryParentUi) return;
+            const selectedIndex = this.getSelectedAccessoryIndex();
+            if (selectedIndex === null) return;
+
+            const modelIndex = this.parseAccessoryParentModelIndex();
+            this.refreshAccessoryParentBoneOptions(modelIndex, null);
+            this.mmdManager.setAccessoryParent(selectedIndex, modelIndex, null);
+        });
+
+        parentBoneSelect?.addEventListener("change", () => {
+            if (this.isSyncingAccessoryParentUi) return;
+            const selectedIndex = this.getSelectedAccessoryIndex();
+            if (selectedIndex === null) return;
+
+            const modelIndex = this.parseAccessoryParentModelIndex();
+            if (modelIndex === null) {
+                this.mmdManager.setAccessoryParent(selectedIndex, null, null);
+                return;
+            }
+
+            const boneName = parentBoneSelect.value || null;
+            this.mmdManager.setAccessoryParent(selectedIndex, modelIndex, boneName);
+        });
+
+        btnVisibility?.addEventListener("click", () => {
+            const selectedIndex = this.getSelectedAccessoryIndex();
+            if (selectedIndex === null) return;
+            const visible = this.mmdManager.toggleAccessoryVisibility(selectedIndex);
+            this.updateAccessoryActionButtons();
+            this.showToast(visible ? "Accessory visible" : "Accessory hidden", "info");
+        });
+
+        btnDelete?.addEventListener("click", () => {
+            const selectedIndex = this.getSelectedAccessoryIndex();
+            if (selectedIndex === null) return;
+
+            const accessories = this.mmdManager.getLoadedAccessories();
+            const current = accessories.find((item) => item.index === selectedIndex);
+            const targetName = current?.name ?? "Accessory";
+
+            const ok = window.confirm(`Delete accessory '${targetName}'?`);
+            if (!ok) return;
+
+            const removed = this.mmdManager.removeAccessory(selectedIndex);
+            if (!removed) {
+                this.showToast("Failed to delete accessory", "error");
+                return;
+            }
+
+            this.refreshAccessoryPanel();
+            this.showToast(`Accessory deleted: ${targetName}`, "success");
+        });
+
+        this.updateAccessoryValueLabelsFromSliders();
+        this.setAccessoryTransformControlsEnabled(false);
+        this.setAccessoryParentControlsEnabled(false);
+        this.updateAccessoryActionButtons();
+    }
+
+    private refreshAccessoryPanel(): void {
+        const select = this.accessorySelect;
+        if (!select) return;
+
+        const accessories = this.mmdManager.getLoadedAccessories();
+        const previousValue = select.value;
+        select.innerHTML = "";
+
+        for (const accessory of accessories) {
+            const option = document.createElement("option");
+            option.value = String(accessory.index);
+            option.textContent = `${accessory.index + 1}: ${accessory.name}`;
+            option.title = accessory.path;
+            select.appendChild(option);
+        }
+
+        if (accessories.length === 0) {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = "-";
+            select.appendChild(option);
+        } else {
+            const restore = accessories.find((item) => String(item.index) === previousValue);
+            select.value = restore ? String(restore.index) : "0";
+        }
+
+        select.disabled = accessories.length === 0;
+        this.accessoryEmptyStateEl?.classList.toggle("hidden", accessories.length > 0);
+        this.setAccessoryTransformControlsEnabled(accessories.length > 0);
+        this.refreshAccessoryParentModelOptions();
+        this.syncAccessoryParentControlsFromSelection();
+        this.syncAccessoryTransformSlidersFromSelection();
+        this.updateAccessoryActionButtons();
+    }
+
+    private getSelectedAccessoryIndex(): number | null {
+        const select = this.accessorySelect;
+        if (!select || select.disabled) return null;
+        const parsed = Number.parseInt(select.value, 10);
+        if (Number.isNaN(parsed)) return null;
+        return parsed;
+    }
+
+    private setAccessoryTransformControlsEnabled(enabled: boolean): void {
+        for (const slider of this.accessoryTransformSliders.values()) {
+            slider.disabled = !enabled;
+        }
+    }
+
+    private setAccessoryParentControlsEnabled(enabled: boolean): void {
+        if (this.accessoryParentModelSelect) {
+            this.accessoryParentModelSelect.disabled = !enabled;
+        }
+        if (this.accessoryParentBoneSelect) {
+            this.accessoryParentBoneSelect.disabled = !enabled;
+        }
+    }
+
+    private parseAccessoryParentModelIndex(): number | null {
+        const select = this.accessoryParentModelSelect;
+        if (!select) return null;
+        const value = select.value;
+        if (value === "") return null;
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isNaN(parsed)) return null;
+        return parsed;
+    }
+
+    private refreshAccessoryParentModelOptions(): void {
+        const select = this.accessoryParentModelSelect;
+        if (!select) return;
+
+        const previousValue = select.value;
+        const models = this.mmdManager.getLoadedModels();
+        select.innerHTML = "";
+
+        const worldOption = document.createElement("option");
+        worldOption.value = "";
+        worldOption.textContent = "World";
+        select.appendChild(worldOption);
+
+        for (const model of models) {
+            const option = document.createElement("option");
+            option.value = String(model.index);
+            option.textContent = `${model.index + 1}: ${model.name}`;
+            option.title = model.path;
+            select.appendChild(option);
+        }
+
+        const hasPrevious = Array.from(select.options).some((option) => option.value === previousValue);
+        select.value = hasPrevious ? previousValue : "";
+    }
+
+    private refreshAccessoryParentBoneOptions(modelIndex: number | null, selectedBoneName: string | null): void {
+        const select = this.accessoryParentBoneSelect;
+        if (!select) return;
+
+        select.innerHTML = "";
+
+        if (modelIndex === null) {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = "-";
+            select.appendChild(option);
+            select.value = "";
+            select.disabled = true;
+            return;
+        }
+
+        const modelOption = document.createElement("option");
+        modelOption.value = "";
+        modelOption.textContent = "(モデル中心)";
+        select.appendChild(modelOption);
+
+        const boneNames = this.mmdManager.getModelBoneNames(modelIndex);
+        for (const boneName of boneNames) {
+            const option = document.createElement("option");
+            option.value = boneName;
+            option.textContent = boneName;
+            select.appendChild(option);
+        }
+
+        const target = selectedBoneName ?? "";
+        const hasTarget = Array.from(select.options).some((option) => option.value === target);
+        select.value = hasTarget ? target : "";
+        select.disabled = false;
+    }
+
+    private syncAccessoryParentControlsFromSelection(): void {
+        const selectedIndex = this.getSelectedAccessoryIndex();
+        if (selectedIndex === null) {
+            this.isSyncingAccessoryParentUi = true;
+            try {
+                if (this.accessoryParentModelSelect) this.accessoryParentModelSelect.value = "";
+                this.refreshAccessoryParentBoneOptions(null, null);
+                this.setAccessoryParentControlsEnabled(false);
+            } finally {
+                this.isSyncingAccessoryParentUi = false;
+            }
+            return;
+        }
+
+        const parentState = this.mmdManager.getAccessoryParent(selectedIndex);
+        const modelIndex = parentState?.modelIndex ?? null;
+        const boneName = parentState?.boneName ?? null;
+
+        this.isSyncingAccessoryParentUi = true;
+        try {
+            this.setAccessoryParentControlsEnabled(true);
+            if (this.accessoryParentModelSelect) {
+                const modelValue = modelIndex === null ? "" : String(modelIndex);
+                const hasValue = Array.from(this.accessoryParentModelSelect.options)
+                    .some((option) => option.value === modelValue);
+                this.accessoryParentModelSelect.value = hasValue ? modelValue : "";
+            }
+            this.refreshAccessoryParentBoneOptions(modelIndex, boneName);
+        } finally {
+            this.isSyncingAccessoryParentUi = false;
+        }
+    }
+
+    private syncAccessoryTransformSlidersFromSelection(): void {
+        const selectedIndex = this.getSelectedAccessoryIndex();
+        if (selectedIndex === null) {
+            this.resetAccessoryTransformSliders();
+            return;
+        }
+
+        const transform = this.mmdManager.getAccessoryTransform(selectedIndex);
+        if (!transform) {
+            this.resetAccessoryTransformSliders();
+            return;
+        }
+
+        this.isSyncingAccessoryUi = true;
+        try {
+            this.setSliderValueClamped("px", transform.position.x);
+            this.setSliderValueClamped("py", transform.position.y);
+            this.setSliderValueClamped("pz", transform.position.z);
+            this.setSliderValueClamped("rx", transform.rotationDeg.x);
+            this.setSliderValueClamped("ry", transform.rotationDeg.y);
+            this.setSliderValueClamped("rz", transform.rotationDeg.z);
+            this.setSliderValueClamped("s", transform.scale * 100);
+            this.updateAccessoryValueLabelsFromSliders();
+        } finally {
+            this.isSyncingAccessoryUi = false;
+        }
+    }
+
+    private resetAccessoryTransformSliders(): void {
+        this.isSyncingAccessoryUi = true;
+        try {
+            this.setSliderValueClamped("px", 0);
+            this.setSliderValueClamped("py", 0);
+            this.setSliderValueClamped("pz", 0);
+            this.setSliderValueClamped("rx", 0);
+            this.setSliderValueClamped("ry", 0);
+            this.setSliderValueClamped("rz", 0);
+            this.setSliderValueClamped("s", 100);
+            this.updateAccessoryValueLabelsFromSliders();
+        } finally {
+            this.isSyncingAccessoryUi = false;
+        }
+    }
+
+    private setSliderValueClamped(key: AccessoryTransformSliderKey, value: number): void {
+        const slider = this.accessoryTransformSliders.get(key);
+        if (!slider || !Number.isFinite(value)) return;
+        const min = Number(slider.min);
+        const max = Number(slider.max);
+        const clamped = Math.max(min, Math.min(max, value));
+        slider.value = String(clamped);
+    }
+
+    private updateAccessoryValueLabelsFromSliders(): void {
+        const getValue = (key: AccessoryTransformSliderKey): number =>
+            Number(this.accessoryTransformSliders.get(key)?.value ?? 0);
+
+        const px = getValue("px");
+        const py = getValue("py");
+        const pz = getValue("pz");
+        const rx = getValue("rx");
+        const ry = getValue("ry");
+        const rz = getValue("rz");
+        const s = getValue("s");
+
+        const setText = (key: AccessoryTransformSliderKey, text: string): void => {
+            const valueEl = this.accessoryTransformValueEls.get(key);
+            if (valueEl) valueEl.textContent = text;
+        };
+
+        setText("px", px.toFixed(2));
+        setText("py", py.toFixed(2));
+        setText("pz", pz.toFixed(2));
+        setText("rx", `${rx.toFixed(1)}°`);
+        setText("ry", `${ry.toFixed(1)}°`);
+        setText("rz", `${rz.toFixed(1)}°`);
+        setText("s", `${Math.round(s)}%`);
+    }
+
+    private updateAccessoryActionButtons(): void {
+        const btnVisibility = this.btnAccessoryVisibility;
+        const btnDelete = this.btnAccessoryDelete;
+        if (!btnVisibility || !btnDelete) return;
+
+        const selectedIndex = this.getSelectedAccessoryIndex();
+        const enabled = selectedIndex !== null;
+        btnVisibility.disabled = !enabled;
+        btnDelete.disabled = !enabled;
+
+        if (!enabled) {
+            btnVisibility.textContent = "非表示";
+            return;
+        }
+
+        const accessories = this.mmdManager.getLoadedAccessories();
+        const current = accessories.find((item) => item.index === selectedIndex);
+        const visible = current?.visible ?? true;
+        btnVisibility.textContent = visible ? "非表示" : "表示";
     }
 
     private isShaderPanelExpanded(): boolean {

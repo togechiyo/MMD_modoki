@@ -11,6 +11,8 @@
 Renderer 側で以下のコンポーネントを組み立てます。
 
 - `MmdManager`: Babylon.js / babylon-mmd の実行本体
+- `mmd-manager-x-extension`: `MmdManager` へ Xアクセサリー機能を拡張
+- `x-file-loader`: Babylon SceneLoader プラグインとして `.x`（text形式）を解釈
 - `Timeline`: キーフレーム描画とシーク UI
 - `BottomPanel`: モーフとモデル情報 UI
 - `UIController`: DOM イベントと上記コンポーネントを接続
@@ -18,6 +20,7 @@ Renderer 側で以下のコンポーネントを組み立てます。
 補足:
 
 - モデルは `MmdManager` 内で複数保持し、UI からアクティブ対象を切替
+- アクセサリー（`.x`）は拡張側で保持し、UI から親モデル/親ボーンや表示状態を変更
 - 地面表示は上部ツールバーのトグルで ON/OFF
 
 ## 起動フロー

@@ -403,56 +403,78 @@
           </div>
         </section>
 
-        <!-- 6: Effect Controls -->
-        <section id="effect-section" class="bottom-section">
+        <!-- 6: Accessory Controls -->
+        <section id="accessory-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-              <circle cx="7" cy="7" r="2.2" />
-              <path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3 3l1.3 1.3M9.7 9.7L11 11M3 11l1.3-1.3M9.7 4.3L11 3"
-                stroke="currentColor" stroke-width="1.1" fill="none" />
+              <rect x="2.2" y="4.2" width="9.6" height="6.6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M4.4 7.5h5.2M4.4 9.2h3.2" stroke="currentColor" stroke-width="1.1" />
             </svg>
-            <span>エフェクト</span>
+            <span>アクセサリー</span>
           </div>
-          <div class="effect-controls">
-            <div class="effect-row">
-              <span class="effect-label">色温度</span>
-              <input type="range" id="effect-color-temp" class="effect-slider" min="5000" max="8000" value="6500" step="25">
-              <span id="effect-color-temp-val" class="effect-value">6500 K</span>
+          <div id="accessory-controls" class="accessory-controls">
+            <div class="panel-select-row">
+              <span class="panel-select-label">対象</span>
+              <select id="accessory-select" class="panel-select" disabled>
+                <option value="">-</option>
+              </select>
             </div>
-            <div class="effect-row dof-row-hidden">
-              <span class="effect-label">コントラスト</span>
-              <input type="range" id="effect-contrast" class="effect-slider" min="-50" max="50" value="0" step="1">
-              <span id="effect-contrast-val" class="effect-value">0%</span>
+            <div class="info-actions accessory-actions">
+              <button id="btn-accessory-visibility" class="info-action-btn" type="button" disabled>非表示</button>
+              <button id="btn-accessory-delete" class="info-action-btn info-action-btn--danger" type="button" disabled>削除</button>
             </div>
-            <div class="effect-row">
-              <span class="effect-label">ガンマ補正</span>
-              <input type="range" id="effect-gamma" class="effect-slider" min="-50" max="50" value="0" step="1">
-              <span id="effect-gamma-val" class="effect-value">0%</span>
+            <div class="panel-select-row">
+              <span class="panel-select-label">親</span>
+              <select id="accessory-parent-model" class="panel-select" disabled>
+                <option value="">World</option>
+              </select>
             </div>
-            <div class="effect-row dof-row-hidden">
-              <span class="effect-label">収差</span>
-              <input type="range" id="effect-lens-distortion" class="effect-slider" min="-100" max="100" value="0" step="1">
-              <span id="effect-lens-distortion-val" class="effect-value">0%</span>
+            <div class="panel-select-row">
+              <span class="panel-select-label">ボーン</span>
+              <select id="accessory-parent-bone" class="panel-select" disabled>
+                <option value="">-</option>
+              </select>
             </div>
-            <div class="effect-row">
-              <span class="effect-label">収差影響度</span>
-              <input type="range" id="effect-lens-distortion-influence" class="effect-slider" min="0" max="100" value="0" step="1">
-              <span id="effect-lens-distortion-influence-val" class="effect-value">0%</span>
+            <div class="accessory-transform">
+              <div class="accessory-row">
+                <span class="accessory-label">X</span>
+                <input type="range" id="accessory-pos-x" class="accessory-slider" min="-100" max="100" value="0" step="0.1">
+                <span id="accessory-pos-x-val" class="accessory-value">0.00</span>
+              </div>
+              <div class="accessory-row">
+                <span class="accessory-label">Y</span>
+                <input type="range" id="accessory-pos-y" class="accessory-slider" min="-100" max="100" value="0" step="0.1">
+                <span id="accessory-pos-y-val" class="accessory-value">0.00</span>
+              </div>
+              <div class="accessory-row">
+                <span class="accessory-label">Z</span>
+                <input type="range" id="accessory-pos-z" class="accessory-slider" min="-100" max="100" value="0" step="0.1">
+                <span id="accessory-pos-z-val" class="accessory-value">0.00</span>
+              </div>
+              <div class="accessory-row">
+                <span class="accessory-label">Rx</span>
+                <input type="range" id="accessory-rot-x" class="accessory-slider" min="-180" max="180" value="0" step="0.1">
+                <span id="accessory-rot-x-val" class="accessory-value">0.0°</span>
+              </div>
+              <div class="accessory-row">
+                <span class="accessory-label">Ry</span>
+                <input type="range" id="accessory-rot-y" class="accessory-slider" min="-180" max="180" value="0" step="0.1">
+                <span id="accessory-rot-y-val" class="accessory-value">0.0°</span>
+              </div>
+              <div class="accessory-row">
+                <span class="accessory-label">Rz</span>
+                <input type="range" id="accessory-rot-z" class="accessory-slider" min="-180" max="180" value="0" step="0.1">
+                <span id="accessory-rot-z-val" class="accessory-value">0.0°</span>
+              </div>
+              <div class="accessory-row">
+                <span class="accessory-label">Si</span>
+                <input type="range" id="accessory-scale" class="accessory-slider" min="1" max="500" value="100" step="1">
+                <span id="accessory-scale-val" class="accessory-value">100%</span>
+              </div>
             </div>
-            <div class="effect-row dof-row-hidden">
-              <span class="effect-label">レンズブラー</span>
-              <input type="range" id="effect-dof-lens-blur" class="effect-slider" min="0" max="20" value="0" step="1">
-              <span id="effect-dof-lens-blur-val" class="effect-value">0%</span>
-            </div>
-            <div class="effect-row">
-              <span class="effect-label">エッジブラー</span>
-              <input type="range" id="effect-lens-edge-blur" class="effect-slider" min="0" max="300" value="0" step="1">
-              <span id="effect-lens-edge-blur-val" class="effect-value">0%</span>
-            </div>
-            <div class="effect-row">
-              <span class="effect-label">輪郭線</span>
-              <input type="range" id="effect-edge-width" class="effect-slider" min="0" max="100" value="0" step="1">
-              <span id="effect-edge-width-val" class="effect-value">0%</span>
+            <div class="accessory-empty-state" id="accessory-empty-state">
+              <span>アクセサリー未読込</span>
+              <span class="accessory-empty-sub">.x を読み込むとここで操作できます</span>
             </div>
           </div>
         </section>

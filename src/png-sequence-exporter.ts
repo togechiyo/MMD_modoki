@@ -112,8 +112,12 @@ export async function runPngSequenceExportJob(
     const startFrame = Math.max(0, Math.floor(request.startFrame));
     const endFrame = Math.max(startFrame, Math.floor(request.endFrame));
     const step = Math.max(1, Math.floor(request.step));
-    const outputWidth = Math.max(320, Math.floor(request.outputWidth || 1920));
-    const outputHeight = Math.max(180, Math.floor(request.outputHeight || 1080));
+    const outputWidth = Math.max(320, Math.min(8192, Math.floor(request.outputWidth || 1920)));
+    const outputHeight = Math.max(180, Math.min(8192, Math.floor(request.outputHeight || 1080)));
+    const qualityScaleRaw = Number.isFinite(request.precision) ? request.precision : 1;
+    const qualityScale = Math.max(0.25, Math.min(4, qualityScaleRaw));
+    const captureWidth = Math.max(320, Math.min(8192, Math.round(outputWidth * qualityScale)));
+    const captureHeight = Math.max(180, Math.min(8192, Math.round(outputHeight * qualityScale)));
     const prefix = request.prefix?.trim() || "mmd_seq";
     // Speed-priority export tuning:
     // - keep a larger capture queue
@@ -200,7 +204,9 @@ export async function runPngSequenceExportJob(
             }
         };
 
-        callbacks.onStatus?.(`Exporting ${frameList.length} frame(s) in speed-priority mode...`);
+        callbacks.onStatus?.(
+            `Exporting ${frameList.length} frame(s) in speed-priority mode... (${captureWidth}x${captureHeight})`
+        );
         const consumerPromises: Promise<void>[] = [];
         for (let i = 0; i < ioWorkerCount; i += 1) {
             consumerPromises.push(consumeQueue());
@@ -220,8 +226,8 @@ export async function runPngSequenceExportJob(
 
                 const capturedFrame = await captureFrameRgbaAsync(
                     screenshotInternals,
-                    outputWidth,
-                    outputHeight,
+                    captureWidth,
+                    captureHeight,
                 );
                 if (!capturedFrame) {
                     fatalError = new Error(`Failed to capture frame ${frame}`);

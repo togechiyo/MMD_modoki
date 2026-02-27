@@ -54,9 +54,14 @@ export interface BoneControlInfo {
     isIkAffected?: boolean;
 }
 
+export interface MorphDisplayItemInfo {
+    index: number;
+    name: string;
+}
+
 export interface MorphDisplayFrameInfo {
     name: string;
-    morphNames: string[];
+    morphs: MorphDisplayItemInfo[];
 }
 
 export interface MotionInfo {

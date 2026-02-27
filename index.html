@@ -82,6 +82,13 @@
           </svg>
           <span id="physics-toggle-text">物理ON</span>
         </button>
+        <button id="btn-toggle-shader-panel" class="toolbar-btn toggle-on" title="エフェクトパネルの表示/非表示" aria-pressed="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
+            <rect x="2.2" y="3" width="11.6" height="10" rx="1.2" />
+            <path d="M6 5.2v5.6M8.5 5.2v5.6M11 5.2v5.6" />
+          </svg>
+          <span id="shader-panel-toggle-text">Effect ON</span>
+        </button>
         <button id="btn-toggle-fullscreen-ui" class="toolbar-btn" title="UIを非表示/表示 (ESCで戻る)" aria-pressed="false">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
@@ -105,36 +112,108 @@
 
     <!-- Main Content Area -->
     <div id="main-content">
-      <!-- Left Panel: Timeline -->
+      <!-- Left Panel: Playback + Timeline -->
       <aside id="timeline-panel">
-        <div class="panel-header">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-            <path d="M1 1h12v2H1V1zm0 4h12v2H1V5zm0 4h12v2H1V9z" />
-          </svg>
-          <span>タイムライン</span>
-        </div>
-        <div id="timeline-edit-toolbar">
-          <div class="timeline-edit-buttons">
-            <button id="btn-kf-add" class="timeline-edit-btn" type="button" title="現在フレームにキーフレームを登録">登録</button>
-            <button id="btn-kf-delete" class="timeline-edit-btn" type="button" title="選択キーフレームを削除">削除</button>
-            <button id="btn-kf-nudge-left" class="timeline-edit-btn" type="button" title="選択キーフレームを1フレーム前へ">&larr;</button>
-            <button id="btn-kf-nudge-right" class="timeline-edit-btn" type="button" title="選択キーフレームを1フレーム後へ">&rarr;</button>
+        <section id="playback-section" class="left-panel-section">
+          <div class="section-header">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <path d="M4 2l8 5-8 5V2z" />
+            </svg>
+            <span>再生</span>
           </div>
-          <span id="timeline-selection-label" class="timeline-selection-label">トラック未選択</span>
-        </div>
-        <div id="timeline-container">
-          <!-- Fixed left: frame labels -->
-          <div id="timeline-labels">
-            <canvas id="timeline-label-canvas"></canvas>
-          </div>
-          <!-- Scrollable right: track area with ruler overlay -->
-          <div id="timeline-tracks-wrapper">
-            <canvas id="timeline-overlay-canvas"></canvas>
-            <div id="timeline-tracks-scroll">
-              <canvas id="timeline-canvas"></canvas>
+          <div id="playback-controls" class="playback-controls">
+            <div class="playback-compact-row">
+              <div class="transport-buttons">
+                <button id="btn-skip-start" class="transport-btn" title="先頭へ">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M4 2h2v12H4V2zm2 6l7 5V3L6 8z" />
+                  </svg>
+                </button>
+                <button id="btn-play" class="transport-btn play-btn" title="再生">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M5 3l12 7-12 7V3z" />
+                  </svg>
+                </button>
+                <button id="btn-pause" class="transport-btn" title="一時停止" style="display:none;">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <rect x="4" y="3" width="4" height="14" />
+                    <rect x="12" y="3" width="4" height="14" />
+                  </svg>
+                </button>
+                <button id="btn-stop" class="transport-btn" title="停止">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="3" y="3" width="10" height="10" />
+                  </svg>
+                </button>
+                <button id="btn-skip-end" class="transport-btn" title="末尾へ">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M10 2h2v12h-2V2zm-2 6L1 13V3l7 5z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="playback-step-buttons">
+                <button id="btn-kf-nudge-left" class="transport-btn playback-step-btn" type="button" title="1フレーム前へ">
+                  <span aria-hidden="true">&larr;</span>
+                </button>
+                <button id="btn-kf-nudge-right" class="transport-btn playback-step-btn" type="button" title="1フレーム後へ">
+                  <span aria-hidden="true">&rarr;</span>
+                </button>
+              </div>
+              <div class="frame-display">
+                <span class="frame-label">Frame</span>
+                <span id="current-frame" class="frame-number">0</span>
+                <span class="frame-separator">/</span>
+                <span id="total-frames" class="frame-number">0</span>
+              </div>
+              <div class="volume-control">
+                <button id="btn-mute" class="volume-mute-btn" title="ミュート切替">
+                  <svg id="icon-volume-on" width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                    <path d="M2 5h3l4-3v10l-4-3H2V5zm8 .5a3 3 0 0 1 0 3" stroke="currentColor" stroke-width="1.2"
+                      fill="none" />
+                    <path d="M11.5 3.5a5 5 0 0 1 0 7" stroke="currentColor" stroke-width="1.2" fill="none" />
+                  </svg>
+                  <svg id="icon-volume-off" width="14" height="14" viewBox="0 0 14 14" fill="currentColor"
+                    style="display:none">
+                    <path d="M2 5h3l4-3v10l-4-3H2V5z" />
+                    <path d="M10 5l3 4m0-4l-3 4" stroke="currentColor" stroke-width="1.2" fill="none" />
+                  </svg>
+                </button>
+                <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" step="1">
+                <span id="volume-value" class="volume-value">100%</span>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
+
+        <section id="timeline-section" class="left-panel-section left-panel-section--timeline">
+          <div class="panel-header">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <path d="M1 1h12v2H1V1zm0 4h12v2H1V5zm0 4h12v2H1V9z" />
+            </svg>
+            <span>タイムライン</span>
+          </div>
+          <div id="timeline-edit-toolbar">
+            <div class="timeline-edit-buttons">
+              <button id="btn-kf-add" class="timeline-edit-btn" type="button" title="現在フレームにキーフレームを登録">登録</button>
+              <button id="btn-kf-delete" class="timeline-edit-btn" type="button" title="選択キーフレームを削除">削除</button>
+            </div>
+            <span id="timeline-selection-label" class="timeline-selection-label">トラック未選択</span>
+          </div>
+          <div id="timeline-container">
+            <!-- Fixed left: frame labels -->
+            <div id="timeline-labels">
+              <canvas id="timeline-label-canvas"></canvas>
+            </div>
+            <!-- Scrollable right: track area with ruler overlay -->
+            <div id="timeline-tracks-wrapper">
+              <canvas id="timeline-overlay-canvas"></canvas>
+              <div id="timeline-tracks-scroll">
+                <canvas id="timeline-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </aside>
       <div id="timeline-resizer" role="separator" aria-orientation="vertical" aria-label="Timeline width resize"></div>
 
@@ -154,13 +233,44 @@
         </div>
       </main>
 
+      <!-- Right Panel: Effect -->
+      <aside id="shader-panel">
+        <div class="panel-header">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2">
+            <rect x="1.7" y="2" width="10.6" height="10" rx="1.2" />
+            <path d="M4.6 4.2v5.6M7 4.2v5.6M9.4 4.2v5.6" />
+          </svg>
+          <span>エフェクト</span>
+        </div>
+        <div class="shader-panel-body">
+          <div class="shader-panel-row">
+            <span class="info-label">対象</span>
+            <span id="shader-model-name" class="shader-model-name">-</span>
+          </div>
+          <div class="shader-panel-row">
+            <span class="info-label">種類</span>
+            <select id="shader-preset-select" class="panel-select" disabled>
+              <option value="">-</option>
+            </select>
+          </div>
+          <div class="shader-panel-actions">
+            <button id="btn-shader-apply" class="info-action-btn" type="button" disabled>全材質へ割り当て</button>
+            <button id="btn-shader-reset" class="info-action-btn" type="button" disabled>全材質を標準化</button>
+          </div>
+          <div id="shader-panel-note" class="shader-panel-note">モデルを読み込んでください</div>
+          <div id="shader-material-list" class="shader-material-list">
+            <div class="panel-empty-state">No model</div>
+          </div>
+        </div>
+      </aside>
+
     </div>
 
     <!-- Bottom Panel: Morph + Camera + Controls -->
     <footer id="bottom-panel">
       <div class="bottom-panel-inner">
 
-        <!-- 1: Model Info -->
+        <!-- 1: Info -->
         <section id="info-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -170,26 +280,27 @@
             <span>情報</span>
           </div>
           <div id="model-info" class="model-info">
-            <div class="info-row">
-              <span class="info-label">対象</span>
-              <select id="info-model-select" class="info-model-select" disabled>
-                <option value="">-</option>
-              </select>
+            <div class="info-compact-top">
+              <div class="info-target-row">
+                <span class="info-label">対象</span>
+                <select id="info-model-select" class="info-model-select" disabled>
+                  <option value="">-</option>
+                </select>
+              </div>
+              <div class="info-actions">
+                <button id="btn-model-visibility" class="info-action-btn" type="button" disabled>非表示</button>
+                <button id="btn-model-delete" class="info-action-btn info-action-btn--danger" type="button" disabled>削除</button>
+              </div>
             </div>
-            <div class="info-actions">
-              <button id="btn-model-visibility" class="info-action-btn" type="button" disabled>非表示</button>
-              <button id="btn-model-delete" class="info-action-btn info-action-btn--danger" type="button" disabled>削除</button>
-            </div>
-            <div class="info-row"><span class="info-label">モデル</span><span id="info-model-name"
-                class="info-value">-</span></div>
-            <div class="info-row">
-              <span class="info-label">頂点/ボーン</span>
-              <span class="info-value info-value-combo">
-                V:<span id="info-vertices" class="info-value-inline">-</span>
-                B:<span id="info-bones" class="info-value-inline">-</span>
-              </span>
-            </div>
-            <div class="info-row"><span class="info-label">モーフ</span><span id="info-morphs" class="info-value">-</span>
+            <div class="info-compact-stats">
+              <span class="info-compact-item"><span class="info-compact-key">モデル</span><span id="info-model-name"
+                  class="info-value">-</span></span>
+              <span class="info-compact-item"><span class="info-compact-key">V</span><span id="info-vertices"
+                  class="info-value">-</span></span>
+              <span class="info-compact-item"><span class="info-compact-key">B</span><span id="info-bones"
+                  class="info-value">-</span></span>
+              <span class="info-compact-item"><span class="info-compact-key">M</span><span id="info-morphs"
+                  class="info-value">-</span></span>
             </div>
           </div>
         </section>
@@ -285,7 +396,7 @@
               <input type="range" id="cam-distance" class="cam-slider" min="5" max="400" value="45" step="1">
               <span id="cam-distance-value" class="value-display">45.0m</span>
             </div>
-            <div class="camera-dof-controls">
+            <div id="camera-dof-controls" class="camera-dof-controls">
               <div class="effect-row effect-row-check">
                 <span class="effect-label">DoF</span>
                 <label class="effect-check-wrap">
@@ -479,82 +590,73 @@
           </div>
         </section>
 
-        <!-- 7: Playback Controls -->
-        <section id="playback-section" class="bottom-section">
+        <!-- 7: Output Controls -->
+        <section id="output-section" class="bottom-section">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-              <path d="M4 2l8 5-8 5V2z" />
+              <rect x="2" y="2" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M5 7h4M7 5v4" stroke="currentColor" stroke-width="1.2" />
             </svg>
-            <span>再生</span>
+            <span>出力</span>
           </div>
-          <div id="playback-controls" class="playback-controls">
-            <div class="transport-buttons">
-              <button id="btn-skip-start" class="transport-btn" title="先頭へ">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M4 2h2v12H4V2zm2 6l7 5V3L6 8z" />
-                </svg>
-              </button>
-              <button id="btn-play" class="transport-btn play-btn" title="再生">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M5 3l12 7-12 7V3z" />
-                </svg>
-              </button>
-              <button id="btn-pause" class="transport-btn" title="一時停止" style="display:none;">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                  <rect x="4" y="3" width="4" height="14" />
-                  <rect x="12" y="3" width="4" height="14" />
-                </svg>
-              </button>
-              <button id="btn-stop" class="transport-btn" title="停止">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="3" y="3" width="10" height="10" />
-                </svg>
-              </button>
-              <button id="btn-skip-end" class="transport-btn" title="末尾へ">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M10 2h2v12h-2V2zm-2 6L1 13V3l7 5z" />
-                </svg>
-              </button>
+          <div class="output-controls">
+            <div class="output-row">
+              <span class="output-label">比率</span>
+              <select id="output-aspect" class="output-select">
+                <option value="16:9">16:9 横</option>
+                <option value="9:16">9:16 縦</option>
+                <option value="1:1">1:1 正方形</option>
+                <option value="4:3">4:3 横</option>
+                <option value="3:4">3:4 縦</option>
+                <option value="viewport">現在の画面比</option>
+              </select>
             </div>
-            <div class="frame-display">
-              <span class="frame-label">Frame</span>
-              <span id="current-frame" class="frame-number">0</span>
-              <span class="frame-separator">/</span>
-              <span id="total-frames" class="frame-number">0</span>
+            <div class="output-row">
+              <span class="output-label">長辺</span>
+              <select id="output-size-preset" class="output-select">
+                <option value="1280">HD</option>
+                <option value="1920" selected>FullHD</option>
+                <option value="2560">QHD</option>
+                <option value="3840">4K</option>
+              </select>
             </div>
-            <div class="playback-export-row">
-              <button id="btn-export-png" class="playback-export-btn" title="現在の描画をPNGで保存">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M4 2h8a1 1 0 0 1 1 1v2h-2V4H5v7h2v2H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
-                  <path d="M8 8h2V5l3 3-3 3V8H8z" />
-                </svg>
-                <span>PNG保存</span>
-              </button>
-              <button id="btn-export-png-seq" class="playback-export-btn" title="連番PNGを書き出し">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M4 2h8a1 1 0 0 1 1 1v2h-2V4H5v7h2v2H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
-                  <path d="M8 8h2V5l3 3-3 3V8H8z" />
-                </svg>
-                <span>PNG Seq</span>
-              </button>
+            <div class="output-row output-row-dimensions">
+              <span class="output-label">サイズ</span>
+              <div class="output-dimensions">
+                <input id="output-width" class="output-number" type="number" min="320" max="8192" step="1" value="1920">
+                <span class="output-dim-sep">x</span>
+                <input id="output-height" class="output-number" type="number" min="180" max="8192" step="1" value="1080">
+              </div>
             </div>
-            <!-- Volume Fader -->
-            <div class="volume-control">
-              <button id="btn-mute" class="volume-mute-btn" title="ミュート切替">
-                <svg id="icon-volume-on" width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                  <path d="M2 5h3l4-3v10l-4-3H2V5zm8 .5a3 3 0 0 1 0 3" stroke="currentColor" stroke-width="1.2"
-                    fill="none" />
-                  <path d="M11.5 3.5a5 5 0 0 1 0 7" stroke="currentColor" stroke-width="1.2" fill="none" />
-                </svg>
-                <svg id="icon-volume-off" width="14" height="14" viewBox="0 0 14 14" fill="currentColor"
-                  style="display:none">
-                  <path d="M2 5h3l4-3v10l-4-3H2V5z" />
-                  <path d="M10 5l3 4m0-4l-3 4" stroke="currentColor" stroke-width="1.2" fill="none" />
-                </svg>
-              </button>
-              <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" step="1">
-              <span id="volume-value" class="volume-value">100%</span>
+            <div class="output-row output-row-toggle">
+              <span class="output-label">固定</span>
+              <label class="output-toggle-label">
+                <input id="output-lock-aspect" type="checkbox" checked>
+                <span>比率を維持</span>
+              </label>
             </div>
+            <div class="output-row">
+              <span class="output-label">画質</span>
+              <select id="output-quality" class="output-select">
+                <option value="1" selected>標準 x1.0</option>
+                <option value="1.5">高画質 x1.5</option>
+                <option value="2">超高画質 x2.0</option>
+              </select>
+            </div>
+            <button id="btn-export-png" class="playback-export-btn" title="現在の描画をPNGで保存">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M4 2h8a1 1 0 0 1 1 1v2h-2V4H5v7h2v2H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+                <path d="M8 8h2V5l3 3-3 3V8H8z" />
+              </svg>
+              <span>PNG保存</span>
+            </button>
+            <button id="btn-export-png-seq" class="playback-export-btn" title="連番PNGを書き出し">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M4 2h8a1 1 0 0 1 1 1v2h-2V4H5v7h2v2H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+                <path d="M8 8h2V5l3 3-3 3V8H8z" />
+              </svg>
+              <span>PNG Seq</span>
+            </button>
           </div>
         </section>
 
@@ -573,3 +675,4 @@
 </body>
 
 </html>
+

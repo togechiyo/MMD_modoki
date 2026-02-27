@@ -16,6 +16,7 @@ import type {
 type CameraViewPreset = "left" | "front" | "right";
 type AccessoryTransformSliderKey = "px" | "py" | "pz" | "rx" | "ry" | "rz" | "s";
 type NumericArrayLike = ArrayLike<number> | null | undefined;
+type OutputSettings = { width: number; height: number; qualityScale: number };
 
 type RuntimeMovableBoneTrackLike = {
     name: string;
@@ -132,6 +133,14 @@ export class UIController {
     private btnLoadProject: HTMLElement;
     private btnExportPng: HTMLElement;
     private btnExportPngSeq: HTMLElement | null = null;
+    private outputAspectSelect: HTMLSelectElement | null = null;
+    private outputSizePresetSelect: HTMLSelectElement | null = null;
+    private outputWidthInput: HTMLInputElement | null = null;
+    private outputHeightInput: HTMLInputElement | null = null;
+    private outputLockAspectInput: HTMLInputElement | null = null;
+    private outputQualitySelect: HTMLSelectElement | null = null;
+    private outputAspectRatio = 16 / 9;
+    private isSyncingOutputSettings = false;
     private btnToggleGround: HTMLElement;
     private groundToggleText: HTMLElement;
     private btnToggleSkydome: HTMLElement;
@@ -152,6 +161,9 @@ export class UIController {
     private statusText: HTMLElement;
     private statusDot: HTMLElement;
     private viewportOverlay: HTMLElement;
+    private viewportContainerEl: HTMLElement | null = null;
+    private renderCanvasEl: HTMLCanvasElement | null = null;
+    private viewportAspectResizeObserver: ResizeObserver | null = null;
     private btnKeyframeAdd: HTMLButtonElement;
     private btnKeyframeDelete: HTMLButtonElement;
     private btnKeyframeNudgeLeft: HTMLButtonElement;
@@ -181,6 +193,8 @@ export class UIController {
     private camFovValueEl: HTMLElement | null = null;
     private camDistanceSlider: HTMLInputElement | null = null;
     private camDistanceValueEl: HTMLElement | null = null;
+    private cameraControlsEl: HTMLElement | null = null;
+    private cameraDofControlsEl: HTMLElement | null = null;
     private camViewLeftBtn: HTMLButtonElement | null = null;
     private camViewFrontBtn: HTMLButtonElement | null = null;
     private camViewRightBtn: HTMLButtonElement | null = null;
@@ -228,6 +242,12 @@ export class UIController {
         this.btnLoadProject = document.getElementById("btn-load-project")!;
         this.btnExportPng = document.getElementById("btn-export-png")!;
         this.btnExportPngSeq = document.getElementById("btn-export-png-seq");
+        this.outputAspectSelect = document.getElementById("output-aspect") as HTMLSelectElement | null;
+        this.outputSizePresetSelect = document.getElementById("output-size-preset") as HTMLSelectElement | null;
+        this.outputWidthInput = document.getElementById("output-width") as HTMLInputElement | null;
+        this.outputHeightInput = document.getElementById("output-height") as HTMLInputElement | null;
+        this.outputLockAspectInput = document.getElementById("output-lock-aspect") as HTMLInputElement | null;
+        this.outputQualitySelect = document.getElementById("output-quality") as HTMLSelectElement | null;
         this.btnToggleGround = document.getElementById("btn-toggle-ground")!;
         this.groundToggleText = document.getElementById("ground-toggle-text")!;
         this.btnToggleSkydome = document.getElementById("btn-toggle-skydome")!;
@@ -248,6 +268,8 @@ export class UIController {
         this.statusText = document.getElementById("status-text")!;
         this.statusDot = document.querySelector(".status-dot")!;
         this.viewportOverlay = document.getElementById("viewport-overlay")!;
+        this.viewportContainerEl = document.getElementById("viewport-container");
+        this.renderCanvasEl = document.getElementById("render-canvas") as HTMLCanvasElement | null;
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
         this.btnKeyframeDelete = document.getElementById("btn-kf-delete") as HTMLButtonElement;
         this.btnKeyframeNudgeLeft = document.getElementById("btn-kf-nudge-left") as HTMLButtonElement;
@@ -280,6 +302,8 @@ export class UIController {
         this.timelinePanelEl = document.getElementById("timeline-panel");
         this.timelineResizerEl = document.getElementById("timeline-resizer");
         this.shaderPanelEl = document.getElementById("shader-panel");
+        this.cameraControlsEl = document.getElementById("camera-controls");
+        this.cameraDofControlsEl = document.getElementById("camera-dof-controls");
 
         this.setupEventListeners();
         this.setupCallbacks();
@@ -287,6 +311,7 @@ export class UIController {
         this.setupFileDrop();
         this.setupPngSequenceExportStateBridge();
         this.setupPerfDisplay();
+        this.setupViewportAspectSync();
         this.refreshModelSelector();
         this.refreshAccessoryPanel();
         this.updateGroundToggleButton(this.mmdManager.isGroundVisible());
@@ -312,6 +337,8 @@ export class UIController {
             this.pngSequenceExportStateUnsubscribe = null;
             this.pngSequenceExportProgressUnsubscribe?.();
             this.pngSequenceExportProgressUnsubscribe = null;
+            this.viewportAspectResizeObserver?.disconnect();
+            this.viewportAspectResizeObserver = null;
         });
     }
 
@@ -326,6 +353,7 @@ export class UIController {
         this.btnExportPngSeq?.addEventListener("click", () => {
             void this.exportPNGSequence();
         });
+        this.setupOutputControls();
         this.interpolationTypeSelect.addEventListener("change", () => this.updateTimelineEditState());
         this.btnToggleGround.addEventListener("click", () => {
             const visible = this.mmdManager.toggleGroundVisible();
@@ -367,7 +395,7 @@ export class UIController {
         this.btnToggleShaderPanel?.addEventListener("click", () => {
             const nextVisible = !this.isShaderPanelExpanded();
             this.setShaderPanelVisible(nextVisible);
-            this.showToast(nextVisible ? "Shader panel shown" : "Shader panel hidden", "info");
+            this.showToast(nextVisible ? "Effect panel shown" : "Effect panel hidden", "info");
         });
         this.btnToggleFullscreenUi?.addEventListener("click", () => {
             this.toggleUiFullscreenMode();
@@ -1611,10 +1639,144 @@ export class UIController {
         await this.mmdManager.loadMP3(filePath);
     }
 
+    private setupOutputControls(): void {
+        if (
+            !this.outputAspectSelect ||
+            !this.outputSizePresetSelect ||
+            !this.outputWidthInput ||
+            !this.outputHeightInput ||
+            !this.outputLockAspectInput ||
+            !this.outputQualitySelect
+        ) {
+            return;
+        }
+
+        const applyPreset = (): void => {
+            const ratio = this.resolveSelectedOutputAspectRatio();
+            const longEdgeRaw = Number.parseInt(this.outputSizePresetSelect?.value ?? "1920", 10);
+            const longEdge = Number.isFinite(longEdgeRaw) ? Math.max(320, Math.min(8192, longEdgeRaw)) : 1920;
+
+            let nextWidth = longEdge;
+            let nextHeight = Math.max(180, Math.round(longEdge / Math.max(0.1, ratio)));
+            if (ratio < 1) {
+                nextHeight = longEdge;
+                nextWidth = Math.max(320, Math.round(longEdge * ratio));
+            }
+
+            this.isSyncingOutputSettings = true;
+            this.outputWidthInput.value = String(this.clampOutputWidth(nextWidth));
+            this.outputHeightInput.value = String(this.clampOutputHeight(nextHeight));
+            this.isSyncingOutputSettings = false;
+
+            const width = Number.parseInt(this.outputWidthInput.value, 10);
+            const height = Number.parseInt(this.outputHeightInput.value, 10);
+            if (Number.isFinite(width) && Number.isFinite(height) && height > 0) {
+                this.outputAspectRatio = Math.max(0.1, width / height);
+            }
+
+            this.applyViewportAspectPresentation();
+        };
+
+        const syncDimensionWithLock = (source: "width" | "height"): void => {
+            if (!this.outputWidthInput || !this.outputHeightInput || !this.outputLockAspectInput) return;
+            if (this.isSyncingOutputSettings) return;
+
+            let width = this.clampOutputWidth(Number.parseInt(this.outputWidthInput.value, 10));
+            let height = this.clampOutputHeight(Number.parseInt(this.outputHeightInput.value, 10));
+            const locked = this.outputLockAspectInput.checked;
+            const ratio = Math.max(0.1, this.outputAspectRatio);
+
+            if (locked) {
+                if (source === "width") {
+                    height = this.clampOutputHeight(Math.round(width / ratio));
+                } else {
+                    width = this.clampOutputWidth(Math.round(height * ratio));
+                }
+            } else if (height > 0) {
+                this.outputAspectRatio = Math.max(0.1, width / height);
+            }
+
+            this.isSyncingOutputSettings = true;
+            this.outputWidthInput.value = String(width);
+            this.outputHeightInput.value = String(height);
+            this.isSyncingOutputSettings = false;
+        };
+
+        this.outputAspectSelect.addEventListener("change", applyPreset);
+        this.outputSizePresetSelect.addEventListener("change", applyPreset);
+        this.outputWidthInput.addEventListener("input", () => syncDimensionWithLock("width"));
+        this.outputHeightInput.addEventListener("input", () => syncDimensionWithLock("height"));
+        this.outputLockAspectInput.addEventListener("change", () => {
+            if (!this.outputLockAspectInput) return;
+            if (this.outputLockAspectInput.checked) {
+                this.outputAspectRatio = this.resolveSelectedOutputAspectRatio();
+                syncDimensionWithLock("width");
+            }
+        });
+
+        this.outputQualitySelect.value = this.outputQualitySelect.value || "1";
+        this.outputAspectRatio = this.resolveSelectedOutputAspectRatio();
+        applyPreset();
+        this.applyViewportAspectPresentation();
+    }
+
+    private resolveSelectedOutputAspectRatio(): number {
+        if (!this.outputAspectSelect) return this.outputAspectRatio > 0 ? this.outputAspectRatio : 16 / 9;
+        const value = this.outputAspectSelect.value;
+        if (value === "viewport") {
+            const width = this.viewportContainerEl?.clientWidth ?? 0;
+            const height = this.viewportContainerEl?.clientHeight ?? 0;
+            if (width > 0 && height > 0) {
+                return Math.max(0.1, width / height);
+            }
+            return 16 / 9;
+        }
+
+        const parts = value.split(":");
+        if (parts.length === 2) {
+            const w = Number.parseFloat(parts[0]);
+            const h = Number.parseFloat(parts[1]);
+            if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+                return Math.max(0.1, w / h);
+            }
+        }
+
+        return this.outputAspectRatio > 0 ? this.outputAspectRatio : 16 / 9;
+    }
+
+    private getOutputSettings(): OutputSettings {
+        const widthRaw = Number.parseInt(this.outputWidthInput?.value ?? "1920", 10);
+        const heightRaw = Number.parseInt(this.outputHeightInput?.value ?? "1080", 10);
+        const qualityRaw = Number.parseFloat(this.outputQualitySelect?.value ?? "1");
+
+        return {
+            width: this.clampOutputWidth(widthRaw),
+            height: this.clampOutputHeight(heightRaw),
+            qualityScale: Number.isFinite(qualityRaw) ? Math.max(0.25, Math.min(4, qualityRaw)) : 1,
+        };
+    }
+
+    private clampOutputWidth(value: number): number {
+        if (!Number.isFinite(value)) return 1920;
+        return Math.max(320, Math.min(8192, Math.round(value)));
+    }
+
+    private clampOutputHeight(value: number): number {
+        if (!Number.isFinite(value)) return 1080;
+        return Math.max(180, Math.min(8192, Math.round(value)));
+    }
+
     private async exportPNG(): Promise<void> {
         this.setStatus("Exporting PNG...", true);
 
-        const dataUrl = await this.mmdManager.capturePngDataUrl(1);
+        const outputSettings = this.getOutputSettings();
+        const captureWidth = Math.max(320, Math.round(outputSettings.width * outputSettings.qualityScale));
+        const captureHeight = Math.max(180, Math.round(outputSettings.height * outputSettings.qualityScale));
+        const dataUrl = await this.mmdManager.capturePngDataUrl({
+            width: captureWidth,
+            height: captureHeight,
+            precision: 1,
+        });
         if (!dataUrl) {
             this.setStatus("PNG export failed", false);
             return;
@@ -1622,7 +1784,7 @@ export class UIController {
 
         const now = new Date();
         const pad = (v: number) => String(v).padStart(2, "0");
-        const fileName = `mmd_capture_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
+        const fileName = `mmd_capture_${captureWidth}x${captureHeight}_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
 
         const savedPath = await window.electronAPI.savePngFile(dataUrl, fileName);
         if (!savedPath) {
@@ -1646,7 +1808,8 @@ export class UIController {
         const startFrame = Math.max(0, this.mmdManager.currentFrame);
         const endFrame = Math.max(startFrame, this.mmdManager.totalFrames);
         const step = 1;
-        const prefix = "mmd_seq";
+        const outputSettings = this.getOutputSettings();
+        const prefix = `mmd_seq_${outputSettings.width}x${outputSettings.height}`;
 
         const frameList: number[] = [];
         for (let frame = startFrame; frame <= endFrame; frame += step) {
@@ -1677,9 +1840,9 @@ export class UIController {
             step,
             prefix,
             fps: 30,
-            precision: 1,
-            outputWidth: 1920,
-            outputHeight: 1080,
+            precision: outputSettings.qualityScale,
+            outputWidth: outputSettings.width,
+            outputHeight: outputSettings.height,
         });
 
         if (!result) {
@@ -2183,6 +2346,7 @@ export class UIController {
     private setShaderPanelVisible(visible: boolean): void {
         this.mainContentEl.classList.toggle("shader-panel-collapsed", !visible);
         this.clampTimelineWidthToLayout();
+        this.applyViewportAspectPresentation();
         this.updateShaderPanelToggleButton(visible);
     }
 
@@ -2191,7 +2355,7 @@ export class UIController {
         this.btnToggleShaderPanel.setAttribute("aria-pressed", visible ? "true" : "false");
         this.btnToggleShaderPanel.classList.toggle("toggle-on", visible);
         if (this.shaderPanelToggleText) {
-            this.shaderPanelToggleText.textContent = visible ? "Shader ON" : "Shader OFF";
+            this.shaderPanelToggleText.textContent = visible ? "Effect ON" : "Effect OFF";
         }
     }
 
@@ -2253,6 +2417,7 @@ export class UIController {
             );
 
             document.documentElement.style.setProperty("--timeline-width", `${Math.round(nextWidth)}px`);
+            this.applyViewportAspectPresentation();
         };
 
         const onPointerUp = (): void => {
@@ -2273,7 +2438,43 @@ export class UIController {
 
         window.addEventListener("resize", () => {
             this.clampTimelineWidthToLayout();
+            this.applyViewportAspectPresentation();
         });
+    }
+
+    private setupViewportAspectSync(): void {
+        if (!this.viewportContainerEl) return;
+        this.viewportAspectResizeObserver = new ResizeObserver(() => {
+            this.applyViewportAspectPresentation();
+        });
+        this.viewportAspectResizeObserver.observe(this.viewportContainerEl);
+    }
+
+    private applyViewportAspectPresentation(): void {
+        if (!this.renderCanvasEl || !this.viewportContainerEl) return;
+
+        const selectedAspect = this.outputAspectSelect?.value ?? "16:9";
+        if (selectedAspect === "viewport") {
+            this.renderCanvasEl.style.width = "100%";
+            this.renderCanvasEl.style.height = "100%";
+            this.mmdManager.resize();
+            return;
+        }
+
+        const ratio = this.resolveSelectedOutputAspectRatio();
+        const containerWidth = Math.max(1, Math.floor(this.viewportContainerEl.clientWidth));
+        const containerHeight = Math.max(1, Math.floor(this.viewportContainerEl.clientHeight));
+
+        let renderWidth = containerWidth;
+        let renderHeight = Math.max(1, Math.round(renderWidth / Math.max(0.1, ratio)));
+        if (renderHeight > containerHeight) {
+            renderHeight = containerHeight;
+            renderWidth = Math.max(1, Math.round(renderHeight * ratio));
+        }
+
+        this.renderCanvasEl.style.width = `${renderWidth}px`;
+        this.renderCanvasEl.style.height = `${renderHeight}px`;
+        this.mmdManager.resize();
     }
 
     private computeTimelineMaxWidth(): number {
@@ -2311,6 +2512,12 @@ export class UIController {
             return;
         }
 
+        if (this.modelSelect.value === UIController.CAMERA_SELECT_VALUE) {
+            this.renderShaderCameraPostEffectsPanel();
+            return;
+        }
+        this.restoreCameraDofControlsToCameraPanel();
+
         const isAvailable = this.mmdManager.isWgslMaterialShaderAssignmentAvailable();
         const presets = this.mmdManager.getWgslMaterialShaderPresets();
         const models = this.mmdManager.getWgslModelShaderStates();
@@ -2340,16 +2547,6 @@ export class UIController {
             this.shaderResetButton.disabled = true;
             this.shaderPanelNote.textContent = "モデルを読み込んでください";
             this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">No model</div>';
-            return;
-        }
-
-        if (this.modelSelect.value === UIController.CAMERA_SELECT_VALUE) {
-            this.shaderModelNameEl.textContent = "Camera";
-            this.shaderPresetSelect.disabled = true;
-            this.shaderApplyButton.disabled = true;
-            this.shaderResetButton.disabled = true;
-            this.shaderPanelNote.textContent = "情報欄でモデルを選択すると有効になります";
-            this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">Model target is camera</div>';
             return;
         }
 
@@ -2444,12 +2641,146 @@ export class UIController {
         this.shaderResetButton.disabled = false;
     }
 
+    private renderShaderCameraPostEffectsPanel(): void {
+        if (
+            !this.shaderModelNameEl ||
+            !this.shaderPresetSelect ||
+            !this.shaderApplyButton ||
+            !this.shaderResetButton ||
+            !this.shaderPanelNote ||
+            !this.shaderMaterialList
+        ) {
+            return;
+        }
+
+        this.shaderModelNameEl.textContent = "Camera";
+        this.shaderPresetSelect.innerHTML = '<option value="postfx">ポストエフェクト</option>';
+        this.shaderPresetSelect.value = "postfx";
+        this.shaderPresetSelect.disabled = true;
+        this.shaderApplyButton.disabled = true;
+        this.shaderResetButton.disabled = true;
+        this.shaderPanelNote.textContent = "カメラ用ポストエフェクト";
+
+        this.shaderMaterialList.innerHTML = `
+            <div class="shader-postfx-controls">
+                <div class="effect-row">
+                    <span class="effect-label">Contrast</span>
+                    <input data-postfx="contrast" type="range" class="effect-slider" min="-100" max="200" value="0" step="1">
+                    <span data-postfx-val="contrast" class="effect-value">0%</span>
+                </div>
+                <div class="effect-row">
+                    <span class="effect-label">Gamma</span>
+                    <input data-postfx="gamma" type="range" class="effect-slider" min="-100" max="100" value="0" step="1">
+                    <span data-postfx-val="gamma" class="effect-value">0%</span>
+                </div>
+                <div class="effect-row">
+                    <span class="effect-label">Distortion</span>
+                    <input data-postfx="distortion-influence" type="range" class="effect-slider" min="0" max="100" value="0" step="1">
+                    <span data-postfx-val="distortion-influence" class="effect-value">0%</span>
+                </div>
+                <div class="effect-row">
+                    <span class="effect-label">Edge</span>
+                    <input data-postfx="edge-width" type="range" class="effect-slider" min="0" max="200" value="0" step="1">
+                    <span data-postfx-val="edge-width" class="effect-value">0%</span>
+                </div>
+            </div>
+        `;
+
+        const postFxControls = this.shaderMaterialList.querySelector<HTMLElement>(".shader-postfx-controls");
+        if (postFxControls) {
+            this.attachCameraDofControlsToShaderPanel(postFxControls);
+        }
+        const contrastInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="contrast"]');
+        const contrastVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="contrast"]');
+        const gammaInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="gamma"]');
+        const gammaVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="gamma"]');
+        const distortionInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="distortion-influence"]');
+        const distortionVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="distortion-influence"]');
+        const edgeWidthInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="edge-width"]');
+        const edgeWidthVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="edge-width"]');
+
+        if (
+            !contrastInput ||
+            !contrastVal ||
+            !gammaInput ||
+            !gammaVal ||
+            !distortionInput ||
+            !distortionVal ||
+            !edgeWidthInput ||
+            !edgeWidthVal
+        ) {
+            return;
+        }
+
+        const applyContrast = (): void => {
+            const offsetPercent = Number(contrastInput.value);
+            this.mmdManager.postEffectContrast = 1 + offsetPercent / 100;
+            const roundedOffset = Math.round((this.mmdManager.postEffectContrast - 1) * 100);
+            contrastVal.textContent = `${roundedOffset}%`;
+        };
+
+        const applyGamma = (): void => {
+            const offsetPercent = Number(gammaInput.value);
+            const gammaPower = Math.pow(2, -offsetPercent / 100);
+            this.mmdManager.postEffectGamma = gammaPower;
+            const roundedOffset = Math.round(-Math.log2(this.mmdManager.postEffectGamma) * 100);
+            gammaVal.textContent = `${roundedOffset}%`;
+        };
+
+        const applyDistortionInfluence = (): void => {
+            const scale = Number(distortionInput.value) / 100;
+            this.mmdManager.dofLensDistortionInfluence = scale;
+            distortionVal.textContent = `${Math.round(this.mmdManager.dofLensDistortionInfluence * 100)}%`;
+        };
+
+        const applyEdgeWidth = (): void => {
+            const scale = Number(edgeWidthInput.value) / 100;
+            this.mmdManager.modelEdgeWidth = scale;
+            edgeWidthVal.textContent = `${Math.round(this.mmdManager.modelEdgeWidth * 100)}%`;
+        };
+
+        contrastInput.value = String(Math.round((this.mmdManager.postEffectContrast - 1) * 100));
+        gammaInput.value = String(Math.round(-Math.log2(this.mmdManager.postEffectGamma) * 100));
+        distortionInput.value = String(Math.round(this.mmdManager.dofLensDistortionInfluence * 100));
+        edgeWidthInput.value = String(Math.round(this.mmdManager.modelEdgeWidth * 100));
+
+        applyContrast();
+        applyGamma();
+        applyDistortionInfluence();
+        applyEdgeWidth();
+
+        contrastInput.addEventListener("input", applyContrast);
+        gammaInput.addEventListener("input", applyGamma);
+        distortionInput.addEventListener("input", applyDistortionInfluence);
+        edgeWidthInput.addEventListener("input", applyEdgeWidth);
+    }
+
+    private attachCameraDofControlsToShaderPanel(host: HTMLElement): void {
+        if (!this.cameraDofControlsEl) {
+            return;
+        }
+        this.cameraDofControlsEl.classList.add("shader-postfx-dof-controls");
+        if (this.cameraDofControlsEl.parentElement !== host) {
+            host.appendChild(this.cameraDofControlsEl);
+        }
+    }
+
+    private restoreCameraDofControlsToCameraPanel(): void {
+        if (!this.cameraDofControlsEl) {
+            return;
+        }
+        this.cameraDofControlsEl.classList.remove("shader-postfx-dof-controls");
+        if (this.cameraControlsEl && this.cameraDofControlsEl.parentElement !== this.cameraControlsEl) {
+            this.cameraControlsEl.appendChild(this.cameraDofControlsEl);
+        }
+    }
+
     private applyShaderPresetFromPanel(resetToDefault: boolean): void {
         if (!this.shaderPresetSelect) {
             return;
         }
         if (!this.mmdManager.isWgslMaterialShaderAssignmentAvailable()) {
-            this.showToast("WGSL shader assignment is unavailable", "error");
+            this.showToast("WGSL effect assignment is unavailable", "error");
             return;
         }
         if (this.modelSelect.value === UIController.CAMERA_SELECT_VALUE) {
@@ -2470,7 +2801,7 @@ export class UIController {
         const materialKey = this.shaderSelectedMaterialKeys.get(modelIndex) ?? null;
         const presetId = resetToDefault ? "wgsl-mmd-standard" : this.shaderPresetSelect.value;
         if (!presetId) {
-            this.showToast("Shader preset is not selected", "error");
+            this.showToast("Effect preset is not selected", "error");
             return;
         }
 
@@ -2480,13 +2811,13 @@ export class UIController {
             presetId as WgslMaterialShaderPresetId,
         );
         if (!ok) {
-            this.showToast("Shader assignment failed", "error");
+            this.showToast("Effect assignment failed", "error");
             return;
         }
 
         this.refreshShaderPanel();
         const targetLabel = materialKey === null ? "all materials" : "selected material";
-        this.showToast(`Shader assigned (${targetLabel})`, "success");
+        this.showToast(`Effect assigned (${targetLabel})`, "success");
     }
 
     private updateGroundToggleButton(visible: boolean): void {

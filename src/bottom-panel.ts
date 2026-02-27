@@ -74,7 +74,10 @@ export class BottomPanel {
         this.morphFrames = info.morphDisplayFrames.length > 0
             ? info.morphDisplayFrames
             : info.morphNames.length > 0
-                ? [{ name: "All", morphNames: [...info.morphNames] }]
+                ? [{
+                    name: "All",
+                    morphs: info.morphNames.map((name, index) => ({ index, name })),
+                }]
                 : [];
 
         if (this.morphFrames.length === 0) {
@@ -389,12 +392,14 @@ export class BottomPanel {
             return;
         }
 
-        if (frame.morphNames.length === 0) {
+        if (frame.morphs.length === 0) {
             this.morphContainer.innerHTML = '<div class="panel-empty-state">No morphs</div>';
             return;
         }
 
-        for (const morphName of frame.morphNames) {
+        for (const morphInfo of frame.morphs) {
+            const morphName = morphInfo.name;
+            const morphIndex = morphInfo.index;
             const row = document.createElement("div");
             row.className = "morph-slider-row";
 
@@ -408,7 +413,9 @@ export class BottomPanel {
             slider.max = "1";
             slider.step = "0.01";
             slider.value = this.mmdManager
-                ? this.mmdManager.getMorphWeight(morphName).toFixed(2)
+                ? (morphIndex >= 0
+                    ? this.mmdManager.getMorphWeightByIndex(morphIndex).toFixed(2)
+                    : this.mmdManager.getMorphWeight(morphName).toFixed(2))
                 : "0";
 
             const valueDisplay = document.createElement("span");
@@ -418,10 +425,15 @@ export class BottomPanel {
             slider.addEventListener("input", () => {
                 const val = Number.parseFloat(slider.value);
                 valueDisplay.textContent = val.toFixed(2);
-                this.mmdManager?.setMorphWeight(morphName, val);
+                if (!this.mmdManager) return;
+                if (morphIndex >= 0) {
+                    this.mmdManager.setMorphWeightByIndex(morphIndex, val);
+                } else {
+                    this.mmdManager.setMorphWeight(morphName, val);
+                }
             });
 
-            this.morphSliders.set(morphName, slider);
+            this.morphSliders.set(`${morphIndex}:${morphName}`, slider);
 
             row.appendChild(label);
             row.appendChild(slider);

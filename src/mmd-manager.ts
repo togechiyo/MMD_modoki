@@ -61,6 +61,11 @@ const PMX_BONE_FLAG_VISIBLE = 0x0008;
 const PMX_BONE_FLAG_ROTATABLE = 0x0002;
 const PMX_BONE_FLAG_MOVABLE = 0x0004;
 const PMX_RIGID_BODY_MODE_FOLLOW_BONE = 0;
+const PMX_MORPH_CATEGORY_SYSTEM = 0;
+const PMX_MORPH_CATEGORY_EYEBROW = 1;
+const PMX_MORPH_CATEGORY_EYE = 2;
+const PMX_MORPH_CATEGORY_LIP = 3;
+const PMX_MORPH_CATEGORY_OTHER = 4;
 
 function classifyBone(name: string): TrackCategory {
     if (name === "鬮ｯ・ｷ髣鯉ｽｨ繝ｻ・ｽ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｮ・ｫ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｪ") return "root";
@@ -2245,9 +2250,17 @@ export class MmdManager {
 
             // Gather model info in PMX order from mmd metadata.
             const morphNames: string[] = [];
+            const morphEntries: { index: number; name: string; category: number }[] = [];
             const metadataMorphs = Array.isArray(mmdMetadata.morphs) ? mmdMetadata.morphs : [];
             const seenMorphNames = new Set<string>();
-            for (const morph of metadataMorphs) {
+            for (let morphIndex = 0; morphIndex < metadataMorphs.length; morphIndex += 1) {
+                const morph = metadataMorphs[morphIndex];
+                if (!morph?.name) continue;
+                morphEntries.push({
+                    index: morphIndex,
+                    name: morph.name,
+                    category: typeof morph.category === "number" ? morph.category : PMX_MORPH_CATEGORY_OTHER,
+                });
                 if (!seenMorphNames.has(morph.name)) {
                     seenMorphNames.add(morph.name);
                     morphNames.push(morph.name);
@@ -2332,35 +2345,40 @@ export class MmdManager {
                 }
             }
 
-            const morphDisplayFrames: { name: string; morphNames: string[] }[] = [];
-            const metadataDisplayFrames = Array.isArray(mmdMetadata.displayFrames) ? mmdMetadata.displayFrames : [];
-            for (const displayFrame of metadataDisplayFrames) {
-                const frameMorphNames: string[] = [];
-                const seenFrameMorphNames = new Set<string>();
-
-                for (const frameEntry of displayFrame.frames) {
-                    if (frameEntry.type !== 1) continue;
-                    const morph = metadataMorphs[frameEntry.index];
-                    if (!morph) continue;
-                    if (seenFrameMorphNames.has(morph.name)) continue;
-                    seenFrameMorphNames.add(morph.name);
-                    frameMorphNames.push(morph.name);
-                }
-
-                if (frameMorphNames.length > 0) {
-                    morphDisplayFrames.push({
-                        name: displayFrame.name,
-                        morphNames: frameMorphNames,
-                    });
+            const eyeMorphs: { index: number; name: string }[] = [];
+            const lipMorphs: { index: number; name: string }[] = [];
+            const eyebrowMorphs: { index: number; name: string }[] = [];
+            const otherMorphs: { index: number; name: string }[] = [];
+            for (const morphEntry of morphEntries) {
+                const morphItem = {
+                    index: morphEntry.index,
+                    name: morphEntry.name,
+                };
+                switch (morphEntry.category) {
+                    case PMX_MORPH_CATEGORY_EYE:
+                        eyeMorphs.push(morphItem);
+                        break;
+                    case PMX_MORPH_CATEGORY_LIP:
+                        lipMorphs.push(morphItem);
+                        break;
+                    case PMX_MORPH_CATEGORY_EYEBROW:
+                        eyebrowMorphs.push(morphItem);
+                        break;
+                    case PMX_MORPH_CATEGORY_SYSTEM:
+                    case PMX_MORPH_CATEGORY_OTHER:
+                    default:
+                        otherMorphs.push(morphItem);
+                        break;
                 }
             }
-
-            if (morphDisplayFrames.length === 0 && morphNames.length > 0) {
-                morphDisplayFrames.push({
-                    name: "All",
-                    morphNames: [...morphNames],
-                });
-            }
+            const morphDisplayFrames = morphEntries.length > 0
+                ? [
+                    { name: "\u76ee", morphs: eyeMorphs },
+                    { name: "\u30ea\u30c3\u30d7", morphs: lipMorphs },
+                    { name: "\u7709", morphs: eyebrowMorphs },
+                    { name: "\u305d\u306e\u4ed6", morphs: otherMorphs },
+                ]
+                : [];
             const modelInfo: ModelInfo = {
                 name: fileName.replace(/\.(pmx|pmd)$/i, ''),
                 path: filePath,
@@ -2368,7 +2386,7 @@ export class MmdManager {
                 boneCount,
                 boneNames,
                 boneControlInfos,
-                morphCount: morphNames.length,
+                morphCount: morphEntries.length,
                 morphNames,
                 morphDisplayFrames,
             };
@@ -3574,13 +3592,29 @@ export class MmdManager {
     }
 
     /** Capture current viewport as PNG data URL */
-    async capturePngDataUrl(precision = 1): Promise<string | null> {
+    /** Capture current viewport as PNG data URL */
+    async capturePngDataUrl(
+        precisionOrOptions: number | { precision?: number; width?: number; height?: number } = 1
+    ): Promise<string | null> {
         try {
-            const clampedPrecision = Math.max(0.25, Math.min(4, precision));
+            const options = typeof precisionOrOptions === "number"
+                ? { precision: precisionOrOptions }
+                : (precisionOrOptions ?? {});
+            const clampedPrecision = Math.max(0.25, Math.min(4, options.precision ?? 1));
+            const width = Number.isFinite(options.width)
+                ? Math.max(320, Math.min(8192, Math.floor(options.width!)))
+                : null;
+            const height = Number.isFinite(options.height)
+                ? Math.max(180, Math.min(8192, Math.floor(options.height!)))
+                : null;
+            const screenshotSize = width !== null && height !== null
+                ? { width, height }
+                : { precision: clampedPrecision };
+
             return await CreateScreenshotUsingRenderTargetAsync(
                 this.engine,
                 this.camera,
-                { precision: clampedPrecision },
+                screenshotSize,
                 "image/png",
                 1,
                 true
@@ -4698,33 +4732,39 @@ export class MmdManager {
         return Math.max(this.camera.minZ, distance) * 1000;
     }
     getMorphWeight(morphName: string): number {
-        if (!this.currentMesh || !this.currentMesh.morphTargetManager) return 0;
+        const modelMorph = this.currentModel?.morph;
+        if (!modelMorph) return 0;
         try {
-            const mtm = this.currentMesh.morphTargetManager;
-            for (let i = 0; i < mtm.numTargets; i++) {
-                const target = mtm.getTarget(i);
-                if (target.name === morphName) {
-                    return target.influence;
-                }
-            }
+            return modelMorph.getMorphWeight(morphName);
         } catch { /* ignore */ }
         return 0;
     }
-
-    setMorphWeight(morphName: string, weight: number): void {
-        if (!this.currentMesh || !this.currentMesh.morphTargetManager) return;
+    getMorphWeightByIndex(morphIndex: number): number {
+        const modelMorph = this.currentModel?.morph;
+        if (!modelMorph) return 0;
+        if (!Number.isInteger(morphIndex) || morphIndex < 0) return 0;
         try {
-            const mtm = this.currentMesh.morphTargetManager;
-            for (let i = 0; i < mtm.numTargets; i++) {
-                const target = mtm.getTarget(i);
-                if (target.name === morphName) {
-                    target.influence = Math.max(0, Math.min(1, weight));
-                    break;
-                }
-            }
+            return modelMorph.getMorphWeightFromIndex(morphIndex);
+        } catch { /* ignore */ }
+        return 0;
+    }
+    setMorphWeight(morphName: string, weight: number): void {
+        const modelMorph = this.currentModel?.morph;
+        if (!modelMorph) return;
+        const clampedWeight = Math.max(0, Math.min(1, weight));
+        try {
+            modelMorph.setMorphWeight(morphName, clampedWeight);
         } catch { /* ignore */ }
     }
-
+    setMorphWeightByIndex(morphIndex: number, weight: number): void {
+        const modelMorph = this.currentModel?.morph;
+        if (!modelMorph) return;
+        if (!Number.isInteger(morphIndex) || morphIndex < 0) return;
+        const clampedWeight = Math.max(0, Math.min(1, weight));
+        try {
+            modelMorph.setMorphWeightFromIndex(morphIndex, clampedWeight);
+        } catch { /* ignore */ }
+    }
     private getRuntimeBoneByName(boneName: string): EditorRuntimeBone | null {
         const runtimeBones = this.currentModel?.runtimeBones;
         if (!runtimeBones) return null;

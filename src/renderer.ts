@@ -10,9 +10,20 @@ import { Timeline } from "./timeline";
 import { BottomPanel } from "./bottom-panel";
 import { UIController } from "./ui-controller";
 import { runPngSequenceExportJob } from "./png-sequence-exporter";
+import { applyI18nToDom, getLocale, initializeI18n, setLocale } from "./i18n";
 
 // Wait for DOM
 document.addEventListener("DOMContentLoaded", () => {
+  initializeI18n(document);
+  window.mmdI18n = {
+    getLocale: () => getLocale(),
+    setLocale: (locale) => {
+      setLocale(locale);
+    },
+    apply: () => {
+      applyI18nToDom(document);
+    },
+  };
   void initializeApp();
 });
 

@@ -40,7 +40,7 @@
 
   /* Spacing */
   --toolbar-height: 44px;
-  --timeline-width: 180px;
+  --timeline-width: 270px;
   --timeline-resizer-width: 6px;
   --shader-panel-width: 280px;
   --bottom-panel-height: 180px;
@@ -175,7 +175,7 @@ body.exporter-mode #bone-overlay-canvas {
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   -webkit-app-region: no-drag;
 }
 
@@ -216,6 +216,33 @@ body.exporter-mode #bone-overlay-canvas {
   font-size: 12px;
   font-weight: 500;
   transition: all var(--transition-fast);
+}
+
+.toolbar-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.toolbar-btn--compact {
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  min-height: 26px;
+}
+
+.toolbar-btn--compact svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.toolbar-btn--compact span {
+  letter-spacing: 0.02em;
 }
 
 .toolbar-btn:hover {

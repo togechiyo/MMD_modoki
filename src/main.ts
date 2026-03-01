@@ -150,6 +150,7 @@ const createWindow = () => {
     height: 900,
     minWidth: 1000,
     minHeight: 700,
+    autoHideMenuBar: true,
     title: 'MMD Motion Editor',
     backgroundColor: '#0a0a0f',
     webPreferences: {
@@ -159,6 +160,7 @@ const createWindow = () => {
       webSecurity: false, // Allow file:// protocol for local PMX/texture loading
     },
   });
+  mainWindow.setMenuBarVisibility(false);
 
   // Load the app
   void loadEditorWindow(mainWindow);

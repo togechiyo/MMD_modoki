@@ -321,6 +321,9 @@ export class MmdManager {
     private renderFpsLimit = 0;
     private ground: Mesh | null = null;
     private skydome: Mesh | null = null;
+    private readonly defaultClearColor = new Color4(0.04, 0.04, 0.06, 1);
+    private readonly blackClearColor = new Color4(0, 0, 0, 1);
+    private backgroundBlackEnabled = false;
     private audioPlayer: StreamAudioPlayer | null = null;
     private audioBlobUrl: string | null = null;
     // Lighting references
@@ -350,6 +353,12 @@ export class MmdManager {
     private boneVisualizerSelectedBoneName: string | null = null;
     private boneVisualizerPickPoints: { boneName: string; x: number; y: number }[] = [];
     private bonePickPointerDown: { pointerId: number; clientX: number; clientY: number } | null = null;
+    private cameraMouseDragState: {
+        pointerId: number;
+        mode: "rotate" | "pan" | "zoom";
+        lastClientX: number;
+        lastClientY: number;
+    } | null = null;
     private boneGizmoManager: GizmoManager | null = null;
     private boneGizmoRuntimeBone: EditorRuntimeBone | null = null;
     private boneGizmoProxyNode: TransformNode | null = null;
@@ -427,28 +436,164 @@ export class MmdManager {
         this.resize();
     };
     private readonly onCanvasPointerDown = (event: PointerEvent) => {
-        if (event.button !== 0) return;
-        this.bonePickPointerDown = {
+        if (event.button === 0) {
+            this.bonePickPointerDown = {
+                pointerId: event.pointerId,
+                clientX: event.clientX,
+                clientY: event.clientY,
+            };
+            return;
+        }
+
+        const dragMode = this.resolveCameraMouseDragMode(event);
+        if (!dragMode) return;
+
+        this.cameraMouseDragState = {
             pointerId: event.pointerId,
-            clientX: event.clientX,
-            clientY: event.clientY,
+            mode: dragMode,
+            lastClientX: event.clientX,
+            lastClientY: event.clientY,
         };
+        this.bonePickPointerDown = null;
+
+        try {
+            this.renderingCanvas.setPointerCapture(event.pointerId);
+        } catch {
+            // ignore capture errors
+        }
+
+        event.preventDefault();
+    };
+    private readonly onCanvasPointerMove = (event: PointerEvent) => {
+        const dragState = this.cameraMouseDragState;
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+        const deltaX = event.clientX - dragState.lastClientX;
+        const deltaY = event.clientY - dragState.lastClientY;
+        dragState.lastClientX = event.clientX;
+        dragState.lastClientY = event.clientY;
+
+        this.applyCameraMouseDrag(dragState.mode, deltaX, deltaY);
+        event.preventDefault();
     };
     private readonly onCanvasPointerUp = (event: PointerEvent) => {
-        if (event.button !== 0) return;
+        if (event.button === 0) {
+            const pointerDown = this.bonePickPointerDown;
+            this.bonePickPointerDown = null;
+            if (!pointerDown || pointerDown.pointerId !== event.pointerId) return;
 
-        const pointerDown = this.bonePickPointerDown;
-        this.bonePickPointerDown = null;
-        if (!pointerDown || pointerDown.pointerId !== event.pointerId) return;
+            const movedDistance = Math.hypot(event.clientX - pointerDown.clientX, event.clientY - pointerDown.clientY);
+            if (movedDistance > 6) return;
 
-        const movedDistance = Math.hypot(event.clientX - pointerDown.clientX, event.clientY - pointerDown.clientY);
-        if (movedDistance > 6) return;
+            this.tryPickBoneVisualizerAtClientPosition(event.clientX, event.clientY);
+            return;
+        }
 
-        this.tryPickBoneVisualizerAtClientPosition(event.clientX, event.clientY);
+        const dragState = this.cameraMouseDragState;
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+        this.cameraMouseDragState = null;
+        try {
+            this.renderingCanvas.releasePointerCapture(event.pointerId);
+        } catch {
+            // ignore capture errors
+        }
+        event.preventDefault();
     };
-    private readonly onCanvasPointerCancel = () => {
+    private readonly onCanvasPointerCancel = (event?: PointerEvent) => {
         this.bonePickPointerDown = null;
+        if (!event || !this.cameraMouseDragState || this.cameraMouseDragState.pointerId === event.pointerId) {
+            this.cameraMouseDragState = null;
+        }
     };
+    private readonly onCanvasContextMenu = (event: MouseEvent) => {
+        // Keep RMB drag available for camera control (MMD-like).
+        event.preventDefault();
+    };
+
+    private resolveCameraMouseDragMode(event: PointerEvent): "rotate" | "pan" | "zoom" | null {
+        if (this.hasCameraMotion && this._isPlaying) {
+            return null;
+        }
+        if (event.button === 1) {
+            return "pan";
+        }
+
+        if (event.button !== 2) {
+            return null;
+        }
+
+        if (event.shiftKey) {
+            return "pan";
+        }
+
+        if (event.ctrlKey || event.metaKey) {
+            return "zoom";
+        }
+
+        return "rotate";
+    }
+
+    private applyCameraMouseDrag(mode: "rotate" | "pan" | "zoom", deltaX: number, deltaY: number): void {
+        if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return;
+
+        if (mode === "rotate") {
+            const sensibilityX = Math.max(80, this.camera.angularSensibilityX || 1000);
+            const sensibilityY = Math.max(80, this.camera.angularSensibilityY || 1000);
+            this.camera.alpha -= deltaX / sensibilityX;
+            this.camera.beta -= deltaY / sensibilityY;
+            if (this.camera.lowerBetaLimit !== null && this.camera.lowerBetaLimit !== undefined) {
+                this.camera.beta = Math.max(this.camera.lowerBetaLimit, this.camera.beta);
+            }
+            if (this.camera.upperBetaLimit !== null && this.camera.upperBetaLimit !== undefined) {
+                this.camera.beta = Math.min(this.camera.upperBetaLimit, this.camera.beta);
+            }
+        } else if (mode === "pan") {
+            const forward = this.camera.target.subtract(this.camera.position);
+            if (forward.lengthSquared() > 1e-8) {
+                forward.normalize();
+                const up = this.camera.upVector.clone();
+                if (up.lengthSquared() < 1e-8) {
+                    up.set(0, 1, 0);
+                } else {
+                    up.normalize();
+                }
+                let right = Vector3.Cross(forward, up);
+                if (right.lengthSquared() < 1e-8) {
+                    right = Vector3.Right();
+                } else {
+                    right.normalize();
+                }
+                const trueUp = Vector3.Cross(right, forward).normalize();
+                const panScale = Math.max(0.001, this.camera.radius * 0.0014);
+                const move = right.scale(deltaX * panScale).add(trueUp.scale(-deltaY * panScale));
+                this.camera.target.addInPlace(move);
+                this.camera.position.addInPlace(move);
+            }
+        } else {
+            const zoomScale = Math.max(0.01, this.camera.radius * 0.0045);
+            this.camera.radius = this.clampCameraRadius(this.camera.radius + deltaY * zoomScale);
+        }
+
+        this.syncCameraRotationFromCurrentView();
+        this.syncMmdCameraFromViewportCamera();
+    }
+
+    private shouldApplyCameraMotionToViewport(): boolean {
+        return this.hasCameraMotion && (this._isPlaying || this.timelineTarget === "camera");
+    }
+
+    private shouldSyncViewportCameraToMmdCamera(): boolean {
+        if (!this.hasCameraMotion) return true;
+        if (this._isPlaying) return false;
+        return this.timelineTarget === "camera";
+    }
+
+    private clampCameraRadius(radius: number): number {
+        const lower = this.camera.lowerRadiusLimit ?? 0.1;
+        const upper = this.camera.upperRadiusLimit ?? Number.POSITIVE_INFINITY;
+        return Math.max(lower, Math.min(upper, radius));
+    }
 
     // Callbacks
     public onFrameUpdate: ((frame: number, total: number) => void) | null = null;
@@ -881,11 +1026,13 @@ export class MmdManager {
 
     public setTimelineTarget(target: "model" | "camera"): void {
         this.timelineTarget = target;
+        if (target === "camera" && this.hasCameraMotion && !this._isPlaying) {
+            this.syncViewportCameraFromMmdCamera();
+        }
         this.syncBoneVisualizerVisibility();
         this.updateBoneGizmoTarget();
         this.emitMergedKeyframeTracks();
     }
-
     public getTimelineTarget(): "model" | "camera" {
         return this.timelineTarget;
     }
@@ -1701,6 +1848,23 @@ export class MmdManager {
         return this.ground?.isEnabled() ?? false;
     }
 
+    public isBackgroundBlack(): boolean {
+        return this.backgroundBlackEnabled;
+    }
+
+    public setBackgroundBlack(enabled: boolean): void {
+        this.backgroundBlackEnabled = Boolean(enabled);
+        this.scene.clearColor = this.backgroundBlackEnabled
+            ? this.blackClearColor.clone()
+            : this.defaultClearColor.clone();
+    }
+
+    public toggleBackgroundBlack(): boolean {
+        const next = !this.backgroundBlackEnabled;
+        this.setBackgroundBlack(next);
+        return next;
+    }
+
     public setGroundVisible(visible: boolean): void {
         if (!this.ground) return;
         this.ground.setEnabled(visible);
@@ -1830,7 +1994,7 @@ export class MmdManager {
 
         // Create scene
         this.scene = new Scene(this.engine);
-        this.scene.clearColor = new Color4(0.04, 0.04, 0.06, 1);
+        this.scene.clearColor = this.defaultClearColor.clone();
         this.scene.ambientColor = new Color3(0.5, 0.5, 0.5);
         this.scene.imageProcessingConfiguration.isEnabled = true;
         this.scene.imageProcessingConfiguration.applyByPostProcess = false;
@@ -1862,9 +2026,13 @@ export class MmdManager {
         this.camera.upperRadiusLimit = 100;
         this.camera.wheelDeltaPercentage = 0.01;
         this.camera.attachControl(canvas, true);
+        this.camera.inputs.removeByType("ArcRotateCameraPointersInput");
         canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
+        canvas.addEventListener("pointermove", this.onCanvasPointerMove);
         canvas.addEventListener("pointerup", this.onCanvasPointerUp);
         canvas.addEventListener("pointercancel", this.onCanvasPointerCancel);
+        canvas.addEventListener("pointerleave", this.onCanvasPointerCancel);
+        canvas.addEventListener("contextmenu", this.onCanvasContextMenu);
         this.syncCameraRotationFromCurrentView();
         this.updateDofFocalLengthFromCameraFov();
         this.dofFocusDistanceMmValue = this.getCameraFocusDistanceMm();
@@ -1997,7 +2165,7 @@ export class MmdManager {
         this.vpdLoader = new VpdLoader(this.scene);
 
         this.scene.onBeforeRenderObservable.add(() => {
-            if (this.hasCameraMotion) {
+            if (this.shouldApplyCameraMotionToViewport()) {
                 this.syncViewportCameraFromMmdCamera();
             }
             const boneRuntime = this.boneGizmoRuntimeBone;
@@ -2682,7 +2850,7 @@ export class MmdManager {
                 return null;
             }
 
-            this.syncMmdCameraFromViewportCamera();
+            this.syncMmdCameraFromViewportCamera(true);
 
             if (this.cameraAnimationHandle !== null) {
                 this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
@@ -3186,7 +3354,7 @@ export class MmdManager {
     }
 
     private applyCameraAnimation(animation: MmdAnimation, sourcePath: string | null): void {
-        this.syncMmdCameraFromViewportCamera();
+        this.syncMmdCameraFromViewportCamera(true);
 
         if (this.cameraAnimationHandle !== null) {
             this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
@@ -3495,7 +3663,7 @@ export class MmdManager {
         );
         this.camera.fov = (data.camera.fov * Math.PI) / 180;
         this.syncCameraRotationFromCurrentView();
-        this.syncMmdCameraFromViewportCamera();
+        this.syncMmdCameraFromViewportCamera(true);
         this.updateEditorDofFocusAndFStop();
 
         this.setPlaybackSpeed(Math.max(0.01, data.scene.playbackSpeed));
@@ -4923,12 +5091,15 @@ export class MmdManager {
         this.syncMmdCameraFromViewportCamera();
     }
 
-    private syncMmdCameraFromViewportCamera(): void {
+    private syncMmdCameraFromViewportCamera(force = false): void {
+        if (!force && !this.shouldSyncViewportCameraToMmdCamera()) {
+            return;
+        }
+
         this.mmdCamera.target.copyFrom(this.camera.target);
         this.mmdCamera.position = this.camera.position.clone();
         this.mmdCamera.fov = this.camera.fov;
     }
-
     private syncViewportCameraFromMmdCamera(): void {
         // MmdCamera is not the active scene camera, so keep its position up to date explicitly.
         this.mmdCamera.updatePosition();
@@ -5461,8 +5632,11 @@ export class MmdManager {
 
     dispose(): void {
         this.renderingCanvas.removeEventListener("pointerdown", this.onCanvasPointerDown);
+        this.renderingCanvas.removeEventListener("pointermove", this.onCanvasPointerMove);
         this.renderingCanvas.removeEventListener("pointerup", this.onCanvasPointerUp);
         this.renderingCanvas.removeEventListener("pointercancel", this.onCanvasPointerCancel);
+        this.renderingCanvas.removeEventListener("pointerleave", this.onCanvasPointerCancel);
+        this.renderingCanvas.removeEventListener("contextmenu", this.onCanvasContextMenu);
         if (this.boneGizmoManager) {
             this.boneGizmoManager.dispose();
             this.boneGizmoManager = null;

@@ -28,9 +28,16 @@ export interface ElectronAPI {
     onPngSequenceExportProgress: (callback: (progress: PngSequenceExportProgress) => void) => () => void;
 }
 
+export type UiLocale = "ja" | "en";
+
 declare global {
     interface Window {
         electronAPI: ElectronAPI;
+        mmdI18n?: {
+            getLocale: () => UiLocale;
+            setLocale: (locale: UiLocale) => void;
+            apply: () => void;
+        };
     }
 }
 

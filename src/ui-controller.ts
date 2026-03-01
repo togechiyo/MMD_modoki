@@ -1,6 +1,7 @@
 import type { MmdManager, WgslMaterialShaderPresetId } from "./mmd-manager";
 import type { Timeline } from "./timeline";
 import type { BottomPanel } from "./bottom-panel";
+import { t } from "./i18n";
 import { Quaternion } from "@babylonjs/core/Maths/math.vector";
 import type {
     InterpolationChannelPreview,
@@ -209,6 +210,7 @@ export class UIController {
     private dofFocalLengthValueEl: HTMLElement | null = null;
     private lensDistortionSlider: HTMLInputElement | null = null;
     private lensDistortionValueEl: HTMLElement | null = null;
+    private shortcutEdgeWidthRestore = 1;
     private accessorySelect: HTMLSelectElement | null = null;
     private accessoryParentModelSelect: HTMLSelectElement | null = null;
     private accessoryParentBoneSelect: HTMLSelectElement | null = null;
@@ -230,6 +232,11 @@ export class UIController {
     private isPngSequenceExportActive = false;
     private latestPngSequenceExportProgress: PngSequenceExportProgress | null = null;
     private isUiFullscreenActive = false;
+    private refreshAaToggleUi: (() => void) | null = null;
+    private readonly onLocaleChanged = (): void => {
+        this.applyLocalizedUiState();
+        this.refreshShaderPanel();
+    };
 
     constructor(mmdManager: MmdManager, timeline: Timeline, bottomPanel: BottomPanel) {
         this.mmdManager = mmdManager;
@@ -326,6 +333,8 @@ export class UIController {
         this.setupTimelineResizer();
         this.refreshShaderPanel();
         this.updateTimelineEditState();
+        this.shortcutEdgeWidthRestore = Math.max(0.01, this.mmdManager.modelEdgeWidth || 1);
+        document.addEventListener("app:locale-changed", this.onLocaleChanged as EventListener);
 
         window.addEventListener("beforeunload", (event) => {
             if (this.isPngSequenceExportActive) {
@@ -339,6 +348,7 @@ export class UIController {
             this.pngSequenceExportProgressUnsubscribe = null;
             this.viewportAspectResizeObserver?.disconnect();
             this.viewportAspectResizeObserver = null;
+            document.removeEventListener("app:locale-changed", this.onLocaleChanged as EventListener);
         });
     }
 
@@ -358,44 +368,48 @@ export class UIController {
         this.btnToggleGround.addEventListener("click", () => {
             const visible = this.mmdManager.toggleGroundVisible();
             this.updateGroundToggleButton(visible);
-            this.showToast(visible ? "Ground: ON" : "Ground: OFF", "info");
+            this.showToast(visible ? t("toast.ground.on") : t("toast.ground.off"), "info");
         });
         this.btnToggleSkydome.addEventListener("click", () => {
             const visible = this.mmdManager.toggleSkydomeVisible();
             this.updateSkydomeToggleButton(visible);
-            this.showToast(visible ? "Skydome: ON" : "Skydome: OFF", "info");
+            this.showToast(visible ? t("toast.sky.on") : t("toast.sky.off"), "info");
         });
         const btnToggleAa = document.getElementById("btn-toggle-aa") as HTMLButtonElement | null;
         const aaToggleText = document.getElementById("aa-toggle-text");
         if (btnToggleAa && aaToggleText) {
             const updateAaButton = () => {
                 const enabled = this.mmdManager.antialiasEnabled;
-                aaToggleText.textContent = enabled ? "AA ON" : "AA OFF";
+                aaToggleText.textContent = t("toolbar.aa.short");
                 btnToggleAa.setAttribute("aria-pressed", enabled ? "true" : "false");
                 btnToggleAa.classList.toggle("toggle-on", enabled);
+                btnToggleAa.title = enabled
+                    ? t("toolbar.aa.title.on")
+                    : t("toolbar.aa.title.off");
             };
+            this.refreshAaToggleUi = updateAaButton;
             updateAaButton();
             btnToggleAa.addEventListener("click", () => {
                 this.mmdManager.antialiasEnabled = !this.mmdManager.antialiasEnabled;
                 updateAaButton();
-                this.showToast(this.mmdManager.antialiasEnabled ? "AA: ON" : "AA: OFF", "info");
+                this.showToast(this.mmdManager.antialiasEnabled ? t("toast.aa.on") : t("toast.aa.off"), "info");
             });
         }
         this.btnTogglePhysics.addEventListener("click", () => {
             if (!this.mmdManager.isPhysicsAvailable()) {
                 this.updatePhysicsToggleButton(false, false);
-                this.showToast("Physics is unavailable in this environment", "error");
+                this.showToast(t("toast.physics.unavailable"), "error");
                 return;
             }
 
             const enabled = this.mmdManager.togglePhysicsEnabled();
             this.updatePhysicsToggleButton(enabled, true);
-            this.showToast(enabled ? "Physics: ON" : "Physics: OFF", "info");
+            this.showToast(enabled ? t("toast.physics.on") : t("toast.physics.off"), "info");
         });
         this.btnToggleShaderPanel?.addEventListener("click", () => {
             const nextVisible = !this.isShaderPanelExpanded();
             this.setShaderPanelVisible(nextVisible);
-            this.showToast(nextVisible ? "Effect panel shown" : "Effect panel hidden", "info");
+            this.showToast(nextVisible ? t("toast.fx.shown") : t("toast.fx.hidden"), "info");
         });
         this.btnToggleFullscreenUi?.addEventListener("click", () => {
             this.toggleUiFullscreenMode();
@@ -1262,20 +1276,48 @@ export class UIController {
                 return;
             }
 
-            // Don't handle keys when focused on input
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+            // Don't handle shortcuts while editing text fields.
+            if (this.isTextInputLikeTarget(e.target)) return;
+
+            const lowerKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
+
+            // Alt+Enter: MMD-like fullscreen toggle (mapped to UI fullscreen mode).
+            if (!e.ctrlKey && !e.metaKey && e.altKey && e.key === "Enter") {
+                e.preventDefault();
+                this.toggleUiFullscreenMode();
+                return;
+            }
+
+            // Ctrl+S: save project
+            if (!e.metaKey && !e.altKey && e.ctrlKey && !e.shiftKey && lowerKey === "s") {
+                e.preventDefault();
+                this.saveProject();
+                return;
+            }
+
+            // Ctrl + arrow: jump to previous/next keyframe point
+            if (!e.metaKey && !e.altKey && e.ctrlKey) {
+                if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    this.seekToAdjacentKeyframePoint(-1);
+                    return;
+                }
+                if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                    e.preventDefault();
+                    this.seekToAdjacentKeyframePoint(1);
+                    return;
+                }
+            }
 
             const isAddKeyShortcut =
-                !e.ctrlKey &&
-                !e.metaKey &&
-                !e.altKey &&
+                !hasModifier &&
                 (
-                    e.key === "i" ||
-                    e.key === "I" ||
-                    e.key === "k" ||
-                    e.key === "K" ||
+                    lowerKey === "i" ||
+                    lowerKey === "k" ||
                     e.key === "+" ||
-                    e.code === "NumpadAdd"
+                    e.code === "NumpadAdd" ||
+                    e.key === "Enter"
                 );
             if (isAddKeyShortcut) {
                 e.preventDefault();
@@ -1283,9 +1325,16 @@ export class UIController {
                 return;
             }
 
-            if (e.key === "Delete") {
+            if (!hasModifier && e.key === "Delete") {
                 e.preventDefault();
                 this.deleteSelectedKeyframe();
+                return;
+            }
+
+            // Tab / Shift+Tab / ろ( IntlRo ) : cycle active model
+            if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Tab" || e.code === "IntlRo")) {
+                e.preventDefault();
+                this.cycleActiveModelByShortcut(e.shiftKey ? -1 : 1);
                 return;
             }
 
@@ -1299,6 +1348,43 @@ export class UIController {
                 e.preventDefault();
                 this.nudgeSelectedKeyframe(1);
                 return;
+            }
+
+            // MMD-like playback / display shortcuts
+            if (!hasModifier) {
+                if (lowerKey === "p") {
+                    e.preventDefault();
+                    if (this.mmdManager.isPlaying) {
+                        this.pause();
+                    } else {
+                        this.play();
+                    }
+                    return;
+                }
+
+                if (lowerKey === "g") {
+                    e.preventDefault();
+                    const visible = this.mmdManager.toggleGroundVisible();
+                    this.updateGroundToggleButton(visible);
+                    this.showToast(visible ? t("toast.ground.on") : t("toast.ground.off"), "info");
+                    return;
+                }
+
+                if (lowerKey === "e") {
+                    e.preventDefault();
+                    this.toggleEdgeWidthByShortcut();
+                    return;
+                }
+
+                if (lowerKey === "b") {
+                    e.preventDefault();
+                    const enabled = this.mmdManager.toggleBackgroundBlack();
+                    this.showToast(
+                        enabled ? t("toast.background.black") : t("toast.background.default"),
+                        "info"
+                    );
+                    return;
+                }
             }
 
             switch (e.key) {
@@ -1366,6 +1452,106 @@ export class UIController {
                 void this.exportPNG();
             }
         });
+    }
+
+    private isTextInputLikeTarget(target: EventTarget | null): boolean {
+        if (!(target instanceof HTMLElement)) return false;
+        if (target instanceof HTMLInputElement) return true;
+        if (target instanceof HTMLSelectElement) return true;
+        if (target instanceof HTMLTextAreaElement) return true;
+        return target.isContentEditable || target.closest("[contenteditable='true']") !== null;
+    }
+
+    private cycleActiveModelByShortcut(direction: 1 | -1): void {
+        const models = this.mmdManager.getLoadedModels();
+        if (models.length === 0) return;
+
+        const timelineTarget = this.mmdManager.getTimelineTarget();
+        let nextModel = models[0];
+
+        if (timelineTarget !== "model") {
+            nextModel = direction > 0 ? models[0] : models[models.length - 1];
+        } else {
+            const active = models.find((model) => model.active) ?? models[0];
+            const activeIndex = models.findIndex((model) => model.index === active.index);
+            const nextIndex = (activeIndex + direction + models.length) % models.length;
+            nextModel = models[nextIndex];
+        }
+
+        const ok = this.mmdManager.setActiveModelByIndex(nextModel.index);
+        if (!ok) return;
+
+        this.mmdManager.setTimelineTarget("model");
+        this.refreshModelSelector();
+        this.refreshShaderPanel();
+    }
+
+    private seekToAdjacentKeyframePoint(direction: 1 | -1): void {
+        const track = this.getSelectedTimelineTrack();
+        const frames = track?.frames;
+        if (!frames || frames.length === 0) return;
+
+        const currentFrame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        let targetFrame: number | null = null;
+
+        if (direction > 0) {
+            for (let i = 0; i < frames.length; i += 1) {
+                const frame = Math.max(0, Math.floor(frames[i] ?? 0));
+                if (frame > currentFrame) {
+                    targetFrame = frame;
+                    break;
+                }
+            }
+        } else {
+            for (let i = frames.length - 1; i >= 0; i -= 1) {
+                const frame = Math.max(0, Math.floor(frames[i] ?? 0));
+                if (frame < currentFrame) {
+                    targetFrame = frame;
+                    break;
+                }
+            }
+        }
+
+        if (targetFrame === null) return;
+        this.mmdManager.seekTo(targetFrame);
+        this.timeline.setSelectedFrame(targetFrame);
+        this.updateTimelineEditState();
+    }
+
+    private toggleEdgeWidthByShortcut(): void {
+        const currentEdgeWidth = this.mmdManager.modelEdgeWidth;
+        if (currentEdgeWidth > 0.001) {
+            this.shortcutEdgeWidthRestore = Math.max(0.01, currentEdgeWidth);
+            this.mmdManager.modelEdgeWidth = 0;
+            this.showToast(t("toast.edge.off"), "info");
+        } else {
+            const restore = Math.max(0.01, this.shortcutEdgeWidthRestore || 1);
+            this.mmdManager.modelEdgeWidth = restore;
+            this.showToast(t("toast.edge.on"), "info");
+        }
+        this.syncEdgeWidthUiFromRuntime();
+    }
+
+    private syncEdgeWidthUiFromRuntime(): void {
+        const edgePercent = Math.round(this.mmdManager.modelEdgeWidth * 100);
+
+        const staticInput = document.getElementById("effect-edge-width") as HTMLInputElement | null;
+        const staticValue = document.getElementById("effect-edge-width-val");
+        if (staticInput) {
+            staticInput.value = String(edgePercent);
+        }
+        if (staticValue) {
+            staticValue.textContent = `${edgePercent}%`;
+        }
+
+        const panelInput = this.shaderMaterialList?.querySelector<HTMLInputElement>('input[data-postfx="edge-width"]');
+        const panelValue = this.shaderMaterialList?.querySelector<HTMLElement>('span[data-postfx-val="edge-width"]');
+        if (panelInput) {
+            panelInput.value = String(edgePercent);
+        }
+        if (panelValue) {
+            panelValue.textContent = `${edgePercent}%`;
+        }
     }
 
     private setupPerfDisplay(): void {
@@ -2354,8 +2540,11 @@ export class UIController {
         if (!this.btnToggleShaderPanel) return;
         this.btnToggleShaderPanel.setAttribute("aria-pressed", visible ? "true" : "false");
         this.btnToggleShaderPanel.classList.toggle("toggle-on", visible);
+        this.btnToggleShaderPanel.title = visible
+            ? t("toolbar.fx.title.on")
+            : t("toolbar.fx.title.off");
         if (this.shaderPanelToggleText) {
-            this.shaderPanelToggleText.textContent = visible ? "Effect ON" : "Effect OFF";
+            this.shaderPanelToggleText.textContent = t("toolbar.fx.short");
         }
     }
 
@@ -2369,7 +2558,7 @@ export class UIController {
 
     private enterUiFullscreenMode(): void {
         this.setUiFullscreenVisualState(true);
-        this.showToast("UIを非表示にしました。ESCで戻れます", "info");
+        this.showToast(t("toast.ui.hidden"), "info");
     }
 
     private exitUiFullscreenMode(): void {
@@ -2386,8 +2575,11 @@ export class UIController {
         if (!this.btnToggleFullscreenUi) return;
         this.btnToggleFullscreenUi.setAttribute("aria-pressed", active ? "true" : "false");
         this.btnToggleFullscreenUi.classList.toggle("toggle-on", active);
+        this.btnToggleFullscreenUi.title = active
+            ? t("toolbar.ui.title.on")
+            : t("toolbar.ui.title.off");
         if (this.fullscreenUiToggleText) {
-            this.fullscreenUiToggleText.textContent = active ? "UI非表示ON" : "UI非表示OFF";
+            this.fullscreenUiToggleText.textContent = t("toolbar.ui.short");
         }
     }
 
@@ -2535,7 +2727,7 @@ export class UIController {
             this.shaderPresetSelect.disabled = true;
             this.shaderApplyButton.disabled = true;
             this.shaderResetButton.disabled = true;
-            this.shaderPanelNote.textContent = "WebGPU (WGSL)時のみ有効";
+            this.shaderPanelNote.textContent = t("shader.note.wgslUnavailable");
             this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">WGSL unavailable</div>';
             return;
         }
@@ -2545,7 +2737,7 @@ export class UIController {
             this.shaderPresetSelect.disabled = true;
             this.shaderApplyButton.disabled = true;
             this.shaderResetButton.disabled = true;
-            this.shaderPanelNote.textContent = "モデルを読み込んでください";
+            this.shaderPanelNote.textContent = t("shader.note.loadModel");
             this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">No model</div>';
             return;
         }
@@ -2562,7 +2754,7 @@ export class UIController {
             this.shaderPresetSelect.disabled = true;
             this.shaderApplyButton.disabled = true;
             this.shaderResetButton.disabled = true;
-            this.shaderPanelNote.textContent = "このモデルには割り当て可能な材質がありません";
+            this.shaderPanelNote.textContent = t("shader.note.noMaterial");
             this.shaderMaterialList.innerHTML = '<div class="panel-empty-state">No material</div>';
             return;
         }
@@ -2624,16 +2816,22 @@ export class UIController {
             this.shaderMaterialList.appendChild(item);
         }
 
-        this.shaderApplyButton.textContent = selectedMaterial ? "選択へ割り当て" : "全材質へ割り当て";
-        this.shaderResetButton.textContent = selectedMaterial ? "選択を標準化" : "全材質を標準化";
+        this.shaderApplyButton.textContent = selectedMaterial
+            ? t("shader.apply.selected")
+            : t("shader.apply.all");
+        this.shaderResetButton.textContent = selectedMaterial
+            ? t("shader.reset.selected")
+            : t("shader.reset.all");
 
         if (selectedMaterial) {
-            this.shaderPanelNote.textContent = `選択材質: ${selectedMaterial.name}`;
+            this.shaderPanelNote.textContent = t("shader.note.selectedMaterial", {
+                name: selectedMaterial.name,
+            });
         } else if (mixedPresets) {
-            this.shaderPanelNote.textContent = "材質未選択: 全材質に適用（現在は混在）";
+            this.shaderPanelNote.textContent = t("shader.note.mixedPresets");
         } else {
             const selectedPreset = presets.find((preset) => preset.id === selectedPresetId);
-            this.shaderPanelNote.textContent = selectedPreset?.description ?? "材質未選択: 全材質に適用";
+            this.shaderPanelNote.textContent = selectedPreset?.description ?? t("shader.note.applyAll");
         }
 
         this.shaderPresetSelect.disabled = presets.length === 0;
@@ -2654,12 +2852,12 @@ export class UIController {
         }
 
         this.shaderModelNameEl.textContent = "Camera";
-        this.shaderPresetSelect.innerHTML = '<option value="postfx">ポストエフェクト</option>';
+        this.shaderPresetSelect.innerHTML = `<option value="postfx">${t("shader.camera.postfx")}</option>`;
         this.shaderPresetSelect.value = "postfx";
         this.shaderPresetSelect.disabled = true;
         this.shaderApplyButton.disabled = true;
         this.shaderResetButton.disabled = true;
-        this.shaderPanelNote.textContent = "カメラ用ポストエフェクト";
+        this.shaderPanelNote.textContent = t("shader.camera.note");
 
         this.shaderMaterialList.innerHTML = `
             <div class="shader-postfx-controls">
@@ -2820,24 +3018,47 @@ export class UIController {
         this.showToast(`Effect assigned (${targetLabel})`, "success");
     }
 
+    private applyLocalizedUiState(): void {
+        this.refreshAaToggleUi?.();
+        this.updateGroundToggleButton(this.mmdManager.isGroundVisible());
+        this.updateSkydomeToggleButton(this.mmdManager.isSkydomeVisible());
+        this.updatePhysicsToggleButton(
+            this.mmdManager.getPhysicsEnabled(),
+            this.mmdManager.isPhysicsAvailable()
+        );
+        this.updateShaderPanelToggleButton(this.isShaderPanelExpanded());
+        this.updateFullscreenUiToggleButton(this.isUiFullscreenActive);
+    }
+
     private updateGroundToggleButton(visible: boolean): void {
-        this.groundToggleText.textContent = visible ? "Ground ON" : "Ground OFF";
+        this.groundToggleText.textContent = t("toolbar.ground.short");
         this.btnToggleGround.setAttribute("aria-pressed", visible ? "true" : "false");
         this.btnToggleGround.classList.toggle("toggle-on", visible);
+        this.btnToggleGround.title = visible
+            ? t("toolbar.ground.title.on")
+            : t("toolbar.ground.title.off");
     }
 
     private updateSkydomeToggleButton(visible: boolean): void {
-        this.skydomeToggleText.textContent = visible ? "Sky ON" : "Sky OFF";
+        this.skydomeToggleText.textContent = t("toolbar.sky.short");
         this.btnToggleSkydome.setAttribute("aria-pressed", visible ? "true" : "false");
         this.btnToggleSkydome.classList.toggle("toggle-on", visible);
+        this.btnToggleSkydome.title = visible
+            ? t("toolbar.sky.title.on")
+            : t("toolbar.sky.title.off");
     }
 
     private updatePhysicsToggleButton(enabled: boolean, available: boolean): void {
         const active = available && enabled;
-        this.physicsToggleText.textContent = available ? (active ? "Physics ON" : "Physics OFF") : "Physics N/A";
+        this.physicsToggleText.textContent = available
+            ? t("toolbar.physics.short")
+            : t("toolbar.physics.naShort");
         this.btnTogglePhysics.setAttribute("aria-pressed", active ? "true" : "false");
         this.btnTogglePhysics.classList.toggle("toggle-on", active);
         (this.btnTogglePhysics as HTMLButtonElement).disabled = !available;
+        this.btnTogglePhysics.title = available
+            ? (active ? t("toolbar.physics.title.on") : t("toolbar.physics.title.off"))
+            : t("toolbar.physics.title.unavailable");
         if (this.physicsGravityAccelSlider) {
             this.physicsGravityAccelSlider.disabled = !available;
         }

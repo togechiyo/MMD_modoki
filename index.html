@@ -37,64 +37,66 @@
           <span class="app-title">MMD Motion Editor</span>
         </div>
         <div class="toolbar-divider"></div>
-        <button id="btn-load-file" class="toolbar-btn" title="PMX / VMD / VPD / 音源を読み込む">
+        <button id="btn-load-file" class="toolbar-btn" title="PMX / VMD / VPD / 音源を読み込む" data-i18n-title="toolbar.loadFile.title">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M2 2h6l2 2h4v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2zm3 7h6l-3 3-3-3zm2.5-4h1v3h-1V5z" />
           </svg>
-          <span>ファイル読込</span>
+          <span data-i18n="toolbar.loadFile.label">ファイル読込</span>
         </button>
-        <button id="btn-save-project" class="toolbar-btn" title="プロジェクトJSONを保存する">
+        <button id="btn-save-project" class="toolbar-btn" title="プロジェクトJSONを保存する" data-i18n-title="toolbar.saveProject.title">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M2 2h9l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2zm2 1v3h6V3H4zm0 6v4h8V9H4z" />
           </svg>
-          <span>プロジェクト保存</span>
+          <span data-i18n="toolbar.saveProject.label">プロジェクト保存</span>
         </button>
-        <button id="btn-load-project" class="toolbar-btn" title="プロジェクトJSONを読み込む">
+        <button id="btn-load-project" class="toolbar-btn" title="プロジェクトJSONを読み込む" data-i18n-title="toolbar.loadProject.title">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M2 2h6l2 2h4v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2zm3 7h6l-3 3-3-3zm2.5-4h1v3h-1V5z" />
           </svg>
-          <span>プロジェクト読込</span>
+          <span data-i18n="toolbar.loadProject.label">プロジェクト読込</span>
         </button>
-        <button id="btn-toggle-ground" class="toolbar-btn toggle-on" title="地面表示を切り替える" aria-pressed="true">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M1 4h14v8H1z" />
-            <path d="M1 8h14M8 4v8" stroke="currentColor" stroke-width="1" fill="none" />
-          </svg>
-          <span id="ground-toggle-text">床表示ON</span>
-        </button>
-        <button id="btn-toggle-skydome" class="toolbar-btn toggle-on" title="スカイドーム表示を切り替える" aria-pressed="true">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M2 10a6 6 0 1 1 12 0v4H2v-4z" />
-            <path d="M2 10h12" stroke="currentColor" stroke-width="1" fill="none" />
-          </svg>
-          <span id="skydome-toggle-text">空表示ON</span>
-        </button>
-        <button id="btn-toggle-aa" class="toolbar-btn toggle-on" title="アンチエイリアスの有効/無効を切り替える" aria-pressed="true">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M2 12l3-8h2l3 8h-2l-.6-1.8H4.6L4 12H2zm3.1-3.3h1.8L6 6z" />
-            <path d="M11 5h3v1h-3zM11 8h3v1h-3zM11 11h3v1h-3z" />
-          </svg>
-          <span id="aa-toggle-text">AA ON</span>
-        </button>
-        <button id="btn-toggle-physics" class="toolbar-btn toggle-on" title="物理演算の有効/無効を切り替える" aria-pressed="true">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 1.5a3 3 0 0 1 3 3v1h1.5a2 2 0 0 1 0 4H11v1a3 3 0 0 1-6 0v-1H3.5a2 2 0 0 1 0-4H5v-1a3 3 0 0 1 3-3z" />
-          </svg>
-          <span id="physics-toggle-text">物理ON</span>
-        </button>
-        <button id="btn-toggle-shader-panel" class="toolbar-btn toggle-on" title="エフェクトパネルの表示/非表示" aria-pressed="true">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
-            <rect x="2.2" y="3" width="11.6" height="10" rx="1.2" />
-            <path d="M6 5.2v5.6M8.5 5.2v5.6M11 5.2v5.6" />
-          </svg>
-          <span id="shader-panel-toggle-text">Effect ON</span>
-        </button>
-        <button id="btn-toggle-fullscreen-ui" class="toolbar-btn" title="UIを非表示/表示 (ESCで戻る)" aria-pressed="false">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-            <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
-          </svg>
-          <span id="fullscreen-ui-toggle-text">UI非表示OFF</span>
-        </button>
+        <div class="toolbar-toggle-group" role="group" aria-label="表示と機能の切替" data-i18n-aria-label="toolbar.toggleGroup.ariaLabel">
+          <button id="btn-toggle-ground" class="toolbar-btn toolbar-btn--compact toggle-on" title="地面表示を切り替える" aria-pressed="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M1 4h14v8H1z" />
+              <path d="M1 8h14M8 4v8" stroke="currentColor" stroke-width="1" fill="none" />
+            </svg>
+            <span id="ground-toggle-text" data-i18n="toolbar.ground.short">GND</span>
+          </button>
+          <button id="btn-toggle-skydome" class="toolbar-btn toolbar-btn--compact toggle-on" title="スカイドーム表示を切り替える" aria-pressed="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 10a6 6 0 1 1 12 0v4H2v-4z" />
+              <path d="M2 10h12" stroke="currentColor" stroke-width="1" fill="none" />
+            </svg>
+            <span id="skydome-toggle-text" data-i18n="toolbar.sky.short">SKY</span>
+          </button>
+          <button id="btn-toggle-aa" class="toolbar-btn toolbar-btn--compact toggle-on" title="アンチエイリアスの有効/無効を切り替える" aria-pressed="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 12l3-8h2l3 8h-2l-.6-1.8H4.6L4 12H2zm3.1-3.3h1.8L6 6z" />
+              <path d="M11 5h3v1h-3zM11 8h3v1h-3zM11 11h3v1h-3z" />
+            </svg>
+            <span id="aa-toggle-text" data-i18n="toolbar.aa.short">AA</span>
+          </button>
+          <button id="btn-toggle-physics" class="toolbar-btn toolbar-btn--compact toggle-on" title="物理演算の有効/無効を切り替える" aria-pressed="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 1.5a3 3 0 0 1 3 3v1h1.5a2 2 0 0 1 0 4H11v1a3 3 0 0 1-6 0v-1H3.5a2 2 0 0 1 0-4H5v-1a3 3 0 0 1 3-3z" />
+            </svg>
+            <span id="physics-toggle-text" data-i18n="toolbar.physics.short">PHY</span>
+          </button>
+          <button id="btn-toggle-shader-panel" class="toolbar-btn toolbar-btn--compact" title="エフェクト欄の表示/非表示" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
+              <rect x="2.2" y="3" width="11.6" height="10" rx="1.2" />
+              <path d="M6 5.2v5.6M8.5 5.2v5.6M11 5.2v5.6" />
+            </svg>
+            <span id="shader-panel-toggle-text" data-i18n="toolbar.fx.short">FX</span>
+          </button>
+          <button id="btn-toggle-fullscreen-ui" class="toolbar-btn toolbar-btn--compact" title="UIを非表示/表示 (ESCで戻る)" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
+            </svg>
+            <span id="fullscreen-ui-toggle-text" data-i18n="toolbar.ui.short">UI</span>
+          </button>
+        </div>
       </div>
       <div class="toolbar-right">
         <div id="perf-display" class="perf-badge">
@@ -111,7 +113,7 @@
     </header>
 
     <!-- Main Content Area -->
-    <div id="main-content">
+    <div id="main-content" class="shader-panel-collapsed">
       <!-- Left Panel: Playback + Timeline -->
       <aside id="timeline-panel">
         <section id="playback-section" class="left-panel-section">
@@ -124,38 +126,38 @@
           <div id="playback-controls" class="playback-controls">
             <div class="playback-compact-row">
               <div class="transport-buttons">
-                <button id="btn-skip-start" class="transport-btn" title="先頭へ">
+                <button id="btn-skip-start" class="transport-btn" title="先頭へ (Home)" data-i18n-title="playback.skipStart.title">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M4 2h2v12H4V2zm2 6l7 5V3L6 8z" />
                   </svg>
                 </button>
-                <button id="btn-play" class="transport-btn play-btn" title="再生">
+                <button id="btn-play" class="transport-btn play-btn" title="再生 (P / Space)" data-i18n-title="playback.play.title">
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M5 3l12 7-12 7V3z" />
                   </svg>
                 </button>
-                <button id="btn-pause" class="transport-btn" title="一時停止" style="display:none;">
+                <button id="btn-pause" class="transport-btn" title="一時停止 (P / Space)" data-i18n-title="playback.pause.title" style="display:none;">
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                     <rect x="4" y="3" width="4" height="14" />
                     <rect x="12" y="3" width="4" height="14" />
                   </svg>
                 </button>
-                <button id="btn-stop" class="transport-btn" title="停止">
+                <button id="btn-stop" class="transport-btn" title="停止" data-i18n-title="playback.stop.title">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="3" y="3" width="10" height="10" />
                   </svg>
                 </button>
-                <button id="btn-skip-end" class="transport-btn" title="末尾へ">
+                <button id="btn-skip-end" class="transport-btn" title="末尾へ (End)" data-i18n-title="playback.skipEnd.title">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M10 2h2v12h-2V2zm-2 6L1 13V3l7 5z" />
                   </svg>
                 </button>
               </div>
               <div class="playback-step-buttons">
-                <button id="btn-kf-nudge-left" class="transport-btn playback-step-btn" type="button" title="1フレーム前へ">
+                <button id="btn-kf-nudge-left" class="transport-btn playback-step-btn" type="button" title="選択キーを1フレーム前へ (Alt+←)" data-i18n-title="playback.nudgeLeft.title">
                   <span aria-hidden="true">&larr;</span>
                 </button>
-                <button id="btn-kf-nudge-right" class="transport-btn playback-step-btn" type="button" title="1フレーム後へ">
+                <button id="btn-kf-nudge-right" class="transport-btn playback-step-btn" type="button" title="選択キーを1フレーム後へ (Alt+→)" data-i18n-title="playback.nudgeRight.title">
                   <span aria-hidden="true">&rarr;</span>
                 </button>
               </div>
@@ -194,8 +196,8 @@
           </div>
           <div id="timeline-edit-toolbar">
             <div class="timeline-edit-buttons">
-              <button id="btn-kf-add" class="timeline-edit-btn" type="button" title="現在フレームにキーフレームを登録">登録</button>
-              <button id="btn-kf-delete" class="timeline-edit-btn" type="button" title="選択キーフレームを削除">削除</button>
+              <button id="btn-kf-add" class="timeline-edit-btn" type="button" title="現在フレームにキーフレームを登録 (Enter / I / K / +)" data-i18n-title="timeline.key.add.title">登録</button>
+              <button id="btn-kf-delete" class="timeline-edit-btn" type="button" title="選択キーフレームを削除 (Delete)" data-i18n-title="timeline.key.delete.title">削除</button>
             </div>
             <span id="timeline-selection-label" class="timeline-selection-label">トラック未選択</span>
           </div>
@@ -227,8 +229,8 @@
               <path d="M32 60V36" stroke="currentColor" stroke-width="2" />
               <path d="M4 20L32 36L60 20" stroke="currentColor" stroke-width="2" />
             </svg>
-            <p>PMXモデルを読み込んでください</p>
-            <span class="hint-text">ツールバーの「ファイル読込」ボタンか、Ctrl+Oで開く</span>
+            <p data-i18n="viewport.empty.title">PMXモデルを読み込んでください</p>
+            <span class="hint-text" data-i18n="viewport.empty.hint">ツールバーの「ファイル読込」ボタンか、Ctrl+Oで開く</span>
           </div>
         </div>
       </main>

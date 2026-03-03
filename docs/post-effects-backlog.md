@@ -1,5 +1,5 @@
 ﻿# ポストエフェクト拡充バックログ
-最終更新: 2026-03-01
+最終更新: 2026-03-03
 
 実現可能性の判断軸:
 - `Editor直利用`: Babylon.js Editorで既にUI露出されている機能
@@ -10,6 +10,16 @@
 - `実装済`: すでにUIから操作可能
 - `候補`: 実装前（優先度付き）
 - `実験`: 検証用。品質/負荷次第で採用
+
+## 運用メモ（2026-03-03）
+- WebGPU安定性優先のため、次の項目は UI から一時的に非表示:
+  - `FX-200` SSAO
+  - `FX-110` Glow Layer
+  - `FX-205` Motion Blur
+  - `FX-202` SSR
+  - `FX-203` Volumetric Light
+- `FX-202` SSR は UI 経由では常時 OFF（`strength=0` / `enabled=false`）を適用。
+- 実装コード自体は保持し、再検証時に再公開できる状態を維持する。
 
 ## 0. 現在の実装済み（再整理）
 | ID | エフェクト | ステータス | 補足 |
@@ -25,52 +35,54 @@
 | FX-103 | Chromatic Aberration | 実装済 | Amount 0でOFF |
 | FX-105 | Exposure | 実装済 | ImageProcessing連携 |
 | FX-107 | Sharpen | 実装済 | Edge 0でOFF |
+| FX-108 | Color Curves（Saturation運用） | 実装済 | Curvesスライダで操作（Hue/Density/Exposureは内部固定） |
+| FX-109 | LUT（3dl） | 実装済 | LUT選択 + 強度スライダ（ColorGradingTexture） |
 | FX-111 | Dithering | 実装済 | Intensity 0でOFF |
+| FX-204 | Fog（Scene Fog） | 実装済 | 密度フェーダー中心の単項目運用 |
 | FX-211 | Tone Mapper | 実装済 | OFF/Standard/ACES/Neutral |
+| FX-308 | Anime LUT Pack | 実装済 | `anime-soft / anime-cool / anime-dramatic` 同梱 |
 
-## 1. 未実装候補（実現可能性順: 高 -> 低）
+## 1. 未実装 / 再公開候補（実現可能性順: 高 -> 低）
 | 優先 | ID | エフェクト | 実現可能性 | Editor直利用 | 根拠/理由 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | FX-108 | Color Curves | S | Yes | ImageProcessing.colorCurvesで既存 |
-| 2 | FX-110 | Glow Layer | S | Yes | DefaultRenderingPipelineで既存 |
-| 3 | FX-104 | Saturation | A | Yes(代替) | Color CurvesのSaturationで代替可能 |
-| 4 | FX-109 | LUT（3dl先行） | A | Yes | Color Grading対応。3dl先行なら容易 |
-| 5 | FX-308 | Anime LUT Pack | A | Yes | LUT運用にプリセット群を乗せるだけ |
-| 6 | FX-200 | SSAO | A | Yes | Editor側にSSAO2 pipelineあり |
-| 7 | FX-205 | Motion Blur | A | Yes | Editor側にMotionBlurPostProcessあり |
-| 8 | FX-202 | SSR | A | Yes | Editor側にSSR pipelineあり |
-| 9 | FX-203 | Volumetric Light | A | Yes | Editor側にVLS PostProcessあり |
-| 10 | FX-204 | Fog（高度/距離） | A | Yes | Scene fogとして既存（厳密にはPostProcess外） |
-| 11 | FX-210 | Color Grading Wheels | B | No | 独自UI設計が必要（内部はColor Curvesへ割当） |
-| 12 | FX-309 | Bloom+Edge Combo | B | No | 既存値のプリセット化で実装可 |
-| 13 | FX-209 | Lens Dirt | B | No | 合成テクスチャ追加の専用パスが必要 |
-| 14 | FX-208 | Glare/Streak | B | No | レンズフレア系の独自合成が必要 |
-| 15 | FX-307 | Soft Light Overlay | B | No | 単純な合成パス追加で対応可能 |
-| 16 | FX-300 | Posterize | B | No | 比較的軽い独自ポストパスで実装可 |
-| 17 | FX-301 | Toon Quantize | B | No | Posterize系の拡張で実装可 |
-| 18 | FX-402 | CRT/Scanline | B | No | 独自シェーダ1枚で実装しやすい |
-| 19 | FX-403 | Glitch RGB Split | B | No | 独自シェーダ1枚で実装しやすい |
-| 20 | FX-404 | VHS Noise | B | No | ノイズ/揺れ合成で実装可能 |
-| 21 | FX-408 | Temporal Dither | B | No | 軽量パスで実装可能 |
-| 22 | FX-206 | Radial Blur | B | No | 中コストの独自パス |
-| 23 | FX-207 | Zoom Blur | B | No | 中コストの独自パス |
-| 24 | FX-400 | Tilt Shift | C | No | DoFとの干渉調整が必要 |
-| 25 | FX-401 | Heat Haze | C | No | 歪み+時間変化で設計/調整コスト高 |
-| 26 | FX-405 | Rain-on-Lens | C | No | 専用マスク/法線/屈折処理が必要 |
-| 27 | FX-407 | Anamorphic Flare | C | No | 高輝度抽出+方向ブラー等が必要 |
-| 28 | FX-302 | Halftone Dot | C | No | スタイライズ品質調整が難しい |
-| 29 | FX-303 | Cross Hatch | C | No | スタイライズ品質調整が難しい |
-| 30 | FX-305 | Bilateral Smooth | C | No | 重いフィルタで最適化が必要 |
-| 31 | FX-304 | Kuwahara | C | No | 非常に重く品質/速度のトレードオフが大 |
-| 32 | FX-406 | Bokeh Shape | C | No | DoF系に大きな改修が必要 |
-| 33 | FX-409 | VRS-like Blur Mask | C | No | 可変品質制御の設計負荷が高い |
-| 34 | FX-201 | GTAO | C | No | 現行Editor直利用対象外、統合コスト高 |
-| 35 | FX-106 | White Balance | C | No | Babylonの直接ノブが薄く実装方針要検討 |
+| 1 | FX-110 | Glow Layer | S | Yes | 実装済みだが現状はUI非表示運用 |
+| 2 | FX-104 | Saturation | A | Yes(代替) | Color CurvesのSaturationで代替済み。専用ノブ化のみ未実施 |
+| 3 | FX-200 | SSAO | A | Yes | 実装済みだが現状はUI非表示運用 |
+| 4 | FX-205 | Motion Blur | A | Yes | 実装済みだが現状はUI非表示運用 |
+| 5 | FX-202 | SSR | A | Yes | 実装済みだが現状はUI非表示・常時OFF運用 |
+| 6 | FX-203 | Volumetric Light | A | Yes | 実装済みだが現状はUI非表示運用 |
+| 7 | FX-210 | Color Grading Wheels | B | No | 独自UI設計が必要（内部はColor Curvesへ割当） |
+| 8 | FX-309 | Bloom+Edge Combo | B | No | 既存値のプリセット化で実装可 |
+| 9 | FX-209 | Lens Dirt | B | No | 合成テクスチャ追加の専用パスが必要 |
+| 10 | FX-208 | Glare/Streak | B | No | レンズフレア系の独自合成が必要 |
+| 11 | FX-307 | Soft Light Overlay | B | No | 単純な合成パス追加で対応可能 |
+| 12 | FX-300 | Posterize | B | No | 比較的軽い独自ポストパスで実装可 |
+| 13 | FX-301 | Toon Quantize | B | No | Posterize系の拡張で実装可 |
+| 14 | FX-402 | CRT/Scanline | B | No | 独自シェーダ1枚で実装しやすい |
+| 15 | FX-403 | Glitch RGB Split | B | No | 独自シェーダ1枚で実装しやすい |
+| 16 | FX-404 | VHS Noise | B | No | ノイズ/揺れ合成で実装可能 |
+| 17 | FX-408 | Temporal Dither | B | No | 軽量パスで実装可能 |
+| 18 | FX-206 | Radial Blur | B | No | 中コストの独自パス |
+| 19 | FX-207 | Zoom Blur | B | No | 中コストの独自パス |
+| 20 | FX-400 | Tilt Shift | C | No | DoFとの干渉調整が必要 |
+| 21 | FX-401 | Heat Haze | C | No | 歪み+時間変化で設計/調整コスト高 |
+| 22 | FX-405 | Rain-on-Lens | C | No | 専用マスク/法線/屈折処理が必要 |
+| 23 | FX-407 | Anamorphic Flare | C | No | 高輝度抽出+方向ブラー等が必要 |
+| 24 | FX-302 | Halftone Dot | C | No | スタイライズ品質調整が難しい |
+| 25 | FX-303 | Cross Hatch | C | No | スタイライズ品質調整が難しい |
+| 26 | FX-305 | Bilateral Smooth | C | No | 重いフィルタで最適化が必要 |
+| 27 | FX-304 | Kuwahara | C | No | 非常に重く品質/速度のトレードオフが大 |
+| 28 | FX-406 | Bokeh Shape | C | No | DoF系に大きな改修が必要 |
+| 29 | FX-409 | VRS-like Blur Mask | C | No | 可変品質制御の設計負荷が高い |
+| 30 | FX-201 | GTAO | C | No | 現行Editor直利用対象外、統合コスト高 |
+| 31 | FX-106 | White Balance | C | No | Babylonの直接ノブが薄く実装方針要検討 |
+
+注記: `FX-110 / FX-200 / FX-202 / FX-203 / FX-205` は実験導入済みだが、現時点では UI 非表示運用。
 
 ## 2. 次の実装バッチ（推奨）
-1. `FX-108, FX-104`（ColorCurves/Saturation）
-2. `FX-110, FX-109, FX-308`（Glow/LUT/Anime LUT Pack）
-3. `FX-200, FX-205, FX-202, FX-203`（SSAO/MotionBlur/SSR/VLS）
+1. `FX-110, FX-200, FX-205, FX-202, FX-203` の再公開判定（WebGPU安定性・UI運用見直し）
+2. `FX-210, FX-309`（Color Grading Wheels / Bloom+Edgeプリセット）
+3. スタイライズ系Bランクの小粒追加（`FX-300, FX-301, FX-402, FX-403`）
 
 ## 3. LUT方針メモ
 - 先行対応は `3dl` を推奨（Babylon標準のColorGradingTextureに素直に乗る）

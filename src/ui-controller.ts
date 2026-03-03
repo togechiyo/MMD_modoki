@@ -1331,7 +1331,7 @@ export class UIController {
                 return;
             }
 
-            // Tab / Shift+Tab / ろ( IntlRo ) : cycle active model
+            // Tab / Shift+Tab / めE IntlRo ) : cycle active model
             if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Tab" || e.code === "IntlRo")) {
                 e.preventDefault();
                 this.cycleActiveModelByShortcut(e.shiftKey ? -1 : 1);
@@ -2375,7 +2375,7 @@ export class UIController {
 
         const modelOption = document.createElement("option");
         modelOption.value = "";
-        modelOption.textContent = "(モデル中心)";
+        modelOption.textContent = "(モチE��中忁E";
         select.appendChild(modelOption);
 
         const boneNames = this.mmdManager.getModelBoneNames(modelIndex);
@@ -2858,6 +2858,9 @@ export class UIController {
         this.shaderApplyButton.disabled = true;
         this.shaderResetButton.disabled = true;
         this.shaderPanelNote.textContent = t("shader.camera.note");
+        const lutPresetOptionsHtml = this.mmdManager.getPostEffectLutPresetOptions()
+            .map((preset) => `<option value="${preset.id}">${preset.label}</option>`)
+            .join("");
 
         this.shaderMaterialList.innerHTML = `
             <div class="shader-postfx-controls">
@@ -2930,6 +2933,53 @@ export class UIController {
                     <input data-postfx="sharpen-edge" type="range" class="effect-slider" min="0" max="400" value="0" step="1">
                     <span data-postfx-val="sharpen-edge" class="effect-value">OFF</span>
                 </div>
+                <div class="effect-row" style="display:none;">
+                    <span class="effect-label">SSAO</span>
+                    <input data-postfx="ssao-strength" type="range" class="effect-slider" min="0" max="400" value="100" step="1">
+                    <span data-postfx-val="ssao-strength" class="effect-value">OFF</span>
+                </div>
+                <div class="effect-row">
+                    <span class="effect-label">Curves</span>
+                    <input data-postfx="color-curves-saturation" type="range" class="effect-slider" min="-100" max="100" value="0" step="1">
+                    <span data-postfx-val="color-curves-saturation" class="effect-value">OFF</span>
+                </div>
+                <div class="effect-row" style="display:none;">
+                    <span class="effect-label">Glow</span>
+                    <input data-postfx="glow-intensity" type="range" class="effect-slider" min="0" max="400" value="50" step="1">
+                    <span data-postfx-val="glow-intensity" class="effect-value">OFF</span>
+                </div>
+                <div class="effect-row">
+                    <span class="effect-label">LUT</span>
+                    <select data-postfx-select="lut-preset" class="effect-select">
+                        ${lutPresetOptionsHtml}
+                    </select>
+                    <span data-postfx-val="lut" class="effect-value">OFF</span>
+                </div>
+                <div class="effect-row">
+                    <span class="effect-label">LUTInt</span>
+                    <input data-postfx="lut-intensity" type="range" class="effect-slider" min="0" max="200" value="100" step="1">
+                    <span data-postfx-val="lut-intensity" class="effect-value">1.00</span>
+                </div>
+                <div class="effect-row" style="display:none;">
+                    <span class="effect-label">MBlur</span>
+                    <input data-postfx="motion-blur-strength" type="range" class="effect-slider" min="0" max="200" value="50" step="1">
+                    <span data-postfx-val="motion-blur-strength" class="effect-value">OFF</span>
+                </div>
+                <div class="effect-row" style="display:none;">
+                    <span class="effect-label">SSR</span>
+                    <input data-postfx="ssr-strength" type="range" class="effect-slider" min="0" max="200" value="80" step="1">
+                    <span data-postfx-val="ssr-strength" class="effect-value">OFF</span>
+                </div>
+                <div class="effect-row" style="display:none;">
+                    <span class="effect-label">VLight</span>
+                    <input data-postfx="vls-exposure" type="range" class="effect-slider" min="0" max="200" value="30" step="1">
+                    <span data-postfx-val="vls-exposure" class="effect-value">OFF</span>
+                </div>
+                <div class="effect-row">
+                    <span class="effect-label">Fog</span>
+                    <input data-postfx="fog-density" type="range" class="effect-slider" min="0" max="200" value="2" step="1">
+                    <span data-postfx-val="fog-density" class="effect-value">OFF</span>
+                </div>
                 <div class="effect-row">
                     <span class="effect-label">Distortion</span>
                     <input data-postfx="distortion-influence" type="range" class="effect-slider" min="0" max="100" value="0" step="1">
@@ -2972,6 +3022,24 @@ export class UIController {
         const grainIntensityVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="grain-intensity"]');
         const sharpenEdgeInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="sharpen-edge"]');
         const sharpenEdgeVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="sharpen-edge"]');
+        const ssaoStrengthInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="ssao-strength"]');
+        const ssaoStrengthVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="ssao-strength"]');
+        const colorCurvesSaturationInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="color-curves-saturation"]');
+        const colorCurvesSaturationVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="color-curves-saturation"]');
+        const glowIntensityInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="glow-intensity"]');
+        const glowIntensityVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="glow-intensity"]');
+        const lutPresetSelect = this.shaderMaterialList.querySelector<HTMLSelectElement>('select[data-postfx-select="lut-preset"]');
+        const lutVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="lut"]');
+        const lutIntensityInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="lut-intensity"]');
+        const lutIntensityVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="lut-intensity"]');
+        const motionBlurStrengthInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="motion-blur-strength"]');
+        const motionBlurStrengthVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="motion-blur-strength"]');
+        const ssrStrengthInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="ssr-strength"]');
+        const ssrStrengthVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="ssr-strength"]');
+        const vlsExposureInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="vls-exposure"]');
+        const vlsExposureVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="vls-exposure"]');
+        const fogDensityInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="fog-density"]');
+        const fogDensityVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="fog-density"]');
         const distortionInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="distortion-influence"]');
         const distortionVal = this.shaderMaterialList.querySelector<HTMLElement>('span[data-postfx-val="distortion-influence"]');
         const edgeWidthInput = this.shaderMaterialList.querySelector<HTMLInputElement>('input[data-postfx="edge-width"]');
@@ -3003,6 +3071,24 @@ export class UIController {
             !grainIntensityVal ||
             !sharpenEdgeInput ||
             !sharpenEdgeVal ||
+            !ssaoStrengthInput ||
+            !ssaoStrengthVal ||
+            !colorCurvesSaturationInput ||
+            !colorCurvesSaturationVal ||
+            !glowIntensityInput ||
+            !glowIntensityVal ||
+            !lutPresetSelect ||
+            !lutVal ||
+            !lutIntensityInput ||
+            !lutIntensityVal ||
+            !motionBlurStrengthInput ||
+            !motionBlurStrengthVal ||
+            !ssrStrengthInput ||
+            !ssrStrengthVal ||
+            !vlsExposureInput ||
+            !vlsExposureVal ||
+            !fogDensityInput ||
+            !fogDensityVal ||
             !distortionInput ||
             !distortionVal ||
             !edgeWidthInput ||
@@ -3110,6 +3196,96 @@ export class UIController {
                 : "OFF";
         };
 
+        const applySsao = (): void => {
+            this.mmdManager.postEffectSsaoStrength = Number(ssaoStrengthInput.value) / 100;
+            const normalized = Math.max(0, Math.min(1, this.mmdManager.postEffectSsaoStrength / 4));
+            // Keep single-slider UX: bias toward enclosed-space darkening with a wider sampling radius.
+            this.mmdManager.postEffectSsaoRadius = 0.3 + normalized * 1.9;
+            this.mmdManager.postEffectSsaoEnabled = this.mmdManager.postEffectSsaoStrength > 0.000001;
+
+            ssaoStrengthVal.textContent = this.mmdManager.postEffectSsaoEnabled
+                ? this.mmdManager.postEffectSsaoStrength.toFixed(2)
+                : "OFF";
+        };
+
+        const applyColorCurves = (): void => {
+            this.mmdManager.postEffectColorCurvesHue = 30;
+            this.mmdManager.postEffectColorCurvesDensity = 0;
+            this.mmdManager.postEffectColorCurvesSaturation = Number(colorCurvesSaturationInput.value);
+            this.mmdManager.postEffectColorCurvesExposure = 0;
+            this.mmdManager.postEffectColorCurvesEnabled = Math.abs(this.mmdManager.postEffectColorCurvesSaturation) > 0.000001;
+
+            colorCurvesSaturationVal.textContent = this.mmdManager.postEffectColorCurvesEnabled
+                ? `${Math.round(this.mmdManager.postEffectColorCurvesSaturation)}`
+                : "OFF";
+        };
+
+        const applyGlow = (): void => {
+            this.mmdManager.postEffectGlowIntensity = Number(glowIntensityInput.value) / 100;
+            this.mmdManager.postEffectGlowKernel = 32;
+            this.mmdManager.postEffectGlowEnabled = this.mmdManager.postEffectGlowIntensity > 0.000001;
+
+            glowIntensityVal.textContent = this.mmdManager.postEffectGlowEnabled
+                ? this.mmdManager.postEffectGlowIntensity.toFixed(2)
+                : "OFF";
+        };
+
+        const applyLut = (): void => {
+            this.mmdManager.postEffectLutPreset = lutPresetSelect.value;
+            this.mmdManager.postEffectLutIntensity = Number(lutIntensityInput.value) / 100;
+            this.mmdManager.postEffectLutEnabled = this.mmdManager.postEffectLutPreset !== "none"
+                && this.mmdManager.postEffectLutIntensity > 0.000001;
+
+            lutIntensityInput.disabled = this.mmdManager.postEffectLutPreset === "none";
+
+            lutVal.textContent = this.mmdManager.postEffectLutEnabled
+                ? this.mmdManager.postEffectLutPreset
+                : "OFF";
+            lutIntensityVal.textContent = this.mmdManager.postEffectLutEnabled
+                ? this.mmdManager.postEffectLutIntensity.toFixed(2)
+                : "OFF";
+        };
+
+        const applyMotionBlur = (): void => {
+            this.mmdManager.postEffectMotionBlurStrength = Number(motionBlurStrengthInput.value) / 100;
+            this.mmdManager.postEffectMotionBlurSamples = 32;
+            this.mmdManager.postEffectMotionBlurEnabled = this.mmdManager.postEffectMotionBlurStrength > 0.000001;
+
+            motionBlurStrengthVal.textContent = this.mmdManager.postEffectMotionBlurEnabled
+                ? this.mmdManager.postEffectMotionBlurStrength.toFixed(2)
+                : "OFF";
+        };
+
+        const applySsr = (): void => {
+            this.mmdManager.postEffectSsrStrength = 0;
+            this.mmdManager.postEffectSsrStep = 1;
+            this.mmdManager.postEffectSsrEnabled = false;
+            ssrStrengthVal.textContent = "OFF";
+        };
+
+        const applyVls = (): void => {
+            this.mmdManager.postEffectVlsExposure = Number(vlsExposureInput.value) / 100;
+            this.mmdManager.postEffectVlsDecay = 0.95;
+            this.mmdManager.postEffectVlsWeight = 0.4;
+            this.mmdManager.postEffectVlsDensity = 0.9;
+            this.mmdManager.postEffectVlsEnabled = this.mmdManager.postEffectVlsExposure > 0.000001;
+
+            vlsExposureVal.textContent = this.mmdManager.postEffectVlsEnabled
+                ? this.mmdManager.postEffectVlsExposure.toFixed(2)
+                : "OFF";
+        };
+
+        const applyFog = (): void => {
+            this.mmdManager.postEffectFogDensity = Number(fogDensityInput.value) / 100;
+            this.mmdManager.postEffectFogMode = 0;
+            this.mmdManager.postEffectFogStart = 20;
+            this.mmdManager.postEffectFogEnd = 100;
+            this.mmdManager.postEffectFogEnabled = this.mmdManager.postEffectFogDensity > 0.000001;
+            fogDensityVal.textContent = this.mmdManager.postEffectFogEnabled
+                ? this.mmdManager.postEffectFogDensity.toFixed(2)
+                : "OFF";
+        };
+
         const applyDistortionInfluence = (): void => {
             const scale = Number(distortionInput.value) / 100;
             this.mmdManager.dofLensDistortionInfluence = scale;
@@ -3153,6 +3329,40 @@ export class UIController {
         sharpenEdgeInput.value = String(
             Math.max(0, Math.min(400, Math.round(this.mmdManager.postEffectSharpenEdge * 100))),
         );
+        ssaoStrengthInput.value = String(
+            Math.max(0, Math.min(400, Math.round((this.mmdManager.postEffectSsaoEnabled ? this.mmdManager.postEffectSsaoStrength : 0) * 100))),
+        );
+        colorCurvesSaturationInput.value = String(
+            Math.max(
+                -100,
+                Math.min(100, Math.round(this.mmdManager.postEffectColorCurvesEnabled ? this.mmdManager.postEffectColorCurvesSaturation : 0)),
+            ),
+        );
+        glowIntensityInput.value = String(
+            Math.max(0, Math.min(400, Math.round((this.mmdManager.postEffectGlowEnabled ? this.mmdManager.postEffectGlowIntensity : 0) * 100))),
+        );
+        lutPresetSelect.value = Array.from(lutPresetSelect.options).some((option) => option.value === this.mmdManager.postEffectLutPreset)
+            ? this.mmdManager.postEffectLutPreset
+            : "none";
+        lutIntensityInput.value = String(
+            Math.round(
+                (this.mmdManager.postEffectLutEnabled && lutPresetSelect.value !== "none"
+                    ? this.mmdManager.postEffectLutIntensity
+                    : 0) * 100,
+            ),
+        );
+        motionBlurStrengthInput.value = String(
+            Math.max(0, Math.min(200, Math.round((this.mmdManager.postEffectMotionBlurEnabled ? this.mmdManager.postEffectMotionBlurStrength : 0) * 100))),
+        );
+        ssrStrengthInput.value = String(
+            Math.max(0, Math.min(200, Math.round((this.mmdManager.postEffectSsrEnabled ? this.mmdManager.postEffectSsrStrength : 0) * 100))),
+        );
+        vlsExposureInput.value = String(
+            Math.max(0, Math.min(200, Math.round((this.mmdManager.postEffectVlsEnabled ? this.mmdManager.postEffectVlsExposure : 0) * 100))),
+        );
+        fogDensityInput.value = String(
+            Math.max(0, Math.min(200, Math.round((this.mmdManager.postEffectFogEnabled ? this.mmdManager.postEffectFogDensity : 0) * 100))),
+        );
         distortionInput.value = String(Math.round(this.mmdManager.dofLensDistortionInfluence * 100));
         edgeWidthInput.value = String(Math.round(this.mmdManager.modelEdgeWidth * 100));
 
@@ -3166,6 +3376,14 @@ export class UIController {
         applyChromaticAberration();
         applyGrainIntensity();
         applySharpenEdge();
+        applySsao();
+        applyColorCurves();
+        applyGlow();
+        applyLut();
+        applyMotionBlur();
+        applySsr();
+        applyVls();
+        applyFog();
         applyDistortionInfluence();
         applyEdgeWidth();
 
@@ -3182,6 +3400,15 @@ export class UIController {
         chromaticAberrationInput.addEventListener("input", applyChromaticAberration);
         grainIntensityInput.addEventListener("input", applyGrainIntensity);
         sharpenEdgeInput.addEventListener("input", applySharpenEdge);
+        ssaoStrengthInput.addEventListener("input", applySsao);
+        colorCurvesSaturationInput.addEventListener("input", applyColorCurves);
+        glowIntensityInput.addEventListener("input", applyGlow);
+        lutPresetSelect.addEventListener("change", applyLut);
+        lutIntensityInput.addEventListener("input", applyLut);
+        motionBlurStrengthInput.addEventListener("input", applyMotionBlur);
+        ssrStrengthInput.addEventListener("input", applySsr);
+        vlsExposureInput.addEventListener("input", applyVls);
+        fogDensityInput.addEventListener("input", applyFog);
         distortionInput.addEventListener("input", applyDistortionInfluence);
         edgeWidthInput.addEventListener("input", applyEdgeWidth);
     }

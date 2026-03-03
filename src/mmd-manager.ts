@@ -3,10 +3,11 @@ import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { WebGPUTintWASM } from "@babylonjs/core/Engines/WebGPU/webgpuTintWASM";
 import { Scene } from "@babylonjs/core/scene";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
-import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Matrix, Quaternion, Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Space } from "@babylonjs/core/Maths/math.axis";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
+import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
@@ -16,6 +17,7 @@ import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { ColorGradingTexture } from "@babylonjs/core/Materials/Textures/colorGradingTexture";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
@@ -24,6 +26,9 @@ import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
 import { FxaaPostProcess } from "@babylonjs/core/PostProcesses/fxaaPostProcess";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
 import { LensRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/lensRenderingPipeline";
+import { SSAO2RenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline";
+import { SSRRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssrRenderingPipeline";
+import { VolumetricLightScatteringPostProcess } from "@babylonjs/core/PostProcesses/volumetricLightScatteringPostProcess";
 import { DepthOfFieldEffectBlurLevel } from "@babylonjs/core/PostProcesses/depthOfFieldEffect";
 import { GizmoManager } from "@babylonjs/core/Gizmos/gizmoManager";
 import type { DepthRenderer } from "@babylonjs/core/Rendering/depthRenderer";
@@ -179,6 +184,7 @@ import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 import "@babylonjs/core/Materials/Textures/Loaders/tgaTextureLoader";
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import "@babylonjs/core/Rendering/depthRendererSceneComponent";
+import "@babylonjs/core/Rendering/prePassRendererSceneComponent";
 import "@babylonjs/core/Engines/WebGPU/Extensions/engine.dynamicTexture";
 import "@babylonjs/core/ShadersWGSL/postprocess.vertex";
 import "@babylonjs/core/ShadersWGSL/imageProcessing.fragment";
@@ -188,6 +194,13 @@ import "@babylonjs/core/ShadersWGSL/circleOfConfusion.fragment";
 import "@babylonjs/core/ShadersWGSL/depthOfFieldMerge.fragment";
 import "@babylonjs/core/ShadersWGSL/kernelBlur.vertex";
 import "@babylonjs/core/ShadersWGSL/kernelBlur.fragment";
+import "@babylonjs/core/ShadersWGSL/motionBlur.fragment";
+import "@babylonjs/core/ShadersWGSL/screenSpaceReflection2.fragment";
+import "@babylonjs/core/ShadersWGSL/screenSpaceReflection2Blur.fragment";
+import "@babylonjs/core/ShadersWGSL/screenSpaceReflection2BlurCombiner.fragment";
+import "@babylonjs/core/ShadersWGSL/volumetricLightingRenderVolume.vertex";
+import "@babylonjs/core/ShadersWGSL/volumetricLightingRenderVolume.fragment";
+import "@babylonjs/core/ShadersWGSL/volumetricLightingBlendVolume.fragment";
 
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
@@ -298,7 +311,12 @@ export class MmdManager {
             description: "Sharper highlights for glossy materials",
         },
     ];
-
+    private static readonly POST_EFFECT_LUT_PRESETS = [
+        { id: "none", label: "None" },
+        { id: "anime-soft", label: "Anime Soft" },
+        { id: "anime-cool", label: "Anime Cool" },
+        { id: "anime-dramatic", label: "Anime Dramatic" },
+    ] as const;
     private readonly renderingCanvas: HTMLCanvasElement;
     private engine: Engine | WebGPUEngine;
     private scene: Scene;
@@ -401,6 +419,36 @@ export class MmdManager {
     private postEffectChromaticAberrationValue = 0;
     private postEffectGrainIntensityValue = 0;
     private postEffectSharpenEdgeValue = 0;
+    private postEffectSsaoEnabledValue = false;
+    private postEffectSsaoStrengthValue = 1;
+    private postEffectSsaoRadiusValue = 2;
+    private postEffectColorCurvesEnabledValue = false;
+    private postEffectColorCurvesHueValue = 30;
+    private postEffectColorCurvesDensityValue = 0;
+    private postEffectColorCurvesSaturationValue = 0;
+    private postEffectColorCurvesExposureValue = 0;
+    private postEffectGlowEnabledValue = false;
+    private postEffectGlowIntensityValue = 0.5;
+    private postEffectGlowKernelValue = 32;
+    private postEffectLutEnabledValue = false;
+    private postEffectLutIntensityValue = 1;
+    private postEffectLutPresetValue = "none";
+    private postEffectMotionBlurEnabledValue = false;
+    private postEffectMotionBlurStrengthValue = 0.5;
+    private postEffectMotionBlurSamplesValue = 32;
+    private postEffectSsrEnabledValue = false;
+    private postEffectSsrStrengthValue = 0.8;
+    private postEffectSsrStepValue = 1;
+    private postEffectVlsEnabledValue = false;
+    private postEffectVlsExposureValue = 0.3;
+    private postEffectVlsDecayValue = 0.95;
+    private postEffectVlsWeightValue = 0.4;
+    private postEffectVlsDensityValue = 0.9;
+    private postEffectFogEnabledValue = false;
+    private postEffectFogModeValue = 0;
+    private postEffectFogStartValue = 20;
+    private postEffectFogEndValue = 100;
+    private postEffectFogDensityValue = 0.02;
     private antialiasEnabledValue = true;
     private postEffectFarDofStrengthValue = 0;
     private readonly farDofEnabled = false;
@@ -416,6 +464,17 @@ export class MmdManager {
     private depthRenderer: DepthRenderer | null = null;
     private defaultRenderingPipeline: DefaultRenderingPipeline | null = null;
     private lensRenderingPipeline: LensRenderingPipeline | null = null;
+    private ssaoRenderingPipeline: SSAO2RenderingPipeline | null = null;
+    private ssaoPostProcess: PostProcess | null = null;
+    private ssrRenderingPipeline: SSRRenderingPipeline | null = null;
+    private motionBlurPostProcess: PostProcess | null = null;
+    private motionBlurPreviousCameraPosition: Vector3 | null = null;
+    private motionBlurScreenDirection = new Vector2(0, 0);
+    private motionBlurScreenAmount = 0;
+    private volumetricLightPostProcess: VolumetricLightScatteringPostProcess | null = null;
+    private postEffectLutTexture: ColorGradingTexture | null = null;
+    private postEffectLutTextureKey: string | null = null;
+    private readonly postEffectLutPresetBlobUrlById = new Map<string, string>();
     private dofEnabledValue = false;
     private dofBlurLevelValue = DepthOfFieldEffectBlurLevel.Medium;
     private dofFocusDistanceMmValue = 55000;
@@ -638,6 +697,10 @@ export class MmdManager {
 
     public getWgslMaterialShaderPresets(): readonly WgslMaterialShaderPresetInfo[] {
         return MmdManager.WGSL_MATERIAL_SHADER_PRESETS;
+    }
+
+    public getPostEffectLutPresetOptions(): ReadonlyArray<{ id: string; label: string }> {
+        return MmdManager.POST_EFFECT_LUT_PRESETS;
     }
 
     public getWgslModelShaderStates(): WgslModelShaderInfo[] {
@@ -2232,6 +2295,7 @@ export class MmdManager {
             const deltaMs = Math.max(0, Math.min(100, nowMs - this.lastRenderTimestampMs));
             this.lastRenderTimestampMs = nowMs;
 
+            this.updateSimpleMotionBlurState(deltaMs);
             this.scene.render();
             if (!this._isPlaying) return;
 
@@ -3489,6 +3553,36 @@ export class MmdManager {
                 chromaticAberration: this.postEffectChromaticAberration,
                 grainIntensity: this.postEffectGrainIntensity,
                 sharpenEdge: this.postEffectSharpenEdge,
+                ssaoEnabled: this.postEffectSsaoEnabled,
+                ssaoStrength: this.postEffectSsaoStrength,
+                ssaoRadius: this.postEffectSsaoRadius,
+                colorCurvesEnabled: this.postEffectColorCurvesEnabled,
+                colorCurvesHue: this.postEffectColorCurvesHue,
+                colorCurvesDensity: this.postEffectColorCurvesDensity,
+                colorCurvesSaturation: this.postEffectColorCurvesSaturation,
+                colorCurvesExposure: this.postEffectColorCurvesExposure,
+                glowEnabled: this.postEffectGlowEnabled,
+                glowIntensity: this.postEffectGlowIntensity,
+                glowKernel: this.postEffectGlowKernel,
+                lutEnabled: this.postEffectLutEnabled,
+                lutIntensity: this.postEffectLutIntensity,
+                lutPreset: this.postEffectLutPreset,
+                motionBlurEnabled: this.postEffectMotionBlurEnabled,
+                motionBlurStrength: this.postEffectMotionBlurStrength,
+                motionBlurSamples: this.postEffectMotionBlurSamples,
+                ssrEnabled: this.postEffectSsrEnabled,
+                ssrStrength: this.postEffectSsrStrength,
+                ssrStep: this.postEffectSsrStep,
+                vlsEnabled: this.postEffectVlsEnabled,
+                vlsExposure: this.postEffectVlsExposure,
+                vlsDecay: this.postEffectVlsDecay,
+                vlsWeight: this.postEffectVlsWeight,
+                vlsDensity: this.postEffectVlsDensity,
+                fogEnabled: this.postEffectFogEnabled,
+                fogMode: this.postEffectFogMode,
+                fogStart: this.postEffectFogStart,
+                fogEnd: this.postEffectFogEnd,
+                fogDensity: this.postEffectFogDensity,
                 gammaEncodingVersion: 2,
             },
             keyframes,
@@ -3719,6 +3813,96 @@ export class MmdManager {
         this.postEffectSharpenEdge = typeof data.effects.sharpenEdge === "number" && Number.isFinite(data.effects.sharpenEdge)
             ? data.effects.sharpenEdge
             : 0;
+        this.postEffectSsaoStrength = typeof data.effects.ssaoStrength === "number" && Number.isFinite(data.effects.ssaoStrength)
+            ? data.effects.ssaoStrength
+            : 1;
+        this.postEffectSsaoRadius = typeof data.effects.ssaoRadius === "number" && Number.isFinite(data.effects.ssaoRadius)
+            ? data.effects.ssaoRadius
+            : 2;
+        this.postEffectSsaoEnabled = typeof data.effects.ssaoEnabled === "boolean"
+            ? data.effects.ssaoEnabled
+            : false;
+        this.postEffectColorCurvesEnabled = typeof data.effects.colorCurvesEnabled === "boolean"
+            ? data.effects.colorCurvesEnabled
+            : false;
+        this.postEffectColorCurvesHue = typeof data.effects.colorCurvesHue === "number" && Number.isFinite(data.effects.colorCurvesHue)
+            ? data.effects.colorCurvesHue
+            : 30;
+        this.postEffectColorCurvesDensity = typeof data.effects.colorCurvesDensity === "number" && Number.isFinite(data.effects.colorCurvesDensity)
+            ? data.effects.colorCurvesDensity
+            : 0;
+        this.postEffectColorCurvesSaturation = typeof data.effects.colorCurvesSaturation === "number" && Number.isFinite(data.effects.colorCurvesSaturation)
+            ? data.effects.colorCurvesSaturation
+            : 0;
+        this.postEffectColorCurvesExposure = typeof data.effects.colorCurvesExposure === "number" && Number.isFinite(data.effects.colorCurvesExposure)
+            ? data.effects.colorCurvesExposure
+            : 0;
+        this.postEffectGlowEnabled = typeof data.effects.glowEnabled === "boolean"
+            ? data.effects.glowEnabled
+            : false;
+        this.postEffectGlowIntensity = typeof data.effects.glowIntensity === "number" && Number.isFinite(data.effects.glowIntensity)
+            ? data.effects.glowIntensity
+            : 0.5;
+        this.postEffectGlowKernel = typeof data.effects.glowKernel === "number" && Number.isFinite(data.effects.glowKernel)
+            ? data.effects.glowKernel
+            : 32;
+        this.postEffectLutPreset = typeof data.effects.lutPreset === "string"
+            ? data.effects.lutPreset
+            : "none";
+        this.postEffectLutIntensity = typeof data.effects.lutIntensity === "number" && Number.isFinite(data.effects.lutIntensity)
+            ? data.effects.lutIntensity
+            : 1;
+        this.postEffectLutEnabled = typeof data.effects.lutEnabled === "boolean"
+            ? data.effects.lutEnabled
+            : false;
+        this.postEffectMotionBlurStrength = typeof data.effects.motionBlurStrength === "number" && Number.isFinite(data.effects.motionBlurStrength)
+            ? data.effects.motionBlurStrength
+            : 0.5;
+        this.postEffectMotionBlurSamples = typeof data.effects.motionBlurSamples === "number" && Number.isFinite(data.effects.motionBlurSamples)
+            ? data.effects.motionBlurSamples
+            : 32;
+        this.postEffectMotionBlurEnabled = typeof data.effects.motionBlurEnabled === "boolean"
+            ? data.effects.motionBlurEnabled
+            : false;
+        this.postEffectSsrStrength = typeof data.effects.ssrStrength === "number" && Number.isFinite(data.effects.ssrStrength)
+            ? data.effects.ssrStrength
+            : 0.8;
+        this.postEffectSsrStep = typeof data.effects.ssrStep === "number" && Number.isFinite(data.effects.ssrStep)
+            ? data.effects.ssrStep
+            : 1;
+        this.postEffectSsrEnabled = typeof data.effects.ssrEnabled === "boolean"
+            ? data.effects.ssrEnabled
+            : false;
+        this.postEffectVlsExposure = typeof data.effects.vlsExposure === "number" && Number.isFinite(data.effects.vlsExposure)
+            ? data.effects.vlsExposure
+            : 0.3;
+        this.postEffectVlsDecay = typeof data.effects.vlsDecay === "number" && Number.isFinite(data.effects.vlsDecay)
+            ? data.effects.vlsDecay
+            : 0.95;
+        this.postEffectVlsWeight = typeof data.effects.vlsWeight === "number" && Number.isFinite(data.effects.vlsWeight)
+            ? data.effects.vlsWeight
+            : 0.4;
+        this.postEffectVlsDensity = typeof data.effects.vlsDensity === "number" && Number.isFinite(data.effects.vlsDensity)
+            ? data.effects.vlsDensity
+            : 0.9;
+        this.postEffectVlsEnabled = typeof data.effects.vlsEnabled === "boolean"
+            ? data.effects.vlsEnabled
+            : false;
+        this.postEffectFogMode = typeof data.effects.fogMode === "number" && Number.isFinite(data.effects.fogMode)
+            ? data.effects.fogMode
+            : 0;
+        this.postEffectFogStart = typeof data.effects.fogStart === "number" && Number.isFinite(data.effects.fogStart)
+            ? data.effects.fogStart
+            : 20;
+        this.postEffectFogEnd = typeof data.effects.fogEnd === "number" && Number.isFinite(data.effects.fogEnd)
+            ? data.effects.fogEnd
+            : 100;
+        this.postEffectFogDensity = typeof data.effects.fogDensity === "number" && Number.isFinite(data.effects.fogDensity)
+            ? data.effects.fogDensity
+            : 0.02;
+        this.postEffectFogEnabled = typeof data.effects.fogEnabled === "boolean"
+            ? data.effects.fogEnabled
+            : false;
 
         this.camera.setPosition(
             new Vector3(
@@ -3820,6 +4004,24 @@ export class MmdManager {
 
     private isWebGpuEngine(): boolean {
         return this.engine instanceof WebGPUEngine;
+    }
+
+    private hasPrePassRendererSupport(): boolean {
+        if (this.isWebGpuEngine()) {
+            // WebGPU compatibility mode in Babylon 8.45.3 can expose prepass APIs
+            // while MRT allocation still fails at runtime. Keep prepass off.
+            return false;
+        }
+        const hasEnableFn = typeof (this.scene as Scene & { enablePrePassRenderer?: () => unknown }).enablePrePassRenderer === "function";
+        const hasMrtFn = typeof (this.engine as Engine & { createMultipleRenderTarget?: unknown }).createMultipleRenderTarget === "function";
+        return hasEnableFn && hasMrtFn;
+    }
+
+    private disablePrePassRendererIfSupported(): void {
+        const sceneWithPrePass = this.scene as Scene & { disablePrePassRenderer?: () => void };
+        if (typeof sceneWithPrePass.disablePrePassRenderer === "function") {
+            sceneWithPrePass.disablePrePassRenderer();
+        }
     }
 
     private getPostProcessShaderLanguage(): ShaderLanguage {
@@ -4042,7 +4244,279 @@ export class MmdManager {
         this.postEffectSharpenEdgeValue = Math.max(0, Math.min(4, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
+    /** SSAO2 enabled state. */
+    get postEffectSsaoEnabled(): boolean {
+        return this.postEffectSsaoEnabledValue;
+    }
+    set postEffectSsaoEnabled(v: boolean) {
+        this.postEffectSsaoEnabledValue = Boolean(v);
+        this.applySsaoSettings();
+    }
+    /** SSAO2 intensity (0.0..4.0). */
+    get postEffectSsaoStrength(): number {
+        return this.postEffectSsaoStrengthValue;
+    }
+    set postEffectSsaoStrength(v: number) {
+        this.postEffectSsaoStrengthValue = Math.max(0, Math.min(4, v));
+        this.applySsaoSettings();
+    }
+    /** SSAO2 sampling radius (0.01..6.0). */
+    get postEffectSsaoRadius(): number {
+        return this.postEffectSsaoRadiusValue;
+    }
+    set postEffectSsaoRadius(v: number) {
+        this.postEffectSsaoRadiusValue = Math.max(0.01, Math.min(6, v));
+        this.applySsaoSettings();
+    }
 
+    /** Color curves enabled state. */
+    get postEffectColorCurvesEnabled(): boolean {
+        return this.postEffectColorCurvesEnabledValue;
+    }
+    set postEffectColorCurvesEnabled(v: boolean) {
+        this.postEffectColorCurvesEnabledValue = Boolean(v);
+        this.applyImageProcessingSettings();
+    }
+
+    /** Color curves hue (0..360). */
+    get postEffectColorCurvesHue(): number {
+        return this.postEffectColorCurvesHueValue;
+    }
+    set postEffectColorCurvesHue(v: number) {
+        this.postEffectColorCurvesHueValue = Math.max(0, Math.min(360, v));
+        this.applyImageProcessingSettings();
+    }
+
+    /** Color curves density (-100..100). */
+    get postEffectColorCurvesDensity(): number {
+        return this.postEffectColorCurvesDensityValue;
+    }
+    set postEffectColorCurvesDensity(v: number) {
+        this.postEffectColorCurvesDensityValue = Math.max(-100, Math.min(100, v));
+        this.applyImageProcessingSettings();
+    }
+
+    /** Color curves saturation (-100..100). */
+    get postEffectColorCurvesSaturation(): number {
+        return this.postEffectColorCurvesSaturationValue;
+    }
+    set postEffectColorCurvesSaturation(v: number) {
+        this.postEffectColorCurvesSaturationValue = Math.max(-100, Math.min(100, v));
+        this.applyImageProcessingSettings();
+    }
+
+    /** Color curves exposure (-100..100). */
+    get postEffectColorCurvesExposure(): number {
+        return this.postEffectColorCurvesExposureValue;
+    }
+    set postEffectColorCurvesExposure(v: number) {
+        this.postEffectColorCurvesExposureValue = Math.max(-100, Math.min(100, v));
+        this.applyImageProcessingSettings();
+    }
+
+    /** Glow enabled state. */
+    get postEffectGlowEnabled(): boolean {
+        return this.postEffectGlowEnabledValue;
+    }
+    set postEffectGlowEnabled(v: boolean) {
+        this.postEffectGlowEnabledValue = Boolean(v);
+        this.applyDefaultPipelinePostProcessSettings();
+    }
+
+    /** Glow intensity (0..4). */
+    get postEffectGlowIntensity(): number {
+        return this.postEffectGlowIntensityValue;
+    }
+    set postEffectGlowIntensity(v: number) {
+        this.postEffectGlowIntensityValue = Math.max(0, Math.min(4, v));
+        this.applyDefaultPipelinePostProcessSettings();
+    }
+
+    /** Glow kernel size (1..256). */
+    get postEffectGlowKernel(): number {
+        return this.postEffectGlowKernelValue;
+    }
+    set postEffectGlowKernel(v: number) {
+        this.postEffectGlowKernelValue = Math.max(1, Math.min(256, Math.round(v)));
+        this.applyDefaultPipelinePostProcessSettings();
+    }
+
+    /** LUT enabled state. */
+    get postEffectLutEnabled(): boolean {
+        return this.postEffectLutEnabledValue;
+    }
+    set postEffectLutEnabled(v: boolean) {
+        this.postEffectLutEnabledValue = Boolean(v);
+        this.applyImageProcessingSettings();
+    }
+
+    /** LUT intensity (0..2). */
+    get postEffectLutIntensity(): number {
+        return this.postEffectLutIntensityValue;
+    }
+    set postEffectLutIntensity(v: number) {
+        this.postEffectLutIntensityValue = Math.max(0, Math.min(2, v));
+        this.applyImageProcessingSettings();
+    }
+
+    /** LUT preset id. */
+    get postEffectLutPreset(): string {
+        return this.postEffectLutPresetValue;
+    }
+    set postEffectLutPreset(v: string) {
+        const normalized = typeof v === "string" ? v.trim().toLowerCase() : "none";
+        this.postEffectLutPresetValue = MmdManager.POST_EFFECT_LUT_PRESETS.some((preset) => preset.id === normalized)
+            ? normalized
+            : "none";
+        this.applyImageProcessingSettings();
+    }
+
+    /** Motion blur enabled state. */
+    get postEffectMotionBlurEnabled(): boolean {
+        return this.postEffectMotionBlurEnabledValue;
+    }
+    set postEffectMotionBlurEnabled(v: boolean) {
+        this.postEffectMotionBlurEnabledValue = Boolean(v);
+        this.applyMotionBlurSettings();
+    }
+
+    /** Motion blur strength (0..2). */
+    get postEffectMotionBlurStrength(): number {
+        return this.postEffectMotionBlurStrengthValue;
+    }
+    set postEffectMotionBlurStrength(v: number) {
+        this.postEffectMotionBlurStrengthValue = Math.max(0, Math.min(2, v));
+        this.applyMotionBlurSettings();
+    }
+
+    /** Motion blur sample count (8..64). */
+    get postEffectMotionBlurSamples(): number {
+        return this.postEffectMotionBlurSamplesValue;
+    }
+    set postEffectMotionBlurSamples(v: number) {
+        this.postEffectMotionBlurSamplesValue = Math.max(8, Math.min(64, Math.round(v)));
+        this.applyMotionBlurSettings();
+    }
+
+    /** SSR enabled state. */
+    get postEffectSsrEnabled(): boolean {
+        return this.postEffectSsrEnabledValue;
+    }
+    set postEffectSsrEnabled(v: boolean) {
+        this.postEffectSsrEnabledValue = Boolean(v);
+        this.applySsrSettings();
+    }
+
+    /** SSR reflection strength (0..2). */
+    get postEffectSsrStrength(): number {
+        return this.postEffectSsrStrengthValue;
+    }
+    set postEffectSsrStrength(v: number) {
+        this.postEffectSsrStrengthValue = Math.max(0, Math.min(2, v));
+        this.applySsrSettings();
+    }
+
+    /** SSR step size (1..8). */
+    get postEffectSsrStep(): number {
+        return this.postEffectSsrStepValue;
+    }
+    set postEffectSsrStep(v: number) {
+        this.postEffectSsrStepValue = Math.max(1, Math.min(8, Math.round(v)));
+        this.applySsrSettings();
+    }
+
+    /** Volumetric light enabled state. */
+    get postEffectVlsEnabled(): boolean {
+        return this.postEffectVlsEnabledValue;
+    }
+    set postEffectVlsEnabled(v: boolean) {
+        this.postEffectVlsEnabledValue = Boolean(v);
+        this.applyVolumetricLightSettings();
+    }
+
+    /** Volumetric light exposure (0..2). */
+    get postEffectVlsExposure(): number {
+        return this.postEffectVlsExposureValue;
+    }
+    set postEffectVlsExposure(v: number) {
+        this.postEffectVlsExposureValue = Math.max(0, Math.min(2, v));
+        this.applyVolumetricLightSettings();
+    }
+
+    /** Volumetric light decay (0..1). */
+    get postEffectVlsDecay(): number {
+        return this.postEffectVlsDecayValue;
+    }
+    set postEffectVlsDecay(v: number) {
+        this.postEffectVlsDecayValue = Math.max(0, Math.min(1, v));
+        this.applyVolumetricLightSettings();
+    }
+
+    /** Volumetric light weight (0..1). */
+    get postEffectVlsWeight(): number {
+        return this.postEffectVlsWeightValue;
+    }
+    set postEffectVlsWeight(v: number) {
+        this.postEffectVlsWeightValue = Math.max(0, Math.min(1, v));
+        this.applyVolumetricLightSettings();
+    }
+
+    /** Volumetric light density (0..2). */
+    get postEffectVlsDensity(): number {
+        return this.postEffectVlsDensityValue;
+    }
+    set postEffectVlsDensity(v: number) {
+        this.postEffectVlsDensityValue = Math.max(0, Math.min(2, v));
+        this.applyVolumetricLightSettings();
+    }
+
+    /** Fog enabled state. */
+    get postEffectFogEnabled(): boolean {
+        return this.postEffectFogEnabledValue;
+    }
+    set postEffectFogEnabled(v: boolean) {
+        this.postEffectFogEnabledValue = Boolean(v);
+        this.applyFogSettings();
+    }
+
+    /** Fog mode (0=Linear, 1=Exp, 2=Exp2). */
+    get postEffectFogMode(): number {
+        return this.postEffectFogModeValue;
+    }
+    set postEffectFogMode(v: number) {
+        this.postEffectFogModeValue = Math.max(0, Math.min(2, Math.round(v)));
+        this.applyFogSettings();
+    }
+
+    /** Fog start distance for linear mode. */
+    get postEffectFogStart(): number {
+        return this.postEffectFogStartValue;
+    }
+    set postEffectFogStart(v: number) {
+        this.postEffectFogStartValue = Math.max(0, Math.min(100000, v));
+        if (this.postEffectFogEndValue < this.postEffectFogStartValue + 0.01) {
+            this.postEffectFogEndValue = this.postEffectFogStartValue + 0.01;
+        }
+        this.applyFogSettings();
+    }
+
+    /** Fog end distance for linear mode. */
+    get postEffectFogEnd(): number {
+        return this.postEffectFogEndValue;
+    }
+    set postEffectFogEnd(v: number) {
+        this.postEffectFogEndValue = Math.max(this.postEffectFogStartValue + 0.01, Math.min(100000, v));
+        this.applyFogSettings();
+    }
+
+    /** Fog density for exponential modes. */
+    get postEffectFogDensity(): number {
+        return this.postEffectFogDensityValue;
+    }
+    set postEffectFogDensity(v: number) {
+        this.postEffectFogDensityValue = Math.max(0, Math.min(2, v));
+        this.applyFogSettings();
+    }
     /** Post-process anti-aliasing enabled state. */
     get antialiasEnabled(): boolean {
         return this.antialiasEnabledValue;
@@ -4353,6 +4827,7 @@ export class MmdManager {
         // Move light source opposite to direction for good shadow coverage
         const dist = 60;
         this.dirLight.position = new Vector3(-x * dist, Math.abs(y) * dist + 5, -z * dist);
+        this.updateVolumetricLightPosition();
     }
 
     /** Current azimuth of directional light (degrees) */
@@ -4424,6 +4899,27 @@ export class MmdManager {
             if (this.lensRenderingPipeline) {
                 this.lensRenderingPipeline.dispose(false);
                 this.lensRenderingPipeline = null;
+            }
+            if (this.ssaoRenderingPipeline) {
+                this.ssaoRenderingPipeline.dispose(true);
+                this.ssaoRenderingPipeline = null;
+            }
+            if (this.ssaoPostProcess) {
+                this.ssaoPostProcess.dispose(this.camera);
+                this.ssaoPostProcess = null;
+            }
+            if (this.ssrRenderingPipeline) {
+                this.ssrRenderingPipeline.dispose(false);
+                this.ssrRenderingPipeline = null;
+            }
+            this.disablePrePassRendererIfSupported();
+            if (this.motionBlurPostProcess) {
+                this.motionBlurPostProcess.dispose(this.camera);
+                this.motionBlurPostProcess = null;
+            }
+            if (this.volumetricLightPostProcess) {
+                this.volumetricLightPostProcess.dispose(this.camera);
+                this.volumetricLightPostProcess = null;
             }
             if (this.defaultRenderingPipeline) {
                 this.defaultRenderingPipeline.dispose();
@@ -4504,6 +5000,27 @@ export class MmdManager {
             this.lensRenderingPipeline.dispose(false);
             this.lensRenderingPipeline = null;
         }
+        if (this.ssaoRenderingPipeline) {
+            this.ssaoRenderingPipeline.dispose(true);
+            this.ssaoRenderingPipeline = null;
+        }
+        if (this.ssaoPostProcess) {
+            this.ssaoPostProcess.dispose(this.camera);
+            this.ssaoPostProcess = null;
+        }
+        if (this.ssrRenderingPipeline) {
+            this.ssrRenderingPipeline.dispose(false);
+            this.ssrRenderingPipeline = null;
+        }
+        this.disablePrePassRendererIfSupported();
+        if (this.motionBlurPostProcess) {
+            this.motionBlurPostProcess.dispose(this.camera);
+            this.motionBlurPostProcess = null;
+        }
+        if (this.volumetricLightPostProcess) {
+            this.volumetricLightPostProcess.dispose(this.camera);
+            this.volumetricLightPostProcess = null;
+        }
 
         this.defaultRenderingPipeline = new DefaultRenderingPipeline(
             "DefaultRenderingPipeline",
@@ -4517,6 +5034,9 @@ export class MmdManager {
         this.defaultRenderingPipeline.glowLayerEnabled = false;
         this.applyImageProcessingSettings();
         this.applyDefaultPipelinePostProcessSettings();
+        this.applySsaoSettings();
+        this.applySsrSettings();
+        this.applyFogSettings();
 
         this.configureDofDepthRenderer();
         if (this.dofLensDistortionFollowsCameraFov) {
@@ -4527,6 +5047,9 @@ export class MmdManager {
         this.applyEditorDofSettings();
         this.setupFinalLensDistortionPostProcess();
         this.applyAntialiasSettings();
+        this.applyVolumetricLightSettings();
+        this.applyMotionBlurSettings();
+        this.enforceFinalPostProcessOrder();
     }
 
     private isImageProcessingEffectsEnabled(): boolean {
@@ -4534,6 +5057,8 @@ export class MmdManager {
         return this.postEffectToneMappingEnabledValue
             || this.postEffectDitheringEnabledValue
             || this.postEffectVignetteEnabledValue
+            || this.postEffectColorCurvesEnabledValue
+            || (this.postEffectLutEnabledValue && this.postEffectLutPresetValue !== "none")
             || Math.abs(this.postEffectExposureValue - 1) > epsilon;
     }
 
@@ -4548,6 +5073,18 @@ export class MmdManager {
         imageProcessing.vignetteWeight = this.postEffectVignetteWeightValue;
         imageProcessing.vignetteColor.set(0, 0, 0, 1);
 
+        if (this.postEffectColorCurvesEnabledValue) {
+            if (!imageProcessing.colorCurves) {
+                imageProcessing.colorCurves = new ColorCurves();
+            }
+            imageProcessing.colorCurves.globalHue = this.postEffectColorCurvesHueValue;
+            imageProcessing.colorCurves.globalDensity = this.postEffectColorCurvesDensityValue;
+            imageProcessing.colorCurves.globalSaturation = this.postEffectColorCurvesSaturationValue;
+            imageProcessing.colorCurves.globalExposure = this.postEffectColorCurvesExposureValue;
+        }
+        imageProcessing.colorCurvesEnabled = this.postEffectColorCurvesEnabledValue;
+        this.applyLutSettings();
+
         const shouldEnable = this.isImageProcessingEffectsEnabled();
         const pipeline = this.defaultRenderingPipeline;
         if (pipeline) {
@@ -4555,6 +5092,145 @@ export class MmdManager {
         } else {
             this.scene.imageProcessingConfiguration.isEnabled = shouldEnable;
         }
+    }
+
+    private applyLutSettings(): void {
+        const imageProcessing = this.scene.imageProcessingConfiguration;
+        const key = this.postEffectLutPresetValue;
+        const enabled = this.postEffectLutEnabledValue && key !== "none";
+        if (!enabled) {
+            imageProcessing.colorGradingEnabled = false;
+            imageProcessing.colorGradingTexture = null;
+            if (this.postEffectLutTexture) {
+                this.postEffectLutTexture.dispose();
+                this.postEffectLutTexture = null;
+            }
+            this.postEffectLutTextureKey = null;
+            return;
+        }
+
+        if (!this.postEffectLutTexture || this.postEffectLutTextureKey !== key) {
+            if (this.postEffectLutTexture) {
+                this.postEffectLutTexture.dispose();
+                this.postEffectLutTexture = null;
+            }
+            try {
+                const lutUrl = this.getOrCreateLutPresetBlobUrl(key);
+                this.postEffectLutTexture = new ColorGradingTexture(lutUrl, this.scene);
+                this.postEffectLutTextureKey = key;
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.warn(`Failed to create LUT preset '${key}': ${message}`);
+                imageProcessing.colorGradingEnabled = false;
+                imageProcessing.colorGradingTexture = null;
+                this.postEffectLutTexture = null;
+                this.postEffectLutTextureKey = null;
+                return;
+            }
+        }
+
+        if (!this.postEffectLutTexture) {
+            imageProcessing.colorGradingEnabled = false;
+            imageProcessing.colorGradingTexture = null;
+            return;
+        }
+
+        this.postEffectLutTexture.level = this.postEffectLutIntensityValue;
+        imageProcessing.colorGradingTexture = this.postEffectLutTexture;
+        imageProcessing.colorGradingEnabled = true;
+    }
+
+    private getOrCreateLutPresetBlobUrl(presetId: string): string {
+        const existing = this.postEffectLutPresetBlobUrlById.get(presetId);
+        if (existing) {
+            return existing;
+        }
+
+        const lutText = this.buildLut3dlText(presetId);
+        const blob = new Blob([lutText], { type: "text/plain" });
+        const blobUrl = URL.createObjectURL(blob);
+        this.postEffectLutPresetBlobUrlById.set(presetId, blobUrl);
+        return blobUrl;
+    }
+
+    private buildLut3dlText(presetId: string): string {
+        const size = 16;
+        const maxValue = 4095;
+        const lines: string[] = [];
+        lines.push(Array.from({ length: size }, (_, i) => String(i)).join(" "));
+
+        for (let r = 0; r < size; r += 1) {
+            for (let g = 0; g < size; g += 1) {
+                for (let b = 0; b < size; b += 1) {
+                    const color = this.transformLutColor(
+                        presetId,
+                        r / (size - 1),
+                        g / (size - 1),
+                        b / (size - 1),
+                    );
+                    const rr = Math.round(Math.max(0, Math.min(1, color.r)) * maxValue);
+                    const gg = Math.round(Math.max(0, Math.min(1, color.g)) * maxValue);
+                    const bb = Math.round(Math.max(0, Math.min(1, color.b)) * maxValue);
+                    lines.push(`${rr} ${gg} ${bb}`);
+                }
+            }
+        }
+
+        return lines.join("\n");
+    }
+
+    private transformLutColor(presetId: string, r: number, g: number, b: number): { r: number; g: number; b: number } {
+        let outR = r;
+        let outG = g;
+        let outB = b;
+
+        const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+        const applySaturation = (saturationScale: number): void => {
+            const luma = outR * 0.2126 + outG * 0.7152 + outB * 0.0722;
+            outR = luma + (outR - luma) * saturationScale;
+            outG = luma + (outG - luma) * saturationScale;
+            outB = luma + (outB - luma) * saturationScale;
+        };
+        const applyContrast = (contrastScale: number): void => {
+            outR = (outR - 0.5) * contrastScale + 0.5;
+            outG = (outG - 0.5) * contrastScale + 0.5;
+            outB = (outB - 0.5) * contrastScale + 0.5;
+        };
+
+        switch (presetId) {
+            case "anime-soft": {
+                applyContrast(1.04);
+                applySaturation(1.14);
+                outR += 0.04;
+                outG += 0.015;
+                outB -= 0.03;
+                break;
+            }
+            case "anime-cool": {
+                applyContrast(1.05);
+                applySaturation(1.1);
+                outR -= 0.02;
+                outG += 0.015;
+                outB += 0.05;
+                break;
+            }
+            case "anime-dramatic": {
+                applyContrast(1.14);
+                applySaturation(1.22);
+                outR += 0.03;
+                outG -= 0.01;
+                outB += 0.015;
+                break;
+            }
+            default:
+                break;
+        }
+
+        return {
+            r: clamp01(outR),
+            g: clamp01(outG),
+            b: clamp01(outB),
+        };
     }
 
     private applyDefaultPipelinePostProcessSettings(): void {
@@ -4567,6 +5243,12 @@ export class MmdManager {
         pipeline.bloomWeight = this.postEffectBloomWeightValue;
         pipeline.bloomThreshold = this.postEffectBloomThresholdValue;
         pipeline.bloomKernel = this.postEffectBloomKernelValue;
+
+        pipeline.glowLayerEnabled = this.postEffectGlowEnabledValue;
+        if (pipeline.glowLayer) {
+            pipeline.glowLayer.intensity = this.postEffectGlowIntensityValue;
+            pipeline.glowLayer.blurKernelSize = this.postEffectGlowKernelValue;
+        }
 
         pipeline.chromaticAberrationEnabled = this.postEffectChromaticAberrationValue > 1e-4;
         if (pipeline.chromaticAberration) {
@@ -4589,6 +5271,818 @@ export class MmdManager {
             this.configureDofDepthRenderer();
             this.applyEditorDofSettings();
         }
+    }
+
+    private applySsaoSettings(): void {
+        if (!this.postEffectSsaoEnabledValue) {
+            if (this.ssaoRenderingPipeline) {
+                this.ssaoRenderingPipeline.dispose(true);
+                this.ssaoRenderingPipeline = null;
+            }
+            this.disablePrePassRendererIfSupported();
+            if (this.ssaoPostProcess) {
+                this.ssaoPostProcess.dispose(this.camera);
+                this.ssaoPostProcess = null;
+            }
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+
+        const canUseSsaoPipeline = this.hasPrePassRendererSupport() && SSAO2RenderingPipeline.IsSupported;
+        if (canUseSsaoPipeline) {
+            if (this.ssaoPostProcess) {
+                this.ssaoPostProcess.dispose(this.camera);
+                this.ssaoPostProcess = null;
+            }
+
+            if (!this.ssaoRenderingPipeline) {
+                try {
+                    this.ssaoRenderingPipeline = new SSAO2RenderingPipeline(
+                        "SsaoRenderingPipeline",
+                        this.scene,
+                        { ssaoRatio: 0.75, blurRatio: 0.75 },
+                        [this.camera],
+                    );
+                    this.ssaoRenderingPipeline.samples = 16;
+                    this.ssaoRenderingPipeline.textureSamples = 1;
+                    this.ssaoRenderingPipeline.expensiveBlur = true;
+                    this.ssaoRenderingPipeline.bilateralSamples = 16;
+                    this.ssaoRenderingPipeline.bilateralSoften = 0.25;
+                    this.ssaoRenderingPipeline.bilateralTolerance = 0.15;
+                    this.ssaoRenderingPipeline.base = 0;
+                } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    console.warn(`SSAO2 pipeline initialization failed on ${this.getEngineType()}. Switching to screen-space SSAO fallback. Reason: ${message}`);
+                    this.ssaoRenderingPipeline = null;
+                }
+            }
+
+            if (this.ssaoRenderingPipeline) {
+                this.ssaoRenderingPipeline.totalStrength = this.postEffectSsaoStrengthValue * 2.2;
+                this.ssaoRenderingPipeline.radius = this.postEffectSsaoRadiusValue;
+                this.ssaoRenderingPipeline.maxZ = Math.max(50, Math.min(2000, this.camera.radius * 12));
+                this.ssaoRenderingPipeline.minZAspect = 0.2;
+                this.ssaoRenderingPipeline.epsilon = 0.02;
+                this.enforceFinalPostProcessOrder();
+                return;
+            }
+        }
+
+        if (this.ssaoRenderingPipeline) {
+            this.ssaoRenderingPipeline.dispose(true);
+            this.ssaoRenderingPipeline = null;
+        }
+        this.disablePrePassRendererIfSupported();
+
+        if (!this.depthRenderer) {
+            this.configureDofDepthRenderer();
+        }
+        const initialDepthMap = this.depthRenderer?.getDepthMap();
+        if (!initialDepthMap) {
+            this.postEffectSsaoEnabledValue = false;
+            if (this.ssaoPostProcess) {
+                this.ssaoPostProcess.dispose(this.camera);
+                this.ssaoPostProcess = null;
+            }
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+
+        if (!this.ssaoPostProcess) {
+            this.ensureSimpleSsaoShader();
+            this.ssaoPostProcess = new PostProcess(
+                "ssaoFallback",
+                "mmdSimpleSsao",
+                {
+                    uniforms: ["ssaoStrength", "ssaoRadius", "screenSize", "cameraNearFar", "inverseViewProjection", "worldFadeMeters"],
+                    samplers: ["depthSampler"],
+                    size: 1.0,
+                    camera: this.camera,
+                    samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                    engine: this.engine,
+                    reusable: false,
+                    shaderLanguage: this.getPostProcessShaderLanguage(),
+                },
+            );
+            this.ssaoPostProcess.autoClear = false;
+            this.ssaoPostProcess.onApplyObservable.add((effect) => {
+                const depthMap = this.depthRenderer?.getDepthMap() ?? initialDepthMap;
+                effect.setTexture("depthSampler", depthMap);
+                effect.setFloat("ssaoStrength", this.postEffectSsaoStrengthValue);
+                effect.setFloat("ssaoRadius", this.postEffectSsaoRadiusValue);
+                effect.setFloat2(
+                    "screenSize",
+                    Math.max(1, this.engine.getRenderWidth()),
+                    Math.max(1, this.engine.getRenderHeight()),
+                );
+                effect.setFloat2("cameraNearFar", this.camera.minZ, this.camera.maxZ);
+                const inverseViewProjection = this.camera.getTransformationMatrix().clone();
+                inverseViewProjection.invert();
+                effect.setMatrix("inverseViewProjection", inverseViewProjection);
+                effect.setFloat2("worldFadeMeters", 10.0, 14.0);
+            });
+        }
+
+        this.enforceFinalPostProcessOrder();
+    }
+
+    private applySsrSettings(): void {
+        if (!this.postEffectSsrEnabledValue) {
+            if (this.ssrRenderingPipeline) {
+                this.ssrRenderingPipeline.dispose(false);
+                this.ssrRenderingPipeline = null;
+            }
+            this.disablePrePassRendererIfSupported();
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+
+        if (!this.hasPrePassRendererSupport()) {
+            if (this.ssrRenderingPipeline) {
+                this.ssrRenderingPipeline.dispose(false);
+                this.ssrRenderingPipeline = null;
+            }
+            this.disablePrePassRendererIfSupported();
+            this.postEffectSsrEnabledValue = false;
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+
+        if (!this.ssrRenderingPipeline) {
+            try {
+                this.ssrRenderingPipeline = new SSRRenderingPipeline(
+                    "SsrRenderingPipeline",
+                    this.scene,
+                    [this.camera],
+                    false,
+                );
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.warn(`SSR pipeline initialization failed on ${this.getEngineType()}. SSR was disabled. Reason: ${message}`);
+                this.postEffectSsrEnabledValue = false;
+                this.ssrRenderingPipeline = null;
+                this.enforceFinalPostProcessOrder();
+                return;
+            }
+        }
+
+        if (!this.ssrRenderingPipeline || !this.ssrRenderingPipeline.isSupported) {
+            if (this.ssrRenderingPipeline) {
+                this.ssrRenderingPipeline.dispose(false);
+                this.ssrRenderingPipeline = null;
+            }
+            this.disablePrePassRendererIfSupported();
+            this.postEffectSsrEnabledValue = false;
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+
+        this.ssrRenderingPipeline.isEnabled = true;
+        this.ssrRenderingPipeline.samples = 1;
+        this.ssrRenderingPipeline.strength = this.postEffectSsrStrengthValue;
+        this.ssrRenderingPipeline.step = this.postEffectSsrStepValue;
+        this.ssrRenderingPipeline.maxDistance = 1000;
+        this.ssrRenderingPipeline.maxSteps = 64;
+        this.ssrRenderingPipeline.thickness = 0.2;
+        this.ssrRenderingPipeline.roughnessFactor = 0;
+        this.ssrRenderingPipeline.blurDispersionStrength = 0;
+        this.ssrRenderingPipeline.enableSmoothReflections = this.postEffectSsrStepValue > 1;
+        this.enforceFinalPostProcessOrder();
+    }
+
+    private applyMotionBlurSettings(): void {
+        const postProcesses = [...this.camera._postProcesses];
+        for (const postProcess of postProcesses) {
+            if (postProcess && postProcess !== this.motionBlurPostProcess && postProcess.name === "motionBlur") {
+                this.camera.detachPostProcess(postProcess);
+                postProcess.dispose(this.camera);
+            }
+        }
+
+        if (!this.postEffectMotionBlurEnabledValue) {
+            if (this.motionBlurPostProcess) {
+                this.motionBlurPostProcess.dispose(this.camera);
+                this.motionBlurPostProcess = null;
+            }
+            this.motionBlurPreviousCameraPosition = null;
+            this.motionBlurScreenDirection.set(0, 0);
+            this.motionBlurScreenAmount = 0;
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+
+        if (!this.motionBlurPostProcess) {
+            this.ensureSimpleMotionBlurShader();
+            this.motionBlurPostProcess = new PostProcess(
+                "motionBlur",
+                "mmdSimpleMotionBlur",
+                {
+                    uniforms: ["blurDirection", "blurAmount"],
+                    size: 1.0,
+                    camera: this.camera,
+                    samplingMode: Texture.BILINEAR_SAMPLINGMODE,
+                    engine: this.engine,
+                    reusable: false,
+                    shaderLanguage: this.getPostProcessShaderLanguage(),
+                },
+            );
+            this.motionBlurPostProcess.onApplyObservable.add((effect) => {
+                const sampleScale = Math.max(0.25, Math.min(2, this.postEffectMotionBlurSamplesValue / 32));
+                const blurAmount = this.motionBlurScreenAmount * this.postEffectMotionBlurStrengthValue * sampleScale;
+                effect.setFloat2("blurDirection", this.motionBlurScreenDirection.x, this.motionBlurScreenDirection.y);
+                effect.setFloat("blurAmount", blurAmount);
+            });
+            this.motionBlurPreviousCameraPosition = null;
+            this.motionBlurScreenDirection.set(0, 0);
+            this.motionBlurScreenAmount = 0;
+        }
+
+        this.enforceFinalPostProcessOrder();
+    }
+
+    private updateVolumetricLightPosition(): void {
+        if (!this.volumetricLightPostProcess || !this.dirLight) {
+            return;
+        }
+        const position = this.dirLight.position;
+        this.volumetricLightPostProcess.useCustomMeshPosition = true;
+        this.volumetricLightPostProcess.setCustomMeshPosition(position.clone());
+        if (this.volumetricLightPostProcess.mesh) {
+            this.volumetricLightPostProcess.mesh.position.copyFrom(position);
+        }
+    }
+
+    private applyVolumetricLightSettings(): void {
+        if (!this.postEffectVlsEnabledValue || !this.dirLight) {
+            if (this.volumetricLightPostProcess) {
+                this.volumetricLightPostProcess.dispose(this.camera);
+                this.volumetricLightPostProcess = null;
+            }
+            this.enforceFinalPostProcessOrder();
+            return;
+        }
+
+        if (!this.volumetricLightPostProcess) {
+            try {
+                this.volumetricLightPostProcess = new VolumetricLightScatteringPostProcess(
+                    "volumetricLight",
+                    1.0,
+                    this.camera,
+                    undefined,
+                    100,
+                    Texture.BILINEAR_SAMPLINGMODE,
+                    this.engine,
+                    false,
+                    this.scene,
+                );
+                this.volumetricLightPostProcess.autoClear = false;
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.warn(`Volumetric light initialization failed on ${this.getEngineType()}. Volumetric light was disabled. Reason: ${message}`);
+                this.postEffectVlsEnabledValue = false;
+                this.volumetricLightPostProcess = null;
+                this.enforceFinalPostProcessOrder();
+                return;
+            }
+        }
+
+        this.volumetricLightPostProcess.exposure = this.postEffectVlsExposureValue;
+        this.volumetricLightPostProcess.decay = this.postEffectVlsDecayValue;
+        this.volumetricLightPostProcess.weight = this.postEffectVlsWeightValue;
+        this.volumetricLightPostProcess.density = this.postEffectVlsDensityValue;
+        this.updateVolumetricLightPosition();
+        this.enforceFinalPostProcessOrder();
+    }
+
+    private ensureSimpleSsaoShader(): void {
+        const shaderKey = "mmdSimpleSsaoFragmentShader";
+        if (!Effect.ShadersStore[shaderKey]) {
+            Effect.ShadersStore[shaderKey] = `
+                precision highp float;
+                varying vec2 vUV;
+                uniform sampler2D textureSampler;
+                uniform sampler2D depthSampler;
+                uniform float ssaoStrength;
+                uniform float ssaoRadius;
+                uniform vec2 screenSize;
+                uniform vec2 cameraNearFar;
+                uniform mat4 inverseViewProjection;
+                uniform vec2 worldFadeMeters;
+
+                float readDepthMetric(vec2 uv) {
+                    return clamp(texture2D(depthSampler, clamp(uv, vec2(0.001), vec2(0.999))).r, 0.0, 1.0);
+                }
+
+                vec3 reconstructWorldPosition(vec2 uv, float depthMetric) {
+                    vec2 ndcXY = uv * 2.0 - 1.0;
+                    float ndcZ = depthMetric * 2.0 - 1.0;
+                    vec4 clipPos = vec4(ndcXY, ndcZ, 1.0);
+                    vec4 worldPos = inverseViewProjection * clipPos;
+                    return worldPos.xyz / max(worldPos.w, 0.00001);
+                }
+
+                vec2 directionForIndex(int index) {
+                    if (index == 0) return vec2(1.0, 0.0);
+                    if (index == 1) return vec2(0.7071, 0.7071);
+                    if (index == 2) return vec2(0.0, 1.0);
+                    if (index == 3) return vec2(-0.7071, 0.7071);
+                    if (index == 4) return vec2(-1.0, 0.0);
+                    if (index == 5) return vec2(-0.7071, -0.7071);
+                    if (index == 6) return vec2(0.0, -1.0);
+                    return vec2(0.7071, -0.7071);
+                }
+                float computeAoLiteAt(vec2 uv, vec2 texel, float radiusNorm, float strength) {
+                    float cDepth = readDepthMetric(uv);
+                    if (cDepth >= 0.99999) {
+                        return 0.0;
+                    }
+
+                    float nL = readDepthMetric(uv - vec2(texel.x, 0.0));
+                    float nR = readDepthMetric(uv + vec2(texel.x, 0.0));
+                    float nD = readDepthMetric(uv - vec2(0.0, texel.y));
+                    float nU = readDepthMetric(uv + vec2(0.0, texel.y));
+
+                    float nGrad = max(max(abs(nR - nL), abs(nU - nD)), 0.00003);
+                    float stepPx = mix(1.0, 4.6, radiusNorm);
+                    vec2 stepVec = texel * stepPx;
+                    float nNear = min(min(nL, nR), min(nD, nU));
+                    float nMicro = smoothstep(
+                        nGrad * 0.06 + 0.00001,
+                        nGrad * 0.95 + 0.00025,
+                        cDepth - nNear
+                    );
+
+                    float occ = 0.0;
+                    float w = 0.0;
+                    for (int j = 0; j < 4; ++j) {
+                        vec2 dir = directionForIndex(j * 2);
+                        vec2 suv = clamp(uv + dir * stepVec, vec2(0.001), vec2(0.999));
+                        float sd = readDepthMetric(suv);
+                        if (sd >= 0.99999) {
+                            continue;
+                        }
+
+                        float delta = cDepth - sd;
+                        float lo = nGrad * 0.04 + 0.00001;
+                        float mid = nGrad * 0.55 + 0.00012;
+                        float hi = nGrad * 1.5 + 0.00035;
+                        float pos = smoothstep(lo, mid, delta);
+                        float shallow = 1.0 - smoothstep(mid, hi, delta);
+                        float reject = 1.0 - smoothstep(hi * 1.6, hi * 4.5, abs(delta));
+                        occ += pos * shallow * reject;
+                        w += 1.0;
+                    }
+
+                    float raw = occ / max(w, 0.0001);
+                    float a = clamp((raw * 1.08 + nMicro * 1.12) * strength * 2.9, 0.0, 1.0);
+                    float distFade = 1.0 - smoothstep(0.5, 0.92, cDepth);
+                    a *= distFade * (1.0 - smoothstep(0.989, 1.0, cDepth));
+                    return a;
+                }
+
+
+                void main(void) {
+                    vec4 color = texture2D(textureSampler, vUV);
+                    vec2 safeScreen = max(screenSize, vec2(1.0));
+                    vec2 texel = 1.0 / safeScreen;
+
+                    float centerDepth = readDepthMetric(vUV);
+                    if (centerDepth >= 0.99999 || ssaoStrength <= 0.00001) {
+                        gl_FragColor = color;
+                        return;
+                    }
+
+                    float dL = readDepthMetric(vUV - vec2(texel.x, 0.0));
+                    float dR = readDepthMetric(vUV + vec2(texel.x, 0.0));
+                    float dD = readDepthMetric(vUV - vec2(0.0, texel.y));
+                    float dU = readDepthMetric(vUV + vec2(0.0, texel.y));
+
+                    float depthGrad = max(max(abs(dR - dL), abs(dU - dD)), 0.00003);
+                    float radiusNorm = clamp((ssaoRadius - 0.25) / 2.1, 0.0, 1.0);
+                    float sampleRadiusPx = mix(1.2, 7.2, radiusNorm);
+                    vec2 baseStep = texel * sampleRadiusPx;
+                    float nearDepth = min(min(dL, dR), min(dD, dU));
+                    float microCavity = smoothstep(
+                        depthGrad * 0.08 + 0.00001,
+                        depthGrad * 1.2 + 0.00035,
+                        centerDepth - nearDepth
+                    );
+
+                    float occlusion = 0.0;
+                    float totalWeight = 0.0;
+
+                    for (int ring = 1; ring <= 4; ++ring) {
+                        float ringFactor = float(ring) / 4.0;
+                        float ringWeight = mix(1.15, 0.5, ringFactor);
+
+                        for (int i = 0; i < 8; ++i) {
+                            vec2 dir = directionForIndex(i);
+                            vec2 off = dir * baseStep * ringFactor;
+                            vec2 sampleUv = clamp(vUV + off, vec2(0.001), vec2(0.999));
+                            float sampleDepth = readDepthMetric(sampleUv);
+                            if (sampleDepth >= 0.99999) {
+                                continue;
+                            }
+
+                            float delta = centerDepth - sampleDepth;
+                            float shallowLo = depthGrad * (0.05 + ringFactor * 0.12) + 0.00001;
+                            float shallowMid = depthGrad * (0.65 + ringFactor * 0.85) + (0.00012 + ringFactor * 0.00018);
+                            float shallowHi = depthGrad * (1.8 + ringFactor * 1.7) + (0.00032 + ringFactor * 0.00055);
+                            float positiveGate = smoothstep(shallowLo, shallowMid, delta);
+                            float shallowGate = 1.0 - smoothstep(shallowMid, shallowHi, delta);
+                            float largeGapReject = 1.0 - smoothstep(shallowHi * 1.6, shallowHi * 5.0, abs(delta));
+                            float contrib = positiveGate * shallowGate * largeGapReject * ringWeight;
+                            occlusion += contrib;
+                            totalWeight += ringWeight;
+                        }
+                    }
+
+                    float aoRaw = occlusion / max(totalWeight, 0.0001);
+                    float aoCombined = clamp(aoRaw * 1.05 + microCavity * 1.1, 0.0, 1.0);
+                    float distanceFade = 1.0 - smoothstep(0.45, 0.9, centerDepth);
+                    float flatFarSuppress = 1.0 - smoothstep(0.00003, 0.00045, depthGrad) * (1.0 - distanceFade);
+                    float ao = clamp(pow(aoCombined, 0.9) * ssaoStrength * 3.2, 0.0, 0.95);
+                    ao *= (1.0 - smoothstep(0.988, 1.0, centerDepth)) * distanceFade * flatFarSuppress;
+
+                    float slopeX = dR - dL;
+                    float slopeY = dU - dD;
+                    float slopeLen2 = slopeX * slopeX + slopeY * slopeY;
+                    float normalZ = 1.0 / sqrt(1.0 + slopeLen2 * 9800.0);
+                    float frontFactor = smoothstep(0.9, 0.999, normalZ);
+                    float farFactor = smoothstep(0.28, 0.92, centerDepth);
+                    float frontFarFactor = frontFactor * farFactor;
+                    float blurFactor = clamp(max(farFactor * 0.55, frontFarFactor * 1.2), 0.0, 1.0);
+                    blurFactor = blurFactor * blurFactor * (3.0 - 2.0 * blurFactor);
+
+                    float blurRadiusPx = mix(1.6, 9.8, blurFactor);
+                    float blurRadiusPxWide = blurRadiusPx * mix(1.35, 2.4, blurFactor);
+                    float blurAo = ao;
+                    float blurWeight = 1.0;
+                    float depthSigma = depthGrad * mix(10.0, 180.0, blurFactor) + mix(0.0003, 0.0065, blurFactor);
+                    for (int k = 0; k < 8; ++k) {
+                        vec2 bDir = directionForIndex(k);
+                        vec2 bUv = clamp(vUV + bDir * texel * blurRadiusPx, vec2(0.001), vec2(0.999));
+                        float bDepth = readDepthMetric(bUv);
+                        if (bDepth < 0.99999) {
+                            float depthWeight = exp(-abs(bDepth - centerDepth) / depthSigma);
+                            float neighborAo = computeAoLiteAt(bUv, texel, radiusNorm, ssaoStrength);
+                            blurAo += neighborAo * depthWeight;
+                            blurWeight += depthWeight;
+                        }
+
+                        vec2 bUvWide = clamp(vUV + bDir * texel * blurRadiusPxWide, vec2(0.001), vec2(0.999));
+                        float bDepthWide = readDepthMetric(bUvWide);
+                        if (bDepthWide < 0.99999) {
+                            float depthWeightWide = exp(-abs(bDepthWide - centerDepth) / (depthSigma * 1.35));
+                            float neighborAoWide = computeAoLiteAt(bUvWide, texel, radiusNorm, ssaoStrength);
+                            blurAo += neighborAoWide * depthWeightWide * 0.72;
+                            blurWeight += depthWeightWide * 0.72;
+                        }
+                    }
+                    float aoBlurred = blurAo / max(blurWeight, 0.0001);
+                    ao = mix(ao * mix(1.0, 0.45, blurFactor), aoBlurred, mix(0.72, 0.985, blurFactor));
+                    vec3 worldPos = reconstructWorldPosition(vUV, centerDepth);
+                    float worldDistance = length(worldPos);
+                    float aoWorldOpacity = 1.0 - smoothstep(worldFadeMeters.x, worldFadeMeters.y, worldDistance);
+                    ao *= aoWorldOpacity;
+
+                    vec3 selfShadowColor = color.rgb * 0.34;
+                    vec3 shaded = mix(color.rgb, selfShadowColor, clamp(ao, 0.0, 1.0));
+                    gl_FragColor = vec4(shaded, color.a);
+                }
+            `;
+        }
+
+        if (!ShaderStore.ShadersStoreWGSL[shaderKey]) {
+            ShaderStore.ShadersStoreWGSL[shaderKey] = `
+                varying vUV: vec2f;
+                var textureSamplerSampler: sampler;
+                var textureSampler: texture_2d<f32>;
+                var depthSamplerSampler: sampler;
+                var depthSampler: texture_2d<f32>;
+                uniform ssaoStrength: f32;
+                uniform ssaoRadius: f32;
+                uniform screenSize: vec2f;
+                uniform cameraNearFar: vec2f;
+                uniform inverseViewProjection: mat4x4f;
+                uniform worldFadeMeters: vec2f;
+
+                fn readDepthMetric(uv: vec2f) -> f32 {
+                    return clamp(textureSampleLevel(depthSampler, depthSamplerSampler, clamp(uv, vec2f(0.001), vec2f(0.999)), 0.0).r, 0.0, 1.0);
+                }
+
+                fn reconstructWorldPosition(uv: vec2f, depthMetric: f32) -> vec3f {
+                    let ndcXY = uv * 2.0 - 1.0;
+                    let ndcZ = depthMetric * 2.0 - 1.0;
+                    let clipPos = vec4f(ndcXY, ndcZ, 1.0);
+                    let worldPos = uniforms.inverseViewProjection * clipPos;
+                    return worldPos.xyz / max(worldPos.w, 0.00001);
+                }
+
+                fn directionForIndex(index: i32) -> vec2f {
+                    switch index {
+                        case 0: { return vec2f(1.0, 0.0); }
+                        case 1: { return vec2f(0.7071, 0.7071); }
+                        case 2: { return vec2f(0.0, 1.0); }
+                        case 3: { return vec2f(-0.7071, 0.7071); }
+                        case 4: { return vec2f(-1.0, 0.0); }
+                        case 5: { return vec2f(-0.7071, -0.7071); }
+                        case 6: { return vec2f(0.0, -1.0); }
+                        default: { return vec2f(0.7071, -0.7071); }
+                    }
+                }
+                fn computeAoLiteAt(uv: vec2f, texel: vec2f, radiusNorm: f32, strength: f32) -> f32 {
+                    let cDepth = readDepthMetric(uv);
+                    if (cDepth >= 0.99999) {
+                        return 0.0;
+                    }
+
+                    let nL = readDepthMetric(uv - vec2f(texel.x, 0.0));
+                    let nR = readDepthMetric(uv + vec2f(texel.x, 0.0));
+                    let nD = readDepthMetric(uv - vec2f(0.0, texel.y));
+                    let nU = readDepthMetric(uv + vec2f(0.0, texel.y));
+
+                    let nGrad = max(max(abs(nR - nL), abs(nU - nD)), 0.00003);
+                    let stepPx = mix(1.0, 4.6, radiusNorm);
+                    let stepVec = texel * stepPx;
+                    let nNear = min(min(nL, nR), min(nD, nU));
+                    let nMicro = smoothstep(
+                        nGrad * 0.06 + 0.00001,
+                        nGrad * 0.95 + 0.00025,
+                        cDepth - nNear
+                    );
+
+                    var occ = 0.0;
+                    var w = 0.0;
+                    for (var j: i32 = 0; j < 4; j = j + 1) {
+                        let dir = directionForIndex(j * 2);
+                        let suv = clamp(uv + dir * stepVec, vec2f(0.001), vec2f(0.999));
+                        let sd = readDepthMetric(suv);
+                        if (sd >= 0.99999) {
+                            continue;
+                        }
+
+                        let delta = cDepth - sd;
+                        let lo = nGrad * 0.04 + 0.00001;
+                        let mid = nGrad * 0.55 + 0.00012;
+                        let hi = nGrad * 1.5 + 0.00035;
+                        let pos = smoothstep(lo, mid, delta);
+                        let shallow = 1.0 - smoothstep(mid, hi, delta);
+                        let reject = 1.0 - smoothstep(hi * 1.6, hi * 4.5, abs(delta));
+                        occ += pos * shallow * reject;
+                        w += 1.0;
+                    }
+
+                    let raw = occ / max(w, 0.0001);
+                    var a = clamp((raw * 1.08 + nMicro * 1.12) * strength * 2.9, 0.0, 1.0);
+                    let distFade = 1.0 - smoothstep(0.5, 0.92, cDepth);
+                    a *= distFade * (1.0 - smoothstep(0.989, 1.0, cDepth));
+                    return a;
+                }
+
+
+                #define CUSTOM_FRAGMENT_DEFINITIONS
+                @fragment
+                fn main(input: FragmentInputs)->FragmentOutputs {
+                    let color = textureSample(textureSampler, textureSamplerSampler, input.vUV);
+                    let safeScreen = max(uniforms.screenSize, vec2f(1.0));
+                    let texel = vec2f(1.0) / safeScreen;
+
+                    let centerDepth = readDepthMetric(input.vUV);
+                    if (centerDepth >= 0.99999 || uniforms.ssaoStrength <= 0.00001) {
+                        fragmentOutputs.color = color;
+                        return fragmentOutputs;
+                    }
+
+                    let dL = readDepthMetric(input.vUV - vec2f(texel.x, 0.0));
+                    let dR = readDepthMetric(input.vUV + vec2f(texel.x, 0.0));
+                    let dD = readDepthMetric(input.vUV - vec2f(0.0, texel.y));
+                    let dU = readDepthMetric(input.vUV + vec2f(0.0, texel.y));
+
+                    let depthGrad = max(max(abs(dR - dL), abs(dU - dD)), 0.00003);
+                    let radiusNorm = clamp((uniforms.ssaoRadius - 0.25) / 2.1, 0.0, 1.0);
+                    let sampleRadiusPx = mix(1.2, 7.2, radiusNorm);
+                    let baseStep = texel * sampleRadiusPx;
+                    let nearDepth = min(min(dL, dR), min(dD, dU));
+                    let microCavity = smoothstep(
+                        depthGrad * 0.08 + 0.00001,
+                        depthGrad * 1.2 + 0.00035,
+                        centerDepth - nearDepth
+                    );
+
+                    var occlusion = 0.0;
+                    var totalWeight = 0.0;
+
+                    for (var ring: i32 = 1; ring <= 4; ring = ring + 1) {
+                        let ringFactor = f32(ring) / 4.0;
+                        let ringWeight = mix(1.15, 0.5, ringFactor);
+
+                        for (var i: i32 = 0; i < 8; i = i + 1) {
+                            let dir = directionForIndex(i);
+                            let off = dir * baseStep * ringFactor;
+                            let sampleUv = clamp(input.vUV + off, vec2f(0.001), vec2f(0.999));
+                            let sampleDepth = readDepthMetric(sampleUv);
+                            if (sampleDepth >= 0.99999) {
+                                continue;
+                            }
+
+                            let delta = centerDepth - sampleDepth;
+                            let shallowLo = depthGrad * (0.05 + ringFactor * 0.12) + 0.00001;
+                            let shallowMid = depthGrad * (0.65 + ringFactor * 0.85) + (0.00012 + ringFactor * 0.00018);
+                            let shallowHi = depthGrad * (1.8 + ringFactor * 1.7) + (0.00032 + ringFactor * 0.00055);
+                            let positiveGate = smoothstep(shallowLo, shallowMid, delta);
+                            let shallowGate = 1.0 - smoothstep(shallowMid, shallowHi, delta);
+                            let largeGapReject = 1.0 - smoothstep(shallowHi * 1.6, shallowHi * 5.0, abs(delta));
+                            let contrib = positiveGate * shallowGate * largeGapReject * ringWeight;
+                            occlusion += contrib;
+                            totalWeight += ringWeight;
+                        }
+                    }
+
+                    let aoRaw = occlusion / max(totalWeight, 0.0001);
+                    let aoCombined = clamp(aoRaw * 1.05 + microCavity * 1.1, 0.0, 1.0);
+                    let distanceFade = 1.0 - smoothstep(0.45, 0.9, centerDepth);
+                    let flatFarSuppress = 1.0 - smoothstep(0.00003, 0.00045, depthGrad) * (1.0 - distanceFade);
+                    var ao = clamp(pow(aoCombined, 0.9) * uniforms.ssaoStrength * 3.2, 0.0, 0.95);
+                    ao *= (1.0 - smoothstep(0.988, 1.0, centerDepth)) * distanceFade * flatFarSuppress;
+
+                    let slopeX = dR - dL;
+                    let slopeY = dU - dD;
+                    let slopeLen2 = slopeX * slopeX + slopeY * slopeY;
+                    let normalZ = 1.0 / sqrt(1.0 + slopeLen2 * 9800.0);
+                    let frontFactor = smoothstep(0.9, 0.999, normalZ);
+                    let farFactor = smoothstep(0.28, 0.92, centerDepth);
+                    let frontFarFactor = frontFactor * farFactor;
+                    var blurFactor = clamp(max(farFactor * 0.55, frontFarFactor * 1.2), 0.0, 1.0);
+                    blurFactor = blurFactor * blurFactor * (3.0 - 2.0 * blurFactor);
+
+                    let blurRadiusPx = mix(1.6, 9.8, blurFactor);
+                    let blurRadiusPxWide = blurRadiusPx * mix(1.35, 2.4, blurFactor);
+                    var blurAo = ao;
+                    var blurWeight = 1.0;
+                    let depthSigma = depthGrad * mix(10.0, 180.0, blurFactor) + mix(0.0003, 0.0065, blurFactor);
+                    for (var k: i32 = 0; k < 8; k = k + 1) {
+                        let bDir = directionForIndex(k);
+                        let bUv = clamp(input.vUV + bDir * texel * blurRadiusPx, vec2f(0.001), vec2f(0.999));
+                        let bDepth = readDepthMetric(bUv);
+                        if (bDepth < 0.99999) {
+                            let depthWeight = exp(-abs(bDepth - centerDepth) / depthSigma);
+                            let neighborAo = computeAoLiteAt(bUv, texel, radiusNorm, uniforms.ssaoStrength);
+                            blurAo += neighborAo * depthWeight;
+                            blurWeight += depthWeight;
+                        }
+
+                        let bUvWide = clamp(input.vUV + bDir * texel * blurRadiusPxWide, vec2f(0.001), vec2f(0.999));
+                        let bDepthWide = readDepthMetric(bUvWide);
+                        if (bDepthWide < 0.99999) {
+                            let depthWeightWide = exp(-abs(bDepthWide - centerDepth) / (depthSigma * 1.35));
+                            let neighborAoWide = computeAoLiteAt(bUvWide, texel, radiusNorm, uniforms.ssaoStrength);
+                            blurAo += neighborAoWide * depthWeightWide * 0.72;
+                            blurWeight += depthWeightWide * 0.72;
+                        }
+                    }
+                    let aoBlurred = blurAo / max(blurWeight, 0.0001);
+                    ao = mix(ao * mix(1.0, 0.45, blurFactor), aoBlurred, mix(0.72, 0.985, blurFactor));
+                    let worldPos = reconstructWorldPosition(input.vUV, centerDepth);
+                    let worldDistance = length(worldPos);
+                    let aoWorldOpacity = 1.0 - smoothstep(uniforms.worldFadeMeters.x, uniforms.worldFadeMeters.y, worldDistance);
+                    ao *= aoWorldOpacity;
+
+                    let selfShadowColor = color.rgb * 0.34;
+                    let shaded = mix(color.rgb, selfShadowColor, clamp(ao, 0.0, 1.0));
+                    fragmentOutputs.color = vec4f(shaded, color.a);
+                }
+            `;
+        }
+    }
+    private ensureSimpleMotionBlurShader(): void {
+        const shaderKey = "mmdSimpleMotionBlurFragmentShader";
+        if (!Effect.ShadersStore[shaderKey]) {
+            Effect.ShadersStore[shaderKey] = `
+                precision highp float;
+                varying vec2 vUV;
+                uniform sampler2D textureSampler;
+                uniform vec2 blurDirection;
+                uniform float blurAmount;
+
+                vec4 sampleClamped(vec2 uv) {
+                    return texture2D(textureSampler, clamp(uv, vec2(0.0), vec2(1.0)));
+                }
+
+                void main(void) {
+                    float dirLen = length(blurDirection);
+                    if (blurAmount < 0.00001 || dirLen < 0.00001) {
+                        gl_FragColor = texture2D(textureSampler, vUV);
+                        return;
+                    }
+
+                    vec2 dir = normalize(blurDirection) * blurAmount;
+                    vec4 color = sampleClamped(vUV) * 0.28;
+                    color += sampleClamped(vUV + dir * 0.25) * 0.18;
+                    color += sampleClamped(vUV - dir * 0.25) * 0.18;
+                    color += sampleClamped(vUV + dir * 0.5) * 0.14;
+                    color += sampleClamped(vUV - dir * 0.5) * 0.14;
+                    color += sampleClamped(vUV + dir * 0.9) * 0.04;
+                    color += sampleClamped(vUV - dir * 0.9) * 0.04;
+                    gl_FragColor = color;
+                }
+            `;
+        }
+
+        if (!ShaderStore.ShadersStoreWGSL[shaderKey]) {
+            ShaderStore.ShadersStoreWGSL[shaderKey] = `
+                varying vUV: vec2f;
+                var textureSamplerSampler: sampler;
+                var textureSampler: texture_2d<f32>;
+                uniform blurDirection: vec2f;
+                uniform blurAmount: f32;
+
+                fn sampleClamped(uv: vec2f) -> vec4f {
+                    let clampedUv = clamp(uv, vec2f(0.0), vec2f(1.0));
+                    return textureSample(textureSampler, textureSamplerSampler, clampedUv);
+                }
+
+                #define CUSTOM_FRAGMENT_DEFINITIONS
+                @fragment
+                fn main(input: FragmentInputs)->FragmentOutputs {
+                    let dirLen = length(uniforms.blurDirection);
+                    if (uniforms.blurAmount < 0.00001 || dirLen < 0.00001) {
+                        fragmentOutputs.color = textureSample(textureSampler, textureSamplerSampler, input.vUV);
+                        return fragmentOutputs;
+                    }
+
+                    let dir = normalize(uniforms.blurDirection) * uniforms.blurAmount;
+                    var color = sampleClamped(input.vUV) * 0.28;
+                    color += sampleClamped(input.vUV + dir * 0.25) * 0.18;
+                    color += sampleClamped(input.vUV - dir * 0.25) * 0.18;
+                    color += sampleClamped(input.vUV + dir * 0.5) * 0.14;
+                    color += sampleClamped(input.vUV - dir * 0.5) * 0.14;
+                    color += sampleClamped(input.vUV + dir * 0.9) * 0.04;
+                    color += sampleClamped(input.vUV - dir * 0.9) * 0.04;
+                    fragmentOutputs.color = color;
+                }
+            `;
+        }
+    }
+
+    private updateSimpleMotionBlurState(deltaMs: number): void {
+        if (!this.motionBlurPostProcess || !this.postEffectMotionBlurEnabledValue) {
+            return;
+        }
+
+        const cameraPosition = this.camera.globalPosition ?? this.camera.position;
+        if (!this.motionBlurPreviousCameraPosition) {
+            this.motionBlurPreviousCameraPosition = cameraPosition.clone();
+            this.motionBlurScreenDirection.set(0, 0);
+            this.motionBlurScreenAmount = 0;
+            return;
+        }
+
+        const deltaWorld = cameraPosition.subtract(this.motionBlurPreviousCameraPosition);
+        this.motionBlurPreviousCameraPosition.copyFrom(cameraPosition);
+
+        const deltaView = Vector3.TransformNormal(deltaWorld, this.camera.getViewMatrix());
+        const rawX = -deltaView.x;
+        const rawY = deltaView.y;
+        const rawLen = Math.hypot(rawX, rawY);
+        if (rawLen < 0.000001) {
+            this.motionBlurScreenDirection.scaleInPlace(0.8);
+            this.motionBlurScreenAmount *= 0.8;
+            return;
+        }
+
+        const dirX = rawX / rawLen;
+        const dirY = rawY / rawLen;
+        const speedPerMs = rawLen / Math.max(1, deltaMs);
+        const targetAmount = Math.min(0.04, speedPerMs * 2.4);
+        const smooth = 0.35;
+
+        this.motionBlurScreenDirection.x = this.motionBlurScreenDirection.x * (1 - smooth) + dirX * smooth;
+        this.motionBlurScreenDirection.y = this.motionBlurScreenDirection.y * (1 - smooth) + dirY * smooth;
+
+        const dirLen = Math.hypot(this.motionBlurScreenDirection.x, this.motionBlurScreenDirection.y);
+        if (dirLen > 0.000001) {
+            this.motionBlurScreenDirection.x /= dirLen;
+            this.motionBlurScreenDirection.y /= dirLen;
+        }
+
+        this.motionBlurScreenAmount = this.motionBlurScreenAmount * (1 - smooth) + targetAmount * smooth;
+    }
+    private applyFogSettings(): void {
+        if (!this.postEffectFogEnabledValue) {
+            this.scene.fogMode = Scene.FOGMODE_NONE;
+            return;
+        }
+
+        this.scene.fogMode = this.postEffectFogModeValue === 1
+            ? Scene.FOGMODE_EXP
+            : this.postEffectFogModeValue === 2
+                ? Scene.FOGMODE_EXP2
+                : Scene.FOGMODE_LINEAR;
+        this.scene.fogStart = this.postEffectFogStartValue;
+        this.scene.fogEnd = Math.max(this.postEffectFogStartValue + 0.01, this.postEffectFogEndValue);
+        this.scene.fogDensity = this.postEffectFogDensityValue;
+        this.scene.fogColor.set(this.scene.clearColor.r, this.scene.clearColor.g, this.scene.clearColor.b);
     }
 
     private setupFinalLensDistortionPostProcess(): void {
@@ -4709,22 +6203,30 @@ export class MmdManager {
     }
 
     private enforceFinalPostProcessOrder(): void {
-        if (!this.finalLensDistortionPostProcess) return;
+        const tail: PostProcess[] = [];
+        if (this.volumetricLightPostProcess) {
+            tail.push(this.volumetricLightPostProcess);
+        }
+        if (this.motionBlurPostProcess) {
+            tail.push(this.motionBlurPostProcess);
+        }
+        if (this.finalLensDistortionPostProcess) {
+            tail.push(this.finalLensDistortionPostProcess);
+        }
+        if (this.finalAntialiasPostProcess) {
+            tail.push(this.finalAntialiasPostProcess);
+        }
 
-        const distortion = this.finalLensDistortionPostProcess;
-        const antialias = this.finalAntialiasPostProcess;
-
-        if (antialias) {
-            this.camera.detachPostProcess(distortion);
-            this.camera.detachPostProcess(antialias);
-            this.camera.attachPostProcess(distortion);
-            this.camera.attachPostProcess(antialias);
+        if (tail.length === 0) {
             return;
         }
 
-        // Keep distortion near the tail when AA is disabled.
-        this.camera.detachPostProcess(distortion);
-        this.camera.attachPostProcess(distortion);
+        for (const postProcess of tail) {
+            this.camera.detachPostProcess(postProcess);
+        }
+        for (const postProcess of tail) {
+            this.camera.attachPostProcess(postProcess);
+        }
     }
 
     private ensureSignedLensDistortionShader(): void {
@@ -5956,6 +7458,37 @@ export class MmdManager {
             this.lensRenderingPipeline.dispose(false);
             this.lensRenderingPipeline = null;
         }
+        if (this.ssaoRenderingPipeline) {
+            this.ssaoRenderingPipeline.dispose(true);
+            this.ssaoRenderingPipeline = null;
+        }
+        if (this.ssaoPostProcess) {
+            this.ssaoPostProcess.dispose(this.camera);
+            this.ssaoPostProcess = null;
+        }
+        if (this.ssrRenderingPipeline) {
+            this.ssrRenderingPipeline.dispose(false);
+            this.ssrRenderingPipeline = null;
+        }
+        this.disablePrePassRendererIfSupported();
+        if (this.motionBlurPostProcess) {
+            this.motionBlurPostProcess.dispose(this.camera);
+            this.motionBlurPostProcess = null;
+        }
+        if (this.volumetricLightPostProcess) {
+            this.volumetricLightPostProcess.dispose(this.camera);
+            this.volumetricLightPostProcess = null;
+        }
+        if (this.postEffectLutTexture) {
+            this.postEffectLutTexture.dispose();
+            this.postEffectLutTexture = null;
+            this.postEffectLutTextureKey = null;
+        }
+
+        for (const blobUrl of this.postEffectLutPresetBlobUrlById.values()) {
+            URL.revokeObjectURL(blobUrl);
+        }
+        this.postEffectLutPresetBlobUrlById.clear();
         if (this.colorCorrectionPostProcess) {
             this.colorCorrectionPostProcess.dispose(this.camera);
             this.colorCorrectionPostProcess = null;
@@ -5997,6 +7530,18 @@ export class MmdManager {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -65,7 +65,11 @@
   - ポストエフェクト
     - ImageProcessing系: Contrast / Gamma / Exposure / ToneMap / Dither / Vignette
     - DefaultRenderingPipeline系: Bloom / Chroma / Grain / Sharpen
+    - Color補正系: Curves（Color Curves Saturation）/ LUT（3dlプリセット + 強度）
+    - Scene系: Fog（密度フェーダー中心）
     - その他: Distortion / Edge
+  - 安定性優先の暫定運用として、`SSAO / Glow / Motion Blur / SSR / VLight` は UI 非表示
+  - SSR は UI 経由では常時 OFF（強度 0 / enabled false）
   - Bloom は複合項目として `ON/OFF + Weight + Threshold + Kernel`
   - BloomTh は右へ動かすほど発光範囲が広がるよう、UI操作を反転
   - DoF関連コントロール

@@ -43,7 +43,10 @@ PMX/PMD モデル、Xアクセサリー、VMD モーション、音源（MP3/WAV
 - 右パネル「エフェクト」で材質プリセット / カメラ向けポストエフェクトを調整
   - Contrast / Gamma / Exposure / ToneMap / Dither / Vignette
   - Bloom（ON/OFF + Weight/Threshold/Kernel）/ Chroma / Grain / Sharpen
+  - Curves（Color Curves Saturation）/ LUT（3dl）/ Fog
   - Distortion / Edge
+- 実験系ポストエフェクト（SSAO / Glow / Motion Blur / SSR / VLight）は現在 UI 非表示運用
+  - SSR は UI 経由では常時 OFF（強度 0）を適用
 - ライティング調整（方位角/仰角/光の強さ/環境光/影の濃さ/境界幅）
 - DoF 操作は「情報 > 対象」でカメラ選択時のエフェクト欄に集約
 - 床表示 ON/OFF（上部ツールバー）
@@ -108,7 +111,7 @@ npm run make
 5. `ファイル読込` でモデルモーション（`.vmd` / `.vpd`）を読み込む
 6. 必要に応じてカメラモーション（`.vmd`）や音源（`.mp3` / `.wav` / `.ogg`）を読み込む
 7. `情報 > 対象` で `Camera` を選ぶと、右の `エフェクト` 欄で DoF / ポストエフェクトを調整できる
-   （Bloom は ON/OFF + Weight/Threshold/Kernel の複合項目）
+   （Bloom は ON/OFF + Weight/Threshold/Kernel の複合項目。LUT はプリセット選択 + 強度）
 8. `出力` 欄で比率・解像度・画質を設定して `PNG出力` / `PNG連番出力` を実行する
 9. 再生コントロール・タイムライン・モーフ・照明を調整する
 

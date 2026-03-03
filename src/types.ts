@@ -205,6 +205,36 @@ export interface ProjectEffectState {
     chromaticAberration?: number;
     grainIntensity?: number;
     sharpenEdge?: number;
+    ssaoEnabled?: boolean;
+    ssaoStrength?: number;
+    ssaoRadius?: number;
+    colorCurvesEnabled?: boolean;
+    colorCurvesHue?: number;
+    colorCurvesDensity?: number;
+    colorCurvesSaturation?: number;
+    colorCurvesExposure?: number;
+    glowEnabled?: boolean;
+    glowIntensity?: number;
+    glowKernel?: number;
+    lutEnabled?: boolean;
+    lutIntensity?: number;
+    lutPreset?: string;
+    motionBlurEnabled?: boolean;
+    motionBlurStrength?: number;
+    motionBlurSamples?: number;
+    ssrEnabled?: boolean;
+    ssrStrength?: number;
+    ssrStep?: number;
+    vlsEnabled?: boolean;
+    vlsExposure?: number;
+    vlsDecay?: number;
+    vlsWeight?: number;
+    vlsDensity?: number;
+    fogEnabled?: boolean;
+    fogMode?: number;
+    fogStart?: number;
+    fogEnd?: number;
+    fogDensity?: number;
     gammaEncodingVersion?: 2;
 }
 

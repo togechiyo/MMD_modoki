@@ -15,6 +15,7 @@
 - [MMDキーフレーム/ボーン/補間 調査メモ](./mmd-keyframe-bone-interpolation-research.md)
 - [現行MMD 補間曲線の扱い調査メモ](./mmd-interpolation-curve-research.md)
 - [現行MMD ショートカットキー調査メモ](./mmd-shortcuts-research.md)
+- [現行MMD AutoLuminous 調査メモ](./mmd-autoluminous-research.md)
 - [補間曲線 仕様と実装まとめ（現行）](./interpolation-curve-spec-implementation.md)
 - [ボーン操作 仕様と実装メモ](./bone-operation-spec.md)
 - [タイムライン 仕様と実装メモ](./timeline-spec.md)
@@ -56,7 +57,8 @@
 20. Babylon-mmd 物理調査を確認したい: `babylon-mmd-physics-research.md`
 21. 物理の現行仕様を確認したい: `physics-runtime-spec.md`
 22. 物理演算の実装順を確認したい: `physics-task-list.md`
-23. 起動時エラーを確認したい: `troubleshooting.md`
-24. WebGPU/WGSL 導入方針を確認したい: `webgpu-wgsl-feasibility.md`
-25. WebCodecs + MediaBunny による WebM 保存方針を確認したい: `webcodecs-mediabunny-webm-research.md`
+23. AutoLuminous の発光条件を確認したい: `mmd-autoluminous-research.md`
+24. 起動時エラーを確認したい: `troubleshooting.md`
+25. WebGPU/WGSL 導入方針を確認したい: `webgpu-wgsl-feasibility.md`
+26. WebCodecs + MediaBunny による WebM 保存方針を確認したい: `webcodecs-mediabunny-webm-research.md`
 

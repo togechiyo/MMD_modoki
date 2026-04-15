@@ -239,10 +239,10 @@
 - [ ] 実験機能フラグ管理
 - [ ] パフォーマンス計測基盤の整備
 - [ ] 責務分離を意識したリファクタリング
-- [ ] テスト計画の作成
-- [ ] `unit / integration / manual` の切り分け整理
-- [ ] 優先テスト対象の決定
-- [ ] 単体テスト基盤の整備
+- [x] テスト計画の作成 → [testing-strategy-proposal.md](testing-strategy-proposal.md)
+- [x] `unit / integration / manual` の切り分け整理 → 同上
+- [x] 優先テスト対象の決定 → 同上
+- [ ] 単体テスト基盤の整備（Vitest 導入）
 - [ ] 重要ロジックの単体テスト追加
 
 ## 参考リンク

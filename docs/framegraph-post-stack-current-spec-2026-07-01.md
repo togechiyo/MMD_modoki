@@ -17,6 +17,21 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 - プロジェクト保存 / 読み込みでは、stack の順序と enabled 状態を `effects.frameGraphPostStack` として復元する。
 - 旧 project などで stack がない場合は、既存の各 post effect state から canonical order で復元する。
 
+## 2026-08-11 追記: 詳細スライダーの操作値
+
+FrameGraph stack の詳細パネルにある数値スライダーは、効果ごとの内部単位にかかわらず、UI 上の操作値を `0..100` に統一する。
+
+- 右端の表示は従来どおり実値とし、`0.75`、`129px`、`2.0m` など効果の単位で表示する。
+- runtime 値と project 保存値は変換せず、従来の値域・単位を維持する。
+- 正負のある offset は操作値 `50` を実値 `0` とする。
+- 広い値域を持つ DoF lens は対数変換、それ以外は線形変換を基本とする。
+- kernel、sample radius、step などの離散値は実値へ戻す際に量子化する。
+- 色、ON / OFF、preset、対象モデル / ボーンなどはこの数値スライダー規約の対象外とする。
+
+変換定義は `src/ui/frame-graph-effect-slider-mapping.ts` に集約する。新しい FrameGraph effect に詳細スライダーを追加するときは、HTML 側へ固有の `min` / `max` と変換式を直接書かず、この定義へ runtime の実値範囲と必要な量子化を追加する。
+
+SSGI の UI 表示名は仮の `GI（実験的）` から単純な `SSGI` へ変更する。内部 ID `ssgi` と project 保存形式は変更しない。
+
 背景:
 
 - v0.2.0 packaged build の初回起動では localStorage に `mmd_modoki.postEffectBackend` がなく、旧既定の `classic` に落ちていた。

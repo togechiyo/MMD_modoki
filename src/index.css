@@ -2533,7 +2533,7 @@ body.file-drag-active #viewport-container {
 
 .effect-panel-section-head {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr) 30px;
   align-items: center;
   gap: 6px;
   padding: 2px 0;
@@ -2570,6 +2570,30 @@ body.file-drag-active #viewport-container {
 
 .effect-panel-add-button:disabled {
   opacity: 0.45;
+  cursor: default;
+}
+
+.effect-panel-reload-button {
+  width: 30px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: var(--radius-sm);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.effect-panel-reload-button:hover:not(:disabled) {
+  border-color: rgba(203, 213, 225, 0.6);
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--text-primary);
+}
+
+.effect-panel-reload-button:disabled {
+  opacity: 0.35;
   cursor: default;
 }
 

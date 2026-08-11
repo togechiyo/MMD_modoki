@@ -35,6 +35,14 @@ import { ModelInfoPanelController, MODEL_INFO_CAMERA_SELECT_VALUE, type ModelInf
 import { ModelEdgeController } from "./ui/model-edge-controller";
 import { ModelExternalParentController } from "./ui/model-external-parent-controller";
 import { installEnterCommitNumberInput } from "./ui/panel-control-helpers";
+import {
+    FRAME_GRAPH_EFFECT_SLIDER_MAX,
+    FRAME_GRAPH_EFFECT_SLIDER_MIN,
+    fromFrameGraphEffectSliderValue,
+    isFrameGraphEffectSliderField,
+    toFrameGraphEffectSliderValue,
+    type FrameGraphEffectSliderField,
+} from "./ui/frame-graph-effect-slider-mapping";
 import { RuntimeFeatureUiController } from "./ui/runtime-feature-ui-controller";
 import { SceneEnvironmentUiController } from "./ui/scene-environment-ui-controller";
 import { ShaderPanelController } from "./ui/shader-panel-controller";
@@ -417,6 +425,7 @@ export class UIController {
     private postEffectStackList: HTMLElement | null = null;
     private postEffectAddPanel: HTMLElement | null = null;
     private postEffectAddButton: HTMLButtonElement | null = null;
+    private postEffectReloadFrameGraphButton: HTMLButtonElement | null = null;
     private postEffectEnableFrameGraphButton: HTMLButtonElement | null = null;
     private expandedFrameGraphPostEffectId: FrameGraphPostAddEffectId | null = null;
     private draggingFrameGraphPostEffectId: FrameGraphPostAddEffectId | null = null;
@@ -549,6 +558,7 @@ export class UIController {
         this.postEffectStackList = document.getElementById("effect-post-stack-list");
         this.postEffectAddPanel = document.getElementById("effect-post-add-panel");
         this.postEffectAddButton = document.getElementById("btn-effect-add-post") as HTMLButtonElement | null;
+        this.postEffectReloadFrameGraphButton = document.getElementById("btn-effect-reload-framegraph") as HTMLButtonElement | null;
         this.postEffectEnableFrameGraphButton = document.getElementById("btn-effect-enable-framegraph") as HTMLButtonElement | null;
 
         this.modelEdgeController = new ModelEdgeController({
@@ -4180,6 +4190,10 @@ export class UIController {
             this.switchPostEffectBackendToFrameGraph();
         });
 
+        this.postEffectReloadFrameGraphButton?.addEventListener("click", () => {
+            this.reloadFrameGraphPostEffectsBackend();
+        });
+
         this.postEffectAddPanel?.querySelectorAll<HTMLButtonElement>("[data-effect-add-post]").forEach((button) => {
             button.addEventListener("click", () => {
                 const effectId = button.dataset.effectAddPost ?? "";
@@ -4329,6 +4343,31 @@ export class UIController {
         window.setTimeout(() => {
             window.location.reload();
         }, 120);
+    }
+
+    private reloadFrameGraphPostEffectsBackend(): void {
+        if (this.getConfiguredPostEffectBackend() !== "frameGraph") {
+            this.showToast(t("effect.frameGraphPost.backendRequired"), "info");
+            return;
+        }
+
+        this.setPostEffectAddPanelOpen(false);
+        if (this.postEffectReloadFrameGraphButton) {
+            this.postEffectReloadFrameGraphButton.disabled = true;
+        }
+        try {
+            const reloaded = this.mmdManager.reloadFrameGraphPostEffectsBackend();
+            this.showToast(
+                t(reloaded
+                    ? "effect.frameGraphPost.reloaded"
+                    : "effect.frameGraphPost.reloadFailed"),
+                reloaded ? "success" : "error",
+            );
+        } catch {
+            this.showToast(t("effect.frameGraphPost.reloadFailed"), "error");
+        } finally {
+            this.refreshFrameGraphPostAddUi();
+        }
     }
 
     private applyFrameGraphPostEffectDefaultValues(effectId: FrameGraphPostAddEffectId): void {
@@ -4564,6 +4603,9 @@ export class UIController {
         const frameGraphReady = backend === "frameGraph";
 
         this.postEffectEnableFrameGraphButton?.toggleAttribute("hidden", frameGraphReady);
+        if (this.postEffectReloadFrameGraphButton) {
+            this.postEffectReloadFrameGraphButton.disabled = !frameGraphReady;
+        }
         this.postEffectAddPanel?.querySelectorAll<HTMLButtonElement>("[data-effect-add-post]").forEach((button) => {
             const effectId = button.dataset.effectAddPost ?? "";
             const known = this.isFrameGraphPostAddEffectId(effectId);
@@ -4718,17 +4760,14 @@ export class UIController {
         const disabledAttr = controlsDisabled ? " disabled" : "";
         const label = (key: string): string => this.escapeEffectStackHtml(t(`effect.frameGraphPost.controls.${key}`));
         const range = (
-            field: string,
+            field: FrameGraphEffectSliderField,
             label: string,
-            min: number,
-            max: number,
-            value: number,
+            actualValue: number,
             displayValue: string,
-            step = 1,
         ): string => `
             <div class="effect-layer-control-row">
                 <span class="effect-layer-control-label">${this.escapeEffectStackHtml(label)}</span>
-                <input class="effect-layer-control-slider" type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-effect-stack-control="${field}"${disabledAttr}>
+                <input class="effect-layer-control-slider" type="range" min="${FRAME_GRAPH_EFFECT_SLIDER_MIN}" max="${FRAME_GRAPH_EFFECT_SLIDER_MAX}" step="1" value="${toFrameGraphEffectSliderValue(field, actualValue)}" data-effect-stack-control="${field}"${disabledAttr}>
                 <span class="effect-layer-control-value" data-effect-stack-value="${field}">${displayValue}</span>
             </div>
         `;
@@ -4776,17 +4815,17 @@ export class UIController {
                 const bloomColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectBloomColor());
                 rows.push(
                     color("bloomColor", label("color"), bloomColor, bloomColor),
-                    range("bloomWeight", label("weight"), 0, 200, Math.round(this.mmdManager.postEffectBloomWeight * 100), this.mmdManager.postEffectBloomWeight.toFixed(2)),
-                    range("bloomThreshold", label("threshold"), 0, 200, Math.round(this.mmdManager.postEffectBloomThreshold * 100), this.mmdManager.postEffectBloomThreshold.toFixed(2)),
-                    range("bloomKernel", label("kernel"), 1, 256, Math.round(this.mmdManager.postEffectBloomKernel), String(Math.round(this.mmdManager.postEffectBloomKernel))),
+                    range("bloomWeight", label("weight"), this.mmdManager.postEffectBloomWeight, this.mmdManager.postEffectBloomWeight.toFixed(2)),
+                    range("bloomThreshold", label("threshold"), this.mmdManager.postEffectBloomThreshold, this.mmdManager.postEffectBloomThreshold.toFixed(2)),
+                    range("bloomKernel", label("kernel"), this.mmdManager.postEffectBloomKernel, String(Math.round(this.mmdManager.postEffectBloomKernel))),
                 );
                 break;
             }
             case "luminous":
                 rows.push(
-                    range("luminousIntensity", label("intensity"), 0, 200, Math.round(this.mmdManager.postEffectGlowIntensity * 100), this.mmdManager.postEffectGlowIntensity.toFixed(2)),
-                    range("luminousThreshold", label("threshold"), 0, 150, Math.round(this.mmdManager.postEffectGlowThreshold * 100), this.mmdManager.postEffectGlowThreshold.toFixed(2)),
-                    range("luminousRadius", label("radius"), 1, 128, Math.round(this.mmdManager.postEffectGlowKernel), `${Math.round(this.mmdManager.postEffectGlowKernel)}px`),
+                    range("luminousIntensity", label("intensity"), this.mmdManager.postEffectGlowIntensity, this.mmdManager.postEffectGlowIntensity.toFixed(2)),
+                    range("luminousThreshold", label("threshold"), this.mmdManager.postEffectGlowThreshold, this.mmdManager.postEffectGlowThreshold.toFixed(2)),
+                    range("luminousRadius", label("radius"), this.mmdManager.postEffectGlowKernel, `${Math.round(this.mmdManager.postEffectGlowKernel)}px`),
                 );
                 break;
             case "dof":
@@ -4804,12 +4843,10 @@ export class UIController {
                         this.buildFrameGraphPostStackDofTargetBoneOptionsHtml(),
                         this.getFrameGraphPostStackDofTargetBoneLabel(),
                     ),
-                    range("dofFocusOffset", label("offset"), -20000, 20000, Math.round(this.mmdManager.dofAutoFocusNearOffsetMm), `${(this.mmdManager.dofAutoFocusNearOffsetMm / 1000).toFixed(1)}m`, 100),
+                    range("dofFocusOffset", label("offset"), this.mmdManager.dofAutoFocusNearOffsetMm, `${(this.mmdManager.dofAutoFocusNearOffsetMm / 1000).toFixed(1)}m`),
                     range(
                         "dofLensSize",
                         label("lens"),
-                        1,
-                        4096,
                         this.getDofLensSizeSliderValue(),
                         String(this.getDofLensSizeSliderValue()),
                     ),
@@ -4843,30 +4880,30 @@ export class UIController {
                         <span class="effect-layer-control-value" data-effect-stack-value="lutPreset">${this.getFrameGraphPostStackLutPresetLabel()}</span>
                     </div>
                 `);
-                rows.push(range("lutIntensity", label("intensity"), 0, 100, Math.round(this.mmdManager.postEffectLutIntensity * 100), this.mmdManager.postEffectLutIntensity.toFixed(2)));
+                rows.push(range("lutIntensity", label("intensity"), this.mmdManager.postEffectLutIntensity, this.mmdManager.postEffectLutIntensity.toFixed(2)));
                 break;
             case "ssao":
                 rows.push(
-                    range("ssaoStrength", label("strength"), 0, 100, Math.round(this.mmdManager.postEffectSsaoStrength * 100), this.mmdManager.postEffectSsaoStrength.toFixed(2)),
-                    range("ssaoRadius", label("radius"), 1, 500, Math.round(this.mmdManager.postEffectSsaoRadius * 100), this.mmdManager.postEffectSsaoRadius.toFixed(2)),
+                    range("ssaoStrength", label("strength"), this.mmdManager.postEffectSsaoStrength, this.mmdManager.postEffectSsaoStrength.toFixed(2)),
+                    range("ssaoRadius", label("radius"), this.mmdManager.postEffectSsaoRadius, this.mmdManager.postEffectSsaoRadius.toFixed(2)),
                 );
                 break;
             case "ssgi":
                 rows.push(
-                    range("ssgiStrength", label("strength"), 0, 100, Math.round(this.mmdManager.postEffectSsgiStrength * 100), this.mmdManager.postEffectSsgiStrength.toFixed(2)),
-                    range("ssgiSampleRadius", label("radius"), 1, 256, Math.round(this.mmdManager.postEffectSsgiSampleRadius), `${Math.round(this.mmdManager.postEffectSsgiSampleRadius)}px`),
+                    range("ssgiStrength", label("strength"), this.mmdManager.postEffectSsgiStrength, this.mmdManager.postEffectSsgiStrength.toFixed(2)),
+                    range("ssgiSampleRadius", label("radius"), this.mmdManager.postEffectSsgiSampleRadius, `${Math.round(this.mmdManager.postEffectSsgiSampleRadius)}px`),
                 );
                 break;
             case "offsetShadow": {
                 const offsetShadowColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectOffsetShadowColor());
                 rows.push(
                     color("offsetShadowColor", label("color"), offsetShadowColor, offsetShadowColor),
-                    range("offsetShadowStrength", label("strength"), 0, 200, Math.round(this.mmdManager.postEffectOffsetShadowStrength * 100), this.mmdManager.postEffectOffsetShadowStrength.toFixed(2)),
-                    range("offsetShadowOffsetX", label("offsetX"), -64, 64, Math.round(this.mmdManager.postEffectOffsetShadowOffsetX), `${Math.round(this.mmdManager.postEffectOffsetShadowOffsetX)}px`),
-                    range("offsetShadowOffsetY", label("offsetY"), -64, 64, Math.round(this.mmdManager.postEffectOffsetShadowOffsetY), `${Math.round(this.mmdManager.postEffectOffsetShadowOffsetY)}px`),
-                    range("offsetShadowDepthBias", label("minDepth"), 0, 400, Math.round(this.mmdManager.postEffectOffsetShadowDepthBias * 1000), this.mmdManager.postEffectOffsetShadowDepthBias.toFixed(3)),
-                    range("offsetShadowMaxDepth", label("maxDepth"), 1, 4000, Math.round(this.mmdManager.postEffectOffsetShadowMaxDepth * 1000), this.mmdManager.postEffectOffsetShadowMaxDepth.toFixed(3)),
-                    range("offsetShadowDepthScale", label("depthScale"), 0, 100, Math.round(this.mmdManager.postEffectOffsetShadowDepthScale * 100), this.mmdManager.postEffectOffsetShadowDepthScale.toFixed(2)),
+                    range("offsetShadowStrength", label("strength"), this.mmdManager.postEffectOffsetShadowStrength, this.mmdManager.postEffectOffsetShadowStrength.toFixed(2)),
+                    range("offsetShadowOffsetX", label("offsetX"), this.mmdManager.postEffectOffsetShadowOffsetX, `${Math.round(this.mmdManager.postEffectOffsetShadowOffsetX)}px`),
+                    range("offsetShadowOffsetY", label("offsetY"), this.mmdManager.postEffectOffsetShadowOffsetY, `${Math.round(this.mmdManager.postEffectOffsetShadowOffsetY)}px`),
+                    range("offsetShadowDepthBias", label("minDepth"), this.mmdManager.postEffectOffsetShadowDepthBias, this.mmdManager.postEffectOffsetShadowDepthBias.toFixed(3)),
+                    range("offsetShadowMaxDepth", label("maxDepth"), this.mmdManager.postEffectOffsetShadowMaxDepth, this.mmdManager.postEffectOffsetShadowMaxDepth.toFixed(3)),
+                    range("offsetShadowDepthScale", label("depthScale"), this.mmdManager.postEffectOffsetShadowDepthScale, this.mmdManager.postEffectOffsetShadowDepthScale.toFixed(2)),
                 );
                 break;
             }
@@ -4875,36 +4912,36 @@ export class UIController {
                 const offsetHighlightStrength = Math.max(0, Math.min(1, this.mmdManager.postEffectOffsetHighlightStrength));
                 rows.push(
                     color("offsetHighlightColor", label("color"), offsetHighlightColor, offsetHighlightColor),
-                    range("offsetHighlightStrength", label("strength"), 0, 100, Math.round(offsetHighlightStrength * 100), offsetHighlightStrength.toFixed(2)),
-                    range("offsetHighlightOffsetX", label("offsetX"), -256, 256, Math.round(this.mmdManager.postEffectOffsetHighlightOffsetX), `${Math.round(this.mmdManager.postEffectOffsetHighlightOffsetX)}px`),
-                    range("offsetHighlightOffsetY", label("offsetY"), -256, 256, Math.round(this.mmdManager.postEffectOffsetHighlightOffsetY), `${Math.round(this.mmdManager.postEffectOffsetHighlightOffsetY)}px`),
-                    range("offsetHighlightDepthScale", label("depthScale"), 0, 100, Math.round(this.mmdManager.postEffectOffsetHighlightDepthScale * 100), this.mmdManager.postEffectOffsetHighlightDepthScale.toFixed(2)),
+                    range("offsetHighlightStrength", label("strength"), offsetHighlightStrength, offsetHighlightStrength.toFixed(2)),
+                    range("offsetHighlightOffsetX", label("offsetX"), this.mmdManager.postEffectOffsetHighlightOffsetX, `${Math.round(this.mmdManager.postEffectOffsetHighlightOffsetX)}px`),
+                    range("offsetHighlightOffsetY", label("offsetY"), this.mmdManager.postEffectOffsetHighlightOffsetY, `${Math.round(this.mmdManager.postEffectOffsetHighlightOffsetY)}px`),
+                    range("offsetHighlightDepthScale", label("depthScale"), this.mmdManager.postEffectOffsetHighlightDepthScale, this.mmdManager.postEffectOffsetHighlightDepthScale.toFixed(2)),
                 );
                 break;
             }
             case "ssr":
                 rows.push(
-                    range("ssrStrength", label("strength"), 0, 200, Math.round(this.mmdManager.postEffectSsrStrength * 100), this.mmdManager.postEffectSsrStrength.toFixed(2)),
-                    range("ssrStep", label("step"), 1, 8, Math.round(this.mmdManager.postEffectSsrStep), String(Math.round(this.mmdManager.postEffectSsrStep))),
+                    range("ssrStrength", label("strength"), this.mmdManager.postEffectSsrStrength, this.mmdManager.postEffectSsrStrength.toFixed(2)),
+                    range("ssrStep", label("step"), this.mmdManager.postEffectSsrStep, String(Math.round(this.mmdManager.postEffectSsrStep))),
                 );
                 break;
             case "vignette":
-                rows.push(range("vignetteWeight", label("weight"), 0, 400, Math.round(this.mmdManager.postEffectVignetteWeight * 100), this.mmdManager.postEffectVignetteWeight.toFixed(2)));
+                rows.push(range("vignetteWeight", label("weight"), this.mmdManager.postEffectVignetteWeight, this.mmdManager.postEffectVignetteWeight.toFixed(2)));
                 break;
             case "grain":
-                rows.push(range("grainIntensity", label("intensity"), 0, 100, Math.round(this.mmdManager.postEffectGrainIntensity), `${Math.round(this.mmdManager.postEffectGrainIntensity)}%`));
+                rows.push(range("grainIntensity", label("intensity"), this.mmdManager.postEffectGrainIntensity, `${Math.round(this.mmdManager.postEffectGrainIntensity)}%`));
                 break;
             case "sharpen":
-                rows.push(range("sharpenEdge", label("edge"), 0, 400, Math.round(this.mmdManager.postEffectSharpenEdge * 100), this.mmdManager.postEffectSharpenEdge.toFixed(2)));
+                rows.push(range("sharpenEdge", label("edge"), this.mmdManager.postEffectSharpenEdge, this.mmdManager.postEffectSharpenEdge.toFixed(2)));
                 break;
             case "chromatic":
-                rows.push(range("chromaticAberration", label("offset"), 0, 200, Math.round(this.mmdManager.postEffectChromaticAberration), `${Math.round(this.mmdManager.postEffectChromaticAberration)}px`));
+                rows.push(range("chromaticAberration", label("offset"), this.mmdManager.postEffectChromaticAberration, `${Math.round(this.mmdManager.postEffectChromaticAberration)}px`));
                 break;
             case "edgeBlur":
-                rows.push(range("edgeBlur", label("strength"), 0, 100, Math.round(this.mmdManager.dofLensEdgeBlur * 100), `${Math.round(this.mmdManager.dofLensEdgeBlur * 100)}%`));
+                rows.push(range("edgeBlur", label("strength"), this.mmdManager.dofLensEdgeBlur, `${Math.round(this.mmdManager.dofLensEdgeBlur * 100)}%`));
                 break;
             case "distortion":
-                rows.push(range("distortion", label("influence"), 0, 100, Math.round(this.mmdManager.dofLensDistortionInfluence * 100), `${Math.round(this.mmdManager.dofLensDistortionInfluence * 100)}%`));
+                rows.push(range("distortion", label("influence"), this.mmdManager.dofLensDistortionInfluence, `${Math.round(this.mmdManager.dofLensDistortionInfluence * 100)}%`));
                 break;
         }
 
@@ -4925,18 +4962,21 @@ export class UIController {
         const rawValue = control instanceof HTMLInputElement && control.type !== "color"
             ? Number(control.value)
             : control.value;
+        const actualValue = typeof rawValue === "number" && isFrameGraphEffectSliderField(field)
+            ? fromFrameGraphEffectSliderValue(field, rawValue)
+            : rawValue;
         const effectId = this.getFrameGraphPostEffectIdForControlField(field);
         const wasActive = effectId ? this.mmdManager.isFrameGraphPostEffectActive(effectId) : false;
 
         switch (field) {
             case "bloomWeight":
-                this.mmdManager.postEffectBloomWeight = Number(rawValue) / 100;
+                this.mmdManager.postEffectBloomWeight = Number(actualValue);
                 break;
             case "bloomThreshold":
-                this.mmdManager.postEffectBloomThreshold = Number(rawValue) / 100;
+                this.mmdManager.postEffectBloomThreshold = Number(actualValue);
                 break;
             case "bloomKernel":
-                this.mmdManager.postEffectBloomKernel = Number(rawValue);
+                this.mmdManager.postEffectBloomKernel = Number(actualValue);
                 break;
             case "bloomColor": {
                 const colorValue = this.readEffectStackHexColor(String(rawValue));
@@ -4945,13 +4985,13 @@ export class UIController {
                 break;
             }
             case "luminousIntensity":
-                this.mmdManager.postEffectGlowIntensity = Number(rawValue) / 100;
+                this.mmdManager.postEffectGlowIntensity = Number(actualValue);
                 break;
             case "luminousThreshold":
-                this.mmdManager.postEffectGlowThreshold = Number(rawValue) / 100;
+                this.mmdManager.postEffectGlowThreshold = Number(actualValue);
                 break;
             case "luminousRadius":
-                this.mmdManager.postEffectGlowKernel = Number(rawValue);
+                this.mmdManager.postEffectGlowKernel = Number(actualValue);
                 break;
             case "luminousGlareCount":
                 this.mmdManager.postEffectGlowGlareCount = Number(rawValue);
@@ -4992,13 +5032,13 @@ export class UIController {
                 break;
             }
             case "dofFocusOffset":
-                this.mmdManager.dofAutoFocusNearOffsetMm = Number(rawValue);
+                this.mmdManager.dofAutoFocusNearOffsetMm = Number(actualValue);
                 break;
             case "dofFStop":
                 this.applySimplifiedDofDefaults();
                 break;
             case "dofLensSize":
-                this.mmdManager.dofLensSize = Number(rawValue);
+                this.mmdManager.dofLensSize = Number(actualValue);
                 break;
             case "dofFocalLength":
                 this.mmdManager.dofFocalLength = Number(rawValue);
@@ -5017,38 +5057,38 @@ export class UIController {
                 }
                 break;
             case "lutIntensity":
-                this.mmdManager.postEffectLutIntensity = Number(rawValue) / 100;
+                this.mmdManager.postEffectLutIntensity = Number(actualValue);
                 break;
             case "ssaoStrength":
-                this.mmdManager.postEffectSsaoStrength = Number(rawValue) / 100;
+                this.mmdManager.postEffectSsaoStrength = Number(actualValue);
                 this.mmdManager.postEffectSsaoDebugView = false;
                 break;
             case "ssaoRadius":
-                this.mmdManager.postEffectSsaoRadius = Number(rawValue) / 100;
+                this.mmdManager.postEffectSsaoRadius = Number(actualValue);
                 break;
             case "ssgiStrength":
-                this.mmdManager.postEffectSsgiStrength = Number(rawValue) / 100;
+                this.mmdManager.postEffectSsgiStrength = Number(actualValue);
                 break;
             case "ssgiSampleRadius":
-                this.mmdManager.postEffectSsgiSampleRadius = Number(rawValue);
+                this.mmdManager.postEffectSsgiSampleRadius = Number(actualValue);
                 break;
             case "offsetShadowStrength":
-                this.mmdManager.postEffectOffsetShadowStrength = Number(rawValue) / 100;
+                this.mmdManager.postEffectOffsetShadowStrength = Number(actualValue);
                 break;
             case "offsetShadowOffsetX":
-                this.mmdManager.postEffectOffsetShadowOffsetX = Number(rawValue);
+                this.mmdManager.postEffectOffsetShadowOffsetX = Number(actualValue);
                 break;
             case "offsetShadowOffsetY":
-                this.mmdManager.postEffectOffsetShadowOffsetY = Number(rawValue);
+                this.mmdManager.postEffectOffsetShadowOffsetY = Number(actualValue);
                 break;
             case "offsetShadowDepthBias":
-                this.mmdManager.postEffectOffsetShadowDepthBias = Number(rawValue) / 1000;
+                this.mmdManager.postEffectOffsetShadowDepthBias = Number(actualValue);
                 break;
             case "offsetShadowMaxDepth":
-                this.mmdManager.postEffectOffsetShadowMaxDepth = Number(rawValue) / 1000;
+                this.mmdManager.postEffectOffsetShadowMaxDepth = Number(actualValue);
                 break;
             case "offsetShadowDepthScale":
-                this.mmdManager.postEffectOffsetShadowDepthScale = Number(rawValue) / 100;
+                this.mmdManager.postEffectOffsetShadowDepthScale = Number(actualValue);
                 break;
             case "offsetShadowThickness":
                 this.mmdManager.postEffectOffsetShadowThickness = Number(rawValue) / 100;
@@ -5066,13 +5106,13 @@ export class UIController {
                 break;
             }
             case "offsetHighlightStrength":
-                this.mmdManager.postEffectOffsetHighlightStrength = Number(rawValue) / 100;
+                this.mmdManager.postEffectOffsetHighlightStrength = Number(actualValue);
                 break;
             case "offsetHighlightOffsetX":
-                this.mmdManager.postEffectOffsetHighlightOffsetX = Number(rawValue);
+                this.mmdManager.postEffectOffsetHighlightOffsetX = Number(actualValue);
                 break;
             case "offsetHighlightOffsetY":
-                this.mmdManager.postEffectOffsetHighlightOffsetY = Number(rawValue);
+                this.mmdManager.postEffectOffsetHighlightOffsetY = Number(actualValue);
                 break;
             case "offsetHighlightDepthThreshold":
                 this.mmdManager.postEffectOffsetHighlightDepthThreshold = Number(rawValue) / 1000;
@@ -5081,7 +5121,7 @@ export class UIController {
                 this.mmdManager.postEffectOffsetHighlightNormalThreshold = Number(rawValue) / 100;
                 break;
             case "offsetHighlightDepthScale":
-                this.mmdManager.postEffectOffsetHighlightDepthScale = Number(rawValue) / 100;
+                this.mmdManager.postEffectOffsetHighlightDepthScale = Number(actualValue);
                 break;
             case "offsetHighlightThickness":
                 this.mmdManager.postEffectOffsetHighlightThickness = Number(rawValue) / 100;
@@ -5096,29 +5136,29 @@ export class UIController {
                 break;
             }
             case "ssrStrength":
-                this.mmdManager.postEffectSsrStrength = Number(rawValue) / 100;
+                this.mmdManager.postEffectSsrStrength = Number(actualValue);
                 break;
             case "ssrStep":
-                this.mmdManager.postEffectSsrStep = Number(rawValue);
+                this.mmdManager.postEffectSsrStep = Number(actualValue);
                 break;
             case "vignetteWeight":
-                this.mmdManager.postEffectVignetteWeight = Number(rawValue) / 100;
+                this.mmdManager.postEffectVignetteWeight = Number(actualValue);
                 this.mmdManager.postEffectVignetteEnabled = this.mmdManager.postEffectVignetteWeight > 0.0001;
                 break;
             case "grainIntensity":
-                this.mmdManager.postEffectGrainIntensity = Number(rawValue);
+                this.mmdManager.postEffectGrainIntensity = Number(actualValue);
                 break;
             case "sharpenEdge":
-                this.mmdManager.postEffectSharpenEdge = Number(rawValue) / 100;
+                this.mmdManager.postEffectSharpenEdge = Number(actualValue);
                 break;
             case "chromaticAberration":
-                this.mmdManager.postEffectChromaticAberration = Number(rawValue);
+                this.mmdManager.postEffectChromaticAberration = Number(actualValue);
                 break;
             case "edgeBlur":
-                this.mmdManager.dofLensEdgeBlur = Number(rawValue) / 100;
+                this.mmdManager.dofLensEdgeBlur = Number(actualValue);
                 break;
             case "distortion":
-                this.mmdManager.dofLensDistortionInfluence = Number(rawValue) / 100;
+                this.mmdManager.dofLensDistortionInfluence = Number(actualValue);
                 break;
             default:
                 return;

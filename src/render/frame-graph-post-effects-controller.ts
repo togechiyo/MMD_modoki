@@ -1,6 +1,7 @@
 import { Constants } from "@babylonjs/core/Engines/constants";
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
+import type { FrameGraphTask } from "@babylonjs/core/FrameGraph/frameGraphTask";
 import { FrameGraphObjectList } from "@babylonjs/core/FrameGraph/frameGraphObjectList";
 import { FrameGraphBloomTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/bloomTask";
 import { FrameGraphChromaticAberrationTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/chromaticAberrationTask";
@@ -55,6 +56,10 @@ import {
     ensureFrameGraphSsgiShaders,
     FRAME_GRAPH_SSGI_METHOD_NAME,
 } from "./frame-graph-ssgi-shaders";
+import {
+    resolveLuminousBlurPassSettings,
+    type LuminousBlurBand,
+} from "./luminous-blur-settings";
 
 const SSGI_DENOISE_STEP_WIDTHS = [1, 2, 4] as const;
 
@@ -73,6 +78,10 @@ export type FrameGraphPostEffectsInfo = {
 type FrameGraphPostEffectsOutputTask =
     | FrameGraphCopyToBackbufferColorTask
     | FrameGraphCopyToTextureTask;
+
+type FrameGraphPostEffectsStackOutputTask = {
+    sourceTexture?: FrameGraphTextureHandle;
+};
 
 type EffectWrapperReadyLike = {
     effect?: {
@@ -144,6 +153,8 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
     luminousBlur: {
         coreKernel: number;
         haloKernel: number;
+        coreDirectionScale: number;
+        haloDirectionScale: number;
     };
     connectedOrder: FrameGraphPostEffectId[];
 };
@@ -1520,19 +1531,6 @@ class FrameGraphPostEffectsLuminousTask extends FrameGraphPostProcessTask {
     }
 }
 
-function resolveLuminousBlurKernel(settings: FrameGraphPostEffectsSettings, band: "core" | "halo"): number {
-    const radius = Math.max(1, Math.min(128, settings.luminousRadius));
-    const ideal = band === "core"
-        ? Math.max(5, Math.min(33, radius * 0.32))
-        : Math.max(9, Math.min(129, radius));
-    const kernels = band === "core"
-        ? [5, 9, 13, 17, 25, 33]
-        : [9, 13, 17, 25, 33, 49, 65, 97, 129];
-    return kernels.reduce((best, candidate) => (
-        Math.abs(candidate - ideal) < Math.abs(best - ideal) ? candidate : best
-    ), kernels[0]);
-}
-
 class FrameGraphPostEffectsLuminousExtractTask extends FrameGraphPostProcessTask {
     constructor(
         name: string,
@@ -1572,7 +1570,7 @@ class FrameGraphPostEffectsLuminousThinBlurTask extends FrameGraphPostProcessTas
         postProcess: ThinBlurPostProcess,
         private readonly getSettings: () => FrameGraphPostEffectsSettings,
         private readonly direction: "horizontal" | "vertical",
-        private readonly band: "core" | "halo",
+        private readonly band: LuminousBlurBand,
     ) {
         super(name, frameGraph, postProcess);
     }
@@ -1595,10 +1593,12 @@ class FrameGraphPostEffectsLuminousThinBlurTask extends FrameGraphPostProcessTas
                 const engine = this.postProcess.options.engine;
                 const width = Math.max(1, engine.getRenderWidth());
                 const height = Math.max(1, engine.getRenderHeight());
+                const blurSettings = resolveLuminousBlurPassSettings(settings.luminousRadius, this.band);
                 blur.textureWidth = width;
                 blur.textureHeight = height;
-                blur.direction = this.direction === "horizontal" ? new Vector2(1, 0) : new Vector2(0, 1);
-                blur.kernel = resolveLuminousBlurKernel(settings, this.band);
+                blur.direction = this.direction === "horizontal"
+                    ? new Vector2(blurSettings.directionScale, 0)
+                    : new Vector2(0, blurSettings.directionScale);
                 additionalBindings?.(context);
             },
         );
@@ -1933,7 +1933,6 @@ export class FrameGraphPostEffectsController {
     private fxaaEffect: ThinFXAAPostProcess | null = null;
     private fxaaTask: FrameGraphFXAATask | null = null;
     private outputTask: FrameGraphPostEffectsOutputTask | null = null;
-    private baseOutputTexture: FrameGraphTextureHandle | null = null;
     private frameGraph: FrameGraph | null = null;
     private activeScene: Scene | null = null;
     private ready = false;
@@ -2046,6 +2045,8 @@ export class FrameGraphPostEffectsController {
     getDiagnosticsSnapshot(): FrameGraphPostEffectsDiagnosticsSnapshot {
         const settings = this.getSettings();
         const resourcePlan = this.resourcePlan;
+        const luminousCoreBlur = resolveLuminousBlurPassSettings(settings.luminousRadius, "core");
+        const luminousHaloBlur = resolveLuminousBlurPassSettings(settings.luminousRadius, "halo");
         return {
             active: this.active,
             ready: this.ready,
@@ -2103,8 +2104,10 @@ export class FrameGraphPostEffectsController {
                 luminousHaloBlur: this.luminousHaloBlurVerticalTask !== null,
             },
             luminousBlur: {
-                coreKernel: resolveLuminousBlurKernel(settings, "core"),
-                haloKernel: resolveLuminousBlurKernel(settings, "halo"),
+                coreKernel: luminousCoreBlur.kernel,
+                haloKernel: luminousHaloBlur.kernel,
+                coreDirectionScale: luminousCoreBlur.directionScale,
+                haloDirectionScale: luminousHaloBlur.directionScale,
             },
             connectedOrder: [...this.connectedOrder],
         };
@@ -2143,6 +2146,19 @@ export class FrameGraphPostEffectsController {
 
         const frameGraph = new FrameGraph(scene, false);
         frameGraph.name = "MMD modoki post effects";
+        const normalizedEffectOrder = normalizeFrameGraphPostEffectIds(effectOrder);
+        const physicalEffectOrder = normalizeFrameGraphPostEffectIds(
+            normalizedEffectOrder,
+            FRAME_GRAPH_POST_EFFECT_IDS,
+        );
+        const preludeTasks: FrameGraphTask[] = [];
+        const effectTasks = new Map<FrameGraphPostEffectId, FrameGraphTask[]>();
+        const postludeTasks: FrameGraphTask[] = [];
+        const deferEffectTask = (id: FrameGraphPostEffectId, task: FrameGraphTask): void => {
+            const tasks = effectTasks.get(id) ?? [];
+            tasks.push(task);
+            effectTasks.set(id, tasks);
+        };
         this.colorCorrectionEffect = new EffectWrapper({
             engine: frameGraph.engine,
             fragmentShader: "mmdFrameGraphColorCorrection",
@@ -2188,7 +2204,7 @@ export class FrameGraphPostEffectsController {
         imageProcessingTask.sourceTexture = sourceTextureHandle;
         imageProcessingTask.disabled = !initialSettings.imageProcessingEnabled;
         this.lastImageProcessingEnabled = initialSettings.imageProcessingEnabled;
-        frameGraph.addTask(imageProcessingTask);
+        preludeTasks.push(imageProcessingTask);
         this.imageProcessingTask = imageProcessingTask;
 
         let dofSourceTexture = imageProcessingTask.outputTexture;
@@ -2217,7 +2233,7 @@ export class FrameGraphPostEffectsController {
             clearGeometryDepthTask.clearColor = false;
             clearGeometryDepthTask.clearDepth = true;
             clearGeometryDepthTask.depthTexture = geometryDepthTexture;
-            frameGraph.addTask(clearGeometryDepthTask);
+            preludeTasks.push(clearGeometryDepthTask);
 
             const geometryRendererTask = new FrameGraphGeometryRendererTask(
                 "frameGraphPostEffectsGeometry",
@@ -2257,7 +2273,7 @@ export class FrameGraphPostEffectsController {
                 });
             }
             geometryRendererTask.disabled = false;
-            frameGraph.addTask(geometryRendererTask);
+            preludeTasks.push(geometryRendererTask);
             this.geometryRendererTask = geometryRendererTask;
 
             let ssaoSourceTexture = imageProcessingTask.outputTexture;
@@ -2274,7 +2290,7 @@ export class FrameGraphPostEffectsController {
                 ssrTask.camera = camera;
                 ssrTask.disabled = false;
                 this.applySsrSettings(ssrTask, initialSettings);
-                frameGraph.addTask(ssrTask);
+                deferEffectTask("ssr", ssrTask);
                 this.ssrTask = ssrTask;
                 ssaoSourceTexture = ssrTask.outputTexture;
                 dofSourceTexture = ssrTask.outputTexture;
@@ -2303,7 +2319,7 @@ export class FrameGraphPostEffectsController {
                 ssgiGatherTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
                 ssgiGatherTask.normalTexture = geometryRendererTask.geometryViewNormalTexture;
                 ssgiGatherTask.disabled = false;
-                frameGraph.addTask(ssgiGatherTask);
+                deferEffectTask("ssgi", ssgiGatherTask);
                 this.ssgiGatherTask = ssgiGatherTask;
 
                 let denoisedSsgiTexture = ssgiGatherTask.outputTexture;
@@ -2322,7 +2338,7 @@ export class FrameGraphPostEffectsController {
                     denoiseTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
                     denoiseTask.normalTexture = geometryRendererTask.geometryViewNormalTexture;
                     denoiseTask.disabled = false;
-                    frameGraph.addTask(denoiseTask);
+                    deferEffectTask("ssgi", denoiseTask);
                     this.ssgiDenoiseTasks.push(denoiseTask);
                     denoisedSsgiTexture = denoiseTask.outputTexture;
                 }
@@ -2348,7 +2364,7 @@ export class FrameGraphPostEffectsController {
                 ssgiCompositeTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
                 ssgiCompositeTask.normalTexture = geometryRendererTask.geometryViewNormalTexture;
                 ssgiCompositeTask.disabled = false;
-                frameGraph.addTask(ssgiCompositeTask);
+                deferEffectTask("ssgi", ssgiCompositeTask);
                 this.ssgiCompositeTask = ssgiCompositeTask;
                 ssaoSourceTexture = ssgiCompositeTask.outputTexture;
                 dofSourceTexture = ssgiCompositeTask.outputTexture;
@@ -2367,7 +2383,7 @@ export class FrameGraphPostEffectsController {
                 ssaoTask.camera = camera;
                 ssaoTask.disabled = false;
                 this.applySsaoSettings(ssaoTask, initialSettings, camera);
-                frameGraph.addTask(ssaoTask);
+                deferEffectTask("ssao", ssaoTask);
                 this.ssaoTask = ssaoTask;
 
                 this.ssaoToonCompositeEffect = new EffectWrapper({
@@ -2389,7 +2405,7 @@ export class FrameGraphPostEffectsController {
                 ssaoToonCompositeTask.sourceTexture = ssaoTask.outputTexture;
                 ssaoToonCompositeTask.originalTexture = imageProcessingTask.outputTexture;
                 ssaoToonCompositeTask.disabled = false;
-                frameGraph.addTask(ssaoToonCompositeTask);
+                deferEffectTask("ssao", ssaoToonCompositeTask);
                 this.ssaoToonCompositeTask = ssaoToonCompositeTask;
                 dofSourceTexture = ssaoToonCompositeTask.outputTexture;
             }
@@ -2425,7 +2441,7 @@ export class FrameGraphPostEffectsController {
                 offsetShadowTask.sourceTexture = dofSourceTexture;
                 offsetShadowTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
                 offsetShadowTask.disabled = false;
-                frameGraph.addTask(offsetShadowTask);
+                deferEffectTask("offsetShadow", offsetShadowTask);
                 this.offsetShadowTask = offsetShadowTask;
                 dofSourceTexture = offsetShadowTask.outputTexture;
             }
@@ -2457,7 +2473,7 @@ export class FrameGraphPostEffectsController {
                 offsetHighlightTask.sourceTexture = dofSourceTexture;
                 offsetHighlightTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
                 offsetHighlightTask.disabled = false;
-                frameGraph.addTask(offsetHighlightTask);
+                deferEffectTask("offsetHighlight", offsetHighlightTask);
                 this.offsetHighlightTask = offsetHighlightTask;
                 dofSourceTexture = offsetHighlightTask.outputTexture;
             }
@@ -2481,7 +2497,7 @@ export class FrameGraphPostEffectsController {
             depthOfFieldTask.camera = camera;
             depthOfFieldTask.disabled = false;
             this.applyDepthOfFieldSettings(depthOfFieldTask, initialSettings);
-            frameGraph.addTask(depthOfFieldTask);
+            deferEffectTask("dof", depthOfFieldTask);
             this.depthOfFieldTask = depthOfFieldTask;
             bloomSourceTexture = depthOfFieldTask.outputTexture;
         }
@@ -2507,7 +2523,7 @@ export class FrameGraphPostEffectsController {
         );
         luminousExtractTask.sourceTexture = luminousTextureHandle ?? bloomSourceTexture;
         luminousExtractTask.disabled = luminousDisabled;
-        frameGraph.addTask(luminousExtractTask);
+        deferEffectTask("luminous", luminousExtractTask);
         this.luminousExtractTask = luminousExtractTask;
 
         const blurShaderOptions = {
@@ -2517,7 +2533,7 @@ export class FrameGraphPostEffectsController {
             "mmdFrameGraphLuminousCoreBlurHorizontal",
             frameGraph.engine,
             new Vector2(1, 0),
-            resolveLuminousBlurKernel(initialSettings, "core"),
+            resolveLuminousBlurPassSettings(initialSettings.luminousRadius, "core").kernel,
             blurShaderOptions,
         );
         const luminousCoreBlurHorizontalTask = new FrameGraphPostEffectsLuminousThinBlurTask(
@@ -2530,14 +2546,14 @@ export class FrameGraphPostEffectsController {
         );
         luminousCoreBlurHorizontalTask.sourceTexture = luminousExtractTask.outputTexture;
         luminousCoreBlurHorizontalTask.disabled = luminousDisabled;
-        frameGraph.addTask(luminousCoreBlurHorizontalTask);
+        deferEffectTask("luminous", luminousCoreBlurHorizontalTask);
         this.luminousCoreBlurHorizontalTask = luminousCoreBlurHorizontalTask;
 
         this.luminousCoreBlurVerticalEffect = new ThinBlurPostProcess(
             "mmdFrameGraphLuminousCoreBlurVertical",
             frameGraph.engine,
             new Vector2(0, 1),
-            resolveLuminousBlurKernel(initialSettings, "core"),
+            resolveLuminousBlurPassSettings(initialSettings.luminousRadius, "core").kernel,
             blurShaderOptions,
         );
         const luminousCoreBlurVerticalTask = new FrameGraphPostEffectsLuminousThinBlurTask(
@@ -2550,14 +2566,14 @@ export class FrameGraphPostEffectsController {
         );
         luminousCoreBlurVerticalTask.sourceTexture = luminousCoreBlurHorizontalTask.outputTexture;
         luminousCoreBlurVerticalTask.disabled = luminousDisabled;
-        frameGraph.addTask(luminousCoreBlurVerticalTask);
+        deferEffectTask("luminous", luminousCoreBlurVerticalTask);
         this.luminousCoreBlurVerticalTask = luminousCoreBlurVerticalTask;
 
         this.luminousHaloBlurHorizontalEffect = new ThinBlurPostProcess(
             "mmdFrameGraphLuminousHaloBlurHorizontal",
             frameGraph.engine,
             new Vector2(1, 0),
-            resolveLuminousBlurKernel(initialSettings, "halo"),
+            resolveLuminousBlurPassSettings(initialSettings.luminousRadius, "halo").kernel,
             blurShaderOptions,
         );
         const luminousHaloBlurHorizontalTask = new FrameGraphPostEffectsLuminousThinBlurTask(
@@ -2570,14 +2586,14 @@ export class FrameGraphPostEffectsController {
         );
         luminousHaloBlurHorizontalTask.sourceTexture = luminousExtractTask.outputTexture;
         luminousHaloBlurHorizontalTask.disabled = luminousDisabled;
-        frameGraph.addTask(luminousHaloBlurHorizontalTask);
+        deferEffectTask("luminous", luminousHaloBlurHorizontalTask);
         this.luminousHaloBlurHorizontalTask = luminousHaloBlurHorizontalTask;
 
         this.luminousHaloBlurVerticalEffect = new ThinBlurPostProcess(
             "mmdFrameGraphLuminousHaloBlurVertical",
             frameGraph.engine,
             new Vector2(0, 1),
-            resolveLuminousBlurKernel(initialSettings, "halo"),
+            resolveLuminousBlurPassSettings(initialSettings.luminousRadius, "halo").kernel,
             blurShaderOptions,
         );
         const luminousHaloBlurVerticalTask = new FrameGraphPostEffectsLuminousThinBlurTask(
@@ -2590,7 +2606,7 @@ export class FrameGraphPostEffectsController {
         );
         luminousHaloBlurVerticalTask.sourceTexture = luminousHaloBlurHorizontalTask.outputTexture;
         luminousHaloBlurVerticalTask.disabled = luminousDisabled;
-        frameGraph.addTask(luminousHaloBlurVerticalTask);
+        deferEffectTask("luminous", luminousHaloBlurVerticalTask);
         this.luminousHaloBlurVerticalTask = luminousHaloBlurVerticalTask;
 
         this.luminousEffect = new EffectWrapper({
@@ -2613,7 +2629,7 @@ export class FrameGraphPostEffectsController {
         luminousTask.glowTexture = luminousCoreBlurVerticalTask.outputTexture;
         luminousTask.haloTexture = luminousHaloBlurVerticalTask.outputTexture;
         luminousTask.disabled = luminousDisabled;
-        frameGraph.addTask(luminousTask);
+        deferEffectTask("luminous", luminousTask);
         this.luminousTask = luminousTask;
         luminousOutputTexture = luminousTask.outputTexture;
         }
@@ -2628,7 +2644,7 @@ export class FrameGraphPostEffectsController {
         );
         bloomTask.sourceTexture = luminousOutputTexture;
         bloomTask.disabled = !initialSettings.bloomEnabled;
-        frameGraph.addTask(bloomTask);
+        deferEffectTask("bloom", bloomTask);
         this.bloomTask = bloomTask;
 
         this.bloomTintEffect = new EffectWrapper({
@@ -2650,7 +2666,7 @@ export class FrameGraphPostEffectsController {
         bloomTintTask.sourceTexture = bloomTask.outputTexture;
         bloomTintTask.originalTexture = luminousOutputTexture;
         bloomTintTask.disabled = !initialSettings.bloomEnabled;
-        frameGraph.addTask(bloomTintTask);
+        deferEffectTask("bloom", bloomTintTask);
         this.bloomTintTask = bloomTintTask;
 
         this.lutEffect = new EffectWrapper({
@@ -2672,7 +2688,7 @@ export class FrameGraphPostEffectsController {
         );
         lutTask.sourceTexture = bloomTintTask.outputTexture;
         lutTask.disabled = !this.isLutEnabled(initialSettings);
-        frameGraph.addTask(lutTask);
+        deferEffectTask("lut", lutTask);
         this.lutTask = lutTask;
 
         const colorCorrectionTask = new FrameGraphPostEffectsColorCorrectionTask(
@@ -2685,7 +2701,7 @@ export class FrameGraphPostEffectsController {
             this.getSettings,
         );
         colorCorrectionTask.sourceTexture = lutTask.outputTexture;
-        frameGraph.addTask(colorCorrectionTask);
+        postludeTasks.push(colorCorrectionTask);
 
         this.sharpenEffect = new ThinSharpenPostProcess(
             "frameGraphPostEffectsSharpen",
@@ -2702,7 +2718,7 @@ export class FrameGraphPostEffectsController {
         sharpenTask.sourceTexture = colorCorrectionTask.outputTexture;
         sharpenTask.disabled = initialSettings.sharpenEdge <= 0.0001;
         this.applySharpenSettings(sharpenTask, initialSettings);
-        frameGraph.addTask(sharpenTask);
+        deferEffectTask("sharpen", sharpenTask);
         this.sharpenTask = sharpenTask;
 
         this.grainEffect = new ThinGrainPostProcess(
@@ -2720,7 +2736,7 @@ export class FrameGraphPostEffectsController {
         grainTask.sourceTexture = sharpenTask.outputTexture;
         grainTask.disabled = initialSettings.grainIntensity <= 0.0001;
         this.applyGrainSettings(grainTask, initialSettings);
-        frameGraph.addTask(grainTask);
+        deferEffectTask("grain", grainTask);
         this.grainTask = grainTask;
 
         this.chromaticAberrationEffect = new ThinChromaticAberrationPostProcess(
@@ -2738,7 +2754,7 @@ export class FrameGraphPostEffectsController {
         chromaticAberrationTask.sourceTexture = grainTask.outputTexture;
         chromaticAberrationTask.disabled = initialSettings.chromaticAberration <= 0.0001;
         this.applyChromaticAberrationSettings(chromaticAberrationTask, initialSettings);
-        frameGraph.addTask(chromaticAberrationTask);
+        deferEffectTask("chromatic", chromaticAberrationTask);
         this.chromaticAberrationTask = chromaticAberrationTask;
 
         this.vignetteEdgeBlurEffect = new EffectWrapper({
@@ -2758,7 +2774,12 @@ export class FrameGraphPostEffectsController {
         );
         vignetteEdgeBlurTask.sourceTexture = chromaticAberrationTask.outputTexture;
         vignetteEdgeBlurTask.disabled = !this.isVignetteEdgeBlurEnabled(initialSettings);
-        frameGraph.addTask(vignetteEdgeBlurTask);
+        const vignetteEdgeBlurOrderId = physicalEffectOrder.find((id) => (
+            id === "vignette" || id === "edgeBlur"
+        ));
+        if (vignetteEdgeBlurOrderId) {
+            deferEffectTask(vignetteEdgeBlurOrderId, vignetteEdgeBlurTask);
+        }
         this.vignetteEdgeBlurTask = vignetteEdgeBlurTask;
 
         this.lensDistortionEffect = new EffectWrapper({
@@ -2778,7 +2799,7 @@ export class FrameGraphPostEffectsController {
         );
         lensDistortionTask.sourceTexture = vignetteEdgeBlurTask.outputTexture;
         lensDistortionTask.disabled = !isFrameGraphPostEffectActiveInSettings(initialSettings, "distortion");
-        frameGraph.addTask(lensDistortionTask);
+        deferEffectTask("distortion", lensDistortionTask);
         this.lensDistortionTask = lensDistortionTask;
 
         this.fxaaEffect = new ThinFXAAPostProcess(
@@ -2795,7 +2816,7 @@ export class FrameGraphPostEffectsController {
         );
         fxaaTask.sourceTexture = lensDistortionTask.outputTexture;
         fxaaTask.disabled = !initialSettings.antialiasEnabled;
-        frameGraph.addTask(fxaaTask);
+        postludeTasks.push(fxaaTask);
         this.fxaaTask = fxaaTask;
 
         const outputTask: FrameGraphPostEffectsOutputTask = outputTexture
@@ -2807,10 +2828,23 @@ export class FrameGraphPostEffectsController {
                 outputTexture,
             );
         }
-        frameGraph.addTask(outputTask);
+        postludeTasks.push(outputTask);
         this.outputTask = outputTask;
-        this.baseOutputTexture = imageProcessingTask.outputTexture;
-        this.connectPostEffectOrder(imageProcessingTask.outputTexture, outputTask, effectOrder);
+        this.connectPostEffectOrder(imageProcessingTask.outputTexture, colorCorrectionTask, physicalEffectOrder);
+        fxaaTask.sourceTexture = colorCorrectionTask.outputTexture;
+        outputTask.sourceTexture = fxaaTask.outputTexture;
+
+        for (const task of preludeTasks) {
+            frameGraph.addTask(task);
+        }
+        for (const id of physicalEffectOrder) {
+            for (const task of effectTasks.get(id) ?? []) {
+                frameGraph.addTask(task);
+            }
+        }
+        for (const task of postludeTasks) {
+            frameGraph.addTask(task);
+        }
 
         this.frameGraph = frameGraph;
         this.activeScene = scene;
@@ -2976,13 +3010,6 @@ export class FrameGraphPostEffectsController {
         if (this.fxaaTask) {
             this.fxaaTask.disabled = !settings.antialiasEnabled;
         }
-        if (this.baseOutputTexture !== null && this.outputTask !== null) {
-            this.connectPostEffectOrder(
-                this.baseOutputTexture,
-                this.outputTask,
-                resourcePlan.effectOrder,
-            );
-        }
         try {
             this.frameGraph.execute();
         } catch (err: unknown) {
@@ -3004,16 +3031,16 @@ export class FrameGraphPostEffectsController {
 
     private connectPostEffectOrder(
         baseTexture: FrameGraphTextureHandle,
-        outputTask: FrameGraphPostEffectsOutputTask,
+        stackOutputTask: FrameGraphPostEffectsStackOutputTask,
         effectOrder: readonly FrameGraphPostEffectId[],
     ): void {
         let currentTexture = baseTexture;
         let vignetteEdgeBlurConnected = false;
         this.connectedOrder = [];
-        const normalizedOrder = normalizeFrameGraphPostEffectIds(effectOrder, FRAME_GRAPH_POST_EFFECT_IDS);
+        const normalizedOrder = normalizeFrameGraphPostEffectIds(effectOrder);
 
         const connectVignetteEdgeBlur = (): void => {
-            if (vignetteEdgeBlurConnected || !this.vignetteEdgeBlurTask || this.vignetteEdgeBlurTask.disabled) {
+            if (vignetteEdgeBlurConnected || !this.vignetteEdgeBlurTask) {
                 return;
             }
             this.vignetteEdgeBlurTask.sourceTexture = currentTexture;
@@ -3025,7 +3052,7 @@ export class FrameGraphPostEffectsController {
         for (const id of normalizedOrder) {
             switch (id) {
                 case "ssr":
-                    if (this.ssrTask && !this.ssrTask.disabled) {
+                    if (this.ssrTask) {
                         this.ssrTask.sourceTexture = currentTexture;
                         currentTexture = this.ssrTask.outputTexture;
                         this.connectedOrder.push("ssr");
@@ -3034,11 +3061,8 @@ export class FrameGraphPostEffectsController {
                 case "ssgi":
                     if (
                         this.ssgiGatherTask
-                        && !this.ssgiGatherTask.disabled
                         && this.ssgiDenoiseTasks.length === SSGI_DENOISE_STEP_WIDTHS.length
-                        && this.ssgiDenoiseTasks.every((task) => !task.disabled)
                         && this.ssgiCompositeTask
-                        && !this.ssgiCompositeTask.disabled
                     ) {
                         this.ssgiGatherTask.sourceTexture = currentTexture;
                         this.ssgiCompositeTask.sourceTexture = currentTexture;
@@ -3054,7 +3078,7 @@ export class FrameGraphPostEffectsController {
                     }
                     break;
                 case "ssao":
-                    if (this.ssaoTask && !this.ssaoTask.disabled && this.ssaoToonCompositeTask && !this.ssaoToonCompositeTask.disabled) {
+                    if (this.ssaoTask && this.ssaoToonCompositeTask) {
                         this.ssaoTask.sourceTexture = currentTexture;
                         this.ssaoToonCompositeTask.sourceTexture = this.ssaoTask.outputTexture;
                         this.ssaoToonCompositeTask.originalTexture = currentTexture;
@@ -3063,35 +3087,35 @@ export class FrameGraphPostEffectsController {
                     }
                     break;
                 case "offsetShadow":
-                    if (this.offsetShadowTask && !this.offsetShadowTask.disabled) {
+                    if (this.offsetShadowTask) {
                         this.offsetShadowTask.sourceTexture = currentTexture;
                         currentTexture = this.offsetShadowTask.outputTexture;
                         this.connectedOrder.push("offsetShadow");
                     }
                     break;
                 case "offsetHighlight":
-                    if (this.offsetHighlightTask && !this.offsetHighlightTask.disabled) {
+                    if (this.offsetHighlightTask) {
                         this.offsetHighlightTask.sourceTexture = currentTexture;
                         currentTexture = this.offsetHighlightTask.outputTexture;
                         this.connectedOrder.push("offsetHighlight");
                     }
                     break;
                 case "dof":
-                    if (this.depthOfFieldTask && !this.depthOfFieldTask.disabled) {
+                    if (this.depthOfFieldTask) {
                         this.depthOfFieldTask.sourceTexture = currentTexture;
                         currentTexture = this.depthOfFieldTask.outputTexture;
                         this.connectedOrder.push("dof");
                     }
                     break;
                 case "luminous":
-                    if (this.luminousTask && !this.luminousTask.disabled) {
+                    if (this.luminousTask) {
                         this.luminousTask.sourceTexture = currentTexture;
                         currentTexture = this.luminousTask.outputTexture;
                         this.connectedOrder.push("luminous");
                     }
                     break;
                 case "bloom":
-                    if (this.bloomTask && !this.bloomTask.disabled && this.bloomTintTask && !this.bloomTintTask.disabled) {
+                    if (this.bloomTask && this.bloomTintTask) {
                         this.bloomTask.sourceTexture = currentTexture;
                         this.bloomTintTask.sourceTexture = this.bloomTask.outputTexture;
                         this.bloomTintTask.originalTexture = currentTexture;
@@ -3100,28 +3124,28 @@ export class FrameGraphPostEffectsController {
                     }
                     break;
                 case "lut":
-                    if (this.lutTask && !this.lutTask.disabled) {
+                    if (this.lutTask) {
                         this.lutTask.sourceTexture = currentTexture;
                         currentTexture = this.lutTask.outputTexture;
                         this.connectedOrder.push("lut");
                     }
                     break;
                 case "sharpen":
-                    if (this.sharpenTask && !this.sharpenTask.disabled) {
+                    if (this.sharpenTask) {
                         this.sharpenTask.sourceTexture = currentTexture;
                         currentTexture = this.sharpenTask.outputTexture;
                         this.connectedOrder.push("sharpen");
                     }
                     break;
                 case "grain":
-                    if (this.grainTask && !this.grainTask.disabled) {
+                    if (this.grainTask) {
                         this.grainTask.sourceTexture = currentTexture;
                         currentTexture = this.grainTask.outputTexture;
                         this.connectedOrder.push("grain");
                     }
                     break;
                 case "chromatic":
-                    if (this.chromaticAberrationTask && !this.chromaticAberrationTask.disabled) {
+                    if (this.chromaticAberrationTask) {
                         this.chromaticAberrationTask.sourceTexture = currentTexture;
                         currentTexture = this.chromaticAberrationTask.outputTexture;
                         this.connectedOrder.push("chromatic");
@@ -3132,7 +3156,7 @@ export class FrameGraphPostEffectsController {
                     connectVignetteEdgeBlur();
                     break;
                 case "distortion":
-                    if (this.lensDistortionTask && !this.lensDistortionTask.disabled) {
+                    if (this.lensDistortionTask) {
                         this.lensDistortionTask.sourceTexture = currentTexture;
                         currentTexture = this.lensDistortionTask.outputTexture;
                         this.connectedOrder.push("distortion");
@@ -3141,11 +3165,7 @@ export class FrameGraphPostEffectsController {
             }
         }
 
-        if (this.fxaaTask && !this.fxaaTask.disabled) {
-            this.fxaaTask.sourceTexture = currentTexture;
-            currentTexture = this.fxaaTask.outputTexture;
-        }
-        outputTask.sourceTexture = currentTexture;
+        stackOutputTask.sourceTexture = currentTexture;
     }
 
     private emitWarningOnce(warning: FrameGraphPostEffectsWarning): void {
@@ -3231,7 +3251,6 @@ export class FrameGraphPostEffectsController {
         this.fxaaEffect = null;
         this.fxaaTask = null;
         this.outputTask = null;
-        this.baseOutputTexture = null;
         this.connectedOrder = [];
         this.frameGraph?.dispose();
         this.frameGraph = null;

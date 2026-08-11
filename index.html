@@ -572,6 +572,12 @@
               <div>
                 <div class="effect-panel-section-title" data-i18n="effect.frameGraphPost.title">FrameGraph / Post</div>
               </div>
+              <button id="btn-effect-reload-framegraph" class="effect-panel-reload-button" type="button" title="FrameGraphを再読み込み" aria-label="FrameGraphを再読み込み" data-i18n-title="effect.frameGraphPost.reload" data-i18n-aria-label="effect.frameGraphPost.reload">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                  <path d="M11.4 5.2A4.8 4.8 0 1 0 11 9.5" />
+                  <path d="M8.6 2.7h3v3" />
+                </svg>
+              </button>
             </div>
             <div id="effect-post-add-panel" class="effect-add-panel" role="menu" aria-label="Add FrameGraph post effect" data-i18n-aria-label="effect.frameGraphPost.addMenuLabel" hidden>
               <div class="effect-add-panel-head">
@@ -587,7 +593,7 @@
                 <button type="button" role="menuitem" data-effect-add-post="offsetShadow" data-i18n="effect.frameGraphPost.effects.offsetShadow">Offset Shadow</button>
                 <button type="button" role="menuitem" data-effect-add-post="offsetHighlight" data-i18n="effect.frameGraphPost.effects.offsetHighlight">Offset Rim</button>
                 <button type="button" role="menuitem" data-effect-add-post="ssr" data-i18n="effect.frameGraphPost.effects.ssr">SSR</button>
-                <button type="button" role="menuitem" data-effect-add-post="ssgi" data-i18n="effect.frameGraphPost.effects.ssgi">GI (Experimental)</button>
+                <button type="button" role="menuitem" data-effect-add-post="ssgi" data-i18n="effect.frameGraphPost.effects.ssgi">SSGI</button>
                 <button type="button" role="menuitem" data-effect-add-post="vignette" data-i18n="effect.frameGraphPost.effects.vignette">Vignette</button>
                 <button type="button" role="menuitem" data-effect-add-post="grain" data-i18n="effect.frameGraphPost.effects.grain">Grain</button>
                 <button type="button" role="menuitem" data-effect-add-post="sharpen" data-i18n="effect.frameGraphPost.effects.sharpen">Sharpen</button>

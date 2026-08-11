@@ -213,6 +213,12 @@ declare global {
                 distance: number;
                 fov: number;
             };
+            getFrameGraphPostEffectsState: () => {
+                backend: string;
+                ready: boolean;
+                executedFrameCount: number;
+                stack: string[];
+            };
             captureExportSurfaceProbe: (width: number, height: number) => Promise<{
                 backend: string;
                 ready: boolean;

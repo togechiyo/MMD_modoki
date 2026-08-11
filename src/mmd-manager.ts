@@ -1556,6 +1556,8 @@ ${beforeFogAppendBlock}
     private readonly requestedPostEffectBackend = readPostEffectBackendLocalStorage();
     private postEffectBackend: PostEffectBackend = this.requestedPostEffectBackend;
     private frameGraphPostEffectsController: FrameGraphPostEffectsController | null = null;
+    private frameGraphPostEffectsRebuildPending = false;
+    private frameGraphPostEffectsRebuildScheduled = false;
     private sceneInstrumentation: SceneInstrumentation | null = null;
     private camera: ArcRotateCamera;
     private mmdCamera: MmdCamera;
@@ -6663,6 +6665,8 @@ ${beforeFogAppendBlock}
                     connectedOrder: controllerSnapshot.connectedOrder,
                     luminousCoreKernel: controllerSnapshot.luminousBlur.coreKernel,
                     luminousHaloKernel: controllerSnapshot.luminousBlur.haloKernel,
+                    luminousCoreDirectionScale: controllerSnapshot.luminousBlur.coreDirectionScale,
+                    luminousHaloDirectionScale: controllerSnapshot.luminousBlur.haloDirectionScale,
                 }
                 : null,
         };
@@ -9238,7 +9242,14 @@ ${beforeFogAppendBlock}
             this.addRuntimeDiagnostic(message);
         }
 
-        this.frameGraphPostEffectsController = new FrameGraphPostEffectsController((warning) => {
+        const controller = new FrameGraphPostEffectsController((warning) => {
+            if (this.frameGraphPostEffectsController !== controller) {
+                logDebugIfEnabled("postfx", "render", "ignored stale Frame Graph build warning", {
+                    reason: warning.reason,
+                    message: warning.message,
+                });
+                return;
+            }
             logWarn("render", "frame graph post effect backend requested but not active", {
                 storageKey: POST_EFFECT_BACKEND_STORAGE_KEY,
                 fallback: "classic",
@@ -9251,18 +9262,24 @@ ${beforeFogAppendBlock}
             this.disposeFrameGraphPostEffectsLuminousMaskTarget();
             this.postEffectBackend = "classic";
         }, (info) => {
+            if (this.frameGraphPostEffectsController !== controller) {
+                return;
+            }
             if (info.event === "ssgi-ready") {
                 logInfo("render", "frame graph SSGI task active", {
                     ...info.details,
                     storageKey: POST_EFFECT_BACKEND_STORAGE_KEY,
                 });
-                return;
             }
             logDebugIfEnabled("postfx", "render", "frame graph post effect backend", {
                 event: info.event,
                 storageKey: POST_EFFECT_BACKEND_STORAGE_KEY,
             });
+            if (info.event === "ready" && this.frameGraphPostEffectsRebuildPending) {
+                this.scheduleFrameGraphPostEffectsBackendRebuild();
+            }
         }, () => this.getFrameGraphPostEffectsSettings());
+        this.frameGraphPostEffectsController = controller;
 
         const settings = this.getFrameGraphPostEffectsSettings();
         const resourcePlan = buildFrameGraphResourcePlan(settings, this.getFrameGraphPostEffectRuntimeOrder());
@@ -9278,7 +9295,7 @@ ${beforeFogAppendBlock}
         const depthTexture = resourcePlan.needsDepthRenderer
             ? this.depthRenderer?.getDepthMap().getInternalTexture() ?? null
             : null;
-        const activated = this.frameGraphPostEffectsController.activate(
+        const activated = controller.activate(
             this.scene,
             sourceTexture?.getInternalTexture() ?? null,
             depthTexture,
@@ -9921,10 +9938,7 @@ ${beforeFogAppendBlock}
     }
 
     public getFrameGraphPostEffectRuntimeOrder(): readonly FrameGraphPostEffectId[] {
-        return normalizeFrameGraphPostEffectIds(
-            this.getFrameGraphPostEffectStackIds(),
-            FRAME_GRAPH_POST_EFFECT_IDS,
-        );
+        return normalizeFrameGraphPostEffectIds(this.getFrameGraphPostEffectStackIds());
     }
 
     public isFrameGraphPostEffectActive(id: FrameGraphPostEffectId): boolean {
@@ -10008,15 +10022,51 @@ ${beforeFogAppendBlock}
         if (this.postEffectBackend !== "frameGraph" || !this.frameGraphPostEffectsController) {
             return;
         }
-        // FrameGraph texture dependencies are fixed after build on WebGPU.
-        // Rebuild the graph for stack order/state changes instead of mutating
-        // task source textures during execute.
-        this.disposeFrameGraphPostEffectsController();
-        this.initializePostEffectBackend();
+        this.frameGraphPostEffectsRebuildPending = true;
+        this.scheduleFrameGraphPostEffectsBackendRebuild();
+    }
+
+    private scheduleFrameGraphPostEffectsBackendRebuild(): void {
+        if (this.frameGraphPostEffectsRebuildScheduled) {
+            return;
+        }
+        this.frameGraphPostEffectsRebuildScheduled = true;
+        requestAnimationFrame(() => {
+            this.frameGraphPostEffectsRebuildScheduled = false;
+            if (!this.frameGraphPostEffectsRebuildPending) {
+                return;
+            }
+            const controller = this.frameGraphPostEffectsController;
+            if (this.postEffectBackend !== "frameGraph" || !controller) {
+                this.frameGraphPostEffectsRebuildPending = false;
+                return;
+            }
+            if (!controller.isReady()) {
+                return;
+            }
+
+            // FrameGraph texture dependencies are immutable after build.
+            // Coalesce rapid order/state changes and rebuild once from the
+            // latest stack after the current asynchronous build is ready.
+            this.frameGraphPostEffectsRebuildPending = false;
+            this.disposeFrameGraphPostEffectsController();
+            this.initializePostEffectBackend();
+        });
     }
 
     public refreshFrameGraphPostEffectsBackendForStackStateChange(): void {
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
+    }
+
+    public reloadFrameGraphPostEffectsBackend(): boolean {
+        if (this.requestedPostEffectBackend !== "frameGraph") {
+            return false;
+        }
+        this.frameGraphPostEffectsRebuildPending = false;
+        this.shutdownPostEffectBackend();
+        this.initializePostEffectBackend();
+        return this.postEffectBackend === "frameGraph"
+            && this.frameGraphPostEffectsController !== null;
     }
 
     private refreshFrameGraphPostEffectsBackendForResourcePlanChange(): boolean {

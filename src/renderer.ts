@@ -347,6 +347,12 @@ async function initializeApp(): Promise<void> {
         getCameraTarget: () => mmdManager.getCameraTarget(),
         getCameraPosition: () => mmdManager.getCameraPosition(),
         getCameraKeyframePose: () => mmdManager.getCameraKeyframePose(),
+        getFrameGraphPostEffectsState: () => ({
+          backend: mmdManager.getPostEffectBackend(),
+          ready: mmdManager.isPostEffectBackendReadyForCapture(),
+          executedFrameCount: mmdManager.getFrameGraphPostEffectsExecutedFrameCount(),
+          stack: [...mmdManager.getFrameGraphPostEffectRuntimeOrder()],
+        }),
         captureExportSurfaceProbe: async (width, height) => {
           mmdManager.setAutoRenderEnabled(false);
           mmdManager.postEffectExposure = 1.05;

@@ -400,8 +400,13 @@
 - [x] 0～100詳細UI、初期値、project保存復元、stack順接続
 - [x] 豆腐PMXのPlaywright実描画、PNG出力、WebGPU validation warning 0
 - [x] 実機調整で少数手調整波の反復・強弱表現の限界を記録する
-- [ ] 方向スペクトル + multi-band の Compute 水面生成 spike を実装する
-- [ ] `WaterMaterial` / 独立water meshの reflection・refraction 経路を現在の水中パスと比較する
-- [ ] light-view G-buffer + warped mesh版コースティクスを実装する
-- [ ] 波紋、泡、飛沫用のCompute taskを追加する
+- [x] 2022年以降の立体水面、水中volume、コースティクス、interaction方式を比較し、5 task構成を決める
+- [ ] Dynamic Wave Trains最小reproductionと方向スペクトル + multi-band Compute baselineを同一test sceneで比較する
+- [ ] camera中心clipmapの独立water mesh、水平変位、reflection / refraction、waterline / meniscusを実装する
+- [ ] MMD方向光とshadowへ連動する低解像度froxel単一散乱を実装する
+- [ ] light-view receiver G-buffer + Newton屈折mesh版コースティクスを実装する
+- [ ] sphere probe + local Wave Particle patchで接触波紋・wakeを実装する
+- [ ] phase / breaking energy由来foamとwater-crossing event由来splash particleを分離実装する
+- [ ] interaction simulationのfixed-step、deterministic seed、seek reset / checkpoint、export replayを実装する
 - 詳細: [海エフェクト MVP 実装メモ 2026-08-11](./ocean-effect-mvp-implementation-2026-08-11.md)
+- 高品質化調査: [海エフェクト高品質化 調査メモ 2026-08-11](./ocean-surface-volume-interaction-research-2026-08-11.md)

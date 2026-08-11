@@ -107,6 +107,11 @@ export function buildFrameGraphResourcePlan(
         addConsumer(consumersByKey, "depthScene", "dof");
     }
 
+    if (activeEffects.includes("ocean")) {
+        addConsumer(consumersByKey, "viewDepth", "ocean");
+        addConsumer(consumersByKey, "viewNormal", "ocean");
+    }
+
     if (activeEffects.includes("motionBlur")) {
         addConsumer(consumersByKey, "velocity", "motionBlur");
     }

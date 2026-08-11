@@ -206,6 +206,10 @@ declare global {
             } | null;
             getCameraTarget: () => { x: number; y: number; z: number };
             getCameraPosition: () => { x: number; y: number; z: number };
+            setCameraPose: (
+                position: { x: number; y: number; z: number },
+                target: { x: number; y: number; z: number },
+            ) => void;
             getCameraKeyframePose: () => {
                 position: { x: number; y: number; z: number };
                 rotation: { x: number; y: number; z: number };
@@ -231,6 +235,7 @@ declare global {
                 byteLength: number;
                 nonZeroByteCount: number;
                 nonZeroRgbByteCount: number;
+                pixelChecksum: number;
                 format: "RGBA";
                 rowOrder: "top-to-bottom";
                 surfaceFormat: "rgba8unorm";
@@ -560,6 +565,10 @@ export interface ProjectEffectState {
     ssgiStrength?: number;
     ssgiSampleRadius?: number;
     ssgiBlendMode?: SsgiBlendMode;
+    oceanWaterHeight?: number;
+    oceanWaveStrength?: number;
+    oceanClarity?: number;
+    oceanCausticsStrength?: number;
     vlsEnabled?: boolean;
     vlsExposure?: number;
     vlsDecay?: number;

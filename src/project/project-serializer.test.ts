@@ -185,6 +185,10 @@ function createHost() {
         postEffectSsgiStrength: 0.3,
         postEffectSsgiSampleRadius: 64,
         postEffectSsgiBlendMode: "softLight" as const,
+        postEffectOceanWaterHeight: 8,
+        postEffectOceanWaveStrength: 0.7,
+        postEffectOceanClarity: 0.85,
+        postEffectOceanCausticsStrength: 1.1,
         postEffectVlsEnabled: false,
         postEffectVlsExposure: 0.3,
         postEffectVlsDecay: 0.95,
@@ -245,6 +249,23 @@ describe("exportProjectState", () => {
         expect(project.effects.ssgiSampleRadius).toBe(48);
         expect(project.effects.ssgiBlendMode).toBe("softLight");
         expect(project.effects.frameGraphPostStack).toEqual([{ id: "ssgi", enabled: false }]);
+    });
+
+    it("writes ocean tuning independently from the stack enabled state", () => {
+        const project = exportProjectState({
+            ...createHost(),
+            postEffectOceanWaterHeight: 12.5,
+            postEffectOceanWaveStrength: 1.2,
+            postEffectOceanClarity: 0.92,
+            postEffectOceanCausticsStrength: 1.65,
+            getFrameGraphPostEffectStackEntries: () => [{ id: "ocean", enabled: false }],
+        });
+
+        expect(project.effects.oceanWaterHeight).toBe(12.5);
+        expect(project.effects.oceanWaveStrength).toBe(1.2);
+        expect(project.effects.oceanClarity).toBe(0.92);
+        expect(project.effects.oceanCausticsStrength).toBe(1.65);
+        expect(project.effects.frameGraphPostStack).toEqual([{ id: "ocean", enabled: false }]);
     });
 
     it("writes light direction as x/y/z instead of Babylon backing fields", () => {

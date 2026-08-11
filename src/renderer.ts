@@ -346,6 +346,10 @@ async function initializeApp(): Promise<void> {
         getCameraExternalParent: () => mmdManager.getCameraExternalParent(),
         getCameraTarget: () => mmdManager.getCameraTarget(),
         getCameraPosition: () => mmdManager.getCameraPosition(),
+        setCameraPose: (position, target) => {
+          mmdManager.setCameraPosition(position.x, position.y, position.z);
+          mmdManager.setCameraTarget(target.x, target.y, target.z);
+        },
         getCameraKeyframePose: () => mmdManager.getCameraKeyframePose(),
         getFrameGraphPostEffectsState: () => ({
           backend: mmdManager.getPostEffectBackend(),
@@ -365,7 +369,9 @@ async function initializeApp(): Promise<void> {
           const frame = await mmdManager.readExportRenderFrameAsync();
           let nonZeroByteCount = 0;
           let nonZeroRgbByteCount = 0;
+          let pixelChecksum = 2166136261;
           for (let index = 0; index < frame.pixels.length; index += 1) {
+            pixelChecksum = Math.imul(pixelChecksum ^ frame.pixels[index], 16777619);
             if (frame.pixels[index] !== 0) {
               nonZeroByteCount += 1;
               if (index % 4 !== 3) nonZeroRgbByteCount += 1;
@@ -379,6 +385,7 @@ async function initializeApp(): Promise<void> {
             byteLength: frame.pixels.byteLength,
             nonZeroByteCount,
             nonZeroRgbByteCount,
+            pixelChecksum: pixelChecksum >>> 0,
             format: frame.format,
             rowOrder: frame.rowOrder,
             surfaceFormat: surface.format,

@@ -540,3 +540,23 @@ contact impulse
 - WebGPU `GPUFeatureName`: https://gpuweb.github.io/types/types/GPUFeatureName.html
 - 既存調査: [FrameGraphComputeShaderTask 調査メモ](./framegraph-compute-shader-task-note-2026-07-09.md)
 - 既存資産: `src/mmd-manager.ts` の鏡面床、`src/render/frame-graph-ssgi-task.ts` の compute task
+
+## 2026-08-11 MVP 実装状況
+
+最初の実装では、独立 water mesh の前に screen-space で中心体験を検証した。view depth / view normal とカメラ光線から波面との交点を復元し、水面歪み・Fresnel・RGB別吸収・軽量Newtonコースティクスを1つのFrameGraphエフェクトへまとめている。
+
+豆腐PMXを使ったPlaywright Electron実描画で、WebGPU validation warning 0、PNG出力、UI初期値、project保存値を確認した。実装範囲、縮小した論文要素、制約は [海エフェクト MVP 実装メモ](./ocean-effect-mvp-implementation-2026-08-11.md) を参照する。
+
+## 2026-08-11 水面生成方針の更新
+
+MVP では 9 本の解析波を広域・中距離・繊細へ分け、方向と振幅包絡を手調整した。しかし、実機では少数波の規則性が水面輪郭、法線、ハイライト、コースティクスへ共通して現れ、方向を増やすだけでは反復パターンが増えたように見えることを確認した。
+
+このため、前節の「公式 `WaterMaterial` を水面 material の第一候補とする」という判断は、reflection / refraction 経路の比較に限定する。波面生成の第一候補は、2024 年のリアルタイム海面合成研究を参考にした方向スペクトル + multi-band synthesis へ更新する。
+
+- 周波数・方向スペクトルから振幅、方向、位相を決め、手調整した固定波列を置き換える
+- 3～4 band の height / slope / normal texture を Compute task で生成する
+- 初回は 32～48 成分の sparse synthesis とし、必要性を確認してから inverse FFT へ進む
+- 現在の screen-space 水面交差、水中吸収、Fresnel、コースティクス合成は維持する
+- `WaterMaterial` は RTT、render list、MMD outline・半透明材質との相性を調べる隔離 spike とする
+
+参照: `Physically accurate real-time synthesis of ocean waves for maritime simulators`（Applied Ocean Research 2024 preprint）: https://www.vliz.be/imisdocs/publications/80/394980.pdf

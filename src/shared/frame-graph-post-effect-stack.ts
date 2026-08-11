@@ -2,6 +2,7 @@ export const FRAME_GRAPH_POST_EFFECT_IDS = [
     "ssr",
     "ssgi",
     "ssao",
+    "ocean",
     "offsetShadow",
     "offsetHighlight",
     "dof",
@@ -51,6 +52,7 @@ export type FrameGraphPostEffectActivationSettings = {
     ssgiEnabled: boolean;
     ssgiStrength: number;
     ssgiSampleRadius: number;
+    oceanEnabled: boolean;
 };
 
 const FRAME_GRAPH_POST_EFFECT_ID_SET = new Set<string>(FRAME_GRAPH_POST_EFFECT_IDS);
@@ -116,6 +118,8 @@ export function isFrameGraphPostEffectActiveInSettings(
             return settings.ssgiEnabled;
         case "ssao":
             return settings.ssaoEnabled && settings.ssaoStrength > 0.00001;
+        case "ocean":
+            return settings.oceanEnabled;
         case "offsetShadow":
             return settings.offsetShadowEnabled && settings.offsetShadowStrength > 0.0001;
         case "offsetHighlight":

@@ -1855,6 +1855,10 @@ ${beforeFogAppendBlock}
     private postEffectSsrStepValue = 4;
     private postEffectSsgiStrengthValue = 0.3;
     private postEffectSsgiSampleRadiusValue = 64;
+    private postEffectOceanWaterHeightValue = 8;
+    private postEffectOceanWaveStrengthValue = 0.7;
+    private postEffectOceanClarityValue = 0.85;
+    private postEffectOceanCausticsStrengthValue = 1.1;
     private postEffectVlsEnabledValue = false;
     private postEffectVlsExposureValue = 0.3;
     private postEffectVlsDecayValue = 0.95;
@@ -9402,6 +9406,12 @@ ${beforeFogAppendBlock}
             ssgiStrength: this.postEffectSsgiStrengthValue,
             ssgiSampleRadius: this.postEffectSsgiSampleRadiusValue,
             ssgiBlendMode: "softLight",
+            oceanEnabled: this.isFrameGraphPostEffectActive("ocean"),
+            oceanWaterHeight: this.postEffectOceanWaterHeightValue,
+            oceanWaveStrength: this.postEffectOceanWaveStrengthValue,
+            oceanClarity: this.postEffectOceanClarityValue,
+            oceanCausticsStrength: this.postEffectOceanCausticsStrengthValue,
+            oceanTimeSeconds: this._currentFrame / 30,
             lutEnabled: this.isFrameGraphPostEffectActive("lut") && isLutSourceReadyImpl(this),
             lutIntensity: this.postEffectLutIntensityValue,
             lutRuntimeText: this.getFrameGraphPostEffectLutRuntimeText(),
@@ -9984,6 +9994,8 @@ ${beforeFogAppendBlock}
                 return false;
             case "ssao":
                 return this.postEffectSsaoEnabledValue;
+            case "ocean":
+                return false;
             case "offsetShadow":
                 return this.postEffectOffsetShadowEnabledValue;
             case "offsetHighlight":
@@ -10873,6 +10885,50 @@ ${beforeFogAppendBlock}
     }
     set postEffectSsgiBlendMode(_v: SsgiBlendMode) {
         // Retain the project-host property while older saved mode values are ignored.
+    }
+
+    /** Ocean surface height in MMD world units. */
+    get postEffectOceanWaterHeight(): number {
+        return this.postEffectOceanWaterHeightValue;
+    }
+    set postEffectOceanWaterHeight(v: number) {
+        const value = Number(v);
+        this.postEffectOceanWaterHeightValue = Number.isFinite(value)
+            ? Math.max(-20, Math.min(40, value))
+            : 8;
+    }
+
+    /** Ocean wave amplitude multiplier (0..2). */
+    get postEffectOceanWaveStrength(): number {
+        return this.postEffectOceanWaveStrengthValue;
+    }
+    set postEffectOceanWaveStrength(v: number) {
+        const value = Number(v);
+        this.postEffectOceanWaveStrengthValue = Number.isFinite(value)
+            ? Math.max(0, Math.min(2, value))
+            : 0.7;
+    }
+
+    /** Clear-water transmission and distance-onset control (0..4). */
+    get postEffectOceanClarity(): number {
+        return this.postEffectOceanClarityValue;
+    }
+    set postEffectOceanClarity(v: number) {
+        const value = Number(v);
+        this.postEffectOceanClarityValue = Number.isFinite(value)
+            ? Math.max(0, Math.min(4, value))
+            : 0.85;
+    }
+
+    /** Refractive caustics contribution (0..2). */
+    get postEffectOceanCausticsStrength(): number {
+        return this.postEffectOceanCausticsStrengthValue;
+    }
+    set postEffectOceanCausticsStrength(v: number) {
+        const value = Number(v);
+        this.postEffectOceanCausticsStrengthValue = Number.isFinite(value)
+            ? Math.max(0, Math.min(2, value))
+            : 1.1;
     }
 
     /** Volumetric light enabled state. */

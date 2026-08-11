@@ -245,6 +245,10 @@ type ProjectImportHost = {
     postEffectSsgiStrength: number;
     postEffectSsgiSampleRadius: number;
     postEffectSsgiBlendMode: SsgiBlendMode;
+    postEffectOceanWaterHeight: number;
+    postEffectOceanWaveStrength: number;
+    postEffectOceanClarity: number;
+    postEffectOceanCausticsStrength: number;
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -1170,6 +1174,22 @@ export async function importProjectState(
         readFiniteNumber(data.effects.ssgiSampleRadius, 64),
     ));
     host.postEffectSsgiBlendMode = "softLight";
+    host.postEffectOceanWaterHeight = Math.max(-20, Math.min(
+        40,
+        readFiniteNumber(data.effects.oceanWaterHeight, 8),
+    ));
+    host.postEffectOceanWaveStrength = Math.max(0, Math.min(
+        2,
+        readFiniteNumber(data.effects.oceanWaveStrength, 0.7),
+    ));
+    host.postEffectOceanClarity = Math.max(0, Math.min(
+        4,
+        readFiniteNumber(data.effects.oceanClarity, 0.85),
+    ));
+    host.postEffectOceanCausticsStrength = Math.max(0, Math.min(
+        2,
+        readFiniteNumber(data.effects.oceanCausticsStrength, 1.1),
+    ));
     host.postEffectVlsEnabled = typeof data.effects.vlsEnabled === "boolean"
         ? data.effects.vlsEnabled
         : false;

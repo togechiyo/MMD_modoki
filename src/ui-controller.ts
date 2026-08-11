@@ -289,6 +289,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("lut", active); },
     },
     {
+        id: "ocean",
+        labelKey: "effect.frameGraphPost.effects.ocean",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("ocean"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("ocean", active); },
+    },
+    {
         id: "motionBlur",
         labelKey: "effect.frameGraphPost.effects.motionBlur",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("motionBlur"),
@@ -4437,6 +4443,12 @@ export class UIController {
                 break;
             case "ssgi":
                 break;
+            case "ocean":
+                this.mmdManager.postEffectOceanWaterHeight = 8;
+                this.mmdManager.postEffectOceanWaveStrength = 0.7;
+                this.mmdManager.postEffectOceanClarity = 0.85;
+                this.mmdManager.postEffectOceanCausticsStrength = 1.1;
+                break;
             case "vignette":
                 this.mmdManager.postEffectVignetteWeight = Math.max(this.mmdManager.postEffectVignetteWeight, 2);
                 break;
@@ -4494,6 +4506,8 @@ export class UIController {
                 this.mmdManager.postEffectSsrEnabled = true;
                 break;
             case "ssgi":
+                break;
+            case "ocean":
                 break;
             case "vignette":
                 this.mmdManager.postEffectVignetteEnabled = true;
@@ -4906,6 +4920,14 @@ export class UIController {
                     range("ssgiSampleRadius", label("radius"), this.mmdManager.postEffectSsgiSampleRadius, `${Math.round(this.mmdManager.postEffectSsgiSampleRadius)}px`),
                 );
                 break;
+            case "ocean":
+                rows.push(
+                    range("oceanWaterHeight", label("waterHeight"), this.mmdManager.postEffectOceanWaterHeight, this.mmdManager.postEffectOceanWaterHeight.toFixed(1)),
+                    range("oceanWaveStrength", label("waves"), this.mmdManager.postEffectOceanWaveStrength, this.mmdManager.postEffectOceanWaveStrength.toFixed(2)),
+                    range("oceanClarity", label("clarity"), this.mmdManager.postEffectOceanClarity, this.mmdManager.postEffectOceanClarity.toFixed(2)),
+                    range("oceanCausticsStrength", label("caustics"), this.mmdManager.postEffectOceanCausticsStrength, this.mmdManager.postEffectOceanCausticsStrength.toFixed(2)),
+                );
+                break;
             case "offsetShadow": {
                 const offsetShadowColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectOffsetShadowColor());
                 rows.push(
@@ -5090,6 +5112,18 @@ export class UIController {
             case "ssgiSampleRadius":
                 this.mmdManager.postEffectSsgiSampleRadius = Number(actualValue);
                 break;
+            case "oceanWaterHeight":
+                this.mmdManager.postEffectOceanWaterHeight = Number(actualValue);
+                break;
+            case "oceanWaveStrength":
+                this.mmdManager.postEffectOceanWaveStrength = Number(actualValue);
+                break;
+            case "oceanClarity":
+                this.mmdManager.postEffectOceanClarity = Number(actualValue);
+                break;
+            case "oceanCausticsStrength":
+                this.mmdManager.postEffectOceanCausticsStrength = Number(actualValue);
+                break;
             case "offsetShadowStrength":
                 this.mmdManager.postEffectOffsetShadowStrength = Number(actualValue);
                 break;
@@ -5227,6 +5261,11 @@ export class UIController {
             case "ssgiStrength":
             case "ssgiSampleRadius":
                 return "ssgi";
+            case "oceanWaterHeight":
+            case "oceanWaveStrength":
+            case "oceanClarity":
+            case "oceanCausticsStrength":
+                return "ocean";
             case "offsetShadowStrength":
             case "offsetShadowOffsetX":
             case "offsetShadowOffsetY":
@@ -5355,6 +5394,18 @@ export class UIController {
                 break;
             case "ssgiSampleRadius":
                 valueElement.textContent = `${Math.round(this.mmdManager.postEffectSsgiSampleRadius)}px`;
+                break;
+            case "oceanWaterHeight":
+                valueElement.textContent = this.mmdManager.postEffectOceanWaterHeight.toFixed(1);
+                break;
+            case "oceanWaveStrength":
+                valueElement.textContent = this.mmdManager.postEffectOceanWaveStrength.toFixed(2);
+                break;
+            case "oceanClarity":
+                valueElement.textContent = this.mmdManager.postEffectOceanClarity.toFixed(2);
+                break;
+            case "oceanCausticsStrength":
+                valueElement.textContent = this.mmdManager.postEffectOceanCausticsStrength.toFixed(2);
                 break;
             case "offsetShadowStrength":
                 valueElement.textContent = this.mmdManager.postEffectOffsetShadowStrength.toFixed(2);

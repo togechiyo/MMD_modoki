@@ -35,6 +35,7 @@ function createSettings(
         ssgiEnabled: false,
         ssgiStrength: 0.3,
         ssgiSampleRadius: 64,
+        oceanEnabled: false,
         antialiasEnabled: true,
         ...overrides,
     };
@@ -139,6 +140,16 @@ describe("buildFrameGraphResourcePlan", () => {
             producer: "geometryRenderer",
             resolution: "full",
         });
+    });
+
+    it("uses scene color, view depth, and view normal for the ocean pass", () => {
+        const plan = buildFrameGraphResourcePlan(createSettings({
+            oceanEnabled: true,
+        }), ["ocean"]);
+
+        expect(plan.activeEffects).toEqual(["ocean"]);
+        expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth", "viewNormal"]);
+        expect(plan.needsGeometryRenderer).toBe(true);
     });
 
     it("does not request SSGI resources when the stack entry is disabled", () => {

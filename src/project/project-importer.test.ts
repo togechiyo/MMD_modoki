@@ -151,6 +151,10 @@ function createHost() {
         postEffectOffsetHighlightDebugView: false,
         postEffectSsgiStrength: 0.3,
         postEffectSsgiSampleRadius: 64,
+        postEffectOceanWaterHeight: 8,
+        postEffectOceanWaveStrength: 0.7,
+        postEffectOceanClarity: 0.85,
+        postEffectOceanCausticsStrength: 1.1,
         setPostEffectExternalLut: vi.fn(),
         setExternalWgslToonShader: vi.fn(),
         setPostEffectFogColor: vi.fn(),
@@ -358,6 +362,30 @@ describe("importProjectState", () => {
         await importProjectState(host, createProject());
 
         expect(host.postEffectSsgiBlendMode).toBe("softLight");
+    });
+
+    it("restores and clamps ocean tuning", async () => {
+        const host = createHost();
+        const project = createProject({
+            effects: {
+                ...createProject().effects,
+                oceanWaterHeight: 50,
+                oceanWaveStrength: 4,
+                oceanClarity: 8,
+                oceanCausticsStrength: 1.6,
+                frameGraphPostStack: [{ id: "ocean", enabled: true }],
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.postEffectOceanWaterHeight).toBe(40);
+        expect(host.postEffectOceanWaveStrength).toBe(2);
+        expect(host.postEffectOceanClarity).toBe(4);
+        expect(host.postEffectOceanCausticsStrength).toBe(1.6);
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
+            { id: "ocean", enabled: true },
+        ]);
     });
 
     it("restores saved SSAO effect values", async () => {

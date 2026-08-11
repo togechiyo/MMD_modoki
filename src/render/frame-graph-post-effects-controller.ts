@@ -62,6 +62,11 @@ import {
     type LuminousBlurBand,
 } from "./luminous-blur-settings";
 import { ObjectMotionBlurBoneVelocityMode } from "./object-motion-blur-bone-velocity";
+import { FrameGraphPostEffectsOceanTask } from "./frame-graph-ocean-task";
+import {
+    ensureFrameGraphOceanShaders,
+    FRAME_GRAPH_OCEAN_METHOD_NAME,
+} from "./frame-graph-ocean-shaders";
 
 const SSGI_DENOISE_STEP_WIDTHS = [1, 2, 4] as const;
 
@@ -122,6 +127,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
         ssgiComposite: boolean;
         ssao: boolean;
         ssaoToonComposite: boolean;
+        ocean: boolean;
         offsetShadow: boolean;
         offsetHighlight: boolean;
         motionBlur: boolean;
@@ -229,6 +235,12 @@ export type FrameGraphPostEffectsSettings = {
     ssgiStrength: number;
     ssgiSampleRadius: number;
     ssgiBlendMode: SsgiBlendMode;
+    oceanEnabled: boolean;
+    oceanWaterHeight: number;
+    oceanWaveStrength: number;
+    oceanClarity: number;
+    oceanCausticsStrength: number;
+    oceanTimeSeconds: number;
     lutEnabled: boolean;
     lutIntensity: number;
     lutRuntimeText: string | null;
@@ -1906,6 +1918,8 @@ export class FrameGraphPostEffectsController {
     private ssaoTask: FrameGraphSSAO2RenderingPipelineTask | null = null;
     private ssaoToonCompositeEffect: EffectWrapper | null = null;
     private ssaoToonCompositeTask: FrameGraphPostEffectsSsaoToonCompositeTask | null = null;
+    private oceanEffect: EffectWrapper | null = null;
+    private oceanTask: FrameGraphPostEffectsOceanTask | null = null;
     private offsetShadowEffect: EffectWrapper | null = null;
     private offsetShadowTask: FrameGraphPostEffectsOffsetShadowTask | null = null;
     private offsetHighlightEffect: EffectWrapper | null = null;
@@ -2019,6 +2033,12 @@ export class FrameGraphPostEffectsController {
             ssgiStrength: 0.3,
             ssgiSampleRadius: 64,
             ssgiBlendMode: "softLight",
+            oceanEnabled: false,
+            oceanWaterHeight: 8,
+            oceanWaveStrength: 0.7,
+            oceanClarity: 0.85,
+            oceanCausticsStrength: 1.1,
+            oceanTimeSeconds: 0,
             lutEnabled: false,
             lutIntensity: 1,
             lutRuntimeText: null,
@@ -2082,6 +2102,7 @@ export class FrameGraphPostEffectsController {
                 ssgiComposite: this.ssgiCompositeTask !== null,
                 ssao: this.ssaoTask !== null,
                 ssaoToonComposite: this.ssaoToonCompositeTask !== null,
+                ocean: this.oceanTask !== null,
                 offsetShadow: this.offsetShadowTask !== null,
                 offsetHighlight: this.offsetHighlightTask !== null,
                 motionBlur: this.motionBlurTask !== null,
@@ -2157,6 +2178,7 @@ export class FrameGraphPostEffectsController {
         ensureVignetteEdgeBlurShaders();
         ensureLensDistortionShaders();
         ensureFrameGraphSsgiShaders();
+        ensureFrameGraphOceanShaders();
 
         const frameGraph = new FrameGraph(scene, false);
         frameGraph.name = "MMD modoki post effects";
@@ -2296,6 +2318,51 @@ export class FrameGraphPostEffectsController {
             geometryRendererTask.disabled = false;
             preludeTasks.push(geometryRendererTask);
             this.geometryRendererTask = geometryRendererTask;
+
+            if (this.isPostEffectActive(initialSettings, "ocean")) {
+                this.oceanEffect = new EffectWrapper({
+                    engine: frameGraph.engine,
+                    fragmentShader: "mmdFrameGraphOcean",
+                    useShaderStore: true,
+                    useAsPostProcess: true,
+                    uniforms: [
+                        "inverseProjection",
+                        "inverseView",
+                        "cameraPosition",
+                        "waterHeight",
+                        "timeSeconds",
+                        "waveStrength",
+                        "clarity",
+                        "causticsStrength",
+                    ],
+                    samplers: ["viewDepthTexture", "viewNormalTexture"],
+                    name: "mmdFrameGraphOcean",
+                    shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+                });
+                const oceanTask = new FrameGraphPostEffectsOceanTask(
+                    "frameGraphPostEffectsOcean",
+                    frameGraph,
+                    this.oceanEffect,
+                    camera,
+                    () => {
+                        const settings = this.getSettings();
+                        return {
+                            waterHeight: settings.oceanWaterHeight,
+                            waveStrength: settings.oceanWaveStrength,
+                            clarity: settings.oceanClarity,
+                            causticsStrength: settings.oceanCausticsStrength,
+                            timeSeconds: settings.oceanTimeSeconds,
+                        };
+                    },
+                );
+                oceanTask.sourceTexture = imageProcessingTask.outputTexture;
+                oceanTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
+                oceanTask.normalTexture = geometryRendererTask.geometryViewNormalTexture;
+                oceanTask.disabled = false;
+                deferEffectTask("ocean", oceanTask);
+                this.oceanTask = oceanTask;
+                dofSourceTexture = oceanTask.outputTexture;
+            }
 
             let ssaoSourceTexture = imageProcessingTask.outputTexture;
             if (this.isPostEffectActive(initialSettings, "ssr")) {
@@ -2890,7 +2957,9 @@ export class FrameGraphPostEffectsController {
         this.activeScene = scene;
         this.active = true;
         this.onInfo?.({
-            message: "Frame Graph post effects backend active (image processing + SSGI + SSAO2 + DoF + Luminous + Bloom + LUT + Motion Blur + color correction + Sharpen + Grain + Chromatic Aberration + Vignette + EdgeBlur + Lens Distortion + FXAA).",
+            message: initialSettings.oceanEnabled
+                ? `Frame Graph post effects backend active (${FRAME_GRAPH_OCEAN_METHOD_NAME} + standard post stack).`
+                : "Frame Graph post effects backend active.",
             event: "activated",
         });
         void this.frameGraph.buildAsync().then(() => {
@@ -3011,6 +3080,9 @@ export class FrameGraphPostEffectsController {
         }
         if (this.ssaoToonCompositeTask) {
             this.ssaoToonCompositeTask.disabled = !this.isPostEffectActive(settings, "ssao");
+        }
+        if (this.oceanTask) {
+            this.oceanTask.disabled = !this.isPostEffectActive(settings, "ocean");
         }
         if (this.offsetShadowTask) {
             this.offsetShadowTask.disabled = !this.isPostEffectActive(settings, "offsetShadow")
@@ -3180,6 +3252,13 @@ export class FrameGraphPostEffectsController {
                         this.connectedOrder.push("lut");
                     }
                     break;
+                case "ocean":
+                    if (this.oceanTask) {
+                        this.oceanTask.sourceTexture = currentTexture;
+                        currentTexture = this.oceanTask.outputTexture;
+                        this.connectedOrder.push("ocean");
+                    }
+                    break;
                 case "motionBlur":
                     if (this.motionBlurTask) {
                         this.motionBlurTask.sourceTexture = currentTexture;
@@ -3260,6 +3339,9 @@ export class FrameGraphPostEffectsController {
         this.ssaoToonCompositeEffect?.dispose();
         this.ssaoToonCompositeEffect = null;
         this.ssaoToonCompositeTask = null;
+        this.oceanEffect?.dispose();
+        this.oceanEffect = null;
+        this.oceanTask = null;
         this.offsetShadowEffect?.dispose();
         this.offsetShadowEffect = null;
         this.offsetShadowTask = null;

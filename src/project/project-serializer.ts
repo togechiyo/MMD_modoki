@@ -178,6 +178,10 @@ type ProjectExportHost = {
     postEffectSsgiStrength: number;
     postEffectSsgiSampleRadius: number;
     postEffectSsgiBlendMode: SsgiBlendMode;
+    postEffectOceanWaterHeight: number;
+    postEffectOceanWaveStrength: number;
+    postEffectOceanClarity: number;
+    postEffectOceanCausticsStrength: number;
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -500,6 +504,10 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             ssgiStrength: host.postEffectSsgiStrength,
             ssgiSampleRadius: host.postEffectSsgiSampleRadius,
             ssgiBlendMode: "softLight",
+            oceanWaterHeight: host.postEffectOceanWaterHeight,
+            oceanWaveStrength: host.postEffectOceanWaveStrength,
+            oceanClarity: host.postEffectOceanClarity,
+            oceanCausticsStrength: host.postEffectOceanCausticsStrength,
             vlsEnabled: host.postEffectVlsEnabled,
             vlsExposure: host.postEffectVlsExposure,
             vlsDecay: host.postEffectVlsDecay,

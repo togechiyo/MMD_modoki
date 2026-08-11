@@ -39,6 +39,7 @@ function createActivationSettings(
         ssgiEnabled: false,
         ssgiStrength: 0.3,
         ssgiSampleRadius: 64,
+        oceanEnabled: false,
         ...overrides,
     };
 }
@@ -93,6 +94,7 @@ describe("frame graph post effect stack helpers", () => {
             ssrEnabled: true,
             ssrStrength: 0.2,
             ssgiEnabled: true,
+            oceanEnabled: true,
             ssgiStrength: 0,
             vignetteEnabled: true,
             vignetteWeight: 0,
@@ -105,6 +107,7 @@ describe("frame graph post effect stack helpers", () => {
         expect(isFrameGraphPostEffectActiveInSettings(settings, "luminous")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssao")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssgi")).toBe(true);
+        expect(isFrameGraphPostEffectActiveInSettings(settings, "ocean")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "motionBlur")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetShadow")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetHighlight")).toBe(true);
@@ -128,9 +131,10 @@ describe("frame graph post effect stack helpers", () => {
             ssrEnabled: true,
             ssrStrength: 0.4,
             ssgiEnabled: true,
+            oceanEnabled: true,
             lutEnabled: true,
             motionBlurEnabled: true,
-        }))).toEqual(["ssr", "ssgi", "offsetShadow", "offsetHighlight", "bloom", "lut", "motionBlur", "grain"]);
+        }))).toEqual(["ssr", "ssgi", "ocean", "offsetShadow", "offsetHighlight", "bloom", "lut", "motionBlur", "grain"]);
     });
 });
 

@@ -212,6 +212,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [FrameGraph Post Stack current spec 2026-07-01](./framegraph-post-stack-current-spec-2026-07-01.md)
 - [FrameGraph Motion Blur 実装メモ 2026-08-11](./framegraph-motion-blur-implementation-note-2026-08-11.md)
 - [海エフェクト（水面・水中）方式比較・構想メモ 2026-08-11](./water-surface-underwater-effect-design-note-2026-08-11.md)
+- [海エフェクト MVP 実装メモ 2026-08-11](./ocean-effect-mvp-implementation-2026-08-11.md)
 - [FrameGraph / MMDエッジ / SSAO 回帰メモ 2026-07-15](./framegraph-outline-ssao-regression-note-2026-07-15.md)
 - [FrameGraph SSGI 偵察・設計メモ 2026-07-19](./ssgi-design-note-2026-07-19.md)
 - [FrameGraph SSGI Compute方式 実装解説 2026-07-19](./framegraph-ssgi-compute-method-note-2026-07-19.md)

@@ -393,3 +393,15 @@
 - [x] 物理オンオフキー
   - 2026-06-26 実装: `物理` 入力モード、物理ボーン timeline 表示、ON `×` / OFF ダイヤ marker、仮想 0f ON marker、明示 0f OFF 優先、物理 ON/OFF key の選択 / copy / delete、物理 OFF 区間の viewport ボーン追加表示に対応。
 - 詳細: [キー登録 v0.2 リリース前集中メモ 2026-06-25](./key-registration-v0.2-release-focus-2026-06-25.md)
+
+## 2026-08-11 海エフェクト
+
+- [x] FrameGraph海MVP（水面交点、RGB別水中吸収、波同期コースティクス）
+- [x] 0～100詳細UI、初期値、project保存復元、stack順接続
+- [x] 豆腐PMXのPlaywright実描画、PNG出力、WebGPU validation warning 0
+- [x] 実機調整で少数手調整波の反復・強弱表現の限界を記録する
+- [ ] 方向スペクトル + multi-band の Compute 水面生成 spike を実装する
+- [ ] `WaterMaterial` / 独立water meshの reflection・refraction 経路を現在の水中パスと比較する
+- [ ] light-view G-buffer + warped mesh版コースティクスを実装する
+- [ ] 波紋、泡、飛沫用のCompute taskを追加する
+- 詳細: [海エフェクト MVP 実装メモ 2026-08-11](./ocean-effect-mvp-implementation-2026-08-11.md)

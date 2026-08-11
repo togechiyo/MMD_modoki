@@ -23,6 +23,8 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     dofFocusOffset: { actualMin: -20_000, actualMax: 20_000, actualStep: 100 },
     dofLensSize: { actualMin: 1, actualMax: 4_096, actualStep: 1, curve: "logarithmic" },
     lutIntensity: { actualMin: 0, actualMax: 1 },
+    motionBlurStrength: { actualMin: 0, actualMax: 10 },
+    motionBlurSamples: { actualMin: 8, actualMax: 64, actualStep: 1 },
     ssaoStrength: { actualMin: 0, actualMax: 1 },
     ssaoRadius: { actualMin: 0.01, actualMax: 5, actualStep: 0.01 },
     ssgiStrength: { actualMin: 0, actualMax: 1 },

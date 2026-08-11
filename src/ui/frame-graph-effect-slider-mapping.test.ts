@@ -50,6 +50,13 @@ describe("FrameGraph effect detail slider mapping", () => {
         expect(fromFrameGraphEffectSliderValue("ssrStep", 50)).toBe(5);
         expect(fromFrameGraphEffectSliderValue("ssrStep", 100)).toBe(8);
         expect(fromFrameGraphEffectSliderValue("bloomKernel", 50)).toBe(129);
+        expect(fromFrameGraphEffectSliderValue("motionBlurSamples", 0)).toBe(8);
+        expect(fromFrameGraphEffectSliderValue("motionBlurSamples", 100)).toBe(64);
+    });
+
+    it("gives FrameGraph motion blur a visibly strong range", () => {
+        expect(fromFrameGraphEffectSliderValue("motionBlurStrength", 50)).toBe(5);
+        expect(fromFrameGraphEffectSliderValue("motionBlurStrength", 100)).toBe(10);
     });
 
     it("clamps UI and runtime values at the declared bounds", () => {

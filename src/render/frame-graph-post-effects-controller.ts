@@ -9,6 +9,7 @@ import { FrameGraphDepthOfFieldTask } from "@babylonjs/core/FrameGraph/Tasks/Pos
 import { FrameGraphFXAATask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/fxaaTask";
 import { FrameGraphGrainTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/grainTask";
 import { FrameGraphImageProcessingTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/imageProcessingTask";
+import { FrameGraphMotionBlurTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/motionBlurTask";
 import { FrameGraphPostProcessTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/postProcessTask";
 import { FrameGraphSharpenTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/sharpenTask";
 import { FrameGraphSSAO2RenderingPipelineTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/ssao2RenderingPipelineTask";
@@ -60,6 +61,7 @@ import {
     resolveLuminousBlurPassSettings,
     type LuminousBlurBand,
 } from "./luminous-blur-settings";
+import { ObjectMotionBlurBoneVelocityMode } from "./object-motion-blur-bone-velocity";
 
 const SSGI_DENOISE_STEP_WIDTHS = [1, 2, 4] as const;
 
@@ -122,6 +124,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
         ssaoToonComposite: boolean;
         offsetShadow: boolean;
         offsetHighlight: boolean;
+        motionBlur: boolean;
         dof: boolean;
         luminousExtract: boolean;
         luminousCoreBlur: boolean;
@@ -142,6 +145,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
         geometryRenderer: boolean;
         viewDepth: boolean;
         viewNormal: boolean;
+        velocity: boolean;
         reflectivity: boolean;
         ssgiHalfResolution: boolean;
         ssgiDenoisedHalfResolution: boolean;
@@ -229,6 +233,9 @@ export type FrameGraphPostEffectsSettings = {
     lutIntensity: number;
     lutRuntimeText: string | null;
     lutTextureKey: string | null;
+    motionBlurEnabled: boolean;
+    motionBlurStrength: number;
+    motionBlurSamples: number;
     antialiasEnabled: boolean;
 };
 
@@ -1926,6 +1933,8 @@ export class FrameGraphPostEffectsController {
     private vignetteEdgeBlurTask: FrameGraphPostEffectsVignetteEdgeBlurTask | null = null;
     private lensDistortionEffect: EffectWrapper | null = null;
     private lensDistortionTask: FrameGraphPostEffectsLensDistortionTask | null = null;
+    private motionBlurTask: FrameGraphMotionBlurTask | null = null;
+    private readonly motionBlurBoneVelocityMode = new ObjectMotionBlurBoneVelocityMode();
     private grainEffect: ThinGrainPostProcess | null = null;
     private grainTask: FrameGraphGrainTask | null = null;
     private sharpenEffect: ThinSharpenPostProcess | null = null;
@@ -2014,6 +2023,9 @@ export class FrameGraphPostEffectsController {
             lutIntensity: 1,
             lutRuntimeText: null,
             lutTextureKey: null,
+            motionBlurEnabled: false,
+            motionBlurStrength: 10,
+            motionBlurSamples: 32,
             antialiasEnabled: true,
         }),
     ) {}
@@ -2072,6 +2084,7 @@ export class FrameGraphPostEffectsController {
                 ssaoToonComposite: this.ssaoToonCompositeTask !== null,
                 offsetShadow: this.offsetShadowTask !== null,
                 offsetHighlight: this.offsetHighlightTask !== null,
+                motionBlur: this.motionBlurTask !== null,
                 dof: this.depthOfFieldTask !== null,
                 luminousExtract: this.luminousExtractTask !== null,
                 luminousCoreBlur: this.luminousCoreBlurHorizontalTask !== null
@@ -2094,6 +2107,7 @@ export class FrameGraphPostEffectsController {
                 geometryRenderer: this.geometryRendererTask !== null,
                 viewDepth: this.geometryRendererTask !== null,
                 viewNormal: this.geometryRendererTask !== null,
+                velocity: resourcePlan?.requirementKeys.includes("velocity") ?? false,
                 reflectivity: this.geometryRendererTask !== null && this.ssrTask !== null,
                 ssgiHalfResolution: this.ssgiGatherTask !== null,
                 ssgiDenoisedHalfResolution:
@@ -2261,6 +2275,13 @@ export class FrameGraphPostEffectsController {
             if (resourcePlan.requirementKeys.includes("viewNormal")) {
                 geometryRendererTask.textureDescriptions.push({
                     type: Constants.PREPASS_NORMAL_TEXTURE_TYPE,
+                    textureType: Constants.TEXTURETYPE_HALF_FLOAT,
+                    textureFormat: Constants.TEXTUREFORMAT_RGBA,
+                });
+            }
+            if (resourcePlan.requirementKeys.includes("velocity")) {
+                geometryRendererTask.textureDescriptions.push({
+                    type: Constants.PREPASS_VELOCITY_TEXTURE_TYPE,
                     textureType: Constants.TEXTURETYPE_HALF_FLOAT,
                     textureFormat: Constants.TEXTUREFORMAT_RGBA,
                 });
@@ -2476,6 +2497,21 @@ export class FrameGraphPostEffectsController {
                 deferEffectTask("offsetHighlight", offsetHighlightTask);
                 this.offsetHighlightTask = offsetHighlightTask;
                 dofSourceTexture = offsetHighlightTask.outputTexture;
+            }
+
+            if (this.isPostEffectActive(initialSettings, "motionBlur")) {
+                const motionBlurTask = new FrameGraphMotionBlurTask(
+                    "frameGraphPostEffectsMotionBlur",
+                    frameGraph,
+                );
+                motionBlurTask.sourceTexture = dofSourceTexture;
+                motionBlurTask.velocityTexture = geometryRendererTask.geometryVelocityTexture;
+                motionBlurTask.postProcess.isObjectBased = true;
+                motionBlurTask.disabled = initialSettings.motionBlurStrength <= 0.0001;
+                this.applyMotionBlurSettings(motionBlurTask, initialSettings);
+                deferEffectTask("motionBlur", motionBlurTask);
+                this.motionBlurTask = motionBlurTask;
+                dofSourceTexture = motionBlurTask.outputTexture;
             }
         }
 
@@ -2846,11 +2882,15 @@ export class FrameGraphPostEffectsController {
             frameGraph.addTask(task);
         }
 
+        if (resourcePlan.activeEffects.includes("motionBlur")) {
+            this.motionBlurBoneVelocityMode.synchronize(scene.meshes);
+        }
+
         this.frameGraph = frameGraph;
         this.activeScene = scene;
         this.active = true;
         this.onInfo?.({
-            message: "Frame Graph post effects backend active (image processing + SSGI + SSAO2 + DoF + Luminous + Bloom + LUT + color correction + Sharpen + Grain + Chromatic Aberration + Vignette + EdgeBlur + Lens Distortion + FXAA).",
+            message: "Frame Graph post effects backend active (image processing + SSGI + SSAO2 + DoF + Luminous + Bloom + LUT + Motion Blur + color correction + Sharpen + Grain + Chromatic Aberration + Vignette + EdgeBlur + Lens Distortion + FXAA).",
             event: "activated",
         });
         void this.frameGraph.buildAsync().then(() => {
@@ -2883,6 +2923,7 @@ export class FrameGraphPostEffectsController {
         }).catch((err: unknown) => {
             this.ready = false;
             this.active = false;
+            this.motionBlurBoneVelocityMode.restore();
             const message = err instanceof Error ? err.message : String(err);
             const stack = err instanceof Error ? err.stack : undefined;
             this.emitWarningOnce({
@@ -2978,6 +3019,15 @@ export class FrameGraphPostEffectsController {
         if (this.offsetHighlightTask) {
             this.offsetHighlightTask.disabled = !this.isPostEffectActive(settings, "offsetHighlight")
                 || this.offsetHighlightTask.depthTexture === undefined;
+        }
+        if (this.motionBlurTask) {
+            if (this.activeScene) {
+                this.motionBlurBoneVelocityMode.synchronize(this.activeScene.meshes);
+            }
+            this.motionBlurTask.disabled = !this.isPostEffectActive(settings, "motionBlur")
+                || settings.motionBlurStrength <= 0.0001
+                || this.motionBlurTask.velocityTexture === undefined;
+            this.applyMotionBlurSettings(this.motionBlurTask, settings);
         }
         if (this.bloomTask) {
             this.bloomTask.disabled = !settings.bloomEnabled;
@@ -3130,6 +3180,13 @@ export class FrameGraphPostEffectsController {
                         this.connectedOrder.push("lut");
                     }
                     break;
+                case "motionBlur":
+                    if (this.motionBlurTask) {
+                        this.motionBlurTask.sourceTexture = currentTexture;
+                        currentTexture = this.motionBlurTask.outputTexture;
+                        this.connectedOrder.push("motionBlur");
+                    }
+                    break;
                 case "sharpen":
                     if (this.sharpenTask) {
                         this.sharpenTask.sourceTexture = currentTexture;
@@ -3241,6 +3298,9 @@ export class FrameGraphPostEffectsController {
         this.lensDistortionEffect?.dispose();
         this.lensDistortionEffect = null;
         this.lensDistortionTask = null;
+        this.motionBlurTask?.dispose();
+        this.motionBlurTask = null;
+        this.motionBlurBoneVelocityMode.restore();
         this.grainEffect?.dispose();
         this.grainEffect = null;
         this.grainTask = null;
@@ -3397,6 +3457,15 @@ export class FrameGraphPostEffectsController {
     ): void {
         sharpenTask.postProcess.edgeAmount = Math.max(0, settings.sharpenEdge);
         sharpenTask.postProcess.colorAmount = 1;
+    }
+
+    private applyMotionBlurSettings(
+        motionBlurTask: FrameGraphMotionBlurTask,
+        settings: FrameGraphPostEffectsSettings,
+    ): void {
+        motionBlurTask.postProcess.isObjectBased = true;
+        motionBlurTask.postProcess.motionStrength = Math.max(0, Math.min(10, settings.motionBlurStrength));
+        motionBlurTask.postProcess.motionBlurSamples = Math.max(8, Math.min(64, Math.round(settings.motionBlurSamples)));
     }
 
     private isVignetteEdgeBlurEnabled(settings: FrameGraphPostEffectsSettings): boolean {

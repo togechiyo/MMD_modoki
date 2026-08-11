@@ -353,6 +353,9 @@ async function initializeApp(): Promise<void> {
           executedFrameCount: mmdManager.getFrameGraphPostEffectsExecutedFrameCount(),
           stack: [...mmdManager.getFrameGraphPostEffectRuntimeOrder()],
         }),
+        getWebGpuValidationDiagnostics: () => (
+          mmdManager.getWebGpuValidationDiagnostics()
+        ),
         captureExportSurfaceProbe: async (width, height) => {
           mmdManager.setAutoRenderEnabled(false);
           mmdManager.postEffectExposure = 1.05;
@@ -361,8 +364,12 @@ async function initializeApp(): Promise<void> {
           mmdManager.renderOnceForCapture(0);
           const frame = await mmdManager.readExportRenderFrameAsync();
           let nonZeroByteCount = 0;
-          for (const value of frame.pixels) {
-            if (value !== 0) nonZeroByteCount += 1;
+          let nonZeroRgbByteCount = 0;
+          for (let index = 0; index < frame.pixels.length; index += 1) {
+            if (frame.pixels[index] !== 0) {
+              nonZeroByteCount += 1;
+              if (index % 4 !== 3) nonZeroRgbByteCount += 1;
+            }
           }
           return {
             backend: mmdManager.getPostEffectBackend(),
@@ -371,6 +378,7 @@ async function initializeApp(): Promise<void> {
             height: frame.height,
             byteLength: frame.pixels.byteLength,
             nonZeroByteCount,
+            nonZeroRgbByteCount,
             format: frame.format,
             rowOrder: frame.rowOrder,
             surfaceFormat: surface.format,

@@ -14,6 +14,8 @@ function createSettings(
         luminousIntensity: 0.5,
         bloomEnabled: false,
         lutEnabled: false,
+        motionBlurEnabled: false,
+        motionBlurStrength: 0.5,
         sharpenEdge: 0,
         grainIntensity: 0,
         chromaticAberration: 0,
@@ -199,6 +201,24 @@ describe("buildFrameGraphResourcePlan", () => {
             producer: "depthRenderer",
             resolution: "full",
         });
+    });
+
+    it("uses geometry velocity for object-based Motion Blur", () => {
+        const plan = buildFrameGraphResourcePlan(createSettings({
+            motionBlurEnabled: true,
+            motionBlurStrength: 0.75,
+        }), ["motionBlur"]);
+
+        expect(plan.activeEffects).toEqual(["motionBlur"]);
+        expect(plan.needsGeometryRenderer).toBe(true);
+        expect(plan.needsDepthRenderer).toBe(false);
+        expect(plan.requirements).toContainEqual({
+            key: "velocity",
+            consumers: ["motionBlur"],
+            producer: "geometryRenderer",
+            resolution: "full",
+        });
+        expect(plan.requirementKeys).not.toContain("viewDepth");
     });
 
     it("ignores zero-strength effects and appends active effects to the runtime order", () => {

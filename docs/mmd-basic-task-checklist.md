@@ -53,6 +53,7 @@
 - [x] Luminous 半径を固定 blur kernel と連続 direction scale に分離し、スライダー操作中の段階飛びと shader 再コンパイルを解消（[Luminous 半径スライダー修正メモ](./luminous-radius-slider-fix-2026-08-11.md)）
 - [x] FrameGraph stack 見出し右端に、設定を保持したまま backend を破棄・再生成する再読み込みボタンを追加
 - [x] FrameGraph stack 並べ替え時のtask登録順・build済みtexture再接続・非同期build競合を解消（[並べ替え安定化メモ](./framegraph-stack-reorder-stability-fix-2026-08-11.md)）
+- [x] Classic の既存設定を再利用した object-based Motion Blur を FrameGraph stack へ追加（[実装メモ](./framegraph-motion-blur-implementation-note-2026-08-11.md)）
 - [x] PNG 出力
 - [x] WebM 出力
 - [x] 連番 PNG / WebM の出力レンダリング経路を共通 RGBA Surface へ統合（[計画と進捗](./export-render-surface-unification-plan-2026-08-09.md)）

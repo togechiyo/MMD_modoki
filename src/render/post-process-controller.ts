@@ -860,6 +860,18 @@ export function updateSimpleMotionBlurState(host: PostProcessHost, deltaMs: numb
 }
 
 export function applyMotionBlurSettings(host: PostProcessHost): void {
+    if (host.postEffectBackend === "frameGraph") {
+        if (host.motionBlurPostProcess) {
+            host.motionBlurPostProcess.dispose(host.camera);
+            host.motionBlurPostProcess = null;
+        }
+        host.motionBlurPreviousCameraPosition = null;
+        host.motionBlurScreenDirection.set(0, 0);
+        host.motionBlurScreenAmount = 0;
+        host.enforceFinalPostProcessOrder();
+        return;
+    }
+
     const postProcesses = [...host.camera._postProcesses];
     for (const postProcess of postProcesses) {
         if (postProcess && postProcess !== host.motionBlurPostProcess && postProcess.name === "motionBlur") {

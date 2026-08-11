@@ -219,6 +219,10 @@ declare global {
                 executedFrameCount: number;
                 stack: string[];
             };
+            getWebGpuValidationDiagnostics: () => {
+                count: number;
+                messages: readonly string[];
+            };
             captureExportSurfaceProbe: (width: number, height: number) => Promise<{
                 backend: string;
                 ready: boolean;
@@ -226,6 +230,7 @@ declare global {
                 height: number;
                 byteLength: number;
                 nonZeroByteCount: number;
+                nonZeroRgbByteCount: number;
                 format: "RGBA";
                 rowOrder: "top-to-bottom";
                 surfaceFormat: "rgba8unorm";

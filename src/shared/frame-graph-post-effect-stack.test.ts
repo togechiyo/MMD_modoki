@@ -18,6 +18,8 @@ function createActivationSettings(
         luminousIntensity: 0.5,
         bloomEnabled: false,
         lutEnabled: false,
+        motionBlurEnabled: false,
+        motionBlurStrength: 0.5,
         sharpenEdge: 0,
         grainIntensity: 0,
         chromaticAberration: 0,
@@ -80,6 +82,8 @@ describe("frame graph post effect stack helpers", () => {
             luminousEnabled: true,
             luminousIntensity: 0,
             bloomEnabled: true,
+            motionBlurEnabled: true,
+            motionBlurStrength: 0.75,
             offsetShadowEnabled: true,
             offsetShadowStrength: 0.45,
             offsetHighlightEnabled: true,
@@ -101,6 +105,7 @@ describe("frame graph post effect stack helpers", () => {
         expect(isFrameGraphPostEffectActiveInSettings(settings, "luminous")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssao")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssgi")).toBe(true);
+        expect(isFrameGraphPostEffectActiveInSettings(settings, "motionBlur")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetShadow")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetHighlight")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "edgeBlur")).toBe(true);
@@ -124,7 +129,8 @@ describe("frame graph post effect stack helpers", () => {
             ssrStrength: 0.4,
             ssgiEnabled: true,
             lutEnabled: true,
-        }))).toEqual(["ssr", "ssgi", "offsetShadow", "offsetHighlight", "bloom", "lut", "grain"]);
+            motionBlurEnabled: true,
+        }))).toEqual(["ssr", "ssgi", "offsetShadow", "offsetHighlight", "bloom", "lut", "motionBlur", "grain"]);
     });
 });
 

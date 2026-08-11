@@ -150,7 +150,7 @@ export function getPostEffectMotionBlurStrength(host: EffectsPipelineHost): numb
     return host.postEffectMotionBlurStrengthValue;
 }
 export function setPostEffectMotionBlurStrength(host: EffectsPipelineHost, v: number): void {
-    host.postEffectMotionBlurStrengthValue = clamp(v, 0, 2);
+    host.postEffectMotionBlurStrengthValue = clamp(v, 0, 10);
     host.applyMotionBlurSettings();
 }
 export function getPostEffectMotionBlurSamples(host: EffectsPipelineHost): number {

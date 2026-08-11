@@ -124,6 +124,10 @@ import {
     PBR_MATERIAL_SSS_SCATTERING_BLEND_STRENGTH,
 } from "./render/pbr-material-sss-prepass-mask-fix";
 import {
+    installSdefUniformBoneWgslEngineFix,
+    installSdefUniformBoneWgslFix,
+} from "./render/sdef-uniform-bone-wgsl-fix";
+import {
     buildSubSurfaceCompositionDefines,
     resolveSubSurfaceFrameGraphPolicy,
 } from "./render/subsurface-frame-graph-policy";
@@ -1844,7 +1848,7 @@ ${beforeFogAppendBlock}
     private postEffectLutExternalSourceFormatValue: "3dl" | "cube" | null = null;
     private postEffectLutExternalRevision = 0;
     private postEffectMotionBlurEnabledValue = false;
-    private postEffectMotionBlurStrengthValue = 0.5;
+    private postEffectMotionBlurStrengthValue = 10;
     private postEffectMotionBlurSamplesValue = 32;
     private postEffectSsrEnabledValue = false;
     private postEffectSsrStrengthValue = 0.3;
@@ -6041,7 +6045,9 @@ ${beforeFogAppendBlock}
         this.scene.imageProcessingConfiguration.contrast = 1;
 
         // SDEF support
+        installSdefUniformBoneWgslFix(SdefInjector);
         SdefInjector.OverrideEngineCreateEffect(this.engine);
+        installSdefUniformBoneWgslEngineFix(this.engine);
 
         // Camera
         this.camera = new ArcRotateCamera(
@@ -9400,6 +9406,9 @@ ${beforeFogAppendBlock}
             lutIntensity: this.postEffectLutIntensityValue,
             lutRuntimeText: this.getFrameGraphPostEffectLutRuntimeText(),
             lutTextureKey: this.getFrameGraphPostEffectLutTextureKey(),
+            motionBlurEnabled: this.isFrameGraphPostEffectActive("motionBlur"),
+            motionBlurStrength: this.postEffectMotionBlurStrengthValue,
+            motionBlurSamples: this.postEffectMotionBlurSamplesValue,
             antialiasEnabled: this.antialiasEnabledValue,
         };
     }
@@ -9987,6 +9996,8 @@ ${beforeFogAppendBlock}
                 return this.postEffectBloomEnabledValue;
             case "lut":
                 return this.postEffectLutEnabledValue;
+            case "motionBlur":
+                return this.postEffectMotionBlurEnabledValue;
             case "sharpen":
                 return this.postEffectSharpenEdgeValue > 0.000001;
             case "grain":
@@ -10794,7 +10805,7 @@ ${beforeFogAppendBlock}
         setPostEffectMotionBlurEnabledImpl(this, v);
     }
 
-    /** Motion blur strength (0..2). */
+    /** Motion blur strength (0..10). */
     get postEffectMotionBlurStrength(): number {
         return getPostEffectMotionBlurStrengthImpl(this);
     }

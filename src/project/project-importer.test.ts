@@ -447,6 +447,7 @@ describe("importProjectState", () => {
                     { id: "lut", enabled: true },
                     { id: "bad" as "lut", enabled: true },
                     { id: "bloom", enabled: false },
+                    { id: "motionBlur", enabled: true },
                     { id: "lut", enabled: false },
                 ],
             },
@@ -457,6 +458,7 @@ describe("importProjectState", () => {
         expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
             { id: "lut", enabled: true },
             { id: "bloom", enabled: false },
+            { id: "motionBlur", enabled: true },
         ]);
     });
 

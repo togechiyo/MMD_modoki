@@ -4,12 +4,14 @@ import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const modelPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
 
 test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    await page.evaluate((path) => window.mmdModokiE2e.loadModel(path), modelPath);
 
     await page.locator("#btn-toggle-shader-panel").click();
     await expect(page.locator("#shader-panel")).toBeVisible();
@@ -92,6 +94,68 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
     await expect(page.locator('[data-effect-stack-row="ssgi"]')).toBeVisible();
     await expect(page.locator('[data-effect-stack-row="luminous"]')).toBeVisible();
     await expect(page.locator('[data-effect-stack-value="luminousRadius"]')).toHaveText("65px");
+
+    await page.locator("#btn-effect-add-post").click();
+    await page.locator('[data-effect-add-post="motionBlur"]').click();
+
+    const motionBlurRow = page.locator('[data-effect-stack-row="motionBlur"]');
+    await expect(motionBlurRow).toBeVisible();
+    const motionBlurSliders = motionBlurRow.locator('input[type="range"][data-effect-stack-control]');
+    await expect(motionBlurSliders).toHaveCount(2);
+    for (let index = 0; index < await motionBlurSliders.count(); index += 1) {
+      await expect(motionBlurSliders.nth(index)).toHaveAttribute("min", "0");
+      await expect(motionBlurSliders.nth(index)).toHaveAttribute("max", "100");
+      await expect(motionBlurSliders.nth(index)).toHaveAttribute("step", "1");
+    }
+
+    const motionBlurStrength = motionBlurRow.locator('[data-effect-stack-control="motionBlurStrength"]');
+    await motionBlurStrength.evaluate((input) => {
+      input.value = "50";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect(motionBlurRow.locator('[data-effect-stack-value="motionBlurStrength"]')).toHaveText("5.00");
+
+    const motionBlurSamples = motionBlurRow.locator('[data-effect-stack-control="motionBlurSamples"]');
+    await motionBlurSamples.evaluate((input) => {
+      input.value = "50";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect(motionBlurRow.locator('[data-effect-stack-value="motionBlurSamples"]')).toHaveText("36");
+
+    await expect.poll(async () => page.evaluate(() => {
+      const state = window.mmdModokiE2e?.getFrameGraphPostEffectsState();
+      return state ? {
+        backend: state.backend,
+        ready: state.ready,
+        hasExecuted: state.executedFrameCount >= 2,
+        stack: state.stack.join(","),
+      } : null;
+    }), { timeout: 30_000 }).toEqual({
+      backend: "frameGraph",
+      ready: true,
+      hasExecuted: true,
+      stack: "luminous,ssgi,motionBlur",
+    });
+
+    await page.waitForFunction(() => (
+      window.mmdModokiE2e.getFrameGraphPostEffectsState().executedFrameCount >= 10
+    ));
+    expect(await page.evaluate(() => (
+      window.mmdModokiE2e.getWebGpuValidationDiagnostics()
+    ))).toEqual({ count: 0, messages: [] });
+
+    const rendered = await page.evaluate(() => (
+      window.mmdModokiE2e.captureExportSurfaceProbe(64, 36)
+    ));
+    expect(rendered).toMatchObject({
+      backend: "frameGraph",
+      ready: true,
+      width: 64,
+      height: 36,
+    });
+    expect(rendered.nonZeroRgbByteCount).toBeGreaterThan(0);
   } finally {
     await launched.close();
   }

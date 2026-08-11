@@ -289,6 +289,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("lut", active); },
     },
     {
+        id: "motionBlur",
+        labelKey: "effect.frameGraphPost.effects.motionBlur",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("motionBlur"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("motionBlur", active); },
+    },
+    {
         id: "sharpen",
         labelKey: "effect.frameGraphPost.effects.sharpen",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("sharpen"),
@@ -4882,6 +4888,12 @@ export class UIController {
                 `);
                 rows.push(range("lutIntensity", label("intensity"), this.mmdManager.postEffectLutIntensity, this.mmdManager.postEffectLutIntensity.toFixed(2)));
                 break;
+            case "motionBlur":
+                rows.push(
+                    range("motionBlurStrength", label("strength"), this.mmdManager.postEffectMotionBlurStrength, this.mmdManager.postEffectMotionBlurStrength.toFixed(2)),
+                    range("motionBlurSamples", label("samples"), this.mmdManager.postEffectMotionBlurSamples, String(Math.round(this.mmdManager.postEffectMotionBlurSamples))),
+                );
+                break;
             case "ssao":
                 rows.push(
                     range("ssaoStrength", label("strength"), this.mmdManager.postEffectSsaoStrength, this.mmdManager.postEffectSsaoStrength.toFixed(2)),
@@ -5059,6 +5071,12 @@ export class UIController {
             case "lutIntensity":
                 this.mmdManager.postEffectLutIntensity = Number(actualValue);
                 break;
+            case "motionBlurStrength":
+                this.mmdManager.postEffectMotionBlurStrength = Number(actualValue);
+                break;
+            case "motionBlurSamples":
+                this.mmdManager.postEffectMotionBlurSamples = Number(actualValue);
+                break;
             case "ssaoStrength":
                 this.mmdManager.postEffectSsaoStrength = Number(actualValue);
                 this.mmdManager.postEffectSsaoDebugView = false;
@@ -5200,6 +5218,9 @@ export class UIController {
             case "lutSource":
             case "lutIntensity":
                 return "lut";
+            case "motionBlurStrength":
+            case "motionBlurSamples":
+                return "motionBlur";
             case "ssaoStrength":
             case "ssaoRadius":
                 return "ssao";
@@ -5316,6 +5337,12 @@ export class UIController {
                 break;
             case "lutIntensity":
                 valueElement.textContent = this.mmdManager.postEffectLutIntensity.toFixed(2);
+                break;
+            case "motionBlurStrength":
+                valueElement.textContent = this.mmdManager.postEffectMotionBlurStrength.toFixed(2);
+                break;
+            case "motionBlurSamples":
+                valueElement.textContent = String(Math.round(this.mmdManager.postEffectMotionBlurSamples));
                 break;
             case "ssaoStrength":
                 valueElement.textContent = this.mmdManager.postEffectSsaoStrength.toFixed(2);

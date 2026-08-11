@@ -50,6 +50,7 @@ SSGI の UI 表示名は仮の `GI（実験的）` から単純な `SSGI` へ変
 - `luminous`
 - `bloom`
 - `lut`
+- `motionBlur`
 - `sharpen`
 - `grain`
 - `chromatic`

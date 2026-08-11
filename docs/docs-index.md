@@ -210,6 +210,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [Frame Graph post effects plan](./frame-graph-post-effects-plan-2026-04-28.md)
 - [Frame Graph post effects progress](./frame-graph-post-effects-progress-2026-04-28.md)
 - [FrameGraph Post Stack current spec 2026-07-01](./framegraph-post-stack-current-spec-2026-07-01.md)
+- [FrameGraph Motion Blur 実装メモ 2026-08-11](./framegraph-motion-blur-implementation-note-2026-08-11.md)
 - [FrameGraph / MMDエッジ / SSAO 回帰メモ 2026-07-15](./framegraph-outline-ssao-regression-note-2026-07-15.md)
 - [FrameGraph SSGI 偵察・設計メモ 2026-07-19](./ssgi-design-note-2026-07-19.md)
 - [FrameGraph SSGI Compute方式 実装解説 2026-07-19](./framegraph-ssgi-compute-method-note-2026-07-19.md)

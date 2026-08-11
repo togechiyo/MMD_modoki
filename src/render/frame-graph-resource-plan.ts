@@ -11,6 +11,7 @@ export type FrameGraphSharedResourceKey =
     | "depthScene"
     | "viewDepth"
     | "viewNormal"
+    | "velocity"
     | "reflectivity"
     | "luminousMask";
 
@@ -58,6 +59,7 @@ function getProducer(key: FrameGraphSharedResourceKey): FrameGraphResourceRequir
             return "depthRenderer";
         case "viewDepth":
         case "viewNormal":
+        case "velocity":
         case "reflectivity":
             return "geometryRenderer";
         case "luminousMask":
@@ -105,6 +107,10 @@ export function buildFrameGraphResourcePlan(
         addConsumer(consumersByKey, "depthScene", "dof");
     }
 
+    if (activeEffects.includes("motionBlur")) {
+        addConsumer(consumersByKey, "velocity", "motionBlur");
+    }
+
     if (activeEffects.includes("luminous")) {
         addConsumer(consumersByKey, "luminousMask", "luminous");
     }
@@ -124,6 +130,7 @@ export function buildFrameGraphResourcePlan(
         requirementKeys,
         needsGeometryRenderer: consumersByKey.has("viewDepth")
             || consumersByKey.has("viewNormal")
+            || consumersByKey.has("velocity")
             || consumersByKey.has("reflectivity"),
         needsDepthRenderer: consumersByKey.has("depthScene"),
         needsLuminousMask: consumersByKey.has("luminousMask"),

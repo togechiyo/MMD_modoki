@@ -210,6 +210,7 @@ declare global {
                 position: { x: number; y: number; z: number },
                 target: { x: number; y: number; z: number },
             ) => void;
+            setLightDirection: (direction: { x: number; y: number; z: number }) => void;
             getCameraKeyframePose: () => {
                 position: { x: number; y: number; z: number };
                 rotation: { x: number; y: number; z: number };
@@ -221,6 +222,9 @@ declare global {
                 backend: string;
                 ready: boolean;
                 executedFrameCount: number;
+                oceanWaveFieldReady: boolean;
+                oceanVolumeReady: boolean;
+                oceanSurfaceReady: boolean;
                 stack: string[];
             };
             getWebGpuValidationDiagnostics: () => {
@@ -569,6 +573,7 @@ export interface ProjectEffectState {
     oceanWaveStrength?: number;
     oceanClarity?: number;
     oceanCausticsStrength?: number;
+    oceanVolumeStrength?: number;
     vlsEnabled?: boolean;
     vlsExposure?: number;
     vlsDecay?: number;

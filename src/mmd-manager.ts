@@ -1859,6 +1859,7 @@ ${beforeFogAppendBlock}
     private postEffectOceanWaveStrengthValue = 0.7;
     private postEffectOceanClarityValue = 0.85;
     private postEffectOceanCausticsStrengthValue = 1.1;
+    private postEffectOceanVolumeStrengthValue = 0.65;
     private postEffectVlsEnabledValue = false;
     private postEffectVlsExposureValue = 0.3;
     private postEffectVlsDecayValue = 0.95;
@@ -9411,7 +9412,11 @@ ${beforeFogAppendBlock}
             oceanWaveStrength: this.postEffectOceanWaveStrengthValue,
             oceanClarity: this.postEffectOceanClarityValue,
             oceanCausticsStrength: this.postEffectOceanCausticsStrengthValue,
+            oceanVolumeStrength: this.postEffectOceanVolumeStrengthValue,
             oceanTimeSeconds: this._currentFrame / 30,
+            oceanLightDirection: this.getLightDirection(),
+            oceanLightColor: this.getLightColor(),
+            oceanLightIntensity: this.dirLight?.intensity ?? 1,
             lutEnabled: this.isFrameGraphPostEffectActive("lut") && isLutSourceReadyImpl(this),
             lutIntensity: this.postEffectLutIntensityValue,
             lutRuntimeText: this.getFrameGraphPostEffectLutRuntimeText(),
@@ -9886,6 +9891,18 @@ ${beforeFogAppendBlock}
 
     getFrameGraphPostEffectsExecutedFrameCount(): number {
         return this.frameGraphPostEffectsController?.getExecutedFrameCount() ?? 0;
+    }
+
+    isFrameGraphOceanWaveFieldReady(): boolean {
+        return this.frameGraphPostEffectsController?.isOceanWaveFieldReady() ?? false;
+    }
+
+    isFrameGraphOceanVolumeReady(): boolean {
+        return this.frameGraphPostEffectsController?.isOceanVolumeReady() ?? false;
+    }
+
+    isFrameGraphOceanSurfaceReady(): boolean {
+        return this.frameGraphPostEffectsController?.isOceanSurfaceReady() ?? false;
     }
 
     getFrameGraphPostEffectsLuminousMaskRenderedSubMeshCount(): number {
@@ -10929,6 +10946,17 @@ ${beforeFogAppendBlock}
         this.postEffectOceanCausticsStrengthValue = Number.isFinite(value)
             ? Math.max(0, Math.min(2, value))
             : 1.1;
+    }
+
+    /** Directional-light-linked underwater volume contribution (0..2). */
+    get postEffectOceanVolumeStrength(): number {
+        return this.postEffectOceanVolumeStrengthValue;
+    }
+    set postEffectOceanVolumeStrength(v: number) {
+        const value = Number(v);
+        this.postEffectOceanVolumeStrengthValue = Number.isFinite(value)
+            ? Math.max(0, Math.min(2, value))
+            : 0.65;
     }
 
     /** Volumetric light enabled state. */

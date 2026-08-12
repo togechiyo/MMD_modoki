@@ -401,9 +401,17 @@
 - [x] 豆腐PMXのPlaywright実描画、PNG出力、WebGPU validation warning 0
 - [x] 実機調整で少数手調整波の反復・強弱表現の限界を記録する
 - [x] 2022年以降の立体水面、水中volume、コースティクス、interaction方式を比較し、5 task構成を決める
-- [ ] Dynamic Wave Trains最小reproductionと方向スペクトル + multi-band Compute baselineを同一test sceneで比較する
-- [ ] camera中心clipmapの独立water mesh、水平変位、reflection / refraction、waterline / meniscusを実装する
-- [ ] MMD方向光とshadowへ連動する低解像度froxel単一散乱を実装する
+- [x] 3帯域・48成分の方向スペクトル風sparse synthesisを`FrameGraphComputeShaderTask`で共有wave field化する
+- [x] 海の太陽方向・色・強度をMMD方向光へ接続し、波面集光由来の簡易水中光芒を追加する
+- [x] 簡易水中光芒を半解像度・12 sampleの独立Compute taskへ分離し、強度0/有効・方向光連動・validation warning 0をPlaywrightで確認する
+- [x] 3段camera-centered clipmapの立体水面を追加し、共有wave fieldによるvertex変位・scene depth test・水上/水中Playwright画像を確認する
+- [ ] Dynamic Wave Trains最小reproductionをmulti-band Compute baselineと同一test sceneで比較する
+- [x] depth復元と局所波高から接触ウォーターラインを追加し、ハイライトnormalの単一tile反復を複数方向・異倍率sampleで緩和する
+- [x] 共通波場を回転・非整数周期の7 sampleへ置換し、caustics飽和抑制と方向光連動の非等間隔volume beamを追加する
+- [x] 水面highlightの白coreを不透明化し、3 normal空間平均とgeometry depth 4 tapの暫定volume / caustics遮蔽を追加する
+- [ ] surface highlight maskのseparable blurと、MMD shadow mapを共有するfroxel / caustics遮蔽へ移行する
+- [ ] clipmap境界stitching、reflection / refraction RTT、海岸線mask、near-plane meniscusを追加する
+- [ ] 現行の方向光連動簡易光芒を、shadowへ連動する低解像度froxel単一散乱へ置き換える
 - [ ] light-view receiver G-buffer + Newton屈折mesh版コースティクスを実装する
 - [ ] sphere probe + local Wave Particle patchで接触波紋・wakeを実装する
 - [ ] phase / breaking energy由来foamとwater-crossing event由来splash particleを分離実装する

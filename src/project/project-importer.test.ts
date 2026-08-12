@@ -155,6 +155,7 @@ function createHost() {
         postEffectOceanWaveStrength: 0.7,
         postEffectOceanClarity: 0.85,
         postEffectOceanCausticsStrength: 1.1,
+        postEffectOceanVolumeStrength: 0.65,
         setPostEffectExternalLut: vi.fn(),
         setExternalWgslToonShader: vi.fn(),
         setPostEffectFogColor: vi.fn(),
@@ -373,6 +374,7 @@ describe("importProjectState", () => {
                 oceanWaveStrength: 4,
                 oceanClarity: 8,
                 oceanCausticsStrength: 1.6,
+                oceanVolumeStrength: 1.4,
                 frameGraphPostStack: [{ id: "ocean", enabled: true }],
             },
         });
@@ -383,6 +385,7 @@ describe("importProjectState", () => {
         expect(host.postEffectOceanWaveStrength).toBe(2);
         expect(host.postEffectOceanClarity).toBe(4);
         expect(host.postEffectOceanCausticsStrength).toBe(1.6);
+        expect(host.postEffectOceanVolumeStrength).toBe(1.4);
         expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
             { id: "ocean", enabled: true },
         ]);

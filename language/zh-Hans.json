@@ -516,6 +516,7 @@
     "effect.frameGraphPost.controls.waves":  "波浪",
     "effect.frameGraphPost.controls.clarity":  "清澈度",
     "effect.frameGraphPost.controls.caustics":  "焦散",
+    "effect.frameGraphPost.controls.volumeLight":  "水下光束",
     "shader.option.builtin":  "内置",
     "shader.option.externalAbsolute":  "外部（绝对路径）",
     "shader.option.projectLut":  "项目LUT",

@@ -182,6 +182,7 @@ type ProjectExportHost = {
     postEffectOceanWaveStrength: number;
     postEffectOceanClarity: number;
     postEffectOceanCausticsStrength: number;
+    postEffectOceanVolumeStrength: number;
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -508,6 +509,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             oceanWaveStrength: host.postEffectOceanWaveStrength,
             oceanClarity: host.postEffectOceanClarity,
             oceanCausticsStrength: host.postEffectOceanCausticsStrength,
+            oceanVolumeStrength: host.postEffectOceanVolumeStrength,
             vlsEnabled: host.postEffectVlsEnabled,
             vlsExposure: host.postEffectVlsExposure,
             vlsDecay: host.postEffectVlsDecay,

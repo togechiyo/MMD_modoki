@@ -64,6 +64,12 @@ import {
 import { ObjectMotionBlurBoneVelocityMode } from "./object-motion-blur-bone-velocity";
 import { FrameGraphPostEffectsOceanTask } from "./frame-graph-ocean-task";
 import {
+    FrameGraphOceanWaveFieldTask,
+    OCEAN_WAVE_BAND_CONFIGS,
+} from "./frame-graph-ocean-wave-task";
+import { FrameGraphOceanVolumeTask } from "./frame-graph-ocean-volume-task";
+import { FrameGraphOceanSurfaceTask } from "./frame-graph-ocean-surface-task";
+import {
     ensureFrameGraphOceanShaders,
     FRAME_GRAPH_OCEAN_METHOD_NAME,
 } from "./frame-graph-ocean-shaders";
@@ -128,6 +134,9 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
         ssao: boolean;
         ssaoToonComposite: boolean;
         ocean: boolean;
+        oceanWaveField: boolean;
+        oceanVolume: boolean;
+        oceanSurface: boolean;
         offsetShadow: boolean;
         offsetHighlight: boolean;
         motionBlur: boolean;
@@ -240,7 +249,11 @@ export type FrameGraphPostEffectsSettings = {
     oceanWaveStrength: number;
     oceanClarity: number;
     oceanCausticsStrength: number;
+    oceanVolumeStrength: number;
     oceanTimeSeconds: number;
+    oceanLightDirection?: { x: number; y: number; z: number };
+    oceanLightColor?: { r: number; g: number; b: number };
+    oceanLightIntensity?: number;
     lutEnabled: boolean;
     lutIntensity: number;
     lutRuntimeText: string | null;
@@ -1920,6 +1933,9 @@ export class FrameGraphPostEffectsController {
     private ssaoToonCompositeTask: FrameGraphPostEffectsSsaoToonCompositeTask | null = null;
     private oceanEffect: EffectWrapper | null = null;
     private oceanTask: FrameGraphPostEffectsOceanTask | null = null;
+    private readonly oceanWaveTasks: FrameGraphOceanWaveFieldTask[] = [];
+    private oceanVolumeTask: FrameGraphOceanVolumeTask | null = null;
+    private oceanSurfaceTask: FrameGraphOceanSurfaceTask | null = null;
     private offsetShadowEffect: EffectWrapper | null = null;
     private offsetShadowTask: FrameGraphPostEffectsOffsetShadowTask | null = null;
     private offsetHighlightEffect: EffectWrapper | null = null;
@@ -2038,7 +2054,11 @@ export class FrameGraphPostEffectsController {
             oceanWaveStrength: 0.7,
             oceanClarity: 0.85,
             oceanCausticsStrength: 1.1,
+            oceanVolumeStrength: 0.65,
             oceanTimeSeconds: 0,
+            oceanLightDirection: { x: 0.3, y: -0.5, z: 0.5 },
+            oceanLightColor: { r: 1, g: 1, b: 1 },
+            oceanLightIntensity: 1,
             lutEnabled: false,
             lutIntensity: 1,
             lutRuntimeText: null,
@@ -2103,6 +2123,9 @@ export class FrameGraphPostEffectsController {
                 ssao: this.ssaoTask !== null,
                 ssaoToonComposite: this.ssaoToonCompositeTask !== null,
                 ocean: this.oceanTask !== null,
+                oceanWaveField: this.oceanWaveTasks.length === OCEAN_WAVE_BAND_CONFIGS.length,
+                oceanVolume: this.oceanVolumeTask !== null,
+                oceanSurface: this.oceanSurfaceTask !== null,
                 offsetShadow: this.offsetShadowTask !== null,
                 offsetHighlight: this.offsetHighlightTask !== null,
                 motionBlur: this.motionBlurTask !== null,
@@ -2320,6 +2343,74 @@ export class FrameGraphPostEffectsController {
             this.geometryRendererTask = geometryRendererTask;
 
             if (this.isPostEffectActive(initialSettings, "ocean")) {
+                const getOceanSettings = () => {
+                    const settings = this.getSettings();
+                    return {
+                        waterHeight: settings.oceanWaterHeight,
+                        waveStrength: settings.oceanWaveStrength,
+                        clarity: settings.oceanClarity,
+                        causticsStrength: settings.oceanCausticsStrength,
+                        volumeStrength: settings.oceanVolumeStrength,
+                        timeSeconds: settings.oceanTimeSeconds,
+                        lightDirection: settings.oceanLightDirection
+                            ?? { x: 0.3, y: -0.5, z: 0.5 },
+                        lightColor: settings.oceanLightColor
+                            ?? { r: 1, g: 1, b: 1 },
+                        lightIntensity: settings.oceanLightIntensity ?? 1,
+                    };
+                };
+                const getOceanWaveSettings = () => {
+                    const settings = this.getSettings();
+                    return {
+                        timeSeconds: settings.oceanTimeSeconds,
+                        waveStrength: settings.oceanWaveStrength,
+                    };
+                };
+                for (const config of OCEAN_WAVE_BAND_CONFIGS) {
+                    const waveTask = new FrameGraphOceanWaveFieldTask(
+                        `frameGraphOceanWaveField-${config.band}`,
+                        frameGraph,
+                        config,
+                        getOceanWaveSettings,
+                    );
+                    waveTask.disabled = false;
+                    deferEffectTask("ocean", waveTask);
+                    this.oceanWaveTasks.push(waveTask);
+                }
+                const broadWaveTask = this.oceanWaveTasks.find((task) => task.config.band === "broad");
+                const mediumWaveTask = this.oceanWaveTasks.find((task) => task.config.band === "medium");
+                const fineWaveTask = this.oceanWaveTasks.find((task) => task.config.band === "fine");
+                if (!broadWaveTask || !mediumWaveTask || !fineWaveTask) {
+                    throw new Error("Ocean wave-field bands could not be initialized.");
+                }
+                const oceanSurfaceTask = new FrameGraphOceanSurfaceTask(
+                    "frameGraphOceanSurface",
+                    frameGraph,
+                    scene,
+                    camera,
+                    getOceanSettings,
+                );
+                oceanSurfaceTask.depthTexture = geometryRendererTask.outputDepthTexture;
+                oceanSurfaceTask.broadWaveTexture = broadWaveTask.outputTexture;
+                oceanSurfaceTask.mediumWaveTexture = mediumWaveTask.outputTexture;
+                oceanSurfaceTask.fineWaveTexture = fineWaveTask.outputTexture;
+                oceanSurfaceTask.disabled = false;
+                this.oceanSurfaceTask = oceanSurfaceTask;
+                const oceanVolumeTask = new FrameGraphOceanVolumeTask(
+                    "frameGraphOceanVolume",
+                    frameGraph,
+                    sourceTextureSize.width,
+                    sourceTextureSize.height,
+                    camera,
+                    getOceanSettings,
+                );
+                oceanVolumeTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
+                oceanVolumeTask.broadWaveTexture = broadWaveTask.outputTexture;
+                oceanVolumeTask.mediumWaveTexture = mediumWaveTask.outputTexture;
+                oceanVolumeTask.fineWaveTexture = fineWaveTask.outputTexture;
+                oceanVolumeTask.disabled = false;
+                deferEffectTask("ocean", oceanVolumeTask);
+                this.oceanVolumeTask = oceanVolumeTask;
                 this.oceanEffect = new EffectWrapper({
                     engine: frameGraph.engine,
                     fragmentShader: "mmdFrameGraphOcean",
@@ -2329,13 +2420,24 @@ export class FrameGraphPostEffectsController {
                         "inverseProjection",
                         "inverseView",
                         "cameraPosition",
+                        "lightDirection",
+                        "lightColor",
+                        "lightIntensity",
                         "waterHeight",
                         "timeSeconds",
                         "waveStrength",
                         "clarity",
                         "causticsStrength",
+                        "surfaceMeshEnabled",
                     ],
-                    samplers: ["viewDepthTexture", "viewNormalTexture"],
+                    samplers: [
+                        "viewDepthTexture",
+                        "viewNormalTexture",
+                        "broadWaveTexture",
+                        "mediumWaveTexture",
+                        "fineWaveTexture",
+                        "oceanVolumeTexture",
+                    ],
                     name: "mmdFrameGraphOcean",
                     shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
                 });
@@ -2344,22 +2446,21 @@ export class FrameGraphPostEffectsController {
                     frameGraph,
                     this.oceanEffect,
                     camera,
-                    () => {
-                        const settings = this.getSettings();
-                        return {
-                            waterHeight: settings.oceanWaterHeight,
-                            waveStrength: settings.oceanWaveStrength,
-                            clarity: settings.oceanClarity,
-                            causticsStrength: settings.oceanCausticsStrength,
-                            timeSeconds: settings.oceanTimeSeconds,
-                        };
-                    },
+                    getOceanSettings,
                 );
                 oceanTask.sourceTexture = imageProcessingTask.outputTexture;
                 oceanTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
                 oceanTask.normalTexture = geometryRendererTask.geometryViewNormalTexture;
+                oceanTask.broadWaveTexture = broadWaveTask.outputTexture;
+                oceanTask.mediumWaveTexture = mediumWaveTask.outputTexture;
+                oceanTask.fineWaveTexture = fineWaveTask.outputTexture;
+                oceanTask.volumeTexture = oceanVolumeTask.outputTexture;
                 oceanTask.disabled = false;
                 deferEffectTask("ocean", oceanTask);
+                // The media pass must not sample an image that already contains the
+                // transparent surface mesh. Otherwise refraction/tint processes the
+                // same water twice and produces a detached oil-film layer.
+                deferEffectTask("ocean", oceanSurfaceTask);
                 this.oceanTask = oceanTask;
                 dofSourceTexture = oceanTask.outputTexture;
             }
@@ -3084,6 +3185,15 @@ export class FrameGraphPostEffectsController {
         if (this.oceanTask) {
             this.oceanTask.disabled = !this.isPostEffectActive(settings, "ocean");
         }
+        if (this.oceanVolumeTask) {
+            this.oceanVolumeTask.disabled = !this.isPostEffectActive(settings, "ocean");
+        }
+        if (this.oceanSurfaceTask) {
+            this.oceanSurfaceTask.disabled = !this.isPostEffectActive(settings, "ocean");
+        }
+        for (const waveTask of this.oceanWaveTasks) {
+            waveTask.disabled = !this.isPostEffectActive(settings, "ocean");
+        }
         if (this.offsetShadowTask) {
             this.offsetShadowTask.disabled = !this.isPostEffectActive(settings, "offsetShadow")
                 || this.offsetShadowTask.depthTexture === undefined;
@@ -3149,6 +3259,20 @@ export class FrameGraphPostEffectsController {
 
     getExecutedFrameCount(): number {
         return this.executedFrameCount;
+    }
+
+    isOceanWaveFieldReady(): boolean {
+        return this.oceanTask !== null
+            && this.oceanVolumeTask !== null
+            && this.oceanWaveTasks.length === OCEAN_WAVE_BAND_CONFIGS.length;
+    }
+
+    isOceanVolumeReady(): boolean {
+        return this.oceanVolumeTask !== null;
+    }
+
+    isOceanSurfaceReady(): boolean {
+        return this.oceanSurfaceTask !== null;
     }
 
     private connectPostEffectOrder(
@@ -3253,9 +3377,11 @@ export class FrameGraphPostEffectsController {
                     }
                     break;
                 case "ocean":
-                    if (this.oceanTask) {
+                    if (this.oceanSurfaceTask && this.oceanTask) {
                         this.oceanTask.sourceTexture = currentTexture;
                         currentTexture = this.oceanTask.outputTexture;
+                        this.oceanSurfaceTask.targetTexture = currentTexture;
+                        currentTexture = this.oceanSurfaceTask.outputTexture;
                         this.connectedOrder.push("ocean");
                     }
                     break;
@@ -3342,6 +3468,14 @@ export class FrameGraphPostEffectsController {
         this.oceanEffect?.dispose();
         this.oceanEffect = null;
         this.oceanTask = null;
+        this.oceanVolumeTask?.dispose();
+        this.oceanVolumeTask = null;
+        this.oceanSurfaceTask?.dispose();
+        this.oceanSurfaceTask = null;
+        for (const waveTask of this.oceanWaveTasks) {
+            waveTask.dispose();
+        }
+        this.oceanWaveTasks.length = 0;
         this.offsetShadowEffect?.dispose();
         this.offsetShadowEffect = null;
         this.offsetShadowTask = null;

@@ -516,6 +516,7 @@
     "effect.frameGraphPost.controls.waves":  "Waves",
     "effect.frameGraphPost.controls.clarity":  "Clarity",
     "effect.frameGraphPost.controls.caustics":  "Caustics",
+    "effect.frameGraphPost.controls.volumeLight":  "Underwater light shafts",
     "shader.option.builtin":  "Builtin",
     "shader.option.externalAbsolute":  "External Abs",
     "shader.option.projectLut":  "Project LUT",

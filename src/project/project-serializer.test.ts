@@ -189,6 +189,7 @@ function createHost() {
         postEffectOceanWaveStrength: 0.7,
         postEffectOceanClarity: 0.85,
         postEffectOceanCausticsStrength: 1.1,
+        postEffectOceanVolumeStrength: 0.65,
         postEffectVlsEnabled: false,
         postEffectVlsExposure: 0.3,
         postEffectVlsDecay: 0.95,
@@ -258,6 +259,7 @@ describe("exportProjectState", () => {
             postEffectOceanWaveStrength: 1.2,
             postEffectOceanClarity: 0.92,
             postEffectOceanCausticsStrength: 1.65,
+            postEffectOceanVolumeStrength: 1.25,
             getFrameGraphPostEffectStackEntries: () => [{ id: "ocean", enabled: false }],
         });
 
@@ -265,6 +267,7 @@ describe("exportProjectState", () => {
         expect(project.effects.oceanWaveStrength).toBe(1.2);
         expect(project.effects.oceanClarity).toBe(0.92);
         expect(project.effects.oceanCausticsStrength).toBe(1.65);
+        expect(project.effects.oceanVolumeStrength).toBe(1.25);
         expect(project.effects.frameGraphPostStack).toEqual([{ id: "ocean", enabled: false }]);
     });
 

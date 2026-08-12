@@ -4,6 +4,8 @@
 
 一次調査完了。立体水面、方向光連動の水中光芒、接触波紋・泡・飛沫について、2022 年以降の一次資料と公開実装を比較し、5 task の責務、推奨方式、実装順を整理した。実装開始前に Dynamic Wave Trains と WP-FFT の source / license 公開状況を再確認する。
 
+2026-08-12、Phase 1として3帯域・48成分のGPU sparse wave field、MMD方向光連動、簡易水中光芒まで実装した。これはDonatini 2024のmulti-band構成を小さく検証するbaselineであり、Dynamic Wave Trains、独立clipmap mesh、shadow付きfroxel、light-view caustics、interactionは未実装である。詳細は[海エフェクト MVP 実装メモ](./ocean-effect-mvp-implementation-2026-08-11.md)を参照する。
+
 ## 調査目的
 
 MMD では既存の MME 水面表現でも、立体的な波、水面反射・屈折、強いコースティクスが利用されている。MMD_modoki の海エフェクトも、簡易な青色 Fog や少数の解析波ではなく、次の 5 要素を一つの環境として整合させる必要がある。
@@ -509,3 +511,33 @@ bloom / LUT / color grading / final
 - Jeschke and Wojtan, `Generalizing Shallow Water Simulations with Dispersive Surface Waves`, SIGGRAPH 2023: https://research.nvidia.com/publication/2023-08_generalizing-shallow-water-simulations-dispersive-surface-waves
 - Waseem and Hong, `Real-Time Two-Way Fluid–Rigid Body Interaction via SDF Coupling with GPU-Accelerated SPH and Volumetric Rendering`, Mathematics 14(11), 2026: https://doi.org/10.3390/math14111845
 - Babylon.js 9.2 `FrameGraphComputeShaderTask` local source: `node_modules/@babylonjs/core/FrameGraph/Tasks/Misc/computeShaderTask.js`
+
+## 2026-08-12 実装追跡: volume Phase 2
+
+調査時に定めた「既存の簡易光芒を独立 task 化してから froxel / shadow へ進む」段階として、半解像度 `FrameGraphOceanVolumeTask` を追加した。
+
+- 入力: geometry view depth、3帯域 wave field、camera inverse projection / view、MMD方向光
+- 出力: 半解像度 RGBA16F。RGB は12点積分した散乱光、A は正規化した水中距離
+- 水面 compression を光線上の各 sample から逆投影し、水面由来の明暗筋を作る
+- 時間乱数は使わず、pixel 固定 jitter にして pause / seek / export の決定性を維持する
+- post ocean は volume texture をsampleし、RGB別吸収による基礎散乱へ加算するだけに縮小した
+
+これは最終候補の froxel 単一散乱を小さく検証する中間段階である。空間光の独立 resource と task 順序、方向光連動、半解像度 upsample、WebGPU validation までは確認できた。未実装なのは shadow map visibility、3D froxel、temporal reprojection、複数散乱近似である。
+
+## 2026-08-12 実装追跡: surface Phase 3
+
+立体水面の最初の実装として、3段camera-centered clipmapをFrameGraph ObjectRendererへ追加した。既存のmulti-band wave fieldをvertex / fragmentから直接sampleし、near / middle / farで格子解像度を分ける。
+
+この段階で確認できたのは、実geometryのwaterline、MMD camera追従、scene depthとの前後関係、波面normalと白highlightの共有である。まだDynamic Wave Trainsの空間変調やFFT displacementではなく、既存sparse spectrum textureのheight / slopeを利用したbaselineである。
+
+追加のPhase 3bでは、geometry depthから復元したreceiverと局所波高の符号距離から接触ウォーターラインを生成した。太さは固定world幅、`fwidth`は上限付きAA幅に限定し、遠景で線が白帯へ膨張する問題を避ける。ハイライトnormalはmedium 2方向・fine 3方向の回転／異倍率sampleへ変更し、単一の8-unit fine tileと格子hashがそのまま見える状態を緩和した。これはwaterline / highlightのbaselineであり、near-plane meniscus、foam、wet surfaceは別taskとして残る。
+
+画面上の水面境界には、実meshのview ray / normal接線判定から無彩色の暗縁と白芯を生成する二層rimも追加した。接触線とは役割を分け、明るい背景でも輪郭が消えず、広い暗帯にもならない狭い範囲だけを不透明化する。
+
+Phase 3cでは、fine slopeの法線寄与、specular指数、caustics曲率差分を再調整した。specularはwide/coreの二段lobeとsoft roll-off、causticsは曲率／compressionの加重合成、volume focusingは線形寄りの応答とし、二値的な白点ではなく中間階調を優先する。
+
+Phase 3dでは、各band textureの単純反復を共通7-sample波場へ置換した。回転・非整数周期でbroad 2 / medium 2 / fine 3を合成し、surface、caustics、volumeの周期が同時に露出する問題を緩和する。volumeは屈折方向光をviewへ投影したworld-anchored beam maskを追加し、12点積分で消えていた光束の明暗差を補う。現方式はMMD shadow mapを参照しないため、遮蔽された光芒は次のfroxel / shadow phaseへ残す。
+
+Phase 3eでは、surface highlight coverageをalphaへ反映して白coreを不透明化し、近傍3 normalのspecular平均で小さな空間blurを行う。volume / causticsにはgeometry depthの4 tap screen-space visibilityを追加し、水面depthから立ち上がるbeamへ掛ける。これはshadow map連携前の暫定遮蔽であり、画面外遮蔽とtransparent receiverは保証しない。
+
+次に比較・追加する項目は、clipmap ring境界のstitching、view-dependent tessellation、planar reflection / refraction、shoreline maskである。コースティクスのlight-view receiver実装は、この実水面をlight-spaceへ投影する前提で進められる。

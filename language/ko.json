@@ -516,6 +516,7 @@
     "effect.frameGraphPost.controls.waves":  "파도",
     "effect.frameGraphPost.controls.clarity":  "투명도",
     "effect.frameGraphPost.controls.caustics":  "코스틱",
+    "effect.frameGraphPost.controls.volumeLight":  "수중 광선",
     "shader.option.builtin":  "내장",
     "shader.option.externalAbsolute":  "외부(절대 경로)",
     "shader.option.projectLut":  "프로젝트 LUT",

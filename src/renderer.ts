@@ -350,11 +350,17 @@ async function initializeApp(): Promise<void> {
           mmdManager.setCameraPosition(position.x, position.y, position.z);
           mmdManager.setCameraTarget(target.x, target.y, target.z);
         },
+        setLightDirection: (direction) => {
+          mmdManager.setLightDirection(direction.x, direction.y, direction.z);
+        },
         getCameraKeyframePose: () => mmdManager.getCameraKeyframePose(),
         getFrameGraphPostEffectsState: () => ({
           backend: mmdManager.getPostEffectBackend(),
           ready: mmdManager.isPostEffectBackendReadyForCapture(),
           executedFrameCount: mmdManager.getFrameGraphPostEffectsExecutedFrameCount(),
+          oceanWaveFieldReady: mmdManager.isFrameGraphOceanWaveFieldReady(),
+          oceanVolumeReady: mmdManager.isFrameGraphOceanVolumeReady(),
+          oceanSurfaceReady: mmdManager.isFrameGraphOceanSurfaceReady(),
           stack: [...mmdManager.getFrameGraphPostEffectRuntimeOrder()],
         }),
         getWebGpuValidationDiagnostics: () => (

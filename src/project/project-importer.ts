@@ -249,6 +249,7 @@ type ProjectImportHost = {
     postEffectOceanWaveStrength: number;
     postEffectOceanClarity: number;
     postEffectOceanCausticsStrength: number;
+    postEffectOceanVolumeStrength: number;
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -1189,6 +1190,10 @@ export async function importProjectState(
     host.postEffectOceanCausticsStrength = Math.max(0, Math.min(
         2,
         readFiniteNumber(data.effects.oceanCausticsStrength, 1.1),
+    ));
+    host.postEffectOceanVolumeStrength = Math.max(0, Math.min(
+        2,
+        readFiniteNumber(data.effects.oceanVolumeStrength, 0.65),
     ));
     host.postEffectVlsEnabled = typeof data.effects.vlsEnabled === "boolean"
         ? data.effects.vlsEnabled

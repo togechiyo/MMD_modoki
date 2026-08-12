@@ -33,6 +33,7 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     oceanWaveStrength: { actualMin: 0, actualMax: 2 },
     oceanClarity: { actualMin: 0, actualMax: 4 },
     oceanCausticsStrength: { actualMin: 0, actualMax: 2 },
+    oceanVolumeStrength: { actualMin: 0, actualMax: 2 },
     offsetShadowStrength: { actualMin: 0, actualMax: 2 },
     offsetShadowOffsetX: { actualMin: -64, actualMax: 64, actualStep: 1 },
     offsetShadowOffsetY: { actualMin: -64, actualMax: 64, actualStep: 1 },

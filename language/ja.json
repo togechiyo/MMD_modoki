@@ -516,6 +516,7 @@
     "effect.frameGraphPost.controls.waves":  "波",
     "effect.frameGraphPost.controls.clarity":  "透明度",
     "effect.frameGraphPost.controls.caustics":  "コースティクス",
+    "effect.frameGraphPost.controls.volumeLight":  "水中光芒",
     "shader.option.builtin":  "内蔵",
     "shader.option.externalAbsolute":  "外部（絶対パス）",
     "shader.option.projectLut":  "プロジェクトLUT",

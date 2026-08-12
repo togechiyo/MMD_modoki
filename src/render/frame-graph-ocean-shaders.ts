@@ -1,6 +1,6 @@
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 
-export const FRAME_GRAPH_OCEAN_METHOD_NAME = "depth-reconstructed-ocean-v1";
+export const FRAME_GRAPH_OCEAN_METHOD_NAME = "gpu-multiband-ocean-v2";
 
 const GLSL_SHADER = `
 precision highp float;
@@ -8,119 +8,87 @@ varying vec2 vUV;
 uniform sampler2D textureSampler;
 uniform sampler2D viewDepthTexture;
 uniform sampler2D viewNormalTexture;
+uniform sampler2D broadWaveTexture;
+uniform sampler2D mediumWaveTexture;
+uniform sampler2D fineWaveTexture;
+uniform sampler2D oceanVolumeTexture;
 uniform mat4 inverseProjection;
 uniform mat4 inverseView;
 uniform vec3 cameraPosition;
+uniform vec3 lightDirection;
+uniform vec3 lightColor;
+uniform float lightIntensity;
 uniform float waterHeight;
 uniform float timeSeconds;
 uniform float waveStrength;
 uniform float clarity;
 uniform float causticsStrength;
+uniform float surfaceMeshEnabled;
 
-float broadWaveAt(vec2 p) {
-    float t = timeSeconds;
-    return (
-        sin(dot(p, vec2(0.0133, 0.0043)) + t * 0.10) * 0.62
-        + sin(dot(p, vec2(-0.0042, 0.0216)) + t * 0.14 + 1.37) * 0.38
-        + sin(dot(p, vec2(0.0191, -0.0294)) + t * 0.18 + 2.91) * 0.24
+vec2 rotateWaveCoordinate(vec2 value, float cosine, float sine) {
+    return vec2(cosine * value.x - sine * value.y, sine * value.x + cosine * value.y);
+}
+
+vec2 rotateWaveGradient(vec2 value, float cosine, float sine) {
+    return vec2(cosine * value.x + sine * value.y, -sine * value.x + cosine * value.y);
+}
+
+vec4 sampleWaveField(vec2 p) {
+    vec4 broadA = texture2D(broadWaveTexture, fract(p / 512.0 + vec2(0.173, 0.317)));
+    vec4 broadB = texture2D(broadWaveTexture, fract(
+        rotateWaveCoordinate(p, 0.8192, 0.5736) / 731.0 + vec2(0.711, 0.109)
+    ));
+    vec4 mediumA = texture2D(mediumWaveTexture, fract(p / 64.0 + vec2(0.619, 0.241)));
+    vec4 mediumB = texture2D(mediumWaveTexture, fract(
+        rotateWaveCoordinate(p, 0.4226, 0.9063) / 97.3 + vec2(0.137, 0.853)
+    ));
+    vec4 fineA = texture2D(fineWaveTexture, fract(p / 8.0 + vec2(0.083, 0.773)));
+    vec4 fineB = texture2D(fineWaveTexture, fract(
+        rotateWaveCoordinate(p, 0.3420, 0.9397) / 13.7 + vec2(0.731, 0.197)
+    ));
+    vec4 fineC = texture2D(fineWaveTexture, fract(
+        rotateWaveCoordinate(p, -0.8290, 0.5592) / 23.1 + vec2(0.419, 0.557)
+    ));
+    vec2 broadGradient = broadA.gb * 0.72
+        + rotateWaveGradient(broadB.gb, 0.8192, 0.5736) * 0.28;
+    vec2 mediumGradient = mediumA.gb * 0.64
+        + rotateWaveGradient(mediumB.gb, 0.4226, 0.9063) * 0.36;
+    vec2 fineGradient = fineA.gb * 0.40
+        + rotateWaveGradient(fineB.gb, 0.3420, 0.9397) * 0.32
+        + rotateWaveGradient(fineC.gb, -0.8290, 0.5592) * 0.28;
+    return vec4(
+        broadA.r * 0.72 + broadB.r * 0.28
+            + mediumA.r * 0.64 + mediumB.r * 0.36
+            + fineA.r * 0.40 + fineB.r * 0.32 + fineC.r * 0.28,
+        broadGradient.x + mediumGradient.x + fineGradient.x,
+        broadGradient.y + mediumGradient.y + fineGradient.y,
+        clamp(
+            broadA.a * 0.12 + broadB.a * 0.06
+                + mediumA.a * 0.24 + mediumB.a * 0.14
+                + fineA.a * 0.18 + fineB.a * 0.14 + fineC.a * 0.12,
+            0.0,
+            1.0
+        )
     );
 }
 
-float mediumWaveAt(vec2 p) {
-    float t = timeSeconds;
-    return sin(dot(p, vec2(0.0636, 0.1247)) + t * 0.45 + 0.73) * 0.14
-        + sin(dot(p, vec2(-0.1734, -0.1354)) + t * 0.62 + 2.17) * 0.09
-        + sin(dot(p, vec2(0.3130, -0.0665)) + t * 0.78 + 4.03) * 0.06;
-}
-
-float fineWaveAt(vec2 p) {
-    float t = timeSeconds;
-    return sin(dot(p, vec2(-1.0240, 0.9550)) + t * 1.40 + 1.11) * 0.018
-        + sin(dot(p, vec2(2.1840, 0.2680)) + t * 1.90 + 3.43) * 0.010
-        + sin(dot(p, vec2(-0.4450, -3.1690)) + t * 2.50 + 5.19) * 0.006;
-}
-
-vec2 broadWaveGradientAt(vec2 p) {
-    float t = timeSeconds;
-    return (
-        cos(dot(p, vec2(0.0133, 0.0043)) + t * 0.10) * vec2(0.0133, 0.0043) * 0.62
-        + cos(dot(p, vec2(-0.0042, 0.0216)) + t * 0.14 + 1.37) * vec2(-0.0042, 0.0216) * 0.38
-        + cos(dot(p, vec2(0.0191, -0.0294)) + t * 0.18 + 2.91) * vec2(0.0191, -0.0294) * 0.24
-    );
-}
-
-vec2 mediumWaveGradientAt(vec2 p) {
-    float t = timeSeconds;
-    return cos(dot(p, vec2(0.0636, 0.1247)) + t * 0.45 + 0.73) * vec2(0.0636, 0.1247) * 0.14
-        + cos(dot(p, vec2(-0.1734, -0.1354)) + t * 0.62 + 2.17) * vec2(-0.1734, -0.1354) * 0.09
-        + cos(dot(p, vec2(0.3130, -0.0665)) + t * 0.78 + 4.03) * vec2(0.3130, -0.0665) * 0.06;
-}
-
-vec2 fineWaveGradientAt(vec2 p) {
-    float t = timeSeconds;
-    return cos(dot(p, vec2(-1.0240, 0.9550)) + t * 1.40 + 1.11) * vec2(-1.0240, 0.9550) * 0.018
-        + cos(dot(p, vec2(2.1840, 0.2680)) + t * 1.90 + 3.43) * vec2(2.1840, 0.2680) * 0.010
-        + cos(dot(p, vec2(-0.4450, -3.1690)) + t * 2.50 + 5.19) * vec2(-0.4450, -3.1690) * 0.006;
-}
-
-float waveEnergyRawAt(vec2 p) {
-    float t = timeSeconds;
-    float a = sin(dot(p, vec2(0.0061, -0.0037)) + t * 0.035 + 0.4);
-    float b = sin(dot(p, vec2(-0.0120, 0.0083)) - t * 0.027 + 2.1);
-    float c = sin(dot(p, vec2(0.0210, 0.0150)) + t * 0.041 + 4.0);
-    return 0.5 + a * 0.27 + b * 0.19 + c * 0.12 + a * b * 0.08;
-}
-
-vec2 waveEnergyRawGradientAt(vec2 p) {
-    float t = timeSeconds;
-    float phaseA = dot(p, vec2(0.0061, -0.0037)) + t * 0.035 + 0.4;
-    float phaseB = dot(p, vec2(-0.0120, 0.0083)) - t * 0.027 + 2.1;
-    float phaseC = dot(p, vec2(0.0210, 0.0150)) + t * 0.041 + 4.0;
-    float a = sin(phaseA);
-    float b = sin(phaseB);
-    vec2 da = cos(phaseA) * vec2(0.0061, -0.0037);
-    vec2 db = cos(phaseB) * vec2(-0.0120, 0.0083);
-    vec2 dc = cos(phaseC) * vec2(0.0210, 0.0150);
-    return da * 0.27 + db * 0.19 + dc * 0.12 + (da * b + db * a) * 0.08;
-}
-
-float waveEnergyAt(vec2 p) {
-    return smoothstep(0.16, 0.84, waveEnergyRawAt(p));
-}
-
-vec2 waveEnergyGradientAt(vec2 p) {
-    float raw = waveEnergyRawAt(p);
-    float x = clamp((raw - 0.16) / 0.68, 0.0, 1.0);
-    float smoothstepDerivative = 6.0 * x * (1.0 - x) / 0.68;
-    return waveEnergyRawGradientAt(p) * smoothstepDerivative;
+// The raster surface displaces xz by -slope * 5. Approximate the inverse map
+// here so ray/surface tests address the same visible position as that mesh.
+vec4 sampleDisplacedWaveField(vec2 p) {
+    vec4 first = sampleWaveField(p);
+    return sampleWaveField(p + first.gb * 5.0);
 }
 
 float waveHeightAt(vec2 p) {
-    float energy = waveEnergyAt(p);
-    float broadGain = 0.72 + energy * 0.38;
-    float mediumGain = 0.18 + energy * 1.05;
-    float fineGain = 0.02 + energy * energy * 1.65;
-    return waveStrength * (
-        broadWaveAt(p) * broadGain
-        + mediumWaveAt(p) * mediumGain
-        + fineWaveAt(p) * fineGain
-    );
+    return sampleDisplacedWaveField(p).r;
 }
 
 vec2 waveGradientAt(vec2 p) {
-    float energy = waveEnergyAt(p);
-    vec2 energyGradient = waveEnergyGradientAt(p);
-    float broad = broadWaveAt(p);
-    float medium = mediumWaveAt(p);
-    float fine = fineWaveAt(p);
-    float broadGain = 0.72 + energy * 0.38;
-    float mediumGain = 0.18 + energy * 1.05;
-    float fineGain = 0.02 + energy * energy * 1.65;
-    return waveStrength * (
-        broadWaveGradientAt(p) * broadGain + broad * energyGradient * 0.38
-        + mediumWaveGradientAt(p) * mediumGain + medium * energyGradient * 1.05
-        + fineWaveGradientAt(p) * fineGain + fine * energyGradient * (3.3 * energy)
-    );
+    return sampleDisplacedWaveField(p).gb;
+}
+
+float waveCompressionAt(vec2 p) {
+    return sampleDisplacedWaveField(p).a;
 }
 
 vec3 waveNormalAt(vec2 p) {
@@ -143,6 +111,22 @@ float sparkleMaskAt(vec2 p) {
     return point * smoothstep(0.82, 0.98, seed);
 }
 
+float waterlineMaskAt(vec3 receiver, vec3 receiverNormal) {
+    float localSurface = waterHeight + waveHeightAt(receiver.xz);
+    float signedDistance = receiver.y - localSurface;
+    float antiAliasWidth = clamp(fwidth(signedDistance) * 0.65, 0.008, 0.045);
+    float coreWidth = 0.055;
+    float core = 1.0 - smoothstep(coreWidth * 0.30, coreWidth + antiAliasWidth, abs(signedDistance));
+    float halo = 1.0 - smoothstep(
+        coreWidth + antiAliasWidth,
+        coreWidth * 2.7 + antiAliasWidth,
+        abs(signedDistance)
+    );
+    float sideFacing = 1.0 - abs(receiverNormal.y);
+    float contactSurface = mix(0.22, 1.0, smoothstep(0.15, 0.82, sideFacing));
+    return clamp(max(core, halo * 0.26) * contactSurface, 0.0, 1.0);
+}
+
 vec3 reconstructViewPosition(vec2 uv, float viewZ) {
     vec4 clip = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
     vec4 homogeneousView = inverseProjection * clip;
@@ -155,6 +139,31 @@ vec3 getWorldRay(vec2 uv) {
     vec4 homogeneousView = inverseProjection * clip;
     vec3 viewRay = normalize(homogeneousView.xyz / max(abs(homogeneousView.w), 0.000001) * sign(homogeneousView.w));
     return normalize((inverseView * vec4(viewRay, 0.0)).xyz);
+}
+
+float screenSpaceLightVisibility(vec2 uv, float receiverDistance) {
+    mat3 viewRotation = inverse(mat3(inverseView));
+    vec3 viewLight = normalize(viewRotation * normalize(-lightDirection));
+    vec2 screenLight = viewLight.xy;
+    float screenLength = length(screenLight);
+    if (screenLength < 0.0001) {
+        return 1.0;
+    }
+    screenLight /= screenLength;
+    screenLight.y = -screenLight.y;
+    float visibility = 1.0;
+    for (int index = 1; index <= 4; index++) {
+        vec2 probeUv = clamp(uv + screenLight * (float(index) * 0.006), vec2(0.002), vec2(0.998));
+        float probeViewZ = texture2D(viewDepthTexture, probeUv).r;
+        if (abs(probeViewZ) <= 0.000001) {
+            continue;
+        }
+        vec3 probeViewPosition = reconstructViewPosition(probeUv, probeViewZ);
+        vec3 probeWorldPosition = (inverseView * vec4(probeViewPosition, 1.0)).xyz;
+        float probeDistance = length(probeWorldPosition - cameraPosition);
+        visibility *= probeDistance + 0.35 < receiverDistance ? 0.62 : 1.0;
+    }
+    return clamp(visibility, 0.10, 1.0);
 }
 
 float intersectWater(vec3 origin, vec3 ray) {
@@ -171,7 +180,7 @@ float intersectWater(vec3 origin, vec3 ray) {
 }
 
 float causticCompression(vec3 receiver) {
-    vec3 incident = normalize(vec3(0.32, -1.0, 0.18));
+    vec3 incident = normalize(lightDirection);
     vec2 surfaceXz = receiver.xz;
     for (int i = 0; i < 2; i++) {
         float surfaceY = waterHeight + waveHeightAt(surfaceXz);
@@ -196,12 +205,15 @@ float causticCompression(vec3 receiver) {
         vec2 delta = vec2(jz.y * error.x - jz.x * error.y, -jx.y * error.x + jx.x * error.y) / safeDet;
         surfaceXz -= clamp(delta, vec2(-2.0), vec2(2.0));
     }
-    float eps = 0.06;
+    float eps = 0.18;
     vec2 g = waveGradientAt(surfaceXz);
     vec2 gx = waveGradientAt(surfaceXz + vec2(eps, 0.0));
     vec2 gz = waveGradientAt(surfaceXz + vec2(0.0, eps));
     float curvature = abs(gx.x - g.x) + abs(gz.y - g.y) + abs(gx.y - g.y) * 0.5;
-    return pow(clamp(curvature * 75.0 - 0.03, 0.0, 1.0), 1.7);
+    float spectralCompression = waveCompressionAt(surfaceXz);
+    float curvatureFocus = smoothstep(0.035, 0.78, clamp(curvature * 38.0, 0.0, 1.0));
+    float spectralFocus = smoothstep(0.20, 0.90, spectralCompression);
+    return clamp(curvatureFocus * 0.58 + spectralFocus * 0.22, 0.0, 1.0);
 }
 
 void main(void) {
@@ -209,9 +221,11 @@ void main(void) {
     float viewZ = texture2D(viewDepthTexture, vUV).r;
     bool hasGeometry = abs(viewZ) > 0.000001;
     vec3 ray = getWorldRay(vUV);
+    float cameraSurfaceHeight = waterHeight + waveHeightAt(cameraPosition.xz);
+    bool cameraBelow = cameraPosition.y < cameraSurfaceHeight;
     float surfaceDistance = intersectWater(cameraPosition, ray);
     bool surfaceInFront = surfaceDistance > 0.0
-        && (cameraPosition.y - waterHeight) * ray.y < -0.00001;
+        && (cameraPosition.y - cameraSurfaceHeight) * ray.y < -0.00001;
     vec3 worldPosition = cameraPosition + ray * 100000.0;
     float sceneDistance = 100000.0;
     if (hasGeometry) {
@@ -226,8 +240,10 @@ void main(void) {
     vec2 surfaceXz = cameraPosition.xz + ray.xz * surfaceDistance;
     float surfaceDetail = 1.0 - smoothstep(140.0, 700.0, surfaceDistance);
     vec3 surfaceNormal = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormalAt(surfaceXz), surfaceDetail));
-    bool cameraBelow = cameraPosition.y < waterHeight;
     bool receiverBelow = hasGeometry && worldPosition.y < waterHeight + waveHeightAt(worldPosition.xz);
+    float receiverDepth = receiverBelow
+        ? max(waterHeight + waveHeightAt(worldPosition.xz) - worldPosition.y, 0.0)
+        : 0.0;
     float underwaterDistance = 0.0;
     if (cameraBelow) {
         underwaterDistance = receiverBelow ? sceneDistance : max(surfaceDistance, 0.0);
@@ -237,6 +253,12 @@ void main(void) {
 
     vec3 transmission = vec3(1.0);
     vec3 volumeScattering = vec3(0.0);
+    float pathFade = smoothstep(0.0, 3.5, underwaterDistance);
+    float receiverFade = receiverBelow ? smoothstep(0.05, 2.2, receiverDepth) : pathFade;
+    float cameraSubmergence = smoothstep(0.0, 1.6, cameraSurfaceHeight - cameraPosition.y);
+    float mediaBlend = pathFade * (cameraBelow
+        ? max(receiverFade, cameraSubmergence)
+        : receiverFade);
     if (underwaterDistance > 0.0001) {
         float baseClarity = clamp(clarity, 0.0, 1.0);
         float distanceClarity = clamp((clarity - 1.0) / 3.0, 0.0, 1.0);
@@ -246,7 +268,9 @@ void main(void) {
         vec3 absorption = vec3(2.25, 0.72, 0.28) * absorptionScale;
         transmission = exp(-absorption * opticalDistance);
         volumeScattering = vec3(0.025, 0.48, 0.60) * (vec3(1.0) - transmission);
-        color = color * transmission + volumeScattering;
+        volumeScattering += texture2D(oceanVolumeTexture, vUV).rgb * mediaBlend;
+        vec3 filteredColor = color * transmission + volumeScattering;
+        color = mix(color, filteredColor, mediaBlend);
     }
 
     vec3 causticContribution = vec3(0.0);
@@ -259,10 +283,27 @@ void main(void) {
         float sourceLuminance = dot(source.rgb, vec3(0.2126, 0.7152, 0.0722));
         float directLightAvailability = smoothstep(0.18, 0.55, sourceLuminance);
         float caustic = causticCompression(worldPosition) * facing * depthFade
-            * directLightAvailability * causticsStrength;
-        causticContribution = vec3(0.54, 1.0, 0.94) * caustic * 0.75;
+            * directLightAvailability;
+        float largeScaleVariation = sin(dot(worldPosition.xz, vec2(0.061, 0.097))) * 0.62
+            + sin(dot(worldPosition.xz, vec2(-0.133, 0.047)) + 1.8) * 0.38;
+        float causticEnvelope = 0.18 + smoothstep(-0.58, 0.72, largeScaleVariation) * 0.82;
+        float lightVisibility = screenSpaceLightVisibility(vUV, sceneDistance);
+        caustic *= causticEnvelope * lightVisibility * smoothstep(0.08, 1.8, receiverDepth);
+        float causticEnergy = 1.0 - exp(-caustic * causticsStrength * 0.72);
+        causticContribution = lightColor * lightIntensity * causticEnergy * 0.24;
         color += causticContribution;
     }
+
+    vec3 receiverWorldNormal = normalize((inverseView * vec4(
+        texture2D(viewNormalTexture, vUV).xyz,
+        0.0
+    )).xyz);
+    float rawWaterline = waterlineMaskAt(worldPosition, receiverWorldNormal);
+    float waterline = hasGeometry ? rawWaterline : 0.0;
+    float waterlineBrightness = 0.72 + 0.28 * clamp(lightIntensity, 0.0, 1.5);
+    vec3 waterlineColor = mix(vec3(1.0), clamp(lightColor, vec3(0.0), vec3(1.0)), 0.10)
+        * waterlineBrightness;
+    color = mix(color, waterlineColor, waterline);
 
     if (surfaceInFront) {
         float undersideBoost = cameraBelow ? 1.8 : 1.0;
@@ -271,14 +312,23 @@ void main(void) {
             ? 0.005 + waveStrength * 0.003
             : 0.002 + waveStrength * 0.0015;
         vec2 distortion = shadingNormal.xz * distortionScale;
-        vec3 refractedColor = texture2D(textureSampler, clamp(vUV + distortion, vec2(0.002), vec2(0.998))).rgb;
-        refractedColor = refractedColor * transmission + volumeScattering + causticContribution;
+        vec3 refractedSource = texture2D(textureSampler, clamp(vUV + distortion, vec2(0.002), vec2(0.998))).rgb;
+        vec3 refractedFiltered = refractedSource * transmission + volumeScattering;
+        vec3 refractedColor = mix(refractedSource, refractedFiltered, mediaBlend)
+            + causticContribution;
+        refractedColor = mix(refractedColor, waterlineColor, waterline);
+        if (surfaceMeshEnabled > 0.5) {
+            color = refractedColor;
+            outputAlpha = max(outputAlpha, 0.08);
+            gl_FragColor = vec4(color, outputAlpha);
+            return;
+        }
         float viewFacing = clamp(abs(dot(-ray, shadingNormal)), 0.0, 1.0);
         float fresnel = 0.025 + 0.975 * pow(1.0 - viewFacing, 5.0);
-        vec3 toSun = normalize(vec3(-0.32, 1.0, -0.18));
+        vec3 toSun = normalize(-lightDirection);
         vec3 halfVector = normalize(toSun - ray);
         float sunGlint = pow(max(dot(shadingNormal, halfVector), 0.0), 300.0);
-        float sparkleSignal = sunGlint * sparkleMaskAt(surfaceXz) * 7.0;
+        float sparkleSignal = sunGlint * sparkleMaskAt(surfaceXz) * 7.0 * clamp(lightIntensity, 0.0, 2.0);
         float waveLighting = clamp(dot(shadingNormal, toSun), 0.0, 1.0);
         float neutralShade = mix(0.82, 1.03, waveLighting);
         float reflectionWeight = clamp(fresnel * (cameraBelow ? 0.94 : 0.86), 0.0, 0.94);
@@ -303,119 +353,118 @@ var viewDepthTextureSampler: sampler;
 var viewDepthTexture: texture_2d<f32>;
 var viewNormalTextureSampler: sampler;
 var viewNormalTexture: texture_2d<f32>;
+var broadWaveTextureSampler: sampler;
+var broadWaveTexture: texture_2d<f32>;
+var mediumWaveTextureSampler: sampler;
+var mediumWaveTexture: texture_2d<f32>;
+var fineWaveTextureSampler: sampler;
+var fineWaveTexture: texture_2d<f32>;
+var oceanVolumeTextureSampler: sampler;
+var oceanVolumeTexture: texture_2d<f32>;
 uniform inverseProjection: mat4x4f;
 uniform inverseView: mat4x4f;
 uniform cameraPosition: vec3f;
+uniform lightDirection: vec3f;
+uniform lightColor: vec3f;
+uniform lightIntensity: f32;
 uniform waterHeight: f32;
 uniform timeSeconds: f32;
 uniform waveStrength: f32;
 uniform clarity: f32;
 uniform causticsStrength: f32;
+uniform surfaceMeshEnabled: f32;
 
-fn broadWaveAt(p: vec2f) -> f32 {
-    let t = uniforms.timeSeconds;
-    return (
-        sin(dot(p, vec2f(0.0133, 0.0043)) + t * 0.10) * 0.62
-        + sin(dot(p, vec2f(-0.0042, 0.0216)) + t * 0.14 + 1.37) * 0.38
-        + sin(dot(p, vec2f(0.0191, -0.0294)) + t * 0.18 + 2.91) * 0.24
+fn rotateWaveCoordinate(value: vec2f, cosine: f32, sine: f32) -> vec2f {
+    return vec2f(cosine * value.x - sine * value.y, sine * value.x + cosine * value.y);
+}
+
+fn rotateWaveGradient(value: vec2f, cosine: f32, sine: f32) -> vec2f {
+    return vec2f(cosine * value.x + sine * value.y, -sine * value.x + cosine * value.y);
+}
+
+fn sampleWaveField(p: vec2f) -> vec4f {
+    let broadA = textureSampleLevel(
+        broadWaveTexture,
+        broadWaveTextureSampler,
+        fract(p / 512.0 + vec2f(0.173, 0.317)),
+        0.0
+    );
+    let broadB = textureSampleLevel(
+        broadWaveTexture,
+        broadWaveTextureSampler,
+        fract(rotateWaveCoordinate(p, 0.8192, 0.5736) / 731.0 + vec2f(0.711, 0.109)),
+        0.0
+    );
+    let mediumA = textureSampleLevel(
+        mediumWaveTexture,
+        mediumWaveTextureSampler,
+        fract(p / 64.0 + vec2f(0.619, 0.241)),
+        0.0
+    );
+    let mediumB = textureSampleLevel(
+        mediumWaveTexture,
+        mediumWaveTextureSampler,
+        fract(rotateWaveCoordinate(p, 0.4226, 0.9063) / 97.3 + vec2f(0.137, 0.853)),
+        0.0
+    );
+    let fineA = textureSampleLevel(
+        fineWaveTexture,
+        fineWaveTextureSampler,
+        fract(p / 8.0 + vec2f(0.083, 0.773)),
+        0.0
+    );
+    let fineB = textureSampleLevel(
+        fineWaveTexture,
+        fineWaveTextureSampler,
+        fract(rotateWaveCoordinate(p, 0.3420, 0.9397) / 13.7 + vec2f(0.731, 0.197)),
+        0.0
+    );
+    let fineC = textureSampleLevel(
+        fineWaveTexture,
+        fineWaveTextureSampler,
+        fract(rotateWaveCoordinate(p, -0.8290, 0.5592) / 23.1 + vec2f(0.419, 0.557)),
+        0.0
+    );
+    let broadGradient = broadA.gb * 0.72
+        + rotateWaveGradient(broadB.gb, 0.8192, 0.5736) * 0.28;
+    let mediumGradient = mediumA.gb * 0.64
+        + rotateWaveGradient(mediumB.gb, 0.4226, 0.9063) * 0.36;
+    let fineGradient = fineA.gb * 0.40
+        + rotateWaveGradient(fineB.gb, 0.3420, 0.9397) * 0.32
+        + rotateWaveGradient(fineC.gb, -0.8290, 0.5592) * 0.28;
+    return vec4f(
+        broadA.r * 0.72 + broadB.r * 0.28
+            + mediumA.r * 0.64 + mediumB.r * 0.36
+            + fineA.r * 0.40 + fineB.r * 0.32 + fineC.r * 0.28,
+        broadGradient.x + mediumGradient.x + fineGradient.x,
+        broadGradient.y + mediumGradient.y + fineGradient.y,
+        clamp(
+            broadA.a * 0.12 + broadB.a * 0.06
+                + mediumA.a * 0.24 + mediumB.a * 0.14
+                + fineA.a * 0.18 + fineB.a * 0.14 + fineC.a * 0.12,
+            0.0,
+            1.0
+        )
     );
 }
 
-fn mediumWaveAt(p: vec2f) -> f32 {
-    let t = uniforms.timeSeconds;
-    return sin(dot(p, vec2f(0.0636, 0.1247)) + t * 0.45 + 0.73) * 0.14
-        + sin(dot(p, vec2f(-0.1734, -0.1354)) + t * 0.62 + 2.17) * 0.09
-        + sin(dot(p, vec2f(0.3130, -0.0665)) + t * 0.78 + 4.03) * 0.06;
-}
-
-fn fineWaveAt(p: vec2f) -> f32 {
-    let t = uniforms.timeSeconds;
-    return sin(dot(p, vec2f(-1.0240, 0.9550)) + t * 1.40 + 1.11) * 0.018
-        + sin(dot(p, vec2f(2.1840, 0.2680)) + t * 1.90 + 3.43) * 0.010
-        + sin(dot(p, vec2f(-0.4450, -3.1690)) + t * 2.50 + 5.19) * 0.006;
-}
-
-fn broadWaveGradientAt(p: vec2f) -> vec2f {
-    let t = uniforms.timeSeconds;
-    return (
-        cos(dot(p, vec2f(0.0133, 0.0043)) + t * 0.10) * vec2f(0.0133, 0.0043) * 0.62
-        + cos(dot(p, vec2f(-0.0042, 0.0216)) + t * 0.14 + 1.37) * vec2f(-0.0042, 0.0216) * 0.38
-        + cos(dot(p, vec2f(0.0191, -0.0294)) + t * 0.18 + 2.91) * vec2f(0.0191, -0.0294) * 0.24
-    );
-}
-
-fn mediumWaveGradientAt(p: vec2f) -> vec2f {
-    let t = uniforms.timeSeconds;
-    return cos(dot(p, vec2f(0.0636, 0.1247)) + t * 0.45 + 0.73) * vec2f(0.0636, 0.1247) * 0.14
-        + cos(dot(p, vec2f(-0.1734, -0.1354)) + t * 0.62 + 2.17) * vec2f(-0.1734, -0.1354) * 0.09
-        + cos(dot(p, vec2f(0.3130, -0.0665)) + t * 0.78 + 4.03) * vec2f(0.3130, -0.0665) * 0.06;
-}
-
-fn fineWaveGradientAt(p: vec2f) -> vec2f {
-    let t = uniforms.timeSeconds;
-    return cos(dot(p, vec2f(-1.0240, 0.9550)) + t * 1.40 + 1.11) * vec2f(-1.0240, 0.9550) * 0.018
-        + cos(dot(p, vec2f(2.1840, 0.2680)) + t * 1.90 + 3.43) * vec2f(2.1840, 0.2680) * 0.010
-        + cos(dot(p, vec2f(-0.4450, -3.1690)) + t * 2.50 + 5.19) * vec2f(-0.4450, -3.1690) * 0.006;
-}
-
-fn waveEnergyRawAt(p: vec2f) -> f32 {
-    let t = uniforms.timeSeconds;
-    let a = sin(dot(p, vec2f(0.0061, -0.0037)) + t * 0.035 + 0.4);
-    let b = sin(dot(p, vec2f(-0.0120, 0.0083)) - t * 0.027 + 2.1);
-    let c = sin(dot(p, vec2f(0.0210, 0.0150)) + t * 0.041 + 4.0);
-    return 0.5 + a * 0.27 + b * 0.19 + c * 0.12 + a * b * 0.08;
-}
-
-fn waveEnergyRawGradientAt(p: vec2f) -> vec2f {
-    let t = uniforms.timeSeconds;
-    let phaseA = dot(p, vec2f(0.0061, -0.0037)) + t * 0.035 + 0.4;
-    let phaseB = dot(p, vec2f(-0.0120, 0.0083)) - t * 0.027 + 2.1;
-    let phaseC = dot(p, vec2f(0.0210, 0.0150)) + t * 0.041 + 4.0;
-    let a = sin(phaseA);
-    let b = sin(phaseB);
-    let da = cos(phaseA) * vec2f(0.0061, -0.0037);
-    let db = cos(phaseB) * vec2f(-0.0120, 0.0083);
-    let dc = cos(phaseC) * vec2f(0.0210, 0.0150);
-    return da * 0.27 + db * 0.19 + dc * 0.12 + (da * b + db * a) * 0.08;
-}
-
-fn waveEnergyAt(p: vec2f) -> f32 {
-    return smoothstep(0.16, 0.84, waveEnergyRawAt(p));
-}
-
-fn waveEnergyGradientAt(p: vec2f) -> vec2f {
-    let raw = waveEnergyRawAt(p);
-    let x = clamp((raw - 0.16) / 0.68, 0.0, 1.0);
-    let smoothstepDerivative = 6.0 * x * (1.0 - x) / 0.68;
-    return waveEnergyRawGradientAt(p) * smoothstepDerivative;
+// The raster surface displaces xz by -slope * 5. Approximate the inverse map
+// here so ray/surface tests address the same visible position as that mesh.
+fn sampleDisplacedWaveField(p: vec2f) -> vec4f {
+    let first = sampleWaveField(p);
+    return sampleWaveField(p + first.gb * 5.0);
 }
 
 fn waveHeightAt(p: vec2f) -> f32 {
-    let energy = waveEnergyAt(p);
-    let broadGain = 0.72 + energy * 0.38;
-    let mediumGain = 0.18 + energy * 1.05;
-    let fineGain = 0.02 + energy * energy * 1.65;
-    return uniforms.waveStrength * (
-        broadWaveAt(p) * broadGain
-        + mediumWaveAt(p) * mediumGain
-        + fineWaveAt(p) * fineGain
-    );
+    return sampleDisplacedWaveField(p).r;
 }
 
 fn waveGradientAt(p: vec2f) -> vec2f {
-    let energy = waveEnergyAt(p);
-    let energyGradient = waveEnergyGradientAt(p);
-    let broad = broadWaveAt(p);
-    let medium = mediumWaveAt(p);
-    let fine = fineWaveAt(p);
-    let broadGain = 0.72 + energy * 0.38;
-    let mediumGain = 0.18 + energy * 1.05;
-    let fineGain = 0.02 + energy * energy * 1.65;
-    return uniforms.waveStrength * (
-        broadWaveGradientAt(p) * broadGain + broad * energyGradient * 0.38
-        + mediumWaveGradientAt(p) * mediumGain + medium * energyGradient * 1.05
-        + fineWaveGradientAt(p) * fineGain + fine * energyGradient * (3.3 * energy)
-    );
+    return sampleDisplacedWaveField(p).gb;
+}
+
+fn waveCompressionAt(p: vec2f) -> f32 {
+    return sampleDisplacedWaveField(p).a;
 }
 
 fn waveNormalAt(p: vec2f) -> vec3f {
@@ -438,6 +487,26 @@ fn sparkleMaskAt(p: vec2f) -> f32 {
     return point * smoothstep(0.82, 0.98, seed);
 }
 
+fn waterlineMaskAt(receiver: vec3f, receiverNormal: vec3f) -> f32 {
+    let localSurface = uniforms.waterHeight + waveHeightAt(receiver.xz);
+    let signedDistance = receiver.y - localSurface;
+    let antiAliasWidth = clamp(fwidth(signedDistance) * 0.65, 0.008, 0.045);
+    let coreWidth = 0.055;
+    let core = 1.0 - smoothstep(
+        coreWidth * 0.30,
+        coreWidth + antiAliasWidth,
+        abs(signedDistance)
+    );
+    let halo = 1.0 - smoothstep(
+        coreWidth + antiAliasWidth,
+        coreWidth * 2.7 + antiAliasWidth,
+        abs(signedDistance)
+    );
+    let sideFacing = 1.0 - abs(receiverNormal.y);
+    let contactSurface = mix(0.22, 1.0, smoothstep(0.15, 0.82, sideFacing));
+    return clamp(max(core, halo * 0.26) * contactSurface, 0.0, 1.0);
+}
+
 fn reconstructViewPosition(uv: vec2f, viewZ: f32) -> vec3f {
     let clip = vec4f(uv * 2.0 - 1.0, 1.0, 1.0);
     let homogeneousView = uniforms.inverseProjection * clip;
@@ -455,6 +524,44 @@ fn getWorldRay(uv: vec2f) -> vec3f {
     return normalize((uniforms.inverseView * vec4f(viewRay, 0.0)).xyz);
 }
 
+fn screenSpaceLightVisibility(uv: vec2f, receiverDistance: f32) -> f32 {
+    let worldLight = normalize(-uniforms.lightDirection);
+    let viewLight = normalize(vec3f(
+        dot(uniforms.inverseView[0].xyz, worldLight),
+        dot(uniforms.inverseView[1].xyz, worldLight),
+        dot(uniforms.inverseView[2].xyz, worldLight)
+    ));
+    var screenLight = viewLight.xy;
+    let screenLength = length(screenLight);
+    if (screenLength < 0.0001) {
+        return 1.0;
+    }
+    screenLight = screenLight / screenLength;
+    screenLight.y = -screenLight.y;
+    var visibility = 1.0;
+    for (var index = 1u; index <= 4u; index += 1u) {
+        let probeUv = clamp(
+            uv + screenLight * (f32(index) * 0.006),
+            vec2f(0.002),
+            vec2f(0.998)
+        );
+        let probeViewZ = textureSampleLevel(
+            viewDepthTexture,
+            viewDepthTextureSampler,
+            probeUv,
+            0.0
+        ).r;
+        if (abs(probeViewZ) <= 0.000001) {
+            continue;
+        }
+        let probeViewPosition = reconstructViewPosition(probeUv, probeViewZ);
+        let probeWorldPosition = (uniforms.inverseView * vec4f(probeViewPosition, 1.0)).xyz;
+        let probeDistance = length(probeWorldPosition - uniforms.cameraPosition);
+        visibility = visibility * select(1.0, 0.62, probeDistance + 0.35 < receiverDistance);
+    }
+    return clamp(visibility, 0.10, 1.0);
+}
+
 fn intersectWater(origin: vec3f, ray: vec3f) -> f32 {
     let safeY = select(max(abs(ray.y), 0.00001), -max(abs(ray.y), 0.00001), ray.y < 0.0);
     var distanceAlongRay = (uniforms.waterHeight - origin.y) / safeY;
@@ -469,7 +576,7 @@ fn intersectWater(origin: vec3f, ray: vec3f) -> f32 {
 }
 
 fn causticCompression(receiver: vec3f) -> f32 {
-    let incident = normalize(vec3f(0.32, -1.0, 0.18));
+    let incident = normalize(uniforms.lightDirection);
     var surfaceXz = receiver.xz;
     for (var i = 0; i < 2; i = i + 1) {
         let surfaceY = uniforms.waterHeight + waveHeightAt(surfaceXz);
@@ -492,12 +599,15 @@ fn causticCompression(receiver: vec3f) -> f32 {
         let delta = vec2f(jz.y * error.x - jz.x * error.y, -jx.y * error.x + jx.x * error.y) / safeDet;
         surfaceXz = surfaceXz - clamp(delta, vec2f(-2.0), vec2f(2.0));
     }
-    let eps = 0.06;
+    let eps = 0.18;
     let g = waveGradientAt(surfaceXz);
     let gx = waveGradientAt(surfaceXz + vec2f(eps, 0.0));
     let gz = waveGradientAt(surfaceXz + vec2f(0.0, eps));
     let curvature = abs(gx.x - g.x) + abs(gz.y - g.y) + abs(gx.y - g.y) * 0.5;
-    return pow(clamp(curvature * 75.0 - 0.03, 0.0, 1.0), 1.7);
+    let spectralCompression = waveCompressionAt(surfaceXz);
+    let curvatureFocus = smoothstep(0.035, 0.78, clamp(curvature * 38.0, 0.0, 1.0));
+    let spectralFocus = smoothstep(0.20, 0.90, spectralCompression);
+    return clamp(curvatureFocus * 0.58 + spectralFocus * 0.22, 0.0, 1.0);
 }
 
 #define CUSTOM_FRAGMENT_DEFINITIONS
@@ -508,9 +618,11 @@ fn main(input: FragmentInputs)->FragmentOutputs {
     let sampledViewNormal = textureSample(viewNormalTexture, viewNormalTextureSampler, input.vUV).xyz;
     let hasGeometry = abs(viewZ) > 0.000001;
     let ray = getWorldRay(input.vUV);
+    let cameraSurfaceHeight = uniforms.waterHeight + waveHeightAt(uniforms.cameraPosition.xz);
+    let cameraBelow = uniforms.cameraPosition.y < cameraSurfaceHeight;
     let surfaceDistance = intersectWater(uniforms.cameraPosition, ray);
     var surfaceInFront = surfaceDistance > 0.0
-        && (uniforms.cameraPosition.y - uniforms.waterHeight) * ray.y < -0.00001;
+        && (uniforms.cameraPosition.y - cameraSurfaceHeight) * ray.y < -0.00001;
     var worldPosition = uniforms.cameraPosition + ray * 100000.0;
     var sceneDistance = 100000.0;
     if (hasGeometry) {
@@ -525,8 +637,12 @@ fn main(input: FragmentInputs)->FragmentOutputs {
     let surfaceXz = uniforms.cameraPosition.xz + ray.xz * surfaceDistance;
     let surfaceDetail = 1.0 - smoothstep(140.0, 700.0, surfaceDistance);
     let surfaceNormal = normalize(mix(vec3f(0.0, 1.0, 0.0), waveNormalAt(surfaceXz), vec3f(surfaceDetail)));
-    let cameraBelow = uniforms.cameraPosition.y < uniforms.waterHeight;
     let receiverBelow = hasGeometry && worldPosition.y < uniforms.waterHeight + waveHeightAt(worldPosition.xz);
+    let receiverDepth = select(
+        0.0,
+        max(uniforms.waterHeight + waveHeightAt(worldPosition.xz) - worldPosition.y, 0.0),
+        receiverBelow
+    );
     var underwaterDistance = 0.0;
     if (cameraBelow) {
         underwaterDistance = select(max(surfaceDistance, 0.0), sceneDistance, receiverBelow);
@@ -536,6 +652,18 @@ fn main(input: FragmentInputs)->FragmentOutputs {
 
     var transmission = vec3f(1.0);
     var volumeScattering = vec3f(0.0);
+    let pathFade = smoothstep(0.0, 3.5, underwaterDistance);
+    let receiverFade = select(pathFade, smoothstep(0.05, 2.2, receiverDepth), receiverBelow);
+    let cameraSubmergence = smoothstep(
+        0.0,
+        1.6,
+        cameraSurfaceHeight - uniforms.cameraPosition.y
+    );
+    let mediaBlend = pathFade * select(
+        receiverFade,
+        max(receiverFade, cameraSubmergence),
+        cameraBelow
+    );
     if (underwaterDistance > 0.0001) {
         let baseClarity = clamp(uniforms.clarity, 0.0, 1.0);
         let distanceClarity = clamp((uniforms.clarity - 1.0) / 3.0, 0.0, 1.0);
@@ -545,7 +673,14 @@ fn main(input: FragmentInputs)->FragmentOutputs {
         let absorption = vec3f(2.25, 0.72, 0.28) * absorptionScale;
         transmission = exp(-absorption * opticalDistance);
         volumeScattering = vec3f(0.025, 0.48, 0.60) * (vec3f(1.0) - transmission);
-        color = color * transmission + volumeScattering;
+        volumeScattering += textureSampleLevel(
+            oceanVolumeTexture,
+            oceanVolumeTextureSampler,
+            input.vUV,
+            0.0
+        ).rgb * mediaBlend;
+        let filteredColor = color * transmission + volumeScattering;
+        color = mix(color, filteredColor, vec3f(mediaBlend));
     }
 
     var causticContribution = vec3f(0.0);
@@ -556,11 +691,29 @@ fn main(input: FragmentInputs)->FragmentOutputs {
         let depthFade = exp(-depthBelow * 0.055);
         let sourceLuminance = dot(source.rgb, vec3f(0.2126, 0.7152, 0.0722));
         let directLightAvailability = smoothstep(0.18, 0.55, sourceLuminance);
-        let caustic = causticCompression(worldPosition) * facing * depthFade
-            * directLightAvailability * uniforms.causticsStrength;
-        causticContribution = vec3f(0.54, 1.0, 0.94) * caustic * 0.75;
+        var caustic = causticCompression(worldPosition) * facing * depthFade
+            * directLightAvailability;
+        let largeScaleVariation = sin(dot(worldPosition.xz, vec2f(0.061, 0.097))) * 0.62
+            + sin(dot(worldPosition.xz, vec2f(-0.133, 0.047)) + 1.8) * 0.38;
+        let causticEnvelope = 0.18 + smoothstep(-0.58, 0.72, largeScaleVariation) * 0.82;
+        let lightVisibility = screenSpaceLightVisibility(input.vUV, sceneDistance);
+        caustic = caustic * causticEnvelope * lightVisibility
+            * smoothstep(0.08, 1.8, receiverDepth);
+        let causticEnergy = 1.0 - exp(-caustic * uniforms.causticsStrength * 0.72);
+        causticContribution = uniforms.lightColor * uniforms.lightIntensity * causticEnergy * 0.24;
         color = color + causticContribution;
     }
+
+    let receiverWorldNormal = normalize((uniforms.inverseView * vec4f(sampledViewNormal, 0.0)).xyz);
+    let rawWaterline = waterlineMaskAt(worldPosition, receiverWorldNormal);
+    let waterline = select(0.0, rawWaterline, hasGeometry);
+    let waterlineBrightness = 0.72 + 0.28 * clamp(uniforms.lightIntensity, 0.0, 1.5);
+    let waterlineColor = mix(
+        vec3f(1.0),
+        clamp(uniforms.lightColor, vec3f(0.0), vec3f(1.0)),
+        vec3f(0.10)
+    ) * waterlineBrightness;
+    color = mix(color, waterlineColor, vec3f(waterline));
 
     if (surfaceInFront) {
         let undersideBoost = select(1.0, 1.8, cameraBelow);
@@ -571,14 +724,24 @@ fn main(input: FragmentInputs)->FragmentOutputs {
             cameraBelow
         );
         let distortion = shadingNormal.xz * distortionScale;
-        var refractedColor = textureSampleLevel(textureSampler, textureSamplerSampler, clamp(input.vUV + distortion, vec2f(0.002), vec2f(0.998)), 0.0).rgb;
-        refractedColor = refractedColor * transmission + volumeScattering + causticContribution;
+        let refractedSource = textureSampleLevel(textureSampler, textureSamplerSampler, clamp(input.vUV + distortion, vec2f(0.002), vec2f(0.998)), 0.0).rgb;
+        let refractedFiltered = refractedSource * transmission + volumeScattering;
+        var refractedColor = mix(refractedSource, refractedFiltered, vec3f(mediaBlend))
+            + causticContribution;
+        refractedColor = mix(refractedColor, waterlineColor, vec3f(waterline));
+        if (uniforms.surfaceMeshEnabled > 0.5) {
+            color = refractedColor;
+            outputAlpha = max(outputAlpha, 0.08);
+            fragmentOutputs.color = vec4f(color, outputAlpha);
+            return fragmentOutputs;
+        }
         let viewFacing = clamp(abs(dot(-ray, shadingNormal)), 0.0, 1.0);
         let fresnel = 0.025 + 0.975 * pow(1.0 - viewFacing, 5.0);
-        let toSun = normalize(vec3f(-0.32, 1.0, -0.18));
+        let toSun = normalize(-uniforms.lightDirection);
         let halfVector = normalize(toSun - ray);
         let sunGlint = pow(max(dot(shadingNormal, halfVector), 0.0), 300.0);
-        let sparkleSignal = sunGlint * sparkleMaskAt(surfaceXz) * 7.0;
+        let sparkleSignal = sunGlint * sparkleMaskAt(surfaceXz) * 7.0
+            * clamp(uniforms.lightIntensity, 0.0, 2.0);
         let waveLighting = clamp(dot(shadingNormal, toSun), 0.0, 1.0);
         let neutralShade = mix(0.82, 1.03, waveLighting);
         let reflectionWeight = clamp(fresnel * select(0.86, 0.94, cameraBelow), 0.0, 0.94);

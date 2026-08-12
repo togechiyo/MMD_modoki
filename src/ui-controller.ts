@@ -4448,6 +4448,7 @@ export class UIController {
                 this.mmdManager.postEffectOceanWaveStrength = 0.7;
                 this.mmdManager.postEffectOceanClarity = 0.85;
                 this.mmdManager.postEffectOceanCausticsStrength = 1.1;
+                this.mmdManager.postEffectOceanVolumeStrength = 0.65;
                 break;
             case "vignette":
                 this.mmdManager.postEffectVignetteWeight = Math.max(this.mmdManager.postEffectVignetteWeight, 2);
@@ -4926,6 +4927,7 @@ export class UIController {
                     range("oceanWaveStrength", label("waves"), this.mmdManager.postEffectOceanWaveStrength, this.mmdManager.postEffectOceanWaveStrength.toFixed(2)),
                     range("oceanClarity", label("clarity"), this.mmdManager.postEffectOceanClarity, this.mmdManager.postEffectOceanClarity.toFixed(2)),
                     range("oceanCausticsStrength", label("caustics"), this.mmdManager.postEffectOceanCausticsStrength, this.mmdManager.postEffectOceanCausticsStrength.toFixed(2)),
+                    range("oceanVolumeStrength", label("volumeLight"), this.mmdManager.postEffectOceanVolumeStrength, this.mmdManager.postEffectOceanVolumeStrength.toFixed(2)),
                 );
                 break;
             case "offsetShadow": {
@@ -5124,6 +5126,9 @@ export class UIController {
             case "oceanCausticsStrength":
                 this.mmdManager.postEffectOceanCausticsStrength = Number(actualValue);
                 break;
+            case "oceanVolumeStrength":
+                this.mmdManager.postEffectOceanVolumeStrength = Number(actualValue);
+                break;
             case "offsetShadowStrength":
                 this.mmdManager.postEffectOffsetShadowStrength = Number(actualValue);
                 break;
@@ -5265,6 +5270,7 @@ export class UIController {
             case "oceanWaveStrength":
             case "oceanClarity":
             case "oceanCausticsStrength":
+            case "oceanVolumeStrength":
                 return "ocean";
             case "offsetShadowStrength":
             case "offsetShadowOffsetX":
@@ -5406,6 +5412,9 @@ export class UIController {
                 break;
             case "oceanCausticsStrength":
                 valueElement.textContent = this.mmdManager.postEffectOceanCausticsStrength.toFixed(2);
+                break;
+            case "oceanVolumeStrength":
+                valueElement.textContent = this.mmdManager.postEffectOceanVolumeStrength.toFixed(2);
                 break;
             case "offsetShadowStrength":
                 valueElement.textContent = this.mmdManager.postEffectOffsetShadowStrength.toFixed(2);

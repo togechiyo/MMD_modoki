@@ -194,6 +194,10 @@ function createHost() {
         postEffectAerialPerspectiveStart: 55,
         postEffectAerialPerspectiveRange: 180,
         getPostEffectAerialPerspectiveColor: () => ({ r: 0.72, g: 0.79, b: 0.83 }),
+        postEffectDirectionalLightShaftsStrength: 0.08,
+        postEffectDirectionalLightShaftsPhaseG: 0,
+        getPostEffectDirectionalLightShaftsLightColor: () => ({ r: 1, g: 1, b: 1 }),
+        getPostEffectDirectionalLightShaftsShadowColor: () => ({ r: 0, g: 0, b: 0 }),
         postEffectVlsEnabled: false,
         postEffectVlsExposure: 0.3,
         postEffectVlsDecay: 0.95,
@@ -290,6 +294,23 @@ describe("exportProjectState", () => {
         expect(project.effects.aerialPerspectiveRange).toBe(360);
         expect(project.effects.aerialPerspectiveColor).toEqual({ r: 0.6, g: 0.7, b: 0.8 });
         expect(project.effects.frameGraphPostStack).toEqual([{ id: "aerialPerspective", enabled: true }]);
+    });
+
+    it("writes directional para flare tuning, colors, and enabled stack state", () => {
+        const project = exportProjectState({
+            ...createHost(),
+            postEffectDirectionalLightShaftsStrength: 0.025,
+            postEffectDirectionalLightShaftsPhaseG: 0.6,
+            getPostEffectDirectionalLightShaftsLightColor: () => ({ r: 0.9, g: 0.6, b: 0.3 }),
+            getPostEffectDirectionalLightShaftsShadowColor: () => ({ r: 0.3, g: 0.4, b: 0.7 }),
+            getFrameGraphPostEffectStackEntries: () => [{ id: "directionalLightShafts", enabled: true }],
+        });
+
+        expect(project.effects.directionalLightShaftsStrength).toBe(0.025);
+        expect(project.effects.directionalLightShaftsPhaseG).toBe(0.6);
+        expect(project.effects.directionalLightShaftsLightColor).toEqual({ r: 0.9, g: 0.6, b: 0.3 });
+        expect(project.effects.directionalLightShaftsShadowColor).toEqual({ r: 0.3, g: 0.4, b: 0.7 });
+        expect(project.effects.frameGraphPostStack).toEqual([{ id: "directionalLightShafts", enabled: true }]);
     });
 
     it("writes light direction as x/y/z instead of Babylon backing fields", () => {

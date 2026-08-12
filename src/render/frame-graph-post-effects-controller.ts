@@ -34,6 +34,7 @@ import { ThinImageProcessingPostProcess } from "@babylonjs/core/PostProcesses/th
 import { ThinSharpenPostProcess } from "@babylonjs/core/PostProcesses/thinSharpenPostProcess";
 import { ThinBlurPostProcess } from "@babylonjs/core/PostProcesses/thinBlurPostProcess";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
+import type { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import type { Scene } from "@babylonjs/core/scene";
 import type { SsgiBlendMode } from "../types";
 import { createLutAtlasTextureFrom3dlText } from "./lut-atlas-texture";
@@ -77,6 +78,8 @@ import { FrameGraphAerialPerspectiveTask } from "./frame-graph-aerial-perspectiv
 import {
     ensureFrameGraphAerialPerspectiveShaders,
 } from "./frame-graph-aerial-perspective-shaders";
+import { FrameGraphDirectionalLightShaftsTask } from "./frame-graph-directional-light-shafts-task";
+import { ensureFrameGraphDirectionalLightShaftsShaders } from "./frame-graph-directional-light-shafts-shaders";
 
 const SSGI_DENOISE_STEP_WIDTHS = [1, 2, 4] as const;
 
@@ -142,6 +145,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
         oceanVolume: boolean;
         oceanSurface: boolean;
         aerialPerspective: boolean;
+        directionalLightShafts: boolean;
         offsetShadow: boolean;
         offsetHighlight: boolean;
         motionBlur: boolean;
@@ -266,6 +270,11 @@ export type FrameGraphPostEffectsSettings = {
     aerialPerspectiveColor: { r: number; g: number; b: number };
     aerialPerspectiveLightColor?: { r: number; g: number; b: number };
     aerialPerspectiveLightIntensity?: number;
+    directionalLightShaftsEnabled: boolean;
+    directionalLightShaftsStrength: number;
+    directionalLightShaftsPhaseG: number;
+    directionalLightShaftsLightColor: { r: number; g: number; b: number };
+    directionalLightShaftsShadowColor: { r: number; g: number; b: number };
     lutEnabled: boolean;
     lutIntensity: number;
     lutRuntimeText: string | null;
@@ -1950,6 +1959,8 @@ export class FrameGraphPostEffectsController {
     private oceanSurfaceTask: FrameGraphOceanSurfaceTask | null = null;
     private aerialPerspectiveEffect: EffectWrapper | null = null;
     private aerialPerspectiveTask: FrameGraphAerialPerspectiveTask | null = null;
+    private directionalLightShaftsEffect: EffectWrapper | null = null;
+    private directionalLightShaftsTask: FrameGraphDirectionalLightShaftsTask | null = null;
     private offsetShadowEffect: EffectWrapper | null = null;
     private offsetShadowTask: FrameGraphPostEffectsOffsetShadowTask | null = null;
     private offsetHighlightEffect: EffectWrapper | null = null;
@@ -2080,6 +2091,11 @@ export class FrameGraphPostEffectsController {
             aerialPerspectiveColor: { r: 0.72, g: 0.79, b: 0.83 },
             aerialPerspectiveLightColor: { r: 1, g: 1, b: 1 },
             aerialPerspectiveLightIntensity: 1,
+            directionalLightShaftsEnabled: false,
+            directionalLightShaftsStrength: 0.08,
+            directionalLightShaftsPhaseG: 0,
+            directionalLightShaftsLightColor: { r: 1, g: 1, b: 1 },
+            directionalLightShaftsShadowColor: { r: 0, g: 0, b: 0 },
             lutEnabled: false,
             lutIntensity: 1,
             lutRuntimeText: null,
@@ -2148,6 +2164,7 @@ export class FrameGraphPostEffectsController {
                 oceanVolume: this.oceanVolumeTask !== null,
                 oceanSurface: this.oceanSurfaceTask !== null,
                 aerialPerspective: this.aerialPerspectiveTask !== null,
+                directionalLightShafts: this.directionalLightShaftsTask !== null,
                 offsetShadow: this.offsetShadowTask !== null,
                 offsetHighlight: this.offsetHighlightTask !== null,
                 motionBlur: this.motionBlurTask !== null,
@@ -2201,6 +2218,7 @@ export class FrameGraphPostEffectsController {
         effectOrder: readonly FrameGraphPostEffectId[] = FRAME_GRAPH_POST_EFFECT_IDS,
         luminousTexture?: InternalTexture | null,
         outputTexture?: InternalTexture | null,
+        directionalLight?: DirectionalLight | null,
     ): boolean {
         if (this.active) {
             return true;
@@ -2225,6 +2243,7 @@ export class FrameGraphPostEffectsController {
         ensureFrameGraphSsgiShaders();
         ensureFrameGraphOceanShaders();
         ensureFrameGraphAerialPerspectiveShaders();
+        ensureFrameGraphDirectionalLightShaftsShaders();
 
         const frameGraph = new FrameGraph(scene, false);
         frameGraph.name = "MMD modoki post effects";
@@ -2406,6 +2425,50 @@ export class FrameGraphPostEffectsController {
                 aerialPerspectiveTask.disabled = false;
                 deferEffectTask("aerialPerspective", aerialPerspectiveTask);
                 this.aerialPerspectiveTask = aerialPerspectiveTask;
+            }
+
+            if (
+                this.isPostEffectActive(initialSettings, "directionalLightShafts")
+                && directionalLight
+                && frameGraph.engine.isWebGPU
+            ) {
+                this.directionalLightShaftsEffect = new EffectWrapper({
+                    engine: frameGraph.engine,
+                    fragmentShader: "mmdFrameGraphDirectionalLightShafts",
+                    useShaderStore: true,
+                    useAsPostProcess: true,
+                    uniforms: [
+                        "inverseProjection",
+                        "lightViewDirection",
+                        "lightColor",
+                        "lightIntensity",
+                        "strength",
+                        "phaseG",
+                        "flareLightColor",
+                        "flareShadowColor",
+                    ],
+                    samplers: ["viewDepthTexture"],
+                    name: "mmdFrameGraphDirectionalLightShafts",
+                    shaderLanguage: ShaderLanguage.WGSL,
+                });
+                const lightShaftsTask = new FrameGraphDirectionalLightShaftsTask(
+                    "frameGraphDirectionalLightShafts",
+                    frameGraph,
+                    this.directionalLightShaftsEffect,
+                    camera,
+                    directionalLight,
+                    () => ({
+                        strength: this.getSettings().directionalLightShaftsStrength,
+                        phaseG: this.getSettings().directionalLightShaftsPhaseG,
+                        lightColor: this.getSettings().directionalLightShaftsLightColor,
+                        shadowColor: this.getSettings().directionalLightShaftsShadowColor,
+                    }),
+                );
+                lightShaftsTask.sourceTexture = imageProcessingTask.outputTexture;
+                lightShaftsTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
+                lightShaftsTask.disabled = false;
+                deferEffectTask("directionalLightShafts", lightShaftsTask);
+                this.directionalLightShaftsTask = lightShaftsTask;
             }
 
             if (this.isPostEffectActive(initialSettings, "ocean")) {
@@ -3255,6 +3318,11 @@ export class FrameGraphPostEffectsController {
             this.aerialPerspectiveTask.disabled = !this.isPostEffectActive(settings, "aerialPerspective")
                 || this.aerialPerspectiveTask.depthTexture === undefined;
         }
+        if (this.directionalLightShaftsTask) {
+            const disabled = !this.isPostEffectActive(settings, "directionalLightShafts")
+                || this.directionalLightShaftsTask.depthTexture === undefined;
+            this.directionalLightShaftsTask.disabled = disabled;
+        }
         if (this.oceanVolumeTask) {
             this.oceanVolumeTask.disabled = !this.isPostEffectActive(settings, "ocean");
         }
@@ -3462,6 +3530,13 @@ export class FrameGraphPostEffectsController {
                         this.connectedOrder.push("aerialPerspective");
                     }
                     break;
+                case "directionalLightShafts":
+                    if (this.directionalLightShaftsTask) {
+                        this.directionalLightShaftsTask.sourceTexture = currentTexture;
+                        currentTexture = this.directionalLightShaftsTask.outputTexture;
+                        this.connectedOrder.push("directionalLightShafts");
+                    }
+                    break;
                 case "motionBlur":
                     if (this.motionBlurTask) {
                         this.motionBlurTask.sourceTexture = currentTexture;
@@ -3552,6 +3627,9 @@ export class FrameGraphPostEffectsController {
         this.aerialPerspectiveEffect?.dispose();
         this.aerialPerspectiveEffect = null;
         this.aerialPerspectiveTask = null;
+        this.directionalLightShaftsTask = null;
+        this.directionalLightShaftsEffect?.dispose();
+        this.directionalLightShaftsEffect = null;
         for (const waveTask of this.oceanWaveTasks) {
             waveTask.dispose();
         }

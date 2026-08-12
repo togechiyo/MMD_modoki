@@ -37,6 +37,8 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     aerialPerspectiveStrength: { actualMin: 0, actualMax: 0.6 },
     aerialPerspectiveStart: { actualMin: 0, actualMax: 500, actualStep: 1 },
     aerialPerspectiveRange: { actualMin: 20, actualMax: 1000, actualStep: 1, curve: "logarithmic" },
+    directionalLightShaftsStrength: { actualMin: 0, actualMax: 0.16 },
+    directionalLightShaftsPhaseG: { actualMin: -0.9, actualMax: 0.9 },
     offsetShadowStrength: { actualMin: 0, actualMax: 2 },
     offsetShadowOffsetX: { actualMin: -64, actualMax: 64, actualStep: 1 },
     offsetShadowOffsetY: { actualMin: -64, actualMax: 64, actualStep: 1 },

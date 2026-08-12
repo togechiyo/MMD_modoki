@@ -116,6 +116,10 @@ export function buildFrameGraphResourcePlan(
         addConsumer(consumersByKey, "viewDepth", "aerialPerspective");
     }
 
+    if (activeEffects.includes("directionalLightShafts")) {
+        addConsumer(consumersByKey, "viewDepth", "directionalLightShafts");
+    }
+
     if (activeEffects.includes("motionBlur")) {
         addConsumer(consumersByKey, "velocity", "motionBlur");
     }

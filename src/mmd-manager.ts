@@ -292,6 +292,12 @@ import {
     DEFAULT_AERIAL_PERSPECTIVE_STRENGTH,
 } from "./render/aerial-perspective-settings";
 import {
+    DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_PHASE_G,
+    DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_LIGHT_COLOR,
+    DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_SHADOW_COLOR,
+    DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_STRENGTH,
+} from "./render/directional-light-shafts-settings";
+import {
     addFrameGraphPostEffectId,
     FRAME_GRAPH_POST_EFFECT_IDS,
     normalizeFrameGraphPostEffectIds,
@@ -1873,6 +1879,18 @@ ${beforeFogAppendBlock}
         DEFAULT_AERIAL_PERSPECTIVE_COLOR.r,
         DEFAULT_AERIAL_PERSPECTIVE_COLOR.g,
         DEFAULT_AERIAL_PERSPECTIVE_COLOR.b,
+    );
+    private postEffectDirectionalLightShaftsStrengthValue = DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_STRENGTH;
+    private postEffectDirectionalLightShaftsPhaseGValue = DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_PHASE_G;
+    private postEffectDirectionalLightShaftsLightColorValue = new Color3(
+        DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_LIGHT_COLOR.r,
+        DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_LIGHT_COLOR.g,
+        DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_LIGHT_COLOR.b,
+    );
+    private postEffectDirectionalLightShaftsShadowColorValue = new Color3(
+        DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_SHADOW_COLOR.r,
+        DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_SHADOW_COLOR.g,
+        DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_SHADOW_COLOR.b,
     );
     private postEffectVlsEnabledValue = false;
     private postEffectVlsExposureValue = 0.3;
@@ -9328,6 +9346,7 @@ ${beforeFogAppendBlock}
             this.getFrameGraphPostEffectRuntimeOrder(),
             luminousMaskTexture?.getInternalTexture() ?? null,
             this.exportRenderSurface?.getInternalTexture() ?? null,
+            this.dirLight ?? null,
         );
         if (!activated) {
             this.disposeFrameGraphPostEffectsSceneColorTarget();
@@ -9438,6 +9457,11 @@ ${beforeFogAppendBlock}
             aerialPerspectiveColor: this.getPostEffectAerialPerspectiveColor(),
             aerialPerspectiveLightColor: this.getLightColor(),
             aerialPerspectiveLightIntensity: this.dirLight?.intensity ?? 1,
+            directionalLightShaftsEnabled: this.isFrameGraphPostEffectActive("directionalLightShafts"),
+            directionalLightShaftsStrength: this.postEffectDirectionalLightShaftsStrengthValue,
+            directionalLightShaftsPhaseG: this.postEffectDirectionalLightShaftsPhaseGValue,
+            directionalLightShaftsLightColor: this.getPostEffectDirectionalLightShaftsLightColor(),
+            directionalLightShaftsShadowColor: this.getPostEffectDirectionalLightShaftsShadowColor(),
             lutEnabled: this.isFrameGraphPostEffectActive("lut") && isLutSourceReadyImpl(this),
             lutIntensity: this.postEffectLutIntensityValue,
             lutRuntimeText: this.getFrameGraphPostEffectLutRuntimeText(),
@@ -10035,6 +10059,8 @@ ${beforeFogAppendBlock}
             case "ocean":
                 return false;
             case "aerialPerspective":
+                return false;
+            case "directionalLightShafts":
                 return false;
             case "offsetShadow":
                 return this.postEffectOffsetShadowEnabledValue;
@@ -11022,6 +11048,52 @@ ${beforeFogAppendBlock}
             Math.max(0, Math.min(1, Number.isFinite(r) ? r : DEFAULT_AERIAL_PERSPECTIVE_COLOR.r)),
             Math.max(0, Math.min(1, Number.isFinite(g) ? g : DEFAULT_AERIAL_PERSPECTIVE_COLOR.g)),
             Math.max(0, Math.min(1, Number.isFinite(b) ? b : DEFAULT_AERIAL_PERSPECTIVE_COLOR.b)),
+        );
+    }
+
+    get postEffectDirectionalLightShaftsStrength(): number {
+        return this.postEffectDirectionalLightShaftsStrengthValue;
+    }
+    set postEffectDirectionalLightShaftsStrength(v: number) {
+        const value = Number(v);
+        this.postEffectDirectionalLightShaftsStrengthValue = Number.isFinite(value)
+            ? Math.max(0, Math.min(0.16, value))
+            : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_STRENGTH;
+    }
+
+    get postEffectDirectionalLightShaftsPhaseG(): number {
+        return this.postEffectDirectionalLightShaftsPhaseGValue;
+    }
+    set postEffectDirectionalLightShaftsPhaseG(v: number) {
+        const value = Number(v);
+        this.postEffectDirectionalLightShaftsPhaseGValue = Number.isFinite(value)
+            ? Math.max(-0.9, Math.min(0.9, value))
+            : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_PHASE_G;
+    }
+
+    getPostEffectDirectionalLightShaftsLightColor(): { r: number; g: number; b: number } {
+        const color = this.postEffectDirectionalLightShaftsLightColorValue;
+        return { r: color.r, g: color.g, b: color.b };
+    }
+
+    setPostEffectDirectionalLightShaftsLightColor(r: number, g: number, b: number): void {
+        this.postEffectDirectionalLightShaftsLightColorValue.set(
+            Math.max(0, Math.min(1, Number.isFinite(r) ? r : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_LIGHT_COLOR.r)),
+            Math.max(0, Math.min(1, Number.isFinite(g) ? g : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_LIGHT_COLOR.g)),
+            Math.max(0, Math.min(1, Number.isFinite(b) ? b : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_LIGHT_COLOR.b)),
+        );
+    }
+
+    getPostEffectDirectionalLightShaftsShadowColor(): { r: number; g: number; b: number } {
+        const color = this.postEffectDirectionalLightShaftsShadowColorValue;
+        return { r: color.r, g: color.g, b: color.b };
+    }
+
+    setPostEffectDirectionalLightShaftsShadowColor(r: number, g: number, b: number): void {
+        this.postEffectDirectionalLightShaftsShadowColorValue.set(
+            Math.max(0, Math.min(1, Number.isFinite(r) ? r : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_SHADOW_COLOR.r)),
+            Math.max(0, Math.min(1, Number.isFinite(g) ? g : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_SHADOW_COLOR.g)),
+            Math.max(0, Math.min(1, Number.isFinite(b) ? b : DEFAULT_DIRECTIONAL_LIGHT_SHAFTS_SHADOW_COLOR.b)),
         );
     }
 

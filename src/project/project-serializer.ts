@@ -187,6 +187,10 @@ type ProjectExportHost = {
     postEffectAerialPerspectiveStart: number;
     postEffectAerialPerspectiveRange: number;
     getPostEffectAerialPerspectiveColor: () => { r: number; g: number; b: number };
+    postEffectDirectionalLightShaftsStrength: number;
+    postEffectDirectionalLightShaftsPhaseG: number;
+    getPostEffectDirectionalLightShaftsLightColor: () => { r: number; g: number; b: number };
+    getPostEffectDirectionalLightShaftsShadowColor: () => { r: number; g: number; b: number };
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -518,6 +522,10 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             aerialPerspectiveStart: host.postEffectAerialPerspectiveStart,
             aerialPerspectiveRange: host.postEffectAerialPerspectiveRange,
             aerialPerspectiveColor: host.getPostEffectAerialPerspectiveColor(),
+            directionalLightShaftsStrength: host.postEffectDirectionalLightShaftsStrength,
+            directionalLightShaftsPhaseG: host.postEffectDirectionalLightShaftsPhaseG,
+            directionalLightShaftsLightColor: host.getPostEffectDirectionalLightShaftsLightColor(),
+            directionalLightShaftsShadowColor: host.getPostEffectDirectionalLightShaftsShadowColor(),
             vlsEnabled: host.postEffectVlsEnabled,
             vlsExposure: host.postEffectVlsExposure,
             vlsDecay: host.postEffectVlsDecay,

@@ -254,6 +254,10 @@ type ProjectImportHost = {
     postEffectAerialPerspectiveStart: number;
     postEffectAerialPerspectiveRange: number;
     setPostEffectAerialPerspectiveColor(r: number, g: number, b: number): void;
+    postEffectDirectionalLightShaftsStrength: number;
+    postEffectDirectionalLightShaftsPhaseG: number;
+    setPostEffectDirectionalLightShaftsLightColor(r: number, g: number, b: number): void;
+    setPostEffectDirectionalLightShaftsShadowColor(r: number, g: number, b: number): void;
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -1216,6 +1220,26 @@ export async function importProjectState(
         readFiniteNumber(aerialColor?.r, 0.72),
         readFiniteNumber(aerialColor?.g, 0.79),
         readFiniteNumber(aerialColor?.b, 0.83),
+    );
+    host.postEffectDirectionalLightShaftsStrength = Math.max(0, Math.min(
+        0.16,
+        readFiniteNumber(data.effects.directionalLightShaftsStrength, 0.08),
+    ));
+    host.postEffectDirectionalLightShaftsPhaseG = Math.max(-0.9, Math.min(
+        0.9,
+        readFiniteNumber(data.effects.directionalLightShaftsPhaseG, 0),
+    ));
+    const paraLightColor = data.effects.directionalLightShaftsLightColor;
+    host.setPostEffectDirectionalLightShaftsLightColor(
+        readFiniteNumber(paraLightColor?.r, 1),
+        readFiniteNumber(paraLightColor?.g, 1),
+        readFiniteNumber(paraLightColor?.b, 1),
+    );
+    const paraShadowColor = data.effects.directionalLightShaftsShadowColor;
+    host.setPostEffectDirectionalLightShaftsShadowColor(
+        readFiniteNumber(paraShadowColor?.r, 0),
+        readFiniteNumber(paraShadowColor?.g, 0),
+        readFiniteNumber(paraShadowColor?.b, 0),
     );
     host.postEffectVlsEnabled = typeof data.effects.vlsEnabled === "boolean"
         ? data.effects.vlsEnabled

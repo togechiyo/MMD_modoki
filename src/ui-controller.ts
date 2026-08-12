@@ -295,6 +295,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("aerialPerspective", active); },
     },
     {
+        id: "directionalLightShafts",
+        labelKey: "effect.frameGraphPost.effects.directionalLightShafts",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("directionalLightShafts"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("directionalLightShafts", active); },
+    },
+    {
         id: "motionBlur",
         labelKey: "effect.frameGraphPost.effects.motionBlur",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("motionBlur"),
@@ -4456,6 +4462,12 @@ export class UIController {
                 this.mmdManager.postEffectAerialPerspectiveRange = 180;
                 this.mmdManager.setPostEffectAerialPerspectiveColor(0.72, 0.79, 0.83);
                 break;
+            case "directionalLightShafts":
+                this.mmdManager.postEffectDirectionalLightShaftsStrength = 0.08;
+                this.mmdManager.postEffectDirectionalLightShaftsPhaseG = 0;
+                this.mmdManager.setPostEffectDirectionalLightShaftsLightColor(1, 1, 1);
+                this.mmdManager.setPostEffectDirectionalLightShaftsShadowColor(0, 0, 0);
+                break;
             case "vignette":
                 this.mmdManager.postEffectVignetteWeight = Math.max(this.mmdManager.postEffectVignetteWeight, 2);
                 break;
@@ -4948,6 +4960,21 @@ export class UIController {
                 );
                 break;
             }
+            case "directionalLightShafts": {
+                const paraLightColor = this.toEffectStackHexColor(
+                    this.mmdManager.getPostEffectDirectionalLightShaftsLightColor(),
+                );
+                const paraShadowColor = this.toEffectStackHexColor(
+                    this.mmdManager.getPostEffectDirectionalLightShaftsShadowColor(),
+                );
+                rows.push(
+                    color("directionalLightShaftsLightColor", label("lightSideColor"), paraLightColor, paraLightColor),
+                    color("directionalLightShaftsShadowColor", label("shadowSideColor"), paraShadowColor, paraShadowColor),
+                    range("directionalLightShaftsStrength", label("strength"), this.mmdManager.postEffectDirectionalLightShaftsStrength, this.mmdManager.postEffectDirectionalLightShaftsStrength.toFixed(3)),
+                    range("directionalLightShaftsPhaseG", label("gradientBias"), this.mmdManager.postEffectDirectionalLightShaftsPhaseG, this.mmdManager.postEffectDirectionalLightShaftsPhaseG.toFixed(2)),
+                );
+                break;
+            }
             case "offsetShadow": {
                 const offsetShadowColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectOffsetShadowColor());
                 rows.push(
@@ -5162,6 +5189,24 @@ export class UIController {
                 this.mmdManager.setPostEffectAerialPerspectiveColor(colorValue.r, colorValue.g, colorValue.b);
                 break;
             }
+            case "directionalLightShaftsStrength":
+                this.mmdManager.postEffectDirectionalLightShaftsStrength = Number(actualValue);
+                break;
+            case "directionalLightShaftsPhaseG":
+                this.mmdManager.postEffectDirectionalLightShaftsPhaseG = Number(actualValue);
+                break;
+            case "directionalLightShaftsLightColor": {
+                const colorValue = this.readEffectStackHexColor(String(rawValue));
+                if (!colorValue) return;
+                this.mmdManager.setPostEffectDirectionalLightShaftsLightColor(colorValue.r, colorValue.g, colorValue.b);
+                break;
+            }
+            case "directionalLightShaftsShadowColor": {
+                const colorValue = this.readEffectStackHexColor(String(rawValue));
+                if (!colorValue) return;
+                this.mmdManager.setPostEffectDirectionalLightShaftsShadowColor(colorValue.r, colorValue.g, colorValue.b);
+                break;
+            }
             case "offsetShadowStrength":
                 this.mmdManager.postEffectOffsetShadowStrength = Number(actualValue);
                 break;
@@ -5310,6 +5355,11 @@ export class UIController {
             case "aerialPerspectiveRange":
             case "aerialPerspectiveColor":
                 return "aerialPerspective";
+            case "directionalLightShaftsStrength":
+            case "directionalLightShaftsPhaseG":
+            case "directionalLightShaftsLightColor":
+            case "directionalLightShaftsShadowColor":
+                return "directionalLightShafts";
             case "offsetShadowStrength":
             case "offsetShadowOffsetX":
             case "offsetShadowOffsetY":
@@ -5465,6 +5515,22 @@ export class UIController {
                 break;
             case "aerialPerspectiveColor":
                 valueElement.textContent = this.toEffectStackHexColor(this.mmdManager.getPostEffectAerialPerspectiveColor());
+                break;
+            case "directionalLightShaftsStrength":
+                valueElement.textContent = this.mmdManager.postEffectDirectionalLightShaftsStrength.toFixed(3);
+                break;
+            case "directionalLightShaftsPhaseG":
+                valueElement.textContent = this.mmdManager.postEffectDirectionalLightShaftsPhaseG.toFixed(2);
+                break;
+            case "directionalLightShaftsLightColor":
+                valueElement.textContent = this.toEffectStackHexColor(
+                    this.mmdManager.getPostEffectDirectionalLightShaftsLightColor(),
+                );
+                break;
+            case "directionalLightShaftsShadowColor":
+                valueElement.textContent = this.toEffectStackHexColor(
+                    this.mmdManager.getPostEffectDirectionalLightShaftsShadowColor(),
+                );
                 break;
             case "offsetShadowStrength":
                 valueElement.textContent = this.mmdManager.postEffectOffsetShadowStrength.toFixed(2);

@@ -578,6 +578,10 @@ export interface ProjectEffectState {
     aerialPerspectiveStart?: number;
     aerialPerspectiveRange?: number;
     aerialPerspectiveColor?: ProjectRgbColor;
+    directionalLightShaftsStrength?: number;
+    directionalLightShaftsPhaseG?: number;
+    directionalLightShaftsLightColor?: ProjectRgbColor;
+    directionalLightShaftsShadowColor?: ProjectRgbColor;
     vlsEnabled?: boolean;
     vlsExposure?: number;
     vlsDecay?: number;

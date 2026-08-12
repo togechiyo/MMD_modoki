@@ -41,6 +41,7 @@ function createActivationSettings(
         ssgiSampleRadius: 64,
         oceanEnabled: false,
         aerialPerspectiveEnabled: false,
+        directionalLightShaftsEnabled: false,
         ...overrides,
     };
 }
@@ -114,6 +115,7 @@ describe("frame graph post effect stack helpers", () => {
             ssgiEnabled: true,
             oceanEnabled: true,
             aerialPerspectiveEnabled: true,
+            directionalLightShaftsEnabled: true,
             ssgiStrength: 0,
             vignetteEnabled: true,
             vignetteWeight: 0,
@@ -128,6 +130,7 @@ describe("frame graph post effect stack helpers", () => {
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssgi")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ocean")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "aerialPerspective")).toBe(true);
+        expect(isFrameGraphPostEffectActiveInSettings(settings, "directionalLightShafts")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "motionBlur")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetShadow")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetHighlight")).toBe(true);

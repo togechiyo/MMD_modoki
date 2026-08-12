@@ -66,6 +66,12 @@ describe("FrameGraph effect detail slider mapping", () => {
         expect(fromFrameGraphEffectSliderValue("aerialPerspectiveStrength", 30)).toBeCloseTo(0.18);
     });
 
+    it("maps directional light shaft controls into the shared range", () => {
+        expect(toFrameGraphEffectSliderValue("directionalLightShaftsStrength", 0.08)).toBe(50);
+        expect(fromFrameGraphEffectSliderValue("directionalLightShaftsStrength", 100)).toBe(0.16);
+        expect(fromFrameGraphEffectSliderValue("directionalLightShaftsPhaseG", 50)).toBeCloseTo(0);
+    });
+
     it("clamps UI and runtime values at the declared bounds", () => {
         expect(toFrameGraphEffectSliderValue("ssgiStrength", -1)).toBe(0);
         expect(toFrameGraphEffectSliderValue("ssgiStrength", 2)).toBe(100);

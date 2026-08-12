@@ -160,6 +160,10 @@ function createHost() {
         postEffectAerialPerspectiveStart: 55,
         postEffectAerialPerspectiveRange: 180,
         setPostEffectAerialPerspectiveColor: vi.fn(),
+        postEffectDirectionalLightShaftsStrength: 0.08,
+        postEffectDirectionalLightShaftsPhaseG: 0,
+        setPostEffectDirectionalLightShaftsLightColor: vi.fn(),
+        setPostEffectDirectionalLightShaftsShadowColor: vi.fn(),
         setPostEffectExternalLut: vi.fn(),
         setExternalWgslToonShader: vi.fn(),
         setPostEffectFogColor: vi.fn(),
@@ -414,6 +418,30 @@ describe("importProjectState", () => {
         expect(host.setPostEffectAerialPerspectiveColor).toHaveBeenCalledWith(0.55, 0.66, 0.77);
         expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
             { id: "aerialPerspective", enabled: true },
+        ]);
+    });
+
+    it("restores and clamps directional light shaft tuning", async () => {
+        const host = createHost();
+        const project = createProject({
+            effects: {
+                ...createProject().effects,
+                directionalLightShaftsStrength: 2,
+                directionalLightShaftsPhaseG: -2,
+                directionalLightShaftsLightColor: { r: 0.9, g: 0.6, b: 0.3 },
+                directionalLightShaftsShadowColor: { r: 0.3, g: 0.4, b: 0.7 },
+                frameGraphPostStack: [{ id: "directionalLightShafts", enabled: true }],
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.postEffectDirectionalLightShaftsStrength).toBe(0.16);
+        expect(host.postEffectDirectionalLightShaftsPhaseG).toBe(-0.9);
+        expect(host.setPostEffectDirectionalLightShaftsLightColor).toHaveBeenCalledWith(0.9, 0.6, 0.3);
+        expect(host.setPostEffectDirectionalLightShaftsShadowColor).toHaveBeenCalledWith(0.3, 0.4, 0.7);
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
+            { id: "directionalLightShafts", enabled: true },
         ]);
     });
 

@@ -63,6 +63,8 @@
 
 ## v0.x 作業 / フィードバック
 
+- [FrameGraph 方向光光芒 初期実装メモ 2026-08-12](./framegraph-directional-light-shafts-implementation-2026-08-12.md)
+
 - [v0.2 作業メモ](./v0.2-task-memo.md)
 - [v0.2 作業チェックリスト](./v0.2-task-checklist.md)
 - [v0.2.0 リリースノート](./v0.2.0-release-note.md)

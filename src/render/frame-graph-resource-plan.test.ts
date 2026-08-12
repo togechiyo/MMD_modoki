@@ -37,6 +37,7 @@ function createSettings(
         ssgiSampleRadius: 64,
         oceanEnabled: false,
         aerialPerspectiveEnabled: false,
+        directionalLightShaftsEnabled: false,
         antialiasEnabled: true,
         ...overrides,
     };
@@ -221,6 +222,17 @@ describe("buildFrameGraphResourcePlan", () => {
         }), ["aerialPerspective"]);
 
         expect(plan.activeEffects).toEqual(["aerialPerspective"]);
+        expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth"]);
+        expect(plan.needsGeometryRenderer).toBe(true);
+        expect(plan.requirementKeys).not.toContain("viewNormal");
+    });
+
+    it("uses scene color and geometry depth for directional light shafts", () => {
+        const plan = buildFrameGraphResourcePlan(createSettings({
+            directionalLightShaftsEnabled: true,
+        }), ["directionalLightShafts"]);
+
+        expect(plan.activeEffects).toEqual(["directionalLightShafts"]);
         expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth"]);
         expect(plan.needsGeometryRenderer).toBe(true);
         expect(plan.requirementKeys).not.toContain("viewNormal");

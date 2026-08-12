@@ -12,6 +12,7 @@ export const FRAME_GRAPH_POST_EFFECT_IDS = [
     "luminous",
     "bloom",
     "lut",
+    "gamma",
     "motionBlur",
     "sharpen",
     "grain",
@@ -34,6 +35,7 @@ export type FrameGraphPostEffectActivationSettings = {
     luminousIntensity: number;
     bloomEnabled: boolean;
     lutEnabled: boolean;
+    gammaEnabled: boolean;
     motionBlurEnabled: boolean;
     motionBlurStrength: number;
     sharpenEdge: number;
@@ -165,6 +167,8 @@ export function isFrameGraphPostEffectActiveInSettings(
             return settings.bloomEnabled;
         case "lut":
             return settings.lutEnabled;
+        case "gamma":
+            return settings.gammaEnabled;
         case "motionBlur":
             return settings.motionBlurEnabled;
         case "sharpen":

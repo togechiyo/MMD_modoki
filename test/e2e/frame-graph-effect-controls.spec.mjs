@@ -18,6 +18,17 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
     await page.locator('[data-effect-tab="post"]').click();
     await page.locator("#btn-effect-add-post").click();
 
+    await expect.poll(async () => page.locator("[data-effect-add-post]").evaluateAll((buttons) => (
+      buttons.map((button) => button.getAttribute("data-effect-add-post"))
+    ))).toEqual([
+      "ssao", "ssgi", "dof",
+      "luminous", "bloom", "directionalLightShafts", "lut",
+      "gamma", "motionBlur", "distortion",
+      "ringParticles", "aerialPerspective",
+      "offsetShadow", "offsetHighlight", "vignette", "grain", "sharpen", "chromatic", "edgeBlur",
+      "ssr",
+    ]);
+
     const addSsgiButton = page.locator('[data-effect-add-post="ssgi"]');
     await expect(addSsgiButton).toHaveText("SSGI");
     await addSsgiButton.click();
@@ -156,6 +167,40 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
       height: 36,
     });
     expect(rendered.nonZeroRgbByteCount).toBeGreaterThan(0);
+
+    await page.locator("#btn-effect-add-post").click();
+    await page.locator('[data-effect-add-post="bloom"]').click();
+    const bloomRow = page.locator('[data-effect-stack-row="bloom"]');
+    await expect(bloomRow.locator('[data-effect-stack-control="bloomColor"]')).toHaveValue("#fedcba");
+    await expect(bloomRow.locator('[data-effect-stack-control="bloomWeight"]')).toHaveValue("20");
+    await expect(bloomRow.locator('[data-effect-stack-control="bloomThreshold"]')).toHaveValue("90");
+    await expect(bloomRow.locator('[data-effect-stack-control="bloomKernel"]')).toHaveValue("80");
+    await expect(bloomRow.locator('[data-effect-stack-value="bloomWeight"]')).toHaveText("20");
+    await expect(bloomRow.locator('[data-effect-stack-value="bloomThreshold"]')).toHaveText("90");
+    await expect(bloomRow.locator('[data-effect-stack-value="bloomKernel"]')).toHaveText("80");
+
+    await page.locator("#btn-effect-add-post").click();
+    await page.locator('[data-effect-add-post="gamma"]').click();
+    const gammaRow = page.locator('[data-effect-stack-row="gamma"]');
+    const gammaSlider = gammaRow.locator('[data-effect-stack-control="gammaPower"]');
+    await expect(gammaSlider).toHaveValue("50");
+    await expect(gammaRow.locator('[data-effect-stack-value="gammaPower"]')).toHaveText("50");
+    await gammaSlider.evaluate((input) => {
+      input.value = "80";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect(gammaRow.locator('[data-effect-stack-value="gammaPower"]')).toHaveText("80");
+    await expect.poll(async () => page.evaluate(() => (
+      window.mmdModokiE2e.getFrameGraphPostEffectsState().stack.includes("gamma")
+    ))).toBe(true);
+    const gammaRendered = await page.evaluate(() => (
+      window.mmdModokiE2e.captureExportSurfaceProbe(64, 36)
+    ));
+    expect(gammaRendered.nonZeroRgbByteCount).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (
+      window.mmdModokiE2e.getWebGpuValidationDiagnostics()
+    ))).toEqual({ count: 0, messages: [] });
   } finally {
     await launched.close();
   }

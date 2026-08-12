@@ -157,6 +157,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
         bloom: boolean;
         bloomTint: boolean;
         lut: boolean;
+        gamma: boolean;
         colorCorrection: boolean;
         sharpen: boolean;
         grain: boolean;
@@ -190,6 +191,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
 export type FrameGraphPostEffectsSettings = {
     contrast: number;
     gammaPower: number;
+    gammaEnabled: boolean;
     imageProcessingEnabled: boolean;
     dofEnabled: boolean;
     dofBlurLevel: number;
@@ -1497,6 +1499,8 @@ class FrameGraphPostEffectsColorCorrectionTask extends FrameGraphPostProcessTask
         postProcess: EffectWrapper,
         private readonly onExecute: () => void,
         private readonly getSettings: () => FrameGraphPostEffectsSettings,
+        private readonly applyContrast = true,
+        private readonly applyGamma = true,
     ) {
         super(name, frameGraph, postProcess);
     }
@@ -1518,8 +1522,11 @@ class FrameGraphPostEffectsColorCorrectionTask extends FrameGraphPostProcessTask
             },
             (context) => {
                 const settings = this.getSettings();
-                this.postProcess.effect.setFloat("contrast", settings.contrast);
-                this.postProcess.effect.setFloat("gammaPower", settings.gammaPower);
+                this.postProcess.effect.setFloat("contrast", this.applyContrast ? settings.contrast : 1);
+                this.postProcess.effect.setFloat(
+                    "gammaPower",
+                    this.applyGamma && settings.gammaEnabled ? settings.gammaPower : 1,
+                );
                 additionalBindings?.(context);
             },
         );
@@ -1937,6 +1944,8 @@ class FrameGraphPostEffectsLensDistortionTask extends FrameGraphPostProcessTask 
 export class FrameGraphPostEffectsController {
     private activationWarningEmitted = false;
     private colorCorrectionEffect: EffectWrapper | null = null;
+    private gammaCorrectionEffect: EffectWrapper | null = null;
+    private gammaCorrectionTask: FrameGraphPostEffectsColorCorrectionTask | null = null;
     private lutEffect: EffectWrapper | null = null;
     private lutTask: FrameGraphPostEffectsLutTask | null = null;
     private lutTexture: RawTexture | null = null;
@@ -2011,6 +2020,7 @@ export class FrameGraphPostEffectsController {
         private readonly getSettings: () => FrameGraphPostEffectsSettings = () => ({
             contrast: 1,
             gammaPower: 1,
+            gammaEnabled: false,
             imageProcessingEnabled: false,
             dofEnabled: false,
             dofBlurLevel: ThinDepthOfFieldEffectBlurLevel.Medium,
@@ -2178,6 +2188,7 @@ export class FrameGraphPostEffectsController {
                 bloom: this.bloomTask !== null,
                 bloomTint: this.bloomTintTask !== null,
                 lut: this.lutTask !== null,
+                gamma: this.gammaCorrectionTask !== null,
                 colorCorrection: this.colorCorrectionEffect !== null,
                 sharpen: this.sharpenTask !== null,
                 grain: this.grainTask !== null,
@@ -2267,6 +2278,15 @@ export class FrameGraphPostEffectsController {
             useAsPostProcess: true,
             uniforms: ["contrast", "gammaPower"],
             name: "mmdFrameGraphColorCorrection",
+            shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+        });
+        this.gammaCorrectionEffect = new EffectWrapper({
+            engine: frameGraph.engine,
+            fragmentShader: "mmdFrameGraphColorCorrection",
+            useShaderStore: true,
+            useAsPostProcess: true,
+            uniforms: ["contrast", "gammaPower"],
+            name: "mmdFrameGraphGammaCorrection",
             shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
         });
 
@@ -3024,6 +3044,20 @@ export class FrameGraphPostEffectsController {
         deferEffectTask("lut", lutTask);
         this.lutTask = lutTask;
 
+        const gammaCorrectionTask = new FrameGraphPostEffectsColorCorrectionTask(
+            "frameGraphPostEffectsGammaCorrection",
+            frameGraph,
+            this.gammaCorrectionEffect,
+            () => undefined,
+            this.getSettings,
+            false,
+            true,
+        );
+        gammaCorrectionTask.sourceTexture = lutTask.outputTexture;
+        gammaCorrectionTask.disabled = !initialSettings.gammaEnabled;
+        deferEffectTask("gamma", gammaCorrectionTask);
+        this.gammaCorrectionTask = gammaCorrectionTask;
+
         const colorCorrectionTask = new FrameGraphPostEffectsColorCorrectionTask(
             "frameGraphPostEffectsColorCorrection",
             frameGraph,
@@ -3032,8 +3066,10 @@ export class FrameGraphPostEffectsController {
                 this.executedFrameCount += 1;
             },
             this.getSettings,
+            true,
+            false,
         );
-        colorCorrectionTask.sourceTexture = lutTask.outputTexture;
+        colorCorrectionTask.sourceTexture = gammaCorrectionTask.outputTexture;
         postludeTasks.push(colorCorrectionTask);
 
         this.sharpenEffect = new ThinSharpenPostProcess(
@@ -3514,6 +3550,13 @@ export class FrameGraphPostEffectsController {
                         this.connectedOrder.push("lut");
                     }
                     break;
+                case "gamma":
+                    if (this.gammaCorrectionTask) {
+                        this.gammaCorrectionTask.sourceTexture = currentTexture;
+                        currentTexture = this.gammaCorrectionTask.outputTexture;
+                        this.connectedOrder.push("gamma");
+                    }
+                    break;
                 case "ocean":
                     if (this.oceanSurfaceTask && this.oceanTask) {
                         this.oceanTask.sourceTexture = currentTexture;
@@ -3595,6 +3638,9 @@ export class FrameGraphPostEffectsController {
     dispose(): void {
         this.colorCorrectionEffect?.dispose();
         this.colorCorrectionEffect = null;
+        this.gammaCorrectionEffect?.dispose();
+        this.gammaCorrectionEffect = null;
+        this.gammaCorrectionTask = null;
         this.lutEffect?.dispose();
         this.lutEffect = null;
         this.lutTask = null;

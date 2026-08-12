@@ -289,6 +289,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("lut", active); },
     },
     {
+        id: "gamma",
+        labelKey: "effect.frameGraphPost.effects.gamma",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("gamma"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("gamma", active); },
+    },
+    {
         id: "aerialPerspective",
         labelKey: "effect.frameGraphPost.effects.aerialPerspective",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("aerialPerspective"),
@@ -4397,9 +4403,10 @@ export class UIController {
     private applyFrameGraphPostEffectDefaultValues(effectId: FrameGraphPostAddEffectId): void {
         switch (effectId) {
             case "bloom":
-                this.mmdManager.postEffectBloomWeight = Math.max(this.mmdManager.postEffectBloomWeight, 1);
-                this.mmdManager.postEffectBloomThreshold = Math.max(this.mmdManager.postEffectBloomThreshold, 1);
-                this.mmdManager.postEffectBloomKernel = Math.max(this.mmdManager.postEffectBloomKernel, 128);
+                this.mmdManager.postEffectBloomWeight = 0.4;
+                this.mmdManager.postEffectBloomThreshold = 0.9;
+                this.mmdManager.postEffectBloomKernel = 205;
+                this.mmdManager.setPostEffectBloomColor(254 / 255, 220 / 255, 186 / 255);
                 break;
             case "dof":
                 this.applySimplifiedDofDefaults();
@@ -4413,6 +4420,9 @@ export class UIController {
                 break;
             case "lut":
                 this.mmdManager.postEffectLutIntensity = Math.max(this.mmdManager.postEffectLutIntensity, 1);
+                break;
+            case "gamma":
+                this.mmdManager.postEffectGamma = 1;
                 break;
             case "ssao":
                 this.mmdManager.postEffectSsaoStrength = this.mmdManager.postEffectSsaoStrength > 0.00001
@@ -4518,6 +4528,8 @@ export class UIController {
             case "lut":
                 this.mmdManager.postEffectLutEnabled = true;
                 break;
+            case "gamma":
+                break;
             case "ssao":
                 this.mmdManager.postEffectSsaoEnabled = true;
                 break;
@@ -4570,6 +4582,9 @@ export class UIController {
         this.mmdManager.setFrameGraphPostEffectStackIds(
             currentStackIds.filter((id) => id !== effectId),
         );
+        if (effectId === "gamma") {
+            this.mmdManager.postEffectGamma = 1;
+        }
         if (this.expandedFrameGraphPostEffectId === effectId) {
             this.expandedFrameGraphPostEffectId = null;
         }
@@ -4862,9 +4877,9 @@ export class UIController {
                 const bloomColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectBloomColor());
                 rows.push(
                     color("bloomColor", label("color"), bloomColor, bloomColor),
-                    range("bloomWeight", label("weight"), this.mmdManager.postEffectBloomWeight, this.mmdManager.postEffectBloomWeight.toFixed(2)),
-                    range("bloomThreshold", label("threshold"), this.mmdManager.postEffectBloomThreshold, this.mmdManager.postEffectBloomThreshold.toFixed(2)),
-                    range("bloomKernel", label("kernel"), this.mmdManager.postEffectBloomKernel, String(Math.round(this.mmdManager.postEffectBloomKernel))),
+                    range("bloomWeight", label("weight"), this.mmdManager.postEffectBloomWeight, String(toFrameGraphEffectSliderValue("bloomWeight", this.mmdManager.postEffectBloomWeight))),
+                    range("bloomThreshold", label("threshold"), this.mmdManager.postEffectBloomThreshold, String(toFrameGraphEffectSliderValue("bloomThreshold", this.mmdManager.postEffectBloomThreshold))),
+                    range("bloomKernel", label("kernel"), this.mmdManager.postEffectBloomKernel, String(toFrameGraphEffectSliderValue("bloomKernel", this.mmdManager.postEffectBloomKernel))),
                 );
                 break;
             }
@@ -4928,6 +4943,14 @@ export class UIController {
                     </div>
                 `);
                 rows.push(range("lutIntensity", label("intensity"), this.mmdManager.postEffectLutIntensity, this.mmdManager.postEffectLutIntensity.toFixed(2)));
+                break;
+            case "gamma":
+                rows.push(range(
+                    "gammaPower",
+                    label("gamma"),
+                    this.mmdManager.postEffectGamma,
+                    String(toFrameGraphEffectSliderValue("gammaPower", this.mmdManager.postEffectGamma)),
+                ));
                 break;
             case "motionBlur":
                 rows.push(
@@ -5161,6 +5184,9 @@ export class UIController {
             case "lutIntensity":
                 this.mmdManager.postEffectLutIntensity = Number(actualValue);
                 break;
+            case "gammaPower":
+                this.mmdManager.postEffectGamma = Number(actualValue);
+                break;
             case "motionBlurStrength":
                 this.mmdManager.postEffectMotionBlurStrength = Number(actualValue);
                 break;
@@ -5386,6 +5412,8 @@ export class UIController {
             case "lutSource":
             case "lutIntensity":
                 return "lut";
+            case "gammaPower":
+                return "gamma";
             case "motionBlurStrength":
             case "motionBlurSamples":
                 return "motionBlur";
@@ -5468,13 +5496,13 @@ export class UIController {
 
         switch (field) {
             case "bloomWeight":
-                valueElement.textContent = this.mmdManager.postEffectBloomWeight.toFixed(2);
+                valueElement.textContent = String(toFrameGraphEffectSliderValue("bloomWeight", this.mmdManager.postEffectBloomWeight));
                 break;
             case "bloomThreshold":
-                valueElement.textContent = this.mmdManager.postEffectBloomThreshold.toFixed(2);
+                valueElement.textContent = String(toFrameGraphEffectSliderValue("bloomThreshold", this.mmdManager.postEffectBloomThreshold));
                 break;
             case "bloomKernel":
-                valueElement.textContent = String(Math.round(this.mmdManager.postEffectBloomKernel));
+                valueElement.textContent = String(toFrameGraphEffectSliderValue("bloomKernel", this.mmdManager.postEffectBloomKernel));
                 break;
             case "bloomColor":
                 valueElement.textContent = this.toEffectStackHexColor(this.mmdManager.getPostEffectBloomColor());
@@ -5529,6 +5557,12 @@ export class UIController {
                 break;
             case "lutIntensity":
                 valueElement.textContent = this.mmdManager.postEffectLutIntensity.toFixed(2);
+                break;
+            case "gammaPower":
+                valueElement.textContent = String(toFrameGraphEffectSliderValue(
+                    "gammaPower",
+                    this.mmdManager.postEffectGamma,
+                ));
                 break;
             case "motionBlurStrength":
                 valueElement.textContent = this.mmdManager.postEffectMotionBlurStrength.toFixed(2);

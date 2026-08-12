@@ -23,11 +23,19 @@ describe("FrameGraph effect detail slider mapping", () => {
             if (!isFrameGraphEffectSliderField(field)) {
                 throw new Error(`Unexpected slider field: ${field}`);
             }
-            expect(toFrameGraphEffectSliderValue(field, spec.actualMin)).toBe(0);
-            expect(toFrameGraphEffectSliderValue(field, spec.actualMax)).toBe(100);
-            expect(fromFrameGraphEffectSliderValue(field, 0)).toBe(spec.actualMin);
-            expect(fromFrameGraphEffectSliderValue(field, 100)).toBe(spec.actualMax);
+            const reversed = "reversed" in spec && spec.reversed;
+            expect(toFrameGraphEffectSliderValue(field, spec.actualMin)).toBe(reversed ? 100 : 0);
+            expect(toFrameGraphEffectSliderValue(field, spec.actualMax)).toBe(reversed ? 0 : 100);
+            expect(fromFrameGraphEffectSliderValue(field, 0)).toBe(reversed ? spec.actualMax : spec.actualMin);
+            expect(fromFrameGraphEffectSliderValue(field, 100)).toBe(reversed ? spec.actualMin : spec.actualMax);
         }
+    });
+
+    it("maps the legacy gamma offset around a neutral midpoint", () => {
+        expect(toFrameGraphEffectSliderValue("gammaPower", 2)).toBe(0);
+        expect(toFrameGraphEffectSliderValue("gammaPower", 1)).toBe(50);
+        expect(toFrameGraphEffectSliderValue("gammaPower", 0.5)).toBe(100);
+        expect(fromFrameGraphEffectSliderValue("gammaPower", 50)).toBeCloseTo(1, 10);
     });
 
     it("puts signed offsets at the neutral center", () => {
@@ -52,6 +60,13 @@ describe("FrameGraph effect detail slider mapping", () => {
         expect(fromFrameGraphEffectSliderValue("bloomKernel", 50)).toBe(129);
         expect(fromFrameGraphEffectSliderValue("motionBlurSamples", 0)).toBe(8);
         expect(fromFrameGraphEffectSliderValue("motionBlurSamples", 100)).toBe(64);
+    });
+
+    it("maps the light bloom preset into the shared range", () => {
+        expect(toFrameGraphEffectSliderValue("bloomWeight", 0.4)).toBe(20);
+        expect(toFrameGraphEffectSliderValue("bloomThreshold", 0.9)).toBe(90);
+        expect(fromFrameGraphEffectSliderValue("bloomThreshold", 100)).toBe(1);
+        expect(toFrameGraphEffectSliderValue("bloomKernel", 205)).toBe(80);
     });
 
     it("gives FrameGraph motion blur a visibly strong range", () => {

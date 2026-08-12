@@ -673,6 +673,29 @@ describe("importProjectState", () => {
         expect(host.mirroringFloorResolution).toBe(1024);
     });
 
+    it("migrates a saved FrameGraph gamma value into the new stack entry", async () => {
+        const host = createHost();
+        const project = createProject({
+            effects: {
+                ...createProject().effects,
+                gamma: 0.75,
+                gammaEncodingVersion: 2,
+                frameGraphPostStack: [
+                    { id: "lut", enabled: true },
+                    { id: "motionBlur", enabled: true },
+                ],
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
+            { id: "lut", enabled: true },
+            { id: "gamma", enabled: true },
+            { id: "motionBlur", enabled: true },
+        ]);
+    });
+
     it("restores skydome background style and uses the light-gray default for legacy projects", async () => {
         const host = createHost();
         const project = createProject({

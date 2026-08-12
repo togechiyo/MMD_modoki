@@ -13,6 +13,7 @@ import type {
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { createCameraAnimationFromTrack, deserializeCameraTrack, deserializeModelAnimation } from "./project-codec";
 import {
+    addFrameGraphPostEffectId,
     normalizeFrameGraphPostEffectStack,
     type FrameGraphPostEffectId,
     type FrameGraphPostEffectStackEntry,
@@ -1305,6 +1306,21 @@ export async function importProjectState(
         const stackEntries = normalizeFrameGraphPostEffectStack(data.effects.frameGraphPostStack ?? []);
         if (ringParticles?.enabled && !stackEntries.some((entry) => entry.id === "ringParticles")) {
             stackEntries.push({ id: "ringParticles", enabled: true });
+        }
+        if (
+            gammaEncodingVersion === 2
+            && Math.abs(host.postEffectGamma - 1) > 0.000001
+            && !stackEntries.some((entry) => entry.id === "gamma")
+        ) {
+            const enabledById = new Map(stackEntries.map((entry) => [entry.id, entry.enabled]));
+            const migratedIds = addFrameGraphPostEffectId(
+                stackEntries.map((entry) => entry.id),
+                "gamma",
+            );
+            stackEntries.splice(0, stackEntries.length, ...migratedIds.map((id) => ({
+                id,
+                enabled: id === "gamma" ? true : (enabledById.get(id) ?? false),
+            })));
         }
         if (host.setFrameGraphPostEffectStackEntries) {
             host.setFrameGraphPostEffectStackEntries(stackEntries);

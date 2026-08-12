@@ -18,6 +18,7 @@ function createActivationSettings(
         luminousIntensity: 0.5,
         bloomEnabled: false,
         lutEnabled: false,
+        gammaEnabled: false,
         motionBlurEnabled: false,
         motionBlurStrength: 0.5,
         sharpenEdge: 0,
@@ -107,6 +108,7 @@ describe("frame graph post effect stack helpers", () => {
             luminousEnabled: true,
             luminousIntensity: 0,
             bloomEnabled: true,
+            gammaEnabled: true,
             motionBlurEnabled: true,
             motionBlurStrength: 0.75,
             offsetShadowEnabled: true,
@@ -137,6 +139,7 @@ describe("frame graph post effect stack helpers", () => {
         expect(isFrameGraphPostEffectActiveInSettings(settings, "aerialPerspective")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "directionalLightShafts")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "motionBlur")).toBe(true);
+        expect(isFrameGraphPostEffectActiveInSettings(settings, "gamma")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetShadow")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetHighlight")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "edgeBlur")).toBe(true);
@@ -161,8 +164,9 @@ describe("frame graph post effect stack helpers", () => {
             ssgiEnabled: true,
             oceanEnabled: true,
             lutEnabled: true,
+            gammaEnabled: true,
             motionBlurEnabled: true,
-        }))).toEqual(["ssr", "ssgi", "offsetShadow", "offsetHighlight", "bloom", "lut", "motionBlur", "grain"]);
+        }))).toEqual(["ssr", "ssgi", "offsetShadow", "offsetHighlight", "bloom", "lut", "gamma", "motionBlur", "grain"]);
     });
 });
 

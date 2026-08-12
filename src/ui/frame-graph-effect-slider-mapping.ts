@@ -6,6 +6,7 @@ export type FrameGraphEffectSliderSpec = {
     actualMax: number;
     actualStep?: number;
     curve?: "linear" | "logarithmic";
+    reversed?: boolean;
 };
 
 /**
@@ -15,7 +16,7 @@ export type FrameGraphEffectSliderSpec = {
  */
 export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     bloomWeight: { actualMin: 0, actualMax: 2 },
-    bloomThreshold: { actualMin: 0, actualMax: 2 },
+    bloomThreshold: { actualMin: 0, actualMax: 1 },
     bloomKernel: { actualMin: 1, actualMax: 256, actualStep: 1 },
     luminousIntensity: { actualMin: 0, actualMax: 2 },
     luminousThreshold: { actualMin: 0, actualMax: 1.5 },
@@ -23,6 +24,7 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     dofFocusOffset: { actualMin: -20_000, actualMax: 20_000, actualStep: 100 },
     dofLensSize: { actualMin: 1, actualMax: 4_096, actualStep: 1, curve: "logarithmic" },
     lutIntensity: { actualMin: 0, actualMax: 1 },
+    gammaPower: { actualMin: 0.5, actualMax: 2, curve: "logarithmic", reversed: true },
     motionBlurStrength: { actualMin: 0, actualMax: 10 },
     motionBlurSamples: { actualMin: 8, actualMax: 64, actualStep: 1 },
     ssaoStrength: { actualMin: 0, actualMax: 1 },
@@ -112,8 +114,9 @@ export function toFrameGraphEffectSliderValue(
     actualValue: number,
 ): number {
     const normalized = normalizeActualValue(getSpec(field), actualValue);
+    const displayNormalized = getSpec(field).reversed ? 1 - normalized : normalized;
     return Math.round(FRAME_GRAPH_EFFECT_SLIDER_MIN
-        + normalized * (FRAME_GRAPH_EFFECT_SLIDER_MAX - FRAME_GRAPH_EFFECT_SLIDER_MIN));
+        + displayNormalized * (FRAME_GRAPH_EFFECT_SLIDER_MAX - FRAME_GRAPH_EFFECT_SLIDER_MIN));
 }
 
 export function fromFrameGraphEffectSliderValue(
@@ -121,10 +124,11 @@ export function fromFrameGraphEffectSliderValue(
     sliderValue: number,
 ): number {
     const safeSliderValue = Number.isFinite(sliderValue) ? sliderValue : FRAME_GRAPH_EFFECT_SLIDER_MIN;
-    const normalized = (
+    const sliderNormalized = (
         clamp(safeSliderValue, FRAME_GRAPH_EFFECT_SLIDER_MIN, FRAME_GRAPH_EFFECT_SLIDER_MAX)
         - FRAME_GRAPH_EFFECT_SLIDER_MIN
     ) / (FRAME_GRAPH_EFFECT_SLIDER_MAX - FRAME_GRAPH_EFFECT_SLIDER_MIN);
     const spec = getSpec(field);
+    const normalized = spec.reversed ? 1 - sliderNormalized : sliderNormalized;
     return quantizeActualValue(spec, denormalizeActualValue(spec, normalized));
 }

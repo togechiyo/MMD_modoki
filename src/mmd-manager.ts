@@ -9388,6 +9388,7 @@ ${beforeFogAppendBlock}
         return {
             contrast: this.postEffectContrastValue,
             gammaPower: this.postEffectGammaValue,
+            gammaEnabled: this.isFrameGraphPostEffectActive("gamma"),
             imageProcessingEnabled: this.isFrameGraphImageProcessingTaskNeeded(),
             dofEnabled: this.isFrameGraphPostEffectActive("dof"),
             dofBlurLevel: this.dofBlurLevelValue,
@@ -10095,6 +10096,8 @@ ${beforeFogAppendBlock}
                 return this.postEffectBloomEnabledValue;
             case "lut":
                 return this.postEffectLutEnabledValue;
+            case "gamma":
+                return Math.abs(this.postEffectGammaValue - 1) > 0.000001;
             case "motionBlur":
                 return this.postEffectMotionBlurEnabledValue;
             case "sharpen":

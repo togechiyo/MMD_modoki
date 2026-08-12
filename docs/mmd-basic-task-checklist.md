@@ -425,7 +425,7 @@
 ## 2026-08-12 大気演出への転用候補
 
 - [x] 海エフェクトから転用できる depth 復元、方向光同期、低解像度 Compute、専用 ObjectRenderer と、再利用しない方式を整理する
-- [ ] 空気遠近フォグを独立した FrameGraph effect として実装し、距離による連続変化、強度 0、保存復元、reload を確認する
+- [x] 空気遠近フォグを独立した FrameGraph effect として実装し、距離による連続変化、強度 0、保存復元、reload を確認する
 - [ ] MMD 方向光へ連動する光芒を、低解像度遮蔽 mask + deterministic directional gather で実装する
 - [ ] 漂う dust preset を既存 Particle System / Node Particle 方針で一種類実装し、fixed seed、pause / seek、Bloom / DoF 順を確認する
 - [ ] 2 個目の大気 effect 実装後に、camera / depth / direction light 同期の実重複だけを helper へ抽出する

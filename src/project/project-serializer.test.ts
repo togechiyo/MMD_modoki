@@ -190,6 +190,10 @@ function createHost() {
         postEffectOceanClarity: 0.85,
         postEffectOceanCausticsStrength: 1.1,
         postEffectOceanVolumeStrength: 0.65,
+        postEffectAerialPerspectiveStrength: 0.18,
+        postEffectAerialPerspectiveStart: 55,
+        postEffectAerialPerspectiveRange: 180,
+        getPostEffectAerialPerspectiveColor: () => ({ r: 0.72, g: 0.79, b: 0.83 }),
         postEffectVlsEnabled: false,
         postEffectVlsExposure: 0.3,
         postEffectVlsDecay: 0.95,
@@ -269,6 +273,23 @@ describe("exportProjectState", () => {
         expect(project.effects.oceanCausticsStrength).toBe(1.65);
         expect(project.effects.oceanVolumeStrength).toBe(1.25);
         expect(project.effects.frameGraphPostStack).toEqual([]);
+    });
+
+    it("writes aerial perspective tuning and enabled stack state", () => {
+        const project = exportProjectState({
+            ...createHost(),
+            postEffectAerialPerspectiveStrength: 0.24,
+            postEffectAerialPerspectiveStart: 120,
+            postEffectAerialPerspectiveRange: 360,
+            getPostEffectAerialPerspectiveColor: () => ({ r: 0.6, g: 0.7, b: 0.8 }),
+            getFrameGraphPostEffectStackEntries: () => [{ id: "aerialPerspective", enabled: true }],
+        });
+
+        expect(project.effects.aerialPerspectiveStrength).toBe(0.24);
+        expect(project.effects.aerialPerspectiveStart).toBe(120);
+        expect(project.effects.aerialPerspectiveRange).toBe(360);
+        expect(project.effects.aerialPerspectiveColor).toEqual({ r: 0.6, g: 0.7, b: 0.8 });
+        expect(project.effects.frameGraphPostStack).toEqual([{ id: "aerialPerspective", enabled: true }]);
     });
 
     it("writes light direction as x/y/z instead of Babylon backing fields", () => {

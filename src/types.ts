@@ -574,6 +574,10 @@ export interface ProjectEffectState {
     oceanClarity?: number;
     oceanCausticsStrength?: number;
     oceanVolumeStrength?: number;
+    aerialPerspectiveStrength?: number;
+    aerialPerspectiveStart?: number;
+    aerialPerspectiveRange?: number;
+    aerialPerspectiveColor?: ProjectRgbColor;
     vlsEnabled?: boolean;
     vlsExposure?: number;
     vlsDecay?: number;

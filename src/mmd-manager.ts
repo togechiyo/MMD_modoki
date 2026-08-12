@@ -286,6 +286,12 @@ import {
 } from "./render/export-render-surface";
 import { buildFrameGraphResourcePlan } from "./render/frame-graph-resource-plan";
 import {
+    DEFAULT_AERIAL_PERSPECTIVE_COLOR,
+    DEFAULT_AERIAL_PERSPECTIVE_RANGE,
+    DEFAULT_AERIAL_PERSPECTIVE_START,
+    DEFAULT_AERIAL_PERSPECTIVE_STRENGTH,
+} from "./render/aerial-perspective-settings";
+import {
     addFrameGraphPostEffectId,
     FRAME_GRAPH_POST_EFFECT_IDS,
     normalizeFrameGraphPostEffectIds,
@@ -1860,6 +1866,14 @@ ${beforeFogAppendBlock}
     private postEffectOceanClarityValue = 0.85;
     private postEffectOceanCausticsStrengthValue = 1.1;
     private postEffectOceanVolumeStrengthValue = 0.65;
+    private postEffectAerialPerspectiveStrengthValue = DEFAULT_AERIAL_PERSPECTIVE_STRENGTH;
+    private postEffectAerialPerspectiveStartValue = DEFAULT_AERIAL_PERSPECTIVE_START;
+    private postEffectAerialPerspectiveRangeValue = DEFAULT_AERIAL_PERSPECTIVE_RANGE;
+    private postEffectAerialPerspectiveColorValue = new Color3(
+        DEFAULT_AERIAL_PERSPECTIVE_COLOR.r,
+        DEFAULT_AERIAL_PERSPECTIVE_COLOR.g,
+        DEFAULT_AERIAL_PERSPECTIVE_COLOR.b,
+    );
     private postEffectVlsEnabledValue = false;
     private postEffectVlsExposureValue = 0.3;
     private postEffectVlsDecayValue = 0.95;
@@ -9417,6 +9431,13 @@ ${beforeFogAppendBlock}
             oceanLightDirection: this.getLightDirection(),
             oceanLightColor: this.getLightColor(),
             oceanLightIntensity: this.dirLight?.intensity ?? 1,
+            aerialPerspectiveEnabled: this.isFrameGraphPostEffectActive("aerialPerspective"),
+            aerialPerspectiveStrength: this.postEffectAerialPerspectiveStrengthValue,
+            aerialPerspectiveStart: this.postEffectAerialPerspectiveStartValue,
+            aerialPerspectiveRange: this.postEffectAerialPerspectiveRangeValue,
+            aerialPerspectiveColor: this.getPostEffectAerialPerspectiveColor(),
+            aerialPerspectiveLightColor: this.getLightColor(),
+            aerialPerspectiveLightIntensity: this.dirLight?.intensity ?? 1,
             lutEnabled: this.isFrameGraphPostEffectActive("lut") && isLutSourceReadyImpl(this),
             lutIntensity: this.postEffectLutIntensityValue,
             lutRuntimeText: this.getFrameGraphPostEffectLutRuntimeText(),
@@ -10012,6 +10033,8 @@ ${beforeFogAppendBlock}
             case "ssao":
                 return this.postEffectSsaoEnabledValue;
             case "ocean":
+                return false;
+            case "aerialPerspective":
                 return false;
             case "offsetShadow":
                 return this.postEffectOffsetShadowEnabledValue;
@@ -10957,6 +10980,49 @@ ${beforeFogAppendBlock}
         this.postEffectOceanVolumeStrengthValue = Number.isFinite(value)
             ? Math.max(0, Math.min(2, value))
             : 0.65;
+    }
+
+    get postEffectAerialPerspectiveStrength(): number {
+        return this.postEffectAerialPerspectiveStrengthValue;
+    }
+    set postEffectAerialPerspectiveStrength(v: number) {
+        const value = Number(v);
+        this.postEffectAerialPerspectiveStrengthValue = Number.isFinite(value)
+            ? Math.max(0, Math.min(0.6, value))
+            : DEFAULT_AERIAL_PERSPECTIVE_STRENGTH;
+    }
+
+    get postEffectAerialPerspectiveStart(): number {
+        return this.postEffectAerialPerspectiveStartValue;
+    }
+    set postEffectAerialPerspectiveStart(v: number) {
+        const value = Number(v);
+        this.postEffectAerialPerspectiveStartValue = Number.isFinite(value)
+            ? Math.max(0, Math.min(2000, value))
+            : DEFAULT_AERIAL_PERSPECTIVE_START;
+    }
+
+    get postEffectAerialPerspectiveRange(): number {
+        return this.postEffectAerialPerspectiveRangeValue;
+    }
+    set postEffectAerialPerspectiveRange(v: number) {
+        const value = Number(v);
+        this.postEffectAerialPerspectiveRangeValue = Number.isFinite(value)
+            ? Math.max(1, Math.min(4000, value))
+            : DEFAULT_AERIAL_PERSPECTIVE_RANGE;
+    }
+
+    getPostEffectAerialPerspectiveColor(): { r: number; g: number; b: number } {
+        const color = this.postEffectAerialPerspectiveColorValue;
+        return { r: color.r, g: color.g, b: color.b };
+    }
+
+    setPostEffectAerialPerspectiveColor(r: number, g: number, b: number): void {
+        this.postEffectAerialPerspectiveColorValue.set(
+            Math.max(0, Math.min(1, Number.isFinite(r) ? r : DEFAULT_AERIAL_PERSPECTIVE_COLOR.r)),
+            Math.max(0, Math.min(1, Number.isFinite(g) ? g : DEFAULT_AERIAL_PERSPECTIVE_COLOR.g)),
+            Math.max(0, Math.min(1, Number.isFinite(b) ? b : DEFAULT_AERIAL_PERSPECTIVE_COLOR.b)),
+        );
     }
 
     /** Volumetric light enabled state. */

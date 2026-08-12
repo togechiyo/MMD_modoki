@@ -250,6 +250,10 @@ type ProjectImportHost = {
     postEffectOceanClarity: number;
     postEffectOceanCausticsStrength: number;
     postEffectOceanVolumeStrength: number;
+    postEffectAerialPerspectiveStrength: number;
+    postEffectAerialPerspectiveStart: number;
+    postEffectAerialPerspectiveRange: number;
+    setPostEffectAerialPerspectiveColor(r: number, g: number, b: number): void;
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -1195,6 +1199,24 @@ export async function importProjectState(
         2,
         readFiniteNumber(data.effects.oceanVolumeStrength, 0.65),
     ));
+    host.postEffectAerialPerspectiveStrength = Math.max(0, Math.min(
+        0.6,
+        readFiniteNumber(data.effects.aerialPerspectiveStrength, 0.18),
+    ));
+    host.postEffectAerialPerspectiveStart = Math.max(0, Math.min(
+        2000,
+        readFiniteNumber(data.effects.aerialPerspectiveStart, 55),
+    ));
+    host.postEffectAerialPerspectiveRange = Math.max(1, Math.min(
+        4000,
+        readFiniteNumber(data.effects.aerialPerspectiveRange, 180),
+    ));
+    const aerialColor = data.effects.aerialPerspectiveColor;
+    host.setPostEffectAerialPerspectiveColor(
+        readFiniteNumber(aerialColor?.r, 0.72),
+        readFiniteNumber(aerialColor?.g, 0.79),
+        readFiniteNumber(aerialColor?.b, 0.83),
+    );
     host.postEffectVlsEnabled = typeof data.effects.vlsEnabled === "boolean"
         ? data.effects.vlsEnabled
         : false;

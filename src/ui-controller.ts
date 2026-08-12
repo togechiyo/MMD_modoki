@@ -289,6 +289,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("lut", active); },
     },
     {
+        id: "aerialPerspective",
+        labelKey: "effect.frameGraphPost.effects.aerialPerspective",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("aerialPerspective"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("aerialPerspective", active); },
+    },
+    {
         id: "motionBlur",
         labelKey: "effect.frameGraphPost.effects.motionBlur",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("motionBlur"),
@@ -4444,6 +4450,12 @@ export class UIController {
                 this.mmdManager.postEffectOceanCausticsStrength = 1.1;
                 this.mmdManager.postEffectOceanVolumeStrength = 0.65;
                 break;
+            case "aerialPerspective":
+                this.mmdManager.postEffectAerialPerspectiveStrength = 0.18;
+                this.mmdManager.postEffectAerialPerspectiveStart = 55;
+                this.mmdManager.postEffectAerialPerspectiveRange = 180;
+                this.mmdManager.setPostEffectAerialPerspectiveColor(0.72, 0.79, 0.83);
+                break;
             case "vignette":
                 this.mmdManager.postEffectVignetteWeight = Math.max(this.mmdManager.postEffectVignetteWeight, 2);
                 break;
@@ -4503,6 +4515,8 @@ export class UIController {
             case "ssgi":
                 break;
             case "ocean":
+                break;
+            case "aerialPerspective":
                 break;
             case "vignette":
                 this.mmdManager.postEffectVignetteEnabled = true;
@@ -4924,6 +4938,16 @@ export class UIController {
                     range("oceanVolumeStrength", label("volumeLight"), this.mmdManager.postEffectOceanVolumeStrength, this.mmdManager.postEffectOceanVolumeStrength.toFixed(2)),
                 );
                 break;
+            case "aerialPerspective": {
+                const aerialColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectAerialPerspectiveColor());
+                rows.push(
+                    color("aerialPerspectiveColor", label("color"), aerialColor, aerialColor),
+                    range("aerialPerspectiveStrength", label("strength"), this.mmdManager.postEffectAerialPerspectiveStrength, this.mmdManager.postEffectAerialPerspectiveStrength.toFixed(2)),
+                    range("aerialPerspectiveStart", label("startDistance"), this.mmdManager.postEffectAerialPerspectiveStart, `${Math.round(this.mmdManager.postEffectAerialPerspectiveStart)}`),
+                    range("aerialPerspectiveRange", label("transitionRange"), this.mmdManager.postEffectAerialPerspectiveRange, `${Math.round(this.mmdManager.postEffectAerialPerspectiveRange)}`),
+                );
+                break;
+            }
             case "offsetShadow": {
                 const offsetShadowColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectOffsetShadowColor());
                 rows.push(
@@ -5123,6 +5147,21 @@ export class UIController {
             case "oceanVolumeStrength":
                 this.mmdManager.postEffectOceanVolumeStrength = Number(actualValue);
                 break;
+            case "aerialPerspectiveStrength":
+                this.mmdManager.postEffectAerialPerspectiveStrength = Number(actualValue);
+                break;
+            case "aerialPerspectiveStart":
+                this.mmdManager.postEffectAerialPerspectiveStart = Number(actualValue);
+                break;
+            case "aerialPerspectiveRange":
+                this.mmdManager.postEffectAerialPerspectiveRange = Number(actualValue);
+                break;
+            case "aerialPerspectiveColor": {
+                const colorValue = this.readEffectStackHexColor(String(rawValue));
+                if (!colorValue) return;
+                this.mmdManager.setPostEffectAerialPerspectiveColor(colorValue.r, colorValue.g, colorValue.b);
+                break;
+            }
             case "offsetShadowStrength":
                 this.mmdManager.postEffectOffsetShadowStrength = Number(actualValue);
                 break;
@@ -5266,6 +5305,11 @@ export class UIController {
             case "oceanCausticsStrength":
             case "oceanVolumeStrength":
                 return "ocean";
+            case "aerialPerspectiveStrength":
+            case "aerialPerspectiveStart":
+            case "aerialPerspectiveRange":
+            case "aerialPerspectiveColor":
+                return "aerialPerspective";
             case "offsetShadowStrength":
             case "offsetShadowOffsetX":
             case "offsetShadowOffsetY":
@@ -5409,6 +5453,18 @@ export class UIController {
                 break;
             case "oceanVolumeStrength":
                 valueElement.textContent = this.mmdManager.postEffectOceanVolumeStrength.toFixed(2);
+                break;
+            case "aerialPerspectiveStrength":
+                valueElement.textContent = this.mmdManager.postEffectAerialPerspectiveStrength.toFixed(2);
+                break;
+            case "aerialPerspectiveStart":
+                valueElement.textContent = `${Math.round(this.mmdManager.postEffectAerialPerspectiveStart)}`;
+                break;
+            case "aerialPerspectiveRange":
+                valueElement.textContent = `${Math.round(this.mmdManager.postEffectAerialPerspectiveRange)}`;
+                break;
+            case "aerialPerspectiveColor":
+                valueElement.textContent = this.toEffectStackHexColor(this.mmdManager.getPostEffectAerialPerspectiveColor());
                 break;
             case "offsetShadowStrength":
                 valueElement.textContent = this.mmdManager.postEffectOffsetShadowStrength.toFixed(2);

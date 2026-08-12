@@ -59,6 +59,13 @@ describe("FrameGraph effect detail slider mapping", () => {
         expect(fromFrameGraphEffectSliderValue("motionBlurStrength", 100)).toBe(10);
     });
 
+    it("maps the subtle aerial perspective defaults into the shared range", () => {
+        expect(toFrameGraphEffectSliderValue("aerialPerspectiveStrength", 0.18)).toBe(30);
+        expect(toFrameGraphEffectSliderValue("aerialPerspectiveStart", 55)).toBe(11);
+        expect(fromFrameGraphEffectSliderValue("aerialPerspectiveStart", 11)).toBe(55);
+        expect(fromFrameGraphEffectSliderValue("aerialPerspectiveStrength", 30)).toBeCloseTo(0.18);
+    });
+
     it("clamps UI and runtime values at the declared bounds", () => {
         expect(toFrameGraphEffectSliderValue("ssgiStrength", -1)).toBe(0);
         expect(toFrameGraphEffectSliderValue("ssgiStrength", 2)).toBe(100);

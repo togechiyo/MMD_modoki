@@ -3,6 +3,7 @@ export const FRAME_GRAPH_POST_EFFECT_IDS = [
     "ssgi",
     "ssao",
     "ocean",
+    "aerialPerspective",
     "offsetShadow",
     "offsetHighlight",
     "dof",
@@ -53,6 +54,7 @@ export type FrameGraphPostEffectActivationSettings = {
     ssgiStrength: number;
     ssgiSampleRadius: number;
     oceanEnabled: boolean;
+    aerialPerspectiveEnabled: boolean;
 };
 
 const FRAME_GRAPH_POST_EFFECT_ID_SET = new Set<string>(FRAME_GRAPH_POST_EFFECT_IDS);
@@ -140,6 +142,8 @@ export function isFrameGraphPostEffectActiveInSettings(
             return settings.ssaoEnabled && settings.ssaoStrength > 0.00001;
         case "ocean":
             return settings.oceanEnabled;
+        case "aerialPerspective":
+            return settings.aerialPerspectiveEnabled;
         case "offsetShadow":
             return settings.offsetShadowEnabled && settings.offsetShadowStrength > 0.0001;
         case "offsetHighlight":

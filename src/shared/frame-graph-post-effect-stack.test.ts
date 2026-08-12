@@ -40,6 +40,7 @@ function createActivationSettings(
         ssgiStrength: 0.3,
         ssgiSampleRadius: 64,
         oceanEnabled: false,
+        aerialPerspectiveEnabled: false,
         ...overrides,
     };
 }
@@ -81,6 +82,11 @@ describe("frame graph post effect stack helpers", () => {
         expect(addFrameGraphPostEffectId(["ssao", "lut"], "bloom")).toEqual(["ssao", "bloom", "lut"]);
         expect(addFrameGraphPostEffectId(["dof", "bloom"], "luminous")).toEqual(["dof", "luminous", "bloom"]);
         expect(addFrameGraphPostEffectId(["ssao", "bloom"], "distortion")).toEqual(["ssao", "bloom", "distortion"]);
+        expect(addFrameGraphPostEffectId(["ssao", "bloom"], "aerialPerspective")).toEqual([
+            "ssao",
+            "aerialPerspective",
+            "bloom",
+        ]);
     });
 
     it("moves ids without dropping disabled stack positions", () => {
@@ -107,6 +113,7 @@ describe("frame graph post effect stack helpers", () => {
             ssrStrength: 0.2,
             ssgiEnabled: true,
             oceanEnabled: true,
+            aerialPerspectiveEnabled: true,
             ssgiStrength: 0,
             vignetteEnabled: true,
             vignetteWeight: 0,
@@ -120,6 +127,7 @@ describe("frame graph post effect stack helpers", () => {
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssao")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssgi")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ocean")).toBe(false);
+        expect(isFrameGraphPostEffectActiveInSettings(settings, "aerialPerspective")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "motionBlur")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetShadow")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetHighlight")).toBe(true);

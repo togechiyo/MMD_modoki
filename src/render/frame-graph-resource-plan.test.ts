@@ -36,6 +36,7 @@ function createSettings(
         ssgiStrength: 0.3,
         ssgiSampleRadius: 64,
         oceanEnabled: false,
+        aerialPerspectiveEnabled: false,
         antialiasEnabled: true,
         ...overrides,
     };
@@ -212,6 +213,17 @@ describe("buildFrameGraphResourcePlan", () => {
             producer: "depthRenderer",
             resolution: "full",
         });
+    });
+
+    it("uses only scene color and view depth for aerial perspective", () => {
+        const plan = buildFrameGraphResourcePlan(createSettings({
+            aerialPerspectiveEnabled: true,
+        }), ["aerialPerspective"]);
+
+        expect(plan.activeEffects).toEqual(["aerialPerspective"]);
+        expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth"]);
+        expect(plan.needsGeometryRenderer).toBe(true);
+        expect(plan.requirementKeys).not.toContain("viewNormal");
     });
 
     it("uses geometry velocity for object-based Motion Blur", () => {

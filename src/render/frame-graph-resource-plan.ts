@@ -112,6 +112,10 @@ export function buildFrameGraphResourcePlan(
         addConsumer(consumersByKey, "viewNormal", "ocean");
     }
 
+    if (activeEffects.includes("aerialPerspective")) {
+        addConsumer(consumersByKey, "viewDepth", "aerialPerspective");
+    }
+
     if (activeEffects.includes("motionBlur")) {
         addConsumer(consumersByKey, "velocity", "motionBlur");
     }

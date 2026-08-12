@@ -183,6 +183,10 @@ type ProjectExportHost = {
     postEffectOceanClarity: number;
     postEffectOceanCausticsStrength: number;
     postEffectOceanVolumeStrength: number;
+    postEffectAerialPerspectiveStrength: number;
+    postEffectAerialPerspectiveStart: number;
+    postEffectAerialPerspectiveRange: number;
+    getPostEffectAerialPerspectiveColor: () => { r: number; g: number; b: number };
     postEffectVlsEnabled: boolean;
     postEffectVlsExposure: number;
     postEffectVlsDecay: number;
@@ -510,6 +514,10 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             oceanClarity: host.postEffectOceanClarity,
             oceanCausticsStrength: host.postEffectOceanCausticsStrength,
             oceanVolumeStrength: host.postEffectOceanVolumeStrength,
+            aerialPerspectiveStrength: host.postEffectAerialPerspectiveStrength,
+            aerialPerspectiveStart: host.postEffectAerialPerspectiveStart,
+            aerialPerspectiveRange: host.postEffectAerialPerspectiveRange,
+            aerialPerspectiveColor: host.getPostEffectAerialPerspectiveColor(),
             vlsEnabled: host.postEffectVlsEnabled,
             vlsExposure: host.postEffectVlsExposure,
             vlsDecay: host.postEffectVlsDecay,

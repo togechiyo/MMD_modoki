@@ -138,6 +138,28 @@ normal texture は MVP では不要。resource planner で不要な geometry tex
 - 停止中に見た目がちらつかない
 - fog 単独で粒状 noise や tile pattern が見えない
 
+### 2026-08-12 初版実装結果
+
+`空気遠近` を独立した FrameGraph stack entry として実装した。海の水中媒体 pass は転用せず、view depth から camera と receiver の距離を復元する部分と、task / resource plan / stack / reload の接続方法だけを転用している。
+
+初版は意図的に次の小さい構成にした。
+
+- full-resolution の custom post process 1 pass
+- 入力は scene color と geometry view depth のみ
+- 開始距離 55、遷移距離 180、強度 0.18 を既定値にする
+- 最大でも大気色へ約 16% 寄せるため、近景や人物の色を覆いにくい
+- 大気色は低彩度の青灰色とし、MMD 方向光の color / intensity を最大 12% だけ混ぜる
+- 遠方だけ彩度を弱く落とし、noise、周期 texture、ray march、半解像度 upsample は使わない
+- view depth がない空背景と強度 0 は入力色・alpha をそのまま返す
+
+水中表現とは責務を分離した。水中では波長別吸収や水面までの媒体距離が必要だが、今回の空気遠近は camera から見えている geometry までの距離だけを使う。海実験で問題になった水面境界との二重所有や、透明度へ掛かる粒状 jitter は持ち込まない。
+
+UI は色、強度、開始距離、遷移距離を公開する。slider 自体は全項目 0～100 に統一し、runtime / project では実値を保存する。効果の有効状態、値、順序は project 保存対象であり、FrameGraph reload 後も stack entry と設定値を維持する。
+
+自動確認では、pure settings、shader source、resource plan、stack activation / order、project save / load、slider mapping を unit test で確認した。Electron Playwright では豆腐 PMX を読み込み、効果追加、既定値、reload 復元、強度 0 と強調設定の画像 checksum 差、WebGPU validation warning なしを確認する。
+
+初版の制約として、高さ密度、太陽方向との角度依存、sky depth への散乱はまだ入れていない。遠方 geometry を穏やかに背景へ馴染ませる用途を優先し、空全体を塗る従来型 Fog や水中 Fog の代替にはしない。
+
 ## 2. MMD 方向光と連動する光芒
 
 ### 目的

@@ -156,6 +156,10 @@ function createHost() {
         postEffectOceanClarity: 0.85,
         postEffectOceanCausticsStrength: 1.1,
         postEffectOceanVolumeStrength: 0.65,
+        postEffectAerialPerspectiveStrength: 0.18,
+        postEffectAerialPerspectiveStart: 55,
+        postEffectAerialPerspectiveRange: 180,
+        setPostEffectAerialPerspectiveColor: vi.fn(),
         setPostEffectExternalLut: vi.fn(),
         setExternalWgslToonShader: vi.fn(),
         setPostEffectFogColor: vi.fn(),
@@ -387,6 +391,30 @@ describe("importProjectState", () => {
         expect(host.postEffectOceanCausticsStrength).toBe(1.6);
         expect(host.postEffectOceanVolumeStrength).toBe(1.4);
         expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([]);
+    });
+
+    it("restores and clamps aerial perspective tuning", async () => {
+        const host = createHost();
+        const project = createProject({
+            effects: {
+                ...createProject().effects,
+                aerialPerspectiveStrength: 2,
+                aerialPerspectiveStart: -20,
+                aerialPerspectiveRange: 9000,
+                aerialPerspectiveColor: { r: 0.55, g: 0.66, b: 0.77 },
+                frameGraphPostStack: [{ id: "aerialPerspective", enabled: true }],
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.postEffectAerialPerspectiveStrength).toBe(0.6);
+        expect(host.postEffectAerialPerspectiveStart).toBe(0);
+        expect(host.postEffectAerialPerspectiveRange).toBe(4000);
+        expect(host.setPostEffectAerialPerspectiveColor).toHaveBeenCalledWith(0.55, 0.66, 0.77);
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
+            { id: "aerialPerspective", enabled: true },
+        ]);
     });
 
     it("restores saved SSAO effect values", async () => {

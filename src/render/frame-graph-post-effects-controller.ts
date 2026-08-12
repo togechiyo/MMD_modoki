@@ -73,6 +73,10 @@ import {
     ensureFrameGraphOceanShaders,
     FRAME_GRAPH_OCEAN_METHOD_NAME,
 } from "./frame-graph-ocean-shaders";
+import { FrameGraphAerialPerspectiveTask } from "./frame-graph-aerial-perspective-task";
+import {
+    ensureFrameGraphAerialPerspectiveShaders,
+} from "./frame-graph-aerial-perspective-shaders";
 
 const SSGI_DENOISE_STEP_WIDTHS = [1, 2, 4] as const;
 
@@ -137,6 +141,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
         oceanWaveField: boolean;
         oceanVolume: boolean;
         oceanSurface: boolean;
+        aerialPerspective: boolean;
         offsetShadow: boolean;
         offsetHighlight: boolean;
         motionBlur: boolean;
@@ -254,6 +259,13 @@ export type FrameGraphPostEffectsSettings = {
     oceanLightDirection?: { x: number; y: number; z: number };
     oceanLightColor?: { r: number; g: number; b: number };
     oceanLightIntensity?: number;
+    aerialPerspectiveEnabled: boolean;
+    aerialPerspectiveStrength: number;
+    aerialPerspectiveStart: number;
+    aerialPerspectiveRange: number;
+    aerialPerspectiveColor: { r: number; g: number; b: number };
+    aerialPerspectiveLightColor?: { r: number; g: number; b: number };
+    aerialPerspectiveLightIntensity?: number;
     lutEnabled: boolean;
     lutIntensity: number;
     lutRuntimeText: string | null;
@@ -1936,6 +1948,8 @@ export class FrameGraphPostEffectsController {
     private readonly oceanWaveTasks: FrameGraphOceanWaveFieldTask[] = [];
     private oceanVolumeTask: FrameGraphOceanVolumeTask | null = null;
     private oceanSurfaceTask: FrameGraphOceanSurfaceTask | null = null;
+    private aerialPerspectiveEffect: EffectWrapper | null = null;
+    private aerialPerspectiveTask: FrameGraphAerialPerspectiveTask | null = null;
     private offsetShadowEffect: EffectWrapper | null = null;
     private offsetShadowTask: FrameGraphPostEffectsOffsetShadowTask | null = null;
     private offsetHighlightEffect: EffectWrapper | null = null;
@@ -2059,6 +2073,13 @@ export class FrameGraphPostEffectsController {
             oceanLightDirection: { x: 0.3, y: -0.5, z: 0.5 },
             oceanLightColor: { r: 1, g: 1, b: 1 },
             oceanLightIntensity: 1,
+            aerialPerspectiveEnabled: false,
+            aerialPerspectiveStrength: 0.18,
+            aerialPerspectiveStart: 55,
+            aerialPerspectiveRange: 180,
+            aerialPerspectiveColor: { r: 0.72, g: 0.79, b: 0.83 },
+            aerialPerspectiveLightColor: { r: 1, g: 1, b: 1 },
+            aerialPerspectiveLightIntensity: 1,
             lutEnabled: false,
             lutIntensity: 1,
             lutRuntimeText: null,
@@ -2126,6 +2147,7 @@ export class FrameGraphPostEffectsController {
                 oceanWaveField: this.oceanWaveTasks.length === OCEAN_WAVE_BAND_CONFIGS.length,
                 oceanVolume: this.oceanVolumeTask !== null,
                 oceanSurface: this.oceanSurfaceTask !== null,
+                aerialPerspective: this.aerialPerspectiveTask !== null,
                 offsetShadow: this.offsetShadowTask !== null,
                 offsetHighlight: this.offsetHighlightTask !== null,
                 motionBlur: this.motionBlurTask !== null,
@@ -2202,6 +2224,7 @@ export class FrameGraphPostEffectsController {
         ensureLensDistortionShaders();
         ensureFrameGraphSsgiShaders();
         ensureFrameGraphOceanShaders();
+        ensureFrameGraphAerialPerspectiveShaders();
 
         const frameGraph = new FrameGraph(scene, false);
         frameGraph.name = "MMD modoki post effects";
@@ -2341,6 +2364,49 @@ export class FrameGraphPostEffectsController {
             geometryRendererTask.disabled = false;
             preludeTasks.push(geometryRendererTask);
             this.geometryRendererTask = geometryRendererTask;
+
+            if (this.isPostEffectActive(initialSettings, "aerialPerspective")) {
+                this.aerialPerspectiveEffect = new EffectWrapper({
+                    engine: frameGraph.engine,
+                    fragmentShader: "mmdFrameGraphAerialPerspective",
+                    useShaderStore: true,
+                    useAsPostProcess: true,
+                    uniforms: [
+                        "inverseProjection",
+                        "strength",
+                        "startDistance",
+                        "transitionRange",
+                        "atmosphereColor",
+                        "lightColor",
+                        "lightIntensity",
+                    ],
+                    samplers: ["viewDepthTexture"],
+                    name: "mmdFrameGraphAerialPerspective",
+                    shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+                });
+                const aerialPerspectiveTask = new FrameGraphAerialPerspectiveTask(
+                    "frameGraphPostEffectsAerialPerspective",
+                    frameGraph,
+                    this.aerialPerspectiveEffect,
+                    camera,
+                    () => {
+                        const settings = this.getSettings();
+                        return {
+                            strength: settings.aerialPerspectiveStrength,
+                            startDistance: settings.aerialPerspectiveStart,
+                            transitionRange: settings.aerialPerspectiveRange,
+                            color: settings.aerialPerspectiveColor,
+                            lightColor: settings.aerialPerspectiveLightColor ?? { r: 1, g: 1, b: 1 },
+                            lightIntensity: settings.aerialPerspectiveLightIntensity ?? 1,
+                        };
+                    },
+                );
+                aerialPerspectiveTask.sourceTexture = imageProcessingTask.outputTexture;
+                aerialPerspectiveTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
+                aerialPerspectiveTask.disabled = false;
+                deferEffectTask("aerialPerspective", aerialPerspectiveTask);
+                this.aerialPerspectiveTask = aerialPerspectiveTask;
+            }
 
             if (this.isPostEffectActive(initialSettings, "ocean")) {
                 const getOceanSettings = () => {
@@ -3185,6 +3251,10 @@ export class FrameGraphPostEffectsController {
         if (this.oceanTask) {
             this.oceanTask.disabled = !this.isPostEffectActive(settings, "ocean");
         }
+        if (this.aerialPerspectiveTask) {
+            this.aerialPerspectiveTask.disabled = !this.isPostEffectActive(settings, "aerialPerspective")
+                || this.aerialPerspectiveTask.depthTexture === undefined;
+        }
         if (this.oceanVolumeTask) {
             this.oceanVolumeTask.disabled = !this.isPostEffectActive(settings, "ocean");
         }
@@ -3385,6 +3455,13 @@ export class FrameGraphPostEffectsController {
                         this.connectedOrder.push("ocean");
                     }
                     break;
+                case "aerialPerspective":
+                    if (this.aerialPerspectiveTask) {
+                        this.aerialPerspectiveTask.sourceTexture = currentTexture;
+                        currentTexture = this.aerialPerspectiveTask.outputTexture;
+                        this.connectedOrder.push("aerialPerspective");
+                    }
+                    break;
                 case "motionBlur":
                     if (this.motionBlurTask) {
                         this.motionBlurTask.sourceTexture = currentTexture;
@@ -3472,6 +3549,9 @@ export class FrameGraphPostEffectsController {
         this.oceanVolumeTask = null;
         this.oceanSurfaceTask?.dispose();
         this.oceanSurfaceTask = null;
+        this.aerialPerspectiveEffect?.dispose();
+        this.aerialPerspectiveEffect = null;
+        this.aerialPerspectiveTask = null;
         for (const waveTask of this.oceanWaveTasks) {
             waveTask.dispose();
         }

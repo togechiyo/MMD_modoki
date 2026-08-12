@@ -4,7 +4,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { Material } from "@babylonjs/core/Materials/material";
 import { ImportMeshAsync } from "@babylonjs/core/Loading/sceneLoader";
-import type { BoneControlInfo, ModelInfo } from "../types";
+import type { ModelInfo } from "../types";
 import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { PBRMaterialBuilder } from "babylon-mmd/esm/Loader/pbrMaterialBuilder";
@@ -21,10 +21,8 @@ import {
 } from "../shared/mmd-material-pipeline";
 import { PbrMaterialProxy } from "../runtime/pbr-material-proxy";
 import { AdaptivePbrMaterialBuilder } from "./adaptive-pbr-material-builder";
+import { collectModelBoneInfo } from "./model-bone-metadata";
 
-const PMX_BONE_FLAG_VISIBLE = 0x0008;
-const PMX_BONE_FLAG_ROTATABLE = 0x0002;
-const PMX_BONE_FLAG_MOVABLE = 0x0004;
 const PMX_MORPH_CATEGORY_SYSTEM = 0;
 const PMX_MORPH_CATEGORY_EYEBROW = 1;
 const PMX_MORPH_CATEGORY_EYE = 2;
@@ -1374,8 +1372,6 @@ export async function loadPMX(
             return Math.max(max, skeleton.bones.length);
         }, 0);
 
-        const boneNames: string[] = [];
-        const boneControlInfos: BoneControlInfo[] = [];
         const metadataBones = Array.isArray(mmdMetadata.bones) ? mmdMetadata.bones : [];
         const metadataRigidBodies = Array.isArray(mmdMetadata.rigidBodies) ? mmdMetadata.rigidBodies : [];
         const metadataJoints = Array.isArray(mmdMetadata.joints) ? mmdMetadata.joints : [];
@@ -1425,75 +1421,10 @@ export async function loadPMX(
                 springRotation: toPhysicsVector(joint?.springRotation),
             };
         });
-        const physicsBoneIndices = new Set<number>();
-        for (const rigidBody of metadataRigidBodies) {
-            if (!rigidBody) continue;
-            if (rigidBody.physicsMode === 0) continue;
-            if (typeof rigidBody.boneIndex !== "number" || rigidBody.boneIndex < 0) continue;
-            physicsBoneIndices.add(rigidBody.boneIndex);
-        }
-
-        const ikBoneIndices = new Set<number>();
-        const ikAffectedBoneIndices = new Set<number>();
-        for (let boneIndex = 0; boneIndex < metadataBones.length; boneIndex += 1) {
-            const bone = metadataBones[boneIndex];
-            if (!bone?.ik) continue;
-
-            ikBoneIndices.add(boneIndex);
-
-            if (typeof bone.ik.target === "number" && bone.ik.target >= 0) {
-                ikAffectedBoneIndices.add(bone.ik.target);
-            }
-
-            for (const ikLink of bone.ik.links) {
-                if (typeof ikLink.target !== "number" || ikLink.target < 0) continue;
-                ikAffectedBoneIndices.add(ikLink.target);
-            }
-        }
-
-        const seenBoneNames = new Set<string>();
-        const physicsBoneNames: string[] = [];
-        for (let boneIndex = 0; boneIndex < metadataBones.length; boneIndex += 1) {
-            const bone = metadataBones[boneIndex];
-            if (!bone) continue;
-
-            const isVisible = (bone.flag & PMX_BONE_FLAG_VISIBLE) !== 0;
-            const isRotatable = (bone.flag & PMX_BONE_FLAG_ROTATABLE) !== 0;
-            const isMovable = (bone.flag & PMX_BONE_FLAG_MOVABLE) !== 0;
-            const isIk = ikBoneIndices.has(boneIndex);
-            const isIkAffected = ikAffectedBoneIndices.has(boneIndex);
-            const isPhysicsBone = physicsBoneIndices.has(boneIndex);
-
-            if (isPhysicsBone) {
-                if (!physicsBoneNames.includes(bone.name)) {
-                    physicsBoneNames.push(bone.name);
-                }
-                if (!boneControlInfos.some((info) => info.name === bone.name)) {
-                    boneControlInfos.push({
-                        name: bone.name,
-                        movable: isMovable,
-                        rotatable: isRotatable,
-                        isIk,
-                        isIkAffected,
-                    });
-                }
-                continue;
-            }
-
-            if (!isVisible) continue;
-
-            if (!seenBoneNames.has(bone.name)) {
-                seenBoneNames.add(bone.name);
-                boneNames.push(bone.name);
-                boneControlInfos.push({
-                    name: bone.name,
-                    movable: isMovable,
-                    rotatable: isRotatable,
-                    isIk,
-                    isIkAffected,
-                });
-            }
-        }
+        const { boneNames, physicsBoneNames, boneControlInfos } = collectModelBoneInfo(
+            metadataBones,
+            metadataRigidBodies,
+        );
 
         const eyeMorphs: { index: number; name: string }[] = [];
         const lipMorphs: { index: number; name: string }[] = [];

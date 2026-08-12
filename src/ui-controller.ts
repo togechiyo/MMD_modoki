@@ -6829,6 +6829,7 @@ export class UIController {
         } finally {
             this.syncingBoneSelection = false;
         }
+        this.modelExternalParentController?.refresh();
         this.refreshViewportBottomBar();
     }
 

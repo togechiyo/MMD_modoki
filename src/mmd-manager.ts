@@ -6308,11 +6308,11 @@ ${beforeFogAppendBlock}
                 // and after a parent-bone drag would multiply the same child pose twice for one frame.
                 this.handleBoneGizmoBeforeRender();
                 this.applyModelExternalParentsBeforeRender();
-                return;
+            } else {
+                this.applyModelExternalParentsBeforeRender();
+                this.handleBoneGizmoBeforeRender();
             }
-
-            this.applyModelExternalParentsBeforeRender();
-            this.handleBoneGizmoBeforeRender();
+            this.resyncCameraAfterModelExternalParents();
         });
 
         this.scene.onBeforeRenderObservable.add(() => {
@@ -13050,6 +13050,19 @@ ${beforeFogAppendBlock}
         }
         if (this.cameraExternalParentModelIndex === null) return;
         this.syncViewportCameraFromMmdCamera(true);
+    }
+
+    private resyncCameraAfterModelExternalParents(): void {
+        const modelIndex = this.cameraExternalParentModelIndex;
+        if (modelIndex === null || !this.sceneModels[modelIndex]?.externalParent) return;
+
+        // Model external parents are applied after the normal onBeforeRender camera sync.
+        // Read the now-composed child-bone matrix again so a camera parented to that model
+        // follows the same rendered pose instead of the raw pose from before composition.
+        this.syncViewportCameraFromMmdCamera(true);
+        // Scene.updateTransformMatrix() already ran before active-mesh evaluation. Refresh it
+        // after the late camera correction so culling and rendering use the corrected view.
+        this.scene.updateTransformMatrix(true);
     }
 
     private applyCameraExternalParentKeyframeAtFrame(frame: number): void {

@@ -256,6 +256,18 @@ describe("timeline edit service model animation tracks", () => {
         expect(physicsRow?.physicsBone).toBe(true);
     });
 
+    it("shows a PMX-visible physics bone without enabling physics-only rows", () => {
+        const modelInfo = createModelInfoWithPhysicsBones();
+        const visiblePhysicsBoneName = modelInfo.physicsBoneNames?.[0] ?? "";
+        modelInfo.boneNames.push(visiblePhysicsBoneName);
+        const { host } = createHost(modelInfo);
+
+        expect(getActiveModelTimelineTracks(host).map((track) => track.name)).toEqual([
+            modelInfo.boneNames[0],
+            visiblePhysicsBoneName,
+        ]);
+    });
+
     it("marks only physics ON frames as x-marker frames", () => {
         const { host, model } = createHost(createModelInfoWithPhysicsBones());
         const animation = createAnimation();

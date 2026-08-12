@@ -142,3 +142,59 @@ test("豆腐モデルの外部親をフレーム単位で登録・解除でき�
     await launched.close();
   }
 });
+
+test("camera follows a bone on a model that has its own external parent", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+
+    await page.evaluate(async ({ tofu, plate }) => {
+      await window.mmdModokiE2e.loadModel(tofu);
+      await window.mmdModokiE2e.loadModel(plate);
+    }, { tofu: tofuPath, plate: platePath });
+
+    const modelSelect = page.locator("#info-model-select");
+    await modelSelect.selectOption("0");
+    const modelParentSelect = page.locator("#info-external-parent-select");
+    await modelParentSelect.selectOption("1");
+    await page.locator("[data-testid='model-external-parent-register']").click();
+    await page.waitForFunction(() => window.mmdModokiE2e.getModelExternalParent(0)?.parentModelIndex === 1);
+
+    await modelSelect.selectOption("__camera__");
+    const cameraParentModelSelect = page.locator("#camera-external-parent-select");
+    const cameraParentBoneSelect = page.locator("#camera-parent-bone-select");
+    await cameraParentModelSelect.selectOption("0");
+    const cameraParentBoneName = await cameraParentBoneSelect.inputValue();
+    expect(cameraParentBoneName.length).toBeGreaterThan(0);
+    await page.locator("[data-testid='camera-external-parent-register']").click();
+    await page.waitForFunction(() => window.mmdModokiE2e.getCameraExternalParent()?.modelIndex === 0);
+
+    const before = await page.evaluate((boneName) => ({
+      camera: window.mmdModokiE2e.getCameraPosition(),
+      child: window.mmdModokiE2e.getModelBoneRenderedPosition(0, boneName),
+    }), cameraParentBoneName);
+    expect(before.child).not.toBeNull();
+
+    await modelSelect.selectOption("1");
+    const parentYInput = page.locator("#bone-controls input[data-control-key='ty']");
+    await parentYInput.fill("6");
+    await parentYInput.press("Enter");
+    await page.waitForFunction(({ boneName, beforeY }) => {
+      const child = window.mmdModokiE2e.getModelBoneRenderedPosition(0, boneName);
+      return child && Math.abs(child.y - beforeY) > 1;
+    }, { boneName: cameraParentBoneName, beforeY: before.child.y });
+    await page.evaluate(() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    }));
+
+    const after = await page.evaluate((boneName) => ({
+      camera: window.mmdModokiE2e.getCameraPosition(),
+      child: window.mmdModokiE2e.getModelBoneRenderedPosition(0, boneName),
+    }), cameraParentBoneName);
+    expect(after.child).not.toBeNull();
+    expect(after.camera.y - before.camera.y).toBeCloseTo(after.child.y - before.child.y, 1);
+  } finally {
+    await launched.close();
+  }
+});

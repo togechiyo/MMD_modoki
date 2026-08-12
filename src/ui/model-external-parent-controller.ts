@@ -1,6 +1,7 @@
 import type { EditorAction } from "../actions/types";
 import type { MmdManager } from "../mmd-manager";
 import { t } from "../i18n";
+import { isModelExternalParentStateForChildBone } from "../shared/model-external-parent";
 
 type ModelExternalParentControllerDeps = {
     mmdManager: MmdManager;
@@ -56,7 +57,8 @@ export class ModelExternalParentController {
         this.container.hidden = !visible;
         if (!visible) return;
 
-        const state = this.mmdManager.getModelExternalParent(childModel.index);
+        const activeState = this.mmdManager.getModelExternalParent(childModel.index);
+        const state = isModelExternalParentStateForChildBone(activeState, childBoneName) ? activeState : null;
         this.syncing = true;
         try {
             this.refreshParentModelOptions(childModel.index, state?.parentModelIndex ?? null);

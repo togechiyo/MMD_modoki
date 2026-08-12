@@ -12,6 +12,13 @@ export type ModelExternalParentKeyframeLike = ModelExternalParentKeyframePayload
     frame: number;
 };
 
+export function isModelExternalParentStateForChildBone(
+    state: Pick<ModelExternalParentKeyframePayload, "childBoneName"> | null | undefined,
+    childBoneName: string | null | undefined,
+): boolean {
+    return Boolean(state && childBoneName && state.childBoneName === childBoneName);
+}
+
 export function selectModelExternalParentKeyframeAtFrame<T extends ModelExternalParentKeyframeLike>(
     keyframes: readonly T[],
     frame: number,

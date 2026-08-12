@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
+    isModelExternalParentStateForChildBone,
     selectModelExternalParentKeyframeAtFrame,
     wouldCreateModelExternalParentCycle,
 } from "../../src/shared/model-external-parent";
+
+describe("isModelExternalParentStateForChildBone", () => {
+    const state = {
+        childBoneName: "全ての親",
+        parentModelPath: "parent.pmx",
+        parentBoneName: "センター",
+    };
+
+    it("matches only the child bone that owns the external-parent state", () => {
+        expect(isModelExternalParentStateForChildBone(state, "全ての親")).toBe(true);
+        expect(isModelExternalParentStateForChildBone(state, "a遅延0")).toBe(false);
+    });
+
+    it("does not match an empty selection or empty state", () => {
+        expect(isModelExternalParentStateForChildBone(state, null)).toBe(false);
+        expect(isModelExternalParentStateForChildBone(null, "全ての親")).toBe(false);
+    });
+});
 
 describe("wouldCreateModelExternalParentCycle", () => {
     it("rejects self parenting", () => {

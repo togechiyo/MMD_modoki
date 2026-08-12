@@ -55,6 +55,7 @@ describe("frame graph post effect stack helpers", () => {
     it("normalizes saved stack entries", () => {
         expect(normalizeFrameGraphPostEffectStack([
             { id: "bloom", enabled: true },
+            { id: "ocean", enabled: true },
             { id: "bad", enabled: true },
             { id: "bloom", enabled: false },
             { id: "lut" },
@@ -62,6 +63,17 @@ describe("frame graph post effect stack helpers", () => {
             { id: "bloom", enabled: true },
             { id: "lut", enabled: false },
         ]);
+    });
+
+    it("retires ocean from saved and runtime stack ids", () => {
+        expect(normalizeFrameGraphPostEffectIds(["ssao", "ocean", "bloom"])).toEqual([
+            "ssao",
+            "bloom",
+        ]);
+        expect(addFrameGraphPostEffectId(["ssao"], "ocean")).toEqual(["ssao"]);
+        expect(isFrameGraphPostEffectActiveInSettings(createActivationSettings({
+            oceanEnabled: true,
+        }), "ocean")).toBe(false);
     });
 
     it("inserts new ids by canonical order", () => {
@@ -107,7 +119,7 @@ describe("frame graph post effect stack helpers", () => {
         expect(isFrameGraphPostEffectActiveInSettings(settings, "luminous")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssao")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssgi")).toBe(true);
-        expect(isFrameGraphPostEffectActiveInSettings(settings, "ocean")).toBe(true);
+        expect(isFrameGraphPostEffectActiveInSettings(settings, "ocean")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "motionBlur")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetShadow")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "offsetHighlight")).toBe(true);
@@ -134,7 +146,7 @@ describe("frame graph post effect stack helpers", () => {
             oceanEnabled: true,
             lutEnabled: true,
             motionBlurEnabled: true,
-        }))).toEqual(["ssr", "ssgi", "ocean", "offsetShadow", "offsetHighlight", "bloom", "lut", "motionBlur", "grain"]);
+        }))).toEqual(["ssr", "ssgi", "offsetShadow", "offsetHighlight", "bloom", "lut", "motionBlur", "grain"]);
     });
 });
 

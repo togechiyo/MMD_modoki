@@ -268,7 +268,7 @@ describe("exportProjectState", () => {
         expect(project.effects.oceanClarity).toBe(0.92);
         expect(project.effects.oceanCausticsStrength).toBe(1.65);
         expect(project.effects.oceanVolumeStrength).toBe(1.25);
-        expect(project.effects.frameGraphPostStack).toEqual([{ id: "ocean", enabled: false }]);
+        expect(project.effects.frameGraphPostStack).toEqual([]);
     });
 
     it("writes light direction as x/y/z instead of Babylon backing fields", () => {

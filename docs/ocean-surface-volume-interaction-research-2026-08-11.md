@@ -2,6 +2,8 @@
 
 ## 状態
 
+> **2026-08-12: retired** — 実装した海エフェクトは見た目の品質が採用基準へ届かなかったため、通常 UI と実行 stack から外した。本資料は方式調査と実験記録として保持する。depth 復元、方向光同期、低解像度 Compute、専用 ObjectRenderer の転用方針は[海エフェクト実験から大気演出へ転用する知見](./framegraph-atmospheric-effects-ocean-reuse-note-2026-08-12.md)へ分離した。
+
 一次調査完了。立体水面、方向光連動の水中光芒、接触波紋・泡・飛沫について、2022 年以降の一次資料と公開実装を比較し、5 task の責務、推奨方式、実装順を整理した。実装開始前に Dynamic Wave Trains と WP-FFT の source / license 公開状況を再確認する。
 
 2026-08-12、Phase 1として3帯域・48成分のGPU sparse wave field、MMD方向光連動、簡易水中光芒まで実装した。これはDonatini 2024のmulti-band構成を小さく検証するbaselineであり、Dynamic Wave Trains、独立clipmap mesh、shadow付きfroxel、light-view caustics、interactionは未実装である。詳細は[海エフェクト MVP 実装メモ](./ocean-effect-mvp-implementation-2026-08-11.md)を参照する。

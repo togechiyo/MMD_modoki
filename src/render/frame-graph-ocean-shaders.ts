@@ -240,9 +240,11 @@ void main(void) {
     vec2 surfaceXz = cameraPosition.xz + ray.xz * surfaceDistance;
     float surfaceDetail = 1.0 - smoothstep(140.0, 700.0, surfaceDistance);
     vec3 surfaceNormal = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormalAt(surfaceXz), surfaceDetail));
-    bool receiverBelow = hasGeometry && worldPosition.y < waterHeight + waveHeightAt(worldPosition.xz);
+    // Keep the absorption boundary smooth. Fine wave displacement belongs to
+    // the visible surface, not to the binary media-volume classification.
+    bool receiverBelow = hasGeometry && worldPosition.y < waterHeight;
     float receiverDepth = receiverBelow
-        ? max(waterHeight + waveHeightAt(worldPosition.xz) - worldPosition.y, 0.0)
+        ? max(waterHeight - worldPosition.y, 0.0)
         : 0.0;
     float underwaterDistance = 0.0;
     if (cameraBelow) {
@@ -281,7 +283,7 @@ void main(void) {
         float depthBelow = max(waterHeight - worldPosition.y, 0.0);
         float depthFade = exp(-depthBelow * 0.055);
         float sourceLuminance = dot(source.rgb, vec3(0.2126, 0.7152, 0.0722));
-        float directLightAvailability = smoothstep(0.18, 0.55, sourceLuminance);
+        float directLightAvailability = smoothstep(0.04, 0.35, sourceLuminance);
         float caustic = causticCompression(worldPosition) * facing * depthFade
             * directLightAvailability;
         float largeScaleVariation = sin(dot(worldPosition.xz, vec2(0.061, 0.097))) * 0.62
@@ -289,8 +291,8 @@ void main(void) {
         float causticEnvelope = 0.18 + smoothstep(-0.58, 0.72, largeScaleVariation) * 0.82;
         float lightVisibility = screenSpaceLightVisibility(vUV, sceneDistance);
         caustic *= causticEnvelope * lightVisibility * smoothstep(0.08, 1.8, receiverDepth);
-        float causticEnergy = 1.0 - exp(-caustic * causticsStrength * 0.72);
-        causticContribution = lightColor * lightIntensity * causticEnergy * 0.24;
+        float causticEnergy = 1.0 - exp(-caustic * causticsStrength * 1.15);
+        causticContribution = lightColor * lightIntensity * causticEnergy * 0.50;
         color += causticContribution;
     }
 
@@ -382,48 +384,52 @@ fn rotateWaveGradient(value: vec2f, cosine: f32, sine: f32) -> vec2f {
     return vec2f(cosine * value.x + sine * value.y, -sine * value.x + cosine * value.y);
 }
 
+fn wrapWaveCoordinate(value: i32, size: i32) -> i32 {
+    return ((value % size) + size) % size;
+}
+
+fn sampleWaveTexture(texture: texture_2d<f32>, uv: vec2f) -> vec4f {
+    let dimensions = vec2i(textureDimensions(texture));
+    let coordinate = fract(uv) * vec2f(dimensions) - vec2f(0.5);
+    let base = vec2i(floor(coordinate));
+    let fraction = fract(coordinate);
+    let p00 = vec2i(wrapWaveCoordinate(base.x, dimensions.x), wrapWaveCoordinate(base.y, dimensions.y));
+    let p10 = vec2i(wrapWaveCoordinate(base.x + 1, dimensions.x), wrapWaveCoordinate(base.y, dimensions.y));
+    let p01 = vec2i(wrapWaveCoordinate(base.x, dimensions.x), wrapWaveCoordinate(base.y + 1, dimensions.y));
+    let p11 = vec2i(wrapWaveCoordinate(base.x + 1, dimensions.x), wrapWaveCoordinate(base.y + 1, dimensions.y));
+    let top = mix(textureLoad(texture, p00, 0), textureLoad(texture, p10, 0), fraction.x);
+    let bottom = mix(textureLoad(texture, p01, 0), textureLoad(texture, p11, 0), fraction.x);
+    return mix(top, bottom, fraction.y);
+}
+
 fn sampleWaveField(p: vec2f) -> vec4f {
-    let broadA = textureSampleLevel(
+    let broadA = sampleWaveTexture(
         broadWaveTexture,
-        broadWaveTextureSampler,
-        fract(p / 512.0 + vec2f(0.173, 0.317)),
-        0.0
+        p / 512.0 + vec2f(0.173, 0.317)
     );
-    let broadB = textureSampleLevel(
+    let broadB = sampleWaveTexture(
         broadWaveTexture,
-        broadWaveTextureSampler,
-        fract(rotateWaveCoordinate(p, 0.8192, 0.5736) / 731.0 + vec2f(0.711, 0.109)),
-        0.0
+        rotateWaveCoordinate(p, 0.8192, 0.5736) / 731.0 + vec2f(0.711, 0.109)
     );
-    let mediumA = textureSampleLevel(
+    let mediumA = sampleWaveTexture(
         mediumWaveTexture,
-        mediumWaveTextureSampler,
-        fract(p / 64.0 + vec2f(0.619, 0.241)),
-        0.0
+        p / 64.0 + vec2f(0.619, 0.241)
     );
-    let mediumB = textureSampleLevel(
+    let mediumB = sampleWaveTexture(
         mediumWaveTexture,
-        mediumWaveTextureSampler,
-        fract(rotateWaveCoordinate(p, 0.4226, 0.9063) / 97.3 + vec2f(0.137, 0.853)),
-        0.0
+        rotateWaveCoordinate(p, 0.4226, 0.9063) / 97.3 + vec2f(0.137, 0.853)
     );
-    let fineA = textureSampleLevel(
+    let fineA = sampleWaveTexture(
         fineWaveTexture,
-        fineWaveTextureSampler,
-        fract(p / 8.0 + vec2f(0.083, 0.773)),
-        0.0
+        p / 8.0 + vec2f(0.083, 0.773)
     );
-    let fineB = textureSampleLevel(
+    let fineB = sampleWaveTexture(
         fineWaveTexture,
-        fineWaveTextureSampler,
-        fract(rotateWaveCoordinate(p, 0.3420, 0.9397) / 13.7 + vec2f(0.731, 0.197)),
-        0.0
+        rotateWaveCoordinate(p, 0.3420, 0.9397) / 13.7 + vec2f(0.731, 0.197)
     );
-    let fineC = textureSampleLevel(
+    let fineC = sampleWaveTexture(
         fineWaveTexture,
-        fineWaveTextureSampler,
-        fract(rotateWaveCoordinate(p, -0.8290, 0.5592) / 23.1 + vec2f(0.419, 0.557)),
-        0.0
+        rotateWaveCoordinate(p, -0.8290, 0.5592) / 23.1 + vec2f(0.419, 0.557)
     );
     let broadGradient = broadA.gb * 0.72
         + rotateWaveGradient(broadB.gb, 0.8192, 0.5736) * 0.28;
@@ -637,10 +643,12 @@ fn main(input: FragmentInputs)->FragmentOutputs {
     let surfaceXz = uniforms.cameraPosition.xz + ray.xz * surfaceDistance;
     let surfaceDetail = 1.0 - smoothstep(140.0, 700.0, surfaceDistance);
     let surfaceNormal = normalize(mix(vec3f(0.0, 1.0, 0.0), waveNormalAt(surfaceXz), vec3f(surfaceDetail)));
-    let receiverBelow = hasGeometry && worldPosition.y < uniforms.waterHeight + waveHeightAt(worldPosition.xz);
+    // Media color uses the mean water plane. Following fine wave height here
+    // made the tint switch on and off as a noisy transparent sheet.
+    let receiverBelow = hasGeometry && worldPosition.y < uniforms.waterHeight;
     let receiverDepth = select(
         0.0,
-        max(uniforms.waterHeight + waveHeightAt(worldPosition.xz) - worldPosition.y, 0.0),
+        max(uniforms.waterHeight - worldPosition.y, 0.0),
         receiverBelow
     );
     var underwaterDistance = 0.0;
@@ -690,7 +698,7 @@ fn main(input: FragmentInputs)->FragmentOutputs {
         let depthBelow = max(uniforms.waterHeight - worldPosition.y, 0.0);
         let depthFade = exp(-depthBelow * 0.055);
         let sourceLuminance = dot(source.rgb, vec3f(0.2126, 0.7152, 0.0722));
-        let directLightAvailability = smoothstep(0.18, 0.55, sourceLuminance);
+        let directLightAvailability = smoothstep(0.04, 0.35, sourceLuminance);
         var caustic = causticCompression(worldPosition) * facing * depthFade
             * directLightAvailability;
         let largeScaleVariation = sin(dot(worldPosition.xz, vec2f(0.061, 0.097))) * 0.62
@@ -699,8 +707,8 @@ fn main(input: FragmentInputs)->FragmentOutputs {
         let lightVisibility = screenSpaceLightVisibility(input.vUV, sceneDistance);
         caustic = caustic * causticEnvelope * lightVisibility
             * smoothstep(0.08, 1.8, receiverDepth);
-        let causticEnergy = 1.0 - exp(-caustic * uniforms.causticsStrength * 0.72);
-        causticContribution = uniforms.lightColor * uniforms.lightIntensity * causticEnergy * 0.24;
+        let causticEnergy = 1.0 - exp(-caustic * uniforms.causticsStrength * 1.15);
+        causticContribution = uniforms.lightColor * uniforms.lightIntensity * causticEnergy * 0.50;
         color = color + causticContribution;
     }
 

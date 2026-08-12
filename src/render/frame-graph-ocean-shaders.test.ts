@@ -9,5 +9,9 @@ describe("ocean media composite shader", () => {
         expect(shader).toContain("let pathFade = smoothstep(0.0, 3.5, underwaterDistance)");
         expect(shader).toContain("smoothstep(0.05, 2.2, receiverDepth)");
         expect(shader).toContain("color = mix(color, filteredColor, vec3f(mediaBlend))");
+        expect(shader).toContain("worldPosition.y < uniforms.waterHeight");
+        expect(shader).not.toContain(
+            "worldPosition.y < uniforms.waterHeight + waveHeightAt(worldPosition.xz)",
+        );
     });
 });

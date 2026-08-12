@@ -286,12 +286,16 @@ fn main(@builtin(global_invocation_id) globalId: vec3u) {
     let acrossBeam = dot(screenPosition, projectedLightPerpendicular);
     let beamWarp = sin(alongBeam * 2.7 + worldAnchoredPhase * 0.31) * 0.68
         + sin(alongBeam * 5.1 - worldAnchoredPhase * 0.19 + 2.2) * 0.24;
-    let projectedBeamCoordinate = acrossBeam * 7.2 + worldAnchoredPhase + beamWarp;
-    let projectedBeamSignal = sin(projectedBeamCoordinate) * 0.72
-        + sin(projectedBeamCoordinate * 1.61 + alongBeam * 0.83 + 1.9) * 0.34
-        + sin(projectedBeamCoordinate * 0.43 - alongBeam * 1.37 + 4.1) * 0.22;
-    let beamThreshold = 0.18 + sin(alongBeam * 1.9 + worldAnchoredPhase * 0.13) * 0.13;
-    let projectedBeam = smoothstep(beamThreshold, beamThreshold + 0.64, projectedBeamSignal);
+    let projectedBeamCoordinate = acrossBeam * 12.5 + worldAnchoredPhase + beamWarp;
+    let beamA = pow(max(sin(projectedBeamCoordinate), 0.0), 5.0);
+    let beamB = pow(max(sin(projectedBeamCoordinate * 1.61 + alongBeam * 0.83 + 1.9), 0.0), 7.0);
+    let beamC = pow(max(sin(projectedBeamCoordinate * 2.27 - alongBeam * 1.17 + 4.1), 0.0), 8.0);
+    let beamD = pow(max(sin(projectedBeamCoordinate * 3.73 + alongBeam * 0.49 + 0.6), 0.0), 9.0);
+    let projectedBeam = clamp(
+        beamA * 0.38 + beamB * 0.30 + beamC * 0.22 + beamD * 0.16,
+        0.0,
+        1.0
+    );
     let forwardPhase = 0.22
         + pow(max(dot(-ray, waterLightDirection), 0.0), 5.0) * 0.78;
     var accumulated = 0.0;
@@ -315,19 +319,20 @@ fn main(@builtin(global_invocation_id) globalId: vec3u) {
         let positionWarp = sin(dot(entryXz, vec2f(0.031, -0.047)) + depth * 0.013);
         let broadShaft = sin(lightAlignedCoordinate * 0.095 + depth * 0.018 + positionWarp * 0.85);
         let crossedShaft = sin(lightAlignedCoordinate * 0.173 - depth * 0.011 + positionWarp * 0.46 + 1.7);
-        let shaftSignal = broadShaft * 0.68 + crossedShaft * 0.32;
-        let shaftEnvelope = smoothstep(0.18, 0.78, shaftSignal);
-        let shaftPattern = shaftEnvelope * (0.48 + focusedShaft * 0.82);
+        let fineShaft = sin(lightAlignedCoordinate * 0.287 + depth * 0.026 - positionWarp * 0.31 + 3.4);
+        let shaftSignal = broadShaft * 0.50 + crossedShaft * 0.30 + fineShaft * 0.20;
+        let shaftEnvelope = smoothstep(0.02, 0.62, shaftSignal);
+        let shaftPattern = shaftEnvelope * (0.62 + focusedShaft * 0.90);
         let surfaceOriginFade = 1.0 - exp(-depth * 0.55);
         let lightVisibility = screenSpaceLightVisibility(samplePosition, waterLightDirection);
         let extinction = exp(-depth * 0.026) * exp(-rayDistance * 0.012);
         accumulated += shaftPattern * surfaceOriginFade * lightVisibility * extinction;
     }
 
-    let integrated = max(accumulated / f32(stepCount) - 0.035, 0.0);
-    let beamContrast = 0.10 + projectedBeam * 1.90;
+    let integrated = max(accumulated / f32(stepCount) - 0.015, 0.0);
+    let beamContrast = 0.14 + projectedBeam * 1.75;
     let radiance = params.lightColor * params.lightIntensity * params.volumeStrength
-        * forwardPhase * integrated * beamContrast * 1.35;
+        * forwardPhase * integrated * beamContrast * 1.45;
     textureStore(
         outputVolume,
         vec2i(outputPixel),

@@ -42,4 +42,9 @@ describe("ocean surface alpha", () => {
         );
         expect(FRAME_GRAPH_OCEAN_SURFACE_FRAGMENT_WGSL).not.toContain("0.08 + fresnel");
     });
+
+    it("wraps bilinear wave samples across periodic texture edges", () => {
+        expect(FRAME_GRAPH_OCEAN_SURFACE_FRAGMENT_WGSL).toContain("wrapShadingCoordinate");
+        expect(FRAME_GRAPH_OCEAN_SURFACE_FRAGMENT_WGSL).toContain("textureLoad(texture, p11, 0)");
+    });
 });

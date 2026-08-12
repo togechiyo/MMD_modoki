@@ -4,6 +4,8 @@
 
 Node Particle Effects は、Babylon.js 9 系の Node Particle / Particle System を使い、MMD_modoki 上でキラキラ、光粒、煙、埃、魔法陣の粒子、ライブステージの演出などを扱うための実験機能である。
 
+> **2026-08-12 追記** — 海エフェクト実験で `FrameGraphComputeShaderTask` と専用 `FrameGraphObjectRendererTask` の接続は確認できた。ただし漂う dust / sparkle の初版は本資料どおり既存 Particle System から始め、衝突・局所発生・多数粒子が必要になった時だけ状態付き Compute へ進む。大気遠近・方向光光芒を含む転用方針は[海エフェクト実験から大気演出へ転用する知見](./framegraph-atmospheric-effects-ocean-reuse-note-2026-08-12.md)を参照する。
+
 近年の MMD 動画では、モデルやステージそのものだけでなく、画面手前や背景に細かい粒子を散らし、Bloom、DoF、玉ボケ、LUT と併用して映像の密度を上げる演出がよく使われる。
 
 MMD_modoki でも、FrameGraph / WebGPU / PostFX の整理が進んだあとに、シーン内エフェクトとしてパーティクルを扱えるようにする価値がある。

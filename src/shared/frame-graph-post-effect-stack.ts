@@ -56,6 +56,13 @@ export type FrameGraphPostEffectActivationSettings = {
 };
 
 const FRAME_GRAPH_POST_EFFECT_ID_SET = new Set<string>(FRAME_GRAPH_POST_EFFECT_IDS);
+const RETIRED_FRAME_GRAPH_POST_EFFECT_ID_SET = new Set<FrameGraphPostEffectId>([
+    "ocean",
+]);
+
+export function isRetiredFrameGraphPostEffectId(id: FrameGraphPostEffectId): boolean {
+    return RETIRED_FRAME_GRAPH_POST_EFFECT_ID_SET.has(id);
+}
 
 export function isFrameGraphPostEffectId(value: string): value is FrameGraphPostEffectId {
     return FRAME_GRAPH_POST_EFFECT_ID_SET.has(value);
@@ -69,7 +76,12 @@ export function normalizeFrameGraphPostEffectIds(
     const seen = new Set<FrameGraphPostEffectId>();
 
     const add = (value: unknown): void => {
-        if (typeof value !== "string" || !isFrameGraphPostEffectId(value) || seen.has(value)) {
+        if (
+            typeof value !== "string"
+            || !isFrameGraphPostEffectId(value)
+            || isRetiredFrameGraphPostEffectId(value)
+            || seen.has(value)
+        ) {
             return;
         }
         seen.add(value);
@@ -95,7 +107,12 @@ export function normalizeFrameGraphPostEffectStack(
             continue;
         }
         const candidate = entry as { id?: unknown; enabled?: unknown };
-        if (typeof candidate.id !== "string" || !isFrameGraphPostEffectId(candidate.id) || seen.has(candidate.id)) {
+        if (
+            typeof candidate.id !== "string"
+            || !isFrameGraphPostEffectId(candidate.id)
+            || isRetiredFrameGraphPostEffectId(candidate.id)
+            || seen.has(candidate.id)
+        ) {
             continue;
         }
         seen.add(candidate.id);
@@ -111,6 +128,9 @@ export function isFrameGraphPostEffectActiveInSettings(
     settings: FrameGraphPostEffectActivationSettings,
     id: FrameGraphPostEffectId,
 ): boolean {
+    if (isRetiredFrameGraphPostEffectId(id)) {
+        return false;
+    }
     switch (id) {
         case "ssr":
             return settings.ssrEnabled && settings.ssrStrength > 0.00001;
@@ -159,6 +179,9 @@ export function addFrameGraphPostEffectId(
     currentIds: readonly FrameGraphPostEffectId[],
     id: FrameGraphPostEffectId,
 ): FrameGraphPostEffectId[] {
+    if (isRetiredFrameGraphPostEffectId(id)) {
+        return [...currentIds].filter((candidate) => !isRetiredFrameGraphPostEffectId(candidate));
+    }
     if (currentIds.includes(id)) {
         return [...currentIds];
     }

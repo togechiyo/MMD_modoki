@@ -396,6 +396,7 @@
 
 ## 2026-08-11 海エフェクト
 
+- [x] 2026-08-12 見た目の品質が採用基準へ届かなかったため、通常UIと実行stackから海エフェクトを外し、実装を参考資料として保持する
 - [x] FrameGraph海MVP（水面交点、RGB別水中吸収、波同期コースティクス）
 - [x] 0～100詳細UI、初期値、project保存復元、stack順接続
 - [x] 豆腐PMXのPlaywright実描画、PNG出力、WebGPU validation warning 0
@@ -418,3 +419,14 @@
 - [ ] interaction simulationのfixed-step、deterministic seed、seek reset / checkpoint、export replayを実装する
 - 詳細: [海エフェクト MVP 実装メモ 2026-08-11](./ocean-effect-mvp-implementation-2026-08-11.md)
 - 高品質化調査: [海エフェクト高品質化 調査メモ 2026-08-11](./ocean-surface-volume-interaction-research-2026-08-11.md)
+
+海固有の未完了項目は通常機能としての実装を凍結する。再開する場合は、採用基準と比較画像を先に定め、現行の簡易方式をそのまま延命しない。
+
+## 2026-08-12 大気演出への転用候補
+
+- [x] 海エフェクトから転用できる depth 復元、方向光同期、低解像度 Compute、専用 ObjectRenderer と、再利用しない方式を整理する
+- [ ] 空気遠近フォグを独立した FrameGraph effect として実装し、距離による連続変化、強度 0、保存復元、reload を確認する
+- [ ] MMD 方向光へ連動する光芒を、低解像度遮蔽 mask + deterministic directional gather で実装する
+- [ ] 漂う dust preset を既存 Particle System / Node Particle 方針で一種類実装し、fixed seed、pause / seek、Bloom / DoF 順を確認する
+- [ ] 2 個目の大気 effect 実装後に、camera / depth / direction light 同期の実重複だけを helper へ抽出する
+- 転用方針: [海エフェクト実験から大気演出へ転用する知見 2026-08-12](./framegraph-atmospheric-effects-ocean-reuse-note-2026-08-12.md)

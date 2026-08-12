@@ -386,9 +386,7 @@ describe("importProjectState", () => {
         expect(host.postEffectOceanClarity).toBe(4);
         expect(host.postEffectOceanCausticsStrength).toBe(1.6);
         expect(host.postEffectOceanVolumeStrength).toBe(1.4);
-        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
-            { id: "ocean", enabled: true },
-        ]);
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([]);
     });
 
     it("restores saved SSAO effect values", async () => {

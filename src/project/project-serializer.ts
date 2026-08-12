@@ -522,7 +522,8 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             fogDensity: host.postEffectFogDensity,
             fogOpacity: host.postEffectFogOpacity,
             fogColor: host.getPostEffectFogColor(),
-            frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.(),
+            frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.()
+                .filter((entry) => entry.id !== "ocean"),
             gammaEncodingVersion: 2,
         },
         accessories,

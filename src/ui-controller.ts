@@ -289,12 +289,6 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("lut", active); },
     },
     {
-        id: "ocean",
-        labelKey: "effect.frameGraphPost.effects.ocean",
-        isActive: (manager) => manager.isFrameGraphPostEffectActive("ocean"),
-        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("ocean", active); },
-    },
-    {
         id: "motionBlur",
         labelKey: "effect.frameGraphPost.effects.motionBlur",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("motionBlur"),

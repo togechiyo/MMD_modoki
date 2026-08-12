@@ -26,5 +26,6 @@ describe("ocean volume compute pass", () => {
         expect(FRAME_GRAPH_OCEAN_VOLUME_COMPUTE_WGSL).toContain("params.lightDirection");
         expect(FRAME_GRAPH_OCEAN_VOLUME_COMPUTE_WGSL).toContain("sampleDisplacedWaveField(entryXz).a");
         expect(FRAME_GRAPH_OCEAN_VOLUME_COMPUTE_WGSL).not.toContain("stablePixelJitter");
+        expect(FRAME_GRAPH_OCEAN_VOLUME_COMPUTE_WGSL).toContain("let beamD = pow");
     });
 });

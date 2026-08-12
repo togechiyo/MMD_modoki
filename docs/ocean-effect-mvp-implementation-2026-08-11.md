@@ -1,5 +1,7 @@
 # 海エフェクト MVP 実装メモ 2026-08-11
 
+> **2026-08-12: retired** — 見た目の品質が採用基準へ届かなかったため、通常UIと実行stackから海エフェクトを外した。実装・調査・テストは将来の再検討用資料として残すが、保存済みproject内の`ocean` entryも読み込み時のstack正規化で除外する。
+
 ## 実装した範囲
 
 FrameGraph の追加エフェクトとして `海` を実装した。
@@ -276,6 +278,14 @@ volume computeとreceiver causticsには、geometry view depthを方向光側へ
 水中色は、receiverが局所水面より下かどうかだけで100%適用すると、実水面の半透明描画と色境界が別レイヤーに見える。適用率を、水中光路長の `smoothstep(0, 3.5)`、receiverの局所水深の `smoothstep(0.05, 2.2)`、cameraの局所水面からの沈み込み量の `smoothstep(0, 1.6)` から作る連続値へ変更した。水面直下では元scene colorを残し、深さと距離が増えるほど波長別吸収と散乱色へ移る。
 
 volume radianceとreceiver causticsも同じ境界fadeで立ち上げ、水面直下にノイズ状の色や光が急出現しないようにした。実水面meshは常時0.08だった最低alphaとFresnel由来alphaを廃止し、通常部は透明、白highlightと細いwaterlineだけを不透明成分として描く。これにより、無彩色の半透明膜と青い水中層が重なる見え方を避ける。
+
+### Phase 3h: 周期境界、コースティクス、光芒密度の調整
+
+wave textureはshaderでUVへ`fract`を掛けていたが、texture sampler自体がclampの場合、0/1境界のbilinear補間が反対端へ跨がず段差になる。surface vertex、surface shading、ocean compositeの各sampleを、整数座標を明示wrapする4点`textureLoad`のbilinear補間へ置き換えた。volume computeは既に同じ方式を使っている。
+
+水中色のreceiver判定から局所wave heightを外し、平均waterHeightからの深度だけで連続fadeさせる。実水面の立体波は表示・屈折・waterlineへ残す一方、細波が吸収volumeの境界を画素単位でon/offしないよう役割を分離した。
+
+receiver causticsは暗い面でも立ち上がるようscene luminance gateを広げ、指数energyと最終光量を上げた。水中光芒は方向光に直交する座標へ4種類の狭い正弦lobeを重ね、本数を増やした。最大値でも太い一枚帯にならないよう各lobeを高いべき乗で細くし、背景を残す強度へ制限する。
 
 ## 現在の制約
 

@@ -9,7 +9,7 @@ const modelPath = process.env.MMD_MODOKI_E2E_MODEL_PATH
   ?? resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
 const screenshotDirectory = resolve(repoRoot, "test-results");
 
-test("豆腐モデルにFrameGraph海エフェクトを適用できる", async () => {
+test.skip("retired ocean implementation reference", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();

@@ -142,14 +142,14 @@ describe("buildFrameGraphResourcePlan", () => {
         });
     });
 
-    it("uses scene color, view depth, and view normal for the ocean pass", () => {
+    it("does not allocate resources for the retired ocean pass", () => {
         const plan = buildFrameGraphResourcePlan(createSettings({
             oceanEnabled: true,
         }), ["ocean"]);
 
-        expect(plan.activeEffects).toEqual(["ocean"]);
-        expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth", "viewNormal"]);
-        expect(plan.needsGeometryRenderer).toBe(true);
+        expect(plan.activeEffects).toEqual([]);
+        expect(plan.requirementKeys).toEqual([]);
+        expect(plan.needsGeometryRenderer).toBe(false);
     });
 
     it("does not request SSGI resources when the stack entry is disabled", () => {

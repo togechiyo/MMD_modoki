@@ -406,6 +406,22 @@ describe("material shader preset restore", () => {
         expect(result.values[2]).toBeGreaterThan(0.6);
     });
 
+    it("keeps opt-in particle hue in the FrameGraph Luminous mask core", () => {
+        const host = createHost();
+        host.material.name = "AutoLuminous ring particle 0";
+        host.material.diffuseColor = Color3.Black();
+        host.material.emissiveColor = new Color3(0.24, 1, 0.32);
+        host.material.ambientColor = Color3.Black();
+        Object.assign(host.material, { mmdLuminousPreserveChroma: true });
+
+        const state = getFrameGraphLuminousMaskMaterialState(host, host.mesh, host.material);
+
+        expect(state).not.toBeNull();
+        if (!state) throw new Error("Expected a luminous particle mask state.");
+        expect(state.color.g).toBeGreaterThan(state.color.r * 3);
+        expect(state.color.g).toBeGreaterThan(state.color.b * 2.5);
+    });
+
     it("keeps FrameGraph Luminous mask heuristic from lighting ordinary shiny materials", () => {
         const host = createHost();
         host.material.specularPower = 120;

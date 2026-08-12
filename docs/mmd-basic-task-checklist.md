@@ -428,6 +428,6 @@
 - [x] 空気遠近フォグを独立した FrameGraph effect として実装し、距離による連続変化、強度 0、保存復元、reload を確認する
 - [x] MMD 方向光へ連動する光芒を、geometry view depth + deterministic directional gather で初期実装する（公式 volumetric task は shadow / lighting volume 所有の統合後に再評価）
 - [x] 不安定なボリューム光芒案を方向光連動の2色パラフレアへ転換し、加算側／乗算側カラー、深度による近景抑制、保存／読込を実装する
-- [ ] 漂う dust preset を既存 Particle System / Node Particle 方針で一種類実装し、fixed seed、pause / seek、Bloom / DoF 順を確認する
+- [x] 漂う光粒 preset を thin instance billboard で実装し、fixed seed、pause / seek、Luminous / FrameGraph 順を確認する（[実装メモ](./ring-particle-effect-implementation-note-2026-08-12.md)）。Bloom / DoF 順の追加評価は継続する
 - [ ] 2 個目の大気 effect 実装後に、camera / depth / direction light 同期の実重複だけを helper へ抽出する
 - 転用方針: [海エフェクト実験から大気演出へ転用する知見 2026-08-12](./framegraph-atmospheric-effects-ocean-reuse-note-2026-08-12.md)

@@ -8,6 +8,7 @@ import type {
     ProjectSerializedModelExternalParentTrack,
     ProjectSerializedModelAnimation,
     SsgiBlendMode,
+    ProjectRingParticleState,
 } from "../types";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { createCameraAnimationFromTrack, deserializeCameraTrack, deserializeModelAnimation } from "./project-codec";
@@ -269,6 +270,7 @@ type ProjectImportHost = {
     postEffectFogEnd: number;
     postEffectFogDensity: number;
     postEffectFogOpacity: number;
+    setRingParticleSettings?(settings: ProjectRingParticleState): void;
     setPostEffectFogColor(r: number, g: number, b: number): void;
     setFrameGraphPostEffectStackIds?: (ids: readonly FrameGraphPostEffectId[]) => void;
     setFrameGraphPostEffectStackEntries?: (entries: readonly FrameGraphPostEffectStackEntry[]) => void;
@@ -1280,8 +1282,30 @@ export async function importProjectState(
         Number.isFinite(data.effects.fogColor.b)) {
         host.setPostEffectFogColor(data.effects.fogColor.r, data.effects.fogColor.g, data.effects.fogColor.b);
     }
-    if (Array.isArray(data.effects.frameGraphPostStack)) {
-        const stackEntries = normalizeFrameGraphPostEffectStack(data.effects.frameGraphPostStack);
+    const ringParticles = data.effects.ringParticles;
+    host.setRingParticleSettings?.({
+        enabled: typeof ringParticles?.enabled === "boolean" ? ringParticles.enabled : false,
+        count: readFiniteNumber(ringParticles?.count, 180),
+        density: readFiniteNumber(ringParticles?.density, 32.5),
+        size: readFiniteNumber(ringParticles?.size, 0.335),
+        speed: readFiniteNumber(ringParticles?.speed, 0.05),
+        intensity: readFiniteNumber(ringParticles?.intensity, 4),
+        colorA: {
+            r: readFiniteNumber(ringParticles?.colorA?.r, 0),
+            g: readFiniteNumber(ringParticles?.colorA?.g, 0.8),
+            b: readFiniteNumber(ringParticles?.colorA?.b, 0.8),
+        },
+        colorB: {
+            r: readFiniteNumber(ringParticles?.colorB?.r, 1),
+            g: readFiniteNumber(ringParticles?.colorB?.g, 1),
+            b: readFiniteNumber(ringParticles?.colorB?.b, 1),
+        },
+    });
+    if (Array.isArray(data.effects.frameGraphPostStack) || ringParticles?.enabled) {
+        const stackEntries = normalizeFrameGraphPostEffectStack(data.effects.frameGraphPostStack ?? []);
+        if (ringParticles?.enabled && !stackEntries.some((entry) => entry.id === "ringParticles")) {
+            stackEntries.push({ id: "ringParticles", enabled: true });
+        }
         if (host.setFrameGraphPostEffectStackEntries) {
             host.setFrameGraphPostEffectStackEntries(stackEntries);
         } else {

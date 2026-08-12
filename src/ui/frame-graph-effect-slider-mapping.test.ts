@@ -72,6 +72,16 @@ describe("FrameGraph effect detail slider mapping", () => {
         expect(fromFrameGraphEffectSliderValue("directionalLightShaftsPhaseG", 50)).toBeCloseTo(0);
     });
 
+    it("maps the compact particle preset into the shared range", () => {
+        expect(toFrameGraphEffectSliderValue("ringParticleCount", 180)).toBe(50);
+        expect(toFrameGraphEffectSliderValue("ringParticleDensity", 32.5)).toBe(50);
+        expect(toFrameGraphEffectSliderValue("ringParticleSize", 0.335)).toBe(30);
+        expect(toFrameGraphEffectSliderValue("ringParticleSpeed", 0.05)).toBe(10);
+        expect(toFrameGraphEffectSliderValue("ringParticleIntensity", 4)).toBe(100);
+        expect(fromFrameGraphEffectSliderValue("ringParticleCount", 50)).toBe(180);
+        expect(fromFrameGraphEffectSliderValue("ringParticleDensity", 50)).toBe(32.5);
+    });
+
     it("clamps UI and runtime values at the declared bounds", () => {
         expect(toFrameGraphEffectSliderValue("ssgiStrength", -1)).toBe(0);
         expect(toFrameGraphEffectSliderValue("ssgiStrength", 2)).toBe(100);

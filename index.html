@@ -562,7 +562,6 @@
           <div class="effect-panel-tabs" role="tablist" aria-label="Effect categories">
             <button class="effect-panel-tab effect-panel-tab--active" type="button" role="tab" data-effect-tab="post" aria-selected="true" title="Post Effects">効果</button>
             <button class="effect-panel-tab" type="button" role="tab" data-effect-tab="materials" aria-selected="false" title="Materials / Shaders">材質</button>
-            <button class="effect-panel-tab" type="button" role="tab" data-effect-tab="particles" aria-selected="false" title="Particles" hidden>粒子</button>
             <button class="effect-panel-tab" type="button" role="tab" data-effect-tab="lighting" aria-selected="false" title="Lighting" hidden>光源</button>
           </div>
 
@@ -597,6 +596,7 @@
                 <button type="button" role="menuitem" data-effect-add-post="ssgi" data-i18n="effect.frameGraphPost.effects.ssgi">SSGI</button>
                 <button type="button" role="menuitem" data-effect-add-post="aerialPerspective" data-i18n="effect.frameGraphPost.effects.aerialPerspective">Aerial Perspective</button>
                 <button type="button" role="menuitem" data-effect-add-post="directionalLightShafts" data-i18n="effect.frameGraphPost.effects.directionalLightShafts">Para Flare</button>
+                <button type="button" role="menuitem" data-effect-add-post="ringParticles" data-i18n="effect.frameGraphPost.effects.ringParticles">漂う光粒</button>
                 <button type="button" role="menuitem" data-effect-add-post="vignette" data-i18n="effect.frameGraphPost.effects.vignette">Vignette</button>
                 <button type="button" role="menuitem" data-effect-add-post="grain" data-i18n="effect.frameGraphPost.effects.grain">Grain</button>
                 <button type="button" role="menuitem" data-effect-add-post="sharpen" data-i18n="effect.frameGraphPost.effects.sharpen">Sharpen</button>
@@ -632,25 +632,6 @@
             <div id="shader-panel-note" class="shader-panel-note" data-i18n="empty.loadModel">モデルを読み込んでください</div>
             <div id="shader-material-list" class="shader-material-list">
               <div class="panel-empty-state" data-i18n="empty.noModel">No model</div>
-            </div>
-          </section>
-
-          <section class="effect-panel-view" data-effect-tab-view="particles" hidden>
-            <div class="effect-panel-section-head">
-              <div>
-                <div class="effect-panel-section-title">Particle Layers</div>
-              </div>
-              <button class="effect-panel-add-button" type="button" disabled>+</button>
-            </div>
-            <div class="effect-layer-list">
-              <div class="effect-layer-placeholder">
-                <span class="effect-layer-name">Sparkle Preset</span>
-                <span class="effect-status-badge effect-status-badge--experimental">planned</span>
-              </div>
-              <div class="effect-layer-placeholder">
-                <span class="effect-layer-name">Node Particle Asset</span>
-                <span class="effect-status-badge effect-status-badge--experimental">lab</span>
-              </div>
             </div>
           </section>
 

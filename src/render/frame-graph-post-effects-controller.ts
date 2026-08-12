@@ -3537,6 +3537,9 @@ export class FrameGraphPostEffectsController {
                         this.connectedOrder.push("directionalLightShafts");
                     }
                     break;
+                case "ringParticles":
+                    // Scene-space particles are already present in sceneColor.
+                    break;
                 case "motionBlur":
                     if (this.motionBlurTask) {
                         this.motionBlurTask.sourceTexture = currentTexture;

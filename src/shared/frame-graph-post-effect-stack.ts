@@ -5,6 +5,7 @@ export const FRAME_GRAPH_POST_EFFECT_IDS = [
     "ocean",
     "aerialPerspective",
     "directionalLightShafts",
+    "ringParticles",
     "offsetShadow",
     "offsetHighlight",
     "dof",
@@ -148,6 +149,10 @@ export function isFrameGraphPostEffectActiveInSettings(
             return settings.aerialPerspectiveEnabled;
         case "directionalLightShafts":
             return settings.directionalLightShaftsEnabled;
+        case "ringParticles":
+            // Scene-space helper rendered before the post chain. It lives in the
+            // FrameGraph stack UI, but does not allocate a FrameGraph post task.
+            return false;
         case "offsetShadow":
             return settings.offsetShadowEnabled && settings.offsetShadowStrength > 0.0001;
         case "offsetHighlight":

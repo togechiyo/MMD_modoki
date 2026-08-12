@@ -353,6 +353,9 @@ async function initializeApp(): Promise<void> {
         setLightDirection: (direction) => {
           mmdManager.setLightDirection(direction.x, direction.y, direction.z);
         },
+        setRingParticleSettings: (settings) => mmdManager.setRingParticleSettings(settings),
+        getRingParticleSettings: () => mmdManager.getRingParticleSettings(),
+        seekTo: (frame) => mmdManager.seekTo(frame),
         getCameraKeyframePose: () => mmdManager.getCameraKeyframePose(),
         getFrameGraphPostEffectsState: () => ({
           backend: mmdManager.getPostEffectBackend(),

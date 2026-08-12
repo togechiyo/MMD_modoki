@@ -301,6 +301,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("directionalLightShafts", active); },
     },
     {
+        id: "ringParticles",
+        labelKey: "effect.frameGraphPost.effects.ringParticles",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("ringParticles"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("ringParticles", active); },
+    },
+    {
         id: "motionBlur",
         labelKey: "effect.frameGraphPost.effects.motionBlur",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("motionBlur"),
@@ -4975,6 +4981,21 @@ export class UIController {
                 );
                 break;
             }
+            case "ringParticles": {
+                const settings = this.mmdManager.getRingParticleSettings();
+                const colorA = this.toEffectStackHexColor(settings.colorA);
+                const colorB = this.toEffectStackHexColor(settings.colorB);
+                rows.push(
+                    range("ringParticleCount", label("particleCount"), settings.count, String(toFrameGraphEffectSliderValue("ringParticleCount", settings.count))),
+                    range("ringParticleDensity", label("particleDensity"), settings.density, String(toFrameGraphEffectSliderValue("ringParticleDensity", settings.density))),
+                    range("ringParticleSize", label("particleSize"), settings.size, String(toFrameGraphEffectSliderValue("ringParticleSize", settings.size))),
+                    range("ringParticleSpeed", label("particleSpeed"), settings.speed, String(toFrameGraphEffectSliderValue("ringParticleSpeed", settings.speed))),
+                    range("ringParticleIntensity", label("emissionStrength"), settings.intensity, String(toFrameGraphEffectSliderValue("ringParticleIntensity", settings.intensity))),
+                    color("ringParticleColorA", label("primaryColor"), colorA, colorA),
+                    color("ringParticleColorB", label("secondaryColor"), colorB, colorB),
+                );
+                break;
+            }
             case "offsetShadow": {
                 const offsetShadowColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectOffsetShadowColor());
                 rows.push(
@@ -5207,6 +5228,36 @@ export class UIController {
                 this.mmdManager.setPostEffectDirectionalLightShaftsShadowColor(colorValue.r, colorValue.g, colorValue.b);
                 break;
             }
+            case "ringParticleCount":
+            case "ringParticleDensity":
+            case "ringParticleSize":
+            case "ringParticleSpeed":
+            case "ringParticleIntensity": {
+                const settings = this.mmdManager.getRingParticleSettings();
+                const propertyByField = {
+                    ringParticleCount: "count",
+                    ringParticleDensity: "density",
+                    ringParticleSize: "size",
+                    ringParticleSpeed: "speed",
+                    ringParticleIntensity: "intensity",
+                } as const;
+                this.mmdManager.setRingParticleSettings({
+                    ...settings,
+                    [propertyByField[field]]: Number(actualValue),
+                });
+                break;
+            }
+            case "ringParticleColorA":
+            case "ringParticleColorB": {
+                const colorValue = this.readEffectStackHexColor(String(rawValue));
+                if (!colorValue) return;
+                const settings = this.mmdManager.getRingParticleSettings();
+                this.mmdManager.setRingParticleSettings({
+                    ...settings,
+                    [field === "ringParticleColorA" ? "colorA" : "colorB"]: colorValue,
+                });
+                break;
+            }
             case "offsetShadowStrength":
                 this.mmdManager.postEffectOffsetShadowStrength = Number(actualValue);
                 break;
@@ -5360,6 +5411,14 @@ export class UIController {
             case "directionalLightShaftsLightColor":
             case "directionalLightShaftsShadowColor":
                 return "directionalLightShafts";
+            case "ringParticleCount":
+            case "ringParticleDensity":
+            case "ringParticleSize":
+            case "ringParticleSpeed":
+            case "ringParticleIntensity":
+            case "ringParticleColorA":
+            case "ringParticleColorB":
+                return "ringParticles";
             case "offsetShadowStrength":
             case "offsetShadowOffsetX":
             case "offsetShadowOffsetY":
@@ -5530,6 +5589,32 @@ export class UIController {
             case "directionalLightShaftsShadowColor":
                 valueElement.textContent = this.toEffectStackHexColor(
                     this.mmdManager.getPostEffectDirectionalLightShaftsShadowColor(),
+                );
+                break;
+            case "ringParticleCount":
+            case "ringParticleDensity":
+            case "ringParticleSize":
+            case "ringParticleSpeed":
+            case "ringParticleIntensity": {
+                const settings = this.mmdManager.getRingParticleSettings();
+                const propertyByField = {
+                    ringParticleCount: "count",
+                    ringParticleDensity: "density",
+                    ringParticleSize: "size",
+                    ringParticleSpeed: "speed",
+                    ringParticleIntensity: "intensity",
+                } as const;
+                valueElement.textContent = String(toFrameGraphEffectSliderValue(field, settings[propertyByField[field]]));
+                break;
+            }
+            case "ringParticleColorA":
+                valueElement.textContent = this.toEffectStackHexColor(
+                    this.mmdManager.getRingParticleSettings().colorA,
+                );
+                break;
+            case "ringParticleColorB":
+                valueElement.textContent = this.toEffectStackHexColor(
+                    this.mmdManager.getRingParticleSettings().colorB,
                 );
                 break;
             case "offsetShadowStrength":

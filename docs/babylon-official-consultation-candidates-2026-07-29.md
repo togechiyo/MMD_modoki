@@ -67,6 +67,7 @@ required attachment の付け忘れは、まずアプリ側の graph 配線を�
 | WEBGPU-DDS-10 | BC texture 非対応 adapter で DXT DDS の自動 fallback がない | 使用法の確認 / 機能要望候補 | 低 | 要追加再現 |
 | WEBGPU-IBLSHADOW-11 | IBL Shadows / CDF の `r32float` mipmap が filterability validation に失敗する | capability 確認 / 不具合候補 | 高 | 要現行版再検証 |
 | WEBGPU-SCREENSHOT-12 | Frame Graph + MirrorTexture 併用時の screenshot が黒画像または destroyed texture になる | 不具合候補 / API 経路確認 | 中 | 要現行版再検証 |
+| FG-VOLUMETRIC-13 | WebGPU で方向光の shadow と FrameGraph Volumetric Lighting を組み合わせると renderer / GPU process が終了する | 不具合候補 / 正式な統合経路の質問 | 高 | 要追加再現 |
 | FG-IPP-CLOSED | Image Processing 初期化順で起動直後だけ色が変わる | アプリ側修正 | - | アプリ側解決 |
 | MMD-EDGE-CLOSED | MMD エッジ有効時に WGSL の代わりに HTML が読み込まれて黒画面になる | アプリ側修正 | - | アプリ側解決 |
 
@@ -557,6 +558,86 @@ screenshot helper の engine state 復元のいずれを正式経路とすべき
 - [Concurrent CreateScreenshotUsingRenderTargetAsync breaks rendering](https://forum.babylonjs.com/t/concurrent-createscreenshot-using-rendertargetasync-breaks-rendering/60516)
 - [Rendering artifacts with WebGPU in Electron](https://forum.babylonjs.com/t/rendering-artifacts-with-webgpu/62502)
 
+## FG-VOLUMETRIC-13: WebGPU / 方向光 shadow / FrameGraph Volumetric Lighting の GPU process crash
+
+### 現象
+
+MMD_modoki の方向光へ連動するボリュームライトを作るため、Babylon.js の公式 Frame Graph task を使う次の構成を試した。
+
+```text
+DirectionalLight
+  -> FrameGraphShadowGeneratorTask または既存 shadow depth
+  -> FrameGraphLightingVolumeTask
+  -> FrameGraphVolumetricLightingTask
+```
+
+WebGPU の Electron 実描画で豆腐モデルを読み込んでこの経路を有効にすると、WebGPU validation warning を収集できる段階より前に renderer または GPU process が終了し、Playwright では `Target crashed` となった。黒画面に留まらずプロセスが終了するため、優先度は高とする。
+
+現時点で確認した経路は次の通り。
+
+- 既存の `CascadedShadowGenerator`（CSM）を lighting volume へ共有する bridge: GPU process crash
+- `FrameGraphShadowGeneratorTask`、`FrameGraphLightingVolumeTask`、`FrameGraphVolumetricLightingTask` を独立した公式経路として構成: renderer ready 未到達
+- 通常照明へ影響しない専用 `DirectionalLight` と低解像度の通常 `ShadowGenerator` を作り、その shadow depth を lighting volume へ渡す経路: `Target crashed`
+
+MMD_modoki 側ではクラッシュ経路を残さず、現在は軽量なスクリーンスペースのパラフレアへ置き換えている。
+
+関連メモ:
+
+- [FrameGraph 方向光光芒 初期実装メモ 2026-08-12](./framegraph-directional-light-shafts-implementation-2026-08-12.md)
+
+### 現時点の推定条件
+
+主要な疑いは、次の要素が同居する構成にある。
+
+- WebGPU
+- `DirectionalLight`
+- 方向光の shadow（既存 CSM、Frame Graph shadow task、または専用の通常 shadow depth）
+- `FrameGraphLightingVolumeTask`
+- `FrameGraphVolumetricLightingTask`
+- 通常 scene rendering と Frame Graph post stack の併用
+
+ただし、まだ次は断定しない。
+
+- CSM が必須条件とは限らない。専用の通常 `ShadowGenerator` 経路でも終了している。
+- WebGPU 固有とは未確定。WebGL2 との同一最小構成比較がまだない。
+- Electron / Chromium 固有とは未確定。ブラウザー版 Playground の最小再現がまだない。
+- MMD、PMX材質、babylon-mmd固有とは未確定。Babylon.js単体への縮小がまだ必要。
+- taskの不具合とは未確定。resource接続、shadow ownership、render list、task寿命の誤りでも同様の終了が起こり得る。
+
+したがって、候補名では CSM を重要な再現条件として扱いつつ、責任範囲は
+`WebGPU + DirectionalLight shadow + FrameGraph LightingVolume / VolumetricLighting` の統合問題として管理する。
+
+### 投稿前の切り分け
+
+Babylon.js単体の最小再現を作り、少なくとも次の比較表を埋める。
+
+| Backend | shadow方式 | Volumetric taskなし | LightingVolumeまで | Volumetric taskまで |
+|---|---|---|---|---|
+| WebGPU | 通常 `ShadowGenerator` | 未確認 | 未確認 | MMD_modokiではcrash |
+| WebGPU | CSM | 未確認 | 未確認 | MMD_modokiではcrash |
+| WebGL2 | 通常 `ShadowGenerator` | 未確認 | 未確認 | 未確認 |
+| WebGL2 | CSM | 未確認 | 未確認 | 未確認 |
+
+最小再現ではMMD、PMX、既存post effect、UtilityLayerを外し、箱と平面だけをrender listへ入れる。そのうえで次を記録する。
+
+1. 使用中のBabylon.js版と、相談時点の現行版で再現するか。
+2. ブラウザー版PlaygroundとElectronの両方で再現するか。
+3. `FrameGraphLightingVolumeTask` までで落ちるか、`FrameGraphVolumetricLightingTask` 接続後に落ちるか。
+4. 通常shadow、CSM、`FrameGraphShadowGeneratorTask` で結果が変わるか。
+5. `device.lost`、`uncapturederror`、WebGPU validation、Chromium GPU process終了コードを採取できるか。
+6. shadow texture format、sample count、render list、camera、task生成・破棄順を記録する。
+
+### 公式へ確認したいこと
+
+1. WebGPUで `DirectionalLight` のshadowを `FrameGraphLightingVolumeTask` と `FrameGraphVolumetricLightingTask` へ接続する最小の正式構成は何か。
+2. 既存のscene側 `ShadowGenerator` / CSMが持つshadowをFrame Graph lighting volumeへ共有してよいか。それとも `FrameGraphShadowGeneratorTask` に所有権を統一する必要があるか。
+3. CSMはこのtask構成で対応対象か。非対応ならbuild時の例外や明示的な診断を出せるか。
+4. resource接続の誤りでGPU process自体が終了する既知問題があるか。
+
+### 投稿タイトル案
+
+`WebGPU renderer crashes when DirectionalLight shadows are connected to FrameGraphLightingVolumeTask and FrameGraphVolumetricLightingTask`
+
 ## WebGPU 案件に共通して記録する情報
 
 WebGPU の validation、device loss、上限、format 差分は Babylon.js、browser、
@@ -602,6 +683,7 @@ Chromium 側の問題と確認された過去事例もあるため、browser 最
 | BC feature のない adapter で DXT DDS upload が失敗する | WebGPU capability / fallback 方針 | `WEBGPU-DDS-10` |
 | IBL Shadows の CDF 用 `r32float` mipmap が filterability validation に失敗する | optional feature / format fallback / 旧版事象 | `WEBGPU-IBLSHADOW-11` |
 | Frame Graph + MirrorTexture で screenshot が黒画像または destroyed texture になる | resource lifetime / helper state / 旧版事象 | `WEBGPU-SCREENSHOT-12` |
+| WebGPUで方向光shadowをLightingVolume / VolumetricLightingへ接続するとrendererまたはGPU processが終了する | Frame Graph volumetric統合 / shadow ownership / GPU crash | `FG-VOLUMETRIC-13` |
 | GPU 生成 irradiance texture が黒くなり、IBL 強度が無反応に見える | 外部 HDR 経路の旧版事象 | 現行版で再発時に別候補化 |
 | GLB 読み込み時に `GPUVertexBufferLayout.arrayStride` で pipeline crash した | 原因が混在した旧版事象 | 現行版で再発時のみ候補化 |
 | 巨大な平面へ logarithmic depth を強制すると角度で消える | アプリ側 precision policy | 公式へ出さない |
@@ -687,17 +769,18 @@ WebGPU では reverse depth buffer を使えるため、すべての PBR 材質�
 ## 相談の推奨順
 
 1. `FG-SSS-01` は投稿済み。回答と追加再現依頼を追跡する。
-2. `FG-GEO-02` の Babylon.js 単体最小再現を作る。
-3. `WEBGPU-MORPH-08` を現行版と WebGL2 で再検証し、まず babylon-mmd 側へ相談する。
-4. `WEBGPU-IBLSHADOW-11` を現行版、optional feature、browser で再検証する。
-5. `WEBGPU-SCREENSHOT-12` を Frame Graph / MirrorTexture の小さい組み合わせで再現する。
-6. `FG-LUT-06` の通常 Image Processing / Frame Graph 比較 Playground を作る。
-7. `SSS-COLOR-03` を direct render と Frame Graph render に分けて比較する。
-8. `SSS-SHADOW-04` は描画回数と中間 RT を除外してから別投稿にする。
-9. `WEBGPU-READBACK-09` は public API の最小比較を作って API 質問として出す。
-10. `FG-LIFETIME-07` は class overview、API、公式例で解決しない質問だけに絞る。
-11. `FG-UTILITY-05` は正式な Frame Graph 構成へ寄せても問題が残る場合だけ相談する。
-12. `WEBGPU-DDS-10` と旧版 SSAO2 / PrePass / MRT は現行版で再発した場合だけ候補へ昇格する。
+2. `FG-VOLUMETRIC-13` はGPU process crashのため優先し、Babylon.js単体でWebGPU / WebGL2と通常shadow / CSMの最小比較を作る。
+3. `FG-GEO-02` の Babylon.js 単体最小再現を作る。
+4. `WEBGPU-MORPH-08` を現行版と WebGL2 で再検証し、まず babylon-mmd 側へ相談する。
+5. `WEBGPU-IBLSHADOW-11` を現行版、optional feature、browser で再検証する。
+6. `WEBGPU-SCREENSHOT-12` を Frame Graph / MirrorTexture の小さい組み合わせで再現する。
+7. `FG-LUT-06` の通常 Image Processing / Frame Graph 比較 Playground を作る。
+8. `SSS-COLOR-03` を direct render と Frame Graph render に分けて比較する。
+9. `SSS-SHADOW-04` は描画回数と中間 RT を除外してから別投稿にする。
+10. `WEBGPU-READBACK-09` は public API の最小比較を作って API 質問として出す。
+11. `FG-LIFETIME-07` は class overview、API、公式例で解決しない質問だけに絞る。
+12. `FG-UTILITY-05` は正式な Frame Graph 構成へ寄せても問題が残る場合だけ相談する。
+13. `WEBGPU-DDS-10` と旧版 SSAO2 / PrePass / MRT は現行版で再発した場合だけ候補へ昇格する。
 
 ## 投稿パッケージのチェックリスト
 

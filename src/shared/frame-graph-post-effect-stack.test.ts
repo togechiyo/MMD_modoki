@@ -88,6 +88,11 @@ describe("frame graph post effect stack helpers", () => {
             "aerialPerspective",
             "bloom",
         ]);
+        expect(addFrameGraphPostEffectId(["aerialPerspective", "bloom"], "ringParticles")).toEqual([
+            "aerialPerspective",
+            "ringParticles",
+            "bloom",
+        ]);
     });
 
     it("moves ids without dropping disabled stack positions", () => {

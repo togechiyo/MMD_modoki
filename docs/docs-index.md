@@ -311,6 +311,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [Emissive Light Assist 構想メモ](./emissive-light-assist-concept-2026-06-12.md)
 - [外部 WGSL シェーダー読み込み構想メモ](./external-wgsl-shader-loading-concept-2026-06-12.md)
 - [Node Particle Effects 構想メモ](./node-particle-effects-concept-2026-06-12.md)
+- [環状光粒エフェクト 実装メモ 2026-08-12](./ring-particle-effect-implementation-note-2026-08-12.md)
 - [アクセサリ構想メモ（対象セレクタ統合と対応形式の拡張）](./accessory-target-selector-and-format-expansion-concept-2026-08-04.md)
 - [床・ステージ表面構想メモ](./stage-surface-design-note-2026-07-30.md)
 - [VMDU（Unicode 版 VMD）構想メモ](./vmdu-unicode-vmd-concept-2026-08-04.md)

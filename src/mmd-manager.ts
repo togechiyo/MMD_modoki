@@ -150,6 +150,11 @@ import {
     syncLuminousGlowLayer as syncLuminousGlowLayerImpl,
 } from "./scene/material-shader-service";
 import {
+    DEFAULT_RING_PARTICLE_SETTINGS,
+    RingParticleController,
+    type RingParticleSettings,
+} from "./scene/ring-particle-controller";
+import {
     getAntialiasEnabled as getAntialiasEnabledImpl,
     getDofAutoFocusEnabled as getDofAutoFocusEnabledImpl,
     getDofAutoFocusNearOffsetMm as getDofAutoFocusNearOffsetMmImpl,
@@ -1851,6 +1856,8 @@ ${beforeFogAppendBlock}
     private postEffectGlowGlareLengthValue = 48;
     private postEffectGlowGlareAngleValue = 0;
     private postEffectGlowGlarePowerValue = 0.4;
+    private ringParticleSettingsValue: RingParticleSettings = structuredClone(DEFAULT_RING_PARTICLE_SETTINGS);
+    private ringParticleController: RingParticleController | null = null;
     private postEffectLutEnabledValue = false;
     private postEffectLutIntensityValue = 1;
     private postEffectLutPresetValue = "anime-soft";
@@ -6107,6 +6114,12 @@ ${beforeFogAppendBlock}
         this.camera.inputs.removeByType("ArcRotateCameraPointersInput");
         this.camera.inputs.removeByType("ArcRotateCameraMouseWheelInput");
         this.scene.activeCamera = this.camera;
+        this.ringParticleController = new RingParticleController(
+            this.scene,
+            this.camera,
+            () => this._currentFrame,
+        );
+        this.ringParticleController.setSettings(this.ringParticleSettingsValue);
         this.initializeBoneGizmoSystem();
         canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
         canvas.addEventListener("pointermove", this.onCanvasPointerMove);
@@ -9673,12 +9686,15 @@ ${beforeFogAppendBlock}
             return null;
         }
         const clampedAlpha = Math.max(0, Math.min(1, alpha));
-        material.diffuseColor.copyFrom(color);
-        material.ambientColor.copyFrom(color);
+        // Use the mask texture as alpha and add its tint only once through
+        // emissive. Diffuse + emissive previously doubled the HDR value and
+        // clipped colored particles to white.
+        material.diffuseColor.copyFrom(Color3.Black());
+        material.ambientColor.copyFrom(Color3.Black());
         material.emissiveColor.copyFrom(color);
         material.alpha = clampedAlpha;
         material.diffuseTexture = texture;
-        material.emissiveTexture = texture;
+        material.emissiveTexture = null;
         material.opacityTexture = null;
         material.useAlphaFromDiffuseTexture = Boolean(texture?.hasAlpha);
         material.transparencyMode = texture?.hasAlpha || clampedAlpha < 0.999
@@ -9981,6 +9997,7 @@ ${beforeFogAppendBlock}
             }
         }
         this.frameGraphPostEffectStackIdsValue = normalized;
+        this.syncRingParticleEnabledFromFrameGraphStack();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
 
@@ -10008,6 +10025,7 @@ ${beforeFogAppendBlock}
         }
         this.frameGraphPostEffectStackIdsValue = normalized;
         this.frameGraphPostEffectStackEnabledValue = enabledById;
+        this.syncRingParticleEnabledFromFrameGraphStack();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
 
@@ -10040,6 +10058,7 @@ ${beforeFogAppendBlock}
             return;
         }
         this.frameGraphPostEffectStackEnabledValue.set(id, next);
+        this.syncRingParticleEnabledFromFrameGraphStack();
         this.refreshFrameGraphPostEffectsBackendForStackStateChange();
     }
 
@@ -10061,6 +10080,8 @@ ${beforeFogAppendBlock}
             case "aerialPerspective":
                 return false;
             case "directionalLightShafts":
+                return false;
+            case "ringParticles":
                 return false;
             case "offsetShadow":
                 return this.postEffectOffsetShadowEnabledValue;
@@ -10097,7 +10118,19 @@ ${beforeFogAppendBlock}
     }
 
     private getActiveFrameGraphPostEffectIds(): FrameGraphPostEffectId[] {
-        return FRAME_GRAPH_POST_EFFECT_IDS.filter((id) => this.isFrameGraphPostEffectActive(id));
+        return FRAME_GRAPH_POST_EFFECT_IDS.filter((id) => (
+            id !== "ringParticles" && this.isFrameGraphPostEffectActive(id)
+        ));
+    }
+
+    private syncRingParticleEnabledFromFrameGraphStack(): void {
+        const enabled = this.frameGraphPostEffectStackIdsValue.includes("ringParticles")
+            && (this.frameGraphPostEffectStackEnabledValue.get("ringParticles") ?? true);
+        if (this.ringParticleSettingsValue.enabled === enabled) return;
+        this.setRingParticleSettings({
+            ...this.ringParticleSettingsValue,
+            enabled,
+        });
     }
 
     private areFrameGraphPostEffectIdsEqual(
@@ -10764,6 +10797,16 @@ ${beforeFogAppendBlock}
     set postEffectGlowIntensity(v: number) {
         this.postEffectGlowIntensityValue = Math.max(0, Math.min(4, v));
         this.applyDefaultPipelinePostProcessSettings();
+    }
+
+    getRingParticleSettings(): RingParticleSettings {
+        return structuredClone(this.ringParticleSettingsValue);
+    }
+
+    setRingParticleSettings(settings: RingParticleSettings): void {
+        this.ringParticleController?.setSettings(settings);
+        this.ringParticleSettingsValue = this.ringParticleController?.getSettings()
+            ?? structuredClone(settings);
     }
 
     /** LuminousGlow threshold (0..1.5). */
@@ -13768,6 +13811,8 @@ ${beforeFogAppendBlock}
         this.renderingCanvas.removeEventListener("contextmenu", this.onCanvasContextMenu);
         this.renderingCanvas.removeEventListener("wheel", this.onCanvasWheel);
         this.disposeBoneGizmoSystem();
+        this.ringParticleController?.dispose();
+        this.ringParticleController = null;
         window.removeEventListener("resize", this.onWindowResize);
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();

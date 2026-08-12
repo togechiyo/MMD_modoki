@@ -211,6 +211,9 @@ declare global {
                 target: { x: number; y: number; z: number },
             ) => void;
             setLightDirection: (direction: { x: number; y: number; z: number }) => void;
+            setRingParticleSettings: (settings: ProjectRingParticleState) => void;
+            getRingParticleSettings: () => ProjectRingParticleState;
+            seekTo: (frame: number) => void;
             getCameraKeyframePose: () => {
                 position: { x: number; y: number; z: number };
                 rotation: { x: number; y: number; z: number };
@@ -594,6 +597,7 @@ export interface ProjectEffectState {
     fogDensity?: number;
     fogOpacity?: number;
     fogColor?: ProjectRgbColor;
+    ringParticles?: ProjectRingParticleState;
     frameGraphPostStack?: FrameGraphPostEffectStackEntry[];
     gammaEncodingVersion?: 2;
 }
@@ -760,6 +764,24 @@ export interface PngSequenceExportRequest {
     outputHeight: number;
     exportKind?: "sequence" | "single";
     singleFileName?: string;
+}
+
+export interface ProjectRingParticleState {
+    enabled: boolean;
+    count: number;
+    density: number;
+    size: number;
+    speed: number;
+    intensity: number;
+    colorA: ProjectRgbColor;
+    colorB: ProjectRgbColor;
+    /** Legacy pre-FrameGraph particle layout values. */
+    radius?: number;
+    spread?: number;
+    height?: number;
+    heightSpread?: number;
+    twinkle?: number;
+    luminousLinked?: boolean;
 }
 
 export interface PngSequenceExportDiagnostics {

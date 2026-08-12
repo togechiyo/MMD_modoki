@@ -933,12 +933,20 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
         return createLuminousGlowOccluderState(texture);
     }
 
+    const preserveChroma = material.mmdLuminousPreserveChroma === true;
     const diffuseColor = readMaterialColor(material, ["diffuseColor", "albedoColor", "baseColor"]) ?? Color3.Black();
     const ambientColor = readMaterialColor(material, ["ambientColor"]) ?? Color3.Black();
+    const emissiveColor = readMaterialColor(material, ["emissiveColor"]) ?? Color3.Black();
     const combined = new Color3(
-        Math.min(LUMINOUS_GLOW_MAX_COLOR, Math.max(0, diffuseColor.r + ambientColor.r * LUMINOUS_GLOW_AMBIENT_WEIGHT)),
-        Math.min(LUMINOUS_GLOW_MAX_COLOR, Math.max(0, diffuseColor.g + ambientColor.g * LUMINOUS_GLOW_AMBIENT_WEIGHT)),
-        Math.min(LUMINOUS_GLOW_MAX_COLOR, Math.max(0, diffuseColor.b + ambientColor.b * LUMINOUS_GLOW_AMBIENT_WEIGHT)),
+        Math.min(LUMINOUS_GLOW_MAX_COLOR, Math.max(0, preserveChroma
+            ? emissiveColor.r
+            : diffuseColor.r + ambientColor.r * LUMINOUS_GLOW_AMBIENT_WEIGHT)),
+        Math.min(LUMINOUS_GLOW_MAX_COLOR, Math.max(0, preserveChroma
+            ? emissiveColor.g
+            : diffuseColor.g + ambientColor.g * LUMINOUS_GLOW_AMBIENT_WEIGHT)),
+        Math.min(LUMINOUS_GLOW_MAX_COLOR, Math.max(0, preserveChroma
+            ? emissiveColor.b
+            : diffuseColor.b + ambientColor.b * LUMINOUS_GLOW_AMBIENT_WEIGHT)),
     );
     const maxChannel = Math.max(combined.r, combined.g, combined.b);
     if (maxChannel <= 1e-4) {
@@ -961,7 +969,7 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
     const coreColor = mixColorTowardValue(
         scaleColor(luminousColor, 1.08),
         luminousPeak * 1.1,
-        LUMINOUS_GLOW_CORE_WHITE_MIX,
+        preserveChroma ? 0 : LUMINOUS_GLOW_CORE_WHITE_MIX,
     );
 
     return {

@@ -8,6 +8,7 @@ import type {
     ProjectSerializedModelExternalParentTrack,
     ProjectSerializedAccessoryTransformTrack,
     SsgiBlendMode,
+    ProjectRingParticleState,
 } from "../types";
 import type { FrameGraphPostEffectStackEntry } from "../shared/frame-graph-post-effect-stack";
 import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
@@ -241,6 +242,7 @@ type ProjectExportHost = {
     getSkydomeBackgroundStyle?: () => SkydomeBackgroundStyle;
     getExternalWgslToonShaderPath: () => string | null;
     getPostEffectFogColor: () => { r: number; g: number; b: number };
+    getRingParticleSettings?: () => ProjectRingParticleState;
     getFrameGraphPostEffectStackEntries?: () => FrameGraphPostEffectStackEntry[];
     isGroundVisible: () => boolean;
     isSkydomeVisible: () => boolean;
@@ -538,6 +540,16 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             fogDensity: host.postEffectFogDensity,
             fogOpacity: host.postEffectFogOpacity,
             fogColor: host.getPostEffectFogColor(),
+            ringParticles: host.getRingParticleSettings?.() ?? {
+                enabled: false,
+                count: 180,
+                density: 32.5,
+                size: 0.335,
+                speed: 0.05,
+                intensity: 4,
+                colorA: { r: 0, g: 0.8, b: 0.8 },
+                colorB: { r: 1, g: 1, b: 1 },
+            },
             frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.()
                 .filter((entry) => entry.id !== "ocean"),
             gammaEncodingVersion: 2,

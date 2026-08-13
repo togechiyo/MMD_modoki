@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     readBinaryFile: (filePath: string) =>
         ipcRenderer.invoke('file:readBinary', filePath),
+    readMmdModelHeader: (filePath: string) =>
+        ipcRenderer.invoke('file:readMmdModelHeader', filePath),
     readTextFile: (filePath: string) =>
         ipcRenderer.invoke('file:readText', filePath),
     getFileInfo: (filePath: string) =>

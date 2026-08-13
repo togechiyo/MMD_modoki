@@ -1,6 +1,7 @@
 import type { FrameGraphPostEffectStackEntry } from "./shared/frame-graph-post-effect-stack";
 import type { MmdMaterialPipelinePreset } from "./shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "./shared/mmd-render-order";
+import type { MmdModelHeaderPreview } from "./shared/mmd-model-header";
 
 export interface ElectronAPI {
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
@@ -10,6 +11,7 @@ export interface ElectronAPI {
     snapMainWindowContentAspect: (aspectRatio: number) => Promise<boolean>;
     getPathForDroppedFile: (file: File) => string | null;
     readBinaryFile: (filePath: string) => Promise<Buffer | null>;
+    readMmdModelHeader: (filePath: string) => Promise<MmdModelHeaderPreview | null>;
     readTextFile: (filePath: string) => Promise<string | null>;
     getFileInfo: (filePath: string) => Promise<{ name: string; path: string; size: number; extension: string } | null>;
     fileExists: (filePath: string) => Promise<boolean>;
@@ -181,6 +183,8 @@ declare global {
         mmdModokiE2e?: {
             exportProjectState: () => MmdModokiProjectFileV1;
             loadModel: (filePath: string) => Promise<ModelInfo | null>;
+            loadModelInteractively: (filePath: string) => Promise<ModelInfo | null>;
+            getLoadedModelCount: () => number;
             getModelBoneRenderedPosition: (
                 modelIndex: number,
                 boneName: string,

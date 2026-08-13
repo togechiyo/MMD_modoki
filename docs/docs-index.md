@@ -101,6 +101,7 @@
 
 ## UI / レイアウト / 操作面
 
+- [PMX モデルコメント通知 2026-08-13](./pmx-model-comment-notice-2026-08-13.md)
 - [MMD らしい UI 再設計メモ](./mmd-like-ui-redesign-note-2026-05-20.md)
 - [UI 再編成スコープ 2026-06-18](./ui-reorganization-scope-2026-06-18.md)
 - [ui-controller.ts 分割方針メモ](./ui-controller-split-plan.md)

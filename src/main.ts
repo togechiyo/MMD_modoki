@@ -23,6 +23,7 @@ import type {
   SmokeRendererFailurePayload,
   SmokeRendererReadyPayload,
 } from './types';
+import { parseMmdModelHeader } from './shared/mmd-model-header';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -1093,6 +1094,19 @@ ipcMain.handle('file:readBinary', async (_event, filePath: string) => {
     return buffer;
   } catch (err) {
     writeAppLog('error', 'ipc', 'failed to read binary file', {
+      filePath,
+      ...createLogErrorData(err),
+    });
+    return null;
+  }
+});
+
+ipcMain.handle('file:readMmdModelHeader', async (_event, filePath: string) => {
+  try {
+    const buffer = fs.readFileSync(filePath);
+    return parseMmdModelHeader(buffer);
+  } catch (err) {
+    writeAppLog('error', 'ipc', 'failed to read MMD model header', {
       filePath,
       ...createLogErrorData(err),
     });

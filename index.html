@@ -450,6 +450,18 @@
             <span class="hint-text" data-i18n="viewport.empty.hint">ツールバーの「ファイル読込」ボタンか、Ctrl+Oで開く</span>
           </div>
         </div>
+        <aside id="model-comment-notice" class="model-comment-notice" role="dialog" aria-labelledby="model-comment-notice-title" hidden>
+          <div class="model-comment-notice__header">
+            <strong id="model-comment-notice-title" class="model-comment-notice__title"></strong>
+            <button id="model-comment-notice-close" class="model-comment-notice__close" type="button" aria-label="閉じる" data-i18n-aria-label="viewport.modelComment.close">×</button>
+          </div>
+          <div id="model-comment-notice-meta" class="model-comment-notice__meta"></div>
+          <div id="model-comment-notice-body" class="model-comment-notice__body"></div>
+          <div class="model-comment-notice__actions">
+            <button id="model-comment-notice-ok" class="model-comment-notice__button model-comment-notice__button--primary" type="button">OK</button>
+            <button id="model-comment-notice-cancel" class="model-comment-notice__button" type="button">キャンセル</button>
+          </div>
+        </aside>
         <div id="viewport-bottom-bar" class="viewport-bottom-bar">
           <div class="viewport-seek-transport" role="group" aria-label="Viewport playback controls">
             <button id="viewport-seek-play-toggle" class="viewport-seek-play-btn" type="button" data-i18n-title="viewportSeekBar.play" aria-label="再生">▶</button>

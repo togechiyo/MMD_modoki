@@ -32,6 +32,7 @@ import { LayoutUiController } from "./ui/layout-ui-controller";
 import { LensEffectController } from "./ui/lens-effect-controller";
 import { LutPanelController } from "./ui/lut-panel-controller";
 import { ModelInfoPanelController, MODEL_INFO_CAMERA_SELECT_VALUE, type ModelInfoSelectState } from "./ui/model-info-panel-controller";
+import { ModelCommentNoticeController } from "./ui/model-comment-notice-controller";
 import { ModelEdgeController } from "./ui/model-edge-controller";
 import { ModelExternalParentController } from "./ui/model-external-parent-controller";
 import { installEnterCommitNumberInput } from "./ui/panel-control-helpers";
@@ -423,6 +424,7 @@ export class UIController {
     private statusText: HTMLElement;
     private statusDot: HTMLElement;
     private viewportOverlay: HTMLElement;
+    private readonly modelCommentNoticeController: ModelCommentNoticeController;
     private btnKeyframeAdd: HTMLButtonElement;
     private btnKeyframeCopy: HTMLButtonElement;
     private btnKeyframePaste: HTMLButtonElement;
@@ -516,6 +518,7 @@ export class UIController {
         this.viewportSeekBarController?.refreshLocale();
         this.viewportAxisHandleController?.refreshLocale();
         this.viewportTopBarController?.refreshLocale();
+        this.modelCommentNoticeController.refreshLocale();
         this.dofPanelController?.refreshFocusTargetControls();
         this.refreshFrameGraphPostAddUi();
         this.refreshShaderPanel();
@@ -556,6 +559,7 @@ export class UIController {
         this.statusText = getRequiredElement("status-text");
         this.statusDot = queryRequiredElement(".status-dot");
         this.viewportOverlay = getRequiredElement("viewport-overlay");
+        this.modelCommentNoticeController = new ModelCommentNoticeController();
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
         this.btnKeyframeCopy = document.getElementById("btn-kf-copy") as HTMLButtonElement;
         this.btnKeyframePaste = document.getElementById("btn-kf-paste") as HTMLButtonElement;
@@ -3229,8 +3233,7 @@ export class UIController {
                 return;
             case "pmx":
             case "pmd":
-                this.setStatus("Loading PMX/PMD...", true);
-                await this.mmdManager.loadPMX(filePath);
+                await this.loadModelInteractively(filePath);
                 return;
             case "x": {
                 this.setStatus("Loading X model...", true);
@@ -3314,8 +3317,27 @@ export class UIController {
 
         if (!filePath) return;
 
+        await this.loadModelInteractively(filePath);
+    }
+
+    public async loadModelInteractively(filePath: string): Promise<ModelInfo | null> {
+        this.setStatus(t("viewport.modelComment.waiting"), false);
+        const header = await window.electronAPI.readMmdModelHeader(filePath);
+        if (!header) {
+            this.setStatus(t("viewport.modelComment.readFailed"), false);
+            this.showToast(t("viewport.modelComment.readFailed"), "error");
+            return null;
+        }
+
+        const confirmed = await this.modelCommentNoticeController.confirm(header);
+        if (!confirmed) {
+            this.setStatus(t("viewport.modelComment.canceled"), false);
+            this.showToast(t("viewport.modelComment.canceled"), "info");
+            return null;
+        }
+
         this.setStatus("Loading PMX/PMD...", true);
-        await this.mmdManager.loadPMX(filePath);
+        return await this.mmdManager.loadPMX(filePath);
     }
 
     private async loadVMD(): Promise<void> {

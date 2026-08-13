@@ -326,11 +326,13 @@ async function initializeApp(): Promise<void> {
     const bottomPanel = new BottomPanel();
     bottomPanel.setMmdManager(mmdManager);
 
-    new UIController(mmdManager, timeline, bottomPanel);
+    const uiController = new UIController(mmdManager, timeline, bottomPanel);
     if (new URLSearchParams(window.location.search).get("e2e") === "1") {
       window.mmdModokiE2e = {
         exportProjectState: () => mmdManager.exportProjectState(),
         loadModel: (filePath) => mmdManager.loadPMX(filePath),
+        loadModelInteractively: (filePath) => uiController.loadModelInteractively(filePath),
+        getLoadedModelCount: () => mmdManager.getLoadedModels().length,
         getModelBoneRenderedPosition: (modelIndex, boneName) => (
           mmdManager.getModelBoneRenderedPosition(modelIndex, boneName)
         ),

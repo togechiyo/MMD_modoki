@@ -77,9 +77,17 @@ mmd_modoki.physics.dampingCorrectionAmount
 
 ```text
 amount = 0.00 -> gravity scale = 1.0
-amount = 1.00 -> gravity scale = 0.75
-gravity scale = 1 - amount * (1 - 0.75)
+amount = 1.00 -> gravity scale = 0.0
+gravity scale = 1 - amount
 ```
+
+2026-08-13 の `可変追従ボーン_Ver2.pmx` 調査では、質量 `1`、重力 `98`、Yバネ `388` の定常沈下が
+理論値 `98 / 388 ≈ 0.25258` と一致した。MMD本体では見えない沈下を減衰 `1.0` 剛体の互換差として
+比較できるよう、最大補正を従来の gravity scale `0.75` から `0.0`（重力相殺）へ拡張した。
+補正対象は減衰 `1.0` 相当の dynamic 剛体に限り、互換補正全体の既定値は OFF のままとする。
+
+動的外部親モデルでは、外部親変換後の追加 `syncBodies()` は重力相殺力を再注入しない。
+通常の物理入力で一度だけ補正力を入れ、追加同期ではボーン追従剛体の姿勢・速度だけを更新する。
 
 保存キー:
 

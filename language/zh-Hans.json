@@ -718,7 +718,7 @@
     "dialog.physics.dampingCap": "Damping correction",
     "dialog.physics.gravityScale": "Gravity correction",
     "dialog.physics.massScale": "Mass toward 1 amount",
-    "dialog.physics.fullyDampedNote": "0 means no correction and 1 means max correction. Damping/gravity affect rigid bodies whose linear and angular damping are both 1.0. Mass toward 1 affects zero-limit 6DOF mass correction.",
+    "dialog.physics.fullyDampedNote": "0 means no correction and 1 means max correction. Gravity correction 1 cancels gravity for targeted bodies. Damping/gravity affect rigid bodies whose linear and angular damping are both 1.0. Mass toward 1 affects zero-limit 6DOF mass correction.",
     "dialog.lightShadow.title": "Light/Shadow Quality Settings",
     "dialog.lightShadow.qualityHigh": "High",
     "dialog.lightShadow.qualityMedium": "Medium",

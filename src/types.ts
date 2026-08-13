@@ -206,6 +206,10 @@ declare global {
             } | null;
             getCameraTarget: () => { x: number; y: number; z: number };
             getCameraPosition: () => { x: number; y: number; z: number };
+            setFullyDampedPhysicsCompatibilityCorrection: (
+                enabled: boolean,
+                gravityAmount: number,
+            ) => boolean;
             setCameraPose: (
                 position: { x: number; y: number; z: number },
                 target: { x: number; y: number; z: number },

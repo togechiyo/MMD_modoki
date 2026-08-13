@@ -346,6 +346,12 @@ async function initializeApp(): Promise<void> {
         getCameraExternalParent: () => mmdManager.getCameraExternalParent(),
         getCameraTarget: () => mmdManager.getCameraTarget(),
         getCameraPosition: () => mmdManager.getCameraPosition(),
+        setFullyDampedPhysicsCompatibilityCorrection: (enabled, gravityAmount) => {
+          mmdManager.setFullyDampedRigidBodyDampingCorrectionAmount(0);
+          mmdManager.setAbnormalDynamicRigidBodyMassTowardUnit(0);
+          mmdManager.setFullyDampedRigidBodyGravityCorrectionAmount(gravityAmount);
+          return mmdManager.setFullyDampedRigidBodyCorrectionEnabled(enabled);
+        },
         setCameraPose: (position, target) => {
           mmdManager.setCameraPosition(position.x, position.y, position.z);
           mmdManager.setCameraTarget(target.x, target.y, target.z);

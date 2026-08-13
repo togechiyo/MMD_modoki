@@ -259,6 +259,33 @@ function createPlateModel(segmentCount = 16) {
     };
 }
 
+function createDynamicFollowerModel() {
+    const base = createTofuModel();
+    return {
+        ...base,
+        modelName: "Dynamic External Parent Follower",
+        englishModelName: "Dynamic External Parent Follower",
+        comment: "Generated physics follower for external-parent E2E coverage",
+        bones: [
+            { name: "External Parent Root", englishName: "External Parent Root", parentBoneIndex: -1 },
+            { name: "Physics Input", englishName: "Physics Input", parentBoneIndex: 0 },
+            { name: "Camera Output", englishName: "Camera Output", parentBoneIndex: 1 },
+        ],
+        rigidBodies: [
+            { name: "Physics Input", boneIndex: 1, physicsMode: 0 },
+            { name: "Camera Output", boneIndex: 2, physicsMode: 1 },
+        ],
+        joints: [{
+            name: "Horizontal Delay",
+            rigidbodyIndexA: 0,
+            rigidbodyIndexB: 1,
+            positionMin: [-1000, -1000, -1000],
+            positionMax: [1000, 1000, 1000],
+            springPosition: [388, 388, 388],
+        }],
+    };
+}
+
 function writePmx(model) {
     const writer = new PmxWriter();
     const vertexIndexSize = model.vertices.length <= 255 ? 1 : 2;
@@ -320,25 +347,68 @@ function writePmx(model) {
         writer.int32(material.indices.length);
     }
 
-    writer.int32(1); // bones
-    writer.text("センター");
-    writer.text("Center");
-    writer.vector([0, 0, 0]);
-    writer.int8(-1);
-    writer.int32(0);
-    writer.uint16(BONE_FLAGS.rotatable | BONE_FLAGS.movable | BONE_FLAGS.visible | BONE_FLAGS.controllable);
-    writer.vector([0, 1, 0]);
+    const bones = model.bones ?? [
+        { name: "センター", englishName: "Center", parentBoneIndex: -1 },
+    ];
+    writer.int32(bones.length);
+    for (const bone of bones) {
+        writer.text(bone.name);
+        writer.text(bone.englishName);
+        writer.vector([0, 0, 0]);
+        writer.int8(bone.parentBoneIndex);
+        writer.int32(0);
+        writer.uint16(BONE_FLAGS.rotatable | BONE_FLAGS.movable | BONE_FLAGS.visible | BONE_FLAGS.controllable);
+        writer.vector([0, 1, 0]);
+    }
 
     writer.int32(0); // morphs
     writer.int32(1); // display frames
     writer.text("Root");
     writer.text("Root");
     writer.uint8(1);
-    writer.int32(1);
-    writer.uint8(0); // bone frame
-    writer.int8(0);
-    writer.int32(0); // rigid bodies
-    writer.int32(0); // joints
+    writer.int32(bones.length);
+    for (let boneIndex = 0; boneIndex < bones.length; boneIndex += 1) {
+        writer.uint8(0); // bone frame
+        writer.int8(boneIndex);
+    }
+
+    const rigidBodies = model.rigidBodies ?? [];
+    writer.int32(rigidBodies.length);
+    for (const rigidBody of rigidBodies) {
+        writer.text(rigidBody.name);
+        writer.text(rigidBody.name);
+        writer.int8(rigidBody.boneIndex);
+        writer.uint8(0); // collision group
+        writer.uint16(0); // keep overlapping control bodies from colliding
+        writer.uint8(0); // sphere
+        writer.vector([2, 0, 0]);
+        writer.vector([0, 0, 0]);
+        writer.vector([0, 0, 0]);
+        writer.float32(1);
+        writer.float32(1); // linear damping
+        writer.float32(1); // angular damping
+        writer.float32(0); // restitution
+        writer.float32(0.5); // friction
+        writer.uint8(rigidBody.physicsMode);
+    }
+
+    const joints = model.joints ?? [];
+    writer.int32(joints.length);
+    for (const joint of joints) {
+        writer.text(joint.name);
+        writer.text(joint.name);
+        writer.uint8(0); // spring 6DoF
+        writer.int8(joint.rigidbodyIndexA);
+        writer.int8(joint.rigidbodyIndexB);
+        writer.vector([0, 0, 0]);
+        writer.vector([0, 0, 0]);
+        writer.vector(joint.positionMin);
+        writer.vector(joint.positionMax);
+        writer.vector([Math.PI / 180, Math.PI / 180, Math.PI / 180]);
+        writer.vector([0, 0, 0]);
+        writer.vector(joint.springPosition);
+        writer.vector([0, 0, 0]);
+    }
 
     return writer.build();
 }
@@ -375,18 +445,19 @@ function validateSourceGeometry(model) {
     }
 }
 
-async function validateModel(PmxReader, filePath, expectedName) {
+async function validateModel(PmxReader, filePath, model) {
     const data = await readFile(filePath);
     const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
     const parsed = await PmxReader.ParseAsync(arrayBuffer);
     assert.equal(parsed.header.version, 2);
     assert.equal(parsed.header.encoding, 0);
-    assert.equal(parsed.header.modelName, expectedName);
-    assert.equal(parsed.bones.length, 1);
-    assert.equal(parsed.bones[0].name, "センター");
+    const expectedBones = model.bones ?? [{ name: "センター" }];
+    assert.equal(parsed.header.modelName, model.modelName);
+    assert.equal(parsed.bones.length, expectedBones.length);
+    assert.deepEqual(parsed.bones.map((bone) => bone.name), expectedBones.map((bone) => bone.name));
     assert.deepEqual(parsed.bones[0].position, [0, 0, 0]);
-    assert.equal(parsed.rigidBodies.length, 0);
-    assert.equal(parsed.joints.length, 0);
+    assert.equal(parsed.rigidBodies.length, model.rigidBodies?.length ?? 0);
+    assert.equal(parsed.joints.length, model.joints?.length ?? 0);
     assert.ok(parsed.vertices.length > 0);
     assert.ok(parsed.indices.length > 0);
     assert.equal(
@@ -400,6 +471,7 @@ async function main() {
     const models = [
         ["tofu.pmx", createTofuModel()],
         ["plate.pmx", createPlateModel()],
+        ["dynamic-follower.pmx", createDynamicFollowerModel()],
     ];
 
     const vite = await createServer({
@@ -416,7 +488,7 @@ async function main() {
             validateSourceGeometry(model);
             const outputPath = path.join(outputDirectory, fileName);
             await writeFile(outputPath, writePmx(model));
-            await validateModel(PmxReader, outputPath, model.modelName);
+            await validateModel(PmxReader, outputPath, model);
             console.log(`[test-model] generated and validated: ${path.relative(repositoryRoot, outputPath)}`);
         }
     } finally {

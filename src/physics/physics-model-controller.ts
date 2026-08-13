@@ -6,6 +6,7 @@ import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
 import type { MmdWasmModel } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmModel";
 import { logDebugIfEnabled, logWarn } from "../app-logger";
 import type { WebmPhysicsModelSnapshot, WebmPhysicsRigidBodySnapshot } from "../types";
+import { fullyDampedGravityScaleFromCorrectionAmount } from "./physics-compatibility-correction";
 
 const MMD_CONSTRAINT_ERP_VALUE = 0.475;
 const MMD_CONSTRAINT_CFM_VALUE = 0;
@@ -30,11 +31,11 @@ const RUNTIME_RIGID_BODY_DAMPING_LIMIT = 0.999999;
 const PHYSICS_COMPATIBILITY_CORRECTION_ENABLED_KEY = "mmd_modoki.physics.compatibilityCorrectionEnabled";
 const RUNTIME_RIGID_BODY_DAMPING_CAP_DISABLE_KEY = "mmd_modoki.physics.disableDampingCap";
 const RUNTIME_RIGID_BODY_DAMPING_CORRECTION_AMOUNT_KEY = "mmd_modoki.physics.dampingCorrectionAmount";
-const FULLY_DAMPED_RIGID_BODY_GRAVITY_SCALE_MIN = 0.75;
 const FULLY_DAMPED_RIGID_BODY_GRAVITY_SCALE_DISABLE_KEY = "mmd_modoki.physics.disableFullyDampedGravityScale";
 const FULLY_DAMPED_RIGID_BODY_GRAVITY_CORRECTION_AMOUNT_KEY = "mmd_modoki.physics.fullyDampedGravityCorrectionAmount";
 const FOLLOW_BONE_VELOCITY_SYNC_DT_SECONDS = 1 / 60;
 const FOLLOW_BONE_VELOCITY_SYNC_DISABLE_KEY = "mmd_modoki.physics.disableFollowBoneVelocitySync";
+const externalParentResyncPhysicsModels = new WeakSet<object>();
 const MMD_CONSTRAINT_PARAMETERS = [
     { id: 1, name: "ERP", value: MMD_CONSTRAINT_ERP_VALUE },
     { id: 2, name: "StopERP", value: MMD_CONSTRAINT_ERP_VALUE },
@@ -438,6 +439,7 @@ export class PhysicsModelController {
         physicsModel.syncBodies = (): void => {
             originalSyncBodies();
 
+            if (externalParentResyncPhysicsModels.has(physicsModelObject)) return;
             if (PhysicsModelController.isFullyDampedGravityScaleDisabled()) return;
             const gravityScale = PhysicsModelController.getFullyDampedGravityScale();
             if (gravityScale >= 0.999999) return;
@@ -1899,7 +1901,7 @@ export class PhysicsModelController {
     }
 
     public static getFullyDampedGravityScale(): number {
-        return PhysicsModelController.convertGravityCorrectionAmountToScale(
+        return fullyDampedGravityScaleFromCorrectionAmount(
             PhysicsModelController.getFullyDampedGravityCorrectionAmount(),
         );
     }
@@ -1924,11 +1926,6 @@ export class PhysicsModelController {
             // UI can still use the normalized value for the current session.
         }
         return normalized;
-    }
-
-    private static convertGravityCorrectionAmountToScale(value: number): number {
-        const amount = PhysicsModelController.normalizeCorrectionAmountValue(value);
-        return 1 - amount * (1 - FULLY_DAMPED_RIGID_BODY_GRAVITY_SCALE_MIN);
     }
 
     private static normalizeCorrectionAmountValue(value: number): number {
@@ -3092,6 +3089,24 @@ export class PhysicsModelController {
         };
         modelInternal.beforePhysics?.(null);
         modelInternal.afterPhysics?.();
+    }
+
+    public static syncBodiesAfterExternalParent(model: PhysicsRuntimeModel): boolean {
+        const modelInternal = model as unknown as {
+            _physicsModel?: {
+                syncBodies?: () => void;
+            } | null;
+        };
+        const physicsModel = modelInternal._physicsModel;
+        if (!physicsModel?.syncBodies) return false;
+        const physicsModelObject = physicsModel as object;
+        externalParentResyncPhysicsModels.add(physicsModelObject);
+        try {
+            physicsModel.syncBodies();
+        } finally {
+            externalParentResyncPhysicsModels.delete(physicsModelObject);
+        }
+        return true;
     }
 
     public static collectMeshesForCpuMorphSync(model: PhysicsRuntimeModel): readonly Mesh[] {

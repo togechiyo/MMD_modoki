@@ -1,6 +1,6 @@
 # モデル外部親 仕様・実装ガイド
 
-更新日: 2026-08-10
+更新日: 2026-08-13
 
 ## 概要
 
@@ -19,6 +19,7 @@
 | カメラ外部親のUI公開 | 実装済み（カメラ専用UIとして分離） |
 | フレーム単位の登録・解除・親切り替え | 実装済み |
 | 外部親キーのUndo / Redo | 実装済み |
+| 外部親入力を受ける動的ボーン | 実装済み（Classic Bulletで実PMX確認） |
 | MMD本家の外部親キーとの入出力互換 | 未実装 |
 
 外部親は子ボーンのキーフレームと一体で登録する。あるフレームで登録した関係は、次の外部親キーまで保持されるステップ式である。
@@ -77,7 +78,7 @@
 
 babylon-mmd runtimeは、アニメーションと物理評価のたびにボーンのworld行列を更新する。外部親を通常の`onBeforeRender`へ置くと、後から実行されるWASM runtimeのafter-physics処理に上書きされる場合がある。
 
-そのため外部親の合成は`scene.onBeforeActiveMeshesEvaluationObservable`で行い、runtime評価の完了後かつactive mesh / skeleton評価の前に差し込む。
+非物理モデルの外部親合成は`scene.onBeforeActiveMeshesEvaluationObservable`で行い、runtime評価の完了後かつactive mesh / skeleton評価の前に差し込む。
 
 ```text
 animation / physics runtime evaluation
@@ -94,6 +95,29 @@ childWorldAfterExternalParent = childWorld * parentWorld
 ```
 
 親側にも外部親がある場合は、最上位の親から再帰的に適用する。登録時の循環拒否に加えて、runtime側にも訪問中モデル集合を持たせ、破損データによる無限再帰を防ぐ。
+
+### 動的ボーンへ外部親入力を渡す場合
+
+外部親対象ボーンの配下に物理モード1または2の剛体があるモデルは、描画直前だけでは間に合わない。
+babylon-mmdは`beforePhysics`でボーン追従剛体を同期した後に物理stepを行うため、従来の描画直前合成では
+入力剛体が親モデルの移動を受け取れず、動的な出力ボーンとカメラが遅延せずに一括移動していた。
+
+この場合だけ、次の順序で評価する。
+
+```text
+runtime beforePhysics（通常の剛体同期）
+  -> 外部親を入力ボーンへ合成
+  -> 対象モデルのボーン追従剛体を再同期
+  -> Bullet physics step / afterPhysics
+  -> カメラ外部親を動的出力ボーンへ同期
+  -> active mesh / skeleton evaluation
+```
+
+動的剛体を持たない通常モデルは従来どおり描画直前に処理する。物理前に処理したモデルと、その外部親依存として
+先に処理されたモデルは同じフレームの描画直前処理から除外し、親変換の二重適用を防ぐ。
+
+剛体再同期は現行babylon-mmdのruntime model内部にある`_physicsModel.syncBodies()`を互換境界として
+`PhysicsModelController`へ隔離している。public APIではないため、babylon-mmd更新時は実PMX試験とE2Eを必ず再確認する。
 
 ## ギズモとの同期
 
@@ -139,6 +163,7 @@ modelExternalParents: Array<{
 
 - `test/fixtures/external-parent/tofu.pmx`: 子モデル。センターボーン1本。
 - `test/fixtures/external-parent/plate.pmx`: 親モデル。センターボーン1本。
+- `test/fixtures/external-parent/dynamic-follower.pmx`: ボーン追従剛体と動的剛体をバネ接続した水平遅延の最小モデル。
 
 MMD_modokiとPMXEditorでは読み込みを確認している。本家MikuMikuDanceではクラッシュする場合があるため、現時点ではアプリ内E2E fixtureとしてのみ扱う。
 
@@ -163,6 +188,7 @@ npm.cmd run test:e2e -- model-external-parent.spec.mjs
 8. 30フレームへ解除キーを登録し、豆腐が通常位置へ戻ることを確認する。
 9. 29フレームへ戻ると皿への追従が復帰し、30フレームでは解除されることを確認する。
 10. Undoで30フレームの解除キーを取り消すと追従が復帰し、Redoで再び解除されることを確認する。
+11. 動的fixtureの入力ボーンは親へ即時追従し、出力ボーンとカメラは途中値を通って遅れて追従することを確認する。
 
 WASM runtimeでは、次フレーム準備の途中でボーンworld行列がraw値へ戻る瞬間がある。E2Eでは途中の一時値ではなく、skeleton評価後に描画へ使われるfinal matrixを確認する。
 
@@ -174,11 +200,22 @@ WASM runtimeでは、次フレーム準備の途中でボーンworld行列がraw
 - `npm.cmd run test:e2e -- model-external-parent.spec.mjs`: フレーム切り替えとUndo / Redoを含めて成功。
 - `npm.cmd run smoke:launch`: WebGPU / Bullet MPRでrenderer初期化と安定待機に成功。
 
+### 2026-08-13 動的ボーン対応の確認結果
+
+- 実モデル`可変追従ボーン_Ver2.pmx`: Classic Bullet MPRで、親X=`10`に対して動的出力とカメラが途中値を通って追従することを確認。
+- `npm.cmd run generate:test-models`: 動的fixtureを含む3モデルの生成・再読込に成功。
+- `npm.cmd run test:unit`: 59ファイル、372テスト成功。
+- `npm.cmd run lint`: 成功。
+- `npm.cmd run typecheck:critical`: 未定義名参照なし。全体typecheckには既知のベースラインエラーが残る。
+- `npm.cmd run test:e2e -- model-external-parent.spec.mjs`: 通常外部親、子モデル経由のカメラ外部親、動的遅延カメラの3テスト成功。
+- `npm.cmd run smoke:launch`: WebGPU / Bullet MPRでrenderer初期化と安定待機に成功。
+
 ## 既知の制約と今後の候補
 
 - カメラ外部親はカメラ専用UIとして公開済み。モデル用UIとはDOMとcontrollerを分離して維持する。
 - 登録解除時に現在のworld位置を維持する選択肢を検討する。
-- 物理ボーンを子または親にした場合の評価順と安定性を実機確認する。
+- `可変追従ボーン_Ver2.pmx`では水平遅延を確認済み。Y方向の沈みは自由軸バネの静的変位であり、外部親入力の誤差ではない。詳細は[物理ジョイント沈下・伸長調査](./physics-joint-sag-stretch-investigation-2026-08-13.md)を参照する。
+- WASM runtime実験経路では内部physics modelの再同期API差を追加確認する。
 - 親のスケールや、複数階層の回転を含むfixtureを追加する。
 - 本家MMDの外部親キー仕様と、現在のproject固有仕様との差分を整理する。
 - 確認用PMX fixtureが本家MMDでクラッシュする原因を別途調査する。

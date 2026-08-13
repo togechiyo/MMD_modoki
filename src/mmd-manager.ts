@@ -438,6 +438,7 @@ import {
     type PhysicsRigidBodyDiagnosticEntry,
     type PhysicsRuntimeModel,
 } from "./physics/physics-model-controller";
+import { externalParentSubtreeHasDynamicRigidBody } from "./physics/model-external-parent-physics";
 import { applyMmdOutlineTaperingShader } from "./render/mmd-outline-tuning";
 
 type EditorRuntimeBone = IMmdRuntimeBone & {
@@ -1593,6 +1594,8 @@ ${beforeFogAppendBlock}
     private sceneModels: SceneModelEntry[] = [];
     private readonly modelExternalParentMatrix = Matrix.Identity();
     private readonly modelExternalParentBoneMatrix = Matrix.Identity();
+    private readonly modelExternalParentAppliedBeforePhysicsIndices = new Set<number>();
+    private readonly modelExternalParentPhysicsHookedRuntimes = new WeakSet<object>();
     private mmdMaterialPipelinePresetValue = MmdManager.readMmdMaterialPipelinePresetLocalStorage();
     private _isPlaying = false;
     private _currentFrame = 0;
@@ -6244,6 +6247,7 @@ ${beforeFogAppendBlock}
         this.mmdRuntime = new MmdRuntime(this.scene);
         this.mmdRuntime.autoPhysicsInitialization = false;
         this.installMmdRuntimePerformanceHooks(this.mmdRuntime);
+        this.installModelExternalParentPhysicsHook(this.mmdRuntime);
         this.mmdRuntime.register(this.scene);
         this.physicsController = new PhysicsRuntimeController({
             scene: this.scene,
@@ -6502,6 +6506,7 @@ ${beforeFogAppendBlock}
         const wasmRuntime = new MmdWasmRuntime(wasmInstance, this.scene, new MmdWasmPhysics(this.scene));
         wasmRuntime.autoPhysicsInitialization = false;
         this.installMmdRuntimePerformanceHooks(wasmRuntime);
+        this.installModelExternalParentPhysicsHook(wasmRuntime);
         wasmRuntime.register(this.scene);
 
         this.mmdRuntime.unregister(this.scene);
@@ -6608,6 +6613,16 @@ ${beforeFogAppendBlock}
         };
 
         this.performanceHookedRuntimes.add(runtime);
+    }
+
+    private installModelExternalParentPhysicsHook(runtime: RuntimeMmdRuntime): void {
+        if (this.modelExternalParentPhysicsHookedRuntimes.has(runtime)) return;
+        const originalBeforePhysics = runtime.beforePhysics.bind(runtime);
+        runtime.beforePhysics = (deltaTime: number): void => {
+            originalBeforePhysics(deltaTime);
+            this.applyModelExternalParentInputsBeforePhysics();
+        };
+        this.modelExternalParentPhysicsHookedRuntimes.add(runtime);
     }
 
     private installRenderTargetPerformanceHook(
@@ -12342,9 +12357,64 @@ ${beforeFogAppendBlock}
             : surface.renderTarget;
     }
 
+    private applyModelExternalParentInputsBeforePhysics(): void {
+        this.modelExternalParentAppliedBeforePhysicsIndices.clear();
+        this.applyModelExternalParentKeyframesAtFrame(this._currentFrame);
+
+        const physicsInputModelIndices: number[] = [];
+        for (let modelIndex = 0; modelIndex < this.sceneModels.length; modelIndex += 1) {
+            if (this.modelExternalParentFeedsDynamicPhysics(modelIndex)) {
+                physicsInputModelIndices.push(modelIndex);
+            }
+        }
+        if (physicsInputModelIndices.length === 0) return;
+
+        const transformedModelIndices = this.applyModelExternalParentsForModelIndices(physicsInputModelIndices);
+        for (const modelIndex of transformedModelIndices) {
+            this.modelExternalParentAppliedBeforePhysicsIndices.add(modelIndex);
+        }
+        for (const modelIndex of physicsInputModelIndices) {
+            const entry = this.sceneModels[modelIndex];
+            if (entry) {
+                PhysicsModelController.syncBodiesAfterExternalParent(entry.model);
+            }
+        }
+    }
+
+    private modelExternalParentFeedsDynamicPhysics(modelIndex: number): boolean {
+        const entry = this.sceneModels[modelIndex];
+        const state = entry?.externalParent;
+        if (!entry || !state) return false;
+
+        const externalParentRoot = this.getRuntimeBoneByNameFromModel(entry.model, state.childBoneName);
+        const runtimeBones = entry.model.runtimeBones as readonly EditorRuntimeBone[] | undefined;
+        return externalParentSubtreeHasDynamicRigidBody(
+            externalParentRoot,
+            runtimeBones,
+            entry.rigidBodies,
+        );
+    }
+
     private applyModelExternalParentsBeforeRender(): void {
-        const appliedModelIndices = new Set<number>();
+        const modelIndices: number[] = [];
+        for (let modelIndex = 0; modelIndex < this.sceneModels.length; modelIndex += 1) {
+            if (!this.modelExternalParentAppliedBeforePhysicsIndices.has(modelIndex)) {
+                modelIndices.push(modelIndex);
+            }
+        }
+        this.applyModelExternalParentsForModelIndices(
+            modelIndices,
+            this.modelExternalParentAppliedBeforePhysicsIndices,
+        );
+    }
+
+    private applyModelExternalParentsForModelIndices(
+        modelIndices: readonly number[],
+        assumedAppliedModelIndices: ReadonlySet<number> = new Set<number>(),
+    ): Set<number> {
+        const appliedModelIndices = new Set<number>(assumedAppliedModelIndices);
         const applyingModelIndices = new Set<number>();
+        const transformedModelIndices = new Set<number>();
 
         const applyModel = (modelIndex: number): void => {
             if (appliedModelIndices.has(modelIndex) || applyingModelIndices.has(modelIndex)) return;
@@ -12386,15 +12456,17 @@ ${beforeFogAppendBlock}
                     }
                 }
                 childEntry.mesh.metadata?.skeleton?._markAsDirty?.();
+                transformedModelIndices.add(modelIndex);
             }
 
             applyingModelIndices.delete(modelIndex);
             appliedModelIndices.add(modelIndex);
         };
 
-        for (let modelIndex = 0; modelIndex < this.sceneModels.length; modelIndex += 1) {
+        for (const modelIndex of modelIndices) {
             applyModel(modelIndex);
         }
+        return transformedModelIndices;
     }
 
     private applyModelExternalParentKeyframesAtFrame(frame: number): void {

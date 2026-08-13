@@ -45,6 +45,7 @@
 - [Playwright Electron E2E 実装・運用ガイド](./playwright-electron-e2e-operation-guide.md)
 - [現行確認スナップショット 2026-08-06](./current-state-audit-2026-08-06.md)
 - [モデル外部親 仕様・実装ガイド](./model-external-parent-implementation-2026-08-02.md)
+- [物理ジョイント沈下・伸長調査 2026-08-13](./physics-joint-sag-stretch-investigation-2026-08-13.md)
 - [コードレビュー 2026-04](./code-review-2026-04.md)
 - [コードレビュー v0.2 依存更新 2026-06-13](./code-review-v0.2-dependency-upgrade-2026-06-13.md)
 

@@ -6,6 +6,7 @@ import { launchMmdModoki } from "./electron-app.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const tofuPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
 const platePath = resolve(repoRoot, "test/fixtures/external-parent/plate.pmx");
+const dynamicFollowerPath = resolve(repoRoot, "test/fixtures/external-parent/dynamic-follower.pmx");
 
 test("豆腐モデルの外部親をフレーム単位で登録・解除できる", async () => {
   const launched = await launchMmdModoki(repoRoot);
@@ -194,6 +195,93 @@ test("camera follows a bone on a model that has its own external parent", async 
     }), cameraParentBoneName);
     expect(after.child).not.toBeNull();
     expect(after.camera.y - before.camera.y).toBeCloseTo(after.child.y - before.child.y, 1);
+  } finally {
+    await launched.close();
+  }
+});
+
+test("camera follows the delayed dynamic bone after model external parent input", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    await page.evaluate(async ({ plate, dynamicFollower }) => {
+      await window.mmdModokiE2e.loadModel(plate);
+      await window.mmdModokiE2e.loadModel(dynamicFollower);
+    }, { plate: platePath, dynamicFollower: dynamicFollowerPath });
+
+    const modelSelect = page.locator("#info-model-select");
+    await modelSelect.selectOption("1");
+    await page.locator("#info-external-parent-select").selectOption("0");
+    await expect(page.locator("#info-parent-bone-select")).toHaveValue("センター");
+    await page.locator("[data-testid='model-external-parent-register']").click();
+    await page.waitForFunction(() => window.mmdModokiE2e.getModelExternalParent(1)?.parentModelIndex === 0);
+
+    await modelSelect.selectOption("__camera__");
+    await page.locator("#camera-external-parent-select").selectOption("1");
+    await page.locator("#camera-parent-bone-select").selectOption("Camera Output");
+    await page.locator("[data-testid='camera-external-parent-register']").click();
+    await page.waitForFunction(() => window.mmdModokiE2e.getCameraExternalParent()?.boneName === "Camera Output");
+
+    const before = await page.evaluate(() => ({
+      camera: window.mmdModokiE2e.getCameraPosition(),
+      input: window.mmdModokiE2e.getModelBoneRenderedPosition(1, "Physics Input"),
+      output: window.mmdModokiE2e.getModelBoneRenderedPosition(1, "Camera Output"),
+    }));
+    expect(before.input).not.toBeNull();
+    expect(before.output).not.toBeNull();
+
+    const settledWithoutCorrection = await page.evaluate(async () => {
+      for (let index = 0; index < 90; index += 1) {
+        await new Promise((resolveAnimationFrame) => requestAnimationFrame(resolveAnimationFrame));
+      }
+      return window.mmdModokiE2e.getModelBoneRenderedPosition(1, "Camera Output");
+    });
+    expect(settledWithoutCorrection?.y).toBeLessThan(-0.15);
+
+    expect(await page.evaluate(() => (
+      window.mmdModokiE2e.setFullyDampedPhysicsCompatibilityCorrection(true, 1)
+    ))).toBe(true);
+    await page.waitForFunction(() => {
+      const output = window.mmdModokiE2e.getModelBoneRenderedPosition(1, "Camera Output");
+      return output && Math.abs(output.y) < 0.05;
+    });
+
+    await modelSelect.selectOption("0");
+    const parentXInput = page.locator("#bone-controls input[data-control-key='tx']");
+    await parentXInput.fill("10");
+    await parentXInput.press("Enter");
+
+    const samples = await page.evaluate(async () => {
+      const result = [];
+      for (let index = 0; index < 60; index += 1) {
+        await new Promise((resolveAnimationFrame) => requestAnimationFrame(resolveAnimationFrame));
+        result.push({
+          camera: window.mmdModokiE2e.getCameraPosition(),
+          input: window.mmdModokiE2e.getModelBoneRenderedPosition(1, "Physics Input"),
+          output: window.mmdModokiE2e.getModelBoneRenderedPosition(1, "Camera Output"),
+        });
+      }
+      return result;
+    });
+    const delayed = samples.find((sample) => (
+      sample.input
+      && sample.output
+      && sample.input.x > 9.5
+      && sample.output.x > 0.1
+      && sample.output.x < 9.5
+    ));
+    expect(delayed, JSON.stringify(samples)).toBeTruthy();
+    expect(delayed.input.x).toBeGreaterThan(9.5);
+    expect(delayed.output.x).toBeGreaterThan(0.1);
+    expect(delayed.output.x).toBeLessThan(9.5);
+    expect(delayed.camera.x - before.camera.x).toBeCloseTo(delayed.output.x - before.output.x, 1);
+
+    await page.waitForFunction((previousX) => {
+      const output = window.mmdModokiE2e.getModelBoneRenderedPosition(1, "Camera Output");
+      return output && output.x > previousX + 0.1;
+    }, delayed.output.x);
+
   } finally {
     await launched.close();
   }

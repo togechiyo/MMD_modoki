@@ -34,6 +34,7 @@ export type OutputFormState = {
     height: number;
     lockAspect: boolean;
     qualityScale: number;
+    pngTransparentBackground: boolean;
     fps: number;
     includeAudio: boolean;
     preferredVideoCodec: "auto" | "vp8" | "vp9";
@@ -50,6 +51,7 @@ export type OutputSizeSettingsAdapter = {
     setWidth: (value: number) => void;
     setHeight: (value: number) => void;
     setQualityScale: (value: number) => void;
+    setPngTransparentBackground: (value: boolean) => void;
 };
 
 export type WebmExportSettingsAdapter = OutputSizeSettingsAdapter & {
@@ -203,6 +205,7 @@ export class ExportUiController {
         height: 1080,
         lockAspect: false,
         qualityScale: 1,
+        pngTransparentBackground: false,
         fps: 30,
         includeAudio: false,
         preferredVideoCodec: "vp8",
@@ -266,6 +269,7 @@ export class ExportUiController {
             height: outputSettings.height,
             lockAspect: this.outputState.lockAspect,
             qualityScale: outputSettings.qualityScale,
+            pngTransparentBackground: this.outputState.pngTransparentBackground,
             fps: outputSettings.fps,
             includeAudio: this.outputState.includeAudio,
             webmCodec: this.getWebmOutputOptions().preferredVideoCodec,
@@ -279,7 +283,10 @@ export class ExportUiController {
     }
 
     public applyProjectState(state: ProjectOutputState | null | undefined): void {
-        if (!state) return;
+        if (!state) {
+            this.outputState.pngTransparentBackground = false;
+            return;
+        }
 
         if (typeof state.aspectPreset === "string" && this.isOutputAspectPreset(state.aspectPreset)) {
             this.outputState.aspectPreset = state.aspectPreset;
@@ -297,6 +304,7 @@ export class ExportUiController {
         if (Number.isFinite(state.qualityScale)) {
             this.outputState.qualityScale = this.clampOutputQuality(state.qualityScale);
         }
+        this.outputState.pngTransparentBackground = Boolean(state.pngTransparentBackground);
         if (Number.isFinite(state.fps)) {
             this.outputState.fps = this.clampOutputFps(state.fps);
         }
@@ -414,6 +422,7 @@ export class ExportUiController {
             const capturedFrame = await this.mmdManager.capturePngRgbaData({
                 width: captureWidth,
                 height: captureHeight,
+                transparentBackground: this.outputState.pngTransparentBackground,
             });
             if (!capturedFrame) {
                 throw new Error("PNG framebuffer capture returned no data");
@@ -482,6 +491,7 @@ export class ExportUiController {
             precision: 1,
             outputWidth,
             outputHeight,
+            transparentBackground: this.outputState.pngTransparentBackground,
             exportKind: "single",
             singleFileName: saveTarget.fileName,
         });
@@ -550,6 +560,7 @@ export class ExportUiController {
             precision: outputSettings.qualityScale,
             outputWidth: outputSettings.width,
             outputHeight: outputSettings.height,
+            transparentBackground: this.outputState.pngTransparentBackground,
         });
 
         if (!result) {
@@ -812,6 +823,9 @@ export class ExportUiController {
             },
             setQualityScale: (value) => {
                 this.outputState.qualityScale = this.clampOutputQuality(value);
+            },
+            setPngTransparentBackground: (value) => {
+                this.outputState.pngTransparentBackground = Boolean(value);
             },
             setFps: (value) => {
                 this.outputState.fps = this.clampOutputFps(value);

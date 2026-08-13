@@ -139,6 +139,8 @@
     "toast.edge.on":  "Edge: ON",
     "toast.edge.off":  "Edge: OFF",
     "toast.background.black":  "배경: 검정",
+    "toast.background.white":  "배경: 흰색",
+    "toast.background.checker":  "배경: 투명 체크(미리보기)",
     "toast.background.default":  "배경: 기본",
     "toast.backgroundImage.loaded":  "배경 이미지를 불러왔습니다",
     "toast.backgroundImage.cleared":  "배경 이미지를 해제했습니다",
@@ -622,7 +624,10 @@
     "menu.view.toggleFullscreenUi": "Hide UI",
     "menu.background": "Background",
     "menu.background.toggleMedia": "Background Media",
-    "menu.background.toggleBlack": "Black Background",
+    "menu.background.setDefault": "기본 배경",
+    "menu.background.setWhite": "흰색 배경",
+    "menu.background.toggleBlack": "검은색 배경",
+    "menu.background.setChecker": "투명 체크 배경(미리보기)",
     "menu.background.toggleHdriBackground": "HDRI Background",
     "menu.background.toggleEnvironmentLighting": "Use Environment Lighting",
     "menu.background.loadHdri": "Load HDRI for Environment Lighting...",
@@ -760,5 +765,8 @@
     "dialog.pngExport.size": "크기",
     "dialog.pngExport.memoryNote": "8K 같은 대형 출력은 많은 메모리를 사용합니다.",
     "dialog.pngExport.cancel": "취소",
-    "dialog.pngExport.export": "PNG 내보내기"
+    "dialog.pngExport.export": "PNG 내보내기",
+    "dialog.pngExport.transparentBackground": "배경 투명하게",
+    "dialog.pngSequenceExport.title": "PNG 시퀀스 내보내기",
+    "dialog.pngSequenceExport.export": "PNG 시퀀스 내보내기"
 }

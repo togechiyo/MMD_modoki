@@ -1,6 +1,7 @@
 import { t } from "../i18n";
 import type { MmdManager } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
+import type { BackgroundDisplayMode } from "../shared/background-display-mode";
 
 type ToastType = "success" | "error" | "info";
 
@@ -73,6 +74,18 @@ export class SceneEnvironmentUiController {
             enabled ? t("toast.background.black") : t("toast.background.default"),
             "info"
         );
+    }
+
+    public setBackgroundDisplayMode(mode: BackgroundDisplayMode): void {
+        const applied = this.mmdManager.setBackgroundDisplayMode(mode);
+        const toastKey = applied === "white"
+            ? "toast.background.white"
+            : applied === "black"
+                ? "toast.background.black"
+                : applied === "checker"
+                    ? "toast.background.checker"
+                    : "toast.background.default";
+        this.showToast(t(toastKey), "info");
     }
 
     public toggleBackgroundMedia(): void {

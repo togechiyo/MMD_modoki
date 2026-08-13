@@ -29,6 +29,7 @@
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="file.saveProject"><span data-i18n="menu.file.saveProject">プロジェクト保存...</span><span class="app-menu-shortcut">Ctrl+S</span></button>
           <div class="app-menu-separator" role="separator"></div>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="file.exportPng"><span data-i18n="menu.file.exportPng">PNG出力...</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="file.exportPngSequence"><span data-i18n="menu.file.exportPngSequence">PNG連番出力...</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="file.webmExportSettings"><span data-i18n="menu.file.webmExportSettings">WebM動画出力...</span></button>
         </div>
       </div>
@@ -101,7 +102,11 @@
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.toggleGround"><span data-i18n="menu.view.toggleGround">床を表示</span></button>
           <div class="app-menu-separator" role="separator"></div>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="background.toggleMedia"><span data-i18n="menu.background.toggleMedia">背景画像/動画を表示</span></button>
-          <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="background.toggleBlack"><span data-i18n="menu.background.toggleBlack">黒背景を表示</span></button>
+          <div class="app-menu-separator" role="separator"></div>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="background.setDefault"><span data-i18n="menu.background.setDefault">標準背景</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="background.setWhite"><span data-i18n="menu.background.setWhite">白背景</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="background.toggleBlack"><span data-i18n="menu.background.toggleBlack">黒背景</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="background.setChecker"><span data-i18n="menu.background.setChecker">透明チェック背景（プレビュー）</span></button>
           <div class="app-menu-separator" role="separator" hidden data-experiment="environment-lighting"></div>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="background.toggleEnvironmentLighting" hidden data-experiment="environment-lighting"><span data-i18n="menu.background.toggleEnvironmentLighting">環境ライトを使用</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="background.hdriSettings" hidden data-experiment="environment-lighting"><span data-i18n="menu.background.hdriSettings">環境ライト詳細...</span></button>

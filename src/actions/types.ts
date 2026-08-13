@@ -1,4 +1,5 @@
 import type { KeyframeTrack } from "../types";
+import type { BackgroundDisplayMode } from "../shared/background-display-mode";
 
 export type ActionSource =
     | "button"
@@ -60,6 +61,7 @@ export type ViewportAction =
     | { type: "viewport.toggleEdge"; source: ActionSource }
     | { type: "viewport.toggleBackgroundMedia"; source: ActionSource }
     | { type: "viewport.toggleBackgroundBlack"; source: ActionSource }
+    | { type: "viewport.setBackgroundDisplayMode"; source: ActionSource; mode: BackgroundDisplayMode }
     | { type: "viewport.toggleEnvironmentBackground"; source: ActionSource }
     | { type: "viewport.toggleSkydome"; source: ActionSource }
     | { type: "viewport.togglePhysicsBones"; source: ActionSource }

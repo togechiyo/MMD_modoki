@@ -408,6 +408,7 @@ const sanitizePngSequenceExportRequest = (request: PngSequenceExportRequest): Pn
     precision,
     outputWidth,
     outputHeight,
+    transparentBackground: request.transparentBackground === true,
     exportKind,
     singleFileName,
   };

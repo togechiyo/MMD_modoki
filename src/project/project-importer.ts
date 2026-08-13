@@ -32,6 +32,10 @@ import {
     normalizeMmdRenderOrderMode,
     type MmdRenderOrderMode,
 } from "../shared/mmd-render-order";
+import {
+    normalizeBackgroundDisplayMode,
+    type BackgroundDisplayMode,
+} from "../shared/background-display-mode";
 
 type ProjectImportRuntimeModel = {
     createRuntimeAnimation(animation: object): unknown;
@@ -109,6 +113,8 @@ type ProjectImportHost = {
     setCameraExternalParentKeyframes?: (track: ProjectSerializedCameraExternalParentTrack | null) => boolean;
     setGroundVisible(visible: boolean): void;
     setSkydomeVisible(visible: boolean): void;
+    setBackgroundBlack?: (enabled: boolean) => void;
+    setBackgroundDisplayMode?: (mode: BackgroundDisplayMode) => BackgroundDisplayMode;
     setSkydomeBackgroundStyle?: (style: SkydomeBackgroundStyle) => void;
     antialiasEnabled: boolean;
     mirroringFloorReflectance: number;
@@ -782,6 +788,15 @@ export async function importProjectState(
     host.setGroundVisible(Boolean(data.viewport.groundVisible));
     host.setSkydomeBackgroundStyle?.(normalizeSkydomeBackgroundStyle(data.viewport.skydomeBackground));
     host.setSkydomeVisible(Boolean(data.viewport.skydomeVisible));
+    const backgroundDisplayMode = normalizeBackgroundDisplayMode(
+        data.viewport.backgroundDisplayMode,
+        Boolean(data.viewport.backgroundBlack),
+    );
+    if (host.setBackgroundDisplayMode) {
+        host.setBackgroundDisplayMode(backgroundDisplayMode);
+    } else {
+        host.setBackgroundBlack?.(backgroundDisplayMode === "black");
+    }
     host.antialiasEnabled = Boolean(data.viewport.antialiasEnabled);
     host.mirroringFloorReflectance = typeof data.viewport.mirroringFloorReflectance === "number" && Number.isFinite(data.viewport.mirroringFloorReflectance)
         ? data.viewport.mirroringFloorReflectance

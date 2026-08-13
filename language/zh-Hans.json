@@ -139,6 +139,8 @@
     "toast.edge.on":  "Edge: ON",
     "toast.edge.off":  "Edge: OFF",
     "toast.background.black":  "背景: 黑色",
+    "toast.background.white":  "背景: 白色",
+    "toast.background.checker":  "背景: 透明棋盘格（预览）",
     "toast.background.default":  "背景: 默认",
     "toast.backgroundImage.loaded":  "已读取背景图片",
     "toast.backgroundImage.cleared":  "已清除背景图片",
@@ -622,7 +624,10 @@
     "menu.view.toggleFullscreenUi": "Hide UI",
     "menu.background": "Background",
     "menu.background.toggleMedia": "Background Media",
-    "menu.background.toggleBlack": "Black Background",
+    "menu.background.setDefault": "默认背景",
+    "menu.background.setWhite": "白色背景",
+    "menu.background.toggleBlack": "黑色背景",
+    "menu.background.setChecker": "透明棋盘格背景（预览）",
     "menu.background.toggleHdriBackground": "HDRI Background",
     "menu.background.toggleEnvironmentLighting": "Use Environment Lighting",
     "menu.background.loadHdri": "Load HDRI for Environment Lighting...",
@@ -760,5 +765,8 @@
     "dialog.pngExport.size": "尺寸",
     "dialog.pngExport.memoryNote": "8K 等大型输出会占用大量内存。",
     "dialog.pngExport.cancel": "取消",
-    "dialog.pngExport.export": "导出 PNG"
+    "dialog.pngExport.export": "导出 PNG",
+    "dialog.pngExport.transparentBackground": "透明背景",
+    "dialog.pngSequenceExport.title": "导出 PNG 序列",
+    "dialog.pngSequenceExport.export": "导出 PNG 序列"
 }

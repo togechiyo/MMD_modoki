@@ -464,6 +464,8 @@ export interface ProjectLightingState {
 export interface ProjectViewportState {
     groundVisible: boolean;
     skydomeVisible: boolean;
+    backgroundBlack?: boolean;
+    backgroundDisplayMode?: import("./shared/background-display-mode").BackgroundDisplayMode;
     skydomeBackground?: import("./shared/skydome-background-style").SkydomeBackgroundStyle;
     antialiasEnabled: boolean;
     mirroringFloorEnabled?: boolean;
@@ -615,6 +617,7 @@ export interface ProjectOutputState {
     height: number;
     lockAspect: boolean;
     qualityScale: number;
+    pngTransparentBackground?: boolean;
     fps?: number;
     includeAudio?: boolean;
     webmCodec?: "auto" | "vp8" | "vp9";
@@ -770,6 +773,7 @@ export interface PngSequenceExportRequest {
     precision: number;
     outputWidth: number;
     outputHeight: number;
+    transparentBackground?: boolean;
     exportKind?: "sequence" | "single";
     singleFileName?: string;
 }

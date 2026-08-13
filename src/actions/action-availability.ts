@@ -77,6 +77,7 @@ export function canExecuteEditorAction(
         case "viewport.toggleEdge":
         case "viewport.toggleBackgroundMedia":
         case "viewport.toggleBackgroundBlack":
+        case "viewport.setBackgroundDisplayMode":
         case "viewport.toggleEnvironmentBackground":
         case "viewport.toggleSkydome":
         case "viewport.togglePhysicsBones":

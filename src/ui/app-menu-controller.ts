@@ -49,7 +49,7 @@ function resolveElements(): AppMenuElements {
         groups: root ? Array.from(root.querySelectorAll<HTMLElement>(".app-menu-group")) : [],
         triggers: root ? Array.from(root.querySelectorAll<HTMLButtonElement>(".app-menu-trigger")) : [],
         commandItems: root ? Array.from(root.querySelectorAll<HTMLButtonElement>(".app-menu-item[data-menu-command]")) : [],
-        checkItems: root ? Array.from(root.querySelectorAll<HTMLButtonElement>(".app-menu-item--check[data-menu-command]")) : [],
+        checkItems: root ? Array.from(root.querySelectorAll<HTMLButtonElement>(".app-menu-item[data-menu-command][aria-checked]")) : [],
     };
 }
 
@@ -271,8 +271,14 @@ export class AppMenuController {
                 return { checked: this.isActiveModelVisible(), disabled: !this.hasActiveModel() };
             case "background.toggleMedia":
                 return { checked: this.mmdManager.isBackgroundMediaVisible(), disabled: !this.mmdManager.hasBackgroundMedia() };
+            case "background.setDefault":
+                return { checked: this.mmdManager.getBackgroundDisplayMode() === "default", disabled: false };
+            case "background.setWhite":
+                return { checked: this.mmdManager.getBackgroundDisplayMode() === "white", disabled: false };
             case "background.toggleBlack":
                 return { checked: this.mmdManager.isBackgroundBlack(), disabled: false };
+            case "background.setChecker":
+                return { checked: this.mmdManager.getBackgroundDisplayMode() === "checker", disabled: false };
             case "background.toggleEnvironmentLighting":
                 return { checked: this.mmdManager.isEnvironmentLightingEnabled(), disabled: false };
             case "background.toggleHdriBackground":
@@ -323,6 +329,9 @@ export class AppMenuController {
                 return;
             case "file.exportPng":
                 this.openPngExportDialog(invoker ?? null);
+                return;
+            case "file.exportPngSequence":
+                this.openPngSequenceExportDialog(invoker ?? null);
                 return;
             case "file.webmExportSettings":
                 this.openWebmExportDialog(invoker ?? null);
@@ -455,7 +464,16 @@ export class AppMenuController {
                 this.dispatchAction({ type: "viewport.toggleBackgroundMedia", source: "menu" });
                 return;
             case "background.toggleBlack":
-                this.dispatchAction({ type: "viewport.toggleBackgroundBlack", source: "menu" });
+                this.dispatchAction({ type: "viewport.setBackgroundDisplayMode", source: "menu", mode: "black" });
+                return;
+            case "background.setDefault":
+                this.dispatchAction({ type: "viewport.setBackgroundDisplayMode", source: "menu", mode: "default" });
+                return;
+            case "background.setWhite":
+                this.dispatchAction({ type: "viewport.setBackgroundDisplayMode", source: "menu", mode: "white" });
+                return;
+            case "background.setChecker":
+                this.dispatchAction({ type: "viewport.setBackgroundDisplayMode", source: "menu", mode: "checker" });
                 return;
             case "background.toggleEnvironmentLighting":
                 this.dispatchAction({ type: "runtime.toggleEnvironmentLighting", source: "menu" });
@@ -734,6 +752,25 @@ export class AppMenuController {
             content: new PngExportDialogController({
                 dispatchAction: (action) => this.dispatchAction(action),
                 output: this.createExportSettingsAdapter(),
+                kind: "single",
+                close: () => {
+                    this.popupDialogController.close();
+                },
+            }),
+        });
+    }
+
+    private openPngSequenceExportDialog(invoker: HTMLElement | null): void {
+        this.popupDialogController.open({
+            id: "png-sequence-export",
+            surface: "modal",
+            title: t("dialog.pngSequenceExport.title"),
+            size: "sm",
+            restoreFocusTo: invoker,
+            content: new PngExportDialogController({
+                dispatchAction: (action) => this.dispatchAction(action),
+                output: this.createExportSettingsAdapter(),
+                kind: "sequence",
                 close: () => {
                     this.popupDialogController.close();
                 },

@@ -139,6 +139,8 @@
     "toast.edge.on":  "エッジ: ON",
     "toast.edge.off":  "エッジ: OFF",
     "toast.background.black":  "背景: 黒",
+    "toast.background.white":  "背景: 白",
+    "toast.background.checker":  "背景: 透明チェック（プレビュー）",
     "toast.background.default":  "背景: 標準",
     "toast.backgroundImage.loaded":  "背景画像を読み込みました",
     "toast.backgroundImage.cleared":  "背景画像を解除しました",
@@ -622,7 +624,10 @@
     "menu.view.toggleFullscreenUi": "表示UIを隠す",
     "menu.background": "背景",
     "menu.background.toggleMedia": "背景画像/動画を表示",
-    "menu.background.toggleBlack": "黒背景を表示",
+    "menu.background.setDefault": "標準背景",
+    "menu.background.setWhite": "白背景",
+    "menu.background.toggleBlack": "黒背景",
+    "menu.background.setChecker": "透明チェック背景（プレビュー）",
     "menu.background.toggleHdriBackground": "HDRI背景を表示",
     "menu.background.toggleEnvironmentLighting": "環境ライトを使用",
     "menu.background.loadHdri": "HDRIを環境ライトに読み込む...",
@@ -760,5 +765,8 @@
     "dialog.pngExport.size": "サイズ",
     "dialog.pngExport.memoryNote": "8Kなどの大型出力は多くのメモリを使用します。",
     "dialog.pngExport.cancel": "キャンセル",
-    "dialog.pngExport.export": "PNG出力"
+    "dialog.pngExport.export": "PNG出力",
+    "dialog.pngExport.transparentBackground": "背景を透過",
+    "dialog.pngSequenceExport.title": "PNG連番出力",
+    "dialog.pngSequenceExport.export": "PNG連番出力"
 }

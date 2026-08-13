@@ -69,6 +69,8 @@ function createHost() {
         occlusionShadowEdgeSoftness: 0.01,
         isGroundVisible: (): boolean => true,
         isSkydomeVisible: (): boolean => true,
+        isBackgroundBlack: (): boolean => false,
+        getBackgroundDisplayMode: () => "default" as const,
         getSkydomeBackgroundStyle: () => ({
             mode: "solid" as const,
             topColor: { r: 200 / 255, g: 200 / 255, b: 200 / 255 },
@@ -375,6 +377,27 @@ describe("exportProjectState", () => {
             bottomColor: { r: 0.4, g: 0.5, b: 0.6 },
             brightness: 1.35,
         });
+    });
+
+    it("writes the black background state for detached exporters", () => {
+        const project = exportProjectState({
+            ...createHost(),
+            isBackgroundBlack: () => true,
+            getBackgroundDisplayMode: () => "black" as const,
+        });
+
+        expect(project.viewport.backgroundBlack).toBe(true);
+        expect(project.viewport.backgroundDisplayMode).toBe("black");
+    });
+
+    it("writes the checker preview background mode", () => {
+        const project = exportProjectState({
+            ...createHost(),
+            getBackgroundDisplayMode: () => "checker" as const,
+        });
+
+        expect(project.viewport.backgroundDisplayMode).toBe("checker");
+        expect(project.viewport.backgroundBlack).toBe(false);
     });
 
     it("writes physics floor collision setting", () => {

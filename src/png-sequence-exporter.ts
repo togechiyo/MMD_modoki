@@ -104,6 +104,8 @@ export async function runPngSequenceExportJob(
 
         // Export window does not need bone-edit overlay.
         mmdManager.setTimelineTarget("camera");
+        mmdManager.setCheckerBackgroundPreviewEnabled(false);
+        mmdManager.setExportTransparentBackgroundEnabled(request.transparentBackground === true);
 
         mmdManager.prepareExportRenderSurface(captureWidth, captureHeight);
 
@@ -244,7 +246,9 @@ export async function runPngSequenceExportJob(
 
                 const captureStartedAt = performance.now();
                 mmdManager.renderOnceForCapture(0);
-                const capturedFrame = await mmdManager.readExportRenderFrameAsync();
+                const capturedFrame = await mmdManager.readExportRenderFrameAsync(
+                    request.transparentBackground === true ? "straight" : "opaque",
+                );
                 captureMsTotal += performance.now() - captureStartedAt;
 
                 const fileName = request.exportKind === "single" && request.singleFileName

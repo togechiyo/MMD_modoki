@@ -13,6 +13,7 @@ import type {
 import type { FrameGraphPostEffectStackEntry } from "../shared/frame-graph-post-effect-stack";
 import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "../shared/mmd-render-order";
+import type { BackgroundDisplayMode } from "../shared/background-display-mode";
 import {
     normalizeSkydomeBackgroundStyle,
     type SkydomeBackgroundStyle,
@@ -250,6 +251,8 @@ type ProjectExportHost = {
     getMmdCoplanarDepthBiasStrength?: () => number;
     isGroundVisible: () => boolean;
     isSkydomeVisible: () => boolean;
+    isBackgroundBlack?: () => boolean;
+    getBackgroundDisplayMode?: () => BackgroundDisplayMode;
 };
 
 export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFileV1 {
@@ -412,6 +415,9 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         viewport: {
             groundVisible: host.isGroundVisible(),
             skydomeVisible: host.isSkydomeVisible(),
+            backgroundBlack: host.isBackgroundBlack?.() ?? false,
+            backgroundDisplayMode: host.getBackgroundDisplayMode?.()
+                ?? ((host.isBackgroundBlack?.() ?? false) ? "black" : "default"),
             skydomeBackground: normalizeSkydomeBackgroundStyle(host.getSkydomeBackgroundStyle?.()),
             antialiasEnabled: host.antialiasEnabled,
             mirroringFloorEnabled: host.mirroringFloorEnabled,

@@ -406,6 +406,30 @@ body.png-capture-mode #viewport-axis-handle {
   color: rgba(255, 255, 255, 0.24);
 }
 
+.app-menu-item--radio {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+}
+
+.app-menu-item--radio::before {
+  content: "";
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.app-menu-item--radio[aria-checked="true"]::before {
+  border-color: rgba(57, 197, 187, 0.68);
+  background: radial-gradient(circle, #7ddfd8 0 3px, rgba(57, 197, 187, 0.16) 3.5px);
+}
+
+.app-menu-item--radio:disabled::before {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .app-menu-item:hover,
 .app-menu-item:focus-visible {
   background: rgba(255, 255, 255, 0.1);

@@ -744,6 +744,7 @@ export async function runWebmExportJob(
                 `Project load incomplete (${importResult.loadedModels}/${expectedModelCount}). ${warningText}`
             );
         }
+        mmdManager.setCheckerBackgroundPreviewEnabled(false);
 
         if (captureMode === "rgba-surface") {
             mmdManager.prepareExportRenderSurface(outputWidth, outputHeight);

@@ -139,6 +139,8 @@
     "toast.edge.on":  "Edge: ON",
     "toast.edge.off":  "Edge: OFF",
     "toast.background.black":  "Background: Black",
+    "toast.background.white":  "Background: White",
+    "toast.background.checker":  "Background: Transparency checker (preview)",
     "toast.background.default":  "Background: Default",
     "toast.backgroundImage.loaded":  "Background image loaded",
     "toast.backgroundImage.cleared":  "Background image cleared",
@@ -622,7 +624,10 @@
     "menu.view.toggleFullscreenUi": "Hide UI",
     "menu.background": "Background",
     "menu.background.toggleMedia": "Background Media",
+    "menu.background.setDefault": "Default Background",
+    "menu.background.setWhite": "White Background",
     "menu.background.toggleBlack": "Black Background",
+    "menu.background.setChecker": "Transparency Checker (Preview)",
     "menu.background.toggleHdriBackground": "HDRI Background",
     "menu.background.toggleEnvironmentLighting": "Use Environment Lighting",
     "menu.background.loadHdri": "Load HDRI for Environment Lighting...",
@@ -760,5 +765,8 @@
     "dialog.pngExport.size": "Size",
     "dialog.pngExport.memoryNote": "Large outputs such as 8K use a significant amount of memory.",
     "dialog.pngExport.cancel": "Cancel",
-    "dialog.pngExport.export": "Export PNG"
+    "dialog.pngExport.export": "Export PNG",
+    "dialog.pngExport.transparentBackground": "Transparent background",
+    "dialog.pngSequenceExport.title": "Export PNG Sequence",
+    "dialog.pngSequenceExport.export": "Export PNG Sequence"
 }

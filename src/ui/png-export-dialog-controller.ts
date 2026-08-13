@@ -13,22 +13,26 @@ type PngExportDialogDeps = {
     dispatchAction: (action: EditorAction) => boolean;
     close: () => void;
     output: OutputSizeSettingsAdapter;
+    kind?: "single" | "sequence";
 };
 
 export class PngExportDialogController implements PopupContentController {
     private readonly dispatchAction: (action: EditorAction) => boolean;
     private readonly close: () => void;
     private readonly output: OutputSizeSettingsAdapter;
+    private readonly kind: "single" | "sequence";
     private container: HTMLElement | null = null;
     private aspectSelect: HTMLSelectElement | null = null;
     private sizePresetSelect: HTMLSelectElement | null = null;
     private widthInput: HTMLInputElement | null = null;
     private heightInput: HTMLInputElement | null = null;
+    private transparentBackgroundInput: HTMLInputElement | null = null;
 
     constructor(deps: PngExportDialogDeps) {
         this.dispatchAction = deps.dispatchAction;
         this.close = deps.close;
         this.output = deps.output;
+        this.kind = deps.kind ?? "single";
     }
 
     public mount(container: HTMLElement): void {
@@ -51,6 +55,10 @@ export class PngExportDialogController implements PopupContentController {
         );
         this.widthInput = this.createNumberInput("png-output-width", state.width, 320, 8192);
         this.heightInput = this.createNumberInput("png-output-height", state.height, 180, 8192);
+        this.transparentBackgroundInput = this.createCheckbox(
+            "png-output-transparent-background",
+            state.pngTransparentBackground,
+        );
 
         form.appendChild(createPopupFormField(t("dialog.pngExport.aspect"), this.aspectSelect));
         form.appendChild(createPopupFormField(t("dialog.pngExport.longSide"), this.sizePresetSelect));
@@ -58,6 +66,10 @@ export class PngExportDialogController implements PopupContentController {
             t("dialog.pngExport.size"),
             createPopupFormInline(this.widthInput, "x", this.heightInput),
             "div",
+        ));
+        form.appendChild(createPopupFormField(
+            t("dialog.pngExport.transparentBackground"),
+            this.transparentBackgroundInput,
         ));
 
         const memoryNote = document.createElement("p");
@@ -70,10 +82,17 @@ export class PngExportDialogController implements PopupContentController {
         const cancelButton = createPopupFormButton(t("dialog.pngExport.cancel"), "secondary");
         cancelButton.addEventListener("click", () => this.close());
 
-        const exportButton = createPopupFormButton(t("dialog.pngExport.export"), "primary");
+        const exportButton = createPopupFormButton(
+            t(this.kind === "sequence" ? "dialog.pngSequenceExport.export" : "dialog.pngExport.export"),
+            "primary",
+        );
         exportButton.addEventListener("click", () => {
             this.syncAllToOutputState();
-            this.dispatchAction({ type: "project.exportPng", source: "menu", renderMode: "detached" });
+            if (this.kind === "sequence") {
+                this.dispatchAction({ type: "project.exportPngSequence", source: "menu" });
+            } else {
+                this.dispatchAction({ type: "project.exportPng", source: "menu", renderMode: "detached" });
+            }
             this.close();
         });
 
@@ -114,6 +133,9 @@ export class PngExportDialogController implements PopupContentController {
             });
             this.heightInput.addEventListener("change", () => this.commitDimensionInput("height"));
         }
+        this.transparentBackgroundInput?.addEventListener("change", () => {
+            this.output.setPngTransparentBackground(this.transparentBackgroundInput?.checked ?? false);
+        });
     }
 
     private syncAllToOutputState(): void {
@@ -121,6 +143,9 @@ export class PngExportDialogController implements PopupContentController {
         if (this.sizePresetSelect) this.output.setSizePreset(this.sizePresetSelect.value);
         if (this.widthInput) this.output.setWidth(this.parseNumberInput(this.widthInput, 1920));
         if (this.heightInput) this.output.setHeight(this.parseNumberInput(this.heightInput, 1080));
+        if (this.transparentBackgroundInput) {
+            this.output.setPngTransparentBackground(this.transparentBackgroundInput.checked);
+        }
         this.output.setQualityScale(1);
     }
 
@@ -167,6 +192,15 @@ export class PngExportDialogController implements PopupContentController {
         input.max = String(max);
         input.step = "1";
         input.value = String(value);
+        return input;
+    }
+
+    private createCheckbox(id: string, checked: boolean): HTMLInputElement {
+        const input = document.createElement("input");
+        input.id = id;
+        input.className = "popup-form-checkbox";
+        input.type = "checkbox";
+        input.checked = checked;
         return input;
     }
 

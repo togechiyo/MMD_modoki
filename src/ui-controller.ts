@@ -688,6 +688,7 @@ export class UIController {
                     height: 1080,
                     lockAspect: false,
                     qualityScale: 1,
+                    pngTransparentBackground: false,
                     fps: 30,
                     includeAudio: false,
                     preferredVideoCodec: "vp8",
@@ -701,6 +702,7 @@ export class UIController {
                 setWidth: () => undefined,
                 setHeight: () => undefined,
                 setQualityScale: () => undefined,
+                setPngTransparentBackground: () => undefined,
                 setFps: () => undefined,
                 setIncludeAudio: () => undefined,
                 setUsePlaybackRange: () => undefined,
@@ -711,6 +713,7 @@ export class UIController {
                     height: 1080,
                     lockAspect: false,
                     qualityScale: 1,
+                    pngTransparentBackground: false,
                     fps: 30,
                     includeAudio: false,
                     preferredVideoCodec: "vp8",
@@ -2226,6 +2229,9 @@ export class UIController {
         this.actionDispatcher.register("viewport.toggleBackgroundBlack", () => {
             this.sceneEnvironmentUiController?.toggleBackgroundBlack();
         });
+        this.actionDispatcher.register("viewport.setBackgroundDisplayMode", (action) => {
+            this.sceneEnvironmentUiController?.setBackgroundDisplayMode(action.mode);
+        });
         this.actionDispatcher.register("viewport.toggleEnvironmentBackground", () => {
             this.mmdManager.toggleEnvironmentBackgroundVisible();
             this.appMenuController?.refresh();
@@ -2900,6 +2906,7 @@ export class UIController {
             height: 1080,
             lockAspect: false,
             qualityScale: 1,
+            pngTransparentBackground: false,
             fps: 30,
             includeAudio: false,
             webmCodec: "vp8",

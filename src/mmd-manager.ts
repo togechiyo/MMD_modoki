@@ -80,6 +80,10 @@ import {
     type SkydomeBackgroundStyle,
 } from "./shared/skydome-background-style";
 import {
+    normalizeBackgroundDisplayMode,
+    type BackgroundDisplayMode,
+} from "./shared/background-display-mode";
+import {
     DEFAULT_MMD_MATERIAL_PIPELINE_PRESET,
     normalizeMmdMaterialPipelinePreset,
     normalizePbrMaterialShaderPreset,
@@ -1671,7 +1675,12 @@ ${beforeFogAppendBlock}
     private backgroundVideoLastSyncedTime = Number.NaN;
     private backgroundVideoLastDrawnTime = Number.NaN;
     private readonly blackClearColor = new Color4(0, 0, 0, 1);
-    private backgroundBlackEnabled = false;
+    private readonly whiteClearColor = new Color4(1, 1, 1, 1);
+    private backgroundDisplayModeValue: BackgroundDisplayMode = "default";
+    private checkerBackgroundLayer: Layer | null = null;
+    private checkerBackgroundTexture: DynamicTexture | null = null;
+    private checkerBackgroundPreviewEnabled = true;
+    private exportTransparentBackgroundEnabled = false;
     private audioPlayer: StreamAudioPlayer | null = null;
     private audioBlobUrl: string | null = null;
     // Lighting references
@@ -5144,23 +5153,34 @@ ${beforeFogAppendBlock}
     }
 
     public isBackgroundBlack(): boolean {
-        return this.backgroundBlackEnabled;
+        return this.backgroundDisplayModeValue === "black";
+    }
+
+    public getBackgroundDisplayMode(): BackgroundDisplayMode {
+        return this.backgroundDisplayModeValue;
+    }
+
+    public setBackgroundDisplayMode(mode: BackgroundDisplayMode): BackgroundDisplayMode {
+        this.backgroundDisplayModeValue = normalizeBackgroundDisplayMode(mode);
+        if (this.backgroundDisplayModeValue === "checker") {
+            this.ensureCheckerBackgroundLayer();
+        }
+        this.syncBackgroundDisplayState();
+        return this.backgroundDisplayModeValue;
     }
 
     public setBackgroundBlack(enabled: boolean): void {
-        this.backgroundBlackEnabled = Boolean(enabled);
-        if (this.backgroundBlackEnabled) {
-            this.scene.clearColor = this.blackClearColor.clone();
-        } else {
-            this.applySkydomeBackgroundStyle();
+        if (enabled) {
+            this.setBackgroundDisplayMode("black");
+        } else if (this.backgroundDisplayModeValue === "black") {
+            this.setBackgroundDisplayMode("default");
         }
-        this.syncSkydomeVisibility();
     }
 
     public toggleBackgroundBlack(): boolean {
-        const next = !this.backgroundBlackEnabled;
-        this.setBackgroundBlack(next);
-        return next;
+        const nextMode = this.backgroundDisplayModeValue === "black" ? "default" : "black";
+        this.setBackgroundDisplayMode(nextMode);
+        return nextMode === "black";
     }
 
     public setGroundVisible(visible: boolean): void {
@@ -5293,7 +5313,9 @@ ${beforeFogAppendBlock}
     }
 
     private syncSkydomeVisibility(): void {
-        const backgroundVisible = this.skydomeVisibleValue && !this.backgroundBlackEnabled;
+        const backgroundVisible = this.skydomeVisibleValue
+            && this.backgroundDisplayModeValue === "default"
+            && !this.exportTransparentBackgroundEnabled;
         this.skydome?.setEnabled(backgroundVisible);
     }
 
@@ -5301,7 +5323,7 @@ ${beforeFogAppendBlock}
         const style = this.skydomeBackgroundStyleValue;
         const brightness = style.brightness;
         const clearColor = style.mode === "gradient" ? style.bottomColor : style.topColor;
-        if (!this.backgroundBlackEnabled) {
+        if (this.backgroundDisplayModeValue === "default" && !this.exportTransparentBackgroundEnabled) {
             this.scene.clearColor = new Color4(
                 clearColor.r * brightness,
                 clearColor.g * brightness,
@@ -5363,13 +5385,101 @@ ${beforeFogAppendBlock}
 
     public setBackgroundMediaVisible(visible: boolean): boolean {
         this.backgroundMediaVisible = Boolean(visible);
+        this.syncBackgroundMediaVisibility();
+        return this.isBackgroundMediaVisible();
+    }
+
+    private syncBackgroundMediaVisibility(): void {
+        const visible = this.backgroundMediaVisible
+            && this.backgroundDisplayModeValue === "default"
+            && !this.exportTransparentBackgroundEnabled;
         if (this.backgroundImageLayer) {
-            this.backgroundImageLayer.isEnabled = this.backgroundMediaVisible;
+            this.backgroundImageLayer.isEnabled = visible;
         }
         if (this.backgroundVideoLayer) {
-            this.backgroundVideoLayer.isEnabled = this.backgroundMediaVisible;
+            this.backgroundVideoLayer.isEnabled = visible;
         }
-        return this.isBackgroundMediaVisible();
+    }
+
+    public setExportTransparentBackgroundEnabled(enabled: boolean): void {
+        this.exportTransparentBackgroundEnabled = Boolean(enabled);
+        this.syncBackgroundDisplayState();
+    }
+
+    public setCheckerBackgroundPreviewEnabled(enabled: boolean): void {
+        this.checkerBackgroundPreviewEnabled = Boolean(enabled);
+        this.syncCheckerBackgroundVisibility();
+    }
+
+    private syncBackgroundDisplayState(): void {
+        if (this.exportTransparentBackgroundEnabled) {
+            this.scene.clearColor = new Color4(0, 0, 0, 0);
+        } else if (this.backgroundDisplayModeValue === "black") {
+            this.scene.clearColor = this.blackClearColor.clone();
+        } else if (this.backgroundDisplayModeValue === "white" || this.backgroundDisplayModeValue === "checker") {
+            this.scene.clearColor = this.whiteClearColor.clone();
+        } else {
+            this.applySkydomeBackgroundStyle();
+        }
+        this.syncSkydomeVisibility();
+        this.syncBackgroundMediaVisibility();
+        this.syncCheckerBackgroundVisibility();
+    }
+
+    private ensureCheckerBackgroundLayer(): void {
+        if (this.checkerBackgroundLayer && this.checkerBackgroundTexture) {
+            this.syncCheckerBackgroundTextureScale();
+            return;
+        }
+
+        const textureSize = 32;
+        const cellSize = textureSize / 2;
+        const texture = new DynamicTexture(
+            "checkerBackgroundTexture",
+            { width: textureSize, height: textureSize },
+            this.scene,
+            false,
+            Texture.NEAREST_SAMPLINGMODE,
+        );
+        const context = texture.getContext();
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, textureSize, textureSize);
+        context.fillStyle = "#d8d8d8";
+        context.fillRect(cellSize, 0, cellSize, cellSize);
+        context.fillRect(0, cellSize, cellSize, cellSize);
+        texture.update(false);
+        texture.wrapU = Texture.WRAP_ADDRESSMODE;
+        texture.wrapV = Texture.WRAP_ADDRESSMODE;
+
+        const layer = new Layer(
+            "checkerBackgroundLayer",
+            null,
+            this.scene,
+            true,
+            new Color4(1, 1, 1, 1),
+        );
+        layer.texture = texture;
+        this.checkerBackgroundTexture = texture;
+        this.checkerBackgroundLayer = layer;
+        this.syncCheckerBackgroundTextureScale();
+    }
+
+    private syncCheckerBackgroundTextureScale(): void {
+        const texture = this.checkerBackgroundTexture;
+        if (!texture) return;
+        const renderWidth = Math.max(1, this.engine.getRenderWidth());
+        const renderHeight = Math.max(1, this.engine.getRenderHeight());
+        texture.uScale = renderWidth / 32;
+        texture.vScale = renderHeight / 32;
+    }
+
+    private syncCheckerBackgroundVisibility(): void {
+        const visible = this.backgroundDisplayModeValue === "checker"
+            && this.checkerBackgroundPreviewEnabled
+            && !this.exportTransparentBackgroundEnabled;
+        if (this.checkerBackgroundLayer) {
+            this.checkerBackgroundLayer.isEnabled = visible;
+        }
     }
 
     public toggleBackgroundMediaVisible(): boolean {
@@ -5459,7 +5569,7 @@ ${beforeFogAppendBlock}
         this.backgroundImageLayer = nextLayer;
         this.backgroundImagePath = normalizedPath;
         this.backgroundMediaVisible = true;
-        this.backgroundImageLayer.isEnabled = true;
+        this.syncBackgroundMediaVisibility();
         previousLayer?.dispose();
         this.clearBackgroundVideo();
 
@@ -5555,7 +5665,7 @@ ${beforeFogAppendBlock}
         this.backgroundVideoCanvas = canvas;
         this.backgroundVideoPath = normalizedPath;
         this.backgroundMediaVisible = true;
-        this.backgroundVideoLayer.isEnabled = true;
+        this.syncBackgroundMediaVisibility();
         this.backgroundVideoLastSyncedTime = Number.NaN;
         this.backgroundVideoLastDrawnTime = Number.NaN;
         previousLayer?.dispose();
@@ -10418,8 +10528,15 @@ ${beforeFogAppendBlock}
     }
 
     async capturePngRgbaData(
-        precisionOrOptions: number | { precision?: number; width?: number; height?: number } = 1
+        precisionOrOptions: number | {
+            precision?: number;
+            width?: number;
+            height?: number;
+            transparentBackground?: boolean;
+        } = 1
     ): Promise<{ width: number; height: number; rgbaData: Uint8Array } | null> {
+        const previousTransparentBackground = this.exportTransparentBackgroundEnabled;
+        const previousCheckerPreview = this.checkerBackgroundPreviewEnabled;
         try {
             const options = typeof precisionOrOptions === "number"
                 ? { precision: precisionOrOptions }
@@ -10434,13 +10551,17 @@ ${beforeFogAppendBlock}
                 ? Math.max(180, Math.min(8192, Math.floor(requestedHeight)))
                 : Math.max(180, Math.min(8192, Math.floor(this.engine.getRenderHeight(true) * clampedPrecision)));
 
+            this.setCheckerBackgroundPreviewEnabled(false);
+            this.setExportTransparentBackgroundEnabled(options.transparentBackground === true);
             this.prepareExportRenderSurface(width, height);
             const postEffectReady = await this.waitForPostEffectBackendReadyForCapture();
             if (!postEffectReady) {
                 throw new Error("Post effects were not ready for PNG capture");
             }
             this.renderOnceForCapture(0);
-            const renderedFrame = await this.readExportRenderFrameAsync();
+            const renderedFrame = await this.readExportRenderFrameAsync(
+                options.transparentBackground === true ? "straight" : "opaque",
+            );
             return {
                 width: renderedFrame.width,
                 height: renderedFrame.height,
@@ -10453,6 +10574,8 @@ ${beforeFogAppendBlock}
             return null;
         } finally {
             this.releaseExportRenderSurface();
+            this.setExportTransparentBackgroundEnabled(previousTransparentBackground);
+            this.setCheckerBackgroundPreviewEnabled(previousCheckerPreview);
         }
     }
     get volume(): number {
@@ -13914,12 +14037,12 @@ ${beforeFogAppendBlock}
         return diagnostics;
     }
 
-    public async readExportRenderFrameAsync(): Promise<RenderedExportFrame> {
+    public async readExportRenderFrameAsync(alphaMode: "straight" | "opaque" = "opaque"): Promise<RenderedExportFrame> {
         const surface = this.exportRenderSurface;
         if (!surface) {
             throw new Error("Export render surface is not prepared");
         }
-        return await surface.readFrameAsync("opaque");
+        return await surface.readFrameAsync(alphaMode);
     }
 
     public releaseExportRenderSurface(): void {
@@ -14256,6 +14379,9 @@ ${beforeFogAppendBlock}
         }
         this.disposeMirroringFloorResources();
         this.clearBackgroundMedia();
+        this.checkerBackgroundLayer?.dispose();
+        this.checkerBackgroundLayer = null;
+        this.checkerBackgroundTexture = null;
         this.globalIlluminationController?.dispose();
         this.scene.dispose();
         this.engine.dispose();
@@ -14275,6 +14401,7 @@ ${beforeFogAppendBlock}
         const renderHeight = Math.max(1, Math.round(height / hardwareScalingLevel));
         if (this.engine.getRenderWidth() !== renderWidth || this.engine.getRenderHeight() !== renderHeight) {
             this.engine.setSize(renderWidth, renderHeight);
+            this.syncCheckerBackgroundTextureScale();
             this.resizeGlobalIllumination();
             if (this.depthRenderer) {
                 const depthMap = this.depthRenderer.getDepthMap();

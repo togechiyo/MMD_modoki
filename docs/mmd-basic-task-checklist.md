@@ -65,7 +65,8 @@
 - [x] 単発PNGを連番PNGと同じWeb Worker encoderへ統合（単発は1 worker固定）
 - [x] メニューバーの単発PNG出力に比率・長辺プリセット・幅×高さの詳細ダイアログを追加し、指定解像度で描くhidden exporterへ接続（8Kプリセット含む。シークバーの即時スクリーンショットはviewport経路を維持）
 - [ ] 単発8K PNG向けにscanlineを分割投入し、filter済み全量バッファを削減
-- [ ] 共通 RGBA Surface に背景透過 PNG 連番 mode を追加し、straight alpha を検証
+- [x] 共通 RGBA Surface に背景透過 PNG / PNG 連番 mode を追加し、メニューから選択可能にする（[黒背景出力と PNG 背景透過](./black-background-export-and-png-transparency-2026-08-13.md)）
+- [x] 背景表示を標準 / 白 / 黒 / 透明チェックへ整理し、チェック模様は規則的なコード生成プレビューとして出力から除外する
 - [x] UI 非表示モード
 - [x] デフォルト空を `BackgroundMaterial` 化し、単色 / studio gradient・色・明るさ・保存復元に対応
 - [x] 背景画像インポート

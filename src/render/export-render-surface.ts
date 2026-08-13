@@ -66,6 +66,24 @@ export const normalizeExportRgbaRows = (
     return output;
 };
 
+export const unpremultiplyExportRgba = (pixels: Uint8Array): Uint8Array => {
+    for (let offset = 0; offset + 3 < pixels.length; offset += 4) {
+        const alpha = pixels[offset + 3];
+        if (alpha === 0) {
+            pixels[offset] = 0;
+            pixels[offset + 1] = 0;
+            pixels[offset + 2] = 0;
+            continue;
+        }
+        if (alpha === 255) continue;
+        const scale = 255 / alpha;
+        pixels[offset] = Math.min(255, Math.round(pixels[offset] * scale));
+        pixels[offset + 1] = Math.min(255, Math.round(pixels[offset + 1] * scale));
+        pixels[offset + 2] = Math.min(255, Math.round(pixels[offset + 2] * scale));
+    }
+    return pixels;
+};
+
 export class ExportRenderSurface {
     public readonly renderTarget: RenderTargetTexture;
     private readbackCount = 0;
@@ -144,10 +162,14 @@ export class ExportRenderSurface {
         }
         const data = await withTimeout(readback, timeoutMs, "Export render surface readback");
         this.readbackCount += 1;
+        const pixels = normalizeExportRgbaRows(data, this.width, this.height);
+        if (alphaMode === "straight") {
+            unpremultiplyExportRgba(pixels);
+        }
         return {
             width: this.width,
             height: this.height,
-            pixels: normalizeExportRgbaRows(data, this.width, this.height),
+            pixels,
             format: "RGBA",
             rowOrder: "top-to-bottom",
             alphaMode,

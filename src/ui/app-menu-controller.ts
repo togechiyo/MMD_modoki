@@ -10,6 +10,7 @@ import { IblShadowSettingsDialogController } from "./ibl-shadow-settings-dialog-
 import { LightingShadowSettingsDialogController } from "./lighting-shadow-settings-dialog-controller";
 import { MirrorFloorSettingsDialogController } from "./mirror-floor-settings-dialog-controller";
 import { PhysicsSettingsDialogController } from "./physics-settings-dialog-controller";
+import { RenderOrderSettingsDialogController } from "./render-order-settings-dialog-controller";
 import { PngExportDialogController } from "./png-export-dialog-controller";
 import { PopupDialogController } from "./popup-dialog-controller";
 import type { WebmExportSettingsAdapter } from "./export-ui-controller";
@@ -366,6 +367,9 @@ export class AppMenuController {
             case "view.edgeSettings":
                 this.openEdgeSettingsDialog(invoker ?? null);
                 return;
+            case "view.renderOrderSettings":
+                this.openRenderOrderSettingsDialog(invoker ?? null);
+                return;
             case "view.toggleSkydome":
                 this.dispatchAction({ type: "viewport.toggleSkydome", source: "menu" });
                 return;
@@ -594,6 +598,17 @@ export class AppMenuController {
                 mmdManager: this.mmdManager,
                 refreshUi: () => this.refreshRuntimeUi(),
             }),
+        });
+    }
+
+    private openRenderOrderSettingsDialog(invoker: HTMLElement | null): void {
+        this.popupDialogController.open({
+            id: "render-order-settings",
+            surface: "modal",
+            title: t("dialog.renderOrder.title"),
+            size: "md",
+            restoreFocusTo: invoker,
+            content: new RenderOrderSettingsDialogController(this.mmdManager),
         });
     }
 

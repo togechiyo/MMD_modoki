@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import type { FrameGraphPostEffectStackEntry } from "../shared/frame-graph-post-effect-stack";
 import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
+import type { MmdRenderOrderMode } from "../shared/mmd-render-order";
 import {
     normalizeSkydomeBackgroundStyle,
     type SkydomeBackgroundStyle,
@@ -29,6 +30,7 @@ type ProjectExportSceneModel = {
     mesh: object;
     model: object;
     materialPipeline?: MmdMaterialPipelinePreset;
+    renderOrder?: number;
 };
 
 type ProjectExportHost = {
@@ -244,6 +246,8 @@ type ProjectExportHost = {
     getPostEffectFogColor: () => { r: number; g: number; b: number };
     getRingParticleSettings?: () => ProjectRingParticleState;
     getFrameGraphPostEffectStackEntries?: () => FrameGraphPostEffectStackEntry[];
+    getMmdRenderOrderMode?: () => MmdRenderOrderMode;
+    getMmdCoplanarDepthBiasStrength?: () => number;
     isGroundVisible: () => boolean;
     isSkydomeVisible: () => boolean;
 };
@@ -265,6 +269,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         visible: host.getModelVisibility(entry.mesh),
         castsShadow: host.getModelCastsShadow(entry),
         materialPipeline: entry.materialPipeline ?? "mmd-standard",
+        renderOrder: entry.renderOrder ?? modelIndex,
         motionImports: (host.modelMotionImportsByModel.get(entry.model) ?? []).map((item) => ({ ...item })),
         materialShaders: host.getSerializedMaterialShaderStates(entry),
         externalParent: (() => {
@@ -326,6 +331,8 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         savedAt: new Date().toISOString(),
         scene: {
             models,
+            renderOrderMode: host.getMmdRenderOrderMode?.() ?? "evaluated",
+            coplanarMaterialDepthBiasStrength: host.getMmdCoplanarDepthBiasStrength?.() ?? 0,
             activeModelPath: host.activeModelInfo?.path ?? null,
             timelineTarget: host.timelineTarget,
             currentFrame: host._currentFrame,

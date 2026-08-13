@@ -88,6 +88,20 @@ import {
     type PbrMaterialShaderPreset,
 } from "./shared/mmd-material-pipeline";
 import {
+    DEFAULT_MMD_COPLANAR_DEPTH_BIAS_STRENGTH,
+    DEFAULT_MMD_RENDER_ORDER_MODE,
+    MAX_MMD_COPLANAR_DEPTH_BIAS_STRENGTH,
+    getMmdGeometryBoundsFromPositions,
+    getMmdCoplanarMaterialDepthBiasUnits,
+    getMmdMaterialAlphaIndex,
+    getNextMmdModelRenderOrder,
+    moveMmdModelRenderOrder,
+    normalizeMmdCoplanarDepthBiasStrength,
+    normalizeMmdRenderOrderMode,
+    type MmdAxisAlignedBounds,
+    type MmdRenderOrderMode,
+} from "./shared/mmd-render-order";
+import {
     selectModelExternalParentKeyframeAtFrame,
     wouldCreateModelExternalParentCycle,
     type ModelExternalParentKeyframePayload,
@@ -858,6 +872,7 @@ type SceneModelJointEntry = PhysicsJointDiagnosticEntry;
 
 type SceneModelEntry = {
     mesh: MmdMesh;
+    renderMeshes: Mesh[];
     model: RuntimeModel;
     info: ModelInfo;
     materials: SceneModelMaterialEntry[];
@@ -867,6 +882,7 @@ type SceneModelEntry = {
     contactShadowMesh: Mesh | null;
     castShadow: boolean;
     materialPipeline: MmdMaterialPipelinePreset;
+    renderOrder: number;
     externalParent: ModelExternalParentState | null;
     externalParentKeyframes: ModelExternalParentKeyframe[];
 };
@@ -933,6 +949,8 @@ export class MmdManager {
     private static readonly FORCE_MODEL_DEBUG_MATERIAL_STORAGE_KEY = "mmd_modoki.debug.forceModelDebugMaterial";
     private static readonly ALPHA_TEXTURE_DEBUG_STORAGE_KEY = "mmd_modoki.debug.alphaTextureView";
     private static readonly MMD_MATERIAL_PIPELINE_STORAGE_KEY = "mmd_modoki.materialPipeline";
+    private static readonly MMD_RENDER_ORDER_MODE_STORAGE_KEY = "mmd_modoki.renderOrderMode";
+    private static readonly MMD_COPLANAR_DEPTH_BIAS_STRENGTH_STORAGE_KEY = "mmd_modoki.render.coplanarDepthBiasStrength";
     private static readonly ENVIRONMENT_LIGHTING_STORAGE_KEY = "mmd_modoki.environmentLighting";
     private static readonly ENVIRONMENT_LIGHTING_INTENSITY_STORAGE_KEY = "mmd_modoki.environmentLightingIntensity";
     private static readonly ENVIRONMENT_BACKGROUND_STORAGE_KEY = "mmd_modoki.environmentBackground";
@@ -1597,6 +1615,8 @@ ${beforeFogAppendBlock}
     private readonly modelExternalParentAppliedBeforePhysicsIndices = new Set<number>();
     private readonly modelExternalParentPhysicsHookedRuntimes = new WeakSet<object>();
     private mmdMaterialPipelinePresetValue = MmdManager.readMmdMaterialPipelinePresetLocalStorage();
+    private mmdRenderOrderModeValue = MmdManager.readMmdRenderOrderModeLocalStorage();
+    private mmdCoplanarDepthBiasStrengthValue = MmdManager.readMmdCoplanarDepthBiasStrengthLocalStorage();
     private _isPlaying = false;
     private _currentFrame = 0;
     private _totalFrames = 300;
@@ -2354,14 +2374,110 @@ ${beforeFogAppendBlock}
     public onGlobalIlluminationStateChanged: ((enabled: boolean) => void) | null = null;
     public onDofFocusTargetChanged: (() => void) | null = null;
 
-    public getLoadedModels(): { index: number; name: string; path: string; active: boolean; castsShadow: boolean }[] {
+    public getLoadedModels(): { index: number; name: string; path: string; active: boolean; castsShadow: boolean; renderOrder: number }[] {
         return this.sceneModels.map((entry, index) => ({
             index,
             name: entry.info.name,
             path: entry.info.path,
             active: entry.model === this.currentModel,
             castsShadow: entry.castShadow,
+            renderOrder: entry.renderOrder,
         }));
+    }
+
+    public getMmdRenderOrderMode(): MmdRenderOrderMode {
+        return this.mmdRenderOrderModeValue;
+    }
+
+    public setMmdRenderOrderMode(value: unknown): MmdRenderOrderMode {
+        if (this.sceneModels.length > 0) return this.mmdRenderOrderModeValue;
+        const next = normalizeMmdRenderOrderMode(value);
+        this.mmdRenderOrderModeValue = next;
+        MmdManager.writeStringLocalStorage(MmdManager.MMD_RENDER_ORDER_MODE_STORAGE_KEY, next);
+        return next;
+    }
+
+    public getMmdCoplanarDepthBiasStrength(): number {
+        return this.mmdCoplanarDepthBiasStrengthValue;
+    }
+
+    public setMmdCoplanarDepthBiasStrength(value: unknown): number {
+        const next = normalizeMmdCoplanarDepthBiasStrength(value);
+        this.mmdCoplanarDepthBiasStrengthValue = next;
+        MmdManager.writeNumberLocalStorage(MmdManager.MMD_COPLANAR_DEPTH_BIAS_STRENGTH_STORAGE_KEY, next);
+        const appliedMaterialCount = this.refreshMmdCoplanarMaterialDepthBiasCorrection();
+        logInfo("render", "MMD coplanar material depth bias updated", {
+            strength: next,
+            appliedMaterialCount,
+        });
+        return next;
+    }
+
+    public refreshMmdCoplanarMaterialDepthBiasCorrection(): number {
+        let appliedMaterialCount = 0;
+        for (const entry of this.sceneModels) {
+            const meshes = entry.renderMeshes.filter((mesh) => Boolean(mesh.material));
+            const bounds = meshes.map((mesh) => this.getMmdRenderMeshGeometryBounds(mesh));
+            const biasUnits = getMmdCoplanarMaterialDepthBiasUnits(
+                bounds,
+                this.mmdCoplanarDepthBiasStrengthValue,
+            );
+            const biasByMaterial = new Map<Material, number>();
+            meshes.forEach((mesh, index) => {
+                const material = mesh.material;
+                if (!material) return;
+                const units = biasUnits[index] ?? 0;
+                biasByMaterial.set(material, Math.min(biasByMaterial.get(material) ?? 0, units));
+            });
+            for (const [material, units] of biasByMaterial) {
+                material.zOffsetUnits = units;
+                if (units !== 0) appliedMaterialCount += 1;
+            }
+        }
+        return appliedMaterialCount;
+    }
+
+    private getMmdRenderMeshGeometryBounds(mesh: Mesh): MmdAxisAlignedBounds {
+        const geometryBounds = getMmdGeometryBoundsFromPositions(mesh.getVerticesData("position"));
+        if (geometryBounds) return geometryBounds;
+
+        try {
+            const box = mesh.getBoundingInfo().boundingBox;
+            return {
+                min: { x: box.minimum.x, y: box.minimum.y, z: box.minimum.z },
+                max: { x: box.maximum.x, y: box.maximum.y, z: box.maximum.z },
+            };
+        } catch {
+            return {
+                min: { x: Number.NaN, y: Number.NaN, z: Number.NaN },
+                max: { x: Number.NaN, y: Number.NaN, z: Number.NaN },
+            };
+        }
+    }
+
+    public moveModelRenderOrder(modelIndex: number, direction: -1 | 1): boolean {
+        const nextOrders = moveMmdModelRenderOrder(
+            this.sceneModels.map((entry) => entry.renderOrder),
+            modelIndex,
+            direction,
+        );
+        if (!nextOrders) return false;
+        this.sceneModels.forEach((entry, index) => {
+            entry.renderOrder = nextOrders[index] ?? index;
+        });
+        this.applyMmdRenderOrderToAllModels();
+        return true;
+    }
+
+    private applyMmdRenderOrderToAllModels(): void {
+        for (const entry of this.sceneModels) {
+            let materialOrder = 0;
+            for (const mesh of entry.renderMeshes) {
+                if (!mesh.material) continue;
+                mesh.alphaIndex = getMmdMaterialAlphaIndex(entry.renderOrder, materialOrder);
+                materialOrder += 1;
+            }
+        }
     }
 
     public getModelBoneNames(modelIndex: number): string[] {
@@ -6615,6 +6731,25 @@ ${beforeFogAppendBlock}
         this.performanceHookedRuntimes.add(runtime);
     }
 
+    private static readMmdRenderOrderModeLocalStorage(): MmdRenderOrderMode {
+        try {
+            return normalizeMmdRenderOrderMode(
+                globalThis.localStorage?.getItem(MmdManager.MMD_RENDER_ORDER_MODE_STORAGE_KEY),
+            );
+        } catch {
+            return DEFAULT_MMD_RENDER_ORDER_MODE;
+        }
+    }
+
+    private static readMmdCoplanarDepthBiasStrengthLocalStorage(): number {
+        return normalizeMmdCoplanarDepthBiasStrength(MmdManager.readNumberLocalStorage(
+            MmdManager.MMD_COPLANAR_DEPTH_BIAS_STRENGTH_STORAGE_KEY,
+            DEFAULT_MMD_COPLANAR_DEPTH_BIAS_STRENGTH,
+            0,
+            MAX_MMD_COPLANAR_DEPTH_BIAS_STRENGTH,
+        ));
+    }
+
     private installModelExternalParentPhysicsHook(runtime: RuntimeMmdRuntime): void {
         if (this.modelExternalParentPhysicsHookedRuntimes.has(runtime)) return;
         const originalBeforePhysics = runtime.beforePhysics.bind(runtime);
@@ -7877,8 +8012,15 @@ ${beforeFogAppendBlock}
     async loadPMX(
         filePath: string,
         materialPipeline: MmdMaterialPipelinePreset = this.mmdMaterialPipelinePresetValue,
+        renderOrder: number = getNextMmdModelRenderOrder(this.sceneModels.map((entry) => entry.renderOrder)),
     ): Promise<ModelInfo | null> {
-        return await loadPMXImpl(this, filePath, materialPipeline);
+        return await loadPMXImpl(
+            this,
+            filePath,
+            materialPipeline,
+            this.mmdRenderOrderModeValue,
+            renderOrder,
+        );
     }
 
     private shouldActivateAsCurrent(info: ModelInfo): boolean {

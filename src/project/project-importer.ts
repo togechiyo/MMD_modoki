@@ -27,6 +27,11 @@ import {
     type MmdMaterialPipelinePreset,
     type PbrMaterialShaderPreset,
 } from "../shared/mmd-material-pipeline";
+import {
+    normalizeMmdCoplanarDepthBiasStrength,
+    normalizeMmdRenderOrderMode,
+    type MmdRenderOrderMode,
+} from "../shared/mmd-render-order";
 
 type ProjectImportRuntimeModel = {
     createRuntimeAnimation(animation: object): unknown;
@@ -47,7 +52,10 @@ type ProjectImportHost = {
     loadPMX(
         path: string,
         materialPipeline?: MmdMaterialPipelinePreset,
+        renderOrder?: number,
     ): Promise<{ name: string } | null>;
+    setMmdRenderOrderMode?: (value: MmdRenderOrderMode) => MmdRenderOrderMode;
+    setMmdCoplanarDepthBiasStrength?: (value: number) => number;
     loadVMD(path: string): Promise<unknown>;
     loadVPD(path: string): Promise<unknown>;
     loadCameraVMD(path: string): Promise<boolean>;
@@ -373,6 +381,10 @@ export async function importProjectState(
     const lightDirectionY = readLightingDirectionComponent(data.lighting, "y");
     const lightDirectionZ = readLightingDirectionComponent(data.lighting, "z");
     host.clearProjectForImport();
+    host.setMmdRenderOrderMode?.(normalizeMmdRenderOrderMode(data.scene.renderOrderMode));
+    host.setMmdCoplanarDepthBiasStrength?.(
+        normalizeMmdCoplanarDepthBiasStrength(data.scene.coplanarMaterialDepthBiasStrength),
+    );
 
     let loadedModels = 0;
     const embeddedModelAnimationsByPath = new Map<string, ProjectSerializedModelAnimation | null>();
@@ -388,10 +400,10 @@ export async function importProjectState(
     }
 
     for (const modelState of data.scene.models) {
-        const modelInfo = await host.loadPMX(
-            modelState.path,
-            normalizeMmdMaterialPipelinePreset(modelState.materialPipeline),
-        );
+        const materialPipeline = normalizeMmdMaterialPipelinePreset(modelState.materialPipeline);
+        const modelInfo = typeof modelState.renderOrder === "number"
+            ? await host.loadPMX(modelState.path, materialPipeline, modelState.renderOrder)
+            : await host.loadPMX(modelState.path, materialPipeline);
         if (!modelInfo) {
             warnings.push(`Model load failed: ${modelState.path}`);
             continue;

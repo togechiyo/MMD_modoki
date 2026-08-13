@@ -2531,6 +2531,56 @@ body.file-drag-active #viewport-container {
   display: none !important;
 }
 
+.render-order-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.render-order-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.render-order-model-name {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.render-order-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.render-order-move-button {
+  width: 28px;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.render-order-move-button:not(:disabled):hover,
+.render-order-move-button:not(:disabled):focus-visible {
+  border-color: rgba(117, 161, 255, 0.62);
+  background: rgba(76, 141, 255, 0.2);
+  outline: none;
+}
+
+.render-order-move-button:disabled {
+  opacity: 0.32;
+}
+
 .effect-panel-section-head {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 30px;

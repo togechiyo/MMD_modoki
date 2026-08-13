@@ -228,7 +228,10 @@ describe("exportProjectState", () => {
                 mesh: {},
                 model,
                 materialPipeline: "pbr-standard" as const,
+                renderOrder: 3,
             }],
+            getMmdRenderOrderMode: () => "mmd-fixed" as const,
+            getMmdCoplanarDepthBiasStrength: () => 2,
             environmentLightingEnabled: true,
             environmentLightingIntensity: 2.25,
             environmentLightingSourcePath: "C:/hdr/studio.hdr",
@@ -237,6 +240,9 @@ describe("exportProjectState", () => {
         });
 
         expect(project.scene.models[0]?.materialPipeline).toBe("pbr-standard");
+        expect(project.scene.models[0]?.renderOrder).toBe(3);
+        expect(project.scene.renderOrderMode).toBe("mmd-fixed");
+        expect(project.scene.coplanarMaterialDepthBiasStrength).toBe(2);
         expect(project.scene.models[0]).not.toHaveProperty("pbrMaterialPreset");
         expect(project.lighting.environmentLightingEnabled).toBe(true);
         expect(project.lighting.environmentLightingIntensity).toBe(2.25);

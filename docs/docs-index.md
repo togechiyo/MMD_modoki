@@ -168,6 +168,8 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [MMD 描画順整理 実装メモ 2026-08-13](./mmd-render-order-implementation-2026-08-13.md)
+
 - [PMX 顔描画崩れの原因仮説メモ](./face-render-corruption-investigation.md)
 - [モデル透過の調査メモ](./model-transparency-investigation.md)
 - [MMD 顔 alpha 透過調査](./mmd-face-alpha-transparency-investigation-2026-06-27.md)

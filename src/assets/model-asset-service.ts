@@ -19,6 +19,13 @@ import {
     normalizeMmdMaterialPipelinePreset,
     type MmdMaterialPipelinePreset,
 } from "../shared/mmd-material-pipeline";
+import {
+    DEFAULT_MMD_RENDER_ORDER_MODE,
+    getMmdMaterialAlphaIndex,
+    getNextMmdModelRenderOrder,
+    normalizeMmdRenderOrderMode,
+    type MmdRenderOrderMode,
+} from "../shared/mmd-render-order";
 import { PbrMaterialProxy } from "../runtime/pbr-material-proxy";
 import { AdaptivePbrMaterialBuilder } from "./adaptive-pbr-material-builder";
 import { collectModelBoneInfo } from "./model-bone-metadata";
@@ -60,12 +67,19 @@ type ModelAssetMaterial = object & {
     alpha?: number;
     transparencyMode?: number;
     useAlphaFromDiffuseTexture?: boolean;
+    useAlphaFromAlbedoTexture?: boolean;
     backFaceCulling?: boolean;
     disableColorWrite?: boolean;
     disableDepthWrite?: boolean;
     forceDepthWrite?: boolean;
     needDepthPrePass?: boolean;
     diffuseTexture?: {
+        name?: string;
+        hasAlpha?: boolean;
+        metadata?: Record<string, unknown> | null;
+        isReady?: () => boolean;
+    } | null;
+    albedoTexture?: {
         name?: string;
         hasAlpha?: boolean;
         metadata?: Record<string, unknown> | null;
@@ -124,13 +138,17 @@ type SupportedMmdMaterialBuilder = MmdStandardMaterialBuilder | PBRMaterialBuild
 function ensureSharedMmdMaterialBuilder(
     fileName: string,
     materialPipeline: MmdMaterialPipelinePreset,
+    renderOrderMode: MmdRenderOrderMode,
 ): SupportedMmdMaterialBuilder {
+    const renderMethod = renderOrderMode === "mmd-fixed"
+        ? MmdMaterialRenderMethod.DepthWriteAlphaBlending
+        : MmdMaterialRenderMethod.DepthWriteAlphaBlendingWithEvaluation;
     const currentBuilder = MmdModelLoader.SharedMaterialBuilder;
     if (isPbrMaterialPipelinePreset(materialPipeline)) {
         const builder = currentBuilder instanceof AdaptivePbrMaterialBuilder
             ? currentBuilder
             : new AdaptivePbrMaterialBuilder();
-        builder.renderMethod = MmdMaterialRenderMethod.DepthWriteAlphaBlendingWithEvaluation;
+        builder.renderMethod = renderMethod;
         if (builder !== currentBuilder) {
             MmdModelLoader.SharedMaterialBuilder = builder;
         }
@@ -144,7 +162,7 @@ function ensureSharedMmdMaterialBuilder(
     }
 
     if (currentBuilder instanceof MmdStandardMaterialBuilder) {
-        currentBuilder.renderMethod = MmdMaterialRenderMethod.DepthWriteAlphaBlendingWithEvaluation;
+        currentBuilder.renderMethod = renderMethod;
         installMmdMaterialBuilderDecisionDiagnostics(currentBuilder, fileName);
         logInfo("asset", "MMD material builder ready", {
             fileName,
@@ -159,7 +177,7 @@ function ensureSharedMmdMaterialBuilder(
     }
 
     const builder = new MmdStandardMaterialBuilder();
-    builder.renderMethod = MmdMaterialRenderMethod.DepthWriteAlphaBlendingWithEvaluation;
+    builder.renderMethod = renderMethod;
     installMmdMaterialBuilderDecisionDiagnostics(builder, fileName);
     MmdModelLoader.SharedMaterialBuilder = builder;
     logWarn("asset", "MMD material builder replaced before model import", {
@@ -494,6 +512,7 @@ type ModelAssetHost = {
     };
     shadowGenerator: Pick<ShadowGenerator, "addShadowCaster">;
     applyMmdMaterialCompatibilityFixes(material: ModelAssetMaterial): boolean;
+    refreshMmdCoplanarMaterialDepthBiasCorrection?: () => number;
     applyModelEdgeToMeshes(meshes: Mesh[]): void;
     applyCelShadingToMeshes(meshes: Mesh[]): void;
     applyAnisotropicFilteringToMeshes?: (meshes: Mesh[]) => void;
@@ -515,6 +534,7 @@ type ModelAssetHost = {
     setModelMotionImports(model: ModelAssetRuntimeModel, imports: []): void;
     sceneModels: Array<{
         mesh: MmdMesh;
+        renderMeshes: Mesh[];
         model: ModelAssetRuntimeModel;
         info: ModelInfo;
         materials: SceneModelMaterialEntry[];
@@ -552,6 +572,7 @@ type ModelAssetHost = {
         contactShadowMesh: null;
         castShadow: boolean;
         materialPipeline: MmdMaterialPipelinePreset;
+        renderOrder: number;
         externalParent: {
             childBoneName: string;
             parentModelPath: string;
@@ -623,6 +644,20 @@ function visitModelMaterials(
     }
 
     visitor(material, meshName, meshName);
+}
+
+function applyMmdFixedAlphaBlend(material: ModelAssetMaterial): void {
+    if (material.diffuseTexture) {
+        material.diffuseTexture.hasAlpha = true;
+        material.useAlphaFromDiffuseTexture = true;
+    }
+    if (material.albedoTexture) {
+        material.albedoTexture.hasAlpha = true;
+        material.useAlphaFromAlbedoTexture = true;
+    }
+    material.transparencyMode = Material.MATERIAL_ALPHABLEND;
+    material.forceDepthWrite = true;
+    material.markAsDirty?.(Material.AllDirtyFlag);
 }
 
 function collectSceneModelMaterials(
@@ -1152,6 +1187,8 @@ export async function loadPMX(
     host: ModelAssetHost,
     filePath: string,
     requestedMaterialPipeline?: MmdMaterialPipelinePreset,
+    requestedRenderOrderMode: MmdRenderOrderMode = DEFAULT_MMD_RENDER_ORDER_MODE,
+    requestedRenderOrder?: number,
 ): Promise<ModelInfo | null> {
     let renderingSuspended = false;
     try {
@@ -1160,13 +1197,19 @@ export async function loadPMX(
         const { dir, fileName } = splitFilePath(filePath);
         const fileUrl = localPathToFileUrl(dir);
         const materialPipeline = normalizeMmdMaterialPipelinePreset(requestedMaterialPipeline);
+        const renderOrderMode = normalizeMmdRenderOrderMode(requestedRenderOrderMode);
+        const renderOrder = Number.isFinite(requestedRenderOrder)
+            ? Math.max(0, Math.trunc(Number(requestedRenderOrder)))
+            : getNextMmdModelRenderOrder(host.sceneModels.map((entry) => entry.renderOrder));
 
         logInfo("asset", "model load started", {
             filePath,
             fileName,
             materialPipeline,
+            renderOrderMode,
+            renderOrder,
         });
-        const materialBuilder = ensureSharedMmdMaterialBuilder(fileName, materialPipeline);
+        const materialBuilder = ensureSharedMmdMaterialBuilder(fileName, materialPipeline, renderOrderMode);
         host.configureMmdTextureLoaderForWebGpuForBuilder?.(materialBuilder);
         if (materialBuilder instanceof MmdStandardMaterialBuilder) {
             installPmxMaterialDiagnosticCapture(materialBuilder);
@@ -1305,8 +1348,11 @@ export async function loadPMX(
             if (mesh.material) {
                 visitModelMaterials(mesh, (material) => {
                     host.applyMmdMaterialCompatibilityFixes(material);
+                    if (renderOrderMode === "mmd-fixed") {
+                        applyMmdFixedAlphaBlend(material);
+                    }
                 });
-                mesh.alphaIndex = materialOrder;
+                mesh.alphaIndex = getMmdMaterialAlphaIndex(renderOrder, materialOrder);
                 materialOrder += 1;
             }
         }
@@ -1480,6 +1526,7 @@ export async function loadPMX(
 
         host.sceneModels.push({
             mesh: mmdMesh,
+            renderMeshes: result.meshes as Mesh[],
             model: mmdModel,
             info: modelInfo,
             materials: sceneMaterials,
@@ -1489,9 +1536,11 @@ export async function loadPMX(
             contactShadowMesh: null,
             castShadow: true,
             materialPipeline,
+            renderOrder,
             externalParent: null,
             externalParentKeyframes: [],
         });
+        host.refreshMmdCoplanarMaterialDepthBiasCorrection?.();
         host.normalizeRuntimeBoneEvaluationOrder?.(mmdModel);
         host.applyPhysicsStateToModel(mmdModel);
         host.refreshRigidBodyVisualizerTarget();
@@ -1522,6 +1571,8 @@ export async function loadPMX(
             vertexCount,
             boneCount,
             materialPipeline,
+            renderOrderMode,
+            renderOrder,
             morphCount: morphEntries.length,
             meshCount: result.meshes.length,
             sceneModelCount: host.sceneModels.length,

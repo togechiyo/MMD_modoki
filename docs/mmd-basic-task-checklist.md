@@ -436,3 +436,16 @@
 - [x] 漂う光粒 preset を thin instance billboard で実装し、fixed seed、pause / seek、Luminous / FrameGraph 順を確認する（[実装メモ](./ring-particle-effect-implementation-note-2026-08-12.md)）。Bloom / DoF 順の追加評価は継続する
 - [ ] 2 個目の大気 effect 実装後に、camera / depth / direction light 同期の実重複だけを helper へ抽出する
 - 転用方針: [海エフェクト実験から大気演出へ転用する知見 2026-08-12](./framegraph-atmospheric-effects-ocean-reuse-note-2026-08-12.md)
+
+## 2026-08-13 描画順整理
+
+- [x] 複数 PMX 間で `alphaIndex` が `0..n` に衝突する問題を解消
+- [x] PMX 内の材質順を維持したモデル単位の描画順変更を追加
+- [x] MMD 固定順（全材質 AlphaBlend + depth write）を実験モードとして分離
+- [x] 描画方式とモデル描画順をプロジェクトへ保存 / 復元
+- [x] 大型薄型面だけを対象にした同一平面深度バイアス補正（既定 OFF、強度 1～4）を追加
+- [ ] キャラクターモデル複数体で透明材質、エッジ、影、PostFX の実機比較
+- [x] `St.05 Cyber Stage Ver.1.2A` で同一平面補正が 6 材質へ適用され、床のちらつきが解消することを実機確認
+- [ ] キャラクターモデルと別ステージで同一平面補正の強度と副作用を実機比較
+
+詳細: [MMD 描画順整理 実装メモ 2026-08-13](./mmd-render-order-implementation-2026-08-13.md)

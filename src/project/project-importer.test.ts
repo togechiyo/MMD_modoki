@@ -69,6 +69,8 @@ function createHost() {
         physicsAvailable: false,
         renderFpsLimit: 60,
         clearProjectForImport: vi.fn(),
+        setMmdRenderOrderMode: vi.fn((value) => value),
+        setMmdCoplanarDepthBiasStrength: vi.fn((value) => value),
         loadPMX: vi.fn(),
         loadVMD: vi.fn(),
         loadVPD: vi.fn(),
@@ -315,6 +317,33 @@ describe("importProjectState", () => {
         expect(host.environmentBackgroundVisible).toBe(true);
         expect(host.environmentBackgroundIntensity).toBe(0.08);
         expect(host.setEnvironmentLightingSourcePath).toHaveBeenCalledWith("C:/hdr/studio.hdr");
+    });
+
+    it("restores the fixed render method and model draw rank before loading", async () => {
+        const host = createHost();
+        const project = createProject({
+            scene: {
+                ...createProject().scene,
+                renderOrderMode: "mmd-fixed",
+                coplanarMaterialDepthBiasStrength: 2,
+                models: [{
+                    path: "C:/models/front.pmx",
+                    visible: true,
+                    motionImports: [],
+                    renderOrder: 4,
+                }],
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setMmdRenderOrderMode).toHaveBeenCalledWith("mmd-fixed");
+        expect(host.setMmdCoplanarDepthBiasStrength).toHaveBeenCalledWith(2);
+        expect(host.loadPMX).toHaveBeenCalledWith(
+            "C:/models/front.pmx",
+            "mmd-standard",
+            4,
+        );
     });
 
     it("uses MMD Standard and disabled environment lighting for legacy projects", async () => {

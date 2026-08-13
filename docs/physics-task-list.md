@@ -268,7 +268,7 @@
   - UI には「0は補正なし、1は最大補正。減衰/重力は移動減衰と回転減衰が1の剛体にのみ有効。質量1寄せはゼロ制限6DOF系の質量補正に有効」と注記する。
   - 現行仕様は [物理互換補正メモ 2026-07-12](./physics-compatibility-corrections-2026-07-12.md) に分離してまとめる。
   - `減衰補正量` は `localStorage` の `mmd_modoki.physics.dampingCorrectionAmount` に保存する。`0.00` は cap `1.0`、`0.00` より大きい値は cap `0.999..0.901` に変換する。ロード済みモデルにも、元が `1.0` 相当だった body index を記録して再適用する。
-  - `重力補正量` は `localStorage` の `mmd_modoki.physics.fullyDampedGravityCorrectionAmount` に保存する。`0.00` は gravity scale `1.0`、`1.00` は `0.0`（対象剛体の重力相殺）に変換する。
+  - `自由軸バネ重力補正量` は `localStorage` の `mmd_modoki.physics.fullyDampedGravityCorrectionAmount` に保存する。`0.00` は gravity scale `1.0`、`1.00` は `0.0`（対象剛体の重力相殺）に変換する。対象はFollowBone直下の実質自由Y軸＋線形バネ＋減衰1のdynamic剛体に限定する。
   - `質量 1寄せ量` は `localStorage` の `mmd_modoki.physics.abnormalMassTowardUnit` に保存する。補正後の mass をログ空間で `1.0` に寄せるため、遠い値ほど絶対変化量が大きく、`0.00` では従来の質量補正値をそのまま使う。
   - 補正適用時に元の mass / local inertia を記録し、チェック OFF で復元する。
   - 後で切り分ける場合は `localStorage.setItem("mmd_modoki.physics.disableDampingCap", "1")` 後に reload する。

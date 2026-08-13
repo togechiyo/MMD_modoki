@@ -7233,6 +7233,7 @@ ${beforeFogAppendBlock}
         this.physicsModelController.applyPhysicsStateToModel(model, {
             resetPose,
             joints: sceneModel?.joints,
+            rigidBodies: sceneModel?.rigidBodies,
         });
         if (sceneModel) {
             this.physicsModelController.logPhysicsStateApplication(

@@ -6,7 +6,11 @@ import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
 import type { MmdWasmModel } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmModel";
 import { logDebugIfEnabled, logWarn } from "../app-logger";
 import type { WebmPhysicsModelSnapshot, WebmPhysicsRigidBodySnapshot } from "../types";
-import { fullyDampedGravityScaleFromCorrectionAmount } from "./physics-compatibility-correction";
+import {
+    collectFreeLinearSpringDynamicRigidBodyIndices,
+    DEFAULT_PHYSICS_COMPATIBILITY_CORRECTION_AMOUNTS,
+    fullyDampedGravityScaleFromCorrectionAmount,
+} from "./physics-compatibility-correction";
 
 const MMD_CONSTRAINT_ERP_VALUE = 0.475;
 const MMD_CONSTRAINT_CFM_VALUE = 0;
@@ -24,7 +28,9 @@ const ABNORMAL_DYNAMIC_RIGID_BODY_MASS_MODE_KEY = "mmd_modoki.physics.abnormalMa
 const ABNORMAL_DYNAMIC_RIGID_BODY_TINY_MASS_VALUE_KEY = "mmd_modoki.physics.abnormalMassTinyValue";
 const ABNORMAL_DYNAMIC_RIGID_BODY_MASS_TOWARD_UNIT_KEY = "mmd_modoki.physics.abnormalMassTowardUnit";
 const FOLLOW_BONE_RIGID_BODY_PHYSICS_MODE = 0;
-const FULLY_DAMPED_RIGID_BODY_CORRECTION_AMOUNT = 1;
+const DEFAULT_DAMPING_CORRECTION_AMOUNT = DEFAULT_PHYSICS_COMPATIBILITY_CORRECTION_AMOUNTS.damping;
+const DEFAULT_GRAVITY_CORRECTION_AMOUNT = DEFAULT_PHYSICS_COMPATIBILITY_CORRECTION_AMOUNTS.gravity;
+const DEFAULT_MASS_TOWARD_UNIT_AMOUNT = DEFAULT_PHYSICS_COMPATIBILITY_CORRECTION_AMOUNTS.massTowardUnit;
 const RUNTIME_RIGID_BODY_DAMPING_CAP_MIN = 0.901;
 const RUNTIME_RIGID_BODY_DAMPING_CAP_MAX = 0.999;
 const RUNTIME_RIGID_BODY_DAMPING_LIMIT = 0.999999;
@@ -253,7 +259,11 @@ export class PhysicsModelController {
 
     public applyPhysicsStateToModel(
         model: PhysicsRuntimeModel,
-        options: { resetPose?: boolean; joints?: readonly PhysicsJointDiagnosticEntry[] } = {},
+        options: {
+            resetPose?: boolean;
+            joints?: readonly PhysicsJointDiagnosticEntry[];
+            rigidBodies?: readonly PhysicsRigidBodyDiagnosticEntry[];
+        } = {},
     ): void {
         if (model.rigidBodyStates.length === 0) return;
 
@@ -262,7 +272,11 @@ export class PhysicsModelController {
         if (shouldSimulatePhysics) {
             this.getRuntime().initializeMmdModelPhysics(model as never);
             this.installFollowBoneRigidBodyVelocitySync(model);
-            this.installFullyDampedRigidBodyGravityScale(model);
+            this.installFullyDampedRigidBodyGravityScale(
+                model,
+                options.rigidBodies ?? [],
+                options.joints ?? [],
+            );
             this.clampAbnormalDynamicRigidBodyMasses(model, options.joints);
             this.capFullyDampedRigidBodies(model);
             if (options.resetPose) {
@@ -407,7 +421,11 @@ export class PhysicsModelController {
         });
     }
 
-    private installFullyDampedRigidBodyGravityScale(model: PhysicsRuntimeModel): void {
+    private installFullyDampedRigidBodyGravityScale(
+        model: PhysicsRuntimeModel,
+        rigidBodies: readonly PhysicsRigidBodyDiagnosticEntry[],
+        joints: readonly PhysicsJointDiagnosticEntry[],
+    ): void {
         if (PhysicsModelController.isFullyDampedGravityScaleDisabled()) return;
 
         const physicsModel = (model as unknown as PhysicsModelInternal)._physicsModel;
@@ -428,7 +446,19 @@ export class PhysicsModelController {
             return;
         }
 
-        const bodyIndices = PhysicsModelController.collectFullyDampedDynamicRigidBodyIndices(bundle);
+        const candidateRigidBodyIndices = collectFreeLinearSpringDynamicRigidBodyIndices(rigidBodies, joints);
+        const rigidBodyIndexMap = PhysicsModelController.getRigidBodyIndexMap(physicsModel);
+        if (candidateRigidBodyIndices.size === 0 || !rigidBodyIndexMap) return;
+
+        const candidateBundleBodyIndices = new Set<number>();
+        for (const rigidBodyIndex of candidateRigidBodyIndices) {
+            const bundleBodyIndex = rigidBodyIndexMap[rigidBodyIndex];
+            if (Number.isInteger(bundleBodyIndex) && bundleBodyIndex >= 0 && bundleBodyIndex < bundle.count) {
+                candidateBundleBodyIndices.add(bundleBodyIndex);
+            }
+        }
+        const bodyIndices = PhysicsModelController.collectFullyDampedDynamicRigidBodyIndices(bundle)
+            .filter((index) => candidateBundleBodyIndices.has(index));
 
         if (bodyIndices.length === 0) return;
 
@@ -611,6 +641,7 @@ export class PhysicsModelController {
         if (
             PhysicsModelController.isAbnormalMassClampDisabled()
             || !PhysicsModelController.getFullyDampedRigidBodyCorrectionEnabled()
+            || PhysicsModelController.getAbnormalDynamicRigidBodyMassTowardUnit() <= 0
         ) {
             this.restoreOriginalRigidBodyMassProps(physicsModelObject, bundle);
             return;
@@ -1831,16 +1862,22 @@ export class PhysicsModelController {
         try {
             const rawValue = globalThis.localStorage?.getItem(RUNTIME_RIGID_BODY_DAMPING_CORRECTION_AMOUNT_KEY);
             if (rawValue !== null && rawValue !== undefined && rawValue.trim() !== "") {
-                return PhysicsModelController.normalizeCorrectionAmountValue(Number(rawValue));
+                return PhysicsModelController.normalizeCorrectionAmountValue(
+                    Number(rawValue),
+                    DEFAULT_DAMPING_CORRECTION_AMOUNT,
+                );
             }
         } catch {
             // fall through to default
         }
-        return FULLY_DAMPED_RIGID_BODY_CORRECTION_AMOUNT;
+        return DEFAULT_DAMPING_CORRECTION_AMOUNT;
     }
 
     public static setFullyDampedRigidBodyDampingCorrectionAmount(value: number): number {
-        const normalized = PhysicsModelController.normalizeCorrectionAmountValue(value);
+        const normalized = PhysicsModelController.normalizeCorrectionAmountValue(
+            value,
+            DEFAULT_DAMPING_CORRECTION_AMOUNT,
+        );
         try {
             globalThis.localStorage?.setItem(RUNTIME_RIGID_BODY_DAMPING_CORRECTION_AMOUNT_KEY, String(normalized));
         } catch {
@@ -1884,7 +1921,10 @@ export class PhysicsModelController {
     }
 
     private static convertDampingCorrectionAmountToCap(value: number): number {
-        const amount = PhysicsModelController.normalizeCorrectionAmountValue(value);
+        const amount = PhysicsModelController.normalizeCorrectionAmountValue(
+            value,
+            DEFAULT_DAMPING_CORRECTION_AMOUNT,
+        );
         if (amount <= 0) return 1;
         return RUNTIME_RIGID_BODY_DAMPING_CAP_MAX
             - amount * (RUNTIME_RIGID_BODY_DAMPING_CAP_MAX - RUNTIME_RIGID_BODY_DAMPING_CAP_MIN);
@@ -1910,16 +1950,22 @@ export class PhysicsModelController {
         try {
             const rawValue = globalThis.localStorage?.getItem(FULLY_DAMPED_RIGID_BODY_GRAVITY_CORRECTION_AMOUNT_KEY);
             if (rawValue !== null && rawValue !== undefined && rawValue.trim() !== "") {
-                return PhysicsModelController.normalizeCorrectionAmountValue(Number(rawValue));
+                return PhysicsModelController.normalizeCorrectionAmountValue(
+                    Number(rawValue),
+                    DEFAULT_GRAVITY_CORRECTION_AMOUNT,
+                );
             }
         } catch {
             // fall through to default
         }
-        return FULLY_DAMPED_RIGID_BODY_CORRECTION_AMOUNT;
+        return DEFAULT_GRAVITY_CORRECTION_AMOUNT;
     }
 
     public static setFullyDampedGravityCorrectionAmount(value: number): number {
-        const normalized = PhysicsModelController.normalizeCorrectionAmountValue(value);
+        const normalized = PhysicsModelController.normalizeCorrectionAmountValue(
+            value,
+            DEFAULT_GRAVITY_CORRECTION_AMOUNT,
+        );
         try {
             globalThis.localStorage?.setItem(FULLY_DAMPED_RIGID_BODY_GRAVITY_CORRECTION_AMOUNT_KEY, String(normalized));
         } catch {
@@ -1928,8 +1974,8 @@ export class PhysicsModelController {
         return normalized;
     }
 
-    private static normalizeCorrectionAmountValue(value: number): number {
-        if (!Number.isFinite(value)) return FULLY_DAMPED_RIGID_BODY_CORRECTION_AMOUNT;
+    private static normalizeCorrectionAmountValue(value: number, fallback: number): number {
+        if (!Number.isFinite(value)) return fallback;
         return Math.max(0, Math.min(1, value));
     }
 
@@ -2144,7 +2190,7 @@ export class PhysicsModelController {
         } catch {
             // fall through to default
         }
-        return FULLY_DAMPED_RIGID_BODY_CORRECTION_AMOUNT;
+        return DEFAULT_MASS_TOWARD_UNIT_AMOUNT;
     }
 
     public static setAbnormalDynamicRigidBodyMassTowardUnit(value: number): number {
@@ -2158,7 +2204,7 @@ export class PhysicsModelController {
     }
 
     private static normalizeMassTowardUnitValue(value: number): number {
-        if (!Number.isFinite(value)) return FULLY_DAMPED_RIGID_BODY_CORRECTION_AMOUNT;
+        if (!Number.isFinite(value)) return DEFAULT_MASS_TOWARD_UNIT_AMOUNT;
         return Math.max(0, Math.min(1, value));
     }
 

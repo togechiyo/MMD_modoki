@@ -1,4 +1,5 @@
 import type { EditorAction } from "./types";
+import { isUiScalePercentage } from "../shared/ui-scale";
 
 export type EditorActionAvailabilitySnapshot = {
     hasSelectedTimelineTrack: boolean;
@@ -67,6 +68,8 @@ export function canExecuteEditorAction(
             return hasFiniteFrame(action.frame);
         case "playback.stepFrame":
             return Number.isFinite(action.deltaFrames) && action.deltaFrames !== 0;
+        case "layout.uiScale.set":
+            return isUiScalePercentage(action.percentage);
         case "playback.play":
         case "playback.pause":
         case "playback.stop":

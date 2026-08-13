@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('dialog:saveWebm', defaultFileName),
     snapMainWindowContentAspect: (aspectRatio: number) =>
         ipcRenderer.invoke('window:snapMainWindowContentAspect', aspectRatio),
+    setWindowZoomFactor: (zoomFactor: number) =>
+        ipcRenderer.invoke('window:setZoomFactor', zoomFactor),
     getPathForDroppedFile: (file: File) => {
         try {
             const filePath = webUtils.getPathForFile(file);

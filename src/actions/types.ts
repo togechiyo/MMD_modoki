@@ -1,5 +1,6 @@
 import type { KeyframeTrack } from "../types";
 import type { BackgroundDisplayMode } from "../shared/background-display-mode";
+import type { UiScalePercentage } from "../shared/ui-scale";
 
 export type ActionSource =
     | "button"
@@ -84,6 +85,7 @@ export type ProjectAction =
 export type LayoutAction =
     | { type: "layout.fullscreen.toggle"; source: ActionSource }
     | { type: "layout.fullscreen.exit"; source: ActionSource }
+    | { type: "layout.uiScale.set"; source: ActionSource; percentage: UiScalePercentage }
     | { type: "layout.shaderPanel.toggle"; source: ActionSource };
 
 export type RuntimeAction =

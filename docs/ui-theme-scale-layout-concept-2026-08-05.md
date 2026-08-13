@@ -127,6 +127,19 @@ R=G=B は機械判定が可能なため、将来的に lint ルールや小さ�
 - **1px のボーダーが 1px のまま保たれる**（全体ズームだと 1.5px 等になりボケる）
 - WebGPU 側は拡大率の存在を知らなくてよい
 
+### 2026-08-13 暫定実装の判断
+
+現行 UI はまだ `px` 指定が多く、B をそのまま適用すると一部の文字や余白だけが変化する混在状態になる。そのため v0.2 の実用導線では、先に **A の Electron zoom を限定的に採用**した。
+
+- `ウィンドウ > UI倍率` に 75 / 100 / 125 / 150% を置く
+- 倍率はプロジェクトではなくアプリ設定として `localStorage` へ保存する
+- 倍率変更後は `resize` を発火し、Babylon viewport と canvas UI の再計測を促す
+- PNG連番の別ウィンドウは専用 Electron session と `zoomFactor: 1` で生成し、同一オリジンの倍率共有と出力寸法への混入を防ぐ
+- WebM は専用 session では Chromium の VP8 / VP9 encoder が利用不可になるため既定 session を維持する。出力は UI canvas 寸法ではなく明示した RGBA surface 寸法を使う
+- `UIを表示` は既存 presentation mode を使い、`Alt+Enter` で切替、非表示中は Tab または Esc で復帰する
+
+B の rem / token 化は引き続き長期方針とする。Electron zoom は現行の px 主体 UI を一様に拡縮するための暫定実装であり、描画品質・pointer picking・低解像度時のレイアウトは実機比較を継続する。
+
 ### 難所は canvas 描画部分
 
 rem は CSS の話なので、JS で座標計算して描いている箇所には効かない。`timeline.ts` が canvas 描画であれば、そこは拡大率を読んで行の高さ・文字サイズ・キーの菱形サイズを掛ける実装が要る。

@@ -15,6 +15,7 @@ import { PngExportDialogController } from "./png-export-dialog-controller";
 import { PopupDialogController } from "./popup-dialog-controller";
 import type { WebmExportSettingsAdapter } from "./export-ui-controller";
 import { WebmExportDialogController } from "./webm-export-dialog-controller";
+import { parseUiScalePercentage, type UiScalePercentage } from "../shared/ui-scale";
 
 type ToastType = "success" | "error" | "info";
 
@@ -30,6 +31,8 @@ type AppMenuControllerDeps = {
     refreshLightingUi: () => void;
     refreshMaterialUi: () => void;
     createExportSettingsAdapter: () => WebmExportSettingsAdapter;
+    isUiVisible: () => boolean;
+    getUiScalePercentage: () => UiScalePercentage;
 };
 
 type DialogKind = "about" | "shortcuts" | "preferences";
@@ -66,6 +69,8 @@ export class AppMenuController {
     private readonly refreshLightingUi: () => void;
     private readonly refreshMaterialUi: () => void;
     private readonly createExportSettingsAdapter: () => WebmExportSettingsAdapter;
+    private readonly isUiVisible: () => boolean;
+    private readonly getUiScalePercentage: () => UiScalePercentage;
     private readonly popupDialogController: PopupDialogController;
     private openGroup: HTMLElement | null = null;
 
@@ -82,6 +87,8 @@ export class AppMenuController {
         this.refreshLightingUi = deps.refreshLightingUi;
         this.refreshMaterialUi = deps.refreshMaterialUi;
         this.createExportSettingsAdapter = deps.createExportSettingsAdapter;
+        this.isUiVisible = deps.isUiVisible;
+        this.getUiScalePercentage = deps.getUiScalePercentage;
         this.popupDialogController = new PopupDialogController();
         this.setupMenuEvents();
     }
@@ -232,7 +239,14 @@ export class AppMenuController {
     }
 
     private resolveCheckState(command: string): { checked: boolean; disabled: boolean } | null {
+        const uiScalePercentage = this.resolveUiScaleCommand(command);
+        if (uiScalePercentage !== null) {
+            return { checked: this.getUiScalePercentage() === uiScalePercentage, disabled: false };
+        }
+
         switch (command) {
+            case "window.toggleUi":
+                return { checked: this.isUiVisible(), disabled: false };
             case "view.toggleGround":
                 return { checked: this.mmdManager.isGroundVisible(), disabled: false };
             case "view.toggleEdge":
@@ -305,6 +319,16 @@ export class AppMenuController {
     }
 
     private executeCommand(command: string, invoker?: HTMLElement | null): void {
+        const uiScalePercentage = this.resolveUiScaleCommand(command);
+        if (uiScalePercentage !== null) {
+            this.dispatchAction({
+                type: "layout.uiScale.set",
+                source: "menu",
+                percentage: uiScalePercentage,
+            });
+            return;
+        }
+
         switch (command) {
             case "file.openFile":
                 this.dispatchAction({ type: "project.openFile", source: "menu" });
@@ -457,7 +481,7 @@ export class AppMenuController {
             case "view.toggleActiveModel":
                 this.dispatchAction({ type: "model.toggleActiveVisibility", source: "menu" });
                 return;
-            case "view.toggleFullscreenUi":
+            case "window.toggleUi":
                 this.dispatchAction({ type: "layout.fullscreen.toggle", source: "menu" });
                 return;
             case "background.toggleMedia":
@@ -617,6 +641,11 @@ export class AppMenuController {
                 refreshUi: () => this.refreshRuntimeUi(),
             }),
         });
+    }
+
+    private resolveUiScaleCommand(command: string): UiScalePercentage | null {
+        const match = /^window\.uiScale\.(75|100|125|150)$/.exec(command);
+        return match ? parseUiScalePercentage(match[1]) : null;
     }
 
     private openRenderOrderSettingsDialog(invoker: HTMLElement | null): void {

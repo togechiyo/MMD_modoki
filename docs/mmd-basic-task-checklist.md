@@ -451,3 +451,14 @@
 - [ ] キャラクターモデルと別ステージで同一平面補正の強度と副作用を実機比較
 
 詳細: [MMD 描画順整理 実装メモ 2026-08-13](./mmd-render-order-implementation-2026-08-13.md)
+
+## 2026-08-13 ウィンドウメニュー・UI倍率
+
+- [x] 「ウィンドウ」メニューへ既存の UI 表示切替を移動
+- [x] UI倍率 75 / 100 / 125 / 150% を Electron zoom で実装
+- [x] UI倍率をアプリ設定として保存し、プロジェクト設定から分離
+- [x] PNG連番出力用ウィンドウを専用session・100%固定にし、WebMはcodec互換のため既定session + RGBA surface寸法を維持
+- [x] UI非表示時の Tab / Esc 復帰を追加
+- [ ] 75 / 125 / 150% で viewport、timeline hit test、bone picking、各popupを実機確認
+
+詳細: [UI テーマ・拡大率・レイアウト構想メモ](./ui-theme-scale-layout-concept-2026-08-05.md)

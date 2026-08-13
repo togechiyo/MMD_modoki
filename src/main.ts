@@ -1088,6 +1088,15 @@ ipcMain.handle('window:snapMainWindowContentAspect', async (event, aspectRatio: 
   return true;
 });
 
+ipcMain.handle('window:setZoomFactor', async (event, zoomFactor: number) => {
+  const allowedZoomFactors = [0.75, 1, 1.25, 1.5] as const;
+  const safeZoomFactor = allowedZoomFactors.find((candidate) => (
+    Math.abs(candidate - zoomFactor) < 0.001
+  )) ?? 1;
+  event.sender.setZoomFactor(safeZoomFactor);
+  return event.sender.getZoomFactor();
+});
+
 ipcMain.handle('file:readBinary', async (_event, filePath: string) => {
   try {
     const buffer = fs.readFileSync(filePath);
@@ -1631,6 +1640,8 @@ ipcMain.handle(
         parent: ownerWindow,
         webPreferences: {
           preload: path.join(__dirname, 'preload.js'),
+          partition: 'persist:mmd-modoki-png-exporter',
+          zoomFactor: 1,
           contextIsolation: true,
           nodeIntegration: false,
           webSecurity: false,

@@ -684,6 +684,8 @@ export class UIController {
             refreshModelEdgeUi: () => this.modelEdgeController?.refresh(),
             refreshLightingUi: () => this.refreshLightingUiFromRuntime(),
             refreshMaterialUi: () => this.shaderPanelController?.refresh(),
+            isUiVisible: () => !this.layoutUiController?.isUiFullscreenModeActive(),
+            getUiScalePercentage: () => this.layoutUiController?.getUiScalePercentage() ?? 100,
             createExportSettingsAdapter: () => this.exportUiController?.createExportSettingsAdapter() ?? {
                 getState: () => ({
                     aspectPreset: "16:9",
@@ -1917,6 +1919,12 @@ export class UIController {
                 return;
             }
 
+            if (e.key === "Tab" && this.layoutUiController?.isUiFullscreenModeActive()) {
+                e.preventDefault();
+                this.actionDispatcher.dispatch({ type: "layout.fullscreen.exit", source: "shortcut" });
+                return;
+            }
+
             if (this.hasBackgroundExportActive()) {
                 e.preventDefault();
                 return;
@@ -2289,6 +2297,9 @@ export class UIController {
         });
         this.actionDispatcher.register("layout.fullscreen.exit", () => {
             this.layoutUiController?.exitUiFullscreenMode();
+        });
+        this.actionDispatcher.register("layout.uiScale.set", (action) => {
+            this.layoutUiController?.setUiScalePercentage(action.percentage);
         });
         this.actionDispatcher.register("layout.shaderPanel.toggle", () => {
             this.layoutUiController?.toggleShaderPanel();

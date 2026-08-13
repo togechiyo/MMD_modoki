@@ -90,8 +90,6 @@
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.fpsUnlimited"><span data-i18n="menu.view.fpsUnlimited">fps無制限</span></button>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.fps60"><span data-i18n="menu.view.fps60">60fps制限</span></button>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.fps30"><span data-i18n="menu.view.fps30">30fps制限</span></button>
-          <div class="app-menu-separator" role="separator"></div>
-          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="view.toggleFullscreenUi"><span data-i18n="menu.view.toggleFullscreenUi">表示UIを隠す</span><span class="app-menu-shortcut">Esc</span></button>
         </div>
       </div>
       <div class="app-menu-group">
@@ -129,6 +127,18 @@
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="physics.toggleRigidBodies"><span data-i18n="menu.physics.toggleRigidBodies">剛体を表示</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="physics.settings"><span data-i18n="menu.physics.settings">物理演算詳細...</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="physics.gravitySettings"><span data-i18n="menu.physics.gravitySettings">重力設定...</span></button>
+        </div>
+      </div>
+      <div class="app-menu-group">
+        <button class="app-menu-trigger" type="button" data-i18n="menu.window">ウィンドウ</button>
+        <div class="app-menu-list" role="menu">
+          <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="true" data-menu-command="window.toggleUi"><span data-i18n="menu.window.showUi">UIを表示</span><span class="app-menu-shortcut">Alt+Enter</span></button>
+          <div class="app-menu-separator" role="separator"></div>
+          <div class="app-menu-section-label" data-i18n="menu.window.uiScale">UI倍率</div>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="window.uiScale.75"><span>75%</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="true" data-menu-command="window.uiScale.100"><span>100%</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="window.uiScale.125"><span>125%</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="window.uiScale.150"><span>150%</span></button>
         </div>
       </div>
       <div class="app-menu-group">

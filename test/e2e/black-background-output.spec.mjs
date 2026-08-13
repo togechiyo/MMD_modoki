@@ -145,6 +145,7 @@ test("PNG export can be transparent while opaque PNG and WebM preserve black bac
   try {
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    expect(await page.evaluate(() => window.electronAPI.setWindowZoomFactor(1.25))).toBe(1.25);
     await page.evaluate(async (path) => {
       await window.mmdModokiE2e.loadModel(path);
       document.querySelector('[data-menu-command="background.toggleBlack"]')?.click();

@@ -9,6 +9,7 @@ export interface ElectronAPI {
     choosePngSaveTarget: (defaultFileName?: string) => Promise<PngSaveTarget | null>;
     saveWebmDialog: (defaultFileName?: string) => Promise<string | null>;
     snapMainWindowContentAspect: (aspectRatio: number) => Promise<boolean>;
+    setWindowZoomFactor: (zoomFactor: number) => Promise<number>;
     getPathForDroppedFile: (file: File) => string | null;
     readBinaryFile: (filePath: string) => Promise<Buffer | null>;
     readMmdModelHeader: (filePath: string) => Promise<MmdModelHeaderPreview | null>;

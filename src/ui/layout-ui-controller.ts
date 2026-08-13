@@ -2,6 +2,12 @@ import { t } from "../i18n";
 import type { MmdManager } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
 import type { ExportUiController } from "./export-ui-controller";
+import {
+    DEFAULT_UI_SCALE_PERCENTAGE,
+    parseUiScalePercentage,
+    uiScalePercentageToZoomFactor,
+    type UiScalePercentage,
+} from "../shared/ui-scale";
 
 type ToastType = "success" | "error" | "info";
 
@@ -36,6 +42,7 @@ const MIN_SHADER_PANEL_WIDTH = 220;
 const MIN_VIEWPORT_WIDTH = 360;
 const MIN_BOTTOM_PANEL_HEIGHT = 132;
 const MIN_MAIN_CONTENT_HEIGHT = 220;
+const UI_SCALE_STORAGE_KEY = "mmd_modoki.uiScalePercentage";
 
 function resolveLayoutUiElements(): LayoutUiElements {
     return {
@@ -69,6 +76,8 @@ export class LayoutUiController {
     private isShaderResizing = false;
     private isBottomPanelResizing = false;
     private isUiFullscreenActive = false;
+    private uiScalePercentage: UiScalePercentage = DEFAULT_UI_SCALE_PERCENTAGE;
+    private uiScaleApplyGeneration = 0;
 
     private readonly onWindowResize = (): void => {
         this.clampTimelineWidthToLayout();
@@ -91,6 +100,8 @@ export class LayoutUiController {
         this.setupBottomPanelResizer();
         this.setupViewportAspectSync();
         window.addEventListener("resize", this.onWindowResize);
+        this.uiScalePercentage = this.readStoredUiScalePercentage();
+        this.applyUiScalePercentage(false);
         this.clampBottomPanelHeightToLayout();
         this.refreshLocalizedState();
         this.applyViewportAspectPresentation();
@@ -110,6 +121,16 @@ export class LayoutUiController {
 
     public isUiFullscreenModeActive(): boolean {
         return this.isUiFullscreenActive;
+    }
+
+    public getUiScalePercentage(): UiScalePercentage {
+        return this.uiScalePercentage;
+    }
+
+    public setUiScalePercentage(percentage: UiScalePercentage): void {
+        if (percentage === this.uiScalePercentage) return;
+        this.uiScalePercentage = percentage;
+        this.applyUiScalePercentage(true);
     }
 
     public toggleUiFullscreenMode(): void {
@@ -233,6 +254,47 @@ export class LayoutUiController {
         this.elements.appRoot?.classList.toggle("ui-presentation-mode", active);
         this.updateFullscreenUiToggleButton(active);
         this.syncMainWindowPresentationAspect();
+    }
+
+    private readStoredUiScalePercentage(): UiScalePercentage {
+        try {
+            return parseUiScalePercentage(window.localStorage.getItem(UI_SCALE_STORAGE_KEY));
+        } catch (error) {
+            window.electronAPI.logWarn("ui", "failed to read UI scale setting", {
+                message: error instanceof Error ? error.message : String(error),
+            });
+            return DEFAULT_UI_SCALE_PERCENTAGE;
+        }
+    }
+
+    private applyUiScalePercentage(persist: boolean): void {
+        if (persist) {
+            try {
+                window.localStorage.setItem(UI_SCALE_STORAGE_KEY, String(this.uiScalePercentage));
+            } catch (error) {
+                window.electronAPI.logWarn("ui", "failed to persist UI scale setting", {
+                    message: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
+        const generation = ++this.uiScaleApplyGeneration;
+        const requestedPercentage = this.uiScalePercentage;
+        void window.electronAPI
+            .setWindowZoomFactor(uiScalePercentageToZoomFactor(requestedPercentage))
+            .then((appliedZoomFactor) => {
+                if (generation !== this.uiScaleApplyGeneration) return;
+                this.uiScalePercentage = parseUiScalePercentage(Math.round(appliedZoomFactor * 100));
+                window.dispatchEvent(new Event("resize"));
+            })
+            .catch((error: unknown) => {
+                if (generation !== this.uiScaleApplyGeneration) return;
+                window.electronAPI.logError("ui", "failed to apply UI scale setting", {
+                    requestedPercentage,
+                    message: error instanceof Error ? error.message : String(error),
+                });
+                this.showToast(t("toast.ui.scaleFailed"), "error");
+            });
     }
 
     private updateFullscreenUiToggleButton(active: boolean): void {

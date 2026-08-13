@@ -118,6 +118,17 @@ describe("canExecuteEditorAction", () => {
         expect(canExecuteEditorAction({ type: "playback.pause", source: "button" }, noSelection)).toBe(true);
     });
 
+    it("accepts only supported UI scale actions", () => {
+        expect(canExecuteEditorAction(
+            { type: "layout.uiScale.set", source: "menu", percentage: 125 },
+            readySnapshot,
+        )).toBe(true);
+        expect(canExecuteEditorAction(
+            { type: "layout.uiScale.set", source: "menu", percentage: 110 as 100 },
+            readySnapshot,
+        )).toBe(false);
+    });
+
     it("allows interpolation copy and linear reset only when editable channels exist", () => {
         expect(canExecuteEditorAction({ type: "interpolation.copy", source: "button" }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction({ type: "interpolation.applyLinear", source: "button" }, readySnapshot)).toBe(true);

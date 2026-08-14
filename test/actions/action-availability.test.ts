@@ -289,6 +289,14 @@ describe("canExecuteEditorAction", () => {
             { type: "project.exportCameraVmd", source: "menu" },
             { ...readySnapshot, hasCameraVmdExportKeys: true },
         )).toBe(true);
+        expect(canExecuteEditorAction(
+            { type: "project.exportModelVpd", source: "menu" },
+            { ...readySnapshot, hasModelVpdExportBones: true },
+        )).toBe(true);
+        expect(canExecuteEditorAction(
+            { type: "project.exportModelVpd", source: "menu" },
+            { ...readySnapshot, hasModelVpdExportBones: false },
+        )).toBe(false);
     });
 
     it("allows layout fullscreen actions", () => {

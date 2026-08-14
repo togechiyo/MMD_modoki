@@ -3,6 +3,7 @@ import type { MmdMaterialPipelinePreset } from "./shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "./shared/mmd-render-order";
 import type { MmdModelHeaderPreview } from "./shared/mmd-model-header";
 import type { VmdExportDocument, VmdSaveResult } from "./export/vmd-export-document";
+import type { VpdExportDocument, VpdSaveResult } from "./export/vpd-export-document";
 
 export interface ElectronAPI {
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
@@ -30,6 +31,7 @@ export interface ElectronAPI {
         defaultFileName?: string,
     ) => Promise<string | null>;
     saveVmdFile: (document: VmdExportDocument, defaultFileName: string) => Promise<VmdSaveResult>;
+    saveVpdFile: (document: VpdExportDocument, defaultFileName: string) => Promise<VpdSaveResult>;
     savePngRgbaFileToPath: (
         rgbaData: Uint8Array,
         width: number,
@@ -85,6 +87,7 @@ export type AppLogScope =
     | "asset"
     | "camera-vmd"
     | "vmd-export"
+    | "vpd-export"
     | "timeline"
     | "webm"
     | "physics"

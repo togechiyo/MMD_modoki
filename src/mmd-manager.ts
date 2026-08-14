@@ -71,6 +71,7 @@ import type {
 } from "./types";
 import type { IMmdBindableCameraAnimation } from "babylon-mmd/esm/Runtime/Animation/IMmdBindableAnimation";
 import type { IMmdRuntimeBone } from "babylon-mmd/esm/Runtime/IMmdRuntimeBone";
+import type { VpdBonePose } from "./export/vpd-export-document";
 import { exportProjectState as exportProjectStateImpl } from "./project/project-serializer";
 import { importProjectState as importProjectStateImpl } from "./project/project-importer";
 import {
@@ -2841,6 +2842,49 @@ ${beforeFogAppendBlock}
 
     public hasCameraVmdExportKeys(): boolean {
         return (this.cameraSourceAnimation?.cameraTrack.frameNumbers.length ?? 0) > 0;
+    }
+
+    public hasSelectedModelVpdExportBones(): boolean {
+        if (!this.currentModel || !this.activeModelInfo || this.boneVisualizerSelectedBoneNames.size === 0) {
+            return false;
+        }
+        const runtimeBones = this.currentModel.runtimeBones as readonly EditorRuntimeBone[] | undefined;
+        return runtimeBones?.some((bone) => this.boneVisualizerSelectedBoneNames.has(bone.name)) ?? false;
+    }
+
+    public getSelectedModelVpdExportSource(): {
+        modelInfo: ModelInfo;
+        bones: VpdBonePose[];
+        unsupportedExternalParentBoneCount: number;
+    } | null {
+        if (!this.currentModel || !this.activeModelInfo || this.boneVisualizerSelectedBoneNames.size === 0) {
+            return null;
+        }
+        const runtimeBones = this.currentModel.runtimeBones as readonly EditorRuntimeBone[] | undefined;
+        if (!runtimeBones) return null;
+
+        const bones: VpdBonePose[] = [];
+        let unsupportedExternalParentBoneCount = 0;
+        for (const runtimeBone of runtimeBones) {
+            if (!this.boneVisualizerSelectedBoneNames.has(runtimeBone.name)) continue;
+            const restPosition = runtimeBone.linkedBone.getRestMatrix().getTranslation();
+            const position = runtimeBone.linkedBone.position.subtract(restPosition);
+            const rotation = runtimeBone.linkedBone.rotationQuaternion.clone().normalize();
+            if (this.getExternalParentWorldMatrixForBoneToRef(runtimeBone, Matrix.Identity())) {
+                unsupportedExternalParentBoneCount += 1;
+            }
+            bones.push({
+                boneName: runtimeBone.name,
+                position: [position.x, position.y, position.z],
+                rotation: [rotation.x, rotation.y, rotation.z, rotation.w],
+            });
+        }
+        if (bones.length === 0) return null;
+        return {
+            modelInfo: this.activeModelInfo,
+            bones,
+            unsupportedExternalParentBoneCount,
+        };
     }
 
     public captureWebmInitialPhysicsState(): WebmInitialPhysicsState | null {

@@ -237,6 +237,8 @@ export class AppMenuController {
                 return !this.mmdManager.hasActiveModelVmdExportKeys();
             case "file.exportCameraVmd":
                 return !this.mmdManager.hasCameraVmdExportKeys();
+            case "file.exportModelVpd":
+                return !this.mmdManager.hasSelectedModelVpdExportBones();
             default:
                 return null;
         }
@@ -360,6 +362,9 @@ export class AppMenuController {
                 return;
             case "file.exportCameraVmd":
                 this.dispatchAction({ type: "project.exportCameraVmd", source: "menu" });
+                return;
+            case "file.exportModelVpd":
+                this.dispatchAction({ type: "project.exportModelVpd", source: "menu" });
                 return;
             case "file.exportPng":
                 this.openPngExportDialog(invoker ?? null);

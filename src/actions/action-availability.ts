@@ -11,6 +11,7 @@ export type EditorActionAvailabilitySnapshot = {
     hasLoadedModels?: boolean;
     hasModelVmdExportKeys?: boolean;
     hasCameraVmdExportKeys?: boolean;
+    hasModelVpdExportBones?: boolean;
     hasInfoKeyframeTarget?: boolean;
     hasSelectedBone?: boolean;
     hasSelectedMorphFrame?: boolean;
@@ -55,6 +56,8 @@ export function canExecuteEditorAction(
             return snapshot.hasModelVmdExportKeys ?? false;
         case "project.exportCameraVmd":
             return snapshot.hasCameraVmdExportKeys ?? false;
+        case "project.exportModelVpd":
+            return snapshot.hasModelVpdExportBones ?? false;
         case "selection.pickBone":
             return action.boneName.length > 0;
         case "playback.seekAdjacentKeyframe":

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { encodeShiftJisFixedString, fixedStringByteKey } from "../../src/export/shift-jis-fixed-string";
+import { encodeShiftJisFixedString, encodeShiftJisString, fixedStringByteKey } from "../../src/export/shift-jis-fixed-string";
 
 describe("encodeShiftJisFixedString", () => {
     it("encodes the canonical camera header and pads it to 20 bytes", () => {
@@ -29,5 +29,18 @@ describe("encodeShiftJisFixedString", () => {
         const yen = encodeShiftJisFixedString("¥", 15, false);
         const slash = encodeShiftJisFixedString("\\", 15, false);
         expect(yen.ok && slash.ok && fixedStringByteKey(yen.bytes)).toBe(slash.ok ? fixedStringByteKey(slash.bytes) : "");
+    });
+
+    it("encodes an unbounded Shift-JIS text without replacement", () => {
+        const result = encodeShiftJisString("Vocaloid Pose Data file\r\nセンター");
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(new TextDecoder("shift_jis").decode(result.bytes)).toBe("Vocaloid Pose Data file\r\nセンター");
+
+        expect(encodeShiftJisString("pose😀")).toEqual({
+            ok: false,
+            reason: "unencodable",
+            codePoint: "😀",
+        });
     });
 });

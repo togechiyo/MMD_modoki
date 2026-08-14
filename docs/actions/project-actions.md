@@ -210,6 +210,28 @@
   - camera raw track valueを再変換せず保存する。
   - headerが `カメラ・照明`、projection byteが `0x00` になる。
 
+### `project.exportModelVpd`
+
+- 意図:
+  - 選択中モデルの選択ボーンについて、現在のローカル姿勢をVPDとして保存する。
+- 入力:
+  - `source`: `menu`
+  - `payload`: なし
+- 出力:
+  - 選択ボーンの移動とQuaternionを含むShift-JISの `.vpd` が生成される。
+- 副作用:
+  - PMX / PMD内部モデル名の取得、main processでのvalidation、save dialog、ファイルIOが発生する。
+- canExecute:
+  - active modelが存在し、書き出し可能な選択ボーンが1つ以上ある。
+- undo:
+  - 対象外。exportはproject編集履歴を変更しない。
+- テスト観点:
+  - 選択ボーンなしでは無効、1つ以上では有効になる。
+  - キー未登録の現在姿勢も保存できる。
+  - モデル骨順、Shift-JIS、移動、正規化Quaternion、bone countが保持される。
+  - 外部親が適用された選択ボーンはwarningを返し、外部親合成前のローカル姿勢を保存する。
+  - validation error時はファイルを保存しない。
+
 ### `project.exportPng`
 
 - 意図:

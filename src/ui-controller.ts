@@ -89,6 +89,7 @@ import {
     createModelVmdExportDocument,
 } from "./export/vmd-export-adapter";
 import type { VmdSaveResult } from "./export/vmd-export-document";
+import type { VpdExportDocument, VpdSaveResult } from "./export/vpd-export-document";
 
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
 type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory";
@@ -2290,6 +2291,9 @@ export class UIController {
         this.actionDispatcher.register("project.exportCameraVmd", () => {
             void this.exportCameraVmd();
         });
+        this.actionDispatcher.register("project.exportModelVpd", () => {
+            void this.exportModelVpd();
+        });
         this.actionDispatcher.register("project.exportPng", (action) => {
             if (action.renderMode === "detached") {
                 void this.exportUiController?.exportPNGDetached();
@@ -3347,6 +3351,11 @@ export class UIController {
         return `${baseName}_motion.vmd`;
     }
 
+    private buildModelVpdDefaultFileName(modelPath: string, fallbackName: string): string {
+        const baseName = this.getBaseNameForRenderer(modelPath).replace(/\.[^.]+$/, "") || fallbackName || "model";
+        return `${baseName}_pose.vpd`;
+    }
+
     private handleVmdSaveResult(result: VmdSaveResult, sourceWarningCount = 0): void {
         switch (result.status) {
             case "saved": {
@@ -3432,6 +3441,71 @@ export class UIController {
             this.setStatus(t("toast.vmdExportFailed"), false);
             this.showToast(`${t("toast.vmdExportFailed")}: ${message}`, "error");
             window.electronAPI.logError("vmd-export", "Failed to prepare camera VMD export", { message });
+        }
+    }
+
+    private handleVpdSaveResult(result: VpdSaveResult, sourceWarningCount = 0): void {
+        switch (result.status) {
+            case "saved": {
+                const warningCount = result.warnings.length + sourceWarningCount;
+                const suffix = warningCount > 0 ? ` (${warningCount} warning)` : "";
+                this.setStatus(t("toast.vpdExportSaved"), false);
+                this.showToast(`${t("toast.vpdExportSaved")}: ${this.getBaseNameForRenderer(result.filePath)}${suffix}`, "success");
+                return;
+            }
+            case "cancelled":
+                this.setStatus("Ready", false);
+                return;
+            case "invalid": {
+                const first = result.errors[0];
+                const detail = first ? `${first.code}: ${first.message}` : t("toast.vpdExportInvalid");
+                this.setStatus(t("toast.vpdExportInvalid"), false);
+                this.showToast(`${t("toast.vpdExportInvalid")}: ${detail}`, "error");
+                return;
+            }
+            case "failed":
+                this.setStatus(t("toast.vpdExportFailed"), false);
+                this.showToast(`${t("toast.vpdExportFailed")}: ${result.message}`, "error");
+        }
+    }
+
+    private async exportModelVpd(): Promise<void> {
+        const source = this.mmdManager.getSelectedModelVpdExportSource();
+        if (!source || !this.mmdManager.hasSelectedModelVpdExportBones()) {
+            this.showToast(t("toast.vpdExportNoBones"), "error");
+            return;
+        }
+
+        this.setStatus(t("status.vpdExportPreparing"), true);
+        let modelName = source.modelInfo.name;
+        let sourceWarningCount = 0;
+        try {
+            const header = await window.electronAPI.readMmdModelHeader(source.modelInfo.path);
+            const internalName = header?.modelName?.trim();
+            if (internalName) {
+                modelName = internalName;
+            } else {
+                sourceWarningCount = 1;
+                window.electronAPI.logWarn("vpd-export", "Falling back to model file name for VPD header", {
+                    modelPath: source.modelInfo.path,
+                    fallbackName: modelName,
+                });
+            }
+            const document: VpdExportDocument = {
+                modelName,
+                bones: source.bones,
+                unsupportedExternalParentBoneCount: source.unsupportedExternalParentBoneCount,
+            };
+            const result = await window.electronAPI.saveVpdFile(
+                document,
+                this.buildModelVpdDefaultFileName(source.modelInfo.path, source.modelInfo.name),
+            );
+            this.handleVpdSaveResult(result, sourceWarningCount);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus(t("toast.vpdExportFailed"), false);
+            this.showToast(`${t("toast.vpdExportFailed")}: ${message}`, "error");
+            window.electronAPI.logError("vpd-export", "Failed to prepare VPD export", { message });
         }
     }
 

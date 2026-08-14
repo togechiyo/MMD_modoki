@@ -4,10 +4,33 @@ export type ShiftJisFixedStringResult =
     | { ok: true; bytes: Uint8Array; truncated: boolean }
     | { ok: false; reason: "unencodable" | "too_long"; codePoint?: string; byteLength?: number };
 
+export type ShiftJisStringResult =
+    | { ok: true; bytes: Uint8Array }
+    | { ok: false; reason: "unencodable"; codePoint: string };
+
 function encodeCodePoint(codePoint: string): Uint8Array | null {
     const bytes = iconv.encode(codePoint, "shift_jis");
     if (bytes.length === 1 && bytes[0] === 0x3f && codePoint !== "?") return null;
     return Uint8Array.from(bytes);
+}
+
+export function encodeShiftJisString(value: string): ShiftJisStringResult {
+    const chunks: Uint8Array[] = [];
+    let byteLength = 0;
+    for (const codePoint of value) {
+        const encoded = encodeCodePoint(codePoint);
+        if (!encoded) return { ok: false, reason: "unencodable", codePoint };
+        chunks.push(encoded);
+        byteLength += encoded.byteLength;
+    }
+
+    const result = new Uint8Array(byteLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return { ok: true, bytes: result };
 }
 
 export function encodeShiftJisFixedString(

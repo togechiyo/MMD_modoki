@@ -26,6 +26,8 @@ import type {
 import { parseMmdModelHeader } from './shared/mmd-model-header';
 import type { VmdExportDocument, VmdSaveResult } from './export/vmd-export-document';
 import { serializeVmd } from './export/vmd-serializer';
+import type { VpdExportDocument, VpdSaveResult } from './export/vpd-export-document';
+import { serializeVpd } from './export/vpd-serializer';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -1487,6 +1489,67 @@ ipcMain.handle(
       };
     } catch (err) {
       writeAppLog('error', 'vmd-export', 'VMD export failed', createLogErrorData(err));
+      return { status: 'failed', message: err instanceof Error ? err.message : String(err) };
+    }
+  },
+);
+
+ipcMain.handle(
+  'file:saveVpd',
+  async (
+    _event,
+    document: VpdExportDocument,
+    defaultFileName: string,
+  ): Promise<VpdSaveResult> => {
+    try {
+      const serialized = serializeVpd(document);
+      if ('errors' in serialized) {
+        writeAppLog('warn', 'vpd-export', 'VPD export validation failed', {
+          errorCount: serialized.errors.length,
+          warningCount: serialized.warnings.length,
+          errors: serialized.errors.slice(0, 5),
+        });
+        return { status: 'invalid', errors: serialized.errors, warnings: serialized.warnings };
+      }
+
+      const requestedName = typeof defaultFileName === 'string' ? path.basename(defaultFileName.trim()) : '';
+      const sanitizedName = (requestedName || 'pose.vpd')
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .split('')
+        .map((character) => character.charCodeAt(0) < 0x20 ? '_' : character)
+        .join('');
+      const safeName = sanitizedName.toLowerCase().endsWith('.vpd') ? sanitizedName : `${sanitizedName}.vpd`;
+      let filePath: string;
+      if (isE2eMode) {
+        filePath = path.join(app.getPath('userData'), safeName);
+      } else {
+        const result = await dialog.showSaveDialog({
+          title: 'Save VPD Pose',
+          defaultPath: path.join(app.getPath('documents'), safeName),
+          filters: [
+            { name: 'Vocaloid Pose Data', extensions: ['vpd'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+        });
+        if (result.canceled || !result.filePath) return { status: 'cancelled' };
+        filePath = result.filePath.toLowerCase().endsWith('.vpd') ? result.filePath : `${result.filePath}.vpd`;
+      }
+
+      await fs.promises.writeFile(filePath, serialized.bytes);
+      writeAppLog('info', 'vpd-export', 'VPD export saved', {
+        filePath,
+        byteLength: serialized.bytes.byteLength,
+        boneCount: document.bones.length,
+        warningCodes: serialized.warnings.map((warning) => warning.code),
+      });
+      return {
+        status: 'saved',
+        filePath,
+        byteLength: serialized.bytes.byteLength,
+        warnings: serialized.warnings,
+      };
+    } catch (err) {
+      writeAppLog('error', 'vpd-export', 'VPD export failed', createLogErrorData(err));
       return { status: 'failed', message: err instanceof Error ? err.message : String(err) };
     }
   },

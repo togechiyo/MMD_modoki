@@ -95,13 +95,14 @@
 - [ ] キー登録補助機能（上書き確認 / 未変更時スキップ / 複数対象の一括登録 など）
 - [ ] ボーンの位置 / 角度補正
 - [ ] モーフの位置 / 角度補正
-- [ ] VMD 書き出し
+- [ ] VMD 書き出し（β実装済み、MMD 本家での互換確認待ち）
 - [x] プロジェクト保存 / 読み込み（JSON）
 - [x] プロジェクトへキーフレーム本体を保存 / 復元
 
 補足:
 - VMD は既存データの読み込みはできている
-- 新規登録したキーフレームを書き出す経路は未完
+- 2026-08-14: モデル / カメラ VMD のβ書き出し経路を実装。Shift-JIS、全 section、補間 64 bytes、物理切替、validation、main-process 保存を追加し、unit / lint / typecheck:critical / smoke / focused E2E を確認済み。コード経路と保守上の注意点は [VMD 書き出し β 実装ガイド](./vmd-export-beta-implementation-guide-2026-08-14.md) を参照。
+- babylon-mmd reader と exact-byte test では確認済みだが、MMD 本家での読み戻し前なので完了扱いにはしない。
 - 2026-08-14: babylon-mmd 1.2.0 の公式 docs / package source と現行編集データを照合。標準 VMD writer は存在せず、`MmdAnimation` を入力にした pure serializer が必要。根拠は [VMD 出力 / babylon-mmd 1.2.0 調査メモ](./vmd-export-babylon-mmd-research-2026-08-14.md)、byte layout、入力型、Shift-JIS、補間 64 bytes、物理切替、validation、IPC、test vector は [VMD 出力実装仕様](./vmd-export-implementation-spec.md) を参照。
 - 初期書き出し対象はモデル VMD とカメラ VMD のみ。照明・セルフ影は count `0`、重力は VMD 出力対象外とし、対応する Action / UI は追加しない。
 
@@ -132,11 +133,11 @@
 - [x] カメラキーフレーム登録後にフレーム移動しても左右反転しない
 - [x] カメラキーフレーム再生時に close-up せず補間再生できる
 - [ ] 回転補間の MMD 互換性テスト
-- [ ] VMD 書き出し時に補間 / Property 情報を保持
+- [x] VMD 書き出し時に補間 / Property 情報を保持
 
 補足:
 - ボーン / カメラ補間のドラッグ編集、コピー / ペースト / 線形化までは完了
-- Property 補間、VMD 書き出し保持、回転補間の MMD 互換性確認は未完了
+- Property のプレビュー補間と、回転補間の MMD 本家互換性確認は未完了
 
 ### 3-4. UI / 入出力整備
 

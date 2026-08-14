@@ -277,6 +277,18 @@ describe("canExecuteEditorAction", () => {
         expect(canExecuteEditorAction({ type: "project.exportPng", source: "shortcut" }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction({ type: "project.exportPngSequence", source: "button" }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction({ type: "project.exportWebm", source: "button" }, readySnapshot)).toBe(true);
+        expect(canExecuteEditorAction(
+            { type: "project.exportModelVmd", source: "menu" },
+            { ...readySnapshot, hasModelVmdExportKeys: true },
+        )).toBe(true);
+        expect(canExecuteEditorAction(
+            { type: "project.exportModelVmd", source: "menu" },
+            { ...readySnapshot, hasModelVmdExportKeys: false },
+        )).toBe(false);
+        expect(canExecuteEditorAction(
+            { type: "project.exportCameraVmd", source: "menu" },
+            { ...readySnapshot, hasCameraVmdExportKeys: true },
+        )).toBe(true);
     });
 
     it("allows layout fullscreen actions", () => {

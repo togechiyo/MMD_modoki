@@ -9,7 +9,7 @@
 
 キーワード `MUST`、`MUST NOT`、`SHOULD`、`MAY` は、それぞれ必須、禁止、強い推奨、任意を表す。
 
-根拠調査は [VMD 出力 / babylon-mmd 1.2.0 調査メモ](./vmd-export-babylon-mmd-research-2026-08-14.md) に分離する。本書は実装判断を固定する。VMD には公開された公式仕様書がないため、byte layout は babylon-mmd 1.2.0 の reader source と複数の公開解析資料を照合し、最終互換性は MMD 本家での読み戻しにより確定する。
+根拠調査は [VMD 出力 / babylon-mmd 1.2.0 調査メモ](./vmd-export-babylon-mmd-research-2026-08-14.md) に分離する。本書は実装判断を固定する。現在のコード経路と保守上の注意点は [VMD 書き出し β 実装ガイド](./vmd-export-beta-implementation-guide-2026-08-14.md) にまとめる。VMD には公開された公式仕様書がないため、byte layout は babylon-mmd 1.2.0 の reader source と複数の公開解析資料を照合し、最終互換性は MMD 本家での読み戻しにより確定する。
 
 ## 2. スコープ
 
@@ -874,6 +874,33 @@ float は writer と reader がともに float32 なので、expected を `Math.
 - VMD menu / save の focused E2E
 - MMD 本家で代表 model / camera fixture を読み戻し、結果を docs に記録
 
+### 17.1 2026-08-14 β実装結果
+
+実装済み:
+
+- model / camera の別 VMD 保存 Action と File menu
+- source `MmdAnimation` からの adapter
+- Shift-JIS fixed string、衝突・encode不能・長さ超過の保存拒否
+- VMD 0002 serializer、全 section count、Bone補間64 bytes、物理切替
+- main process validation / save dialog / structured log
+- exact-byte、babylon-mmd parser / `VmdLoader` semantic round-trip、adapter、Action availability の unit test
+- Electron focused E2E によるモデル / カメラ実ファイル保存
+
+自動確認結果:
+
+- `npm.cmd run test:unit`: 68 files / 421 tests passed
+- `npm.cmd run lint`: passed
+- `npm.cmd run typecheck:critical`: critical errorなし。通常typecheckの既知errorは残存
+- `npm.cmd run smoke:launch`: WebGPU renderer初期化までpassed
+- `npm.cmd run test:e2e -- vmd-export.spec.mjs`: passed
+
+未完了:
+
+- MMD 本家での model / camera fixture 読み戻し
+- β利用者から得た実ファイル互換性結果の記録
+
+したがって、現時点の表示は `VMD書き出し (β)` とし、「MMD完全互換」とは表現しない。
+
 ## 18. 参照
 
 - [babylon-mmd: MMD Animation Loader](https://noname0310.github.io/babylon-mmd/docs/reference/loader/mmd-animation-loader/)
@@ -888,3 +915,4 @@ float は writer と reader がともに float32 なので、expected を `Math.
 - [カメラ VMD 対応メモ](./camera-vmd.md)
 - [キーフレーム保存仕様](./keyframe-storage-spec.md)
 - [VMD 出力 / babylon-mmd 1.2.0 調査メモ](./vmd-export-babylon-mmd-research-2026-08-14.md)
+- [VMD 書き出し β 実装ガイド 2026-08-14](./vmd-export-beta-implementation-guide-2026-08-14.md)

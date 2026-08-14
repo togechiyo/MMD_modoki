@@ -2803,6 +2803,46 @@ ${beforeFogAppendBlock}
         return this.activeModelInfo;
     }
 
+    public getActiveModelVmdExportSource(): {
+        animation: MmdAnimation;
+        modelInfo: ModelInfo;
+        externalParentKeyCount: number;
+    } | null {
+        if (!this.currentModel || !this.activeModelInfo) return null;
+        const animation = this.modelSourceAnimationsByModel.get(this.currentModel);
+        if (!animation) return null;
+        const sceneEntry = this.sceneModels.find((entry) => entry.model === this.currentModel);
+        return {
+            animation,
+            modelInfo: this.activeModelInfo,
+            externalParentKeyCount: sceneEntry?.externalParentKeyframes.length ?? 0,
+        };
+    }
+
+    public getCameraVmdExportSource(): {
+        animation: MmdAnimation;
+        externalParentKeyCount: number;
+    } | null {
+        if (!this.cameraSourceAnimation) return null;
+        return {
+            animation: this.cameraSourceAnimation,
+            externalParentKeyCount: this.cameraExternalParentKeyframes.length,
+        };
+    }
+
+    public hasActiveModelVmdExportKeys(): boolean {
+        const source = this.getActiveModelVmdExportSource();
+        if (!source) return false;
+        return source.animation.boneTracks.some((track) => track.frameNumbers.length > 0)
+            || source.animation.movableBoneTracks.some((track) => track.frameNumbers.length > 0)
+            || source.animation.morphTracks.some((track) => track.frameNumbers.length > 0)
+            || source.animation.propertyTrack.frameNumbers.length > 0;
+    }
+
+    public hasCameraVmdExportKeys(): boolean {
+        return (this.cameraSourceAnimation?.cameraTrack.frameNumbers.length ?? 0) > 0;
+    }
+
     public captureWebmInitialPhysicsState(): WebmInitialPhysicsState | null {
         if (!this.getPhysicsEnabled()) {
             return null;

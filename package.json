@@ -63,6 +63,7 @@
     "electron-log": "^5.4.3",
     "electron-squirrel-startup": "^1.0.1",
     "i18next": "^25.8.18",
+    "iconv-lite": "^0.7.0",
     "mediabunny": "^1.39.1"
   }
 }

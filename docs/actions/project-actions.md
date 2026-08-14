@@ -1,6 +1,6 @@
 # Project Actions
 
-更新日: 2026-05-18
+更新日: 2026-08-14
 
 ファイル読み込み、保存、書き出しのAction仕様。
 
@@ -169,6 +169,46 @@
   - 対象外。
 - テスト観点:
   - handlerが `loadProject()` に到達する。
+
+### `project.exportModelVmd`
+
+- 意図:
+  - 選択中モデルの編集元animationを標準VMD 0002として保存する。
+- 入力:
+  - `source`: `menu`
+  - `payload`: なし
+- 出力:
+  - Bone、Morph、Property keyを含むモデル用 `.vmd` が生成される。
+- 副作用:
+  - PMX / PMD内部モデル名の取得、main processでのvalidation、save dialog、ファイルIOが発生する。
+- canExecute:
+  - active modelと対応するsource animationが存在し、Bone、Morph、Propertyのいずれかにkeyがある。
+- undo:
+  - 対象外。exportはproject編集履歴を変更しない。
+- テスト観点:
+  - keyなしでは無効、keyありでは有効になる。
+  - モデルheader名、Shift-JIS、補間、物理toggle、Propertyが保持される。
+  - validation error時はファイルを保存しない。
+
+### `project.exportCameraVmd`
+
+- 意図:
+  - 現在のカメラ編集元animationを標準VMD 0002として保存する。
+- 入力:
+  - `source`: `menu`
+  - `payload`: なし
+- 出力:
+  - 位置、回転、距離、FoV、6補間を含むカメラ用 `.vmd` が生成される。
+- 副作用:
+  - main processでのvalidation、save dialog、ファイルIOが発生する。
+- canExecute:
+  - camera source animationが存在し、Camera keyが1つ以上ある。
+- undo:
+  - 対象外。exportはproject編集履歴を変更しない。
+- テスト観点:
+  - keyなしでは無効、keyありでは有効になる。
+  - camera raw track valueを再変換せず保存する。
+  - headerが `カメラ・照明`、projection byteが `0x00` になる。
 
 ### `project.exportPng`
 

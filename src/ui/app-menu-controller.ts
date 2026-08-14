@@ -233,6 +233,10 @@ export class AppMenuController {
             case "edit.selectAllMorphKeys":
             case "edit.selectAllDisplayIkParentKeys":
                 return timelineTarget !== "model";
+            case "file.exportModelVmd":
+                return !this.mmdManager.hasActiveModelVmdExportKeys();
+            case "file.exportCameraVmd":
+                return !this.mmdManager.hasCameraVmdExportKeys();
             default:
                 return null;
         }
@@ -350,6 +354,12 @@ export class AppMenuController {
                 return;
             case "file.saveProject":
                 this.dispatchAction({ type: "project.save", source: "menu", forceChoosePath: true });
+                return;
+            case "file.exportModelVmd":
+                this.dispatchAction({ type: "project.exportModelVmd", source: "menu" });
+                return;
+            case "file.exportCameraVmd":
+                this.dispatchAction({ type: "project.exportCameraVmd", source: "menu" });
                 return;
             case "file.exportPng":
                 this.openPngExportDialog(invoker ?? null);

@@ -84,6 +84,11 @@ import {
     isFrameGraphPostEffectId,
     type FrameGraphPostEffectId,
 } from "./shared/frame-graph-post-effect-stack";
+import {
+    createCameraVmdExportDocument,
+    createModelVmdExportDocument,
+} from "./export/vmd-export-adapter";
+import type { VmdSaveResult } from "./export/vmd-export-document";
 
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
 type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory";
@@ -2279,6 +2284,12 @@ export class UIController {
             void this.saveProject(action.forceChoosePath ?? false);
         });
         this.actionDispatcher.register("project.load", () => this.loadProject());
+        this.actionDispatcher.register("project.exportModelVmd", () => {
+            void this.exportModelVmd();
+        });
+        this.actionDispatcher.register("project.exportCameraVmd", () => {
+            void this.exportCameraVmd();
+        });
         this.actionDispatcher.register("project.exportPng", (action) => {
             if (action.renderMode === "detached") {
                 void this.exportUiController?.exportPNGDetached();
@@ -3329,6 +3340,99 @@ export class UIController {
         if (!filePath) return;
 
         await this.loadModelInteractively(filePath);
+    }
+
+    private buildModelVmdDefaultFileName(modelPath: string, fallbackName: string): string {
+        const baseName = this.getBaseNameForRenderer(modelPath).replace(/\.[^.]+$/, "") || fallbackName || "model";
+        return `${baseName}_motion.vmd`;
+    }
+
+    private handleVmdSaveResult(result: VmdSaveResult, sourceWarningCount = 0): void {
+        switch (result.status) {
+            case "saved": {
+                const warningCount = result.warnings.length + sourceWarningCount;
+                const suffix = warningCount > 0 ? ` (${warningCount} warning)` : "";
+                this.setStatus(t("toast.vmdExportSaved"), false);
+                this.showToast(`${t("toast.vmdExportSaved")}: ${this.getBaseNameForRenderer(result.filePath)}${suffix}`, "success");
+                return;
+            }
+            case "cancelled":
+                this.setStatus("Ready", false);
+                return;
+            case "invalid": {
+                const first = result.errors[0];
+                const detail = first ? `${first.code}: ${first.message}` : t("toast.vmdExportInvalid");
+                this.setStatus(t("toast.vmdExportInvalid"), false);
+                this.showToast(`${t("toast.vmdExportInvalid")}: ${detail}`, "error");
+                return;
+            }
+            case "failed":
+                this.setStatus(t("toast.vmdExportFailed"), false);
+                this.showToast(`${t("toast.vmdExportFailed")}: ${result.message}`, "error");
+        }
+    }
+
+    private async exportModelVmd(): Promise<void> {
+        const source = this.mmdManager.getActiveModelVmdExportSource();
+        if (!source || !this.mmdManager.hasActiveModelVmdExportKeys()) {
+            this.showToast(t("toast.vmdExportNoModelKeys"), "error");
+            return;
+        }
+
+        this.setStatus(t("status.vmdExportPreparing"), true);
+        let modelName = source.modelInfo.name;
+        let sourceWarningCount = 0;
+        try {
+            const header = await window.electronAPI.readMmdModelHeader(source.modelInfo.path);
+            const internalName = header?.modelName?.trim();
+            if (internalName) {
+                modelName = internalName;
+            } else {
+                sourceWarningCount = 1;
+                window.electronAPI.logWarn("vmd-export", "Falling back to model file name for VMD header", {
+                    modelPath: source.modelInfo.path,
+                    fallbackName: modelName,
+                });
+            }
+            const document = createModelVmdExportDocument(
+                source.animation,
+                modelName,
+                source.externalParentKeyCount,
+            );
+            const result = await window.electronAPI.saveVmdFile(
+                document,
+                this.buildModelVmdDefaultFileName(source.modelInfo.path, source.modelInfo.name),
+            );
+            this.handleVmdSaveResult(result, sourceWarningCount);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus(t("toast.vmdExportFailed"), false);
+            this.showToast(`${t("toast.vmdExportFailed")}: ${message}`, "error");
+            window.electronAPI.logError("vmd-export", "Failed to prepare model VMD export", { message });
+        }
+    }
+
+    private async exportCameraVmd(): Promise<void> {
+        const source = this.mmdManager.getCameraVmdExportSource();
+        if (!source || !this.mmdManager.hasCameraVmdExportKeys()) {
+            this.showToast(t("toast.vmdExportNoCameraKeys"), "error");
+            return;
+        }
+
+        this.setStatus(t("status.vmdExportPreparing"), true);
+        try {
+            const document = createCameraVmdExportDocument(
+                source.animation.cameraTrack,
+                source.externalParentKeyCount,
+            );
+            const result = await window.electronAPI.saveVmdFile(document, "camera_motion.vmd");
+            this.handleVmdSaveResult(result);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus(t("toast.vmdExportFailed"), false);
+            this.showToast(`${t("toast.vmdExportFailed")}: ${message}`, "error");
+            window.electronAPI.logError("vmd-export", "Failed to prepare camera VMD export", { message });
+        }
     }
 
     public async loadModelInteractively(filePath: string): Promise<ModelInfo | null> {

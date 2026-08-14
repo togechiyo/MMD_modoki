@@ -24,6 +24,8 @@ import type {
   SmokeRendererReadyPayload,
 } from './types';
 import { parseMmdModelHeader } from './shared/mmd-model-header';
+import type { VmdExportDocument, VmdSaveResult } from './export/vmd-export-document';
+import { serializeVmd } from './export/vmd-serializer';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -1410,6 +1412,82 @@ ipcMain.handle(
         ...createLogErrorData(err),
       });
       return null;
+    }
+  },
+);
+
+ipcMain.handle(
+  'file:saveVmd',
+  async (
+    _event,
+    document: VmdExportDocument,
+    defaultFileName: string,
+  ): Promise<VmdSaveResult> => {
+    try {
+      const serialized = serializeVmd(document);
+      if ("errors" in serialized) {
+        writeAppLog('warn', 'vmd-export', 'VMD export validation failed', {
+          kind: document && typeof document === 'object' && 'kind' in document ? document.kind : 'unknown',
+          errorCount: serialized.errors.length,
+          warningCount: serialized.warnings.length,
+          errors: serialized.errors.slice(0, 5),
+        });
+        return { status: 'invalid', errors: serialized.errors, warnings: serialized.warnings };
+      }
+
+      const requestedName = typeof defaultFileName === 'string' ? path.basename(defaultFileName.trim()) : '';
+      const sanitizedName = (requestedName || 'motion.vmd')
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .split('')
+        .map((character) => character.charCodeAt(0) < 0x20 ? '_' : character)
+        .join('');
+      const safeName = sanitizedName.toLowerCase().endsWith('.vmd') ? sanitizedName : `${sanitizedName}.vmd`;
+      let filePath: string;
+      if (isE2eMode) {
+        filePath = path.join(app.getPath('userData'), safeName);
+      } else {
+        const result = await dialog.showSaveDialog({
+          title: 'Save VMD Motion',
+          defaultPath: path.join(app.getPath('documents'), safeName),
+          filters: [
+            { name: 'Vocaloid Motion Data', extensions: ['vmd'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+        });
+        if (result.canceled || !result.filePath) return { status: 'cancelled' };
+        filePath = result.filePath.toLowerCase().endsWith('.vmd') ? result.filePath : `${result.filePath}.vmd`;
+      }
+
+      await fs.promises.writeFile(filePath, serialized.bytes);
+      const keyCounts = document.kind === 'model'
+        ? {
+            boneKeyCount: document.boneKeys.length,
+            morphKeyCount: document.morphKeys.length,
+            cameraKeyCount: 0,
+            propertyKeyCount: document.propertyKeys.length,
+          }
+        : {
+            boneKeyCount: 0,
+            morphKeyCount: 0,
+            cameraKeyCount: document.cameraKeys.length,
+            propertyKeyCount: 0,
+          };
+      writeAppLog('info', 'vmd-export', 'VMD export saved', {
+        kind: document.kind,
+        filePath,
+        byteLength: serialized.bytes.byteLength,
+        ...keyCounts,
+        warningCodes: serialized.warnings.map((warning) => warning.code),
+      });
+      return {
+        status: 'saved',
+        filePath,
+        byteLength: serialized.bytes.byteLength,
+        warnings: serialized.warnings,
+      };
+    } catch (err) {
+      writeAppLog('error', 'vmd-export', 'VMD export failed', createLogErrorData(err));
+      return { status: 'failed', message: err instanceof Error ? err.message : String(err) };
     }
   },
 );

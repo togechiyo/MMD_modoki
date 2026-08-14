@@ -96,7 +96,7 @@
 - [ ] ボーンの位置 / 角度補正
 - [ ] モーフの位置 / 角度補正
 - [ ] VMD 書き出し（β実装済み、MMD 本家での互換確認待ち）
-- [ ] VPD ポーズ書き出し（β実装済み、MMD 本家での互換確認待ち）
+- [x] VPD ポーズ書き出し（β実装・MMD 本家での基本互換確認済み）
 - [x] プロジェクト保存 / 読み込み（JSON）
 - [x] プロジェクトへキーフレーム本体を保存 / 復元
 
@@ -107,6 +107,7 @@
 - 2026-08-14: babylon-mmd 1.2.0 の公式 docs / package source と現行編集データを照合。標準 VMD writer は存在せず、`MmdAnimation` を入力にした pure serializer が必要。根拠は [VMD 出力 / babylon-mmd 1.2.0 調査メモ](./vmd-export-babylon-mmd-research-2026-08-14.md)、byte layout、入力型、Shift-JIS、補間 64 bytes、物理切替、validation、IPC、test vector は [VMD 出力実装仕様](./vmd-export-implementation-spec.md) を参照。
 - 初期書き出し対象はモデル VMD とカメラ VMD のみ。照明・セルフ影は count `0`、重力は VMD 出力対象外とし、対応する Action / UI は追加しない。
 - 2026-08-14: 選択ボーンの現在ローカル姿勢を Shift-JIS VPD として保存するβ経路を実装。キー登録は不要で、1ボーン / 複数ボーンに対応する。モーフは MikuMikuMoving 拡張でMMD本家が読まないため初期対象外。仕様、validation、外部親制約、テストは [VPD 書き出し 調査・実装仕様](./vpd-export-research-implementation-spec-2026-08-14.md) を参照。
+- 2026-08-14: ユーザー実機の MMD 本家で、MMD_modoki が書き出した VPD の読み込み成功を確認。境界条件の追加検証は継続するが、基本書き出しは完了扱いとする。
 
 ### 3-2. UI 連動
 
@@ -399,7 +400,7 @@
   - [ ] MMD本家の外部親キーとの互換
     - 標準 VMD に親モデル / 親ボーンは保存できないため、project 挙動互換と world bake VMD を分けて扱う
 - [ ] 照明 / 影 / 重力 / アクセサリのキー登録
-- [ ] VPD / VMD 書き出し（β実装済み、MMD 本家での互換確認待ち）
+- [ ] VPD / VMD 書き出し（VPDはMMD本家で基本互換確認済み、VMDは確認待ち）
 - [x] 反転ペースト
   - 2026-06-26 実装: コピー済みのボーンキーを現在フレーム基準で左右反転して貼り付け。左右ボーン名が見つかる場合は対応トラックへ、見つからない場合は同トラックへ反転姿勢として貼り付ける。モーフ / カメラは初期対象外。
 - [x] 物理オンオフキー

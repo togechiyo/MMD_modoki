@@ -102,6 +102,8 @@
 補足:
 - VMD は既存データの読み込みはできている
 - 新規登録したキーフレームを書き出す経路は未完
+- 2026-08-14: babylon-mmd 1.2.0 の公式 docs / package source と現行編集データを照合。標準 VMD writer は存在せず、`MmdAnimation` を入力にした pure serializer が必要。根拠は [VMD 出力 / babylon-mmd 1.2.0 調査メモ](./vmd-export-babylon-mmd-research-2026-08-14.md)、byte layout、入力型、Shift-JIS、補間 64 bytes、物理切替、validation、IPC、test vector は [VMD 出力実装仕様](./vmd-export-implementation-spec.md) を参照。
+- 初期書き出し対象はモデル VMD とカメラ VMD のみ。照明・セルフ影は count `0`、重力は VMD 出力対象外とし、対応する Action / UI は追加しない。
 
 ### 3-2. UI 連動
 

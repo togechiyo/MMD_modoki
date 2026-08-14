@@ -131,6 +131,8 @@
 - [カメラ実装仕様](./camera-implementation-spec.md)
 - [カメラ用ポストエフェクト現行仕様](./camera-postfx-current-spec.md)
 - [カメラVMD対応メモ](./camera-vmd.md)
+- [VMD 出力 / babylon-mmd 1.2.0 調査メモ 2026-08-14](./vmd-export-babylon-mmd-research-2026-08-14.md)
+- [VMD 出力実装仕様](./vmd-export-implementation-spec.md)
 - [カメラ外部親: MMD / babylon-mmd 調査・実装 2026-08-10](./camera-external-parent-mmd-babylon-research-2026-08-10.md)
 - [カメラ外部親 / フォローカメラ再設計メモ 2026-07-13](./camera-external-parent-follow-design-note-2026-07-13.md)
 - [タイムライン仕様](./timeline-spec.md)

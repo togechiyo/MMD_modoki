@@ -280,6 +280,7 @@ declare global {
 }
 
 export interface ModelInfo {
+    instanceId: string;
     name: string;
     path: string;
     vertexCount: number;
@@ -396,6 +397,7 @@ export interface ProjectModelMaterialShaderState {
 }
 
 export interface ProjectModelState {
+    instanceId?: string;
     path: string;
     visible: boolean;
     castsShadow?: boolean;
@@ -406,6 +408,7 @@ export interface ProjectModelState {
     animation?: ProjectSerializedModelAnimation | null;
     externalParent?: {
         childBoneName: string;
+        parentModelInstanceId?: string;
         parentModelPath: string;
         parentBoneName: string;
     } | null;
@@ -418,6 +421,7 @@ export interface ProjectCameraState {
     fov: number;
     distance: number;
     externalParent?: {
+        modelInstanceId?: string | null;
         modelPath: string | null;
         boneName: string | null;
     } | null;
@@ -503,6 +507,7 @@ export interface ProjectEffectState {
     dofEnabled: boolean;
     dofFocusDistanceMm: number;
     dofFocusOffsetMm?: number;
+    dofTargetModelInstanceId?: string | null;
     dofTargetModelPath?: string | null;
     dofTargetBoneName?: string | null;
     dofBlurLevel?: number;
@@ -648,6 +653,7 @@ export interface ProjectAccessoryState {
         rotationDeg: { x: number; y: number; z: number };
         scale: number;
     };
+    parentModelInstanceId?: string | null;
     parentModelPath?: string | null;
     parentBoneName?: string | null;
 }
@@ -704,14 +710,17 @@ export interface ProjectSerializedCameraTrack {
 
 export interface ProjectSerializedCameraExternalParentTrack {
     frameNumbers: ProjectNumberArray;
+    modelInstanceIds?: Array<string | null>;
     modelPaths: Array<string | null>;
     boneNames: Array<string | null>;
 }
 
 export interface ProjectSerializedModelExternalParentTrack {
+    modelInstanceId?: string;
     modelPath: string;
     frameNumbers: ProjectNumberArray;
     childBoneNames: string[];
+    parentModelInstanceIds?: Array<string | null>;
     parentModelPaths: Array<string | null>;
     parentBoneNames: Array<string | null>;
 }
@@ -733,6 +742,7 @@ export interface ProjectSerializedModelAnimation {
 }
 
 export interface ProjectKeyframeModelAnimation {
+    modelInstanceId?: string;
     modelPath: string;
     animation: ProjectSerializedModelAnimation | null;
 }
@@ -753,6 +763,7 @@ export interface MmdModokiProjectFileV1 {
         models: ProjectModelState[];
         renderOrderMode?: MmdRenderOrderMode;
         coplanarMaterialDepthBiasStrength?: number;
+        activeModelInstanceId?: string | null;
         activeModelPath: string | null;
         timelineTarget: "model" | "camera";
         currentFrame: number;

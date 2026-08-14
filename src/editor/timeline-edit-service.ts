@@ -153,6 +153,7 @@ export type CameraKeyframePayload = {
 };
 
 export type CameraExternalParentKeyframePayload = {
+    modelInstanceId?: string | null;
     modelPath: string | null;
     boneName: string | null;
 };

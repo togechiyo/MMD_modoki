@@ -36,6 +36,7 @@ import {
     normalizeBackgroundDisplayMode,
     type BackgroundDisplayMode,
 } from "../shared/background-display-mode";
+import { normalizeModelInstanceId } from "../shared/model-instance-id";
 
 type ProjectImportRuntimeModel = {
     createRuntimeAnimation(animation: object): unknown;
@@ -43,7 +44,7 @@ type ProjectImportRuntimeModel = {
 };
 
 type ProjectImportSceneModel = {
-    info: { path: string };
+    info: { instanceId: string; path: string };
     mesh: object;
     model: ProjectImportRuntimeModel;
 };
@@ -57,7 +58,8 @@ type ProjectImportHost = {
         path: string,
         materialPipeline?: MmdMaterialPipelinePreset,
         renderOrder?: number,
-    ): Promise<{ name: string } | null>;
+        instanceId?: string,
+    ): Promise<{ name: string; instanceId?: string } | null>;
     setMmdRenderOrderMode?: (value: MmdRenderOrderMode) => MmdRenderOrderMode;
     setMmdCoplanarDepthBiasStrength?: (value: number) => number;
     loadVMD(path: string): Promise<unknown>;
@@ -77,6 +79,7 @@ type ProjectImportHost = {
     ): boolean;
     setLightDirection(x: number, y: number, z: number): void;
     setDofFocusTargetByPath?: (modelPath: string | null, boneName: string | null) => void;
+    setDofFocusTargetByInstanceId?: (instanceId: string | null, boneName: string | null) => void;
     updateEditorDofFocusAndFStop?: () => void;
     applyEditorDofSettings?: () => void;
     applyDofLensBlurSettings?: () => void;
@@ -355,14 +358,21 @@ function finalizeImportedRenderState(
         host.setLightDirection(lightDirectionX, lightDirectionY, lightDirectionZ);
     }
 
-    host.setDofFocusTargetByPath?.(
-        typeof data.effects.dofTargetModelPath === "string" && data.effects.dofTargetModelPath.length > 0
-            ? data.effects.dofTargetModelPath
-            : null,
-        typeof data.effects.dofTargetBoneName === "string" && data.effects.dofTargetBoneName.length > 0
-            ? data.effects.dofTargetBoneName
-            : null,
-    );
+    const dofTargetBoneName = typeof data.effects.dofTargetBoneName === "string"
+        && data.effects.dofTargetBoneName.length > 0
+        ? data.effects.dofTargetBoneName
+        : null;
+    const dofTargetInstanceId = normalizeModelInstanceId(data.effects.dofTargetModelInstanceId);
+    if (dofTargetInstanceId && host.setDofFocusTargetByInstanceId) {
+        host.setDofFocusTargetByInstanceId(dofTargetInstanceId, dofTargetBoneName);
+    } else {
+        host.setDofFocusTargetByPath?.(
+            typeof data.effects.dofTargetModelPath === "string" && data.effects.dofTargetModelPath.length > 0
+                ? data.effects.dofTargetModelPath
+                : null,
+            dofTargetBoneName,
+        );
+    }
     host.updateEditorDofFocusAndFStop?.();
     host.applyEditorDofSettings?.();
     host.applyDofLensBlurSettings?.();
@@ -393,23 +403,35 @@ export async function importProjectState(
     );
 
     let loadedModels = 0;
-    const embeddedModelAnimationsByPath = new Map<string, ProjectSerializedModelAnimation | null>();
+    const embeddedModelAnimationsByInstanceId = new Map<string, ProjectSerializedModelAnimation | null>();
+    const legacyEmbeddedModelAnimationsByPath = new Map<string, Array<ProjectSerializedModelAnimation | null>>();
     const keyframeModelAnimations = Array.isArray(data.keyframes?.modelAnimations)
         ? data.keyframes.modelAnimations
         : [];
     for (const keyframeModel of keyframeModelAnimations) {
         if (!keyframeModel || typeof keyframeModel.modelPath !== "string") continue;
-        embeddedModelAnimationsByPath.set(
-            normalizePathForCompare(keyframeModel.modelPath),
-            keyframeModel.animation ?? null,
-        );
+        const instanceId = normalizeModelInstanceId(keyframeModel.modelInstanceId);
+        if (instanceId) {
+            embeddedModelAnimationsByInstanceId.set(instanceId, keyframeModel.animation ?? null);
+            continue;
+        }
+        const normalizedPath = normalizePathForCompare(keyframeModel.modelPath);
+        const animations = legacyEmbeddedModelAnimationsByPath.get(normalizedPath) ?? [];
+        animations.push(keyframeModel.animation ?? null);
+        legacyEmbeddedModelAnimationsByPath.set(normalizedPath, animations);
     }
+    const legacyAnimationOffsetsByPath = new Map<string, number>();
 
     for (const modelState of data.scene.models) {
         const materialPipeline = normalizeMmdMaterialPipelinePreset(modelState.materialPipeline);
+        const requestedInstanceId = normalizeModelInstanceId(modelState.instanceId) ?? undefined;
         const modelInfo = typeof modelState.renderOrder === "number"
-            ? await host.loadPMX(modelState.path, materialPipeline, modelState.renderOrder)
-            : await host.loadPMX(modelState.path, materialPipeline);
+            ? requestedInstanceId
+                ? await host.loadPMX(modelState.path, materialPipeline, modelState.renderOrder, requestedInstanceId)
+                : await host.loadPMX(modelState.path, materialPipeline, modelState.renderOrder)
+            : requestedInstanceId
+                ? await host.loadPMX(modelState.path, materialPipeline, undefined, requestedInstanceId)
+                : await host.loadPMX(modelState.path, materialPipeline);
         if (!modelInfo) {
             warnings.push(`Model load failed: ${modelState.path}`);
             continue;
@@ -439,9 +461,20 @@ export async function importProjectState(
         const targetModel = targetEntry.model;
 
         let restoredEmbeddedAnimation = false;
-        const embeddedAnimationData = embeddedModelAnimationsByPath.get(
-            normalizePathForCompare(modelState.path),
-        ) ?? modelState.animation ?? null;
+        const actualInstanceId = normalizeModelInstanceId(targetEntry.info.instanceId);
+        let embeddedAnimationData: ProjectSerializedModelAnimation | null = modelState.animation ?? null;
+        const animationInstanceId = requestedInstanceId ?? actualInstanceId;
+        if (animationInstanceId && embeddedModelAnimationsByInstanceId.has(animationInstanceId)) {
+            embeddedAnimationData = embeddedModelAnimationsByInstanceId.get(animationInstanceId) ?? null;
+        } else {
+            const normalizedPath = normalizePathForCompare(modelState.path);
+            const legacyAnimations = legacyEmbeddedModelAnimationsByPath.get(normalizedPath) ?? [];
+            const legacyOffset = legacyAnimationOffsetsByPath.get(normalizedPath) ?? 0;
+            if (legacyOffset < legacyAnimations.length) {
+                embeddedAnimationData = legacyAnimations[legacyOffset] ?? null;
+                legacyAnimationOffsetsByPath.set(normalizedPath, legacyOffset + 1);
+            }
+        }
         if (embeddedAnimationData) {
             const embeddedAnimation = deserializeModelAnimation(embeddedAnimationData, `${modelInfo.name}@project`);
             if (embeddedAnimation) {
@@ -484,6 +517,21 @@ export async function importProjectState(
         }
     }
 
+    const findLoadedModelIndex = (
+        instanceId: unknown,
+        fallbackPath: unknown,
+    ): number => {
+        const normalizedInstanceId = normalizeModelInstanceId(instanceId);
+        if (normalizedInstanceId) {
+            return host.sceneModels.findIndex((entry) => entry.info.instanceId === normalizedInstanceId);
+        }
+        if (typeof fallbackPath !== "string") return -1;
+        const normalizedPath = normalizePathForCompare(fallbackPath);
+        return host.sceneModels.findIndex(
+            (entry) => normalizePathForCompare(entry.info.path) === normalizedPath,
+        );
+    };
+
     const modelExternalParentTracks = data.keyframes?.modelExternalParents;
     if (Array.isArray(modelExternalParentTracks)) {
         const normalizedTracks: ProjectSerializedModelExternalParentTrack[] = [];
@@ -492,27 +540,32 @@ export async function importProjectState(
                 warnings.push("Model external parent keyframe data is invalid");
                 continue;
             }
-            const childEntry = host.sceneModels.find((entry) =>
-                normalizePathForCompare(entry.info.path) === normalizePathForCompare(track.modelPath)
-            );
+            const childEntry = host.sceneModels[findLoadedModelIndex(track.modelInstanceId, track.modelPath)];
             if (!childEntry) {
                 warnings.push(`Model external parent keyframe model not found: ${track.modelPath}`);
                 continue;
             }
-            const parentModelPaths = (track.parentModelPaths ?? []).map((parentPath) => {
-                if (!parentPath) return null;
-                const parentEntry = host.sceneModels.find((entry) =>
-                    normalizePathForCompare(entry.info.path) === normalizePathForCompare(parentPath)
-                );
-                if (!parentEntry) {
-                    warnings.push(`Model external parent keyframe parent not found: ${parentPath}`);
+            const parentModelInstanceIds: Array<string | null> = [];
+            const parentModelPaths = (track.parentModelPaths ?? []).map((parentPath, index) => {
+                const parentInstanceId = track.parentModelInstanceIds?.[index] ?? null;
+                if (!parentInstanceId && !parentPath) {
+                    parentModelInstanceIds.push(null);
                     return null;
                 }
+                const parentEntry = host.sceneModels[findLoadedModelIndex(parentInstanceId, parentPath)];
+                if (!parentEntry) {
+                    warnings.push(`Model external parent keyframe parent not found: ${parentInstanceId ?? parentPath}`);
+                    parentModelInstanceIds.push(null);
+                    return null;
+                }
+                parentModelInstanceIds.push(parentEntry.info.instanceId);
                 return parentEntry.info.path;
             });
             normalizedTracks.push({
                 ...track,
+                modelInstanceId: childEntry.info.instanceId,
                 modelPath: childEntry.info.path,
+                parentModelInstanceIds,
                 parentModelPaths,
             });
         }
@@ -534,16 +587,10 @@ export async function importProjectState(
                 continue;
             }
 
-            const normalizedChildPath = normalizePathForCompare(modelState.path);
-            const childModelIndex = host.sceneModels.findIndex(
-                (entry) => normalizePathForCompare(entry.info.path) === normalizedChildPath,
-            );
+            const childModelIndex = findLoadedModelIndex(modelState.instanceId, modelState.path);
             if (childModelIndex < 0) continue;
 
-            const normalizedParentPath = normalizePathForCompare(parent.parentModelPath);
-            const parentModelIndex = host.sceneModels.findIndex(
-                (entry) => normalizePathForCompare(entry.info.path) === normalizedParentPath,
-            );
+            const parentModelIndex = findLoadedModelIndex(parent.parentModelInstanceId, parent.parentModelPath);
             if (parentModelIndex < 0) {
                 warnings.push(`Model external parent not found: ${parent.parentModelPath} (${modelState.path})`);
                 continue;
@@ -551,9 +598,11 @@ export async function importProjectState(
 
             if (host.setModelExternalParentKeyframes) {
                 legacyTracks.push({
+                    modelInstanceId: host.sceneModels[childModelIndex].info.instanceId,
                     modelPath: host.sceneModels[childModelIndex].info.path,
                     frameNumbers: [0],
                     childBoneNames: [parent.childBoneName],
+                    parentModelInstanceIds: [host.sceneModels[parentModelIndex].info.instanceId],
                     parentModelPaths: [host.sceneModels[parentModelIndex].info.path],
                     parentBoneNames: [parent.parentBoneName],
                 });
@@ -651,13 +700,15 @@ export async function importProjectState(
     const cameraExternalParent = cameraExternalParentTrack ? null : data.camera?.externalParent ?? null;
     if (cameraExternalParent && typeof cameraExternalParent === "object") {
         let parentModelIndex: number | null = null;
-        if (typeof cameraExternalParent.modelPath === "string" && cameraExternalParent.modelPath.trim().length > 0) {
-            const normalizedParentPath = normalizePathForCompare(cameraExternalParent.modelPath);
-            parentModelIndex = host.sceneModels.findIndex(
-                (entry) => normalizePathForCompare(entry.info.path) === normalizedParentPath,
+        if (cameraExternalParent.modelInstanceId || cameraExternalParent.modelPath) {
+            parentModelIndex = findLoadedModelIndex(
+                cameraExternalParent.modelInstanceId,
+                cameraExternalParent.modelPath,
             );
             if (parentModelIndex < 0) {
-                warnings.push(`Camera external parent model not found: ${cameraExternalParent.modelPath}`);
+                warnings.push(
+                    `Camera external parent model not found: ${cameraExternalParent.modelInstanceId ?? cameraExternalParent.modelPath}`,
+                );
                 parentModelIndex = null;
             }
         }
@@ -676,15 +727,24 @@ export async function importProjectState(
         if (!loaded) warnings.push(`Audio load failed: ${data.assets.audioPath}`);
     }
 
-    if (!isExportImport && data.scene.activeModelPath) {
-        const targetPath = normalizePathForCompare(data.scene.activeModelPath);
-        const targetIndex = host.sceneModels.findIndex(
-            (entry) => normalizePathForCompare(entry.info.path) === targetPath,
-        );
+    if (!isExportImport && (data.scene.activeModelInstanceId || data.scene.activeModelPath)) {
+        const activeInstanceId = normalizeModelInstanceId(data.scene.activeModelInstanceId);
+        const targetPath = typeof data.scene.activeModelPath === "string"
+            ? normalizePathForCompare(data.scene.activeModelPath)
+            : null;
+        const targetIndex = activeInstanceId
+            ? host.sceneModels.findIndex((entry) => entry.info.instanceId === activeInstanceId)
+            : host.sceneModels.findIndex(
+                (entry) => targetPath !== null && normalizePathForCompare(entry.info.path) === targetPath,
+            );
         if (targetIndex >= 0) {
             host.setActiveModelByIndex(targetIndex);
         } else {
-            warnings.push(`Active model path not found: ${data.scene.activeModelPath}`);
+            warnings.push(
+                activeInstanceId
+                    ? `Active model instance not found: ${activeInstanceId}`
+                    : `Active model path not found: ${data.scene.activeModelPath}`,
+            );
         }
     }
 
@@ -756,14 +816,14 @@ export async function importProjectState(
                 }
 
                 let parentModelIndex: number | null = null;
-                if (typeof accessoryState.parentModelPath === "string" && accessoryState.parentModelPath.trim().length > 0) {
-                    const normalizedParentPath = normalizePathForCompare(accessoryState.parentModelPath);
-                    parentModelIndex = host.sceneModels.findIndex(
-                        (entry) => normalizePathForCompare(entry.info.path) === normalizedParentPath,
+                if (accessoryState.parentModelInstanceId || accessoryState.parentModelPath) {
+                    parentModelIndex = findLoadedModelIndex(
+                        accessoryState.parentModelInstanceId,
+                        accessoryState.parentModelPath,
                     );
                     if (parentModelIndex < 0) {
                         warnings.push(
-                            `Accessory parent model not found: ${accessoryState.parentModelPath} (${accessoryState.path})`,
+                            `Accessory parent model not found: ${accessoryState.parentModelInstanceId ?? accessoryState.parentModelPath} (${accessoryState.path})`,
                         );
                         parentModelIndex = null;
                     }
@@ -973,14 +1033,21 @@ export async function importProjectState(
     host.dofFocusDistanceMm = readFiniteNumber(data.effects.dofFocusDistanceMm, 10000);
     host.dofAutoFocusNearOffsetMm = readFiniteNumber(data.effects.dofFocusOffsetMm, 0);
     host.dofBlurLevel = readFiniteNumber(data.effects.dofBlurLevel, 1);
-    host.setDofFocusTargetByPath?.(
-        typeof data.effects.dofTargetModelPath === "string" && data.effects.dofTargetModelPath.length > 0
-            ? data.effects.dofTargetModelPath
-            : null,
-        typeof data.effects.dofTargetBoneName === "string" && data.effects.dofTargetBoneName.length > 0
-            ? data.effects.dofTargetBoneName
-            : null,
-    );
+    const dofTargetBoneName = typeof data.effects.dofTargetBoneName === "string"
+        && data.effects.dofTargetBoneName.length > 0
+        ? data.effects.dofTargetBoneName
+        : null;
+    const dofTargetInstanceId = normalizeModelInstanceId(data.effects.dofTargetModelInstanceId);
+    if (dofTargetInstanceId && host.setDofFocusTargetByInstanceId) {
+        host.setDofFocusTargetByInstanceId(dofTargetInstanceId, dofTargetBoneName);
+    } else {
+        host.setDofFocusTargetByPath?.(
+            typeof data.effects.dofTargetModelPath === "string" && data.effects.dofTargetModelPath.length > 0
+                ? data.effects.dofTargetModelPath
+                : null,
+            dofTargetBoneName,
+        );
+    }
     host.dofFStop = 2.0;
     host.dofNearSuppressionScale = readFiniteNumber(data.effects.dofNearSuppressionScale, 4);
     host.dofLensSize = readFiniteNumber(data.effects.dofLensSize, 1000);

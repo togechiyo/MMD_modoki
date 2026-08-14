@@ -29,6 +29,10 @@ import {
 import { PbrMaterialProxy } from "../runtime/pbr-material-proxy";
 import { AdaptivePbrMaterialBuilder } from "./adaptive-pbr-material-builder";
 import { collectModelBoneInfo } from "./model-bone-metadata";
+import {
+    createUniqueModelInstanceId,
+    normalizeModelInstanceId,
+} from "../shared/model-instance-id";
 
 const PMX_MORPH_CATEGORY_SYSTEM = 0;
 const PMX_MORPH_CATEGORY_EYEBROW = 1;
@@ -1189,6 +1193,7 @@ export async function loadPMX(
     requestedMaterialPipeline?: MmdMaterialPipelinePreset,
     requestedRenderOrderMode: MmdRenderOrderMode = DEFAULT_MMD_RENDER_ORDER_MODE,
     requestedRenderOrder?: number,
+    requestedInstanceId?: string,
 ): Promise<ModelInfo | null> {
     let renderingSuspended = false;
     try {
@@ -1506,7 +1511,20 @@ export async function loadPMX(
                 { name: "\u305d\u306e\u4ed6", morphs: otherMorphs },
             ]
             : [];
+        const existingInstanceIds = new Set(host.sceneModels.map((entry) => entry.info.instanceId));
+        const normalizedRequestedInstanceId = normalizeModelInstanceId(requestedInstanceId);
+        const instanceId = normalizedRequestedInstanceId && !existingInstanceIds.has(normalizedRequestedInstanceId)
+            ? normalizedRequestedInstanceId
+            : createUniqueModelInstanceId(existingInstanceIds);
+        if (requestedInstanceId && instanceId !== requestedInstanceId) {
+            logWarn("asset", "Model instance ID was invalid or duplicated; generated a replacement", {
+                filePath,
+                requestedInstanceId,
+                instanceId,
+            });
+        }
         const modelInfo: ModelInfo = {
+            instanceId,
             name: fileName.replace(/\.(pmx|pmd)$/i, ""),
             path: filePath,
             vertexCount,
@@ -1565,6 +1583,7 @@ export async function loadPMX(
 
         host.onSceneModelLoaded?.(modelInfo, host.sceneModels.length, activateAsCurrent);
         logInfo("asset", "model load completed", {
+            instanceId,
             filePath,
             fileName,
             modelName: modelInfo.name,

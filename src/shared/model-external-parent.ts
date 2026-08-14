@@ -4,6 +4,7 @@ export type ModelExternalParentLink = {
 
 export type ModelExternalParentKeyframePayload = {
     childBoneName: string;
+    parentModelInstanceId?: string | null;
     parentModelPath: string | null;
     parentBoneName: string | null;
 };

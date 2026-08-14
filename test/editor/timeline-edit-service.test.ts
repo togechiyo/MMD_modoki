@@ -24,6 +24,7 @@ type TestHost = Parameters<typeof ensureModelAnimationForEditing>[0];
 
 function createModelInfo(bones: Array<{ name: string; movable: boolean }>): ModelInfo {
     return {
+        instanceId: "model-test",
         name: "test-model",
         path: "test.pmx",
         vertexCount: 0,
@@ -43,6 +44,7 @@ function createModelInfo(bones: Array<{ name: string; movable: boolean }>): Mode
 
 function createModelInfoWithPhysicsBones(): ModelInfo {
     return {
+        instanceId: "model-physics-test",
         name: "test-model",
         path: "test.pmx",
         vertexCount: 0,

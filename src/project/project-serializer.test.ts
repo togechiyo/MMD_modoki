@@ -226,12 +226,13 @@ describe("exportProjectState", () => {
         const project = exportProjectState({
             ...createHost(),
             sceneModels: [{
-                info: { path: "C:/models/pbr.pmx" },
+                info: { instanceId: "model-pbr", path: "C:/models/pbr.pmx" },
                 mesh: {},
                 model,
                 materialPipeline: "pbr-standard" as const,
                 renderOrder: 3,
             }],
+            activeModelInfo: { instanceId: "model-pbr", path: "C:/models/pbr.pmx" },
             getMmdRenderOrderMode: () => "mmd-fixed" as const,
             getMmdCoplanarDepthBiasStrength: () => 2,
             environmentLightingEnabled: true,
@@ -242,6 +243,9 @@ describe("exportProjectState", () => {
         });
 
         expect(project.scene.models[0]?.materialPipeline).toBe("pbr-standard");
+        expect(project.scene.models[0]?.instanceId).toBe("model-pbr");
+        expect(project.keyframes?.modelAnimations[0]?.modelInstanceId).toBe("model-pbr");
+        expect(project.scene.activeModelInstanceId).toBe("model-pbr");
         expect(project.scene.models[0]?.renderOrder).toBe(3);
         expect(project.scene.renderOrderMode).toBe("mmd-fixed");
         expect(project.scene.coplanarMaterialDepthBiasStrength).toBe(2);
@@ -413,7 +417,7 @@ describe("exportProjectState", () => {
         const host = {
             ...createHost(),
             sceneModels: [{
-                info: { path: "C:/models/parent.pmx" },
+                info: { instanceId: "model-parent", path: "C:/models/parent.pmx" },
                 mesh: {},
                 model: {},
             }],
@@ -424,6 +428,7 @@ describe("exportProjectState", () => {
                 fov: 30,
                 distance: 45,
                 externalParent: {
+                    modelInstanceId: "model-parent",
                     modelPath: "C:/models/parent.pmx",
                     boneName: "頭",
                 },
@@ -433,6 +438,7 @@ describe("exportProjectState", () => {
         const project = exportProjectState(host);
 
         expect(project.camera.externalParent).toEqual({
+            modelInstanceId: "model-parent",
             modelPath: "C:/models/parent.pmx",
             boneName: "頭",
         });
@@ -443,8 +449,8 @@ describe("exportProjectState", () => {
         const project = exportProjectState({
             ...createHost(),
             sceneModels: [
-                { info: { path: "C:/models/tofu.pmx" }, mesh: {}, model: {} },
-                { info: { path: "C:/models/plate.pmx" }, mesh: {}, model: {} },
+                { info: { instanceId: "model-tofu", path: "C:/models/tofu.pmx" }, mesh: {}, model: {} },
+                { info: { instanceId: "model-plate", path: "C:/models/plate.pmx" }, mesh: {}, model: {} },
             ],
             getModelExternalParent: (modelIndex: number) => modelIndex === 0
                 ? {
@@ -458,6 +464,7 @@ describe("exportProjectState", () => {
 
         expect(project.scene.models[0]?.externalParent).toEqual({
             childBoneName: "センター",
+            parentModelInstanceId: "model-plate",
             parentModelPath: "C:/models/plate.pmx",
             parentBoneName: "センター",
         });

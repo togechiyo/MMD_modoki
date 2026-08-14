@@ -1,6 +1,7 @@
 import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 
 export type CameraExternalParentKeyframePayload = {
+    modelInstanceId?: string | null;
     modelPath: string | null;
     boneName: string | null;
 };
@@ -12,13 +13,18 @@ export type CameraExternalParentKeyframeLike = CameraExternalParentKeyframePaylo
 export function normalizeCameraExternalParentPayload(
     payload: CameraExternalParentKeyframePayload,
 ): CameraExternalParentKeyframePayload {
+    const modelInstanceId = typeof payload.modelInstanceId === "string" && payload.modelInstanceId.length > 0
+        ? payload.modelInstanceId
+        : null;
     const modelPath = typeof payload.modelPath === "string" && payload.modelPath.length > 0
         ? payload.modelPath
         : null;
-    const boneName = modelPath && typeof payload.boneName === "string" && payload.boneName.length > 0
+    const boneName = (modelInstanceId || modelPath) && typeof payload.boneName === "string" && payload.boneName.length > 0
         ? payload.boneName
         : null;
-    return { modelPath, boneName };
+    return modelInstanceId
+        ? { modelInstanceId, modelPath, boneName }
+        : { modelPath, boneName };
 }
 
 export function selectCameraExternalParentKeyframeAtFrame<T extends CameraExternalParentKeyframeLike>(

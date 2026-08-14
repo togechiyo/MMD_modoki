@@ -69,6 +69,11 @@ function createHost() {
         physicsAvailable: false,
         renderFpsLimit: 60,
         clearProjectForImport: vi.fn(),
+        modelSourceAnimationsByModel: new WeakMap<object, object>(),
+        modelKeyframeTracksByModel: new WeakMap<object, Map<string, Uint32Array>>(),
+        buildModelTrackFrameMapFromAnimation: vi.fn(() => new Map<string, Uint32Array>()),
+        emitMergedKeyframeTracks: vi.fn(),
+        applySceneMeshVisibility: vi.fn(),
         setMmdRenderOrderMode: vi.fn((value) => value),
         setMmdCoplanarDepthBiasStrength: vi.fn((value) => value),
         loadPMX: vi.fn(),
@@ -188,18 +193,75 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores duplicate-path model animations and active model by instance ID", async () => {
+        const host = createHost();
+        host.loadPMX.mockImplementation(async (modelPath: string, _pipeline, _renderOrder, requestedInstanceId) => {
+            const instanceId = requestedInstanceId ?? `model-${host.sceneModels.length + 1}`;
+            const model = {
+                createRuntimeAnimation: vi.fn((animation) => animation),
+                setRuntimeAnimation: vi.fn(),
+            };
+            host.sceneModels.push({
+                info: { instanceId, path: modelPath },
+                mesh: {},
+                model,
+            });
+            return { name: modelPath, instanceId };
+        });
+        const emptyAnimation = (name: string) => ({
+            name,
+            boneTracks: [],
+            movableBoneTracks: [],
+            morphTracks: [],
+            propertyTrack: {
+                frameNumbers: [],
+                visibles: [],
+                ikBoneNames: [],
+                ikStates: [],
+            },
+        });
+        const baseProject = createProject();
+        const project = createProject({
+            scene: {
+                ...baseProject.scene,
+                models: [
+                    { instanceId: "dancer-a", path: "C:/models/dancer.pmx", visible: true, motionImports: [] },
+                    { instanceId: "dancer-b", path: "C:/models/dancer.pmx", visible: true, motionImports: [] },
+                ],
+                activeModelInstanceId: "dancer-b",
+                activeModelPath: "C:/models/dancer.pmx",
+            },
+            keyframes: {
+                modelAnimations: [
+                    { modelInstanceId: "dancer-a", modelPath: "C:/models/dancer.pmx", animation: emptyAnimation("motion-a") },
+                    { modelInstanceId: "dancer-b", modelPath: "C:/models/dancer.pmx", animation: emptyAnimation("motion-b") },
+                ],
+                cameraAnimation: null,
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.loadPMX.mock.calls.map((call) => call[3])).toEqual(["dancer-a", "dancer-b"]);
+        expect(host.sceneModels.map((entry) =>
+            host.modelSourceAnimationsByModel.get(entry.model)?.name
+        )).toEqual(["motion-a", "motion-b"]);
+        expect(host.setActiveModelByIndex).toHaveBeenLastCalledWith(1);
+    });
+
     it("restores model external parents after all models are loaded", async () => {
         const host = createHost();
-        host.loadPMX.mockImplementation(async (modelPath: string) => {
+        host.loadPMX.mockImplementation(async (modelPath: string, _pipeline, _renderOrder, requestedInstanceId) => {
+            const instanceId = requestedInstanceId ?? `model-${host.sceneModels.length + 1}`;
             host.sceneModels.push({
-                info: { path: modelPath },
+                info: { instanceId, path: modelPath },
                 mesh: {},
                 model: {
                     createRuntimeAnimation: vi.fn(),
                     setRuntimeAnimation: vi.fn(),
                 },
             });
-            return { name: modelPath };
+            return { name: modelPath, instanceId };
         });
         const project = createProject({
             scene: {
@@ -227,9 +289,11 @@ describe("importProjectState", () => {
         await importProjectState(host, project);
 
         expect(host.setModelExternalParentKeyframes).toHaveBeenCalledWith([{
+            modelInstanceId: "model-1",
             modelPath: "C:/models/tofu.pmx",
             frameNumbers: [0],
             childBoneNames: ["センター"],
+            parentModelInstanceIds: ["model-2"],
             parentModelPaths: ["C:/models/plate.pmx"],
             parentBoneNames: ["センター"],
         }]);
@@ -238,16 +302,17 @@ describe("importProjectState", () => {
 
     it("restores frame-based model external parent keys after all models are loaded", async () => {
         const host = createHost();
-        host.loadPMX.mockImplementation(async (modelPath: string) => {
+        host.loadPMX.mockImplementation(async (modelPath: string, _pipeline, _renderOrder, requestedInstanceId) => {
+            const instanceId = requestedInstanceId ?? `model-${host.sceneModels.length + 1}`;
             host.sceneModels.push({
-                info: { path: modelPath },
+                info: { instanceId, path: modelPath },
                 mesh: {},
                 model: {
                     createRuntimeAnimation: vi.fn(),
                     setRuntimeAnimation: vi.fn(),
                 },
             });
-            return { name: modelPath };
+            return { name: modelPath, instanceId };
         });
         const project = createProject({
             scene: {
@@ -274,9 +339,11 @@ describe("importProjectState", () => {
 
         expect(host.loadPMX).toHaveBeenCalledTimes(2);
         expect(host.setModelExternalParentKeyframes).toHaveBeenCalledWith([{
+            modelInstanceId: "model-1",
             modelPath: "C:/models/tofu.pmx",
             frameNumbers: [0, 30],
             childBoneNames: ["センター", "センター"],
+            parentModelInstanceIds: ["model-2", null],
             parentModelPaths: ["C:/models/plate.pmx", null],
             parentBoneNames: ["センター", null],
         }]);
@@ -798,13 +865,14 @@ describe("importProjectState", () => {
 
     it("restores camera external parent after loading models", async () => {
         const host = createHost();
-        host.loadPMX.mockImplementation(async (path: string) => {
+        host.loadPMX.mockImplementation(async (path: string, _pipeline, _renderOrder, requestedInstanceId) => {
+            const instanceId = requestedInstanceId ?? `model-${host.sceneModels.length + 1}`;
             host.sceneModels.push({
-                info: { path },
+                info: { instanceId, path },
                 mesh: {},
                 model: {},
             });
-            return { name: "model", path };
+            return { name: "model", instanceId };
         });
         const baseProject = createProject();
         const project = createProject({
@@ -861,14 +929,15 @@ describe("importProjectState", () => {
 
     it("reapplies render state after seek for dof, light, and model shaders", async () => {
         const host = createHost();
-        host.loadPMX.mockImplementation(async (path: string) => {
+        host.loadPMX.mockImplementation(async (path: string, _pipeline, _renderOrder, requestedInstanceId) => {
+            const instanceId = requestedInstanceId ?? `model-${host.sceneModels.length + 1}`;
             host.sceneModels.push({
-                info: { path },
+                info: { instanceId, path },
                 mesh: {},
                 model: {},
                 materials: [],
             });
-            return { name: "model", path };
+            return { name: "model", instanceId };
         });
 
         const baseProject = createProject();

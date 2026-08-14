@@ -894,6 +894,7 @@ type SceneModelEntry = {
 
 export type ModelExternalParentState = {
     childBoneName: string;
+    parentModelInstanceId: string;
     parentModelPath: string;
     parentBoneName: string;
 };
@@ -1772,6 +1773,7 @@ ${beforeFogAppendBlock}
         }
         | null = null;
     private cameraExternalParentModelIndex: number | null = null;
+    private cameraExternalParentModelInstanceId: string | null = null;
     private cameraExternalParentModelPath: string | null = null;
     private cameraExternalParentBoneName: string | null = null;
     private cameraLowerRadiusLimitBeforeExternalParent: number | null | undefined;
@@ -2026,6 +2028,7 @@ ${beforeFogAppendBlock}
     private readonly dofAutoFocusLensCompensationExponent = 0.72;
     private dofNearSuppressionScaleValue = 4.0;
     private dofAutoFocusNearOffsetMmValue = 0;
+    private dofFocusTargetModelInstanceIdValue: string | null = null;
     private dofFocusTargetModelPathValue: string | null = null;
     private dofFocusTargetBoneNameValue: string | null = null;
     private resizeObserver: ResizeObserver | null = null;
@@ -2384,15 +2387,27 @@ ${beforeFogAppendBlock}
     public onGlobalIlluminationStateChanged: ((enabled: boolean) => void) | null = null;
     public onDofFocusTargetChanged: (() => void) | null = null;
 
-    public getLoadedModels(): { index: number; name: string; path: string; active: boolean; castsShadow: boolean; renderOrder: number }[] {
+    public getLoadedModels(): { index: number; instanceId: string; name: string; path: string; active: boolean; castsShadow: boolean; renderOrder: number }[] {
         return this.sceneModels.map((entry, index) => ({
             index,
+            instanceId: entry.info.instanceId,
             name: entry.info.name,
             path: entry.info.path,
             active: entry.model === this.currentModel,
             castsShadow: entry.castShadow,
             renderOrder: entry.renderOrder,
         }));
+    }
+
+    private findSceneModelIndexByIdentity(
+        instanceId: string | null | undefined,
+        fallbackPath: string | null | undefined,
+    ): number {
+        if (instanceId) {
+            return this.sceneModels.findIndex((entry) => entry.info.instanceId === instanceId);
+        }
+        if (!fallbackPath) return -1;
+        return this.sceneModels.findIndex((entry) => entry.info.path === fallbackPath);
     }
 
     public getMmdRenderOrderMode(): MmdRenderOrderMode {
@@ -2498,7 +2513,10 @@ ${beforeFogAppendBlock}
         this.applyModelExternalParentKeyframesAtFrame(this._currentFrame);
         const state = this.sceneModels[modelIndex]?.externalParent;
         if (!state) return null;
-        const parentModelIndex = this.sceneModels.findIndex((entry) => entry.info.path === state.parentModelPath);
+        const parentModelIndex = this.findSceneModelIndexByIdentity(
+            state.parentModelInstanceId,
+            state.parentModelPath,
+        );
         if (parentModelIndex < 0) return null;
         return { ...state, parentModelIndex };
     }
@@ -2516,6 +2534,7 @@ ${beforeFogAppendBlock}
         if (!keyframe) return null;
         return {
             childBoneName: keyframe.childBoneName,
+            parentModelInstanceId: keyframe.parentModelInstanceId,
             parentModelPath: keyframe.parentModelPath,
             parentBoneName: keyframe.parentBoneName,
         };
@@ -2531,14 +2550,23 @@ ${beforeFogAppendBlock}
             return false;
         }
 
+        const requestedParentModelIndex = this.findSceneModelIndexByIdentity(
+            payload.parentModelInstanceId,
+            payload.parentModelPath,
+        );
+        const requestedParentEntry = this.sceneModels[requestedParentModelIndex];
         const normalizedPayload: ModelExternalParentKeyframe = {
             frame: Math.max(0, Math.floor(frame)),
             childBoneName: payload.childBoneName,
-            parentModelPath: payload.parentModelPath || null,
-            parentBoneName: payload.parentModelPath ? payload.parentBoneName || null : null,
+            parentModelInstanceId: requestedParentEntry?.info.instanceId ?? null,
+            parentModelPath: requestedParentEntry?.info.path ?? null,
+            parentBoneName: requestedParentEntry ? payload.parentBoneName || null : null,
         };
-        if (normalizedPayload.parentModelPath) {
-            const parentModelIndex = this.sceneModels.findIndex((entry) => entry.info.path === normalizedPayload.parentModelPath);
+        if (normalizedPayload.parentModelInstanceId) {
+            const parentModelIndex = this.findSceneModelIndexByIdentity(
+                normalizedPayload.parentModelInstanceId,
+                normalizedPayload.parentModelPath,
+            );
             const parentEntry = this.sceneModels[parentModelIndex];
             if (
                 !parentEntry
@@ -2599,9 +2627,11 @@ ${beforeFogAppendBlock}
         return this.sceneModels
             .filter((entry) => entry.externalParentKeyframes.length > 0)
             .map((entry) => ({
+                modelInstanceId: entry.info.instanceId,
                 modelPath: entry.info.path,
                 frameNumbers: this.packFrameNumbers(new Uint32Array(entry.externalParentKeyframes.map((keyframe) => keyframe.frame))),
                 childBoneNames: entry.externalParentKeyframes.map((keyframe) => keyframe.childBoneName),
+                parentModelInstanceIds: entry.externalParentKeyframes.map((keyframe) => keyframe.parentModelInstanceId ?? null),
                 parentModelPaths: entry.externalParentKeyframes.map((keyframe) => keyframe.parentModelPath),
                 parentBoneNames: entry.externalParentKeyframes.map((keyframe) => keyframe.parentBoneName),
             }));
@@ -2617,7 +2647,7 @@ ${beforeFogAppendBlock}
         if (!tracks) return true;
 
         for (const track of tracks) {
-            const childModelIndex = this.sceneModels.findIndex((entry) => entry.info.path === track.modelPath);
+            const childModelIndex = this.findSceneModelIndexByIdentity(track.modelInstanceId, track.modelPath);
             const childEntry = this.sceneModels[childModelIndex];
             if (!childEntry || !Array.isArray(track.childBoneNames)) return false;
             const frameCount = track.childBoneNames.length;
@@ -2630,11 +2660,15 @@ ${beforeFogAppendBlock}
                 const parentModelPath = typeof track.parentModelPaths?.[index] === "string" && track.parentModelPaths[index]
                     ? track.parentModelPaths[index]
                     : null;
-                const parentBoneName = parentModelPath && typeof track.parentBoneNames?.[index] === "string"
+                const parentModelInstanceId = typeof track.parentModelInstanceIds?.[index] === "string"
+                    ? track.parentModelInstanceIds[index] || null
+                    : null;
+                const parentModelIndex = this.findSceneModelIndexByIdentity(parentModelInstanceId, parentModelPath);
+                const parentEntry = this.sceneModels[parentModelIndex];
+                const parentBoneName = parentEntry && typeof track.parentBoneNames?.[index] === "string"
                     ? track.parentBoneNames[index] || null
                     : null;
-                if (parentModelPath) {
-                    const parentEntry = this.sceneModels.find((entry) => entry.info.path === parentModelPath);
+                if (parentModelInstanceId || parentModelPath) {
                     if (!parentEntry || !parentBoneName || !this.getRuntimeBoneByNameFromModel(parentEntry.model, parentBoneName)) {
                         return false;
                     }
@@ -2642,7 +2676,8 @@ ${beforeFogAppendBlock}
                 keyframes.push({
                     frame: Math.max(0, Math.floor(Number(frames[index] ?? 0))),
                     childBoneName,
-                    parentModelPath,
+                    parentModelInstanceId: parentEntry?.info.instanceId ?? null,
+                    parentModelPath: parentEntry?.info.path ?? null,
                     parentBoneName,
                 });
             }
@@ -2688,8 +2723,11 @@ ${beforeFogAppendBlock}
                 const state = keyframes.length > 0
                     ? selected
                     : entry.externalParent;
-                if (!state?.parentModelPath) continue;
-                const parentModelIndex = this.sceneModels.findIndex((candidate) => candidate.info.path === state.parentModelPath);
+                if (!state?.parentModelInstanceId && !state?.parentModelPath) continue;
+                const parentModelIndex = this.findSceneModelIndexByIdentity(
+                    state.parentModelInstanceId,
+                    state.parentModelPath,
+                );
                 if (parentModelIndex < 0 || parentModelIndex === modelIndex) return false;
                 links.set(modelIndex, { parentModelIndex });
             }
@@ -2728,7 +2766,10 @@ ${beforeFogAppendBlock}
             if (index === childModelIndex) continue;
             const state = this.sceneModels[index]?.externalParent;
             if (!state) continue;
-            const resolvedParentIndex = this.sceneModels.findIndex((entry) => entry.info.path === state.parentModelPath);
+            const resolvedParentIndex = this.findSceneModelIndexByIdentity(
+                state.parentModelInstanceId,
+                state.parentModelPath,
+            );
             if (resolvedParentIndex >= 0) {
                 linksByChildModelIndex.set(index, { parentModelIndex: resolvedParentIndex });
             }
@@ -2740,6 +2781,7 @@ ${beforeFogAppendBlock}
         this.resetModelExternalParentChildBone(childEntry, childBone);
         childEntry.externalParent = {
             childBoneName,
+            parentModelInstanceId: parentEntry.info.instanceId,
             parentModelPath: parentEntry.info.path,
             parentBoneName,
         };
@@ -3897,15 +3939,20 @@ ${beforeFogAppendBlock}
         const removed = this.sceneModels[removeIndex];
         const cameraExternalParentBeforeRemoval = this.getCameraExternalParentPayload();
         for (const entry of this.sceneModels) {
-            if (entry.externalParent?.parentModelPath === removed.info.path) {
+            if (entry.externalParent?.parentModelInstanceId === removed.info.instanceId) {
                 entry.externalParent = null;
             }
             entry.externalParentKeyframes = entry.externalParentKeyframes.map((keyframe) =>
-                keyframe.parentModelPath === removed.info.path
-                    ? { ...keyframe, parentModelPath: null, parentBoneName: null }
+                keyframe.parentModelInstanceId === removed.info.instanceId
+                    ? { ...keyframe, parentModelInstanceId: null, parentModelPath: null, parentBoneName: null }
                     : keyframe
             );
         }
+        this.cameraExternalParentKeyframes = this.cameraExternalParentKeyframes.map((keyframe) =>
+            keyframe.modelInstanceId === removed.info.instanceId
+                ? { ...keyframe, modelInstanceId: null, modelPath: null, boneName: null }
+                : keyframe
+        );
         removed.castShadow = false;
         this.applyModelShadowCasterState(removed);
 
@@ -3922,10 +3969,18 @@ ${beforeFogAppendBlock}
         this.disposeContactShadowForModel(removed);
         removed.mesh.dispose();
         this.sceneModels.splice(removeIndex, 1);
-        this.setCameraExternalParentState(
-            cameraExternalParentBeforeRemoval.modelPath,
-            cameraExternalParentBeforeRemoval.boneName,
-        );
+        if (this.dofFocusTargetModelInstanceIdValue === removed.info.instanceId) {
+            this.setDofFocusTargetEntry(null, null);
+        }
+        if (cameraExternalParentBeforeRemoval.modelInstanceId === removed.info.instanceId) {
+            this.setCameraExternalParentState(null, null, null);
+        } else {
+            this.setCameraExternalParentState(
+                cameraExternalParentBeforeRemoval.modelInstanceId,
+                cameraExternalParentBeforeRemoval.modelPath,
+                cameraExternalParentBeforeRemoval.boneName,
+            );
+        }
         this.syncLuminousGlowLayer();
 
         if (this.sceneModels.length === 0) {
@@ -3968,21 +4023,38 @@ ${beforeFogAppendBlock}
         return this.dofFocusTargetModelPathValue;
     }
 
+    public getDofFocusTargetModelInstanceId(): string | null {
+        return this.dofFocusTargetModelInstanceIdValue;
+    }
+
     public getDofFocusTargetBoneName(): string | null {
         return this.dofFocusTargetBoneNameValue;
     }
 
     public setDofFocusTargetByIndex(index: number | null, boneName: string | null): void {
         if (index === null || !Number.isInteger(index) || index < 0 || index >= this.sceneModels.length) {
-            this.setDofFocusTargetByPath(null, null);
+            this.setDofFocusTargetEntry(null, null);
             return;
         }
-        this.setDofFocusTargetByPath(this.sceneModels[index]?.info.path ?? null, boneName);
+        this.setDofFocusTargetEntry(this.sceneModels[index] ?? null, boneName);
     }
 
     public setDofFocusTargetByPath(modelPath: string | null, boneName: string | null): void {
         const nextModelPath = typeof modelPath === "string" && modelPath.length > 0 ? modelPath : null;
         const entry = nextModelPath !== null ? this.findSceneModelEntryByPath(nextModelPath) : null;
+        this.setDofFocusTargetEntry(entry, boneName);
+    }
+
+    public setDofFocusTargetByInstanceId(instanceId: string | null, boneName: string | null): void {
+        const entry = instanceId
+            ? this.sceneModels.find((candidate) => candidate.info.instanceId === instanceId) ?? null
+            : null;
+        this.setDofFocusTargetEntry(entry, boneName);
+    }
+
+    private setDofFocusTargetEntry(entry: SceneModelEntry | null, boneName: string | null): void {
+        const nextModelInstanceId = entry?.info.instanceId ?? null;
+        const nextModelPath = entry?.info.path ?? null;
         let nextBoneName = typeof boneName === "string" && boneName.length > 0 ? boneName : null;
 
         if (entry) {
@@ -3995,9 +4067,11 @@ ${beforeFogAppendBlock}
         }
 
         const changed =
+            this.dofFocusTargetModelInstanceIdValue !== nextModelInstanceId ||
             this.dofFocusTargetModelPathValue !== nextModelPath ||
             this.dofFocusTargetBoneNameValue !== nextBoneName;
 
+        this.dofFocusTargetModelInstanceIdValue = nextModelInstanceId;
         this.dofFocusTargetModelPathValue = nextModelPath;
         this.dofFocusTargetBoneNameValue = nextBoneName;
 
@@ -4903,7 +4977,10 @@ ${beforeFogAppendBlock}
         }
         if (!externalParentRoot || cursor !== externalParentRoot) return false;
 
-        const parentEntry = this.sceneModels.find((entry) => entry.info.path === state.parentModelPath);
+        const parentEntry = this.sceneModels[this.findSceneModelIndexByIdentity(
+            state.parentModelInstanceId,
+            state.parentModelPath,
+        )];
         const parentBone = parentEntry
             ? this.getRuntimeBoneByNameFromModel(parentEntry.model, state.parentBoneName)
             : null;
@@ -8207,6 +8284,7 @@ ${beforeFogAppendBlock}
         filePath: string,
         materialPipeline: MmdMaterialPipelinePreset = this.mmdMaterialPipelinePresetValue,
         renderOrder: number = getNextMmdModelRenderOrder(this.sceneModels.map((entry) => entry.renderOrder)),
+        instanceId?: string,
     ): Promise<ModelInfo | null> {
         return await loadPMXImpl(
             this,
@@ -8214,6 +8292,7 @@ ${beforeFogAppendBlock}
             materialPipeline,
             this.mmdRenderOrderModeValue,
             renderOrder,
+            instanceId,
         );
     }
 
@@ -12601,12 +12680,12 @@ ${beforeFogAppendBlock}
     }
 
     private getDofFocusTargetPosition(): Vector3 | null {
-        const modelPath = this.dofFocusTargetModelPathValue;
-        if (!modelPath) {
+        const modelInstanceId = this.dofFocusTargetModelInstanceIdValue;
+        if (!modelInstanceId) {
             return this.camera.target.clone();
         }
 
-        const entry = this.findSceneModelEntryByPath(modelPath);
+        const entry = this.sceneModels.find((candidate) => candidate.info.instanceId === modelInstanceId) ?? null;
         if (!entry) {
             return this.camera.target.clone();
         }
@@ -12775,7 +12854,10 @@ ${beforeFogAppendBlock}
                 return;
             }
 
-            const parentModelIndex = this.sceneModels.findIndex((entry) => entry.info.path === state.parentModelPath);
+            const parentModelIndex = this.findSceneModelIndexByIdentity(
+                state.parentModelInstanceId,
+                state.parentModelPath,
+            );
             if (parentModelIndex < 0 || parentModelIndex === modelIndex) {
                 appliedModelIndices.add(modelIndex);
                 return;
@@ -12823,11 +12905,14 @@ ${beforeFogAppendBlock}
         for (const entry of this.sceneModels) {
             if (entry.externalParentKeyframes.length === 0) continue;
             const selected = selectModelExternalParentKeyframeAtFrame(entry.externalParentKeyframes, frame);
-            if (!selected?.parentModelPath || !selected.parentBoneName) {
+            if ((!selected?.parentModelInstanceId && !selected?.parentModelPath) || !selected.parentBoneName) {
                 entry.externalParent = null;
                 continue;
             }
-            const parentEntry = this.sceneModels.find((candidate) => candidate.info.path === selected.parentModelPath);
+            const parentEntry = this.sceneModels[this.findSceneModelIndexByIdentity(
+                selected.parentModelInstanceId,
+                selected.parentModelPath,
+            )];
             const childBone = this.getRuntimeBoneByNameFromModel(entry.model, selected.childBoneName);
             const parentBone = parentEntry
                 ? this.getRuntimeBoneByNameFromModel(parentEntry.model, selected.parentBoneName)
@@ -12835,7 +12920,8 @@ ${beforeFogAppendBlock}
             entry.externalParent = childBone && parentBone
                 ? {
                     childBoneName: selected.childBoneName,
-                    parentModelPath: selected.parentModelPath,
+                    parentModelInstanceId: parentEntry.info.instanceId,
+                    parentModelPath: parentEntry.info.path,
                     parentBoneName: selected.parentBoneName,
                 }
                 : null;
@@ -13107,18 +13193,20 @@ ${beforeFogAppendBlock}
         };
     }
 
-    getCameraExternalParentPayload(): { modelPath: string | null; boneName: string | null } {
+    getCameraExternalParentPayload(): { modelInstanceId: string | null; modelPath: string | null; boneName: string | null } {
         return {
+            modelInstanceId: this.cameraExternalParentModelInstanceId,
             modelPath: this.cameraExternalParentModelPath,
             boneName: this.cameraExternalParentBoneName,
         };
     }
 
-    readCameraExternalParentKeyframe(frame: number): { modelPath: string | null; boneName: string | null } | null {
+    readCameraExternalParentKeyframe(frame: number): { modelInstanceId: string | null; modelPath: string | null; boneName: string | null } | null {
         const normalized = Math.max(0, Math.floor(frame));
         const entry = this.cameraExternalParentKeyframes.find((item) => item.frame === normalized);
         if (!entry) return null;
         return {
+            modelInstanceId: entry.modelInstanceId ?? null,
             modelPath: entry.modelPath,
             boneName: entry.boneName,
         };
@@ -13126,12 +13214,18 @@ ${beforeFogAppendBlock}
 
     upsertCameraExternalParentKeyframe(
         frame: number,
-        payload: { modelPath: string | null; boneName: string | null },
+        payload: { modelInstanceId?: string | null; modelPath: string | null; boneName: string | null },
     ): boolean {
+        const modelIndex = this.findSceneModelIndexByIdentity(payload.modelInstanceId, payload.modelPath);
+        const modelEntry = this.sceneModels[modelIndex];
         this.cameraExternalParentKeyframes = upsertCameraExternalParentKeyframe(
             this.cameraExternalParentKeyframes,
             frame,
-            payload,
+            {
+                modelInstanceId: modelEntry?.info.instanceId ?? null,
+                modelPath: modelEntry?.info.path ?? null,
+                boneName: modelEntry ? payload.boneName : null,
+            },
         );
         this.applyCameraExternalParentKeyframeAtFrame(this._currentFrame);
         return true;
@@ -13145,7 +13239,7 @@ ${beforeFogAppendBlock}
         );
         if (this.cameraExternalParentKeyframes.length !== before) {
             if (this.cameraExternalParentKeyframes.length === 0) {
-                this.setCameraExternalParentState(null, null);
+                this.setCameraExternalParentState(null, null, null);
             } else {
                 this.applyCameraExternalParentKeyframeAtFrame(this._currentFrame);
             }
@@ -13167,6 +13261,7 @@ ${beforeFogAppendBlock}
         if (this.cameraExternalParentKeyframes.length === 0) return null;
         return {
             frameNumbers: this.packFrameNumbers(new Uint32Array(this.cameraExternalParentKeyframes.map((entry) => entry.frame))),
+            modelInstanceIds: this.cameraExternalParentKeyframes.map((entry) => entry.modelInstanceId ?? null),
             modelPaths: this.cameraExternalParentKeyframes.map((entry) => entry.modelPath),
             boneNames: this.cameraExternalParentKeyframes.map((entry) => entry.boneName),
         };
@@ -13175,7 +13270,7 @@ ${beforeFogAppendBlock}
     setCameraExternalParentKeyframes(track: ProjectSerializedCameraExternalParentTrack | null | undefined): boolean {
         if (!track) {
             this.cameraExternalParentKeyframes = [];
-            this.setCameraExternalParentState(null, null);
+            this.setCameraExternalParentState(null, null, null);
             return true;
         }
         const frameCount = Array.isArray(track.modelPaths) ? track.modelPaths.length : 0;
@@ -13184,9 +13279,15 @@ ${beforeFogAppendBlock}
         let entries: CameraExternalParentKeyframe[] = [];
         for (let i = 0; i < frames.length; i += 1) {
             const frame = Math.max(0, Math.floor(Number(frames[i] ?? 0)));
+            const modelIndex = this.findSceneModelIndexByIdentity(
+                track.modelInstanceIds?.[i],
+                track.modelPaths?.[i],
+            );
+            const modelEntry = this.sceneModels[modelIndex];
             entries = upsertCameraExternalParentKeyframe(entries, frame, {
-                modelPath: track.modelPaths?.[i] ?? null,
-                boneName: track.boneNames?.[i] ?? null,
+                modelInstanceId: modelEntry?.info.instanceId ?? null,
+                modelPath: modelEntry?.info.path ?? null,
+                boneName: modelEntry ? track.boneNames?.[i] ?? null : null,
             });
         }
         this.cameraExternalParentKeyframes = entries;
@@ -13218,6 +13319,7 @@ ${beforeFogAppendBlock}
                 const parent = this.getCameraExternalParent();
                 if (typeof parent?.modelIndex !== "number" || parent.modelIndex < 0) return null;
                 return {
+                    modelInstanceId: this.sceneModels[parent.modelIndex]?.info.instanceId ?? null,
                     modelPath: this.sceneModels[parent.modelIndex]?.info.path ?? null,
                     boneName: parent.boneName ?? null,
                 };
@@ -13230,6 +13332,7 @@ ${beforeFogAppendBlock}
             this.syncCameraRotationFromCurrentView();
             this.syncMmdCameraFromViewportCamera(true);
             this.cameraExternalParentModelIndex = null;
+            this.cameraExternalParentModelInstanceId = null;
             this.cameraExternalParentModelPath = null;
             this.cameraExternalParentBoneName = null;
             this.syncViewportCameraFromMmdCamera(true);
@@ -13247,6 +13350,7 @@ ${beforeFogAppendBlock}
 
         this.resetMmdCameraForExternalParent();
         this.cameraExternalParentModelIndex = modelIndex;
+        this.cameraExternalParentModelInstanceId = this.sceneModels[modelIndex].info.instanceId;
         this.cameraExternalParentModelPath = this.sceneModels[modelIndex].info.path;
         this.cameraExternalParentBoneName = normalizedBoneName;
         this.syncViewportCameraFromMmdCamera(true);
@@ -13492,25 +13596,31 @@ ${beforeFogAppendBlock}
         const selected = selectCameraExternalParentKeyframeAtFrame(this.cameraExternalParentKeyframes, frame);
 
         if (!selected) {
-            this.setCameraExternalParentState(null, null);
+            this.setCameraExternalParentState(null, null, null);
             return;
         }
 
-        this.setCameraExternalParentState(selected.modelPath, selected.boneName);
+        this.setCameraExternalParentState(selected.modelInstanceId, selected.modelPath, selected.boneName);
     }
 
-    private setCameraExternalParentState(modelPath: string | null, boneName: string | null): void {
-        const normalized = normalizeCameraExternalParentPayload({ modelPath, boneName });
-        if (!normalized.modelPath) {
+    private setCameraExternalParentState(
+        modelInstanceId: string | null | undefined,
+        modelPath: string | null,
+        boneName: string | null,
+    ): void {
+        const normalized = normalizeCameraExternalParentPayload({ modelInstanceId, modelPath, boneName });
+        if (!normalized.modelInstanceId && !normalized.modelPath) {
             this.cameraExternalParentModelIndex = null;
+            this.cameraExternalParentModelInstanceId = null;
             this.cameraExternalParentModelPath = null;
             this.cameraExternalParentBoneName = null;
             return;
         }
 
-        const modelIndex = this.sceneModels.findIndex((entry) => entry.info.path === normalized.modelPath);
+        const modelIndex = this.findSceneModelIndexByIdentity(normalized.modelInstanceId, normalized.modelPath);
         if (modelIndex < 0) {
             this.cameraExternalParentModelIndex = null;
+            this.cameraExternalParentModelInstanceId = normalized.modelInstanceId ?? null;
             this.cameraExternalParentModelPath = normalized.modelPath;
             this.cameraExternalParentBoneName = normalized.boneName;
             return;
@@ -13522,12 +13632,14 @@ ${beforeFogAppendBlock}
             && !this.getRuntimeBoneByNameFromModel(this.sceneModels[modelIndex].model, normalizedBoneName)
         ) {
             this.cameraExternalParentModelIndex = null;
+            this.cameraExternalParentModelInstanceId = normalized.modelInstanceId ?? null;
             this.cameraExternalParentModelPath = normalized.modelPath;
             this.cameraExternalParentBoneName = normalizedBoneName;
             return;
         }
         this.cameraExternalParentModelIndex = modelIndex;
-        this.cameraExternalParentModelPath = normalized.modelPath;
+        this.cameraExternalParentModelInstanceId = this.sceneModels[modelIndex].info.instanceId;
+        this.cameraExternalParentModelPath = this.sceneModels[modelIndex].info.path;
         this.cameraExternalParentBoneName = normalizedBoneName;
     }
 

@@ -27,7 +27,7 @@ type ProjectExportAccessory = {
 };
 
 type ProjectExportSceneModel = {
-    info: { path: string };
+    info: { instanceId: string; path: string };
     mesh: object;
     model: object;
     materialPipeline?: MmdMaterialPipelinePreset;
@@ -36,7 +36,7 @@ type ProjectExportSceneModel = {
 
 type ProjectExportHost = {
     sceneModels: ProjectExportSceneModel[];
-    activeModelInfo: { path: string } | null;
+    activeModelInfo: { instanceId: string; path: string } | null;
     timelineTarget: "model" | "camera";
     _currentFrame: number;
     _playbackSpeed: number;
@@ -229,6 +229,7 @@ type ProjectExportHost = {
         fov: number;
         distance: number;
         externalParent?: {
+            modelInstanceId?: string | null;
             modelPath: string | null;
             boneName: string | null;
         } | null;
@@ -239,6 +240,7 @@ type ProjectExportHost = {
     getPhysicsGravityAcceleration: () => number;
     getPhysicsGravityDirection: () => { x: number; y: number; z: number };
     getDofFocusTargetModelPath?: () => string | null;
+    getDofFocusTargetModelInstanceId?: () => string | null;
     getDofFocusTargetBoneName?: () => string | null;
     getBackgroundImagePath: () => string | null;
     getBackgroundVideoPath: () => string | null;
@@ -268,6 +270,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
     };
 
     const models = host.sceneModels.map((entry, modelIndex) => ({
+        instanceId: entry.info.instanceId,
         path: entry.info.path,
         visible: host.getModelVisibility(entry.mesh),
         castsShadow: host.getModelCastsShadow(entry),
@@ -280,6 +283,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             if (!parent) return null;
             return {
                 childBoneName: parent.childBoneName,
+                parentModelInstanceId: host.sceneModels[parent.parentModelIndex]?.info.instanceId,
                 parentModelPath: parent.parentModelPath,
                 parentBoneName: parent.parentBoneName,
             };
@@ -292,11 +296,15 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         const parentModelPath = typeof parent?.modelIndex === "number" && parent.modelIndex >= 0
             ? host.sceneModels[parent.modelIndex]?.info.path ?? null
             : null;
+        const parentModelInstanceId = typeof parent?.modelIndex === "number" && parent.modelIndex >= 0
+            ? host.sceneModels[parent.modelIndex]?.info.instanceId ?? null
+            : null;
 
         return {
             path: entry.path,
             visible: entry.visible,
             transform: transform ?? undefined,
+            parentModelInstanceId,
             parentModelPath,
             parentBoneName: parent?.boneName ?? null,
         };
@@ -304,6 +312,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
 
     const keyframes: ProjectKeyframeBundle = {
         modelAnimations: host.sceneModels.map((entry) => ({
+            modelInstanceId: entry.info.instanceId,
             modelPath: entry.info.path,
             animation: serializeModelAnimation(host.modelSourceAnimationsByModel.get(entry.model)),
         })),
@@ -336,6 +345,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             models,
             renderOrderMode: host.getMmdRenderOrderMode?.() ?? "evaluated",
             coplanarMaterialDepthBiasStrength: host.getMmdCoplanarDepthBiasStrength?.() ?? 0,
+            activeModelInstanceId: host.activeModelInfo?.instanceId ?? null,
             activeModelPath: host.activeModelInfo?.path ?? null,
             timelineTarget: host.timelineTarget,
             currentFrame: host._currentFrame,
@@ -367,6 +377,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
                 const parent = host.getCameraExternalParent?.() ?? null;
                 if (typeof parent?.modelIndex !== "number" || parent.modelIndex < 0) return null;
                 return {
+                    modelInstanceId: host.sceneModels[parent.modelIndex]?.info.instanceId ?? null,
                     modelPath: host.sceneModels[parent.modelIndex]?.info.path ?? null,
                     boneName: parent.boneName ?? null,
                 };
@@ -440,6 +451,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             dofEnabled: host.dofEnabled,
             dofFocusDistanceMm: host.dofFocusDistanceMm,
             dofFocusOffsetMm: host.dofAutoFocusNearOffsetMm,
+            dofTargetModelInstanceId: host.getDofFocusTargetModelInstanceId?.() ?? null,
             dofTargetModelPath: host.getDofFocusTargetModelPath?.() ?? null,
             dofTargetBoneName: host.getDofFocusTargetBoneName?.() ?? null,
             dofBlurLevel: host.dofBlurLevel,

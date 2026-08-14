@@ -3608,6 +3608,7 @@ export class UIController {
 
     private getCameraPanelInfo(): ModelInfo {
         return {
+            instanceId: "camera",
             name: "Camera",
             path: "",
             vertexCount: 0,
@@ -4968,10 +4969,10 @@ export class UIController {
         return this.mmdManager.postEffectLutPreset;
     }
 
-    private getFrameGraphPostStackDofResolvedModel(): { index: number; name: string; path: string } | null {
-        const targetPath = this.mmdManager.getDofFocusTargetModelPath();
-        if (!targetPath) return null;
-        return this.mmdManager.getLoadedModels().find((model) => model.path === targetPath) ?? null;
+    private getFrameGraphPostStackDofResolvedModel(): { index: number; instanceId: string; name: string; path: string } | null {
+        const targetInstanceId = this.mmdManager.getDofFocusTargetModelInstanceId();
+        if (!targetInstanceId) return null;
+        return this.mmdManager.getLoadedModels().find((model) => model.instanceId === targetInstanceId) ?? null;
     }
 
     private buildFrameGraphPostStackDofTargetModelOptionsHtml(): string {
@@ -4980,7 +4981,7 @@ export class UIController {
         const modelOptions = this.mmdManager.getLoadedModels()
             .map((model) => {
                 const selected = resolvedModel?.index === model.index ? " selected" : "";
-                return `<option value="${model.index}"${selected}>${this.escapeEffectStackHtml(model.name)}</option>`;
+                return `<option value="${model.index}"${selected}>${this.escapeEffectStackHtml(`${model.index + 1}: ${model.name}`)}</option>`;
             })
             .join("");
         return `<option value=""${cameraSelected}>Camera</option>${modelOptions}`;
@@ -6236,10 +6237,10 @@ export class UIController {
 
         const refreshTargetControls = (): void => {
             const loadedModels = this.mmdManager.getLoadedModels();
-            const targetModelPath = this.mmdManager.getDofFocusTargetModelPath();
+            const targetModelInstanceId = this.mmdManager.getDofFocusTargetModelInstanceId();
             const targetBoneName = this.mmdManager.getDofFocusTargetBoneName();
-            const resolvedModel = targetModelPath
-                ? loadedModels.find((model) => model.path === targetModelPath) ?? null
+            const resolvedModel = targetModelInstanceId
+                ? loadedModels.find((model) => model.instanceId === targetModelInstanceId) ?? null
                 : null;
 
             targetModelSelect.innerHTML = "";
@@ -6250,7 +6251,7 @@ export class UIController {
             for (const model of loadedModels) {
                 const option = document.createElement("option");
                 option.value = String(model.index);
-                option.textContent = model.name;
+                option.textContent = `${model.index + 1}: ${model.name}`;
                 targetModelSelect.appendChild(option);
             }
             targetModelSelect.value = resolvedModel ? String(resolvedModel.index) : "";
@@ -6646,13 +6647,15 @@ export class UIController {
                 position: { x: 0, y: 0, z: 0 },
                 rotation: { x: 0, y: 0, z: 0 },
             };
-        const parentModelPath = parentModelIndex === null
+        const parentModel = parentModelIndex === null
             ? null
-            : this.mmdManager.getLoadedModels().find((model) => model.index === parentModelIndex)?.path ?? null;
+            : this.mmdManager.getLoadedModels().find((model) => model.index === parentModelIndex) ?? null;
+        const parentModelPath = parentModel?.path ?? null;
         if (parentModelIndex !== null && (!parentModelPath || !parentBoneName)) return false;
 
         const externalParent: ModelExternalParentKeyframePayload = {
             childBoneName,
+            parentModelInstanceId: parentModel?.instanceId ?? null,
             parentModelPath,
             parentBoneName: parentModelPath ? parentBoneName : null,
         };
@@ -9161,7 +9164,7 @@ export class UIController {
         const rotationDeg = poseSnapshot?.rotation ?? runtimePose.rotation;
         const externalParent = externalParentOverride
             ?? this.mmdManager.getCameraExternalParentPayload();
-        const distance = externalParent.modelPath
+        const distance = externalParent.modelInstanceId || externalParent.modelPath
             ? 0
             : Math.max(0.0001, poseSnapshot?.distance ?? runtimePose.distance);
         const fov = poseSnapshot?.fov ?? runtimePose.fov;

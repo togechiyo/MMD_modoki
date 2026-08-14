@@ -96,7 +96,7 @@
 - [ ] キー登録補助機能（上書き確認 / 未変更時スキップ / 複数対象の一括登録 など）
 - [ ] ボーンの位置 / 角度補正
 - [ ] モーフの位置 / 角度補正
-- [ ] VMD 書き出し（β実装済み、MMD 本家での互換確認待ち）
+- [x] VMD 書き出し（β実装・MMD 本家でのモデル / カメラ基本読み込み確認済み）
 - [x] VPD ポーズ書き出し（β実装・MMD 本家での基本互換確認済み）
 - [x] プロジェクト保存 / 読み込み（JSON）
 - [x] プロジェクトへキーフレーム本体を保存 / 復元
@@ -104,7 +104,7 @@
 補足:
 - VMD は既存データの読み込みはできている
 - 2026-08-14: モデル / カメラ VMD のβ書き出し経路を実装。Shift-JIS、全 section、補間 64 bytes、物理切替、validation、main-process 保存を追加し、unit / lint / typecheck:critical / smoke / focused E2E を確認済み。コード経路と保守上の注意点は [VMD 書き出し β 実装ガイド](./vmd-export-beta-implementation-guide-2026-08-14.md) を参照。
-- babylon-mmd reader と exact-byte test では確認済みだが、MMD 本家での読み戻し前なので完了扱いにはしない。
+- babylon-mmd reader と exact-byte testに加え、2026-08-14にユーザー実機のMMD本家でモデル / カメラVMDの基本読み込み成功を確認。境界名、物理ON/OFF、全補間の網羅確認は継続するためβ表記は維持する。
 - 2026-08-14: babylon-mmd 1.2.0 の公式 docs / package source と現行編集データを照合。標準 VMD writer は存在せず、`MmdAnimation` を入力にした pure serializer が必要。根拠は [VMD 出力 / babylon-mmd 1.2.0 調査メモ](./vmd-export-babylon-mmd-research-2026-08-14.md)、byte layout、入力型、Shift-JIS、補間 64 bytes、物理切替、validation、IPC、test vector は [VMD 出力実装仕様](./vmd-export-implementation-spec.md) を参照。
 - 初期書き出し対象はモデル VMD とカメラ VMD のみ。照明・セルフ影は count `0`、重力は VMD 出力対象外とし、対応する Action / UI は追加しない。
 - 2026-08-14: 選択ボーンの現在ローカル姿勢を Shift-JIS VPD として保存するβ経路を実装。キー登録は不要で、1ボーン / 複数ボーンに対応する。モーフは MikuMikuMoving 拡張でMMD本家が読まないため初期対象外。仕様、validation、外部親制約、テストは [VPD 書き出し 調査・実装仕様](./vpd-export-research-implementation-spec-2026-08-14.md) を参照。
@@ -227,7 +227,7 @@
 - [ ] オートキー登録時の対象制御（ボーンのみ / カメラのみ / 選択対象のみ など）
 - [ ] キー登録まわりの操作整理（登録/上書き/削除/一括登録の UI と導線整理）
 - [ ] 回転補間の MMD 互換性確認
-- [ ] VMD 新規登録分の書き出し
+- [x] VMD 新規登録分の書き出し（モデル / カメラβ版）
 - [ ] 物理モード比較検証
 - [ ] `TrackAdapter` 相当の責務分離設計
 
@@ -401,7 +401,7 @@
   - [ ] MMD本家の外部親キーとの互換
     - 標準 VMD に親モデル / 親ボーンは保存できないため、project 挙動互換と world bake VMD を分けて扱う
 - [ ] 照明 / 影 / 重力 / アクセサリのキー登録
-- [ ] VPD / VMD 書き出し（VPDはMMD本家で基本互換確認済み、VMDは確認待ち）
+- [x] VPD / VMD 書き出し（MMD本家で基本読み込み確認済み。VMDはβ表記を維持）
 - [x] 反転ペースト
   - 2026-06-26 実装: コピー済みのボーンキーを現在フレーム基準で左右反転して貼り付け。左右ボーン名が見つかる場合は対応トラックへ、見つからない場合は同トラックへ反転姿勢として貼り付ける。モーフ / カメラは初期対象外。
 - [x] 物理オンオフキー

@@ -7,7 +7,7 @@ Current public builds can:
 - Load PMX/PMD models, `.x` accessories, VMD motion, camera VMD, and audio
 - Edit bones, morphs, camera, lighting, post effects, and accessory transforms on a timeline
 - Import built-in and external LUT files (`.3dl`, `.cube`)
-- Export still images, numbered PNG sequences, and WebM videos
+- Export model/camera VMD (beta), VPD poses, still images, numbered PNG sequences, and WebM videos
 - Switch the UI language between English, Japanese, Traditional Chinese, Simplified Chinese, and Korean
 
 ## Release

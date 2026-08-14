@@ -1,7 +1,7 @@
 {
   "name": "mmd-modoki",
   "productName": "MMD modoki",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Electron desktop app for previewing and editing MMD assets",
   "main": ".vite/build/main.js",
   "private": true,

@@ -13,6 +13,7 @@
 - [UI と操作フロー](./ui-flow.md)
 - [MMD_modoki の位置づけ](./mmd-project-positioning-note.md)
 - [MMD基本タスクチェックリスト](./mmd-basic-task-checklist.md)
+- [リリース手順メモ](./release-process.md)
 - [既知の問題](./known-issues.md)
 - [トラブルシュート](./troubleshooting.md)
 
@@ -26,7 +27,6 @@
 - [外部公式情報の確認](./external-official-info-verification-policy.md)
 - [ログ / エラーハンドリング運用](./logging-error-handling-policy.md)
 - [E2E / UI 動作確認方針](./e2e-ui-verification-policy.md)
-- [リリース手順メモ](./release-process.md)
 - [v0.2.0 ビルド前確認メモ 2026-07-06](./release-build-preflight-2026-07-06.md)
 - [macOS ZIP / DMG 配布メモ 2026-07-15](./macos-zip-dmg-distribution-note-2026-07-15.md)
 - [文字コード運用メモ](./dev-notes-encoding.md)

@@ -59,3 +59,4 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | policy | [最も低く安定した層で検証する](./policies/verify-at-the-lowest-stable-layer.md) | unit、smoke、E2E、手動確認を選ぶ |
 | policy | [エラーは通知先と回復可能性を分類する](./policies/classify-errors-before-logging.md) | catch、IPC、file IO、fallbackを追加する |
 | policy | [外部 runtime は現行一次情報で確かめる](./policies/verify-external-runtime-claims-with-current-primary-sources.md) | Babylon.js等の仕様を根拠に設計する |
+| policy | [Skill化は反復性・安定性・検証可能性で判断する](./policies/skill-adoption-requires-repeatability-and-verifiability.md) | 新しいSkillの追加や既存Skillの分割を判断する |

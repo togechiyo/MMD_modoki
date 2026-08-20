@@ -1,0 +1,92 @@
+---
+name: mmd-release
+description: Prepare or execute an MMD_modoki version release by reconciling version files, feedback ledger, release notes, verification, CI packages, tags, and GitHub Release assets. Use for release planning, preflight, version bumps, tag publication, or release completion; do not use for an ordinary commit/push or a local package build alone.
+---
+
+# MMD_modoki Release
+
+Move a requested release through explicit, auditable stages with human checkpoints between preparation and publication. Skill activation does not authorize commit, push, workflow dispatch, tag creation, tag push, or GitHub Release publication.
+
+## Load the current release contract
+
+Read before acting:
+
+- [release-process.md](../../../docs/release-process.md)
+- [package.json](../../../package.json)
+- [build-zips.yml](../../../.github/workflows/build-zips.yml)
+- the feedback ledger and release-note document for the target version, when present.
+
+Treat the current files as authoritative over remembered commands. Confirm the requested target version rather than guessing a patch, minor, or major bump.
+
+## Stage 1: Read-only preflight
+
+1. Inspect branch, upstream, worktree status, recent tags, and commits since the previous release.
+2. Keep unrelated modified and untracked files out of the release scope.
+3. Compare `package.json` and `package-lock.json` versions.
+4. Check the target feedback ledger for fixed, open, deferred, and unconfirmed reports.
+5. Check whether release notes exist and whether their claims are supported by the diff, ledger, tests, or explicit owner decisions.
+6. Confirm that the intended release tag does not already exist locally or remotely before creating it.
+
+Report blockers before mutating files or external state.
+
+### Human checkpoint A: release scope
+
+Stop after the read-only preflight. Summarize the target version, included changes, open/deferred reports, worktree state, expected file edits, and any blockers. Ask the project owner whether to proceed with release-file preparation. Do not begin Stage 2 until the owner answers affirmatively, even when the initial request was broadly phrased as “do the release,” unless the owner explicitly waived intermediate checkpoints.
+
+## Stage 2: Prepare release files
+
+Only when requested, update the version files, release notes, ledger, public documentation, and known-issue text needed for the target release.
+
+- Do not promote an external request to a roadmap commitment without an explicit owner decision.
+- Separate shipped fixes, known issues, deferred items, and experimental changes.
+- Avoid release-note claims based only on implementation intent; require observable behavior or documented evidence.
+- Keep version changes consistent across lockfiles and generated metadata without creating a tag as a side effect.
+
+## Stage 3: Verify
+
+Choose verification using the repository `AGENTS.md` and the `mmd-test` skill when available.
+
+At minimum, reconcile the release scope with the checks required by the current workflow. The release workflow currently runs lint, unit tests, critical typecheck, and platform package builds. Local verification does not replace CI platform builds.
+
+If required checks fail, stop before tag publication unless the user explicitly makes a different, informed decision. Distinguish known non-blocking typecheck baseline errors from critical failures.
+
+### Human checkpoint B: publication readiness
+
+Stop after local verification and any authorized CI preflight have produced enough evidence for a publication decision. Summarize passed, failed, skipped, and manually unverified checks; release-note status; expected artifacts; and remaining known issues. Ask whether to proceed to commit/tag/publication operations. Do not infer approval from successful tests or builds.
+
+## Stage 4: Build and CI preflight
+
+- Local `package` or `make` commands are supplemental checks for the current OS only.
+- The canonical cross-platform artifacts come from `.github/workflows/build-zips.yml`.
+- A `workflow_dispatch` run is an external action and requires authorization in the current request.
+- Confirm all expected Windows ZIP, macOS ZIP, macOS arm64 DMG, and Linux ZIP jobs and artifacts before proceeding to the release tag.
+- Do not treat a successful build as permission to commit, push, or tag.
+
+## Stage 5: Commit and publish gates
+
+After checkpoint B is approved, confirm each external or repository-history mutation is covered by the user's current instruction:
+
+1. commit release preparation;
+2. push the branch or `main`;
+3. dispatch the preflight workflow;
+4. create the version tag;
+5. push the tag;
+6. inspect or edit the generated GitHub prerelease.
+
+Checkpoint approval covers only the stages and mutations described in the checkpoint summary. When the owner explicitly authorizes the complete remaining release sequence, proceed through the listed mutation gates without repeatedly asking. Stop and ask again on new blockers, failed checks, changed release scope, target ambiguity, or unexpected external state.
+
+The tag must use `vX.Y.Z`. Tag push triggers the canonical package workflow and GitHub prerelease asset publication. Do not run `npm publish`.
+
+## Completion report
+
+State:
+
+- released version and tag;
+- commit and branch used;
+- verification results;
+- workflow run result;
+- expected and observed assets;
+- prerelease status;
+- remaining known issues or manual platform checks.
+
+If the task stops before publication, state the exact completed stage and next authorized action. Never report a release as complete from a local build alone.

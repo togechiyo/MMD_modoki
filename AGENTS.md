@@ -225,6 +225,13 @@ UI導線の変更では、可能なら `test:e2e` を実行し、`lint` / `smoke
 - 通常の進捗、TODO、その場限りの実装説明は card 化せず、新規作成前に既存 card と `docs/` を検索する
 - 詳細な形式と退役ルールは [Insights 運用ガイド](./insights/README.md) に従う
 
+## リポジトリ Skill 運用
+
+- `.agents/skills/` には、このリポジトリで繰り返す作業の手順と完了条件を置く。依頼が Skill の description に一致する場合は、その `SKILL.md` に従う
+- Skill は `AGENTS.md` の規則やユーザーの権限指定を上書きしない。特に commit、push、workflow dispatch、tag、Release 公開は、Skill が発動しただけでは実行しない
+- 仕様や調査の正本は `docs/`、再利用する判断は `insights/` に置き、Skill には参照順序と作業手順を記載する
+- 初回導入の構成と評価方針は [Codex Agent Skills 調査・初回導入メモ](./docs/codex-agent-skills-adoption-note-2026-08-20.md) を参照する
+
 ## エージェント向け実務ガイド
 
 - レビュー依頼では、要約より先にバグ、回帰、リスク、欠けているテストを重視する

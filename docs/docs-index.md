@@ -19,6 +19,7 @@
 
 ## 運用 / 品質 / リリース
 
+- [Codex Agent Skills 調査・初回導入メモ 2026-08-20](./codex-agent-skills-adoption-note-2026-08-20.md)
 - [手動テストチェックリスト](./manual-test-checklist.md)
 - [テスト導入提案](./testing-strategy-proposal.md)
 - [テスト戦略メモ 2026-04-13](./testing-strategy-note-2026-04-13.md)

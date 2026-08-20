@@ -69,6 +69,7 @@
 - [v0.2 作業メモ](./v0.2-task-memo.md)
 - [v0.2 作業チェックリスト](./v0.2-task-checklist.md)
 - [v0.2.2 リリースノート](./v0.2.2-release-note.md)
+- [v0.2.x リリースフィードバック台帳](./v0.2-feedback.md)
 - [v0.2.0 リリースノート](./v0.2.0-release-note.md)
 - [v0.2 ブランチ総括 2026-07-01](./v0.2-branch-summary-2026-07-01.md)
 - [v0.2 main 統合計画 2026-07-01](./v0.2-main-merge-plan-2026-07-01.md)

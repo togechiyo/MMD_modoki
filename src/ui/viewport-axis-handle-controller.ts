@@ -1,7 +1,4 @@
-import { t } from "../i18n";
-
 export type ViewportEditMode = "model" | "camera";
-type ViewportAxisSpaceMode = "local" | "global" | "accessory";
 type ViewportHandleKind = "move" | "rotate";
 type ViewportHandleAxis = "x" | "y" | "z";
 
@@ -31,13 +28,11 @@ type ViewportAxisHandleOptions = {
 };
 
 export class ViewportAxisHandleController {
-    private readonly axisSpaceButton: HTMLButtonElement | null;
     private readonly onPreviewBoneTransform: (value: ViewportAxisHandleBoneEditValue) => boolean;
     private readonly onPreviewCameraTransform: (value: ViewportAxisHandleCameraEditValue) => boolean;
     private readonly onCommitBoneTransform: (value: ViewportAxisHandleBoneEditValue, before?: ViewportAxisHandleBoneEditValue) => boolean;
     private readonly onCommitCameraTransform: (value: ViewportAxisHandleCameraEditValue, before?: ViewportAxisHandleCameraEditValue) => boolean;
     private mode: ViewportEditMode = "camera";
-    private axisSpaceMode: ViewportAxisSpaceMode = "local";
     private lastModelTransform: ViewportAxisHandleBoneEditValue | null = null;
     private lastCameraTransform: ViewportAxisHandleCameraEditValue | null = null;
     private handleDrag:
@@ -62,11 +57,7 @@ export class ViewportAxisHandleController {
         this.onPreviewCameraTransform = options.onPreviewCameraTransform ?? (() => false);
         this.onCommitBoneTransform = options.onCommitBoneTransform;
         this.onCommitCameraTransform = options.onCommitCameraTransform;
-        this.axisSpaceButton = document.getElementById("viewport-axis-space-toggle") as HTMLButtonElement | null;
-
-        this.axisSpaceButton?.addEventListener("click", () => this.cycleAxisSpaceMode());
         this.installHandleDragHandlers();
-        this.refreshLocale();
     }
 
     public applyMode(mode: ViewportEditMode): void {
@@ -88,10 +79,6 @@ export class ViewportAxisHandleController {
             distance: transform.distance,
             fov: transform.fov,
         };
-    }
-
-    public refreshLocale(): void {
-        this.refreshAxisSpaceButton();
     }
 
     private installHandleDragHandlers(): void {
@@ -242,25 +229,4 @@ export class ViewportAxisHandleController {
         return value === "x" || value === "y" || value === "z" ? value : null;
     }
 
-    private cycleAxisSpaceMode(): void {
-        this.axisSpaceMode = this.axisSpaceMode === "local"
-            ? "global"
-            : this.axisSpaceMode === "global"
-                ? "accessory"
-                : "local";
-        this.refreshAxisSpaceButton();
-    }
-
-    private refreshAxisSpaceButton(): void {
-        if (!this.axisSpaceButton) return;
-        const key = this.axisSpaceMode === "local"
-            ? "viewportBottomBar.local"
-            : this.axisSpaceMode === "global"
-                ? "viewportBottomBar.global"
-                : "viewportBottomBar.accessory";
-        const label = t(key);
-        this.axisSpaceButton.textContent = label;
-        this.axisSpaceButton.setAttribute("aria-label", label);
-        this.axisSpaceButton.setAttribute("data-axis-space-mode", this.axisSpaceMode);
-    }
 }

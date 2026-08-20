@@ -2331,31 +2331,6 @@ body.file-drag-active #viewport-container {
   gap: 7px;
 }
 
-.viewport-axis-handle-row--space {
-  width: 100%;
-  justify-content: center;
-}
-
-.viewport-axis-space-toggle {
-  height: 19px;
-  width: 74px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: 0;
-  color: #aec3ff;
-  background: transparent;
-  font-family: var(--font-sans);
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 18px;
-  white-space: nowrap;
-  pointer-events: auto;
-  text-align: center;
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.95),
-    0 0 3px rgba(0, 0, 0, 0.85);
-}
-
 .viewport-axis-handle-tool {
   display: inline-flex;
   align-items: center;
@@ -2475,12 +2450,6 @@ body.file-drag-active #viewport-container {
     right: 12px;
     bottom: 62px;
     padding: 0;
-  }
-
-  .viewport-axis-space-toggle {
-    width: 66px;
-    padding-inline: 5px;
-    font-size: 15px;
   }
 
   .viewport-axis-handle-tool {
@@ -4118,7 +4087,7 @@ body.bottom-panel-resizing #bottom-panel-resizer::before {
 #morph-section { order: 5; }
 #lighting-section { order: 6; }
 #shadow-section { order: 7; }
-#accessory-section { order: 8; }
+#gravity-section { order: 8; }
 #camera-section { order: 9; }
 
 /* Bone Operation Controls */
@@ -5021,6 +4990,12 @@ body.bottom-panel-resizing #bottom-panel-resizer::before {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.info-target-content[hidden],
+.info-accessory-controls[hidden],
+.accessory-transform-controls[hidden] {
+  display: none !important;
 }
 
 .interpolation-info {
@@ -6005,6 +5980,61 @@ body.bottom-panel-resizing {
   overflow-x: hidden;
 }
 
+#bottom-panel #info-section .info-accessory-controls {
+  padding: 0;
+  overflow-y: auto;
+}
+
+#bottom-panel #info-section .info-accessory-controls .accessory-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.accessory-section-title {
+  display: none;
+}
+
+.bottom-panel-inner[data-bottom-panel-mode="accessory"] #bone-section .bone-section-title,
+.bottom-panel-inner[data-bottom-panel-mode="accessory"] #bone-section > .bone-selection-summary,
+.bottom-panel-inner[data-bottom-panel-mode="accessory"] #bone-section > #bone-controls,
+.bottom-panel-inner[data-bottom-panel-mode="accessory"] #bone-section > .bone-parent-controls,
+.bottom-panel-inner[data-bottom-panel-mode="accessory"] #bone-section > .camera-parent-controls {
+  display: none !important;
+}
+
+.bottom-panel-inner[data-bottom-panel-mode="accessory"] #bone-section .accessory-section-title {
+  display: inline;
+}
+
+.bottom-panel-inner[data-bottom-panel-mode="accessory"] #btn-bone-keyframe {
+  display: none;
+}
+
+.accessory-transform-controls {
+  padding: var(--bottom-panel-content-pad-y) var(--bottom-panel-content-pad-x);
+}
+
+.accessory-transform-controls .accessory-transform {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-top: 0;
+  border-top: none;
+}
+
+.accessory-parent-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-color);
+}
+
+.accessory-parent-controls .panel-select-row {
+  grid-template-columns: 44px minmax(0, 1fr);
+  padding-inline: 0;
+}
+
 .accessory-controls::-webkit-scrollbar {
   width: 4px;
 }
@@ -6039,32 +6069,6 @@ body.bottom-panel-resizing {
   border-top: 1px solid var(--border-color);
 }
 
-.accessory-empty-state {
-  margin-top: 8px;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.015);
-  color: var(--text-secondary);
-  font-size: var(--bottom-panel-font-md);
-  text-align: center;
-  padding: 10px 8px;
-}
-
-.accessory-empty-state.hidden {
-  display: none;
-}
-
-.accessory-empty-sub {
-  color: var(--text-tertiary);
-  font-size: var(--bottom-panel-font-label);
-}
-
 .accessory-row {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
@@ -6074,6 +6078,30 @@ body.bottom-panel-resizing {
   padding: 0;
   width: 100%;
   min-width: 0;
+}
+
+/* ============================================
+   Gravity Controls
+   ============================================ */
+
+.gravity-controls {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--bottom-panel-content-pad-y) var(--bottom-panel-content-pad-x);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.gravity-controls .light-slider {
+  accent-color: var(--accent-green);
+}
+
+.gravity-controls .light-slider::-webkit-slider-thumb {
+  background: var(--accent-green);
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
 }
 
 .accessory-row.range-has-number {
@@ -6603,6 +6631,11 @@ body.bottom-panel-resizing {
     padding: 10px;
   }
 
+  .gravity-controls {
+    gap: 0;
+    padding: 10px;
+  }
+
   .bone-slider-row {
     grid-template-columns: 52px minmax(0, 1fr) 46px;
     gap: 8px;
@@ -6827,6 +6860,7 @@ body.bottom-panel-resizing {
   .bone-controls,
   .morph-controls,
   .lighting-controls,
+  .gravity-controls,
   .accessory-controls {
     gap: 3px;
     padding: 4px 5px;

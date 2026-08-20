@@ -7,13 +7,16 @@ type AccessoryTransformSliderKey = "px" | "py" | "pz" | "rx" | "ry" | "rz" | "s"
 type ToastType = "success" | "error" | "info";
 
 type AccessoryPanelElements = {
-    select: HTMLSelectElement | null;
+    content: HTMLElement | null;
+    transformContent: HTMLElement | null;
+    name: HTMLElement | null;
+    kind: HTMLElement | null;
     parentModelSelect: HTMLSelectElement | null;
     parentBoneSelect: HTMLSelectElement | null;
-    btnVisibility: HTMLButtonElement | null;
+    chkVisibility: HTMLInputElement | null;
+    chkShadow: HTMLInputElement | null;
     btnDelete: HTMLButtonElement | null;
     transformGrid: HTMLElement | null;
-    emptyState: HTMLElement | null;
 };
 
 export type AccessoryPanelControllerDeps = {
@@ -21,18 +24,22 @@ export type AccessoryPanelControllerDeps = {
     showToast: (message: string, type?: ToastType) => void;
     onAccessoryTransformChanged: (accessoryIndex: number) => void;
     onSelectionChanged: () => void;
+    onAccessoriesChanged: () => void;
     dispatchAction?: (action: EditorAction) => boolean;
 };
 
 function resolveAccessoryPanelElements(): AccessoryPanelElements {
     return {
-        select: document.getElementById("accessory-select") as HTMLSelectElement | null,
+        content: document.getElementById("accessory-info-content"),
+        transformContent: document.getElementById("accessory-transform-content"),
+        name: document.getElementById("info-accessory-name"),
+        kind: document.getElementById("info-accessory-kind"),
         parentModelSelect: document.getElementById("accessory-parent-model") as HTMLSelectElement | null,
         parentBoneSelect: document.getElementById("accessory-parent-bone") as HTMLSelectElement | null,
-        btnVisibility: document.getElementById("btn-accessory-visibility") as HTMLButtonElement | null,
+        chkVisibility: document.getElementById("chk-accessory-visibility") as HTMLInputElement | null,
+        chkShadow: document.getElementById("chk-accessory-shadow") as HTMLInputElement | null,
         btnDelete: document.getElementById("btn-accessory-delete") as HTMLButtonElement | null,
         transformGrid: document.getElementById("accessory-transform-grid"),
-        emptyState: document.getElementById("accessory-empty-state"),
     };
 }
 
@@ -42,10 +49,12 @@ export class AccessoryPanelController {
     private readonly showToast: (message: string, type?: ToastType) => void;
     private readonly onAccessoryTransformChanged: (accessoryIndex: number) => void;
     private readonly onSelectionChanged: () => void;
+    private readonly onAccessoriesChanged: () => void;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
     private readonly transformInputs = new Map<AccessoryTransformSliderKey, HTMLInputElement>();
     private isSyncingTransformUi = false;
     private isSyncingParentUi = false;
+    private selectedAccessoryIndex: number | null = null;
 
     constructor(deps: AccessoryPanelControllerDeps) {
         this.elements = resolveAccessoryPanelElements();
@@ -53,41 +62,25 @@ export class AccessoryPanelController {
         this.showToast = deps.showToast;
         this.onAccessoryTransformChanged = deps.onAccessoryTransformChanged;
         this.onSelectionChanged = deps.onSelectionChanged;
+        this.onAccessoriesChanged = deps.onAccessoriesChanged;
         this.dispatchAction = deps.dispatchAction ?? null;
 
         this.setupControls();
     }
 
     public refresh(): void {
-        const select = this.elements.select;
-        if (!select) return;
-
         const accessories = this.mmdManager.getLoadedAccessories();
-        const previousValue = select.value;
-        select.innerHTML = "";
-
-        for (const accessory of accessories) {
-            const option = document.createElement("option");
-            option.value = String(accessory.index);
-            const kindLabel = accessory.kind === "glb" ? " [GLB]" : "";
-            option.textContent = `${accessory.index + 1}: ${accessory.name}${kindLabel}`;
-            option.title = accessory.path;
-            select.appendChild(option);
+        if (
+            this.selectedAccessoryIndex !== null
+            && !accessories.some((accessory) => accessory.index === this.selectedAccessoryIndex)
+        ) {
+            this.selectedAccessoryIndex = null;
         }
 
-        if (accessories.length === 0) {
-            const option = document.createElement("option");
-            option.value = "";
-            option.textContent = "-";
-            select.appendChild(option);
-        } else {
-            const restore = accessories.find((item) => String(item.index) === previousValue);
-            select.value = restore ? String(restore.index) : "0";
-        }
-
-        select.disabled = accessories.length === 0;
-        this.elements.emptyState?.classList.toggle("hidden", accessories.length > 0);
-        this.setTransformControlsEnabled(accessories.length > 0);
+        const hasSelection = this.selectedAccessoryIndex !== null;
+        this.setAccessoryContentVisible(hasSelection);
+        this.refreshAccessoryInfo();
+        this.setTransformControlsEnabled(hasSelection);
         this.refreshParentModelOptions();
         this.syncParentControlsFromSelection();
         this.syncTransformSlidersFromSelection();
@@ -96,14 +89,16 @@ export class AccessoryPanelController {
     }
 
     public getSelectedAccessoryIndex(): number | null {
-        const select = this.elements.select;
-        if (!select || select.disabled) return null;
-        const parsed = Number.parseInt(select.value, 10);
-        if (Number.isNaN(parsed)) return null;
-        return parsed;
+        return this.selectedAccessoryIndex;
     }
 
-    public selectAccessory(): void {
+    public selectAccessory(index: number | null): void {
+        const exists = index !== null
+            && this.mmdManager.getLoadedAccessories().some((accessory) => accessory.index === index);
+        this.selectedAccessoryIndex = exists ? index : null;
+        this.setAccessoryContentVisible(this.selectedAccessoryIndex !== null);
+        this.refreshAccessoryInfo();
+        this.setTransformControlsEnabled(this.selectedAccessoryIndex !== null);
         this.syncTransformSlidersFromSelection();
         this.syncParentControlsFromSelection();
         this.updateActionButtons();
@@ -135,12 +130,24 @@ export class AccessoryPanelController {
         this.mmdManager.setAccessoryParent(selectedIndex, modelIndex, boneName);
     }
 
-    public toggleSelectedAccessoryVisibility(): void {
+    public setSelectedAccessoryVisibility(visible: boolean): void {
         const selectedIndex = this.getSelectedAccessoryIndex();
         if (selectedIndex === null) return;
-        const visible = this.mmdManager.toggleAccessoryVisibility(selectedIndex);
+        const appliedVisible = this.mmdManager.setAccessoryVisibility(selectedIndex, visible);
         this.updateActionButtons();
-        this.showToast(visible ? "Accessory visible" : "Accessory hidden", "info");
+        this.showToast(appliedVisible ? "Accessory visible" : "Accessory hidden", "info");
+    }
+
+    public setSelectedAccessoryCastsShadow(castsShadow: boolean): void {
+        const selectedIndex = this.getSelectedAccessoryIndex();
+        if (selectedIndex === null) return;
+        const applied = this.mmdManager.setAccessoryCastsShadow(selectedIndex, castsShadow);
+        this.updateActionButtons();
+        if (!applied) {
+            this.showToast("Failed to update accessory shadow", "error");
+            return;
+        }
+        this.showToast(castsShadow ? t("toast.modelShadow.on") : t("toast.modelShadow.off"), "info");
     }
 
     public deleteSelectedAccessory(): void {
@@ -160,15 +167,34 @@ export class AccessoryPanelController {
             return;
         }
 
+        const remainingAccessories = this.mmdManager.getLoadedAccessories();
+        this.selectedAccessoryIndex = remainingAccessories.length > 0
+            ? Math.min(selectedIndex, remainingAccessories.length - 1)
+            : null;
         this.refresh();
+        this.onAccessoriesChanged();
         this.showToast(`Accessory deleted: ${targetName}`, "success");
     }
 
+    private setAccessoryContentVisible(visible: boolean): void {
+        if (this.elements.content) this.elements.content.hidden = !visible;
+        if (this.elements.transformContent) this.elements.transformContent.hidden = !visible;
+    }
+
+    private refreshAccessoryInfo(): void {
+        const selectedIndex = this.getSelectedAccessoryIndex();
+        const accessory = selectedIndex === null
+            ? null
+            : this.mmdManager.getLoadedAccessories().find((item) => item.index === selectedIndex) ?? null;
+        if (this.elements.name) this.elements.name.textContent = accessory?.name ?? "-";
+        if (this.elements.kind) this.elements.kind.textContent = accessory?.kind.toUpperCase() ?? "-";
+    }
+
     private setupControls(): void {
-        const select = this.elements.select;
         const parentModelSelect = this.elements.parentModelSelect;
         const parentBoneSelect = this.elements.parentBoneSelect;
-        const btnVisibility = this.elements.btnVisibility;
+        const chkVisibility = this.elements.chkVisibility;
+        const chkShadow = this.elements.chkShadow;
         const btnDelete = this.elements.btnDelete;
 
         this.renderTransformInputs();
@@ -180,11 +206,6 @@ export class AccessoryPanelController {
         this.registerTransformInput("rz", "accessory-rot-z");
         this.registerTransformInput("s", "accessory-scale");
 
-        select?.addEventListener("change", () => {
-            if (this.dispatchAction?.({ type: "accessory.select", source: "panel" })) return;
-            this.selectAccessory();
-        });
-
         parentModelSelect?.addEventListener("change", () => {
             if (this.dispatchAction?.({ type: "accessory.setParentModel", source: "panel" })) return;
             this.setParentModelFromPanel();
@@ -195,9 +216,16 @@ export class AccessoryPanelController {
             this.setParentBoneFromPanel();
         });
 
-        btnVisibility?.addEventListener("click", () => {
-            if (this.dispatchAction?.({ type: "accessory.toggleVisibility", source: "button" })) return;
-            this.toggleSelectedAccessoryVisibility();
+        chkVisibility?.addEventListener("change", () => {
+            const visible = chkVisibility.checked;
+            if (this.dispatchAction?.({ type: "accessory.setVisibility", source: "panel", visible })) return;
+            this.setSelectedAccessoryVisibility(visible);
+        });
+
+        chkShadow?.addEventListener("change", () => {
+            const castsShadow = chkShadow.checked;
+            if (this.dispatchAction?.({ type: "accessory.setShadow", source: "panel", castsShadow })) return;
+            this.setSelectedAccessoryCastsShadow(castsShadow);
         });
 
         btnDelete?.addEventListener("click", () => {
@@ -469,23 +497,26 @@ export class AccessoryPanelController {
         return value.toFixed(1);
     }
     private updateActionButtons(): void {
-        const btnVisibility = this.elements.btnVisibility;
+        const chkVisibility = this.elements.chkVisibility;
+        const chkShadow = this.elements.chkShadow;
         const btnDelete = this.elements.btnDelete;
-        if (!btnVisibility || !btnDelete) return;
+        if (!chkVisibility || !chkShadow || !btnDelete) return;
 
         const selectedIndex = this.getSelectedAccessoryIndex();
         const enabled = selectedIndex !== null;
-        btnVisibility.disabled = !enabled;
+        chkVisibility.disabled = !enabled;
+        chkShadow.disabled = !enabled;
         btnDelete.disabled = !enabled;
 
         if (!enabled) {
-            btnVisibility.textContent = t("button.hide");
+            chkVisibility.checked = false;
+            chkShadow.checked = false;
             return;
         }
 
         const accessories = this.mmdManager.getLoadedAccessories();
         const current = accessories.find((item) => item.index === selectedIndex);
-        const visible = current?.visible ?? true;
-        btnVisibility.textContent = visible ? t("button.hide") : t("button.show");
+        chkVisibility.checked = current?.visible ?? true;
+        chkShadow.checked = current?.castsShadow ?? true;
     }
 }

@@ -332,6 +332,7 @@ async function initializeApp(): Promise<void> {
         exportProjectState: () => mmdManager.exportProjectState(),
         loadModel: (filePath) => mmdManager.loadPMX(filePath),
         loadModelInteractively: (filePath) => uiController.loadModelInteractively(filePath),
+        loadAccessory: (filePath) => uiController.loadAccessoryFromPath(filePath),
         getLoadedModelCount: () => mmdManager.getLoadedModels().length,
         getModelBoneRenderedPosition: (modelIndex, boneName) => (
           mmdManager.getModelBoneRenderedPosition(modelIndex, boneName)

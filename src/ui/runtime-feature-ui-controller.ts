@@ -30,6 +30,7 @@ type RuntimeFeatureUiElements = {
 export type RuntimeFeatureUiControllerDeps = {
     mmdManager: MmdManager;
     showToast: (message: string, type?: ToastType) => void;
+    syncRangeNumberInput: (slider: HTMLInputElement) => void;
     dispatchAction?: (action: EditorAction) => boolean;
 };
 
@@ -62,12 +63,14 @@ export class RuntimeFeatureUiController {
     private readonly elements: RuntimeFeatureUiElements;
     private readonly mmdManager: MmdManager;
     private readonly showToast: (message: string, type?: ToastType) => void;
+    private readonly syncRangeNumberInput: (slider: HTMLInputElement) => void;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
 
     constructor(deps: RuntimeFeatureUiControllerDeps) {
         this.elements = resolveRuntimeFeatureUiElements();
         this.mmdManager = deps.mmdManager;
         this.showToast = deps.showToast;
+        this.syncRangeNumberInput = deps.syncRangeNumberInput;
         this.dispatchAction = deps.dispatchAction ?? null;
 
         this.setupEventListeners();
@@ -98,6 +101,33 @@ export class RuntimeFeatureUiController {
             this.mmdManager.getPhysicsEnabled(),
             this.mmdManager.isPhysicsAvailable()
         );
+        this.refreshGravityControls();
+    }
+
+    public refreshGravityControls(): void {
+        const acceleration = Math.round(this.mmdManager.getPhysicsGravityAcceleration());
+        if (this.elements.physicsGravityAccelSlider) {
+            this.elements.physicsGravityAccelSlider.value = String(acceleration);
+            this.syncRangeNumberInput(this.elements.physicsGravityAccelSlider);
+        }
+        if (this.elements.physicsGravityAccelValue) {
+            this.elements.physicsGravityAccelValue.textContent = String(acceleration);
+        }
+
+        const direction = this.mmdManager.getPhysicsGravityDirection();
+        const values: Array<[HTMLInputElement | null, HTMLElement | null, number]> = [
+            [this.elements.physicsGravityDirXSlider, this.elements.physicsGravityDirXValue, direction.x],
+            [this.elements.physicsGravityDirYSlider, this.elements.physicsGravityDirYValue, direction.y],
+            [this.elements.physicsGravityDirZSlider, this.elements.physicsGravityDirZValue, direction.z],
+        ];
+        for (const [slider, valueElement, rawValue] of values) {
+            const value = Math.round(rawValue);
+            if (slider) {
+                slider.value = String(value);
+                this.syncRangeNumberInput(slider);
+            }
+            if (valueElement) valueElement.textContent = String(value);
+        }
     }
 
     public refreshShadow(): void {

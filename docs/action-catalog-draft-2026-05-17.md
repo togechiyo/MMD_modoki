@@ -383,7 +383,8 @@ Layout 系は Action Catalog に入れるが、Command / History には入れな
 | accessory select change | `selection.setAccessory` | `syncTransformSlidersFromSelection()` | no | selection |
 | parent model select change | `accessory.setParentModel` | `setAccessoryParent()` | later | project state 変更 |
 | parent bone select change | `accessory.setParentBone` | `setAccessoryParent()` | later | project state 変更 |
-| visibility button | `accessory.toggleVisibility` | `toggleAccessoryVisibility()` | later | 表示だが project state の可能性あり |
+| visibility checkbox | `accessory.setVisibility` | `setAccessoryVisibility()` | later | project 保存 / 復元対象 |
+| shadow checkbox | `accessory.setShadow` | `setAccessoryCastsShadow()` | later | project 保存 / 復元対象 |
 | delete button | `accessory.delete` | `removeAccessory()` | yes / later | 確認 dialog あり |
 | transform sliders | `accessory.setTransform` | `setAccessoryTransform()` | yes / later | drag merge 必須 |
 | accessory keyframe button | `keyframe.registerAccessoryTransform` | `registerAccessoryTransformKeyframe()` | yes | keyframe 側 |

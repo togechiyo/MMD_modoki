@@ -3779,6 +3779,8 @@ ${beforeFogAppendBlock}
         for (const entry of this.sceneModels) {
             this.applyModelShadowCasterState(entry);
         }
+        (this as unknown as { refreshAccessoryShadowCasters?: () => void })
+            .refreshAccessoryShadowCasters?.();
     }
 
     public refreshShadowAfterSceneContentChanged(): void {

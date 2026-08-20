@@ -164,7 +164,8 @@
 | `accessory.select` | accessory select | accessory selection |
 | `accessory.setParentModel` | accessory parent model select | parent model setting |
 | `accessory.setParentBone` | accessory parent bone select | parent bone setting |
-| `accessory.toggleVisibility` | accessory visibility button | selected accessory visibility toggle |
+| `accessory.setVisibility` | accessory visibility checkbox | selected accessory visibility setting |
+| `accessory.setShadow` | accessory shadow checkbox | selected accessory shadow-caster setting |
 | `accessory.deleteSelected` | accessory delete button | selected accessory delete |
 
 `camera.*` / `output.*`:

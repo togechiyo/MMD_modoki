@@ -191,6 +191,7 @@ declare global {
             exportProjectState: () => MmdModokiProjectFileV1;
             loadModel: (filePath: string) => Promise<ModelInfo | null>;
             loadModelInteractively: (filePath: string) => Promise<ModelInfo | null>;
+            loadAccessory: (filePath: string) => Promise<boolean>;
             getLoadedModelCount: () => number;
             getModelBoneRenderedPosition: (
                 modelIndex: number,
@@ -648,6 +649,7 @@ export interface ProjectOutputState {
 export interface ProjectAccessoryState {
     path: string;
     visible: boolean;
+    castsShadow?: boolean;
     transform?: {
         position: { x: number; y: number; z: number };
         rotationDeg: { x: number; y: number; z: number };

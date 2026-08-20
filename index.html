@@ -533,9 +533,6 @@
           </div>
         </div>
         <div id="viewport-axis-handle" class="viewport-axis-handle">
-            <div class="viewport-axis-handle-row viewport-axis-handle-row--space">
-              <button id="viewport-axis-space-toggle" class="viewport-axis-space-toggle" type="button" data-i18n="viewportBottomBar.local">local</button>
-            </div>
             <div class="viewport-axis-handle-row">
               <span class="viewport-axis-handle-tool viewport-axis-handle-tool--rotate viewport-axis-handle-axis--x" data-handle-kind="rotate" data-handle-axis="x">
                 <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -708,13 +705,13 @@
             <button id="btn-info-keyframe" class="section-kf-btn" type="button" aria-label="情報欄のキーフレーム登録" data-i18n-aria-label="button.sectionKeyframe.info"> </button>
           </div>
           <div id="model-info" class="model-info">
-            <div class="info-compact-top">
-              <div class="info-target-row">
-                <span class="info-label" data-i18n="label.target">対象</span>
-                <select id="info-model-select" class="info-model-select" disabled>
-                  <option value="">-</option>
-                </select>
-              </div>
+            <div class="info-target-row">
+              <span class="info-label" data-i18n="label.target">対象</span>
+              <select id="info-model-select" class="info-model-select" disabled>
+                <option value="">-</option>
+              </select>
+            </div>
+            <div id="info-model-content" class="info-target-content">
               <div class="info-actions">
                 <div class="info-button-row">
                   <button id="btn-model-load" class="info-action-btn" type="button" data-i18n="button.load">読込...</button>
@@ -731,16 +728,43 @@
                   </label>
                 </div>
               </div>
+              <div class="info-compact-stats">
+                <span class="info-compact-item"><span class="info-compact-key" data-i18n="label.model">モデル</span><span id="info-model-name"
+                    class="info-value">-</span></span>
+                <span class="info-compact-item"><span class="info-compact-key">V</span><span id="info-vertices"
+                    class="info-value">-</span></span>
+                <span class="info-compact-item"><span class="info-compact-key">B</span><span id="info-bones"
+                    class="info-value">-</span></span>
+                <span class="info-compact-item"><span class="info-compact-key">M</span><span id="info-morphs"
+                    class="info-value">-</span></span>
+              </div>
             </div>
-            <div class="info-compact-stats">
-              <span class="info-compact-item"><span class="info-compact-key" data-i18n="label.model">モデル</span><span id="info-model-name"
-                  class="info-value">-</span></span>
-              <span class="info-compact-item"><span class="info-compact-key">V</span><span id="info-vertices"
-                  class="info-value">-</span></span>
-              <span class="info-compact-item"><span class="info-compact-key">B</span><span id="info-bones"
-                  class="info-value">-</span></span>
-              <span class="info-compact-item"><span class="info-compact-key">M</span><span id="info-morphs"
-                  class="info-value">-</span></span>
+            <div id="accessory-info-content" class="accessory-controls info-accessory-controls" hidden>
+              <div class="info-actions accessory-actions">
+                <div class="info-button-row">
+                  <button id="btn-accessory-delete" class="info-action-btn info-action-btn--danger" type="button" disabled data-i18n="button.delete">削除</button>
+                </div>
+                <div class="info-check-list">
+                  <label class="info-toggle-label" title="選択アクセサリの表示/非表示を切り替え" data-i18n-title="accessory.visibility.title">
+                    <input id="chk-accessory-visibility" type="checkbox" disabled checked>
+                    <span data-i18n="button.show">表示</span>
+                  </label>
+                  <label class="info-toggle-label" title="選択アクセサリが影を落とすかを切り替え" data-i18n-title="accessory.shadowCaster.title">
+                    <input id="chk-accessory-shadow" type="checkbox" disabled checked>
+                    <span data-i18n="model.shadowCaster.label">影</span>
+                  </label>
+                </div>
+              </div>
+              <div class="info-compact-stats">
+                <span class="info-compact-item">
+                  <span class="info-compact-key" data-i18n="section.accessory">アクセサリー</span>
+                  <span id="info-accessory-name" class="info-value">-</span>
+                </span>
+                <span class="info-compact-item">
+                  <span class="info-compact-key" data-i18n="label.type">種類</span>
+                  <span id="info-accessory-kind" class="info-value">-</span>
+                </span>
+              </div>
             </div>
           </div>
         </section>
@@ -821,7 +845,8 @@
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
               <path d="M3 4.5a1.5 1.5 0 1 1 3 0v1.2h2V4.5a1.5 1.5 0 1 1 3 0V9a1.5 1.5 0 1 1-3 0V7.9H6V9a1.5 1.5 0 1 1-3 0V4.5z" />
             </svg>
-            <span data-i18n="section.bone">ボーン</span>
+            <span class="bone-section-title" data-i18n="section.bone">ボーン</span>
+            <span class="accessory-section-title" data-i18n="section.accessory">アクセサリー</span>
             <button id="btn-bone-keyframe" class="section-kf-btn" type="button" aria-label="ボーン欄のキーフレーム登録" data-i18n-aria-label="button.sectionKeyframe.bone"> </button>
           </div>
           <div class="bone-selection-summary">
@@ -862,6 +887,23 @@
                 <option value="">-</option>
               </select>
               <span></span>
+            </div>
+          </div>
+          <div id="accessory-transform-content" class="accessory-controls accessory-transform-controls" hidden>
+            <div id="accessory-transform-grid" class="accessory-transform"></div>
+            <div class="accessory-parent-controls">
+              <div class="panel-select-row">
+                <span class="panel-select-label" data-i18n="label.parent">親</span>
+                <select id="accessory-parent-model" class="panel-select" disabled>
+                  <option value="" data-i18n="option.world">World</option>
+                </select>
+              </div>
+              <div class="panel-select-row">
+                <span class="panel-select-label" data-i18n="label.bone">ボーン</span>
+                <select id="accessory-parent-bone" class="panel-select" disabled>
+                  <option value="">-</option>
+                </select>
+              </div>
             </div>
           </div>
         </section>
@@ -1055,43 +1097,36 @@
           </div>
         </section>
 
-        <!-- 6: Accessory Controls -->
-        <section id="accessory-section" class="bottom-section">
+        <!-- 6: Gravity Controls -->
+        <section id="gravity-section" class="bottom-section">
           <div class="section-header">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-              <rect x="2.2" y="4.2" width="9.6" height="6.6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.2" />
-              <path d="M4.4 7.5h5.2M4.4 9.2h3.2" stroke="currentColor" stroke-width="1.1" />
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2">
+              <path d="M7 1.5v9M4.2 7.8 7 10.6l2.8-2.8" />
+              <path d="M2 12h10" />
             </svg>
-            <span data-i18n="section.accessory">アクセサリー</span>
-            <button id="btn-accessory-keyframe" class="section-kf-btn" type="button" aria-label="アクセサリー欄のキーフレーム登録" data-i18n-aria-label="button.sectionKeyframe.accessory"> </button>
+            <span data-i18n="section.gravity">重力</span>
+            <button id="btn-gravity-keyframe" class="section-kf-btn" type="button" disabled aria-label="重力欄のキーフレーム登録（準備中）" data-i18n-aria-label="button.sectionKeyframe.gravity"> </button>
           </div>
-          <div id="accessory-controls" class="accessory-controls">
-            <div class="panel-select-row">
-              <span class="panel-select-label" data-i18n="label.target">対象</span>
-              <select id="accessory-select" class="panel-select" disabled>
-                <option value="">-</option>
-              </select>
+          <div id="gravity-controls" class="gravity-controls">
+            <div class="light-row gravity-row">
+              <span class="light-label" data-i18n="label.gravityAcceleration">加速度</span>
+              <input type="range" id="physics-gravity-accel" class="light-slider" min="0" max="200" value="98" step="1">
+              <span id="physics-gravity-accel-val" class="light-value">98</span>
             </div>
-            <div id="accessory-transform-grid" class="accessory-transform"></div>
-            <div class="info-actions accessory-actions">
-              <button id="btn-accessory-visibility" class="info-action-btn" type="button" disabled data-i18n="button.hide">非表示</button>
-              <button id="btn-accessory-delete" class="info-action-btn info-action-btn--danger" type="button" disabled data-i18n="button.delete">削除</button>
+            <div class="light-row gravity-row">
+              <span class="light-label" data-i18n="label.gravityX">重力X</span>
+              <input type="range" id="physics-gravity-dir-x" class="light-slider" min="-100" max="100" value="0" step="1">
+              <span id="physics-gravity-dir-x-val" class="light-value">0</span>
             </div>
-            <div class="panel-select-row">
-              <span class="panel-select-label" data-i18n="label.parent">親</span>
-              <select id="accessory-parent-model" class="panel-select" disabled>
-                <option value="" data-i18n="option.world">World</option>
-              </select>
+            <div class="light-row gravity-row">
+              <span class="light-label" data-i18n="label.gravityY">重力Y</span>
+              <input type="range" id="physics-gravity-dir-y" class="light-slider" min="-100" max="100" value="-100" step="1">
+              <span id="physics-gravity-dir-y-val" class="light-value">-100</span>
             </div>
-            <div class="panel-select-row">
-              <span class="panel-select-label" data-i18n="label.bone">ボーン</span>
-              <select id="accessory-parent-bone" class="panel-select" disabled>
-                <option value="">-</option>
-              </select>
-            </div>
-            <div class="accessory-empty-state" id="accessory-empty-state">
-              <span data-i18n="empty.accessoryNotLoaded">アクセサリー未読込</span>
-              <span class="accessory-empty-sub" data-i18n="empty.accessoryHint">.x を読み込むとここで操作できます</span>
+            <div class="light-row gravity-row">
+              <span class="light-label" data-i18n="label.gravityZ">重力Z</span>
+              <input type="range" id="physics-gravity-dir-z" class="light-slider" min="-100" max="100" value="0" step="1">
+              <span id="physics-gravity-dir-z-val" class="light-value">0</span>
             </div>
           </div>
         </section>

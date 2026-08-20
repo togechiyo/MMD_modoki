@@ -118,7 +118,8 @@ export type AccessoryAction =
     | { type: "accessory.select"; source: ActionSource }
     | { type: "accessory.setParentModel"; source: ActionSource }
     | { type: "accessory.setParentBone"; source: ActionSource }
-    | { type: "accessory.toggleVisibility"; source: ActionSource }
+    | { type: "accessory.setVisibility"; source: ActionSource; visible: boolean }
+    | { type: "accessory.setShadow"; source: ActionSource; castsShadow: boolean }
     | { type: "accessory.deleteSelected"; source: ActionSource };
 
 export type CameraAction =

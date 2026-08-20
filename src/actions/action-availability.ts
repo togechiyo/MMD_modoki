@@ -126,7 +126,8 @@ export function canExecuteEditorAction(
         case "accessory.select":
         case "accessory.setParentModel":
         case "accessory.setParentBone":
-        case "accessory.toggleVisibility":
+        case "accessory.setVisibility":
+        case "accessory.setShadow":
         case "accessory.deleteSelected":
         case "camera.setViewPreset":
         case "camera.setExternalParent":

@@ -341,7 +341,8 @@ describe("canExecuteEditorAction", () => {
         expect(canExecuteEditorAction({ type: "accessory.select", source: "panel" }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction({ type: "accessory.setParentModel", source: "panel" }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction({ type: "accessory.setParentBone", source: "panel" }, readySnapshot)).toBe(true);
-        expect(canExecuteEditorAction({ type: "accessory.toggleVisibility", source: "button" }, readySnapshot)).toBe(true);
+        expect(canExecuteEditorAction({ type: "accessory.setVisibility", source: "panel", visible: true }, readySnapshot)).toBe(true);
+        expect(canExecuteEditorAction({ type: "accessory.setShadow", source: "panel", castsShadow: true }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction({ type: "accessory.deleteSelected", source: "button" }, readySnapshot)).toBe(true);
     });
 

@@ -24,6 +24,7 @@ export type AccessoryState = {
     name: string;
     path: string;
     visible: boolean;
+    castsShadow: boolean;
     kind: "x" | "glb";
 };
 
@@ -54,6 +55,8 @@ declare module "./mmd-manager" {
         clearAccessories(): void;
         setAccessoryVisibility(index: number, visible: boolean): boolean;
         toggleAccessoryVisibility(index: number): boolean;
+        setAccessoryCastsShadow(index: number, castsShadow: boolean): boolean;
+        refreshAccessoryShadowCasters(): void;
         removeAccessory(index: number): boolean;
         getAccessoryTransform(index: number): AccessoryTransformState | null;
         setAccessoryTransform(index: number, transform: Partial<AccessoryTransformState>): boolean;
@@ -79,6 +82,7 @@ type XLoadHost = {
     setCameraDistance?: (distance: number) => void;
     syncIblShadowsScene?: () => void;
     refreshShadowAfterSceneContentChanged?: () => void;
+    getShadowEnabled?: () => boolean;
 };
 
 type AccessoryEntry = {
@@ -89,6 +93,7 @@ type AccessoryEntry = {
     offset: TransformNode;
     baseScale: number;
     meshes: AbstractMesh[];
+    castsShadow: boolean;
     parentModelRef: object | null;
     parentModelName: string | null;
     parentBoneName: string | null;
@@ -831,6 +836,7 @@ function createAccessoryEntryFromImport(
         offset,
         baseScale,
         meshes: managedMeshes,
+        castsShadow: kind !== "glb",
         parentModelRef: null,
         parentModelName: null,
         parentBoneName: null,
@@ -1096,6 +1102,17 @@ function setAccessoryVisible(entry: AccessoryEntry, visible: boolean): void {
     }
 }
 
+function applyAccessoryShadowCasterState(host: XLoadHost, entry: AccessoryEntry): void {
+    const enabled = entry.castsShadow && (host.getShadowEnabled?.() ?? true);
+    for (const mesh of entry.meshes) {
+        if (enabled) {
+            host.shadowGenerator.addShadowCaster(mesh, false);
+        } else {
+            host.shadowGenerator.removeShadowCaster(mesh, false);
+        }
+    }
+}
+
 function isIblShadowAccessoryMeshCandidate(mesh: AbstractMesh): mesh is Mesh {
     if (!(mesh instanceof Mesh)) return false;
     if (mesh.isDisposed()) return false;
@@ -1119,6 +1136,8 @@ const mmdManagerProto = MmdManager.prototype as unknown as {
     clearAccessories?: () => void;
     setAccessoryVisibility?: (index: number, visible: boolean) => boolean;
     toggleAccessoryVisibility?: (index: number) => boolean;
+    setAccessoryCastsShadow?: (index: number, castsShadow: boolean) => boolean;
+    refreshAccessoryShadowCasters?: () => void;
     removeAccessory?: (index: number) => boolean;
     getAccessoryTransform?: (index: number) => AccessoryTransformState | null;
     setAccessoryTransform?: (index: number, transform: Partial<AccessoryTransformState>) => boolean;
@@ -1256,6 +1275,7 @@ if (!mmdManagerProto.getLoadedAccessories) {
             name: entry.name,
             path: entry.path,
             visible: isAccessoryVisible(entry),
+            castsShadow: entry.castsShadow,
             kind: entry.kind,
         }));
     };
@@ -1280,11 +1300,15 @@ if (!mmdManagerProto.getIblShadowAccessoryMeshes) {
 if (!mmdManagerProto.clearAccessories) {
     mmdManagerProto.clearAccessories = function(): void {
         const entries = getAccessoryEntries(this as unknown as object);
+        const host = this as unknown as XLoadHost;
         while (entries.length > 0) {
             const entry = entries.pop();
+            for (const mesh of entry?.meshes ?? []) {
+                host.shadowGenerator.removeShadowCaster(mesh, false);
+            }
             entry?.root.dispose(false);
         }
-        (this as unknown as XLoadHost).syncIblShadowsScene?.();
+        host.syncIblShadowsScene?.();
     };
 }
 
@@ -1311,14 +1335,39 @@ if (!mmdManagerProto.toggleAccessoryVisibility) {
     };
 }
 
+if (!mmdManagerProto.setAccessoryCastsShadow) {
+    mmdManagerProto.setAccessoryCastsShadow = function(index: number, castsShadow: boolean): boolean {
+        const entries = getAccessoryEntries(this as unknown as object);
+        const entry = entries[index];
+        if (!entry) return false;
+        entry.castsShadow = castsShadow;
+        applyAccessoryShadowCasterState(this as unknown as XLoadHost, entry);
+        (this as unknown as XLoadHost).refreshShadowAfterSceneContentChanged?.();
+        return true;
+    };
+}
+
+if (!mmdManagerProto.refreshAccessoryShadowCasters) {
+    mmdManagerProto.refreshAccessoryShadowCasters = function(): void {
+        const host = this as unknown as XLoadHost;
+        for (const entry of getAccessoryEntries(this as unknown as object)) {
+            applyAccessoryShadowCasterState(host, entry);
+        }
+    };
+}
+
 if (!mmdManagerProto.removeAccessory) {
     mmdManagerProto.removeAccessory = function(index: number): boolean {
         const entries = getAccessoryEntries(this as unknown as object);
         if (index < 0 || index >= entries.length) return false;
         const [entry] = entries.splice(index, 1);
         if (!entry) return false;
+        const host = this as unknown as XLoadHost;
+        for (const mesh of entry.meshes) {
+            host.shadowGenerator.removeShadowCaster(mesh, false);
+        }
         entry.root.dispose(false);
-        (this as unknown as XLoadHost).syncIblShadowsScene?.();
+        host.syncIblShadowsScene?.();
         return true;
     };
 }

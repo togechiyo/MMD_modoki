@@ -998,4 +998,37 @@ describe("importProjectState", () => {
 
         expect(host.setLightDirection).toHaveBeenLastCalledWith(-0.64, -0.65, -0.35);
     });
+
+    it("restores accessory visibility and shadow state", async () => {
+        const host = createHost();
+        let loadedAccessoryCount = 0;
+        const loadX = vi.fn(async () => {
+            loadedAccessoryCount += 1;
+            return true;
+        });
+        const setAccessoryVisibility = vi.fn(() => true);
+        const setAccessoryCastsShadow = vi.fn(() => true);
+        Object.assign(host, {
+            loadX,
+            getLoadedAccessories: () => Array.from(
+                { length: loadedAccessoryCount },
+                (_, index) => ({ index }),
+            ),
+            setAccessoryVisibility,
+            setAccessoryCastsShadow,
+        });
+        const project = createProject({
+            accessories: [{
+                path: "C:/accessories/stage.x",
+                visible: false,
+                castsShadow: false,
+            }],
+        });
+
+        await importProjectState(host, project);
+
+        expect(loadX).toHaveBeenCalledWith("C:/accessories/stage.x");
+        expect(setAccessoryVisibility).toHaveBeenCalledWith(0, false);
+        expect(setAccessoryCastsShadow).toHaveBeenCalledWith(0, false);
+    });
 });

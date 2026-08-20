@@ -1,4 +1,4 @@
-export type BottomPanelMode = "model" | "camera";
+export type BottomPanelMode = "model" | "camera" | "accessory";
 
 type BottomPanelSectionId =
     | "info"
@@ -8,16 +8,18 @@ type BottomPanelSectionId =
     | "morph"
     | "lighting"
     | "shadow"
-    | "accessory";
+    | "gravity";
 
 const MODE_SECTIONS: Record<BottomPanelMode, BottomPanelSectionId[]> = {
     model: ["info", "interpolation", "bone", "morph"],
-    camera: ["info", "interpolation", "bone", "lighting", "shadow", "accessory"],
+    camera: ["info", "interpolation", "bone", "lighting", "shadow", "gravity"],
+    accessory: ["info", "interpolation", "bone"],
 };
 
 const MODE_GRID_TEMPLATES: Record<BottomPanelMode, string> = {
     model: "repeat(6, minmax(0, 1fr))",
     camera: "repeat(6, minmax(0, 1fr))",
+    accessory: "repeat(6, minmax(0, 1fr))",
 };
 
 const MODE_SECTION_SPANS: Record<BottomPanelMode, Partial<Record<BottomPanelSectionId, number>>> = {
@@ -25,6 +27,7 @@ const MODE_SECTION_SPANS: Record<BottomPanelMode, Partial<Record<BottomPanelSect
         morph: 3,
     },
     camera: {},
+    accessory: {},
 };
 
 export class BottomPanelLayoutController {
@@ -42,7 +45,7 @@ export class BottomPanelLayoutController {
             morph: document.getElementById("morph-section"),
             lighting: document.getElementById("lighting-section"),
             shadow: document.getElementById("shadow-section"),
-            accessory: document.getElementById("accessory-section"),
+            gravity: document.getElementById("gravity-section"),
         };
     }
 

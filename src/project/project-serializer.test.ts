@@ -221,6 +221,24 @@ function createHost() {
 }
 
 describe("exportProjectState", () => {
+    it("writes accessory visibility and shadow state", () => {
+        const project = exportProjectState({
+            ...createHost(),
+            getLoadedAccessories: () => [{
+                index: 0,
+                path: "C:/accessories/stage.x",
+                visible: false,
+                castsShadow: false,
+            }],
+        });
+
+        expect(project.accessories?.[0]).toMatchObject({
+            path: "C:/accessories/stage.x",
+            visible: false,
+            castsShadow: false,
+        });
+    });
+
     it("writes model material pipelines and environment lighting", () => {
         const model = {};
         const project = exportProjectState({

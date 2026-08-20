@@ -31,7 +31,13 @@ import { FogPanelController } from "./ui/fog-panel-controller";
 import { LayoutUiController } from "./ui/layout-ui-controller";
 import { LensEffectController } from "./ui/lens-effect-controller";
 import { LutPanelController } from "./ui/lut-panel-controller";
-import { ModelInfoPanelController, MODEL_INFO_CAMERA_SELECT_VALUE, type ModelInfoSelectState } from "./ui/model-info-panel-controller";
+import {
+    ModelInfoPanelController,
+    MODEL_INFO_CAMERA_SELECT_VALUE,
+    createModelInfoAccessorySelectValue,
+    parseModelInfoAccessorySelectValue,
+    type ModelInfoSelectState,
+} from "./ui/model-info-panel-controller";
 import { ModelCommentNoticeController } from "./ui/model-comment-notice-controller";
 import { ModelEdgeController } from "./ui/model-edge-controller";
 import { ModelExternalParentController } from "./ui/model-external-parent-controller";
@@ -473,7 +479,6 @@ export class UIController {
     private btnPhysicsKeyframe: HTMLButtonElement | null = null;
     private physicsKeyframeInputMode: 0 | 1 = 1;
     private btnMorphKeyframe: HTMLButtonElement | null = null;
-    private btnAccessoryKeyframe: HTMLButtonElement | null = null;
     private shortcutEdgeWidthRestore = 1;
     private readonly rangeNumberInputs = new WeakMap<HTMLInputElement, HTMLInputElement>();
     private syncingBoneSelection = false;
@@ -519,10 +524,10 @@ export class UIController {
     private postFxWgslToonPath: string | null = null;
     private postFxWgslToonText: string | null = null;
     private currentProjectFilePath: string | null = null;
+    private lastModelSideTargetValue: string | null = null;
     private readonly onLocaleChanged = (): void => {
         this.applyLocalizedUiState();
         this.viewportSeekBarController?.refreshLocale();
-        this.viewportAxisHandleController?.refreshLocale();
         this.viewportTopBarController?.refreshLocale();
         this.modelCommentNoticeController.refreshLocale();
         this.dofPanelController?.refreshFocusTargetControls();
@@ -638,6 +643,7 @@ export class UIController {
                 this.refreshModelSelector();
                 this.refreshShaderPanel();
             },
+            getSelectedAccessoryIndex: () => this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null,
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
         this.cameraPanelController = new CameraPanelController({
@@ -818,7 +824,7 @@ export class UIController {
         this.viewportTopBarController = new ViewportTopBarController({
             getCameraTransform: () => this.captureCameraTransformCommandSnapshot(),
             onToggleMode: () => {
-                if (this.mmdManager.getTimelineTarget() === "model") {
+                if (this.isViewportModelEditMode()) {
                     this.switchToCameraMode();
                     return;
                 }
@@ -851,7 +857,11 @@ export class UIController {
             }),
         });
         this.bottomPanelLayoutController = new BottomPanelLayoutController();
-        this.bottomPanelLayoutController.applyMode(this.mmdManager.getTimelineTarget() === "model" ? "model" : "camera");
+        const initialBottomPanelMode = this.mmdManager.getLoadedModels().length > 0
+            && this.mmdManager.getTimelineTarget() === "model"
+            ? "model"
+            : "camera";
+        this.bottomPanelLayoutController.applyMode(initialBottomPanelMode);
         this.layoutUiController = new LayoutUiController({
             mmdManager: this.mmdManager,
             exportUiController: this.exportUiController,
@@ -867,6 +877,7 @@ export class UIController {
         this.runtimeFeatureUiController = new RuntimeFeatureUiController({
             mmdManager: this.mmdManager,
             showToast: (message, type) => this.showToast(message, type),
+            syncRangeNumberInput: (slider) => this.syncRangeNumberInput(slider),
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
         this.accessoryPanelController = new AccessoryPanelController({
@@ -876,7 +887,21 @@ export class UIController {
                 this.markSectionKeyframeDirty("accessory", this.getAccessoryKeyframeContextKey(accessoryIndex));
                 this.updateSectionKeyframeButtons();
             },
-            onSelectionChanged: () => this.updateSectionKeyframeButtons(),
+            onSelectionChanged: () => {
+                this.modelInfoPanelController?.refresh();
+                const accessorySelected = (this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null) !== null;
+                const modelSelected = this.mmdManager.getLoadedModels().length > 0
+                    && this.mmdManager.getTimelineTarget() === "model";
+                this.bottomPanelLayoutController?.applyMode(
+                    accessorySelected
+                        ? "accessory"
+                        : modelSelected
+                            ? "model"
+                            : "camera",
+                );
+                this.updateSectionKeyframeButtons();
+            },
+            onAccessoriesChanged: () => this.refreshModelSelector(),
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
         this.colorPostFxController = new ColorPostFxController({
@@ -1042,8 +1067,11 @@ export class UIController {
         this.btnBoneKeyframe = document.getElementById("btn-bone-keyframe") as HTMLButtonElement | null;
         this.btnPhysicsKeyframe = document.querySelector(".timeline-edit-btn--physics-toggle") as HTMLButtonElement | null;
         this.btnMorphKeyframe = document.getElementById("btn-morph-keyframe") as HTMLButtonElement | null;
-        this.btnAccessoryKeyframe = document.getElementById("btn-accessory-keyframe") as HTMLButtonElement | null;
         this.btnInfoKeyframe?.addEventListener("click", () => {
+            if ((this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null) !== null) {
+                this.actionDispatcher.dispatch({ type: "keyframe.registerAccessoryTransform", source: "button" });
+                return;
+            }
             this.actionDispatcher.dispatch({ type: "keyframe.registerInfo", source: "button" });
         });
         this.btnInterpolationKeyframe?.addEventListener("click", () => {
@@ -1057,9 +1085,6 @@ export class UIController {
         });
         this.btnMorphKeyframe?.addEventListener("click", () => {
             this.actionDispatcher.dispatch({ type: "keyframe.registerMorph", source: "button" });
-        });
-        this.btnAccessoryKeyframe?.addEventListener("click", () => {
-            this.actionDispatcher.dispatch({ type: "keyframe.registerAccessoryTransform", source: "button" });
         });
 
         this.timeline.onSelectionChanged = (track) => {
@@ -2381,7 +2406,9 @@ export class UIController {
             void this.shaderPanelController?.resetShaderPreset();
         });
         this.actionDispatcher.register("accessory.select", () => {
-            this.accessoryPanelController?.selectAccessory();
+            this.accessoryPanelController?.selectAccessory(
+                this.accessoryPanelController.getSelectedAccessoryIndex(),
+            );
         });
         this.actionDispatcher.register("accessory.setParentModel", () => {
             this.accessoryPanelController?.setParentModelFromPanel();
@@ -2389,8 +2416,11 @@ export class UIController {
         this.actionDispatcher.register("accessory.setParentBone", () => {
             this.accessoryPanelController?.setParentBoneFromPanel();
         });
-        this.actionDispatcher.register("accessory.toggleVisibility", () => {
-            this.accessoryPanelController?.toggleSelectedAccessoryVisibility();
+        this.actionDispatcher.register("accessory.setVisibility", (action) => {
+            this.accessoryPanelController?.setSelectedAccessoryVisibility(action.visible);
+        });
+        this.actionDispatcher.register("accessory.setShadow", (action) => {
+            this.accessoryPanelController?.setSelectedAccessoryCastsShadow(action.castsShadow);
         });
         this.actionDispatcher.register("accessory.deleteSelected", () => {
             this.accessoryPanelController?.deleteSelectedAccessory();
@@ -3262,15 +3292,7 @@ export class UIController {
                 await this.loadModelInteractively(filePath);
                 return;
             case "x": {
-                this.setStatus("Loading X model...", true);
-                const ok = await this.mmdManager.loadX(filePath);
-                if (ok) {
-                    this.setStatus("X model loaded", false);
-                    this.accessoryPanelController?.refresh();
-                    this.showToast(`Loaded X model: ${filePath.replace(/^.*[\\/]/, "")}`, "success");
-                } else {
-                    this.setStatus("X model load failed", false);
-                }
+                await this.loadAccessoryFromPath(filePath);
                 return;
             }
             case "3dl":
@@ -3529,6 +3551,29 @@ export class UIController {
         return await this.mmdManager.loadPMX(filePath);
     }
 
+    public async loadAccessoryFromPath(filePath: string): Promise<boolean> {
+        this.setStatus("Loading X model...", true);
+        const ok = await this.mmdManager.loadX(filePath);
+        if (!ok) {
+            this.setStatus("X model load failed", false);
+            return false;
+        }
+
+        this.setStatus("X model loaded", false);
+        const accessories = this.mmdManager.getLoadedAccessories();
+        const loadedAccessory = accessories[accessories.length - 1] ?? null;
+        if (loadedAccessory) {
+            this.lastModelSideTargetValue = createModelInfoAccessorySelectValue(loadedAccessory.index);
+            this.mmdManager.setTimelineTarget("camera");
+            this.applyCameraSelectionUI();
+            this.accessoryPanelController?.selectAccessory(loadedAccessory.index);
+            this.bottomPanelLayoutController?.applyMode("accessory");
+        }
+        this.refreshModelSelector();
+        this.showToast(`Loaded X model: ${filePath.replace(/^.*[\\/]/, "")}`, "success");
+        return true;
+    }
+
     private async loadVMD(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
             { name: "VMD/VPD motion or pose", extensions: ["vmd", "vpd"] },
@@ -3659,6 +3704,7 @@ export class UIController {
     }
 
     private refreshModelSelector(): void {
+        this.refreshViewportEmptyState();
         this.modelInfoPanelController?.refresh();
         this.shaderPanelController?.syncModelSelectorFromInfo();
         this.updateInfoActionButtons();
@@ -3669,9 +3715,13 @@ export class UIController {
     }
 
     private refreshViewportBottomBar(): void {
-        const hasLoadedModels = this.mmdManager.getLoadedModels().length > 0;
+        const loadedModels = this.mmdManager.getLoadedModels();
+        const loadedAccessories = this.mmdManager.getLoadedAccessories();
+        const hasLoadedModels = loadedModels.length > 0;
+        const canSwitchToModel = hasLoadedModels || loadedAccessories.length > 0;
+        const viewportEditMode = this.isViewportModelEditMode() ? "model" : "camera";
         const target = hasLoadedModels ? this.mmdManager.getTimelineTarget() : "camera";
-        this.refreshToolbarTimelineTargetSwitch(target === "model" ? "model" : "camera", hasLoadedModels);
+        this.refreshToolbarTimelineTargetSwitch(viewportEditMode, canSwitchToModel);
         this.viewportSeekBarController?.refresh({
             currentFrame: this.mmdManager.currentFrame,
             totalFrames: this.mmdManager.totalFrames,
@@ -3724,23 +3774,56 @@ export class UIController {
     }
 
     private switchViewportBottomBarToModel(): void {
-        const hasLoadedModels = this.mmdManager.getLoadedModels().length > 0;
-        if (!hasLoadedModels) {
-            this.refreshViewportBottomBar();
+        const models = this.mmdManager.getLoadedModels();
+        const accessories = this.mmdManager.getLoadedAccessories();
+        const lastTargetValue = this.lastModelSideTargetValue;
+        if (lastTargetValue !== null) {
+            const lastAccessoryIndex = parseModelInfoAccessorySelectValue(lastTargetValue);
+            const hasLastAccessory = lastAccessoryIndex !== null
+                && accessories.some((accessory) => accessory.index === lastAccessoryIndex);
+            const lastModelIndex = Number.parseInt(lastTargetValue, 10);
+            const hasLastModel = lastAccessoryIndex === null
+                && Number.isFinite(lastModelIndex)
+                && models.some((model) => model.index === lastModelIndex);
+            if (hasLastAccessory || hasLastModel) {
+                this.actionDispatcher.dispatch({
+                    type: "model.selectTimelineTarget",
+                    source: "button",
+                    value: lastTargetValue,
+                    showToast: true,
+                });
+                return;
+            }
+        }
+
+        const target = models.find((model) => model.active) ?? models[0] ?? null;
+        if (target) {
+            this.actionDispatcher.dispatch({
+                type: "model.selectTimelineTarget",
+                source: "button",
+                value: String(target.index),
+                showToast: true,
+            });
             return;
         }
-        const models = this.mmdManager.getLoadedModels();
-        const target = models.find((model) => model.active) ?? models[0] ?? null;
-        if (!target) {
+
+        const accessory = accessories[0] ?? null;
+        if (!accessory) {
             this.refreshViewportBottomBar();
             return;
         }
         this.actionDispatcher.dispatch({
             type: "model.selectTimelineTarget",
             source: "button",
-            value: String(target.index),
+            value: createModelInfoAccessorySelectValue(accessory.index),
             showToast: true,
         });
+    }
+
+    private isViewportModelEditMode(): boolean {
+        if ((this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null) !== null) return true;
+        return this.mmdManager.getLoadedModels().length > 0
+            && this.mmdManager.getTimelineTarget() === "model";
     }
 
     private switchToCameraMode(): void {
@@ -3784,6 +3867,28 @@ export class UIController {
             return changed;
         };
 
+        const accessoryIndex = parseModelInfoAccessorySelectValue(value);
+        if (accessoryIndex !== null) {
+            const accessory = this.mmdManager.getLoadedAccessories()
+                .find((candidate) => candidate.index === accessoryIndex) ?? null;
+            if (!accessory) return;
+            this.lastModelSideTargetValue = value;
+            this.mmdManager.setTimelineTarget("camera");
+            this.applyCameraSelectionUI();
+            this.accessoryPanelController?.selectAccessory(accessoryIndex);
+            this.bottomPanelLayoutController?.applyMode("accessory");
+            this.refreshModelSelector();
+            this.refreshShaderPanel();
+            if (restoreFrameGraphPostEffectEnabledStates()) {
+                this.refreshShaderPanel();
+            }
+            if (showToast) {
+                this.showToast(`Accessory target: ${accessory.name}`, "success");
+            }
+            return;
+        }
+
+        this.accessoryPanelController?.selectAccessory(null);
         if (value === MODEL_INFO_CAMERA_SELECT_VALUE) {
             this.mmdManager.setTimelineTarget("camera");
             this.applyCameraSelectionUI();
@@ -3808,6 +3913,7 @@ export class UIController {
             return;
         }
 
+        this.lastModelSideTargetValue = String(index);
         this.mmdManager.setTimelineTarget("model");
         this.applyActiveModelSelectionUI();
         this.refreshModelSelector();
@@ -7054,6 +7160,12 @@ export class UIController {
         this.refreshViewportBottomBar();
     }
 
+    private refreshViewportEmptyState(): void {
+        const hasSceneContent = this.mmdManager.getLoadedModels().length > 0
+            || this.mmdManager.getLoadedAccessories().length > 0;
+        this.viewportOverlay.classList.toggle("hidden", hasSceneContent);
+    }
+
     private syncTimelineBoneSelectionFromBottomPanel(boneName: string | null): void {
         if (!boneName) return;
         if (this.mmdManager.getTimelineTarget() !== "model") return;
@@ -7302,12 +7414,19 @@ export class UIController {
     }
 
     private updateSectionKeyframeButtons(): void {
-        this.setSectionKeyframeButtonState(this.btnInfoKeyframe, this.getInfoKeyframeButtonState());
+        const accessorySelected = (this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null) !== null;
+        this.setSectionKeyframeButtonState(
+            this.btnInfoKeyframe,
+            accessorySelected ? this.getAccessoryKeyframeButtonState() : this.getInfoKeyframeButtonState(),
+        );
+        this.btnInfoKeyframe?.setAttribute(
+            "aria-label",
+            t(accessorySelected ? "button.sectionKeyframe.accessory" : "button.sectionKeyframe.info"),
+        );
         this.setSectionKeyframeButtonState(this.btnInterpolationKeyframe, this.getInterpolationKeyframeButtonState());
         this.setSectionKeyframeButtonState(this.btnBoneKeyframe, this.getBoneKeyframeButtonState());
         this.updatePhysicsKeyframeButtonState();
         this.setSectionKeyframeButtonState(this.btnMorphKeyframe, this.getMorphKeyframeButtonState());
-        this.setSectionKeyframeButtonState(this.btnAccessoryKeyframe, this.getAccessoryKeyframeButtonState());
     }
 
     private updatePhysicsKeyframeButtonState(): void {

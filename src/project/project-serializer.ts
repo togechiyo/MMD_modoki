@@ -24,6 +24,7 @@ type ProjectExportAccessory = {
     index: number;
     path: string;
     visible: boolean;
+    castsShadow: boolean;
 };
 
 type ProjectExportSceneModel = {
@@ -303,6 +304,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         return {
             path: entry.path,
             visible: entry.visible,
+            castsShadow: entry.castsShadow,
             transform: transform ?? undefined,
             parentModelInstanceId,
             parentModelPath,

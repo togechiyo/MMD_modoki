@@ -5,6 +5,19 @@ import type { EditorAction } from "../actions/types";
 type ToastType = "success" | "error" | "info";
 
 export const MODEL_INFO_CAMERA_SELECT_VALUE = "__camera__";
+export const MODEL_INFO_ACCESSORY_SELECT_PREFIX = "__accessory__:";
+
+export function createModelInfoAccessorySelectValue(index: number): string {
+    return `${MODEL_INFO_ACCESSORY_SELECT_PREFIX}${Math.max(0, Math.floor(index))}`;
+}
+
+export function parseModelInfoAccessorySelectValue(value: string): number | null {
+    if (!value.startsWith(MODEL_INFO_ACCESSORY_SELECT_PREFIX)) return null;
+    const rawIndex = value.slice(MODEL_INFO_ACCESSORY_SELECT_PREFIX.length);
+    if (!/^\d+$/.test(rawIndex)) return null;
+    const index = Number.parseInt(rawIndex, 10);
+    return Number.isSafeInteger(index) ? index : null;
+}
 
 export type ModelInfoSelectState = {
     innerHTML: string;
@@ -14,6 +27,7 @@ export type ModelInfoSelectState = {
 
 type ModelInfoPanelElements = {
     select: HTMLSelectElement | null;
+    modelContent: HTMLElement | null;
     chkVisibility: HTMLInputElement | null;
     chkShadow: HTMLInputElement | null;
     btnLoad: HTMLButtonElement | null;
@@ -26,12 +40,14 @@ export type ModelInfoPanelControllerDeps = {
     onTargetSelected: (value: string, showToast: boolean) => void;
     onModelVisibilityChanged: (visible: boolean) => void;
     onModelDeleted: (hasRemainingModels: boolean) => void;
+    getSelectedAccessoryIndex: () => number | null;
     dispatchAction?: (action: EditorAction) => boolean;
 };
 
 function resolveModelInfoPanelElements(): ModelInfoPanelElements {
     return {
         select: document.getElementById("info-model-select") as HTMLSelectElement | null,
+        modelContent: document.getElementById("info-model-content"),
         chkVisibility: document.getElementById("chk-model-visibility") as HTMLInputElement | null,
         chkShadow: document.getElementById("chk-model-shadow") as HTMLInputElement | null,
         btnLoad: document.getElementById("btn-model-load") as HTMLButtonElement | null,
@@ -46,6 +62,7 @@ export class ModelInfoPanelController {
     private readonly onTargetSelected: (value: string, showToast: boolean) => void;
     private readonly onModelVisibilityChanged: (visible: boolean) => void;
     private readonly onModelDeleted: (hasRemainingModels: boolean) => void;
+    private readonly getSelectedAccessoryIndex: () => number | null;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
 
     constructor(deps: ModelInfoPanelControllerDeps) {
@@ -55,6 +72,7 @@ export class ModelInfoPanelController {
         this.onTargetSelected = deps.onTargetSelected;
         this.onModelVisibilityChanged = deps.onModelVisibilityChanged;
         this.onModelDeleted = deps.onModelDeleted;
+        this.getSelectedAccessoryIndex = deps.getSelectedAccessoryIndex;
         this.dispatchAction = deps.dispatchAction ?? null;
 
         this.setupControls();
@@ -65,7 +83,13 @@ export class ModelInfoPanelController {
         if (!select) return;
 
         const models = this.mmdManager.getLoadedModels();
+        const accessories = this.mmdManager.getLoadedAccessories();
         const timelineTarget = this.mmdManager.getTimelineTarget();
+        const requestedAccessoryIndex = this.getSelectedAccessoryIndex();
+        const selectedAccessoryIndex = requestedAccessoryIndex !== null
+            && accessories.some((accessory) => accessory.index === requestedAccessoryIndex)
+            ? requestedAccessoryIndex
+            : null;
         select.innerHTML = "";
 
         const cameraOption = document.createElement("option");
@@ -73,12 +97,14 @@ export class ModelInfoPanelController {
         cameraOption.textContent = "0: Camera";
         select.appendChild(cameraOption);
 
-        let selected = false;
-        if (timelineTarget === "camera") {
+        let selected = selectedAccessoryIndex !== null;
+        if (!selected && timelineTarget === "camera") {
             cameraOption.selected = true;
             selected = true;
         }
 
+        const modelGroup = document.createElement("optgroup");
+        modelGroup.label = t("label.model");
         for (const model of models) {
             const option = document.createElement("option");
             option.value = String(model.index);
@@ -88,19 +114,36 @@ export class ModelInfoPanelController {
                 option.selected = true;
                 selected = true;
             }
-            select.appendChild(option);
+            modelGroup.appendChild(option);
         }
+        if (modelGroup.childElementCount > 0) select.appendChild(modelGroup);
+
+        const accessoryGroup = document.createElement("optgroup");
+        accessoryGroup.label = t("section.accessory");
+        for (const accessory of accessories) {
+            const option = document.createElement("option");
+            option.value = createModelInfoAccessorySelectValue(accessory.index);
+            option.textContent = `${models.length + accessory.index + 1}: ${accessory.name} [${accessory.kind.toUpperCase()}]`;
+            option.title = accessory.path;
+            if (selectedAccessoryIndex === accessory.index) option.selected = true;
+            accessoryGroup.appendChild(option);
+        }
+        if (accessoryGroup.childElementCount > 0) select.appendChild(accessoryGroup);
 
         if (!selected) {
             cameraOption.selected = true;
         }
 
-        select.disabled = models.length === 0;
+        select.disabled = models.length === 0 && accessories.length === 0;
+        if (this.elements.modelContent) {
+            this.elements.modelContent.hidden = selectedAccessoryIndex !== null;
+        }
         this.updateActionButtons();
     }
 
     public updateActionButtons(): void {
-        const isModelTarget = this.mmdManager.getTimelineTarget() === "model";
+        const isAccessoryTarget = this.getSelectedAccessoryIndex() !== null;
+        const isModelTarget = !isAccessoryTarget && this.mmdManager.getTimelineTarget() === "model";
         const hasModel = this.mmdManager.getLoadedModels().length > 0;
         const enabled = isModelTarget && hasModel;
 
@@ -120,18 +163,29 @@ export class ModelInfoPanelController {
     }
 
     public getSelectState(): ModelInfoSelectState {
-        const select = this.elements.select;
-        if (!select) {
-            return {
-                innerHTML: '<option value="">-</option>',
-                value: "",
-                disabled: true,
-            };
+        const models = this.mmdManager.getLoadedModels();
+        const select = document.createElement("select");
+        const cameraOption = document.createElement("option");
+        cameraOption.value = MODEL_INFO_CAMERA_SELECT_VALUE;
+        cameraOption.textContent = "0: Camera";
+        select.appendChild(cameraOption);
+        for (const model of models) {
+            const option = document.createElement("option");
+            option.value = String(model.index);
+            option.textContent = `${model.index + 1}: ${model.name}`;
+            option.title = model.path;
+            select.appendChild(option);
         }
+        const activeModel = models.find((model) => model.active) ?? null;
+        const value = this.getSelectedAccessoryIndex() !== null
+            ? MODEL_INFO_CAMERA_SELECT_VALUE
+            : this.mmdManager.getTimelineTarget() === "model" && activeModel
+                ? String(activeModel.index)
+                : MODEL_INFO_CAMERA_SELECT_VALUE;
         return {
             innerHTML: select.innerHTML,
-            value: select.value,
-            disabled: select.disabled,
+            value,
+            disabled: models.length === 0,
         };
     }
 

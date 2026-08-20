@@ -753,6 +753,7 @@ export async function importProjectState(
         loadGlb?: (filePath: string) => Promise<boolean>;
         getLoadedAccessories?: () => Array<{ index: number }>;
         setAccessoryVisibility?: (index: number, visible: boolean) => boolean;
+        setAccessoryCastsShadow?: (index: number, castsShadow: boolean) => boolean;
         setAccessoryTransform?: (
             index: number,
             transform: Partial<NonNullable<ProjectAccessoryState["transform"]>>,
@@ -797,6 +798,12 @@ export async function importProjectState(
                 );
 
                 accessoryExtension.setAccessoryVisibility?.(restoredAccessoryIndex, Boolean(accessoryState.visible));
+                if (typeof accessoryState.castsShadow === "boolean") {
+                    accessoryExtension.setAccessoryCastsShadow?.(
+                        restoredAccessoryIndex,
+                        accessoryState.castsShadow,
+                    );
+                }
 
                 const transform = accessoryState.transform;
                 if (transform) {

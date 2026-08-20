@@ -330,9 +330,29 @@ async function initializeApp(): Promise<void> {
     if (new URLSearchParams(window.location.search).get("e2e") === "1") {
       window.mmdModokiE2e = {
         exportProjectState: () => mmdManager.exportProjectState(),
+        importProjectState: (project) => mmdManager.importProjectState(project),
         loadModel: (filePath) => mmdManager.loadPMX(filePath),
         loadModelInteractively: (filePath) => uiController.loadModelInteractively(filePath),
         loadAccessory: (filePath) => uiController.loadAccessoryFromPath(filePath),
+        getAccessoryVertexBufferDiagnostics: () => mmdManager.getAccessoryMeshes().map((mesh) => ({
+          mesh: mesh.name,
+          bounds: (() => {
+            mesh.computeWorldMatrix(true);
+            const box = mesh.getBoundingInfo().boundingBox;
+            return {
+              min: { x: box.minimumWorld.x, y: box.minimumWorld.y, z: box.minimumWorld.z },
+              max: { x: box.maximumWorld.x, y: box.maximumWorld.y, z: box.maximumWorld.z },
+            };
+          })(),
+          buffers: Object.entries(mesh.geometry?.getVertexBuffers() ?? {}).map(([kind, buffer]) => ({
+            kind,
+            byteStride: buffer.byteStride,
+            effectiveByteStride: buffer.effectiveByteStride,
+            byteOffset: buffer.byteOffset,
+            effectiveByteOffset: buffer.effectiveByteOffset,
+            size: buffer.getSize(),
+          })),
+        })),
         getLoadedModelCount: () => mmdManager.getLoadedModels().length,
         getModelBoneRenderedPosition: (modelIndex, boneName) => (
           mmdManager.getModelBoneRenderedPosition(modelIndex, boneName)

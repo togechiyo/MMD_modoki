@@ -51,8 +51,14 @@ PMX の材質フラグには、影に関するビットがあります。
 
 ## シャドウ生成設定
 
-現在の実装は、ディレクショナルライト + `CascadedShadowGenerator` を優先し、
-非対応環境では `ShadowGenerator` へフォールバックする方針です。
+現在の実装はディレクショナルライトを使い、WebGPU reverse depth では
+通常の `ShadowGenerator` を既定にします。通常 depth の WebGL2 では
+`CascadedShadowGenerator` も選択できます。
+
+WebGPU reverse depth と Babylon.js 9.2.0 の CSM を組み合わせると、単純な豆腐 OBJ / PMX の
+どちらでも、床の広い範囲が斜めの境界で暗くなる誤投影を確認しました。caster の bounds、法線、
+index、材質を変えても再現し、通常 shadow では誤投影が消えるため、OBJ 固有補正は入れません。
+広域 `.x` 表示で確認済みの reverse depth を維持し、互換性のない CSM 側を実行時に無効化します。
 
 共通設定:
 
@@ -412,7 +418,7 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
 
 現時点の暫定既定:
 
-- 影方式: `cascaded`
+- 影方式: `standard`（WebGPU reverse depth。WebGL2 では `cascaded` も選択可能）
 - cascade 数: `3`
 - 半影: `OFF`
 - 半影サイズ: `0.08`（実験 ON 時の初期値）
@@ -506,6 +512,7 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
 - 影範囲を広げるほど、同じ解像度でも 1 ピクセルあたりの密度は下がります。  
   必要に応じて `shadowFrustumSize` と解像度のトレードオフ調整が必要です。
 - `CascadedShadowGenerator` は近景と遠景で影品質を分けられますが、GPU コストは単一シャドウマップより重くなります。
-- 現在の CSM 設定は近景品質と遠景カバーのバランスを優先した固定値です。
+- WebGPU reverse depth では Babylon.js 9.2.0 の CSM 誤投影を避けるため選択不可です。依存更新時に再検証します。
+- WebGL2 の CSM 設定は近景品質と遠景カバーのバランスを優先した固定値です。
 - ステージごとに最適値は異なるため、将来的には CSM 専用パラメータを UI へ分離する余地があります。
 - 旧 project 読込時は、保存されている `shadowBias` / `shadowNormalBias` / `shadowMaxZ` に引っ張られることがあります。

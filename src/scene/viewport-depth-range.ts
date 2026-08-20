@@ -15,6 +15,13 @@ export function configureViewportDepthBuffer(
     return useReverseDepthBuffer;
 }
 
+export function isCascadedShadowCompatible(
+    engine: ViewportDepthBufferTarget,
+    cascadedShadowSupported: boolean,
+): boolean {
+    return cascadedShadowSupported && !engine.useReverseDepthBuffer;
+}
+
 export function getDefaultSkydomeDiameter(cameraMaxZ = DEFAULT_CAMERA_MAX_Z): number {
     return cameraMaxZ * DEFAULT_SKYDOME_FAR_PLANE_RATIO * 2;
 }

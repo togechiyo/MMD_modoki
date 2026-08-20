@@ -11,6 +11,7 @@ import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js"
 import { Material } from "@babylonjs/core/Materials/material";
 import { MultiMaterial } from "@babylonjs/core/Materials/multiMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { OBJFileLoader } from "@babylonjs/loaders/OBJ/objFileLoader.js";
 import { MmdManager } from "./mmd-manager";
 import { isDebugLogEnabled, logDebugIfEnabled, logError, logInfo, logWarn, toLogErrorData } from "./app-logger";
 import { applyWgslShaderPresetToMaterials } from "./scene/material-shader-service";
@@ -20,13 +21,15 @@ import { loadXIntoScene } from "./x-file-loader";
 import type { ProjectSerializedAccessoryTransformTrack } from "./types";
 import { copyProjectArrayToFloat32, copyProjectArrayToUint32, packFloat32Array, packFrameNumbers } from "./project/project-codec";
 
+export type AccessoryKind = "x" | "glb" | "obj";
+
 export type AccessoryState = {
     index: number;
     name: string;
     path: string;
     visible: boolean;
     castsShadow: boolean;
-    kind: "x" | "glb";
+    kind: AccessoryKind;
 };
 
 export type AccessoryTransformState = {
@@ -52,6 +55,7 @@ declare module "./mmd-manager" {
     interface MmdManager {
         loadX(filePath: string): Promise<boolean>;
         loadGlb(filePath: string): Promise<boolean>;
+        loadObj(filePath: string): Promise<boolean>;
         getLoadedAccessories(): AccessoryState[];
         clearAccessories(): void;
         setAccessoryVisibility(index: number, visible: boolean): boolean;
@@ -89,7 +93,7 @@ type XLoadHost = {
 };
 
 type AccessoryEntry = {
-    kind: "x" | "glb";
+    kind: AccessoryKind;
     name: string;
     path: string;
     root: TransformNode;
@@ -115,6 +119,7 @@ const tempRotation = Quaternion.Identity();
 const tempRotation2 = Quaternion.Identity();
 const X_ACCESSORY_IMPORT_SCALE = 10;
 const GLB_ACCESSORY_IMPORT_SCALE = 25;
+const OBJ_ACCESSORY_IMPORT_SCALE = 10;
 const GLB_ACCESSORY_MIN_VISIBLE_SIZE = 60;
 const GLB_ACCESSORY_MAX_AUTO_SCALE = 400;
 const GLB_DEBUG_FORCE_NEON_MATERIAL = false;
@@ -761,7 +766,7 @@ function logGlbReplacementDebug(accessoryName: string, meshes: readonly Abstract
 
 function createAccessoryEntryFromImport(
     host: XLoadHost & object,
-    kind: "x" | "glb",
+    kind: AccessoryKind,
     filePath: string,
     accessoryName: string,
     result: { transformNodes: TransformNode[]; meshes: AbstractMesh[] },
@@ -810,7 +815,7 @@ function createAccessoryEntryFromImport(
     }
     forceAccessoryHierarchyEnabled([...result.transformNodes, ...hierarchyMeshes, ...managedMeshes]);
     prepareManagedAccessoryMeshes(host, managedMeshes, kind !== "glb");
-    if (kind === "x") {
+    if (kind === "x" || kind === "obj") {
         const accessoryMaterials = collectAccessoryMaterials(managedMeshes);
         applyWgslShaderPresetToMaterials(
             host as Parameters<typeof applyWgslShaderPresetToMaterials>[0],
@@ -1135,6 +1140,7 @@ function toRadians(deg: number): number {
 const mmdManagerProto = MmdManager.prototype as unknown as {
     loadX?: (filePath: string) => Promise<boolean>;
     loadGlb?: (filePath: string) => Promise<boolean>;
+    loadObj?: (filePath: string) => Promise<boolean>;
     getLoadedAccessories?: () => AccessoryState[];
     clearAccessories?: () => void;
     setAccessoryVisibility?: (index: number, visible: boolean) => boolean;
@@ -1279,6 +1285,67 @@ if (!mmdManagerProto.loadGlb) {
     };
 }
 
+if (!mmdManagerProto.loadObj) {
+    mmdManagerProto.loadObj = async function(filePath: string): Promise<boolean> {
+        const host = this as unknown as XLoadHost;
+        try {
+            if (/^[a-z][a-z0-9+.-]*:\/\//i.test(filePath)) {
+                throw new Error("OBJ loading only accepts local file paths");
+            }
+
+            const { fileName, fileUrl } = splitFilePath(filePath);
+            logInfo("asset", "obj accessory load started", { filePath, fileName });
+            const data = await window.electronAPI.readTextFile(filePath);
+            if (data === null) {
+                throw new Error(`Unable to read OBJ file: ${filePath}`);
+            }
+
+            const loader = new OBJFileLoader({ skipMaterials: true });
+            const container = await loader.loadAssetContainerAsync(host.scene, data, fileUrl);
+            const meshes = container.meshes as AbstractMesh[];
+            if (meshes.length === 0) {
+                throw new Error("No mesh data found in OBJ file");
+            }
+
+            container.addAllToScene();
+            const accessoryName = fileName.replace(/\.[^/.]+$/, "") || fileName;
+            createAccessoryEntryFromImport(
+                host as XLoadHost & object,
+                "obj",
+                filePath,
+                accessoryName,
+                {
+                    transformNodes: container.transformNodes,
+                    meshes,
+                },
+                OBJ_ACCESSORY_IMPORT_SCALE,
+            );
+            host.applyToonShadowInfluenceToMeshes?.(meshes as Mesh[]);
+            const coplanarBiasedMaterialCount = host.refreshMmdCoplanarMaterialDepthBiasCorrection?.() ?? 0;
+            host.syncIblShadowsScene?.();
+            host.refreshShadowAfterSceneContentChanged?.();
+
+            logInfo("asset", "obj accessory load completed", {
+                filePath,
+                fileName,
+                accessoryName,
+                meshCount: meshes.length,
+                coplanarBiasedMaterialCount,
+                materialsSkipped: true,
+            });
+            return true;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            logError("asset", "obj accessory load failed", {
+                filePath,
+                ...toLogErrorData(err),
+            });
+            host.onError?.(`OBJ load error: ${message}`);
+            return false;
+        }
+    };
+}
+
 if (!mmdManagerProto.getLoadedAccessories) {
     mmdManagerProto.getLoadedAccessories = function(): AccessoryState[] {
         const entries = getAccessoryEntries(this as unknown as object);
@@ -1304,7 +1371,7 @@ if (!mmdManagerProto.getIblShadowAccessoryMeshes) {
     mmdManagerProto.getIblShadowAccessoryMeshes = function(): AbstractMesh[] {
         const entries = getAccessoryEntries(this as unknown as object);
         return entries
-            .filter((entry) => entry.kind === "x" && isAccessoryVisible(entry))
+            .filter((entry) => entry.kind !== "glb" && isAccessoryVisible(entry))
             .flatMap((entry) => entry.meshes.filter(isIblShadowAccessoryMeshCandidate));
     };
 }

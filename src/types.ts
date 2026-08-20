@@ -189,9 +189,28 @@ declare global {
         };
         mmdModokiE2e?: {
             exportProjectState: () => MmdModokiProjectFileV1;
+            importProjectState: (project: MmdModokiProjectFileV1) => Promise<{
+                loadedModels: number;
+                warnings: string[];
+            }>;
             loadModel: (filePath: string) => Promise<ModelInfo | null>;
             loadModelInteractively: (filePath: string) => Promise<ModelInfo | null>;
             loadAccessory: (filePath: string) => Promise<boolean>;
+            getAccessoryVertexBufferDiagnostics: () => Array<{
+                mesh: string;
+                bounds: {
+                    min: { x: number; y: number; z: number };
+                    max: { x: number; y: number; z: number };
+                };
+                buffers: Array<{
+                    kind: string;
+                    byteStride: number;
+                    effectiveByteStride: number;
+                    byteOffset: number;
+                    effectiveByteOffset: number;
+                    size: number;
+                }>;
+            }>;
             getLoadedModelCount: () => number;
             getModelBoneRenderedPosition: (
                 modelIndex: number,

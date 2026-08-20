@@ -198,7 +198,8 @@
 - [ ] Babylon.js Editor 互換 3D 形式の整理
 - [ ] glTF/GLB 読み込み
 - [ ] glTF/GLB アニメーション対応
-- [ ] OBJ 読み込み
+- [x] OBJ 読み込み最小 PoC（2026-08-20: MTLなし豆腐モデルをアクセサリとして読み込み、情報欄操作、transform / 表示 / 影 / pathのproject保存・再読み込みをE2E確認）
+- [ ] OBJのMTL / texture対応
 - [ ] STL 読み込み
 - [ ] `.babylon` 読み込み
 - [ ] 点群 / Gaussian Splat 形式（`.ply` / `.splat` / `.spz` / `.sog`）読み込み調査

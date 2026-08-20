@@ -56,7 +56,11 @@ MMD_modokiでは、ブラウザ型Viewerとの差として、Electron側でOBJ�
 - alpha test / alpha blend、両面、depth write
 - MMD向けtoon材質へ無理に変換せず、元材質を保持する経路
 
-最初のPoCはOBJを最優先とし、自作した小さな「豆腐モデル」で読み込み経路を確認する。fixtureは立方体1個を基本に、頂点、UV、normal、四角形面、単一MTL、小さなPNG textureを含める。実装後は情報欄への追加、transform、表示、影、削除、project保存 / 再読み込みまでを確認対象とする。
+最初のPoCはOBJを最優先とし、自作した小さな「豆腐モデル」で読み込み経路を確認する。Phase 0のfixtureは立方体1個、頂点、normal、四角形面だけを持ち、MTL、texture、外部参照は含めない。次段階でUV、単一MTL、小さなPNG textureを持つfixtureを追加する。
+
+2026-08-20にPhase 0を実装した。OBJはElectron IPCでローカルtextとして読み、Babylon.jsのOBJ parserを `skipMaterials: true` で呼び出す。既存accessoryとして情報欄へ追加し、transform、表示、影、削除、project保存 / 再読み込みを共通経路で扱う。unit testとElectron E2Eで読み込み・操作・復元を確認済みである。
+
+初回実装では、Viteの依存最適化から `@babylonjs/loaders` を除外したままdeep importしたため、OBJ loaderがアプリ本体とは別の `VertexBuffer` prototypeを使った。通常の `byteStride` は存在してもWebGPU向けの `effectiveByteStride` getterがなく、OBJをshadow casterへ登録した次フレームで `GPUVertexBufferLayout.arrayStride is undefined` が発生した。OBJ loaderのdeep importを `optimizeDeps.include` に明示し、Babylon coreを同じ最適化済みmodule graphへ統合して解消した。E2Eではload APIの成功だけで終わらせず、影ONのまま複数frameを描画して `pageerror` がないことと、実効strideが通常strideと一致することを確認する。
 
 MTLやtextureに `http://` / `https://` が指定されていても取得しない。相対pathの解決では、意図しないdirectory外参照も許可しない。
 

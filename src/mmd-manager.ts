@@ -378,6 +378,7 @@ import {
     DEFAULT_CAMERA_MAX_Z,
     DEFAULT_CAMERA_MIN_Z,
     getDefaultSkydomeDiameter,
+    isCascadedShadowCompatible,
 } from "./scene/viewport-depth-range";
 import {
     decodeDdsTextureToRgba,
@@ -1817,7 +1818,7 @@ ${beforeFogAppendBlock}
     );
     private shadowEnabled = true;
     private shadowDarknessValue = 0.05;
-    private shadowModeValue: ShadowMode = "cascaded";
+    private shadowModeValue: ShadowMode = "standard";
     private shadowFrustumSizeValue = 220;
     private shadowMaxZValue = 1000;
     private shadowDistanceMultiplierValue = 1;
@@ -3839,7 +3840,7 @@ ${beforeFogAppendBlock}
     private createConfiguredShadowGenerator(dirLight: DirectionalLight): ShadowGenerator {
         const maxTextureSize = this.engine.getCaps().maxTextureSize ?? 4096;
         const shadowMapSize = Math.min(8192, maxTextureSize);
-        const useCascaded = this.shadowModeValue === "cascaded" && CascadedShadowGenerator.IsSupported;
+        const useCascaded = this.shadowModeValue === "cascaded" && this.isCascadedShadowSupported();
         const shadowGenerator = useCascaded
             ? new CascadedShadowGenerator(shadowMapSize, dirLight, undefined, this.camera)
             : new ShadowGenerator(shadowMapSize, dirLight);
@@ -3887,7 +3888,7 @@ ${beforeFogAppendBlock}
     }
 
     public isCascadedShadowSupported(): boolean {
-        return CascadedShadowGenerator.IsSupported;
+        return isCascadedShadowCompatible(this.engine, CascadedShadowGenerator.IsSupported);
     }
 
     public getEffectiveShadowMode(): ShadowMode {
@@ -3900,7 +3901,7 @@ ${beforeFogAppendBlock}
 
     public set shadowMode(mode: ShadowMode) {
         const requestedMode: ShadowMode = mode === "standard" ? "standard" : "cascaded";
-        const nextMode: ShadowMode = requestedMode === "cascaded" && !CascadedShadowGenerator.IsSupported
+        const nextMode: ShadowMode = requestedMode === "cascaded" && !this.isCascadedShadowSupported()
             ? "standard"
             : requestedMode;
         if (this.shadowModeValue === nextMode && this.getEffectiveShadowMode() === nextMode) return;

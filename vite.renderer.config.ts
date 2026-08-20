@@ -8,6 +8,9 @@ export default defineConfig({
     tailwindcss(),
   ],
   optimizeDeps: {
+    include: [
+      '@babylonjs/loaders/OBJ/objFileLoader.js',
+    ],
     exclude: [
       '@babylonjs/loaders',
       '@babylonjs/loaders/glTF',

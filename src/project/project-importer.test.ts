@@ -1053,4 +1053,32 @@ describe("importProjectState", () => {
         expect(setAccessoryVisibility).toHaveBeenCalledWith(0, false);
         expect(setAccessoryCastsShadow).toHaveBeenCalledWith(0, false);
     });
+
+    it("restores OBJ accessories with the OBJ loader", async () => {
+        const host = createHost();
+        let loadedAccessoryCount = 0;
+        const loadObj = vi.fn(async () => {
+            loadedAccessoryCount += 1;
+            return true;
+        });
+        Object.assign(host, {
+            loadObj,
+            getLoadedAccessories: () => Array.from(
+                { length: loadedAccessoryCount },
+                (_, index) => ({ index }),
+            ),
+        });
+        const project = createProject({
+            accessories: [{
+                path: "C:/accessories/tofu.obj",
+                visible: true,
+                castsShadow: true,
+            }],
+        });
+
+        const result = await importProjectState(host, project);
+
+        expect(result.warnings).toEqual([]);
+        expect(loadObj).toHaveBeenCalledWith("C:/accessories/tofu.obj");
+    });
 });

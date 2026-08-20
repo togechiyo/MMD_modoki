@@ -17,6 +17,7 @@
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |
 | adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | シーン項目のキー登録順を決める |
 | adopted | [報告された要望をそのままロードマップ確約にしない](./decisions/reported-requests-are-not-roadmap-commitments.md) | Issue や外部報告を実装計画へ昇格するか判断する |
+| accepted-with-constraints | [Agent作業は現行branch・offline-first・fixture中心でGUI確認する](./decisions/keep-agent-work-local-fixture-driven-and-gui-verified.md) | branch、通信、model asset、UI検証の安全境界を決める |
 
 ## 却下
 

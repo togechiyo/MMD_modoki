@@ -4,6 +4,7 @@ import {
     DEFAULT_CAMERA_MAX_Z,
     DEFAULT_SKYDOME_FAR_PLANE_RATIO,
     getDefaultSkydomeDiameter,
+    isCascadedShadowCompatible,
 } from "./viewport-depth-range";
 
 describe("viewport depth range", () => {
@@ -30,5 +31,14 @@ describe("viewport depth range", () => {
 
         expect(configureViewportDepthBuffer(engine, "webgl")).toBe(false);
         expect(engine.useReverseDepthBuffer).toBe(false);
+    });
+
+    it("disables cascaded shadows when reverse depth is active", () => {
+        expect(isCascadedShadowCompatible({ useReverseDepthBuffer: true }, true)).toBe(false);
+    });
+
+    it("keeps cascaded shadows available with the standard depth buffer", () => {
+        expect(isCascadedShadowCompatible({ useReverseDepthBuffer: false }, true)).toBe(true);
+        expect(isCascadedShadowCompatible({ useReverseDepthBuffer: false }, false)).toBe(false);
     });
 });

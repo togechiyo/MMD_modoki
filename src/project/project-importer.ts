@@ -752,6 +752,7 @@ export async function importProjectState(
     const accessoryExtension = host as {
         loadX?: (filePath: string) => Promise<boolean>;
         loadGlb?: (filePath: string) => Promise<boolean>;
+        loadObj?: (filePath: string) => Promise<boolean>;
         getLoadedAccessories?: () => Array<{ index: number }>;
         setAccessoryVisibility?: (index: number, visible: boolean) => boolean;
         setAccessoryCastsShadow?: (index: number, castsShadow: boolean) => boolean;
@@ -767,88 +768,88 @@ export async function importProjectState(
         ? data.keyframes.accessoryTransformAnimations
         : [];
     if (accessories.length > 0) {
-        if (typeof accessoryExtension.loadX !== "function") {
-            warnings.push("Accessory restore skipped: accessory loader is unavailable");
-        } else {
-            for (let accessoryIndex = 0; accessoryIndex < accessories.length; accessoryIndex += 1) {
-                const accessoryState = accessories[accessoryIndex];
-                if (!accessoryState || typeof accessoryState.path !== "string" || accessoryState.path.trim().length === 0) {
-                    warnings.push(`Accessory restore skipped at index ${accessoryIndex}: invalid path`);
-                    continue;
-                }
+        for (let accessoryIndex = 0; accessoryIndex < accessories.length; accessoryIndex += 1) {
+            const accessoryState = accessories[accessoryIndex];
+            if (!accessoryState || typeof accessoryState.path !== "string" || accessoryState.path.trim().length === 0) {
+                warnings.push(`Accessory restore skipped at index ${accessoryIndex}: invalid path`);
+                continue;
+            }
 
-                const normalizedPath = accessoryState.path.replace(/\\/g, "/");
-                const ext = normalizedPath.substring(normalizedPath.lastIndexOf(".") + 1).toLowerCase();
-                const loadAccessory = ext === "glb"
-                    ? accessoryExtension.loadGlb
-                    : accessoryExtension.loadX;
-                if (typeof loadAccessory !== "function") {
-                    warnings.push(`Accessory restore skipped: unsupported accessory type for ${accessoryState.path}`);
-                    continue;
-                }
+            const normalizedPath = accessoryState.path.replace(/\\/g, "/");
+            const ext = normalizedPath.substring(normalizedPath.lastIndexOf(".") + 1).toLowerCase();
+            const loadAccessory = ext === "glb"
+                ? accessoryExtension.loadGlb
+                : ext === "obj"
+                    ? accessoryExtension.loadObj
+                    : ext === "x"
+                        ? accessoryExtension.loadX
+                        : undefined;
+            if (typeof loadAccessory !== "function") {
+                warnings.push(`Accessory restore skipped: unsupported accessory type for ${accessoryState.path}`);
+                continue;
+            }
 
-                const beforeCount = accessoryExtension.getLoadedAccessories?.().length ?? 0;
-                const loaded = await loadAccessory(accessoryState.path);
-                if (!loaded) {
-                    warnings.push(`Accessory load failed: ${accessoryState.path}`);
-                    continue;
-                }
-                const restoredAccessoryIndex = Math.max(
-                    0,
-                    (accessoryExtension.getLoadedAccessories?.().length ?? (beforeCount + 1)) - 1,
-                );
+            const beforeCount = accessoryExtension.getLoadedAccessories?.().length ?? 0;
+            const loaded = await loadAccessory.call(accessoryExtension, accessoryState.path);
+            if (!loaded) {
+                warnings.push(`Accessory load failed: ${accessoryState.path}`);
+                continue;
+            }
+            const restoredAccessoryIndex = Math.max(
+                0,
+                (accessoryExtension.getLoadedAccessories?.().length ?? (beforeCount + 1)) - 1,
+            );
 
-                accessoryExtension.setAccessoryVisibility?.(restoredAccessoryIndex, Boolean(accessoryState.visible));
-                if (typeof accessoryState.castsShadow === "boolean") {
-                    accessoryExtension.setAccessoryCastsShadow?.(
-                        restoredAccessoryIndex,
-                        accessoryState.castsShadow,
-                    );
-                }
-
-                const transform = accessoryState.transform;
-                if (transform) {
-                    accessoryExtension.setAccessoryTransform?.(restoredAccessoryIndex, {
-                        position: {
-                            x: Number.isFinite(transform.position?.x) ? transform.position.x : 0,
-                            y: Number.isFinite(transform.position?.y) ? transform.position.y : 0,
-                            z: Number.isFinite(transform.position?.z) ? transform.position.z : 0,
-                        },
-                        rotationDeg: {
-                            x: Number.isFinite(transform.rotationDeg?.x) ? transform.rotationDeg.x : 0,
-                            y: Number.isFinite(transform.rotationDeg?.y) ? transform.rotationDeg.y : 0,
-                            z: Number.isFinite(transform.rotationDeg?.z) ? transform.rotationDeg.z : 0,
-                        },
-                        scale: Number.isFinite(transform.scale) ? transform.scale : 1,
-                    });
-                }
-
-                let parentModelIndex: number | null = null;
-                if (accessoryState.parentModelInstanceId || accessoryState.parentModelPath) {
-                    parentModelIndex = findLoadedModelIndex(
-                        accessoryState.parentModelInstanceId,
-                        accessoryState.parentModelPath,
-                    );
-                    if (parentModelIndex < 0) {
-                        warnings.push(
-                            `Accessory parent model not found: ${accessoryState.parentModelInstanceId ?? accessoryState.parentModelPath} (${accessoryState.path})`,
-                        );
-                        parentModelIndex = null;
-                    }
-                }
-
-                accessoryExtension.setAccessoryParent?.(
+            accessoryExtension.setAccessoryVisibility?.(restoredAccessoryIndex, Boolean(accessoryState.visible));
+            if (typeof accessoryState.castsShadow === "boolean") {
+                accessoryExtension.setAccessoryCastsShadow?.(
                     restoredAccessoryIndex,
-                    parentModelIndex,
-                    typeof accessoryState.parentBoneName === "string" && accessoryState.parentBoneName.length > 0
-                        ? accessoryState.parentBoneName
-                        : null,
+                    accessoryState.castsShadow,
                 );
+            }
 
-                const keyframeTrack = accessoryKeyframeTracks[accessoryIndex] ?? null;
-                if (accessoryExtension.setAccessoryTransformKeyframes && keyframeTrack) {
-                    accessoryExtension.setAccessoryTransformKeyframes(restoredAccessoryIndex, keyframeTrack);
+            const transform = accessoryState.transform;
+            if (transform) {
+                accessoryExtension.setAccessoryTransform?.(restoredAccessoryIndex, {
+                    position: {
+                        x: Number.isFinite(transform.position?.x) ? transform.position.x : 0,
+                        y: Number.isFinite(transform.position?.y) ? transform.position.y : 0,
+                        z: Number.isFinite(transform.position?.z) ? transform.position.z : 0,
+                    },
+                    rotationDeg: {
+                        x: Number.isFinite(transform.rotationDeg?.x) ? transform.rotationDeg.x : 0,
+                        y: Number.isFinite(transform.rotationDeg?.y) ? transform.rotationDeg.y : 0,
+                        z: Number.isFinite(transform.rotationDeg?.z) ? transform.rotationDeg.z : 0,
+                    },
+                    scale: Number.isFinite(transform.scale) ? transform.scale : 1,
+                });
+            }
+
+            let parentModelIndex: number | null = null;
+            if (accessoryState.parentModelInstanceId || accessoryState.parentModelPath) {
+                parentModelIndex = findLoadedModelIndex(
+                    accessoryState.parentModelInstanceId,
+                    accessoryState.parentModelPath,
+                );
+                if (parentModelIndex < 0) {
+                    warnings.push(
+                        `Accessory parent model not found: ${accessoryState.parentModelInstanceId ?? accessoryState.parentModelPath} (${accessoryState.path})`,
+                    );
+                    parentModelIndex = null;
                 }
+            }
+
+            accessoryExtension.setAccessoryParent?.(
+                restoredAccessoryIndex,
+                parentModelIndex,
+                typeof accessoryState.parentBoneName === "string" && accessoryState.parentBoneName.length > 0
+                    ? accessoryState.parentBoneName
+                    : null,
+            );
+
+            const keyframeTrack = accessoryKeyframeTracks[accessoryIndex] ?? null;
+            if (accessoryExtension.setAccessoryTransformKeyframes && keyframeTrack) {
+                accessoryExtension.setAccessoryTransformKeyframes(restoredAccessoryIndex, keyframeTrack);
             }
         }
     }

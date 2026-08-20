@@ -3236,7 +3236,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: ["pmx", "pmd", "x", "vmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr"] },
+            { name: "Supported files", extensions: ["pmx", "pmd", "x", "obj", "vmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3298,6 +3298,10 @@ export class UIController {
                 await this.loadModelInteractively(filePath);
                 return;
             case "x": {
+                await this.loadAccessoryFromPath(filePath);
+                return;
+            }
+            case "obj": {
                 await this.loadAccessoryFromPath(filePath);
                 return;
             }
@@ -3558,14 +3562,27 @@ export class UIController {
     }
 
     public async loadAccessoryFromPath(filePath: string): Promise<boolean> {
-        this.setStatus("Loading X model...", true);
-        const ok = await this.mmdManager.loadX(filePath);
-        if (!ok) {
-            this.setStatus("X model load failed", false);
+        const normalizedPath = filePath.replace(/\\/g, "/");
+        const extension = normalizedPath.substring(normalizedPath.lastIndexOf(".") + 1).toLowerCase();
+        const formatLabel = extension === "obj" ? "OBJ" : "X";
+        const loadAccessory = extension === "obj"
+            ? this.mmdManager.loadObj.bind(this.mmdManager)
+            : extension === "x"
+                ? this.mmdManager.loadX.bind(this.mmdManager)
+                : null;
+        if (!loadAccessory) {
+            this.setStatus(`Unsupported accessory format: ${extension || "unknown"}`, false);
             return false;
         }
 
-        this.setStatus("X model loaded", false);
+        this.setStatus(`Loading ${formatLabel} model...`, true);
+        const ok = await loadAccessory(filePath);
+        if (!ok) {
+            this.setStatus(`${formatLabel} model load failed`, false);
+            return false;
+        }
+
+        this.setStatus(`${formatLabel} model loaded`, false);
         const accessories = this.mmdManager.getLoadedAccessories();
         const loadedAccessory = accessories[accessories.length - 1] ?? null;
         if (loadedAccessory) {
@@ -3576,7 +3593,7 @@ export class UIController {
             this.bottomPanelLayoutController?.applyMode("accessory");
         }
         this.refreshModelSelector();
-        this.showToast(`Loaded X model: ${filePath.replace(/^.*[\\/]/, "")}`, "success");
+        this.showToast(`Loaded ${formatLabel} model: ${filePath.replace(/^.*[\\/]/, "")}`, "success");
         return true;
     }
 

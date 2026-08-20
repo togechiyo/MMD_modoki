@@ -703,7 +703,7 @@
     "dialog.renderOrder.orderNote": "上から順に描画します。PMX内の材質順はモデルファイルの並びを維持します。",
     "dialog.renderOrder.coplanarCorrection": "同一平面補正",
     "dialog.renderOrder.coplanarOff": "OFF",
-    "dialog.renderOrder.coplanarNote": "大型で薄い材質面の重なりだけを自動検出し、PMX材質順に小さな深度バイアスを適用します。1=弱、4=強。",
+    "dialog.renderOrder.coplanarNote": "PMXとXアクセサリの大型で薄い材質面の重なりだけを自動検出し、材質順に小さな深度バイアスを適用します。1=弱、4=強。",
     "dialog.preferences.body": "設定画面はv0.2 UI再設計の入口として追加しました。言語とruntimeは現行ツールバーから操作できます。",
     "dialog.background.title": "デフォルト空設定",
     "dialog.background.body": "デフォルト空の見た目を調整します。",

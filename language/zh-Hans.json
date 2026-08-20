@@ -703,7 +703,7 @@
     "dialog.renderOrder.orderNote": "模型从上到下渲染。每个模型内部的PMX材质顺序保持不变。",
     "dialog.renderOrder.coplanarCorrection": "共面校正",
     "dialog.renderOrder.coplanarOff": "关闭",
-    "dialog.renderOrder.coplanarNote": "仅对重叠的大型薄材质面按PMX材质顺序自动应用小幅深度偏移。1=弱，4=强。",
+    "dialog.renderOrder.coplanarNote": "仅对PMX模型和X附件中重叠的大型薄材质面按材质顺序自动应用小幅深度偏移。1=弱，4=强。",
     "dialog.preferences.body": "The preferences screen has been added as an entry point for the v0.2 UI redesign. Language and runtime are still controlled from the current toolbar.",
     "dialog.background.title": "默认天空设置",
     "dialog.background.body": "调整默认天空背景的外观。",

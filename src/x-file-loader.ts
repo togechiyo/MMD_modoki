@@ -20,6 +20,7 @@ import { MultiMaterial } from "@babylonjs/core/Materials/multiMaterial";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
 import { MmdPluginMaterialSphereTextureBlendMode } from "babylon-mmd/esm/Loader/mmdPluginMaterial";
+import { resolveXMaterialRenderPolicy } from "./shared/x-material-render-policy";
 
 type Tok = { t: "id" | "num" | "str" | "sym"; v: string };
 type XMat = {
@@ -633,13 +634,22 @@ function getDefaultXToonTexture(scene: Scene): DynamicTexture {
     return texture;
 }
 
-function configureTransparentXMaterial(mat: MmdStandardMaterial): void {
+function configureAlphaBlendXMaterial(mat: MmdStandardMaterial): void {
     mat.needDepthPrePass = true;
     mat.separateCullingPass = true;
     mat.useSpecularOverAlpha = false;
     mat.forceDepthWrite = false;
     mat.alphaCutOff = 0;
     mat.transparencyMode = Material.MATERIAL_ALPHABLEND;
+}
+
+function configureAlphaCutoutXMaterial(mat: MmdStandardMaterial): void {
+    mat.needDepthPrePass = false;
+    mat.separateCullingPass = false;
+    mat.useSpecularOverAlpha = false;
+    mat.forceDepthWrite = false;
+    mat.alphaCutOff = 0.5;
+    mat.transparencyMode = Material.MATERIAL_ALPHATEST;
 }
 
 function texturePathCandidates(rawName: string): string[] {
@@ -783,20 +793,26 @@ function buildMat(scene: Scene, m: XMat, cache: Map<XMat, MmdStandardMaterial>):
     mat.specularColor = m.specular.clone();
     mat.emissiveColor = m.emissive.clone();
     mat.backFaceCulling = false;
-    if (m.diffuse.a < 0.999) {
-        configureTransparentXMaterial(mat);
-    }
+    const hasAlphaCapableTexture = Boolean(m.textureUrl && isAlphaCapableTextureUrl(m.textureUrl));
+    const renderPolicy = resolveXMaterialRenderPolicy(m.diffuse.a, hasAlphaCapableTexture);
     if (m.textureUrl) {
         const diffuseTexture = new Texture(m.textureUrl, scene, false, true);
         mat.diffuseTexture = diffuseTexture;
 
         // .x accessories bypass babylon-mmd's PMX alpha evaluation path, so
         // enable alpha usage explicitly for common alpha-capable texture formats.
-        if (isAlphaCapableTextureUrl(m.textureUrl)) {
+        // Opaque .x materials use alpha test for texture cutouts so foliage and
+        // fences participate in the depth buffer instead of unstable mesh-level
+        // alpha blending. Explicit material translucency remains alpha blended.
+        if (hasAlphaCapableTexture) {
             diffuseTexture.hasAlpha = true;
             mat.useAlphaFromDiffuseTexture = true;
-            configureTransparentXMaterial(mat);
         }
+    }
+    if (renderPolicy === "cutout") {
+        configureAlphaCutoutXMaterial(mat);
+    } else if (renderPolicy === "blend") {
+        configureAlphaBlendXMaterial(mat);
     }
     if (m.sphereTextureUrl) {
         const sphereTex = new Texture(m.sphereTextureUrl, scene, false, true);

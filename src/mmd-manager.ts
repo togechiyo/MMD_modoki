@@ -2467,6 +2467,9 @@ ${beforeFogAppendBlock}
                 if (units !== 0) appliedMaterialCount += 1;
             }
         }
+        appliedMaterialCount += this.refreshAccessoryCoplanarMaterialDepthBiasCorrection?.(
+            this.mmdCoplanarDepthBiasStrengthValue,
+        ) ?? 0;
         return appliedMaterialCount;
     }
 

@@ -177,6 +177,7 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [材質 alpha / 同一平面描画ポリシー 2026-08-20](./material-alpha-coplanar-rendering-policy-2026-08-20.md)
 - [MMD 描画順整理 実装メモ 2026-08-13](./mmd-render-order-implementation-2026-08-13.md)
 
 - [PMX 顔描画崩れの原因仮説メモ](./face-render-corruption-investigation.md)
@@ -184,6 +185,7 @@
 - [MMD 顔 alpha 透過調査](./mmd-face-alpha-transparency-investigation-2026-06-27.md)
 - [DDS テクスチャ読み込み調査メモ](./dds-texture-webgpu-investigation-2026-06-27.md)
 - [BMP alpha transparency investigation](./bmp-alpha-transparency-investigation-2026-06-28.md)
+- [`.x` アクセサリ alpha / 同一平面描画メモ 2026-08-20](./x-accessory-alpha-coplanar-rendering-note-2026-08-20.md)
 - [Mac / Linux file URL texture whiteout 調査](./mac-linux-file-url-texture-whiteout-2026-07-14.md)
 - [Material shader customization guide](./material-shader-customization-guide.md)
 - [Babylon.js 公式 Material カタログ 2026-07-30](./babylon-official-material-catalog-2026-07-30.md)

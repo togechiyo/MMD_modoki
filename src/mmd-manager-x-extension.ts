@@ -15,6 +15,7 @@ import { MmdManager } from "./mmd-manager";
 import { isDebugLogEnabled, logDebugIfEnabled, logError, logInfo, logWarn, toLogErrorData } from "./app-logger";
 import { applyWgslShaderPresetToMaterials } from "./scene/material-shader-service";
 import { stabilizeLargeThinLoadedMesh } from "./scene/mesh-render-stability";
+import { applyAccessoryCoplanarMaterialDepthBias } from "./scene/accessory-coplanar-depth-bias";
 import { loadXIntoScene } from "./x-file-loader";
 import type { ProjectSerializedAccessoryTransformTrack } from "./types";
 import { copyProjectArrayToFloat32, copyProjectArrayToUint32, packFloat32Array, packFrameNumbers } from "./project/project-codec";
@@ -69,6 +70,7 @@ declare module "./mmd-manager" {
         getModelBoneNames(modelIndex: number): string[];
         getAccessoryMeshes(): AbstractMesh[];
         getIblShadowAccessoryMeshes(): AbstractMesh[];
+        refreshAccessoryCoplanarMaterialDepthBiasCorrection(strength: unknown): number;
     }
 }
 
@@ -83,6 +85,7 @@ type XLoadHost = {
     syncIblShadowsScene?: () => void;
     refreshShadowAfterSceneContentChanged?: () => void;
     getShadowEnabled?: () => boolean;
+    refreshMmdCoplanarMaterialDepthBiasCorrection?: () => number;
 };
 
 type AccessoryEntry = {
@@ -1150,6 +1153,7 @@ const mmdManagerProto = MmdManager.prototype as unknown as {
     getModelBoneNames?: (modelIndex: number) => string[];
     getAccessoryMeshes?: () => AbstractMesh[];
     getIblShadowAccessoryMeshes?: () => AbstractMesh[];
+    refreshAccessoryCoplanarMaterialDepthBiasCorrection?: (strength: unknown) => number;
 };
 
 if (!mmdManagerProto.loadX) {
@@ -1182,6 +1186,7 @@ if (!mmdManagerProto.loadX) {
                 X_ACCESSORY_IMPORT_SCALE,
             );
             host.applyToonShadowInfluenceToMeshes?.(result.meshes as Mesh[]);
+            const coplanarBiasedMaterialCount = host.refreshMmdCoplanarMaterialDepthBiasCorrection?.() ?? 0;
             host.syncIblShadowsScene?.();
             host.refreshShadowAfterSceneContentChanged?.();
 
@@ -1190,6 +1195,7 @@ if (!mmdManagerProto.loadX) {
                 fileName,
                 accessoryName,
                 meshCount: result.meshes.length,
+                coplanarBiasedMaterialCount,
             });
             return true;
         } catch (err: unknown) {
@@ -1332,6 +1338,17 @@ if (!mmdManagerProto.toggleAccessoryVisibility) {
         setAccessoryVisible(entry, next);
         (this as unknown as XLoadHost).syncIblShadowsScene?.();
         return next;
+    };
+}
+
+if (!mmdManagerProto.refreshAccessoryCoplanarMaterialDepthBiasCorrection) {
+    mmdManagerProto.refreshAccessoryCoplanarMaterialDepthBiasCorrection = function(strength: unknown): number {
+        let appliedMaterialCount = 0;
+        for (const entry of getAccessoryEntries(this as unknown as object)) {
+            if (entry.kind !== "x") continue;
+            appliedMaterialCount += applyAccessoryCoplanarMaterialDepthBias(entry.meshes, strength);
+        }
+        return appliedMaterialCount;
     };
 }
 

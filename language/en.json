@@ -703,7 +703,7 @@
     "dialog.renderOrder.orderNote": "Models render from top to bottom. PMX material order inside each model is preserved.",
     "dialog.renderOrder.coplanarCorrection": "Coplanar correction",
     "dialog.renderOrder.coplanarOff": "Off",
-    "dialog.renderOrder.coplanarNote": "Automatically applies a small depth bias in PMX material order only to overlapping large, thin material surfaces. 1=weak, 4=strong.",
+    "dialog.renderOrder.coplanarNote": "Automatically applies a small depth bias in material order only to overlapping large, thin surfaces in PMX models and X accessories. 1=weak, 4=strong.",
     "dialog.preferences.body": "The preferences screen has been added as an entry point for the v0.2 UI redesign. Language and runtime are still controlled from the current toolbar.",
     "dialog.background.title": "Default Sky Settings",
     "dialog.background.body": "Customize the default sky background.",

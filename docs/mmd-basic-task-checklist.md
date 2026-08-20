@@ -484,6 +484,19 @@
 
 詳細: [MMD 描画順整理 実装メモ 2026-08-13](./mmd-render-order-implementation-2026-08-13.md)
 
+## 2026-08-20 `.x` アクセサリ描画整理
+
+- [x] PMX / `.x` 共通の alpha 分類・同一平面補正ポリシー、閾値、適用タイミング、制約、確認項目を文書化
+- [x] alpha 対応形式のテクスチャを一律 Alpha Blend にしていた処理を、材質半透明とテクスチャカットアウトへ分離
+- [x] 材質 alpha が不透明な葉・柵等を Alpha Test + 通常 depth write 経路へ移す
+- [ ] 同じ街 `.x` で樹木、階段、路面、ガラス、影の実機比較を行う
+- [x] Alpha Test 分離後も残る重複面だけを対象に、SubMesh の face material bounds と既存の同一平面補正を接続
+- [ ] 同一平面補正 `OFF / 1 / 2 / 4` で街 `.x` の階段・路面と副作用を実機比較する
+
+詳細: [`.x` アクセサリ alpha / 同一平面描画メモ 2026-08-20](./x-accessory-alpha-coplanar-rendering-note-2026-08-20.md)
+
+共通方針: [材質 alpha / 同一平面描画ポリシー 2026-08-20](./material-alpha-coplanar-rendering-policy-2026-08-20.md)
+
 ## 2026-08-13 ウィンドウメニュー・UI倍率
 
 - [x] 「ウィンドウ」メニューへ既存の UI 表示切替を移動

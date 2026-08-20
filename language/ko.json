@@ -703,7 +703,7 @@
     "dialog.renderOrder.orderNote": "위에서 아래 순서로 렌더합니다. 각 모델의 PMX 재질 순서는 유지됩니다.",
     "dialog.renderOrder.coplanarCorrection": "동일 평면 보정",
     "dialog.renderOrder.coplanarOff": "끔",
-    "dialog.renderOrder.coplanarNote": "겹치는 크고 얇은 재질 면에만 PMX 재질 순서대로 작은 깊이 바이어스를 자동 적용합니다. 1=약함, 4=강함.",
+    "dialog.renderOrder.coplanarNote": "PMX 모델과 X 액세서리에서 겹치는 크고 얇은 재질 면에만 재질 순서대로 작은 깊이 바이어스를 자동 적용합니다. 1=약함, 4=강함.",
     "dialog.preferences.body": "The preferences screen has been added as an entry point for the v0.2 UI redesign. Language and runtime are still controlled from the current toolbar.",
     "dialog.background.title": "기본 하늘 설정",
     "dialog.background.body": "기본 하늘 배경의 모양을 조정합니다.",

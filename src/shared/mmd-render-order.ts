@@ -57,6 +57,37 @@ export function getMmdGeometryBoundsFromPositions(
     return Number.isFinite(min.x) && Number.isFinite(max.x) ? { min, max } : null;
 }
 
+export function getMmdGeometryBoundsFromIndexedRange(
+    positions: ArrayLike<number> | null | undefined,
+    indices: ArrayLike<number> | null | undefined,
+    indexStart: number,
+    indexCount: number,
+): MmdAxisAlignedBounds | null {
+    if (!positions || positions.length < 3 || !indices || indices.length === 0) return null;
+    const start = Math.max(0, Math.min(indices.length, Math.trunc(indexStart)));
+    const end = Math.max(start, Math.min(indices.length, start + Math.max(0, Math.trunc(indexCount))));
+    if (start === end) return null;
+
+    const min = { x: Infinity, y: Infinity, z: Infinity };
+    const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+    for (let indexOffset = start; indexOffset < end; indexOffset += 1) {
+        const vertexIndex = Math.trunc(Number(indices[indexOffset]));
+        const positionOffset = vertexIndex * 3;
+        if (vertexIndex < 0 || positionOffset + 2 >= positions.length) continue;
+        const x = Number(positions[positionOffset]);
+        const y = Number(positions[positionOffset + 1]);
+        const z = Number(positions[positionOffset + 2]);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+        min.x = Math.min(min.x, x);
+        min.y = Math.min(min.y, y);
+        min.z = Math.min(min.z, z);
+        max.x = Math.max(max.x, x);
+        max.y = Math.max(max.y, y);
+        max.z = Math.max(max.z, z);
+    }
+    return Number.isFinite(min.x) && Number.isFinite(max.x) ? { min, max } : null;
+}
+
 export function getMmdMaterialAlphaIndex(modelRenderOrder: number, materialOrder: number): number {
     const normalizedModelOrder = normalizeMmdModelRenderOrder(modelRenderOrder, 0);
     const normalizedMaterialOrder = Math.max(0, Math.trunc(Number(materialOrder) || 0));

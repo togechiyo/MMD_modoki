@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     DEFAULT_MMD_RENDER_ORDER_MODE,
+    getMmdGeometryBoundsFromIndexedRange,
     getMmdGeometryBoundsFromPositions,
     getMmdCoplanarMaterialDepthBiasUnits,
     MMD_RENDER_ORDER_ALPHA_INDEX_BASE,
@@ -52,6 +53,27 @@ describe("MMD render order", () => {
         ]))).toEqual({
             min: { x: -10, y: expect.closeTo(-0.0316), z: -20 },
             max: { x: 10, y: expect.closeTo(-0.0316), z: 20 },
+        });
+    });
+
+    it("derives a material bound from only its submesh index range", () => {
+        const positions = new Float32Array([
+            -100, 30, -100,
+            100, 30, 100,
+            -20, 0, -10,
+            20, 0, -10,
+            20, 0, 10,
+            -20, 0, 10,
+        ]);
+        const indices = new Uint32Array([
+            0, 1, 0,
+            2, 3, 4,
+            2, 4, 5,
+        ]);
+
+        expect(getMmdGeometryBoundsFromIndexedRange(positions, indices, 3, 6)).toEqual({
+            min: { x: -20, y: 0, z: -10 },
+            max: { x: 20, y: 0, z: 10 },
         });
     });
 

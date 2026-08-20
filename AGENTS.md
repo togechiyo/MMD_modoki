@@ -213,6 +213,18 @@ UI導線の変更では、可能なら `test:e2e` を実行し、`lint` / `smoke
 - [docs/physics-runtime-spec.md](./docs/physics-runtime-spec.md)
 - [docs/troubleshooting.md](./docs/troubleshooting.md)
 
+## Insights 運用
+
+`insights/` は、次回以降の AI agent の判断を変える再利用可能な知見を置く場所です。人間向けの詳しい説明や調査経緯は `docs/` に残し、insight card には適用条件、判断、避けること、証拠、再確認条件を短く記録します。
+
+- 作業開始時は [Insights Index](./insights/index.md) を確認し、現在の問題に関係する card だけを読む
+- 所有者が採用、却下、保留、条件を明示した場合は [Human Decisions](./insights/decision-index.md) を更新する。外部要望、実装済みという事実、曖昧な会話だけから decision を推定しない
+- ユーザー実機確認の OK / NG は技術的知見の証拠として扱い、採否の明言がない限り `decision` にはしない
+- 未確定情報は `observation`、根拠を得た知見は `verified`、複数条件で有効な既定判断だけを `policy` とする
+- 前提、確認結果、所有者判断が変わった場合は、該当 card を同じ作業内で更新または `retired` にし、索引も同期する
+- 通常の進捗、TODO、その場限りの実装説明は card 化せず、新規作成前に既存 card と `docs/` を検索する
+- 詳細な形式と退役ルールは [Insights 運用ガイド](./insights/README.md) に従う
+
 ## エージェント向け実務ガイド
 
 - レビュー依頼では、要約より先にバグ、回帰、リスク、欠けているテストを重視する

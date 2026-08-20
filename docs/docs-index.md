@@ -68,6 +68,7 @@
 
 - [v0.2 作業メモ](./v0.2-task-memo.md)
 - [v0.2 作業チェックリスト](./v0.2-task-checklist.md)
+- [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)
 - [v0.2.2 リリースノート](./v0.2.2-release-note.md)
 - [v0.2.x リリースフィードバック台帳](./v0.2-feedback.md)
 - [v0.2.0 リリースノート](./v0.2.0-release-note.md)
@@ -130,6 +131,7 @@
 
 ## カメラ / タイムライン / キーフレーム
 
+- [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)
 - [カメラ実装仕様](./camera-implementation-spec.md)
 - [カメラ用ポストエフェクト現行仕様](./camera-postfx-current-spec.md)
 - [カメラVMD対応メモ](./camera-vmd.md)

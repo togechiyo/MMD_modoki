@@ -7,7 +7,10 @@
 
 アクセサリの扱いを見直す方針をまとめる。UI 配置の話と、対応形式を広げる話が根を共有しているため、1本にまとめている。実装仕様書ではなく、方向を決めるための設計メモである。
 
-関連: [グラフエディタ / タイムライン クローズアップ表示 構想メモ](./graph-editor-timeline-closeup-concept-2026-08-04.md)
+関連:
+
+- [グラフエディタ / タイムライン クローズアップ表示 構想メモ](./graph-editor-timeline-closeup-concept-2026-08-04.md)
+- [Babylon.js 静的3D形式 対応候補一覧 2026-08-20](./babylon-static-3d-format-candidates-2026-08-20.md)
 
 ## 発端
 

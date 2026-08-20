@@ -170,6 +170,7 @@
 
 ## モデル / アセット読み込み
 
+- [Babylon.js 静的3D形式 対応候補一覧 2026-08-20](./babylon-static-3d-format-candidates-2026-08-20.md)
 - [重いモデルの読み込みメモ](./heavy-model-loading.md)
 - [GLB loading investigation](./glb-loading-investigation-2026-04-01.md)
 - [Generic object panel design](./generic-object-panel-design.md)

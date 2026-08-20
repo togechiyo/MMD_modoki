@@ -1187,6 +1187,11 @@ if (!mmdManagerProto.loadX) {
             );
             host.applyToonShadowInfluenceToMeshes?.(result.meshes as Mesh[]);
             const coplanarBiasedMaterialCount = host.refreshMmdCoplanarMaterialDepthBiasCorrection?.() ?? 0;
+            const redundantFaceCount = result.meshes.reduce((count, mesh) => {
+                const metadata = mesh.metadata as { mmdModokiXRedundantFaceCount?: unknown } | null;
+                const value = metadata?.mmdModokiXRedundantFaceCount;
+                return count + (Number.isFinite(value) ? Number(value) : 0);
+            }, 0);
             host.syncIblShadowsScene?.();
             host.refreshShadowAfterSceneContentChanged?.();
 
@@ -1196,6 +1201,7 @@ if (!mmdManagerProto.loadX) {
                 accessoryName,
                 meshCount: result.meshes.length,
                 coplanarBiasedMaterialCount,
+                redundantFaceCount,
             });
             return true;
         } catch (err: unknown) {
@@ -1315,6 +1321,7 @@ if (!mmdManagerProto.clearAccessories) {
             entry?.root.dispose(false);
         }
         host.syncIblShadowsScene?.();
+        host.refreshShadowAfterSceneContentChanged?.();
     };
 }
 
@@ -1385,6 +1392,7 @@ if (!mmdManagerProto.removeAccessory) {
         }
         entry.root.dispose(false);
         host.syncIblShadowsScene?.();
+        host.refreshShadowAfterSceneContentChanged?.();
         return true;
     };
 }

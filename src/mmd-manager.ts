@@ -367,12 +367,14 @@ import {
     setShadowPenumbraSize as setShadowPenumbraSizeImpl,
     setTransparentShadowEnabled as setTransparentShadowEnabledImpl,
 } from "./scene/light-shadow-controller";
+import { shouldEnableShadowSampling } from "./scene/shadow-caster-runtime-state";
 import {
     readExistingSubMeshEffectReadiness,
     refreshMeshBoundingInfoForRenderStability,
     stabilizeAppGeneratedPlanarMesh,
 } from "./scene/mesh-render-stability";
 import {
+    configureViewportDepthBuffer,
     DEFAULT_CAMERA_MAX_Z,
     DEFAULT_CAMERA_MIN_Z,
     getDefaultSkydomeDiameter,
@@ -3766,6 +3768,7 @@ ${beforeFogAppendBlock}
 
         entry.castShadow = castShadow;
         this.applyModelShadowCasterState(entry);
+        this.syncShadowSamplingWithCasterList();
         return true;
     }
 
@@ -3792,6 +3795,22 @@ ${beforeFogAppendBlock}
         }
         (this as unknown as { refreshAccessoryShadowCasters?: () => void })
             .refreshAccessoryShadowCasters?.();
+        this.syncShadowSamplingWithCasterList();
+    }
+
+    private syncShadowSamplingWithCasterList(): void {
+        if (!this.dirLight || !this.shadowGenerator) return;
+
+        const shadowMap = this.shadowGenerator.getShadowMap();
+        const renderList = shadowMap?.renderList;
+        const explicitCasterCount = Array.isArray(renderList) ? renderList.length : null;
+        const runtimeEnabled = shouldEnableShadowSampling(
+            this.shadowEnabled,
+            explicitCasterCount,
+        );
+
+        this.dirLight.shadowEnabled = runtimeEnabled;
+        this.shadowGenerator.darkness = runtimeEnabled ? this.shadowDarknessValue : 1;
     }
 
     public refreshShadowAfterSceneContentChanged(): void {
@@ -6156,7 +6175,9 @@ ${beforeFogAppendBlock}
     }
 
     private static createWebGlEngine(canvas: HTMLCanvasElement): Engine {
-        return new Engine(canvas, false, MmdManager.RENDER_ENGINE_OPTIONS);
+        const engine = new Engine(canvas, false, MmdManager.RENDER_ENGINE_OPTIONS);
+        configureViewportDepthBuffer(engine, "webgl");
+        return engine;
     }
 
     private static async createPreferredEngine(
@@ -6199,10 +6220,14 @@ ${beforeFogAppendBlock}
                     wasmPath: twgslWasmUrl,
                 },
             });
+            configureViewportDepthBuffer(engine, "webgpu");
             engine.compatibilityMode = MmdManager.WEBGPU_COMPATIBILITY_MODE;
             const webGpuMode = engine.compatibilityMode ? "compatibility" : "native";
             console.info(`Using WebGPU renderer (${webGpuMode}, WGSL-first).`);
-            logInfo("shader", "using WebGPU renderer", { mode: webGpuMode });
+            logInfo("shader", "using WebGPU renderer", {
+                mode: webGpuMode,
+                reverseDepthBuffer: engine.useReverseDepthBuffer,
+            });
             return { engine, startupDiagnostics };
         } catch (err: unknown) {
             if (enginePreference === "webgpu") {

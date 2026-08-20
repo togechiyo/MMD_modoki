@@ -21,6 +21,7 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
 import { MmdPluginMaterialSphereTextureBlendMode } from "babylon-mmd/esm/Loader/mmdPluginMaterial";
 import { resolveXMaterialRenderPolicy } from "./shared/x-material-render-policy";
+import { findRedundantXFaceIndices } from "./shared/x-face-deduplication";
 
 type Tok = { t: "id" | "num" | "str" | "sym"; v: string };
 type XMat = {
@@ -468,10 +469,11 @@ function dataToText(data: unknown): string {
     throw new Error("X loader expects text data");
 }
 
-function tri(faces: number[][]): { idx: number[]; faceId: number[] } {
+function tri(faces: number[][], redundantFaceIndices: ReadonlySet<number>): { idx: number[]; faceId: number[] } {
     const idx: number[] = [];
     const faceId: number[] = [];
     for (let fi = 0; fi < faces.length; fi += 1) {
+        if (redundantFaceIndices.has(fi)) continue;
         const f = faces[fi];
         if (!f || f.length < 3) continue;
         for (let i = 1; i < f.length - 1; i += 1) {
@@ -488,6 +490,7 @@ type TriangulatedMeshData = {
     faceId: number[];
     uvs: number[] | null;
     normals: number[] | null;
+    redundantFaceCount: number;
 };
 
 function canUseExplicitNormals(x: XMesh): boolean {
@@ -506,14 +509,22 @@ function canUseExplicitNormals(x: XMesh): boolean {
 }
 
 function buildTriangulatedMeshData(x: XMesh): TriangulatedMeshData {
+    const redundantFaceIndices = findRedundantXFaceIndices({
+        positions: x.pos,
+        uvs: x.uvs,
+        faces: x.faces,
+        faceMaterials: x.faceMats,
+    });
+
     if (!canUseExplicitNormals(x) || !x.normals) {
-        const { idx, faceId } = tri(x.faces);
+        const { idx, faceId } = tri(x.faces, redundantFaceIndices);
         return {
             positions: x.pos.slice(),
             indices: idx,
             faceId,
             uvs: x.uvs ? x.uvs.slice() : null,
             normals: null,
+            redundantFaceCount: redundantFaceIndices.size,
         };
     }
 
@@ -526,6 +537,7 @@ function buildTriangulatedMeshData(x: XMesh): TriangulatedMeshData {
     let vertexIndex = 0;
 
     for (let faceIndex = 0; faceIndex < x.faces.length; faceIndex += 1) {
+        if (redundantFaceIndices.has(faceIndex)) continue;
         const face = x.faces[faceIndex];
         const normalFace = x.normals.faces[faceIndex];
         if (!face || !normalFace || face.length < 3 || normalFace.length !== face.length) {
@@ -567,7 +579,14 @@ function buildTriangulatedMeshData(x: XMesh): TriangulatedMeshData {
         }
     }
 
-    return { positions, indices, faceId, uvs, normals };
+    return {
+        positions,
+        indices,
+        faceId,
+        uvs,
+        normals,
+        redundantFaceCount: redundantFaceIndices.size,
+    };
 }
 
 function textureUrl(rootUrl: string, name: string): string {
@@ -832,6 +851,10 @@ function buildMesh(scene: Scene, x: XMesh, parent: TransformNode | null, cache: 
 
     const mesh = new Mesh(x.name || "x_mesh", scene);
     if (parent) mesh.parent = parent;
+    mesh.metadata = {
+        ...(mesh.metadata && typeof mesh.metadata === "object" ? mesh.metadata : {}),
+        mmdModokiXRedundantFaceCount: geometry.redundantFaceCount,
+    };
 
     const vd = new VertexData();
     vd.positions = geometry.positions;

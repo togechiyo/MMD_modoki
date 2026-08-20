@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    configureViewportDepthBuffer,
     DEFAULT_CAMERA_MAX_Z,
     DEFAULT_SKYDOME_FAR_PLANE_RATIO,
     getDefaultSkydomeDiameter,
@@ -15,5 +16,19 @@ describe("viewport depth range", () => {
 
         expect(radius).toBe(DEFAULT_CAMERA_MAX_Z * DEFAULT_SKYDOME_FAR_PLANE_RATIO);
         expect(radius).toBeLessThan(DEFAULT_CAMERA_MAX_Z);
+    });
+
+    it("uses reverse depth for WebGPU wide-area rendering", () => {
+        const engine = { useReverseDepthBuffer: false };
+
+        expect(configureViewportDepthBuffer(engine, "webgpu")).toBe(true);
+        expect(engine.useReverseDepthBuffer).toBe(true);
+    });
+
+    it("keeps WebGL on the standard depth buffer", () => {
+        const engine = { useReverseDepthBuffer: true };
+
+        expect(configureViewportDepthBuffer(engine, "webgl")).toBe(false);
+        expect(engine.useReverseDepthBuffer).toBe(false);
     });
 });

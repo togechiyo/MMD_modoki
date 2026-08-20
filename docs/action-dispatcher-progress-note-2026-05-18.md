@@ -231,6 +231,7 @@
 | `effect.setShadowDarkness` | shadow darkness slider | shadow darkness setting |
 | `effect.setShadowFrustumSize` | shadow frustum slider | shadow frustum setting |
 | `effect.setShadowMaxZ` | shadow max Z slider | shadow max Z setting |
+| `effect.setShadowDistanceMultiplier` | wide-area shadow multiplier slider | effective shadow distance setting |
 | `effect.setShadowFilteringQuality` | shadow filter quality slider | shadow filter quality setting |
 | `effect.setSoftTransparentShadow` | soft transparent shadow slider | soft transparent shadow setting |
 | `effect.setIblShadows` | IBL shadows slider | IBL shadows setting |

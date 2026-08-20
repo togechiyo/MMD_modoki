@@ -345,6 +345,8 @@ import {
     getShadowBlurKernel as getShadowBlurKernelImpl,
     getShadowBlurScale as getShadowBlurScaleImpl,
     getShadowMaxZ as getShadowMaxZImpl,
+    getEffectiveShadowMaxZ as getEffectiveShadowMaxZImpl,
+    getShadowDistanceMultiplier as getShadowDistanceMultiplierImpl,
     getShadowNormalBias as getShadowNormalBiasImpl,
     getShadowPenumbraEnabled as getShadowPenumbraEnabledImpl,
     getShadowPenumbraSize as getShadowPenumbraSizeImpl,
@@ -359,6 +361,7 @@ import {
     setShadowBlurKernel as setShadowBlurKernelImpl,
     setShadowBlurScale as setShadowBlurScaleImpl,
     setShadowMaxZ as setShadowMaxZImpl,
+    setShadowDistanceMultiplier as setShadowDistanceMultiplierImpl,
     setShadowNormalBias as setShadowNormalBiasImpl,
     setShadowPenumbraEnabled as setShadowPenumbraEnabledImpl,
     setShadowPenumbraSize as setShadowPenumbraSizeImpl,
@@ -369,6 +372,11 @@ import {
     refreshMeshBoundingInfoForRenderStability,
     stabilizeAppGeneratedPlanarMesh,
 } from "./scene/mesh-render-stability";
+import {
+    DEFAULT_CAMERA_MAX_Z,
+    DEFAULT_CAMERA_MIN_Z,
+    getDefaultSkydomeDiameter,
+} from "./scene/viewport-depth-range";
 import {
     decodeDdsTextureToRgba,
     isDdsTexturePath,
@@ -543,7 +551,6 @@ const PCSS_CSM_LIGHT_SIZE_SCALE = 0.1;
 const PCSS_CSM_MAX_LIGHT_SIZE_UV_RATIO = 0.02;
 const PCSS_CSM_PENUMBRA_DARKNESS = 0.17;
 const FRAME_GRAPH_LUMINOUS_MASK_EXPERIMENT_SCALE = 1.0;
-const DEFAULT_CAMERA_MAX_Z = 10000;
 const VIEWPORT_CAMERA_ROTATE_SENSIBILITY = 400;
 const VIEWPORT_CAMERA_PAN_SCALE = 0.0022;
 const VIEWPORT_CAMERA_DRAG_ZOOM_SCALE = 0.0075;
@@ -1811,6 +1818,7 @@ ${beforeFogAppendBlock}
     private shadowModeValue: ShadowMode = "cascaded";
     private shadowFrustumSizeValue = 220;
     private shadowMaxZValue = 1000;
+    private shadowDistanceMultiplierValue = 1;
     private shadowBiasValue = 0.0005;
     private shadowNormalBiasValue = 0.01;
     private shadowFilteringQualityValue = ShadowGenerator.QUALITY_HIGH;
@@ -6495,7 +6503,7 @@ ${beforeFogAppendBlock}
             this.scene
         );
         this.camera.fov = (30 * Math.PI) / 180;
-        this.camera.minZ = 0.15;
+        this.camera.minZ = DEFAULT_CAMERA_MIN_Z;
         this.camera.maxZ = DEFAULT_CAMERA_MAX_Z;
         this.camera.lowerRadiusLimit = 3;
         this.camera.upperRadiusLimit = null;
@@ -6614,7 +6622,7 @@ ${beforeFogAppendBlock}
         this.syncEnvironmentLightingTexture();
 
         this.skydome = CreateSphere("skydome", {
-            diameter: 1200,
+            diameter: getDefaultSkydomeDiameter(),
             segments: 24,
             updatable: false,
         }, this.scene);
@@ -11954,6 +11962,17 @@ ${beforeFogAppendBlock}
     }
     set shadowMaxZ(v: number) {
         setShadowMaxZImpl(this, v);
+    }
+
+    get shadowDistanceMultiplier(): number {
+        return getShadowDistanceMultiplierImpl(this);
+    }
+    set shadowDistanceMultiplier(v: number) {
+        setShadowDistanceMultiplierImpl(this, v);
+    }
+
+    get effectiveShadowMaxZ(): number {
+        return getEffectiveShadowMaxZImpl(this);
     }
 
     get shadowBias(): number {

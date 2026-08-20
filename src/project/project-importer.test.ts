@@ -104,6 +104,7 @@ function createHost() {
         setShadowColor: vi.fn(),
         setShadowEnabled: vi.fn(),
         shadowMode: "cascaded" as "cascaded" | "standard",
+        shadowDistanceMultiplier: 1,
         shadowBlurKernel: 0,
         shadowBlurScale: 2,
         shadowBlurBoxOffset: 1,
@@ -386,6 +387,27 @@ describe("importProjectState", () => {
         expect(host.environmentBackgroundVisible).toBe(true);
         expect(host.environmentBackgroundIntensity).toBe(0.08);
         expect(host.setEnvironmentLightingSourcePath).toHaveBeenCalledWith("C:/hdr/studio.hdr");
+    });
+
+    it("restores the wide-area shadow multiplier and defaults legacy projects to one", async () => {
+        const host = createHost();
+        const project = createProject({
+            lighting: {
+                ...createProject().lighting,
+                shadowMaxZ: 10000,
+                shadowDistanceMultiplier: 8,
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.shadowDistanceMultiplier).toBe(8);
+
+        const legacyHost = createHost();
+        legacyHost.shadowDistanceMultiplier = 6;
+        await importProjectState(legacyHost, createProject());
+
+        expect(legacyHost.shadowDistanceMultiplier).toBe(1);
     });
 
     it("restores the fixed render method and model draw rank before loading", async () => {

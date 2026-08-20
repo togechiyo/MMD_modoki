@@ -244,6 +244,7 @@
     "button.rigidBodies.title.off":  "全モデル剛体表示: OFF (クリックでON)",
     "button.rigidBodies.title.unavailable":  "全モデル剛体表示: 利用不可",
     "label.shadowMaxZ":  "影描画範囲",
+    "label.shadowDistanceMultiplier":  "広域影距離倍率",
     "label.shadowMode":  "影方式",
     "button.applyAllMaterials":  "全材質へ割り当て",
     "button.resetAllMaterials":  "全材質を標準化",

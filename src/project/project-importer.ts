@@ -143,6 +143,7 @@ type ProjectImportHost = {
     shadowFrustumSizeValue: number;
     shadowMaxZ: number;
     shadowMaxZValue: number;
+    shadowDistanceMultiplier: number;
     shadowBias: number;
     shadowBiasValue: number;
     shadowNormalBias: number;
@@ -937,6 +938,9 @@ export async function importProjectState(
     host.shadowMaxZ = typeof data.lighting.shadowMaxZ === "number" && Number.isFinite(data.lighting.shadowMaxZ)
         ? data.lighting.shadowMaxZ
         : host.shadowMaxZValue;
+    host.shadowDistanceMultiplier = typeof data.lighting.shadowDistanceMultiplier === "number" && Number.isFinite(data.lighting.shadowDistanceMultiplier)
+        ? data.lighting.shadowDistanceMultiplier
+        : 1;
     host.shadowBias = typeof data.lighting.shadowBias === "number" && Number.isFinite(data.lighting.shadowBias)
         ? data.lighting.shadowBias
         : host.shadowBiasValue;

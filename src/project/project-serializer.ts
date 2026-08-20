@@ -64,6 +64,7 @@ type ProjectExportHost = {
     shadowDarkness: number;
     shadowFrustumSize: number;
     shadowMaxZ: number;
+    shadowDistanceMultiplier: number;
     shadowBias: number;
     shadowNormalBias: number;
     shadowFilteringQuality: number;
@@ -405,6 +406,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             shadowDarkness: host.shadowDarkness,
             shadowFrustumSize: host.shadowFrustumSize,
             shadowMaxZ: host.shadowMaxZ,
+            shadowDistanceMultiplier: host.shadowDistanceMultiplier,
             shadowBias: host.shadowBias,
             shadowNormalBias: host.shadowNormalBias,
             shadowFilteringQuality: host.shadowFilteringQuality,

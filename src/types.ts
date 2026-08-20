@@ -456,6 +456,7 @@ export interface ProjectLightingState {
     shadowDarkness: number;
     shadowFrustumSize?: number;
     shadowMaxZ?: number;
+    shadowDistanceMultiplier?: number;
     shadowBias?: number;
     shadowNormalBias?: number;
     shadowFilteringQuality?: number;

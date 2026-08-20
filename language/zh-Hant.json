@@ -244,6 +244,7 @@
     "button.rigidBodies.title.off":  "全模型剛體顯示: OFF（點擊切到 ON）",
     "button.rigidBodies.title.unavailable":  "全模型剛體顯示: 不可用",
     "label.shadowMaxZ":  "陰影範圍",
+    "label.shadowDistanceMultiplier":  "廣域陰影距離倍率",
     "label.shadowMode":  "陰影模式",
     "button.applyAllMaterials":  "分配給全部材質",
     "button.resetAllMaterials":  "將全部材質恢復標準",

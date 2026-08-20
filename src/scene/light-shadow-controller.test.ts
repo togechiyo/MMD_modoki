@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
     getSerializedLightDirection,
+    getShadowDistanceMultiplier,
     MAX_DIRECTIONAL_LIGHT_INTENSITY,
     setLightColor,
     setLightIntensity,
@@ -12,6 +13,7 @@ import {
     setShadowPenumbraSize,
     setSoftTransparentShadowEnabled,
     setShadowMaxZ,
+    setShadowDistanceMultiplier,
     setTransparentShadowEnabled,
 } from "./light-shadow-controller";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -30,6 +32,7 @@ function createHost() {
         shadowGenerator: null,
         shadowFrustumSizeValue: 220,
         shadowMaxZValue: 1000,
+        shadowDistanceMultiplierValue: 1,
         constructor: {},
         applyVolumetricLightSettings: vi.fn(),
         refreshGlobalIlluminationLightParameters: vi.fn(),
@@ -82,6 +85,21 @@ describe("shadow projection range", () => {
         expect(host.dirLight.shadowMaxZ).toBe(10000);
     });
 
+    it("extends wide-area shadows to 100,000 with the detail multiplier", () => {
+        const host = createHost();
+
+        setShadowMaxZ(host, 10000);
+        setShadowDistanceMultiplier(host, 10);
+
+        expect(getShadowDistanceMultiplier(host)).toBe(10);
+        expect(host.dirLight.shadowFrustumSize).toBe(22000);
+        expect(host.dirLight.shadowMaxZ).toBe(100000);
+
+        setShadowDistanceMultiplier(host, 99);
+        expect(getShadowDistanceMultiplier(host)).toBe(10);
+        expect(host.dirLight.shadowMaxZ).toBe(100000);
+    });
+
     it("keeps cascaded shadow frustum fixed while updating shadowMaxZ", () => {
         const csmShadowGenerator = {
             shadowMaxZ: 1000,
@@ -93,10 +111,11 @@ describe("shadow projection range", () => {
         };
 
         setShadowMaxZ(host, 4800);
+        setShadowDistanceMultiplier(host, 5);
 
         expect(host.dirLight.shadowFrustumSize).toBe(960);
-        expect(host.dirLight.shadowMaxZ).toBe(4800);
-        expect(host.shadowGenerator.shadowMaxZ).toBe(4800);
+        expect(host.dirLight.shadowMaxZ).toBe(24000);
+        expect(host.shadowGenerator.shadowMaxZ).toBe(24000);
     });
 });
 

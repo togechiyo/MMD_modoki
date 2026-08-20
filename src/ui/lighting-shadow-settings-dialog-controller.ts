@@ -87,6 +87,27 @@ export class LightingShadowSettingsDialogController implements PopupContentContr
         });
         grid.appendChild(createPopupFormField(t("label.shadowQuality"), quality));
 
+        const formatWideAreaShadowDistance = (multiplier: number): string => {
+            const clampedMultiplier = Math.max(1, Math.min(10, Math.round(multiplier)));
+            const effectiveDistance = Math.min(100_000, this.mmdManager.shadowMaxZ * clampedMultiplier);
+            return `×${clampedMultiplier} (${Math.round(effectiveDistance)})`;
+        };
+        this.appendRange(
+            grid,
+            t("label.shadowDistanceMultiplier"),
+            1,
+            10,
+            1,
+            this.mmdManager.shadowDistanceMultiplier,
+            formatWideAreaShadowDistance,
+            (value) => {
+                this.dispatchAction({ type: "effect.setShadowDistanceMultiplier", source: "menu", value });
+                this.refreshUi();
+                return `×${this.mmdManager.shadowDistanceMultiplier} (${Math.round(this.mmdManager.effectiveShadowMaxZ)})`;
+            },
+            "light-shadow-distance-multiplier",
+        );
+
         this.appendRange(grid, t("label.shadowDarkness"), 0, 100, 1, this.mmdManager.shadowDarkness * 100, (value) => (value / 100).toFixed(2), (value) => {
             this.dispatchAction({ type: "effect.setShadowDarkness", source: "menu", value: value / 100 });
             this.refreshUi();
@@ -116,9 +137,12 @@ export class LightingShadowSettingsDialogController implements PopupContentContr
         initialValue: number,
         formatValue: (value: number) => string,
         applyValue: (value: number) => string,
+        controlId?: string,
     ): void {
         const input = createRange(min, max, step, initialValue);
+        if (controlId) input.id = controlId;
         const value = createPopupFormValueText(formatValue(Number(input.value)));
+        if (controlId) value.id = `${controlId}-val`;
         input.addEventListener("input", () => {
             value.textContent = applyValue(Number(input.value));
         });

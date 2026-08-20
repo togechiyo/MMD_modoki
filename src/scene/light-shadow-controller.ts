@@ -67,6 +67,7 @@ type LightShadowHost = {
     toonShadowInfluenceValue: number;
     shadowFrustumSizeValue: number;
     shadowMaxZValue: number;
+    shadowDistanceMultiplierValue: number;
     lightDirectionInputValue: Vector3 | null;
     sceneModels: Array<{ mesh: Mesh }>;
     getAccessoryMeshes?: () => Mesh[];
@@ -101,6 +102,11 @@ function clampShadowFrustumSize(v: number): number {
 function clampShadowMaxZ(v: number): number {
     if (!Number.isFinite(v)) return DEFAULT_CSM_SHADOW_MAX_Z;
     return Math.max(500, Math.min(MAX_SHADOW_MAX_Z, v));
+}
+
+function clampShadowDistanceMultiplier(v: number): number {
+    if (!Number.isFinite(v)) return 1;
+    return Math.max(1, Math.min(MAX_SHADOW_DISTANCE_MULTIPLIER, Math.round(v)));
 }
 
 function clampShadowBias(v: number): number {
@@ -143,6 +149,8 @@ const DEFAULT_LIGHT_DIRECTION = new Vector3(0.3, -0.5, 0.5).normalize();
 export const MAX_DIRECTIONAL_LIGHT_INTENSITY = 2;
 const DEFAULT_CSM_SHADOW_MAX_Z = 1000;
 const MAX_SHADOW_MAX_Z = 10000;
+const MAX_EFFECTIVE_SHADOW_MAX_Z = 100000;
+const MAX_SHADOW_DISTANCE_MULTIPLIER = 10;
 const DEFAULT_CSM_FRUSTUM_SIZE = 960;
 const DEFAULT_CSM_LIGHT_DISTANCE = 220;
 const STANDARD_SHADOW_FRUSTUM_SCALE_FROM_MAX_Z = 0.22;
@@ -157,7 +165,7 @@ const PCSS_CSM_MAX_LIGHT_SIZE_UV_RATIO = 0.02;
 const PCSS_CSM_PENUMBRA_DARKNESS = 0.17;
 
 function getStandardShadowFrustumSize(host: LightShadowHost): number {
-    return clampShadowFrustumSize(clampShadowMaxZ(host.shadowMaxZValue) * STANDARD_SHADOW_FRUSTUM_SCALE_FROM_MAX_Z);
+    return clampShadowFrustumSize(getEffectiveShadowMaxZ(host) * STANDARD_SHADOW_FRUSTUM_SCALE_FROM_MAX_Z);
 }
 
 function applyShadowBiasSettings(host: LightShadowHost): void {
@@ -489,6 +497,26 @@ export function setShadowBlurKernel(host: LightShadowHost, v: number): void {
     host.engine?.releaseEffects?.();
 }
 
+export function getShadowDistanceMultiplier(host: LightShadowHost): number {
+    return clampShadowDistanceMultiplier(host.shadowDistanceMultiplierValue);
+}
+
+export function getEffectiveShadowMaxZ(host: LightShadowHost): number {
+    return Math.min(
+        MAX_EFFECTIVE_SHADOW_MAX_Z,
+        clampShadowMaxZ(host.shadowMaxZValue) * getShadowDistanceMultiplier(host),
+    );
+}
+
+export function setShadowDistanceMultiplier(host: LightShadowHost, v: number): void {
+    host.shadowDistanceMultiplierValue = clampShadowDistanceMultiplier(v);
+    applyShadowFrustumSize(host);
+    if (host.dirLight) {
+        const direction = getSerializedLightDirection(host);
+        setLightDirection(host, direction.x, direction.y, direction.z);
+    }
+}
+
 export function getShadowBlurScale(host: LightShadowHost): number {
     return clampShadowBlurScale(host.shadowBlurScaleValue);
 }
@@ -667,7 +695,7 @@ export function applyToonShadowInfluenceToMeshes(host: LightShadowHost, meshes: 
 export function applyShadowFrustumSize(host: LightShadowHost): void {
     if (!host.dirLight) return;
     const csmEnabled = host.shadowGenerator instanceof CascadedShadowGenerator;
-    const shadowMaxZ = clampShadowMaxZ(host.shadowMaxZValue);
+    const shadowMaxZ = getEffectiveShadowMaxZ(host);
     host.dirLight.shadowFrustumSize = csmEnabled
         ? DEFAULT_CSM_FRUSTUM_SIZE
         : getStandardShadowFrustumSize(host);

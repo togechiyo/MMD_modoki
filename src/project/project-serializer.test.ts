@@ -43,6 +43,7 @@ function createHost() {
         shadowDarkness: 0,
         shadowFrustumSize: 220,
         shadowMaxZ: 4800,
+        shadowDistanceMultiplier: 4,
         shadowBias: 0.0005,
         shadowNormalBias: 0.01,
         shadowFilteringQuality: 1,
@@ -350,6 +351,7 @@ describe("exportProjectState", () => {
         expect(project.lighting.y).toBe(-0.65);
         expect(project.lighting.z).toBe(-0.35);
         expect(project.lighting.shadowMode).toBe("cascaded");
+        expect(project.lighting.shadowDistanceMultiplier).toBe(4);
         expect(project.lighting.shadowBlurKernel).toBe(24);
         expect(project.lighting.shadowBlurScale).toBe(2);
         expect(project.lighting.shadowBlurBoxOffset).toBe(2);

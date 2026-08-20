@@ -586,6 +586,10 @@ describe("canExecuteEditorAction", () => {
             readySnapshot,
         )).toBe(true);
         expect(canExecuteEditorAction(
+            { type: "effect.setShadowDistanceMultiplier", source: "menu", value: 10 },
+            readySnapshot,
+        )).toBe(true);
+        expect(canExecuteEditorAction(
             { type: "effect.setShadowFilteringQuality", source: "panel", value: 1 },
             readySnapshot,
         )).toBe(true);

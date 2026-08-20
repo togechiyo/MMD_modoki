@@ -244,6 +244,7 @@
     "button.rigidBodies.title.off":  "All-model rigid bodies: OFF (click to ON)",
     "button.rigidBodies.title.unavailable":  "All-model rigid bodies: unavailable",
     "label.shadowMaxZ":  "Shadow Range",
+    "label.shadowDistanceMultiplier":  "Wide-area Shadow Multiplier",
     "label.shadowMode":  "Shadow Mode",
     "button.applyAllMaterials":  "Assign to all materials",
     "button.resetAllMaterials":  "Reset all materials",

@@ -2666,6 +2666,9 @@ export class UIController {
         this.actionDispatcher.register("effect.setShadowMaxZ", (action) => {
             this.mmdManager.shadowMaxZ = action.value;
         });
+        this.actionDispatcher.register("effect.setShadowDistanceMultiplier", (action) => {
+            this.mmdManager.shadowDistanceMultiplier = action.value;
+        });
         this.actionDispatcher.register("effect.setShadowFilteringQuality", (action) => {
             this.mmdManager.shadowFilteringQuality = action.value;
         });
@@ -3001,6 +3004,9 @@ export class UIController {
         }
         if (typeof lighting.shadowMaxZ === "number" && Number.isFinite(lighting.shadowMaxZ)) {
             this.mmdManager.shadowMaxZ = lighting.shadowMaxZ;
+        }
+        if (typeof lighting.shadowDistanceMultiplier === "number" && Number.isFinite(lighting.shadowDistanceMultiplier)) {
+            this.mmdManager.shadowDistanceMultiplier = lighting.shadowDistanceMultiplier;
         }
         if (lighting.shadowMode === "standard" || lighting.shadowMode === "cascaded") {
             this.mmdManager.shadowMode = lighting.shadowMode;

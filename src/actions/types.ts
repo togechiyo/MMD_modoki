@@ -221,6 +221,7 @@ export type EffectAction =
     | { type: "effect.setShadowDarkness"; source: ActionSource; value: number }
     | { type: "effect.setShadowFrustumSize"; source: ActionSource; value: number }
     | { type: "effect.setShadowMaxZ"; source: ActionSource; value: number }
+    | { type: "effect.setShadowDistanceMultiplier"; source: ActionSource; value: number }
     | { type: "effect.setShadowFilteringQuality"; source: ActionSource; value: number }
     | { type: "effect.setShadowBlurKernel"; source: ActionSource; value: number }
     | { type: "effect.setShadowBlurScale"; source: ActionSource; value: number }

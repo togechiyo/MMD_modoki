@@ -5,6 +5,7 @@ import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const objPath = resolve(repoRoot, "test", "fixtures", "accessory", "tofu.obj");
+const texturedObjPath = resolve(repoRoot, "test", "fixtures", "accessory", "tofu-uv-mtl.obj");
 test("loads, edits, saves, and restores a material-free OBJ accessory", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
@@ -83,6 +84,65 @@ test("loads, edits, saves, and restores a material-free OBJ accessory", async ()
         position: { x: 2.5, y: 0, z: 0 },
       },
     });
+  } finally {
+    await launched.close();
+  }
+});
+
+test("loads a local MTL and PNG texture without network access and restores them from a project", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    const pageErrors = [];
+    const externalRequests = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (
+        (url.protocol === "http:" || url.protocol === "https:")
+        && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+      ) {
+        externalRequests.push(request.url());
+      }
+    });
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+
+    expect(await page.evaluate(
+      async (filePath) => window.mmdModokiE2e.loadAccessory(filePath),
+      texturedObjPath,
+    )).toBe(true);
+
+    const targetSelect = page.locator("#info-model-select");
+    await expect(targetSelect.locator('option[value="__accessory__:0"]')).toContainText("tofu-uv-mtl [OBJ]");
+    await expect(targetSelect).toHaveValue("__accessory__:0");
+    await expect(page.locator("#accessory-info-content")).toBeVisible();
+
+    await expect.poll(async () => page.evaluate(
+      () => window.mmdModokiE2e.getAccessoryMaterialDiagnostics()[0]?.diffuseTextureReady ?? false,
+    )).toBe(true);
+    const loadedMaterials = await page.evaluate(
+      () => window.mmdModokiE2e.getAccessoryMaterialDiagnostics(),
+    );
+    expect(loadedMaterials).toHaveLength(1);
+    expect(loadedMaterials[0]).toMatchObject({
+      hasUvs: true,
+      materialName: "TofuMaterial",
+      materialClassName: "StandardMaterial",
+      diffuseTextureReady: true,
+    });
+    expect(loadedMaterials[0]?.diffuseTextureUrl).toMatch(/^data:image\/png;base64,/);
+
+    const savedProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    const imported = await page.evaluate(
+      async (project) => window.mmdModokiE2e.importProjectState(project),
+      savedProject,
+    );
+    expect(imported.warnings).toEqual([]);
+    await expect.poll(async () => page.evaluate(
+      () => window.mmdModokiE2e.getAccessoryMaterialDiagnostics()[0]?.diffuseTextureReady ?? false,
+    )).toBe(true);
+    expect(pageErrors).toEqual([]);
+    expect(externalRequests).toEqual([]);
   } finally {
     await launched.close();
   }

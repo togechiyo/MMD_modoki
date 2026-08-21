@@ -2386,6 +2386,7 @@ ${beforeFogAppendBlock}
     public onCameraMotionLoaded: ((info: MotionInfo) => void) | null = null;
     public onKeyframesLoaded: ((tracks: KeyframeTrack[]) => void) | null = null;
     public onError: ((message: string) => void) | null = null;
+    public onWarning: ((message: string) => void) | null = null;
     public onWebGpuValidationError: ((message: string) => void) | null = null;
     public onAudioLoaded: ((name: string) => void) | null = null;
     public onPhysicsStateChanged: ((enabled: boolean, available: boolean) => void) | null = null;

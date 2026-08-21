@@ -58,13 +58,19 @@ MMD_modokiでは、ブラウザ型Viewerとの差として、Electron側でOBJ�
 
 最初のPoCはOBJを最優先とし、自作した小さな「豆腐モデル」で読み込み経路を確認する。Phase 0のfixtureは立方体1個、頂点、normal、四角形面だけを持ち、MTL、texture、外部参照は含めない。次段階でUV、単一MTL、小さなPNG textureを持つfixtureを追加する。
 
-2026-08-21に次段階のfixtureとして `test/fixtures/accessory/tofu-uv-mtl.obj`、`tofu-uv-mtl.mtl`、`tofu-uv-mtl.png` を追加した。立方体の各面に0〜1のUV、明示normal、単一の `TofuMaterial` を割り当て、同じdirectoryの8×8 RGBA PNGを `map_Kd` から参照する。PNGは `scripts/generate-obj-material-fixture-texture.mjs` で再生成できる。これはMTL / texture実装前の入力fixtureであり、現行loaderは引き続き `skipMaterials: true` のため、材質読込済みという意味ではない。
+2026-08-21に次段階のfixtureとして `test/fixtures/accessory/tofu-uv-mtl.obj`、`tofu-uv-mtl.mtl`、`tofu-uv-mtl.png` を追加した。立方体の各面に0〜1のUV、明示normal、単一の `TofuMaterial` を割り当て、同じdirectoryの8×8 RGBA PNGを `map_Kd` から参照する。PNGは `scripts/generate-obj-material-fixture-texture.mjs` で再生成できる。
 
 2026-08-20にPhase 0を実装した。OBJはElectron IPCでローカルtextとして読み、Babylon.jsのOBJ parserを `skipMaterials: true` で呼び出す。既存accessoryとして情報欄へ追加し、transform、表示、影、削除、project保存 / 再読み込みを共通経路で扱う。unit testとElectron E2Eで読み込み・操作・復元を確認済みである。
 
 初回実装では、Viteの依存最適化から `@babylonjs/loaders` を除外したままdeep importしたため、OBJ loaderがアプリ本体とは別の `VertexBuffer` prototypeを使った。通常の `byteStride` は存在してもWebGPU向けの `effectiveByteStride` getterがなく、OBJをshadow casterへ登録した次フレームで `GPUVertexBufferLayout.arrayStride is undefined` が発生した。OBJ loaderのdeep importを `optimizeDeps.include` に明示し、Babylon coreを同じ最適化済みmodule graphへ統合して解消した。E2Eではload APIの成功だけで終わらせず、影ONのまま複数frameを描画して `pageerror` がないことと、実効strideが通常strideと一致することを確認する。
 
 MTLやtextureに `http://` / `https://` が指定されていても取得しない。相対pathの解決では、意図しないdirectory外参照も許可しない。
+
+2026-08-21にPhase 1として、ローカルMTLとtextureの読み込みを実装した。OBJが最後に指定した単一の `mtllib` をElectron IPCで読み、`map_Ka` / `map_Kd` / `map_Ks` / `map_Bump` / `map_d` が参照するローカル画像をIPCで取得して `data:` URLへ置換した後、Babylon.js 9.2.0のOBJ / MTL loaderへ渡す。対応画像はPNG、JPEG、WebP、GIF、BMPで、1画像64 MiBを上限とする。`map_Bump` の `-bm` 以外のtexture optionと複数MTLの統合は初期対象外である。
+
+companion fileはOBJと同じdirectory tree内だけを許可する。外部URL、絶対path、別drive、OBJの配置rootを越える `..` は拒否し、通常実行経路から外部通信を発生させない。MTLが読めない場合はgeometry-only、textureだけが読めない場合は該当map行を除いてMTLの色・透明度などを保持し、警告toastとstructured logを残す。OBJ材質は元の `StandardMaterial` を保持し、`.x` 用WGSL toon presetを自動適用しない。
+
+fixtureを使うunit testでは、path境界、外部URL拒否、欠損fallback、data URL変換とBabylon NullEngineでの材質・UV割当を確認した。Electron E2Eでは情報欄への追加、texture ready、project保存・再読み込み、外部HTTP requestなしを確認済みである。
 
 ### STL
 

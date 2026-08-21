@@ -11,7 +11,6 @@ import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js"
 import { Material } from "@babylonjs/core/Materials/material";
 import { MultiMaterial } from "@babylonjs/core/Materials/multiMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { OBJFileLoader } from "@babylonjs/loaders/OBJ/objFileLoader.js";
 import { MmdManager } from "./mmd-manager";
 import { isDebugLogEnabled, logDebugIfEnabled, logError, logInfo, logWarn, toLogErrorData } from "./app-logger";
 import { applyWgslShaderPresetToMaterials } from "./scene/material-shader-service";
@@ -20,6 +19,7 @@ import { applyAccessoryCoplanarMaterialDepthBias } from "./scene/accessory-copla
 import { loadXIntoScene } from "./x-file-loader";
 import type { ProjectSerializedAccessoryTransformTrack } from "./types";
 import { copyProjectArrayToFloat32, copyProjectArrayToUint32, packFloat32Array, packFrameNumbers } from "./project/project-codec";
+import { createObjLoaderForLocalMaterialData, prepareLocalObjMaterialBundle } from "./shared/obj-local-materials";
 
 export type AccessoryKind = "x" | "glb" | "obj";
 
@@ -82,6 +82,7 @@ type XLoadHost = {
     scene: Scene;
     shadowGenerator: Pick<ShadowGenerator, "addShadowCaster" | "removeShadowCaster">;
     onError: ((message: string) => void) | null;
+    onWarning?: ((message: string) => void) | null;
     applyToonShadowInfluenceToMeshes?: (meshes: Mesh[]) => void;
     getLoadedModels?: () => ArrayLike<unknown>;
     setCameraTarget?: (x: number, y: number, z: number) => void;
@@ -815,7 +816,7 @@ function createAccessoryEntryFromImport(
     }
     forceAccessoryHierarchyEnabled([...result.transformNodes, ...hierarchyMeshes, ...managedMeshes]);
     prepareManagedAccessoryMeshes(host, managedMeshes, kind !== "glb");
-    if (kind === "x" || kind === "obj") {
+    if (kind === "x") {
         const accessoryMaterials = collectAccessoryMaterials(managedMeshes);
         applyWgslShaderPresetToMaterials(
             host as Parameters<typeof applyWgslShaderPresetToMaterials>[0],
@@ -1293,15 +1294,33 @@ if (!mmdManagerProto.loadObj) {
                 throw new Error("OBJ loading only accepts local file paths");
             }
 
-            const { fileName, fileUrl } = splitFilePath(filePath);
+            const { fileName } = splitFilePath(filePath);
             logInfo("asset", "obj accessory load started", { filePath, fileName });
             const data = await window.electronAPI.readTextFile(filePath);
             if (data === null) {
                 throw new Error(`Unable to read OBJ file: ${filePath}`);
             }
 
-            const loader = new OBJFileLoader({ skipMaterials: true });
-            const container = await loader.loadAssetContainerAsync(host.scene, data, fileUrl);
+            const materialBundle = await prepareLocalObjMaterialBundle(filePath, data, {
+                readTextFile: (path) => window.electronAPI.readTextFile(path),
+                readBinaryFile: (path) => window.electronAPI.readBinaryFile(path),
+            });
+            for (const warning of materialBundle.warnings) {
+                logWarn("asset", "obj material fallback", {
+                    filePath,
+                    materialPath: materialBundle.materialPath,
+                    warning,
+                });
+            }
+            if (materialBundle.warnings.length > 0) {
+                const remainingCount = materialBundle.warnings.length - 1;
+                const suffix = remainingCount > 0 ? ` (+${remainingCount} more)` : "";
+                host.onWarning?.(`OBJ material warning: ${materialBundle.warnings[0]}${suffix}`);
+            }
+
+            const materialsLoaded = materialBundle.mtlData !== null;
+            const loader = createObjLoaderForLocalMaterialData(materialBundle.mtlData);
+            const container = await loader.loadAssetContainerAsync(host.scene, data, "");
             const meshes = container.meshes as AbstractMesh[];
             if (meshes.length === 0) {
                 throw new Error("No mesh data found in OBJ file");
@@ -1331,7 +1350,11 @@ if (!mmdManagerProto.loadObj) {
                 accessoryName,
                 meshCount: meshes.length,
                 coplanarBiasedMaterialCount,
-                materialsSkipped: true,
+                materialReference: materialBundle.materialReference,
+                materialPath: materialBundle.materialPath,
+                materialsLoaded,
+                loadedTextureCount: materialBundle.loadedTextureCount,
+                materialWarningCount: materialBundle.warnings.length,
             });
             return true;
         } catch (err: unknown) {

@@ -334,6 +334,25 @@ async function initializeApp(): Promise<void> {
         loadModel: (filePath) => mmdManager.loadPMX(filePath),
         loadModelInteractively: (filePath) => uiController.loadModelInteractively(filePath),
         loadAccessory: (filePath) => uiController.loadAccessoryFromPath(filePath),
+        getAccessoryMaterialDiagnostics: () => mmdManager.getAccessoryMeshes().map((mesh) => {
+          const material = mesh.material as unknown as {
+            name?: string;
+            getClassName?: () => string;
+            diffuseTexture?: {
+              url?: string;
+              isReady?: () => boolean;
+            } | null;
+          } | null;
+          const texture = material?.diffuseTexture ?? null;
+          return {
+            mesh: mesh.name,
+            hasUvs: mesh.isVerticesDataPresent("uv"),
+            materialName: material?.name ?? null,
+            materialClassName: material?.getClassName?.() ?? null,
+            diffuseTextureUrl: texture?.url ?? null,
+            diffuseTextureReady: texture?.isReady?.() ?? false,
+          };
+        }),
         getAccessoryVertexBufferDiagnostics: () => mmdManager.getAccessoryMeshes().map((mesh) => ({
           mesh: mesh.name,
           bounds: (() => {

@@ -196,6 +196,14 @@ declare global {
             loadModel: (filePath: string) => Promise<ModelInfo | null>;
             loadModelInteractively: (filePath: string) => Promise<ModelInfo | null>;
             loadAccessory: (filePath: string) => Promise<boolean>;
+            getAccessoryMaterialDiagnostics: () => Array<{
+                mesh: string;
+                hasUvs: boolean;
+                materialName: string | null;
+                materialClassName: string | null;
+                diffuseTextureUrl: string | null;
+                diffuseTextureReady: boolean;
+            }>;
             getAccessoryVertexBufferDiagnostics: () => Array<{
                 mesh: string;
                 bounds: {

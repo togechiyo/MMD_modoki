@@ -1725,6 +1725,11 @@ export class UIController {
             this.showToast(message, "error");
         };
 
+        this.mmdManager.onWarning = (message: string) => {
+            this.setStatus("Warning", false);
+            this.showToast(message, "info");
+        };
+
         this.mmdManager.onPhysicsStateChanged = () => {
             this.runtimeFeatureUiController?.refreshPhysics();
             this.runtimeFeatureUiController?.refreshRigidBodies();

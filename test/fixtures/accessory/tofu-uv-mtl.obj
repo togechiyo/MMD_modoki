@@ -1,0 +1,34 @@
+# MMD_modoki OBJ material loader fixture
+# One cube with UVs, explicit normals, one MTL, and one local PNG texture.
+mtllib tofu-uv-mtl.mtl
+
+o TofuUvCube
+v -0.5 0.0 -0.5
+v  0.5 0.0 -0.5
+v  0.5 1.0 -0.5
+v -0.5 1.0 -0.5
+v -0.5 0.0  0.5
+v  0.5 0.0  0.5
+v  0.5 1.0  0.5
+v -0.5 1.0  0.5
+
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.0 1.0
+
+vn  0.0  0.0  1.0
+vn  0.0  0.0 -1.0
+vn  1.0  0.0  0.0
+vn -1.0  0.0  0.0
+vn  0.0  1.0  0.0
+vn  0.0 -1.0  0.0
+
+usemtl TofuMaterial
+s off
+f 5/1/1 6/2/1 7/3/1 8/4/1
+f 2/1/2 1/2/2 4/3/2 3/4/2
+f 6/1/3 2/2/3 3/3/3 7/4/3
+f 1/1/4 5/2/4 8/3/4 4/4/4
+f 8/1/5 7/2/5 3/3/5 4/4/5
+f 1/1/6 2/2/6 6/3/6 5/4/6

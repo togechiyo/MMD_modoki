@@ -200,6 +200,7 @@
 - [ ] glTF/GLB アニメーション対応
 - [x] OBJ 読み込み最小 PoC（2026-08-20: MTLなし豆腐モデルをアクセサリとして読み込み、情報欄操作、transform / 表示 / 影 / pathのproject保存・再読み込みをE2E確認）
 - [ ] OBJのMTL / texture対応
+  - [x] UV＋単一MTL＋ローカルPNGを持つ最小fixtureを追加（2026-08-21: `tofu-uv-mtl.obj` / `.mtl` / `.png`。loader対応は未着手）
 - [ ] STL 読み込み
 - [ ] `.babylon` 読み込み
 - [ ] 点群 / Gaussian Splat 形式（`.ply` / `.splat` / `.spz` / `.sog`）読み込み調査

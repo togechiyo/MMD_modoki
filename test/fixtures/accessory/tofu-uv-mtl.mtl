@@ -1,0 +1,9 @@
+# MMD_modoki single-material OBJ fixture
+newmtl TofuMaterial
+Ka 0.15 0.15 0.15
+Kd 1.00 1.00 1.00
+Ks 0.10 0.10 0.10
+Ns 16.0
+d 1.0
+illum 2
+map_Kd tofu-uv-mtl.png

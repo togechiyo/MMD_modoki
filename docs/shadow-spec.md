@@ -51,14 +51,14 @@ PMX の材質フラグには、影に関するビットがあります。
 
 ## シャドウ生成設定
 
-現在の実装はディレクショナルライトを使い、WebGPU reverse depth では
-通常の `ShadowGenerator` を既定にします。通常 depth の WebGL2 では
-`CascadedShadowGenerator` も選択できます。
+現在の実装は、ディレクショナルライト + `CascadedShadowGenerator` を優先し、
+Babylon.js が CSM 非対応と判定した環境だけ `ShadowGenerator` へフォールバックする方針です。
+WebGPU の reverse depth は広域表示の深度精度対策として併用します。
 
-WebGPU reverse depth と Babylon.js 9.2.0 の CSM を組み合わせると、単純な豆腐 OBJ / PMX の
-どちらでも、床の広い範囲が斜めの境界で暗くなる誤投影を確認しました。caster の bounds、法線、
-index、材質を変えても再現し、通常 shadow では誤投影が消えるため、OBJ 固有補正は入れません。
-広域 `.x` 表示で確認済みの reverse depth を維持し、互換性のない CSM 側を実行時に無効化します。
+2026-08-20 に豆腐 OBJ の斜め影を理由として、reverse depth 使用時に CSM を一律無効化する
+試行を入れましたが、PMX の床への遮蔽影消失とモデル上の誤影を招いたため取り下げました。
+一形式の表示結果からシーン全体の影方式を変更せず、OBJ 固有の問題は材質、geometry、caster登録を
+先に切り分けます。
 
 共通設定:
 
@@ -418,7 +418,7 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
 
 現時点の暫定既定:
 
-- 影方式: `standard`（WebGPU reverse depth。WebGL2 では `cascaded` も選択可能）
+- 影方式: `cascaded`
 - cascade 数: `3`
 - 半影: `OFF`
 - 半影サイズ: `0.08`（実験 ON 時の初期値）
@@ -512,7 +512,19 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
 - 影範囲を広げるほど、同じ解像度でも 1 ピクセルあたりの密度は下がります。  
   必要に応じて `shadowFrustumSize` と解像度のトレードオフ調整が必要です。
 - `CascadedShadowGenerator` は近景と遠景で影品質を分けられますが、GPU コストは単一シャドウマップより重くなります。
-- WebGPU reverse depth では Babylon.js 9.2.0 の CSM 誤投影を避けるため選択不可です。依存更新時に再検証します。
-- WebGL2 の CSM 設定は近景品質と遠景カバーのバランスを優先した固定値です。
+- 現在の CSM 設定は近景品質と遠景カバーのバランスを優先した固定値です。
 - ステージごとに最適値は異なるため、将来的には CSM 専用パラメータを UI へ分離する余地があります。
-- 旧 project 読込時は、保存されている `shadowBias` / `shadowNormalBias` / `shadowMaxZ` に引っ張られることがあります。
+- 旧 project 読込時は、保存されている `shadowMode` / `shadowBias` / `shadowNormalBias` / `shadowMaxZ` に引っ張られることがあります。特に 2026-08-20 の CSM 無効化試行中に保存した project は `shadowMode: standard` を保持し、復旧後の `cascaded` 既定を上書きします。意図して `standard` を選んだ project と自動判別できないため、現時点では一括移行せず、影詳細で方式を確認してから再保存します。
+
+## WebGPU reverse depth と標準影
+
+Babylon.js 9.2.0 の `DirectionalLight` は、自動拡張フラスタムでは reverse depth 時に投影行列の near / far を反転しますが、`shadowFrustumSize > 0` の固定フラスタムでは反転しません。本アプリの標準影は広域対応のため固定フラスタムを使うので、WebGPU でそのまま `ShadowGenerator` へ切り替えると遮蔽影が描画されなくなります。
+
+現行実装では次の範囲に限定して投影行列を補正します。
+
+- 対象は `standard` かつ `engine.useReverseDepthBuffer === true` のときだけ
+- 既存の固定 `shadowFrustumSize` と `shadowMinZ` / `shadowMaxZ` は維持する
+- `Matrix.OrthoLHToRef` の near / far だけを reverse depth 用に入れ替える
+- `cascaded` へ戻すと custom projection builder を解除し、CSM 本来の投影経路へ戻す
+
+確認は `test/fixtures/external-parent/plate.pmx` と `tofu.pmx` を使い、メニューバーの影詳細ポップアップから標準影を選択する Electron E2E で行います。caster / receiver 登録、WebGPU validation error が 0 件であること、受け側に遮蔽影が見えることを合わせて確認します。

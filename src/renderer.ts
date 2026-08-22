@@ -334,6 +334,10 @@ async function initializeApp(): Promise<void> {
         loadModel: (filePath) => mmdManager.loadPMX(filePath),
         loadModelInteractively: (filePath) => uiController.loadModelInteractively(filePath),
         loadAccessory: (filePath) => uiController.loadAccessoryFromPath(filePath),
+        getShadowRuntimeDiagnostics: () => ({
+          ...mmdManager.getShadowRuntimeDiagnostics(),
+          engine: mmdManager.getEngineType(),
+        }),
         getAccessoryMaterialDiagnostics: () => mmdManager.getAccessoryMeshes().map((mesh) => {
           const material = mesh.material as unknown as {
             name?: string;

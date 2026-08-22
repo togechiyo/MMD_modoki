@@ -51,6 +51,7 @@ import { SceneInstrumentation } from "@babylonjs/core/Instrumentation/sceneInstr
 import type { PerfCounter } from "@babylonjs/core/Misc/perfCounter";
 import type { SmartArray } from "@babylonjs/core/Misc/smartArray";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
 import type {
     BoneControlInfo,
@@ -337,6 +338,7 @@ import {
     applyToonShadowInfluenceToMeshes as applyToonShadowInfluenceToMeshesImpl,
     getLightColor as getLightColorImpl,
     getLightDirection as getLightDirectionImpl,
+    getDirectionalShadowProjectionDepthRange,
     getSerializedLightDirection as getSerializedLightDirectionImpl,
     getShadowColor as getShadowColorImpl,
     getShadowEnabled as getShadowEnabledImpl,
@@ -378,7 +380,6 @@ import {
     DEFAULT_CAMERA_MAX_Z,
     DEFAULT_CAMERA_MIN_Z,
     getDefaultSkydomeDiameter,
-    isCascadedShadowCompatible,
 } from "./scene/viewport-depth-range";
 import {
     decodeDdsTextureToRgba,
@@ -1830,7 +1831,7 @@ ${beforeFogAppendBlock}
     );
     private shadowEnabled = true;
     private shadowDarknessValue = 0.05;
-    private shadowModeValue: ShadowMode = "standard";
+    private shadowModeValue: ShadowMode = "cascaded";
     private shadowFrustumSizeValue = 220;
     private shadowMaxZValue = 1000;
     private shadowDistanceMultiplierValue = 1;
@@ -3860,7 +3861,8 @@ ${beforeFogAppendBlock}
     private createConfiguredShadowGenerator(dirLight: DirectionalLight): ShadowGenerator {
         const maxTextureSize = this.engine.getCaps().maxTextureSize ?? 4096;
         const shadowMapSize = Math.min(8192, maxTextureSize);
-        const useCascaded = this.shadowModeValue === "cascaded" && this.isCascadedShadowSupported();
+        const useCascaded = this.shadowModeValue === "cascaded" && CascadedShadowGenerator.IsSupported;
+        this.configureDirectionalShadowProjection(dirLight, useCascaded);
         const shadowGenerator = useCascaded
             ? new CascadedShadowGenerator(shadowMapSize, dirLight, undefined, this.camera)
             : new ShadowGenerator(shadowMapSize, dirLight);
@@ -3907,12 +3909,86 @@ ${beforeFogAppendBlock}
         return shadowGenerator;
     }
 
+    private configureDirectionalShadowProjection(dirLight: DirectionalLight, useCascaded: boolean): void {
+        type ProjectionBuilderHost = {
+            customProjectionMatrixBuilder?: (
+                viewMatrix: Matrix,
+                renderList: AbstractMesh[],
+                result: Matrix,
+            ) => void;
+        };
+        const builderHost = dirLight as unknown as ProjectionBuilderHost;
+        delete builderHost.customProjectionMatrixBuilder;
+
+        if (useCascaded || !this.engine.useReverseDepthBuffer) {
+            dirLight.forceProjectionMatrixCompute();
+            return;
+        }
+
+        builderHost.customProjectionMatrixBuilder = (_viewMatrix, _renderList, result) => {
+            const activeCamera = this.scene.activeCamera;
+            const minZ = dirLight.shadowMinZ ?? activeCamera?.minZ ?? 0;
+            const maxZ = dirLight.shadowMaxZ ?? activeCamera?.maxZ ?? 10000;
+            const range = getDirectionalShadowProjectionDepthRange(
+                minZ,
+                maxZ,
+                this.engine.useReverseDepthBuffer,
+            );
+            Matrix.OrthoLHToRef(
+                dirLight.shadowFrustumSize,
+                dirLight.shadowFrustumSize,
+                range.near,
+                range.far,
+                result,
+                this.engine.isNDCHalfZRange,
+            );
+        };
+        dirLight.forceProjectionMatrixCompute();
+    }
+
     public isCascadedShadowSupported(): boolean {
-        return isCascadedShadowCompatible(this.engine, CascadedShadowGenerator.IsSupported);
+        return CascadedShadowGenerator.IsSupported;
     }
 
     public getEffectiveShadowMode(): ShadowMode {
         return this.shadowGenerator instanceof CascadedShadowGenerator ? "cascaded" : "standard";
+    }
+
+    public getShadowRuntimeDiagnostics(): {
+        requestedMode: ShadowMode;
+        effectiveMode: ShadowMode;
+        cascadedSupported: boolean;
+        enabled: boolean;
+        lightSamplingEnabled: boolean;
+        reverseDepthBuffer: boolean;
+        customProjectionBuilder: boolean;
+        casterCount: number | null;
+        models: Array<{
+            name: string;
+            castsShadow: boolean;
+            renderMeshCount: number;
+            casterMeshCount: number;
+            receiverMeshCount: number;
+        }>;
+    } {
+        const renderList = this.shadowGenerator.getShadowMap()?.renderList;
+        return {
+            requestedMode: this.shadowModeValue,
+            effectiveMode: this.getEffectiveShadowMode(),
+            cascadedSupported: this.isCascadedShadowSupported(),
+            enabled: this.shadowEnabled,
+            lightSamplingEnabled: this.dirLight?.shadowEnabled ?? false,
+            reverseDepthBuffer: this.engine.useReverseDepthBuffer,
+            customProjectionBuilder: Boolean(this.dirLight?.customProjectionMatrixBuilder),
+            casterCount: Array.isArray(renderList) ? renderList.length : null,
+            models: this.sceneModels.map((entry) => ({
+                name: entry.info.name,
+                castsShadow: entry.castShadow,
+                renderMeshCount: entry.renderMeshes.length,
+                casterMeshCount: entry.shadowCasterMeshes.length,
+                receiverMeshCount: entry.renderMeshes.filter((mesh) => mesh.receiveShadows).length,
+            })),
+        };
     }
 
     public get shadowMode(): ShadowMode {
@@ -3921,7 +3997,7 @@ ${beforeFogAppendBlock}
 
     public set shadowMode(mode: ShadowMode) {
         const requestedMode: ShadowMode = mode === "standard" ? "standard" : "cascaded";
-        const nextMode: ShadowMode = requestedMode === "cascaded" && !this.isCascadedShadowSupported()
+        const nextMode: ShadowMode = requestedMode === "cascaded" && !CascadedShadowGenerator.IsSupported
             ? "standard"
             : requestedMode;
         if (this.shadowModeValue === nextMode && this.getEffectiveShadowMode() === nextMode) return;

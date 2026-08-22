@@ -44,6 +44,7 @@ export class LightingShadowSettingsDialogController implements PopupContentContr
         form.appendChild(grid);
 
         const mode = document.createElement("select");
+        mode.id = "light-shadow-mode";
         mode.className = "popup-form-control";
         [
             { value: "cascaded", label: t("dialog.lightShadow.modeCascaded"), disabled: !this.mmdManager.isCascadedShadowSupported() },

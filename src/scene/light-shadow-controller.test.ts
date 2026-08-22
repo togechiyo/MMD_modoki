@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
     getSerializedLightDirection,
+    getDirectionalShadowProjectionDepthRange,
     getShadowDistanceMultiplier,
     MAX_DIRECTIONAL_LIGHT_INTENSITY,
     setLightColor,
@@ -66,6 +67,17 @@ describe("light direction serialization", () => {
 });
 
 describe("shadow projection range", () => {
+    it("reverses the fixed directional-light depth range for reverse depth", () => {
+        expect(getDirectionalShadowProjectionDepthRange(1, 1000, true)).toEqual({
+            near: 1000,
+            far: 1,
+        });
+        expect(getDirectionalShadowProjectionDepthRange(1, 1000, false)).toEqual({
+            near: 1,
+            far: 1000,
+        });
+    });
+
     it("expands standard shadow frustum from shadowMaxZ", () => {
         const host = createHost();
 

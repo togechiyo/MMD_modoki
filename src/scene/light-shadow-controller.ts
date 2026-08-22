@@ -706,6 +706,16 @@ export function applyShadowFrustumSize(host: LightShadowHost): void {
     }
 }
 
+export function getDirectionalShadowProjectionDepthRange(
+    minZ: number,
+    maxZ: number,
+    useReverseDepthBuffer: boolean,
+): { near: number; far: number } {
+    return useReverseDepthBuffer
+        ? { near: maxZ, far: minZ }
+        : { near: minZ, far: maxZ };
+}
+
 export function applyShadowEdgeSoftness(host: LightShadowHost): void {
     if (!host.shadowGenerator) return;
     applyShadowFilterSettings(host);

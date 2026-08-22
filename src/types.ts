@@ -196,6 +196,24 @@ declare global {
             loadModel: (filePath: string) => Promise<ModelInfo | null>;
             loadModelInteractively: (filePath: string) => Promise<ModelInfo | null>;
             loadAccessory: (filePath: string) => Promise<boolean>;
+            getShadowRuntimeDiagnostics: () => {
+                requestedMode: "cascaded" | "standard";
+                effectiveMode: "cascaded" | "standard";
+                cascadedSupported: boolean;
+                enabled: boolean;
+                lightSamplingEnabled: boolean;
+                reverseDepthBuffer: boolean;
+                customProjectionBuilder: boolean;
+                casterCount: number | null;
+                engine: string;
+                models: Array<{
+                    name: string;
+                    castsShadow: boolean;
+                    renderMeshCount: number;
+                    casterMeshCount: number;
+                    receiverMeshCount: number;
+                }>;
+            };
             getAccessoryMaterialDiagnostics: () => Array<{
                 mesh: string;
                 hasUvs: boolean;

@@ -61,15 +61,19 @@ WebGPU 起動直後、Scene と材質を作る前に `engine.useReverseDepthBuff
 - [Babylon.js forum: How to show objects 20KM+ away](https://forum.babylonjs.com/t/how-to-show-objects-20km-away/25462)
 - [床・巨大平面の欠け調査メモ](./floor-render-stability-investigation-2026-06-26.md)
 
-## 2026-08-20 の第六段階: reverse depth と CSM の互換回避
+## 2026-08-20 の取り下げた試行: reverse depth 使用時の CSM 無効化
 
 MTLなし豆腐 OBJ の追加確認で、床の広い範囲が斜めの境界で暗くなる影誤投影が見つかった。
 同じ自己生成豆腐 PMX、正常な bounds と index でも再現し、通常 shadow へ切り替えると消えたため、
 OBJ の面・法線・材質ではなく WebGPU reverse depth と Babylon.js 9.2.0 CSM の組み合わせとして扱う。
 
-広域 `.x` で実機確認済みの reverse depth は維持する。WebGPU reverse depth では CSM を選択不可にして
-通常 `ShadowGenerator` へフォールバックし、WebGL2 の通常 depth では CSM を残す。Babylon.js 更新時は
-この制限を外せるか豆腐 OBJ / PMX と広域 `.x` の両方で再確認する。
+この結果だけを根拠に、WebGPU reverse depth では CSM を選択不可にして通常 `ShadowGenerator` へ
+フォールバックする変更を入れた。しかしPMXの床への遮蔽影消失とモデル上の誤影が発生し、影方式は
+OBJ以外にも波及するため、この全体変更は取り下げた。広域 `.x` で実機確認済みのreverse depthと、
+従来のCSM優先経路はともに維持する。
+
+今後同じ斜め影を再調査する場合は、豆腐OBJと豆腐PMXを同時に読み、実行時の影生成器、caster / receiver、
+shadow mapの内容を分離して確認する。OBJだけの結果からCSMを外さない。
 
 ## 確認対象
 

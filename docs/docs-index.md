@@ -221,6 +221,8 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 ## Frame Graph / PostFX
 
 - [ポストエフェクト拡充バックログ](./post-effects-backlog.md)
+- [Babylon Lite 参照・独自影 backend 実現性調査 2026-08-22](./babylon-lite-custom-shadow-backend-feasibility-2026-08-22.md)
+- [Frame Graph 影移行 調査メモ 2026-08-22](./framegraph-shadow-migration-investigation-2026-08-22.md)
 - [Babylon.js 公式相談候補台帳 2026-07-29](./babylon-official-consultation-candidates-2026-07-29.md)
 - [Babylon.js Playground / 公式フォーラム投稿手順書](./babylon-forum-reporting-runbook.md)
 - [FrameGraph / PostFX 危険メモ 2026-07-01](./framegraph-postfx-risk-note-2026-07-01.md)
@@ -258,6 +260,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 ## 照明 / 影 / GI / エフェクト
 
 - [影仕様と実装](./shadow-spec.md)
+- [Frame Graph 影移行 調査メモ 2026-08-22](./framegraph-shadow-migration-investigation-2026-08-22.md)
 - [WebGPU CSM + PCF 斜め誤影 調査・暫定回避メモ 2026-08-22](./webgpu-csm-pcf-diagonal-shadow-investigation-2026-08-22.md)
 - [影品質の調査メモ](./shadow-quality-investigation.md)
 - [光・影実装メモ（Toon分離 + フラット光）](./light-shadow-implementation.md)
@@ -318,6 +321,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 
 明確に未実装の機能構想、UI案、技術コンセプトをまとめた分類です。実装計画・現行仕様・調査・進捗メモは各領域の分類に残します。
 
+- [MMD_modoki 独自影システム 構想メモ 2026-08-22](./custom-shadow-system-concept-2026-08-22.md)
 - [Effect Panel 整理構想メモ](./effect-panel-organization-concept-2026-06-12.md)
 - [UI テーマ・拡大率・レイアウト構想メモ](./ui-theme-scale-layout-concept-2026-08-05.md)
 - [入力まわり構想メモ（ショートカット・ゲームパッド・MIDI・アプリ設定の保存）](./input-and-app-settings-concept-2026-08-05.md)

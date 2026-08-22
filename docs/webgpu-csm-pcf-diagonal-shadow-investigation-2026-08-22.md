@@ -75,6 +75,12 @@ comparison sampler を読む点である。
 texture array の comparison sampler を直接読む。今回の斜め境界は、この範囲外 sampling が
 暗い shadow factor へ評価された可能性と整合する。
 
+後続の Babylon Lite CSM source との比較で、Babylon.js 9.2.0 と Lite の双方が depth reference を
+`0.99999994` 以下へ clamp していることを確認した。一方、双方とも UV 範囲外を即座に lit とする
+明示 guard は持たない。したがって仮説は「UV / depth の guard がすべて欠けている」ではなく、
+特に UV、`w`、cascade 投影範囲外の comparison sampling と WebGPU sampler 挙動を分離して検証する。
+Lite の receiver へ置換するだけで直るとは限らない。
+
 ただし、これは MMD_modoki 上の比較結果と shader source からの推定である。
 Babylon.js 側の不具合と確定するには、MMD、Electron、独自床材質を外した最小 Playground と、
 WebGPU / WebGL2 の比較が必要である。
@@ -150,6 +156,7 @@ E2E の成功は shader の見た目を自動判定するものではないた�
 ## 関連資料
 
 - [影仕様と実装](./shadow-spec.md)
+- [Babylon Lite 参照・独自影 backend 実現性調査](./babylon-lite-custom-shadow-backend-feasibility-2026-08-22.md)
 - [Babylon.js 公式相談候補台帳](./babylon-official-consultation-candidates-2026-07-29.md)
 - [Babylon.js Playground / 公式フォーラム投稿手順書](./babylon-forum-reporting-runbook.md)
 - [Babylon.js 公式 WGSL ガイド](https://doc.babylonjs.com/setup/support/webGPU/webGPUWGSL/)

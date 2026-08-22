@@ -28,6 +28,7 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | --- | --- | --- |
 | policy | [FrameGraph の構造変更は rebuild する](./policies/framegraph-structure-changes-require-rebuild.md) | stack 順序、enabled、resource 依存を変更する |
 | policy | [描画リソースは意味を保ったまま共有する](./policies/preserve-render-resource-semantics-before-sharing.md) | depth、normal、mask、RTを統合・最適化する |
+| policy | [WebGPU の影変更は独立した高危険作業として隔離・横断検証する](./policies/webgpu-shadow-changes-require-isolated-cross-path-validation.md) | generator、CSM、filter、caster / receiver、shadow resourceを変更する |
 | verified | [大半径 blur は multi-scale で作る](./verified/wide-blur-needs-multiscale-sampling.md) | Bloom、Glow、DoFなど広いぼかしを作る |
 
 ## Rendering / materials and depth

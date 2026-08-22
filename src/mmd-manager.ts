@@ -813,6 +813,8 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-cel-sharp"
     | "wgsl-cel-shadow-sharp"
     | "wgsl-accessory-toon"
+    | "wgsl-obj-untextured"
+    | "wgsl-obj-mtl"
     | "wgsl-rim-lift"
     | "wgsl-mono-flat";
 
@@ -1084,6 +1086,16 @@ export class MmdManager {
             id: "wgsl-accessory-toon",
             label: "Accessory Toon",
             description: "Use the standard MMD shading path with an accessory-oriented fallback toon ramp",
+        },
+        {
+            id: "wgsl-obj-untextured",
+            label: "OBJ Untextured",
+            description: "Neutral lighting for an OBJ without an MTL material library",
+        },
+        {
+            id: "wgsl-obj-mtl",
+            label: "OBJ MTL",
+            description: "Preserve OBJ MTL colors, textures, and transparency while using standard lighting",
         },
         {
             id: "wgsl-rim-lift",
@@ -3418,12 +3430,19 @@ ${beforeFogAppendBlock}
 
     public setModelMaterialVisibility(modelIndex: number, materialKey: string | null, visible: boolean): boolean {
         const targets = this.findTargetSceneMaterials(modelIndex, materialKey);
-        if (targets.length === 0) {
+        return this.setMaterialVisibilityForMaterials(
+            targets.map((target) => target.material),
+            visible,
+        );
+    }
+
+    public setMaterialVisibilityForMaterials(materials: readonly object[], visible: boolean): boolean {
+        if (materials.length === 0) {
             return false;
         }
 
-        for (const target of targets) {
-            this.setMaterialHiddenState(target.material, !visible);
+        for (const material of materials) {
+            this.setMaterialHiddenState(material, !visible);
         }
 
         syncLuminousGlowLayerImpl(this);

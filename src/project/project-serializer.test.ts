@@ -231,12 +231,20 @@ describe("exportProjectState", () => {
                 visible: false,
                 castsShadow: false,
             }],
+            getSerializedAccessoryMaterialShaderStates: () => [{
+                materialKey: "0:stage",
+                presetId: "wgsl-full-light",
+            }],
         });
 
         expect(project.accessories?.[0]).toMatchObject({
             path: "C:/accessories/stage.x",
             visible: false,
             castsShadow: false,
+            materialShaders: [{
+                materialKey: "0:stage",
+                presetId: "wgsl-full-light",
+            }],
         });
     });
 

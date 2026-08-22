@@ -627,7 +627,7 @@ function localPathToFileUrl(pathText: string): string {
     return `file://${normalized}`;
 }
 
-function getDefaultXToonTexture(scene: Scene): DynamicTexture {
+export function getDefaultAccessoryToonTexture(scene: Scene): DynamicTexture {
     const cached = xDefaultToonTextureCache.get(scene);
     if (cached) return cached;
 
@@ -803,7 +803,7 @@ function buildMat(scene: Scene, m: XMat, cache: Map<XMat, MmdStandardMaterial>):
     const c = cache.get(m);
     if (c) return c;
     const mat = new MmdStandardMaterial(m.name || "x_material", scene);
-    mat.toonTexture = getDefaultXToonTexture(scene);
+    mat.toonTexture = getDefaultAccessoryToonTexture(scene);
     mat.ignoreDiffuseWhenToonTextureIsNull = true;
     mat.diffuseColor = new Color3(m.diffuse.r, m.diffuse.g, m.diffuse.b);
     mat.ambientColor = NON_TOON_SHADOW_AMBIENT.clone();
@@ -924,7 +924,7 @@ function buildMesh(scene: Scene, x: XMesh, parent: TransformNode | null, cache: 
         }
     } else {
         const mat = new MmdStandardMaterial(`${mesh.name}_mat`, scene);
-        mat.toonTexture = getDefaultXToonTexture(scene);
+        mat.toonTexture = getDefaultAccessoryToonTexture(scene);
         mat.ignoreDiffuseWhenToonTextureIsNull = true;
         mat.diffuseColor = new Color3(0.8, 0.8, 0.8);
         mat.ambientColor = NON_TOON_SHADOW_AMBIENT.clone();

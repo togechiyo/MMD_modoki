@@ -342,6 +342,10 @@ async function initializeApp(): Promise<void> {
               url?: string;
               isReady?: () => boolean;
             } | null;
+            toonTexture?: {
+              name?: string;
+              isReady?: () => boolean;
+            } | null;
           } | null;
           const texture = material?.diffuseTexture ?? null;
           return {
@@ -351,6 +355,8 @@ async function initializeApp(): Promise<void> {
             materialClassName: material?.getClassName?.() ?? null,
             diffuseTextureUrl: texture?.url ?? null,
             diffuseTextureReady: texture?.isReady?.() ?? false,
+            toonTextureName: material?.toonTexture?.name ?? null,
+            toonTextureReady: material?.toonTexture?.isReady?.() ?? false,
           };
         }),
         getAccessoryVertexBufferDiagnostics: () => mmdManager.getAccessoryMeshes().map((mesh) => ({

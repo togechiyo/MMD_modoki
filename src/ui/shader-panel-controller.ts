@@ -5,6 +5,10 @@ import {
     PBR_MATERIAL_UI_ENABLED,
     type PbrMaterialShaderPreset,
 } from "../shared/mmd-material-pipeline";
+import {
+    createModelInfoAccessorySelectValue,
+    parseModelInfoAccessorySelectValue,
+} from "./model-info-panel-controller";
 
 type ToastType = "success" | "error" | "info";
 
@@ -48,6 +52,8 @@ const HIDDEN_SHADER_PRESET_IDS = new Set<WgslMaterialShaderPresetId>([
     "wgsl-full-alpha-test-hard",
     "wgsl-alpha-mask",
     "wgsl-accessory-toon",
+    "wgsl-obj-untextured",
+    "wgsl-obj-mtl",
     "wgsl-white-key-cutout",
     "wgsl-black-key-cutout",
 ]);
@@ -76,7 +82,7 @@ export class ShaderPanelController {
     private readonly showToast: (message: string, type?: ToastType) => void;
     private readonly onExternalWgslToonChanged: (path: string | null, text: string | null) => void;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
-    private readonly selectedMaterialKeys = new Map<number, string>();
+    private readonly selectedMaterialKeys = new Map<string, string>();
     private bundledWgslShaderFiles: { name: string; path: string }[] = [];
     private bundledWgslScanInFlight = false;
     private postFxWgslToonPath: string | null = null;
@@ -113,10 +119,17 @@ export class ShaderPanelController {
 
         this.syncModelSelectorFromInfo();
         const models = this.mmdManager.getWgslModelShaderStates();
+        const accessories = this.mmdManager.getAccessoryMaterialShaderStates();
+        const infoModelState = this.getInfoModelSelectState();
+        const selectedAccessoryIndex = parseModelInfoAccessorySelectValue(infoModelState.value);
+        const selectedAccessory = selectedAccessoryIndex === null
+            ? null
+            : accessories.find((accessory) => accessory.accessoryIndex === selectedAccessoryIndex) ?? null;
         if (elements.materialPipelineSelect) {
             elements.materialPipelineSelect.value = this.mmdManager.getMmdMaterialPipelinePreset();
+            elements.materialPipelineSelect.disabled = selectedAccessory !== null;
         }
-        if (this.mmdManager.getTimelineTarget() === "camera") {
+        if (infoModelState.value === CAMERA_SELECT_VALUE && selectedAccessory === null) {
             this.renderCameraPostEffectsPanel();
             return;
         }
@@ -130,7 +143,11 @@ export class ShaderPanelController {
         const previousSelectedShaderValue = elements.presetSelect.value;
         let presets: Array<{ id: string; label: string; description: string }> =
             this.mmdManager.getWgslMaterialShaderPresets()
-            .filter((preset) => !HIDDEN_SHADER_PRESET_IDS.has(preset.id));
+            .filter((preset) => !HIDDEN_SHADER_PRESET_IDS.has(preset.id)
+                || (selectedAccessory?.kind === "x" && preset.id === "wgsl-accessory-toon")
+                || (selectedAccessory?.kind === "obj" && (
+                    preset.id === "wgsl-obj-untextured" || preset.id === "wgsl-obj-mtl"
+                )));
 
         elements.presetSelect.innerHTML = "";
         for (const preset of presets) {
@@ -140,7 +157,7 @@ export class ShaderPanelController {
             elements.presetSelect.appendChild(option);
         }
 
-        if (models.length === 0) {
+        if (models.length === 0 && accessories.length === 0) {
             elements.modelSelect.innerHTML = '<option value="">-</option>';
             elements.modelSelect.disabled = true;
             elements.presetSelect.disabled = true;
@@ -152,20 +169,23 @@ export class ShaderPanelController {
             return;
         }
 
-        const infoModelState = this.getInfoModelSelectState();
-        const timelineTarget = this.mmdManager.getTimelineTarget();
         let selectedModelIndex = Number.parseInt(infoModelState.value, 10);
-        if (
-            timelineTarget !== "model" ||
+        if (selectedAccessory === null && (
             Number.isNaN(selectedModelIndex) ||
             !models.some((model) => model.modelIndex === selectedModelIndex)
-        ) {
-            selectedModelIndex = models.find((model) => model.active)?.modelIndex ?? models[0].modelIndex;
+        )) {
+            selectedModelIndex = models.find((model) => model.active)?.modelIndex ?? models[0]?.modelIndex ?? -1;
         }
 
-        const selectedModel = models.find((model) => model.modelIndex === selectedModelIndex) ?? models[0];
-        const isPbrModel = selectedModel.materialPipeline === "pbr-standard";
-        elements.modelSelect.value = String(selectedModel.modelIndex);
+        const selectedModel = selectedAccessory === null
+            ? models.find((model) => model.modelIndex === selectedModelIndex) ?? models[0] ?? null
+            : null;
+        const selectedTargetValue = selectedAccessory
+            ? createModelInfoAccessorySelectValue(selectedAccessory.accessoryIndex)
+            : String(selectedModel?.modelIndex ?? "");
+        const selectedMaterials = selectedAccessory?.materials ?? selectedModel?.materials ?? [];
+        const isPbrModel = selectedModel?.materialPipeline === "pbr-standard";
+        elements.modelSelect.value = selectedTargetValue;
         elements.modelSelect.disabled = false;
         if (isPbrModel && !PBR_MATERIAL_UI_ENABLED) {
             elements.presetSelect.innerHTML = '<option value="">-</option>';
@@ -229,7 +249,7 @@ export class ShaderPanelController {
                 elements.presetSelect.appendChild(option);
             }
         }
-        if (selectedModel.materials.length === 0) {
+        if (selectedMaterials.length === 0) {
             elements.presetSelect.disabled = true;
             elements.applySelectedButton.disabled = true;
             elements.applyAllButton.disabled = true;
@@ -239,12 +259,12 @@ export class ShaderPanelController {
             return;
         }
 
-        const rememberedMaterialKey = this.selectedMaterialKeys.get(selectedModel.modelIndex);
+        const rememberedMaterialKey = this.selectedMaterialKeys.get(selectedTargetValue);
         const selectedMaterial = rememberedMaterialKey
-            ? selectedModel.materials.find((material) => material.key === rememberedMaterialKey) ?? null
+            ? selectedMaterials.find((material) => material.key === rememberedMaterialKey) ?? null
             : null;
         if (rememberedMaterialKey && !selectedMaterial) {
-            this.selectedMaterialKeys.delete(selectedModel.modelIndex);
+            this.selectedMaterialKeys.delete(selectedTargetValue);
         }
 
         let selectedPresetId = presets[0]?.id ?? "wgsl-mmd-standard";
@@ -254,7 +274,7 @@ export class ShaderPanelController {
                 ? selectedMaterial.pbrPresetId
                 : selectedMaterial.presetId;
         } else {
-            const allPresetIds = Array.from(new Set(selectedModel.materials.map(
+            const allPresetIds = Array.from(new Set(selectedMaterials.map(
                 (material) => isPbrModel ? material.pbrPresetId : material.presetId,
             )));
             if (allPresetIds.length === 1) {
@@ -273,7 +293,7 @@ export class ShaderPanelController {
             ? selectedMaterial.externalWgslPath
             : (() => {
                 const paths = new Set(
-                    selectedModel.materials
+                    selectedMaterials
                         .map((material) => material.externalWgslPath)
                         .filter((value): value is string => typeof value === "string" && value.length > 0),
                 );
@@ -292,7 +312,7 @@ export class ShaderPanelController {
         const presetLabelById = new Map(presets.map((preset) => [preset.id, preset.label]));
         elements.materialList.innerHTML = "";
 
-        for (const material of selectedModel.materials) {
+        for (const material of selectedMaterials) {
             const item = document.createElement("div");
             item.className = "shader-material-item";
             if (selectedMaterial?.key === material.key) {
@@ -303,11 +323,11 @@ export class ShaderPanelController {
             }
             item.title = material.key;
             item.addEventListener("click", () => {
-                const current = this.selectedMaterialKeys.get(selectedModel.modelIndex);
+                const current = this.selectedMaterialKeys.get(selectedTargetValue);
                 if (current === material.key) {
-                    this.selectedMaterialKeys.delete(selectedModel.modelIndex);
+                    this.selectedMaterialKeys.delete(selectedTargetValue);
                 } else {
-                    this.selectedMaterialKeys.set(selectedModel.modelIndex, material.key);
+                    this.selectedMaterialKeys.set(selectedTargetValue, material.key);
                 }
                 this.refresh();
             });
@@ -323,11 +343,17 @@ export class ShaderPanelController {
             });
             visibilityToggle.addEventListener("change", (event) => {
                 event.stopPropagation();
-                const visible = this.mmdManager.setModelMaterialVisibility(
-                    selectedModel.modelIndex,
-                    material.key,
-                    visibilityToggle.checked,
-                );
+                const visible = selectedAccessory
+                    ? this.mmdManager.setAccessoryMaterialVisibility(
+                        selectedAccessory.accessoryIndex,
+                        material.key,
+                        visibilityToggle.checked,
+                    )
+                    : this.mmdManager.setModelMaterialVisibility(
+                        selectedModel?.modelIndex ?? -1,
+                        material.key,
+                        visibilityToggle.checked,
+                    );
                 if (!visible) {
                     visibilityToggle.checked = !visibilityToggle.checked;
                     this.showToast("Material visibility update failed", "error");
@@ -514,35 +540,50 @@ export class ShaderPanelController {
         if (!this.elements.presetSelect) {
             return;
         }
-        if (this.getInfoModelSelectState().value === CAMERA_SELECT_VALUE) {
+        const infoTargetValue = this.getInfoModelSelectState().value;
+        if (infoTargetValue === CAMERA_SELECT_VALUE) {
             this.showToast("Select a model in the info panel first", "error");
             return;
         }
 
         const models = this.mmdManager.getWgslModelShaderStates();
-        let modelIndex = Number.parseInt(this.getInfoModelSelectState().value, 10);
-        if (Number.isNaN(modelIndex) || !models.some((model) => model.modelIndex === modelIndex)) {
+        const accessories = this.mmdManager.getAccessoryMaterialShaderStates();
+        const accessoryIndex = parseModelInfoAccessorySelectValue(infoTargetValue);
+        const selectedAccessory = accessoryIndex === null
+            ? null
+            : accessories.find((accessory) => accessory.accessoryIndex === accessoryIndex) ?? null;
+        let modelIndex = Number.parseInt(infoTargetValue, 10);
+        if (selectedAccessory === null && (
+            Number.isNaN(modelIndex) || !models.some((model) => model.modelIndex === modelIndex)
+        )) {
             modelIndex = models.find((model) => model.active)?.modelIndex ?? -1;
         }
-        if (modelIndex < 0) {
-            this.showToast("Model is not selected", "error");
+        if (selectedAccessory === null && modelIndex < 0) {
+            this.showToast("Material target is not selected", "error");
             return;
         }
 
-        const selectedMaterialKey = this.selectedMaterialKeys.get(modelIndex) ?? null;
+        const selectedTargetValue = selectedAccessory
+            ? createModelInfoAccessorySelectValue(selectedAccessory.accessoryIndex)
+            : String(modelIndex);
+        const selectedMaterialKey = this.selectedMaterialKeys.get(selectedTargetValue) ?? null;
         if (target === "selected" && selectedMaterialKey === null) {
             this.showToast("No material selected", "error");
             return;
         }
         const materialKey = target === "all" ? null : selectedMaterialKey;
-        const selectedModel = models.find((model) => model.modelIndex === modelIndex);
+        const selectedModel = selectedAccessory === null
+            ? models.find((model) => model.modelIndex === modelIndex)
+            : null;
         const isPbrModel = selectedModel?.materialPipeline === "pbr-standard";
         if (!isPbrModel && !this.mmdManager.isWgslMaterialShaderAssignmentAvailable()) {
             this.showToast("WGSL effect assignment is unavailable", "error");
             return;
         }
         const selectedValue = resetToDefault
-            ? (isPbrModel ? "pbr-base" : "wgsl-mmd-standard")
+            ? (isPbrModel
+                ? "pbr-base"
+                : selectedAccessory?.defaultPresetId ?? "wgsl-mmd-standard")
             : this.elements.presetSelect.value;
         if (!selectedValue) {
             this.showToast("Effect preset is not selected", "error");
@@ -579,13 +620,17 @@ export class ShaderPanelController {
             return;
         }
 
-        if (resetToDefault || !this.parseExternalWgslPresetPath(selectedValue)) {
+        if (selectedAccessory === null && (resetToDefault || !this.parseExternalWgslPresetPath(selectedValue))) {
             this.setExternalWgslToonAsset(null, null);
             this.mmdManager.setExternalWgslToonShaderForModel(modelIndex, materialKey, null, null);
         }
 
         const externalWgslPath = this.parseExternalWgslPresetPath(selectedValue);
         if (externalWgslPath) {
+            if (selectedAccessory !== null) {
+                this.showToast("External WGSL assignment is not available for accessories", "error");
+                return;
+            }
             const shaderText = await window.electronAPI.readTextFile(externalWgslPath);
             if (!shaderText) {
                 this.showToast(`WGSL shader load failed: ${this.getBaseNameForRenderer(externalWgslPath)}`, "error");
@@ -609,11 +654,17 @@ export class ShaderPanelController {
             return;
         }
 
-        const ok = this.mmdManager.setWgslMaterialShaderPreset(
-            modelIndex,
-            materialKey,
-            selectedValue as WgslMaterialShaderPresetId,
-        );
+        const ok = selectedAccessory
+            ? this.mmdManager.setAccessoryMaterialShaderPreset(
+                selectedAccessory.accessoryIndex,
+                materialKey,
+                selectedValue as WgslMaterialShaderPresetId,
+            )
+            : this.mmdManager.setWgslMaterialShaderPreset(
+                modelIndex,
+                materialKey,
+                selectedValue as WgslMaterialShaderPresetId,
+            );
         if (!ok) {
             this.showToast("Effect assignment failed", "error");
             return;

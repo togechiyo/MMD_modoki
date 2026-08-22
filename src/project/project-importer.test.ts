@@ -1030,6 +1030,7 @@ describe("importProjectState", () => {
         });
         const setAccessoryVisibility = vi.fn(() => true);
         const setAccessoryCastsShadow = vi.fn(() => true);
+        const applyAccessoryMaterialShaderStates = vi.fn();
         Object.assign(host, {
             loadX,
             getLoadedAccessories: () => Array.from(
@@ -1038,12 +1039,17 @@ describe("importProjectState", () => {
             ),
             setAccessoryVisibility,
             setAccessoryCastsShadow,
+            applyAccessoryMaterialShaderStates,
         });
         const project = createProject({
             accessories: [{
                 path: "C:/accessories/stage.x",
                 visible: false,
                 castsShadow: false,
+                materialShaders: [{
+                    materialKey: "0:stage",
+                    presetId: "wgsl-full-light",
+                }],
             }],
         });
 
@@ -1052,6 +1058,11 @@ describe("importProjectState", () => {
         expect(loadX).toHaveBeenCalledWith("C:/accessories/stage.x");
         expect(setAccessoryVisibility).toHaveBeenCalledWith(0, false);
         expect(setAccessoryCastsShadow).toHaveBeenCalledWith(0, false);
+        expect(applyAccessoryMaterialShaderStates).toHaveBeenCalledWith(
+            0,
+            [{ materialKey: "0:stage", presetId: "wgsl-full-light" }],
+            [],
+        );
     });
 
     it("restores OBJ accessories with the OBJ loader", async () => {

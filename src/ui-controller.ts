@@ -803,6 +803,10 @@ export class UIController {
                 value.distance,
                 value.fov,
             ),
+            onPreviewAccessoryTransform: (value) => this.applyViewportAccessoryTransform(
+                value.position,
+                value.rotation,
+            ),
             onCommitBoneTransform: (value, before) => this.actionDispatcher.dispatch({
                 type: "edit.setBoneTransformFromBottomBar",
                 source: "bottomBar",
@@ -820,6 +824,10 @@ export class UIController {
                 fov: value.fov,
                 before,
             }),
+            onCommitAccessoryTransform: (value) => this.applyViewportAccessoryTransform(
+                value.position,
+                value.rotation,
+            ),
         });
         this.viewportTopBarController = new ViewportTopBarController({
             getCameraTransform: () => this.captureCameraTransformCommandSnapshot(),
@@ -900,8 +908,12 @@ export class UIController {
                             : "camera",
                 );
                 this.updateSectionKeyframeButtons();
+                this.refreshShaderPanel();
             },
-            onAccessoriesChanged: () => this.refreshModelSelector(),
+            onAccessoriesChanged: () => {
+                this.refreshModelSelector();
+                this.refreshShaderPanel();
+            },
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
         this.colorPostFxController = new ColorPostFxController({
@@ -922,7 +934,14 @@ export class UIController {
             isRangeInputEditing: (slider) => this.isRangeInputEditing(slider),
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
-        this.effectPanelShellController = new EffectPanelShellController();
+        this.effectPanelShellController = new EffectPanelShellController(
+            document,
+            (tab) => {
+                if (tab === "materials") {
+                    this.refreshShaderPanel();
+                }
+            },
+        );
         this.effectPanelShellController.setActiveTab("post");
         this.setupPostEffectAddControls();
         this.lutPanelController = new LutPanelController({
@@ -3598,6 +3617,7 @@ export class UIController {
             this.bottomPanelLayoutController?.applyMode("accessory");
         }
         this.refreshModelSelector();
+        this.refreshShaderPanel();
         this.showToast(`Loaded ${formatLabel} model: ${filePath.replace(/^.*[\\/]/, "")}`, "success");
         return true;
     }
@@ -3760,6 +3780,18 @@ export class UIController {
                 frameStopEnabled: this.isPlaybackFrameStopEnabled(),
             },
         });
+        const selectedAccessoryIndex = this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null;
+        if (selectedAccessoryIndex !== null) {
+            this.viewportAxisHandleController?.applyMode("accessory");
+            const transform = this.mmdManager.getAccessoryTransform(selectedAccessoryIndex);
+            this.viewportAxisHandleController?.updateAccessoryTransform(transform
+                ? {
+                    position: transform.position,
+                    rotation: transform.rotationDeg,
+                }
+                : null);
+            return;
+        }
         this.viewportAxisHandleController?.applyMode(target === "model" ? "model" : "camera");
 
         if (target === "model") {
@@ -6934,6 +6966,25 @@ export class UIController {
             distance,
             fov,
         });
+    }
+
+    private applyViewportAccessoryTransform(
+        position: { x: number; y: number; z: number },
+        rotation: { x: number; y: number; z: number },
+    ): boolean {
+        const accessoryIndex = this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null;
+        if (accessoryIndex === null) return false;
+        const applied = this.mmdManager.setAccessoryTransform(accessoryIndex, {
+            position,
+            rotationDeg: rotation,
+        });
+        if (!applied) return false;
+
+        this.accessoryPanelController?.refreshSelectedTransform();
+        this.viewportAxisHandleController?.updateAccessoryTransform({ position, rotation });
+        this.markSectionKeyframeDirty("accessory", this.getAccessoryKeyframeContextKey(accessoryIndex));
+        this.updateSectionKeyframeButtons();
+        return true;
     }
 
     private previewTopBarCameraPan(

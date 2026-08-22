@@ -203,6 +203,8 @@ declare global {
                 materialClassName: string | null;
                 diffuseTextureUrl: string | null;
                 diffuseTextureReady: boolean;
+                toonTextureName: string | null;
+                toonTextureReady: boolean;
             }>;
             getAccessoryVertexBufferDiagnostics: () => Array<{
                 mesh: string;
@@ -678,6 +680,7 @@ export interface ProjectAccessoryState {
     path: string;
     visible: boolean;
     castsShadow?: boolean;
+    materialShaders?: ProjectModelMaterialShaderState[];
     transform?: {
         position: { x: number; y: number; z: number };
         rotationDeg: { x: number; y: number; z: number };

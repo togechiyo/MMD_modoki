@@ -201,6 +201,7 @@
 - [x] OBJ 読み込み最小 PoC（2026-08-20: MTLなし豆腐モデルをアクセサリとして読み込み、情報欄操作、transform / 表示 / 影 / pathのproject保存・再読み込みをE2E確認）
 - [x] OBJの単一MTL / ローカルtexture対応（2026-08-21: IPCでcompanion fileを安全に読み、画像をoffline data URLとしてBabylon OBJ / MTL loaderへ渡す。欠損時fallback、path境界、外部URL拒否、project再読込をunit / Electron E2E確認）
   - [x] UV＋単一MTL＋ローカルPNGを持つ最小fixtureを追加（`tofu-uv-mtl.obj` / `.mtl` / `.png`）
+  - [x] MTLなし `OBJ Untextured` / MTLあり `OBJ MTL` の専用材質presetを追加し、読込時の既定適用、材質panel、Reset、project差分保存を分離。OBJ材質を `.x` と同じMMD toon影色経路へ接続（2026-08-22: 両fixtureのElectron E2E確認）
   - [ ] 複数MTL、拡張texture option、空白・日本語file名の追加互換検証
 - [ ] STL 読み込み
 - [ ] `.babylon` 読み込み

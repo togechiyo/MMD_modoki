@@ -103,8 +103,6 @@ export class ModelInfoPanelController {
             selected = true;
         }
 
-        const modelGroup = document.createElement("optgroup");
-        modelGroup.label = t("label.model");
         for (const model of models) {
             const option = document.createElement("option");
             option.value = String(model.index);
@@ -114,21 +112,17 @@ export class ModelInfoPanelController {
                 option.selected = true;
                 selected = true;
             }
-            modelGroup.appendChild(option);
+            select.appendChild(option);
         }
-        if (modelGroup.childElementCount > 0) select.appendChild(modelGroup);
 
-        const accessoryGroup = document.createElement("optgroup");
-        accessoryGroup.label = t("section.accessory");
         for (const accessory of accessories) {
             const option = document.createElement("option");
             option.value = createModelInfoAccessorySelectValue(accessory.index);
             option.textContent = `${models.length + accessory.index + 1}: ${accessory.name} [${accessory.kind.toUpperCase()}]`;
             option.title = accessory.path;
             if (selectedAccessoryIndex === accessory.index) option.selected = true;
-            accessoryGroup.appendChild(option);
+            select.appendChild(option);
         }
-        if (accessoryGroup.childElementCount > 0) select.appendChild(accessoryGroup);
 
         if (!selected) {
             cameraOption.selected = true;
@@ -164,6 +158,7 @@ export class ModelInfoPanelController {
 
     public getSelectState(): ModelInfoSelectState {
         const models = this.mmdManager.getLoadedModels();
+        const accessories = this.mmdManager.getLoadedAccessories();
         const select = document.createElement("select");
         const cameraOption = document.createElement("option");
         cameraOption.value = MODEL_INFO_CAMERA_SELECT_VALUE;
@@ -176,16 +171,27 @@ export class ModelInfoPanelController {
             option.title = model.path;
             select.appendChild(option);
         }
+        for (const accessory of accessories) {
+            const option = document.createElement("option");
+            option.value = createModelInfoAccessorySelectValue(accessory.index);
+            option.textContent = `${models.length + accessory.index + 1}: ${accessory.name} [${accessory.kind.toUpperCase()}]`;
+            option.title = accessory.path;
+            select.appendChild(option);
+        }
         const activeModel = models.find((model) => model.active) ?? null;
-        const value = this.getSelectedAccessoryIndex() !== null
-            ? MODEL_INFO_CAMERA_SELECT_VALUE
+        const selectedAccessoryIndex = this.getSelectedAccessoryIndex();
+        const selectedAccessory = selectedAccessoryIndex === null
+            ? null
+            : accessories.find((accessory) => accessory.index === selectedAccessoryIndex) ?? null;
+        const value = selectedAccessory
+            ? createModelInfoAccessorySelectValue(selectedAccessory.index)
             : this.mmdManager.getTimelineTarget() === "model" && activeModel
                 ? String(activeModel.index)
                 : MODEL_INFO_CAMERA_SELECT_VALUE;
         return {
             innerHTML: select.innerHTML,
             value,
-            disabled: models.length === 0,
+            disabled: models.length === 0 && accessories.length === 0,
         };
     }
 

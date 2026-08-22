@@ -39,6 +39,8 @@ function createHost() {
                 { id: "wgsl-mmd-standard", label: "standard" },
                 { id: "wgsl-autoluminous", label: "Luminous" },
                 { id: "wgsl-full-shadow", label: "full_shadow" },
+                { id: "wgsl-obj-untextured", label: "OBJ Untextured" },
+                { id: "wgsl-obj-mtl", label: "OBJ MTL" },
             ],
             externalWgslToonFragmentByMaterial: new WeakMap<object, string>(),
             presetWgslToonFragmentByMaterial: new WeakMap<object, string>(),
@@ -102,6 +104,25 @@ function createHost() {
 }
 
 describe("material shader preset restore", () => {
+    it("uses neutral lighting for untextured OBJ and restores MTL material values", () => {
+        const host = createHost();
+        host.material.specularPower = 96;
+        host.material.specularColor = new Color3(0.3, 0.2, 0.1);
+        host.material.ambientColor = new Color3(0.05, 0.1, 0.15);
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-obj-untextured")).toBe(true);
+        expect(host.material.disableLighting).toBe(false);
+        expect(host.material.specularPower).toBe(32);
+        expect(host.material.specularColor.equals(new Color3(0.1, 0.1, 0.1))).toBe(true);
+        expect(host.material.ambientColor.equals(new Color3(0.2, 0.2, 0.2))).toBe(true);
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-obj-mtl")).toBe(true);
+        expect(host.material.disableLighting).toBe(false);
+        expect(host.material.specularPower).toBe(96);
+        expect(host.material.specularColor.equals(new Color3(0.3, 0.2, 0.1))).toBe(true);
+        expect(host.material.ambientColor.equals(new Color3(0.05, 0.1, 0.15))).toBe(true);
+    });
+
     it("persists and restores per-material PBR shader assignments", () => {
         const host = createHost();
         const pbrMaterial = {

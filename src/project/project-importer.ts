@@ -762,6 +762,11 @@ export async function importProjectState(
         ) => boolean;
         setAccessoryParent?: (index: number, modelIndex: number | null, boneName: string | null) => boolean;
         setAccessoryTransformKeyframes?: (index: number, track: ProjectSerializedAccessoryTransformTrack | null) => boolean;
+        applyAccessoryMaterialShaderStates?: (
+            index: number,
+            states: ProjectAccessoryState["materialShaders"],
+            warnings?: string[],
+        ) => void;
     };
     const accessories = Array.isArray(data.accessories) ? data.accessories : [];
     const accessoryKeyframeTracks = Array.isArray(data.keyframes?.accessoryTransformAnimations)
@@ -807,6 +812,11 @@ export async function importProjectState(
                     accessoryState.castsShadow,
                 );
             }
+            accessoryExtension.applyAccessoryMaterialShaderStates?.(
+                restoredAccessoryIndex,
+                accessoryState.materialShaders,
+                warnings,
+            );
 
             const transform = accessoryState.transform;
             if (transform) {

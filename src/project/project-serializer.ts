@@ -269,6 +269,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         } | null;
         getAccessoryParent?: (index: number) => { modelIndex: number | null; boneName: string | null } | null;
         getAccessoryTransformKeyframes?: (index: number) => ProjectSerializedAccessoryTransformTrack | null;
+        getSerializedAccessoryMaterialShaderStates?: (index: number) => ProjectModelMaterialShaderState[];
     };
 
     const models = host.sceneModels.map((entry, modelIndex) => ({
@@ -302,10 +303,12 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             ? host.sceneModels[parent.modelIndex]?.info.instanceId ?? null
             : null;
 
+        const materialShaders = accessoryExtension.getSerializedAccessoryMaterialShaderStates?.(entry.index) ?? [];
         return {
             path: entry.path,
             visible: entry.visible,
             castsShadow: entry.castsShadow,
+            materialShaders: materialShaders.length > 0 ? materialShaders : undefined,
             transform: transform ?? undefined,
             parentModelInstanceId,
             parentModelPath,

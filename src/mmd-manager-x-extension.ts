@@ -8,16 +8,25 @@ import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
-import { Material } from "@babylonjs/core/Materials/material";
+import type { Material } from "@babylonjs/core/Materials/material";
 import { MultiMaterial } from "@babylonjs/core/Materials/multiMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { MmdManager } from "./mmd-manager";
+import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
+import {
+    MmdManager,
+    type WgslMaterialShaderInfo,
+    type WgslMaterialShaderPresetId,
+} from "./mmd-manager";
 import { isDebugLogEnabled, logDebugIfEnabled, logError, logInfo, logWarn, toLogErrorData } from "./app-logger";
-import { applyWgslShaderPresetToMaterials } from "./scene/material-shader-service";
+import {
+    applyWgslShaderPresetToMaterials,
+    getExternalWgslToonShaderPathForMaterial,
+    getWgslMaterialShaderPresetForMaterial,
+} from "./scene/material-shader-service";
 import { stabilizeLargeThinLoadedMesh } from "./scene/mesh-render-stability";
 import { applyAccessoryCoplanarMaterialDepthBias } from "./scene/accessory-coplanar-depth-bias";
-import { loadXIntoScene } from "./x-file-loader";
-import type { ProjectSerializedAccessoryTransformTrack } from "./types";
+import { getDefaultAccessoryToonTexture, loadXIntoScene } from "./x-file-loader";
+import type { ProjectModelMaterialShaderState, ProjectSerializedAccessoryTransformTrack } from "./types";
 import { copyProjectArrayToFloat32, copyProjectArrayToUint32, packFloat32Array, packFrameNumbers } from "./project/project-codec";
 import { createObjLoaderForLocalMaterialData, prepareLocalObjMaterialBundle } from "./shared/obj-local-materials";
 
@@ -42,6 +51,15 @@ export type AccessoryParentState = {
     modelIndex: number | null;
     modelName: string | null;
     boneName: string | null;
+};
+
+export type AccessoryMaterialShaderState = {
+    accessoryIndex: number;
+    accessoryName: string;
+    accessoryPath: string;
+    kind: AccessoryKind;
+    defaultPresetId: WgslMaterialShaderPresetId;
+    materials: WgslMaterialShaderInfo[];
 };
 
 type AccessoryTransformKeyframeState = {
@@ -74,6 +92,19 @@ declare module "./mmd-manager" {
         getModelBoneNames(modelIndex: number): string[];
         getAccessoryMeshes(): AbstractMesh[];
         getIblShadowAccessoryMeshes(): AbstractMesh[];
+        getAccessoryMaterialShaderStates(): AccessoryMaterialShaderState[];
+        setAccessoryMaterialVisibility(index: number, materialKey: string | null, visible: boolean): boolean;
+        setAccessoryMaterialShaderPreset(
+            index: number,
+            materialKey: string | null,
+            presetId: WgslMaterialShaderPresetId,
+        ): boolean;
+        getSerializedAccessoryMaterialShaderStates(index: number): ProjectModelMaterialShaderState[];
+        applyAccessoryMaterialShaderStates(
+            index: number,
+            states: ProjectModelMaterialShaderState[] | undefined,
+            warnings?: string[],
+        ): void;
         refreshAccessoryCoplanarMaterialDepthBiasCorrection(strength: unknown): number;
     }
 }
@@ -101,6 +132,7 @@ type AccessoryEntry = {
     offset: TransformNode;
     baseScale: number;
     meshes: AbstractMesh[];
+    defaultShaderPresetId: WgslMaterialShaderPresetId;
     castsShadow: boolean;
     parentModelRef: object | null;
     parentModelName: string | null;
@@ -120,7 +152,8 @@ const tempRotation = Quaternion.Identity();
 const tempRotation2 = Quaternion.Identity();
 const X_ACCESSORY_IMPORT_SCALE = 10;
 const GLB_ACCESSORY_IMPORT_SCALE = 25;
-const OBJ_ACCESSORY_IMPORT_SCALE = 10;
+// OBJ has no unit metadata, so preserve its authored coordinates instead of inheriting the X accessory correction.
+const OBJ_ACCESSORY_IMPORT_SCALE = 1;
 const GLB_ACCESSORY_MIN_VISIBLE_SIZE = 60;
 const GLB_ACCESSORY_MAX_AUTO_SCALE = 400;
 const GLB_DEBUG_FORCE_NEON_MATERIAL = false;
@@ -430,7 +463,7 @@ function collectAccessoryMaterials(meshes: readonly AbstractMesh[]): Material[] 
     const seen = new Set<object>();
 
     const register = (material: Material | null | undefined): void => {
-        if (!(material instanceof Material)) return;
+        if (!material || typeof material !== "object") return;
         if (seen.has(material as object)) return;
         seen.add(material as object);
         materials.push(material);
@@ -438,8 +471,9 @@ function collectAccessoryMaterials(meshes: readonly AbstractMesh[]): Material[] 
 
     for (const mesh of meshes) {
         const material = mesh.material;
-        if (material instanceof MultiMaterial) {
-            for (const subMaterial of material.subMaterials) {
+        const subMaterials = (material as MultiMaterial | null)?.subMaterials;
+        if (Array.isArray(subMaterials)) {
+            for (const subMaterial of subMaterials) {
                 register(subMaterial ?? null);
             }
             continue;
@@ -449,6 +483,137 @@ function collectAccessoryMaterials(meshes: readonly AbstractMesh[]): Material[] 
     }
 
     return materials;
+}
+
+function collectAccessoryMaterialEntries(meshes: readonly AbstractMesh[]): Array<{
+    key: string;
+    name: string;
+    material: Material;
+}> {
+    return collectAccessoryMaterials(meshes).map((material, materialIndex) => {
+        const name = material.name.trim().length > 0
+            ? material.name
+            : `material_${String(materialIndex + 1)}`;
+        return {
+            key: `${String(materialIndex)}:${name}`,
+            name,
+            material,
+        };
+    });
+}
+
+function getAccessoryDefaultShaderPreset(entry: AccessoryEntry): WgslMaterialShaderPresetId {
+    return entry.defaultShaderPresetId;
+}
+
+function copyStandardMaterialToObjToonMaterial(
+    source: StandardMaterial,
+    target: MmdStandardMaterial,
+): void {
+    target.alpha = source.alpha;
+    target.diffuseColor.copyFrom(source.diffuseColor);
+    target.ambientColor.copyFrom(source.ambientColor);
+    target.specularColor.copyFrom(source.specularColor);
+    target.emissiveColor.copyFrom(source.emissiveColor);
+    target.specularPower = source.specularPower;
+    target.roughness = source.roughness;
+    target.diffuseTexture = source.diffuseTexture;
+    target.ambientTexture = source.ambientTexture;
+    target.opacityTexture = source.opacityTexture;
+    target.reflectionTexture = source.reflectionTexture;
+    target.emissiveTexture = source.emissiveTexture;
+    target.specularTexture = source.specularTexture;
+    target.bumpTexture = source.bumpTexture;
+    target.lightmapTexture = source.lightmapTexture;
+    target.refractionTexture = source.refractionTexture;
+    target.backFaceCulling = source.backFaceCulling;
+    target.sideOrientation = source.sideOrientation;
+    target.twoSidedLighting = source.twoSidedLighting;
+    target.disableLighting = source.disableLighting;
+    target.useAlphaFromDiffuseTexture = source.useAlphaFromDiffuseTexture;
+    target.transparencyMode = source.transparencyMode;
+    target.alphaCutOff = source.alphaCutOff;
+    target.needDepthPrePass = source.needDepthPrePass;
+    target.separateCullingPass = source.separateCullingPass;
+    target.forceDepthWrite = source.forceDepthWrite;
+    target.useSpecularOverAlpha = source.useSpecularOverAlpha;
+    target.maxSimultaneousLights = source.maxSimultaneousLights;
+    target.zOffset = source.zOffset;
+    target.zOffsetUnits = source.zOffsetUnits;
+}
+
+function normalizeObjAccessoryMaterialsToMmd(scene: Scene, meshes: readonly AbstractMesh[]): void {
+    const cache = new Map<Material, Material>();
+
+    const convert = (material: Material): Material => {
+        const cached = cache.get(material);
+        if (cached) return cached;
+        if (material instanceof MmdStandardMaterial) {
+            cache.set(material, material);
+            return material;
+        }
+        if (material instanceof MultiMaterial) {
+            cache.set(material, material);
+            material.subMaterials = material.subMaterials.map((subMaterial) => (
+                subMaterial ? convert(subMaterial) : null
+            ));
+            return material;
+        }
+        if (!(material instanceof StandardMaterial)) {
+            cache.set(material, material);
+            return material;
+        }
+
+        const converted = new MmdStandardMaterial(material.name || "obj_material", scene);
+        cache.set(material, converted);
+        copyStandardMaterialToObjToonMaterial(material, converted);
+        converted.toonTexture = getDefaultAccessoryToonTexture(scene);
+        converted.ignoreDiffuseWhenToonTextureIsNull = true;
+        return converted;
+    };
+
+    for (const mesh of meshes) {
+        if (mesh.material) mesh.material = convert(mesh.material);
+    }
+}
+
+function ensureAccessoryFallbackMaterial(
+    scene: Scene,
+    meshes: readonly AbstractMesh[],
+    accessoryName: string,
+): void {
+    let fallbackMaterial: MmdStandardMaterial | null = null;
+    const getFallbackMaterial = (): MmdStandardMaterial => {
+        if (fallbackMaterial) return fallbackMaterial;
+        fallbackMaterial = new MmdStandardMaterial(`${accessoryName}_default`, scene);
+        // A pure-white fallback is almost indistinguishable from the default sky once
+        // the MMD toon ramp is applied. Keep untextured OBJ neutral but readable.
+        fallbackMaterial.diffuseColor = new Color3(0.55, 0.55, 0.55);
+        fallbackMaterial.ambientColor = new Color3(0.2, 0.2, 0.2);
+        fallbackMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
+        fallbackMaterial.toonTexture = getDefaultAccessoryToonTexture(scene);
+        fallbackMaterial.ignoreDiffuseWhenToonTextureIsNull = true;
+        return fallbackMaterial;
+    };
+
+    for (const mesh of meshes) {
+        const material = mesh.material;
+        if (!material) {
+            mesh.material = getFallbackMaterial();
+            continue;
+        }
+
+        const subMaterials = (material as MultiMaterial).subMaterials;
+        if (!Array.isArray(subMaterials)) continue;
+        if (subMaterials.length === 0) {
+            mesh.material = getFallbackMaterial();
+            continue;
+        }
+
+        for (let index = 0; index < subMaterials.length; index += 1) {
+            if (!subMaterials[index]) subMaterials[index] = getFallbackMaterial();
+        }
+    }
 }
 
 function prepareManagedAccessoryMeshes(host: XLoadHost, meshes: AbstractMesh[], castShadows: boolean): AbstractMesh[] {
@@ -772,6 +937,9 @@ function createAccessoryEntryFromImport(
     accessoryName: string,
     result: { transformNodes: TransformNode[]; meshes: AbstractMesh[] },
     importScale: number,
+    defaultShaderPresetId: WgslMaterialShaderPresetId = kind === "x"
+        ? "wgsl-accessory-toon"
+        : "wgsl-mmd-standard",
 ): AccessoryEntry {
     const entries = getAccessoryEntries(host);
     const root = new TransformNode(`${kind}_accessory_root_${entries.length}`, host.scene);
@@ -814,14 +982,20 @@ function createAccessoryEntryFromImport(
     } else {
         configureImportedAccessoryMeshes(host, result.meshes, managedMeshes);
     }
+    if (kind === "x" || kind === "obj") {
+        ensureAccessoryFallbackMaterial(host.scene, managedMeshes, accessoryName);
+    }
+    if (kind === "obj") {
+        normalizeObjAccessoryMaterialsToMmd(host.scene, managedMeshes);
+    }
     forceAccessoryHierarchyEnabled([...result.transformNodes, ...hierarchyMeshes, ...managedMeshes]);
     prepareManagedAccessoryMeshes(host, managedMeshes, kind !== "glb");
-    if (kind === "x") {
+    if (kind === "x" || kind === "obj") {
         const accessoryMaterials = collectAccessoryMaterials(managedMeshes);
         applyWgslShaderPresetToMaterials(
-            host as Parameters<typeof applyWgslShaderPresetToMaterials>[0],
-            accessoryMaterials,
-            "wgsl-accessory-toon",
+            host as unknown as Parameters<typeof applyWgslShaderPresetToMaterials>[0],
+            accessoryMaterials as unknown as Parameters<typeof applyWgslShaderPresetToMaterials>[1],
+            defaultShaderPresetId,
         );
     }
     if (kind === "glb") {
@@ -845,6 +1019,7 @@ function createAccessoryEntryFromImport(
         offset,
         baseScale,
         meshes: managedMeshes,
+        defaultShaderPresetId,
         castsShadow: kind !== "glb",
         parentModelRef: null,
         parentModelName: null,
@@ -1160,6 +1335,19 @@ const mmdManagerProto = MmdManager.prototype as unknown as {
     getModelBoneNames?: (modelIndex: number) => string[];
     getAccessoryMeshes?: () => AbstractMesh[];
     getIblShadowAccessoryMeshes?: () => AbstractMesh[];
+    getAccessoryMaterialShaderStates?: () => AccessoryMaterialShaderState[];
+    setAccessoryMaterialVisibility?: (index: number, materialKey: string | null, visible: boolean) => boolean;
+    setAccessoryMaterialShaderPreset?: (
+        index: number,
+        materialKey: string | null,
+        presetId: WgslMaterialShaderPresetId,
+    ) => boolean;
+    getSerializedAccessoryMaterialShaderStates?: (index: number) => ProjectModelMaterialShaderState[];
+    applyAccessoryMaterialShaderStates?: (
+        index: number,
+        states: ProjectModelMaterialShaderState[] | undefined,
+        warnings?: string[],
+    ) => void;
     refreshAccessoryCoplanarMaterialDepthBiasCorrection?: (strength: unknown) => number;
 };
 
@@ -1338,6 +1526,7 @@ if (!mmdManagerProto.loadObj) {
                     meshes,
                 },
                 OBJ_ACCESSORY_IMPORT_SCALE,
+                materialsLoaded ? "wgsl-obj-mtl" : "wgsl-obj-untextured",
             );
             host.applyToonShadowInfluenceToMeshes?.(meshes as Mesh[]);
             const coplanarBiasedMaterialCount = host.refreshMmdCoplanarMaterialDepthBiasCorrection?.() ?? 0;
@@ -1669,6 +1858,121 @@ if (!mmdManagerProto.setAccessoryTransformKeyframes) {
         copyProjectArrayToFloat32(track.rotations, entry.transformKeyframes.rotations);
         copyProjectArrayToFloat32(track.scales, entry.transformKeyframes.scales);
         return true;
+    };
+}
+
+if (!mmdManagerProto.getAccessoryMaterialShaderStates) {
+    mmdManagerProto.getAccessoryMaterialShaderStates = function(): AccessoryMaterialShaderState[] {
+        const manager = this as unknown as MmdManager;
+        const host = this as unknown as Parameters<typeof getWgslMaterialShaderPresetForMaterial>[0];
+        return getAccessoryEntries(this as unknown as object).map((entry, accessoryIndex) => ({
+            accessoryIndex,
+            accessoryName: entry.name,
+            accessoryPath: entry.path,
+            kind: entry.kind,
+            defaultPresetId: entry.defaultShaderPresetId,
+            materials: collectAccessoryMaterialEntries(entry.meshes).map((materialEntry) => ({
+                key: materialEntry.key,
+                name: materialEntry.name,
+                presetId: getWgslMaterialShaderPresetForMaterial(
+                    host,
+                    materialEntry.material as unknown as Parameters<typeof getWgslMaterialShaderPresetForMaterial>[1],
+                ),
+                pbrPresetId: "pbr-base",
+                externalWgslPath: getExternalWgslToonShaderPathForMaterial(
+                    host,
+                    materialEntry.material as unknown as Parameters<typeof getExternalWgslToonShaderPathForMaterial>[1],
+                ),
+                visible: manager.isMaterialVisible(
+                    materialEntry.material as unknown as Parameters<MmdManager["isMaterialVisible"]>[0],
+                ),
+            })),
+        }));
+    };
+}
+
+if (!mmdManagerProto.setAccessoryMaterialVisibility) {
+    mmdManagerProto.setAccessoryMaterialVisibility = function(
+        index: number,
+        materialKey: string | null,
+        visible: boolean,
+    ): boolean {
+        const entry = getAccessoryEntries(this as unknown as object)[index];
+        if (!entry) return false;
+        const targets = collectAccessoryMaterialEntries(entry.meshes)
+            .filter((materialEntry) => materialKey === null || materialEntry.key === materialKey)
+            .map((materialEntry) => materialEntry.material);
+        return (this as unknown as MmdManager).setMaterialVisibilityForMaterials(targets, visible);
+    };
+}
+
+if (!mmdManagerProto.setAccessoryMaterialShaderPreset) {
+    mmdManagerProto.setAccessoryMaterialShaderPreset = function(
+        index: number,
+        materialKey: string | null,
+        presetId: WgslMaterialShaderPresetId,
+    ): boolean {
+        const entry = getAccessoryEntries(this as unknown as object)[index];
+        if (!entry) return false;
+        const targets = collectAccessoryMaterialEntries(entry.meshes)
+            .filter((materialEntry) => materialKey === null || materialEntry.key === materialKey)
+            .map((materialEntry) => materialEntry.material);
+        return applyWgslShaderPresetToMaterials(
+            this as unknown as Parameters<typeof applyWgslShaderPresetToMaterials>[0],
+            targets as unknown as Parameters<typeof applyWgslShaderPresetToMaterials>[1],
+            presetId,
+        );
+    };
+}
+
+if (!mmdManagerProto.getSerializedAccessoryMaterialShaderStates) {
+    mmdManagerProto.getSerializedAccessoryMaterialShaderStates = function(
+        index: number,
+    ): ProjectModelMaterialShaderState[] {
+        const entry = getAccessoryEntries(this as unknown as object)[index];
+        if (!entry) return [];
+        const host = this as unknown as Parameters<typeof getWgslMaterialShaderPresetForMaterial>[0];
+        const defaultPreset = getAccessoryDefaultShaderPreset(entry);
+        return collectAccessoryMaterialEntries(entry.meshes).flatMap((materialEntry) => {
+            const presetId = getWgslMaterialShaderPresetForMaterial(
+                host,
+                materialEntry.material as unknown as Parameters<typeof getWgslMaterialShaderPresetForMaterial>[1],
+            );
+            return presetId === defaultPreset
+                ? []
+                : [{ materialKey: materialEntry.key, presetId }];
+        });
+    };
+}
+
+if (!mmdManagerProto.applyAccessoryMaterialShaderStates) {
+    mmdManagerProto.applyAccessoryMaterialShaderStates = function(
+        index: number,
+        states: ProjectModelMaterialShaderState[] | undefined,
+        warnings: string[] = [],
+    ): void {
+        if (!Array.isArray(states) || states.length === 0) return;
+        const entry = getAccessoryEntries(this as unknown as object)[index];
+        if (!entry) return;
+        const materialEntries = collectAccessoryMaterialEntries(entry.meshes);
+        for (const state of states) {
+            if (!state || typeof state.materialKey !== "string" || typeof state.presetId !== "string") {
+                warnings.push(`Invalid accessory material shader assignment: ${entry.path}`);
+                continue;
+            }
+            if (!materialEntries.some((materialEntry) => materialEntry.key === state.materialKey)) {
+                warnings.push(`Accessory material shader target not found: ${state.materialKey} (${entry.path})`);
+                continue;
+            }
+            const ok = (this as unknown as MmdManager).setAccessoryMaterialShaderPreset(
+                index,
+                state.materialKey,
+                state.presetId as WgslMaterialShaderPresetId,
+            );
+            if (!ok) {
+                warnings.push(`Unknown accessory shader preset '${state.presetId}' for ${entry.path}`);
+            }
+        }
     };
 }
 

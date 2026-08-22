@@ -1,4 +1,4 @@
-export type ViewportEditMode = "model" | "camera";
+export type ViewportEditMode = "model" | "camera" | "accessory";
 type ViewportHandleKind = "move" | "rotate";
 type ViewportHandleAxis = "x" | "y" | "z";
 
@@ -20,21 +20,42 @@ export type ViewportAxisHandleCameraEditValue = {
     fov: number;
 };
 
+export type ViewportAxisHandleAccessoryEditValue = {
+    position: Vector3Like;
+    rotation: Vector3Like;
+};
+
+type ViewportAxisHandleEditValue =
+    | ViewportAxisHandleBoneEditValue
+    | ViewportAxisHandleCameraEditValue
+    | ViewportAxisHandleAccessoryEditValue;
+
 type ViewportAxisHandleOptions = {
     onPreviewBoneTransform?: (value: ViewportAxisHandleBoneEditValue) => boolean;
     onPreviewCameraTransform?: (value: ViewportAxisHandleCameraEditValue) => boolean;
+    onPreviewAccessoryTransform?: (value: ViewportAxisHandleAccessoryEditValue) => boolean;
     onCommitBoneTransform: (value: ViewportAxisHandleBoneEditValue, before?: ViewportAxisHandleBoneEditValue) => boolean;
     onCommitCameraTransform: (value: ViewportAxisHandleCameraEditValue, before?: ViewportAxisHandleCameraEditValue) => boolean;
+    onCommitAccessoryTransform: (
+        value: ViewportAxisHandleAccessoryEditValue,
+        before?: ViewportAxisHandleAccessoryEditValue,
+    ) => boolean;
 };
 
 export class ViewportAxisHandleController {
     private readonly onPreviewBoneTransform: (value: ViewportAxisHandleBoneEditValue) => boolean;
     private readonly onPreviewCameraTransform: (value: ViewportAxisHandleCameraEditValue) => boolean;
+    private readonly onPreviewAccessoryTransform: (value: ViewportAxisHandleAccessoryEditValue) => boolean;
     private readonly onCommitBoneTransform: (value: ViewportAxisHandleBoneEditValue, before?: ViewportAxisHandleBoneEditValue) => boolean;
     private readonly onCommitCameraTransform: (value: ViewportAxisHandleCameraEditValue, before?: ViewportAxisHandleCameraEditValue) => boolean;
+    private readonly onCommitAccessoryTransform: (
+        value: ViewportAxisHandleAccessoryEditValue,
+        before?: ViewportAxisHandleAccessoryEditValue,
+    ) => boolean;
     private mode: ViewportEditMode = "camera";
     private lastModelTransform: ViewportAxisHandleBoneEditValue | null = null;
     private lastCameraTransform: ViewportAxisHandleCameraEditValue | null = null;
+    private lastAccessoryTransform: ViewportAxisHandleAccessoryEditValue | null = null;
     private handleDrag:
         | {
             pointerId: number;
@@ -44,8 +65,8 @@ export class ViewportAxisHandleController {
             axis: ViewportHandleAxis;
             startClientY: number;
             startValue: number;
-            startEditValue: ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue;
-            currentEditValue: ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue;
+            startEditValue: ViewportAxisHandleEditValue;
+            currentEditValue: ViewportAxisHandleEditValue;
             min: number;
             max: number;
             scale: number;
@@ -55,8 +76,10 @@ export class ViewportAxisHandleController {
     constructor(options: ViewportAxisHandleOptions) {
         this.onPreviewBoneTransform = options.onPreviewBoneTransform ?? (() => false);
         this.onPreviewCameraTransform = options.onPreviewCameraTransform ?? (() => false);
+        this.onPreviewAccessoryTransform = options.onPreviewAccessoryTransform ?? (() => false);
         this.onCommitBoneTransform = options.onCommitBoneTransform;
         this.onCommitCameraTransform = options.onCommitCameraTransform;
+        this.onCommitAccessoryTransform = options.onCommitAccessoryTransform;
         this.installHandleDragHandlers();
     }
 
@@ -79,6 +102,13 @@ export class ViewportAxisHandleController {
             distance: transform.distance,
             fov: transform.fov,
         };
+    }
+
+    public updateAccessoryTransform(transform: { position: Vector3Like; rotation: Vector3Like } | null): void {
+        if (this.handleDrag?.mode === "accessory") return;
+        this.lastAccessoryTransform = transform
+            ? { position: { ...transform.position }, rotation: { ...transform.rotation } }
+            : null;
     }
 
     private installHandleDragHandlers(): void {
@@ -150,30 +180,40 @@ export class ViewportAxisHandleController {
             );
             return;
         }
+        if (drag.mode === "accessory") {
+            this.onCommitAccessoryTransform(
+                drag.currentEditValue as ViewportAxisHandleAccessoryEditValue,
+                drag.startEditValue as ViewportAxisHandleAccessoryEditValue,
+            );
+            return;
+        }
         this.onCommitCameraTransform(
             drag.currentEditValue as ViewportAxisHandleCameraEditValue,
             drag.startEditValue as ViewportAxisHandleCameraEditValue,
         );
     }
 
-    private getCurrentEditValue(): ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue | null {
-        return this.mode === "model"
-            ? this.lastModelTransform
-            : this.lastCameraTransform;
+    private getCurrentEditValue(): ViewportAxisHandleEditValue | null {
+        if (this.mode === "model") return this.lastModelTransform;
+        if (this.mode === "accessory") return this.lastAccessoryTransform;
+        return this.lastCameraTransform;
     }
 
     private previewEditValue(
         mode: ViewportEditMode,
-        value: ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue,
+        value: ViewportAxisHandleEditValue,
     ): boolean {
         if (mode === "model") {
             return this.onPreviewBoneTransform(value as ViewportAxisHandleBoneEditValue);
+        }
+        if (mode === "accessory") {
+            return this.onPreviewAccessoryTransform(value as ViewportAxisHandleAccessoryEditValue);
         }
         return this.onPreviewCameraTransform(value as ViewportAxisHandleCameraEditValue);
     }
 
     private resolveAxisValue(
-        value: ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue,
+        value: ViewportAxisHandleEditValue,
         kind: ViewportHandleKind,
         axis: ViewportHandleAxis,
     ): number {
@@ -184,11 +224,11 @@ export class ViewportAxisHandleController {
     }
 
     private withAxisValue(
-        source: ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue,
+        source: ViewportAxisHandleEditValue,
         kind: ViewportHandleKind,
         axis: ViewportHandleAxis,
         value: number,
-    ): ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue {
+    ): ViewportAxisHandleEditValue {
         const next = this.cloneEditValue(source);
         if ("position" in next) {
             if (kind === "move") next.position[axis] = value;
@@ -206,7 +246,7 @@ export class ViewportAxisHandleController {
             : { min: -180, max: 180, scale: 0.2 };
     }
 
-    private cloneEditValue<T extends ViewportAxisHandleBoneEditValue | ViewportAxisHandleCameraEditValue>(value: T): T {
+    private cloneEditValue<T extends ViewportAxisHandleEditValue>(value: T): T {
         if ("position" in value) {
             return {
                 position: { ...value.position },

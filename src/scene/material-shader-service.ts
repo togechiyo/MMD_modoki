@@ -65,6 +65,8 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-cel-sharp"
     | "wgsl-cel-shadow-sharp"
     | "wgsl-accessory-toon"
+    | "wgsl-obj-untextured"
+    | "wgsl-obj-mtl"
     | "wgsl-rim-lift"
     | "wgsl-mono-flat";
 
@@ -1782,6 +1784,29 @@ function applyWgslShaderPresetToMaterial(host: MaterialShaderHost, material: Mat
             }
             ensureAccessoryPresetToonTexture(host, material);
             applyAccessoryAmbientTuning(material, defaults);
+            break;
+        }
+        case "wgsl-obj-untextured": {
+            if ("disableLighting" in material) {
+                material.disableLighting = false;
+            }
+            ensureAccessoryPresetToonTexture(host, material);
+            if ("ambientColor" in material) {
+                setMaterialColorProperty(material, "ambientColor", new Color3(0.2, 0.2, 0.2));
+            }
+            if ("specularColor" in material) {
+                setMaterialColorProperty(material, "specularColor", new Color3(0.1, 0.1, 0.1));
+            }
+            if ("specularPower" in material) {
+                material.specularPower = 32;
+            }
+            break;
+        }
+        case "wgsl-obj-mtl": {
+            if ("disableLighting" in material) {
+                material.disableLighting = false;
+            }
+            ensureAccessoryPresetToonTexture(host, material);
             break;
         }
         case "wgsl-rim-lift": {

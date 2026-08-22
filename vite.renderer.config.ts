@@ -10,6 +10,12 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       '@babylonjs/loaders/OBJ/objFileLoader.js',
+      // babylon-mmd loads these after the first textured PMX material is inspected.
+      // Discover them up front so Vite does not invalidate optimized deps mid-session.
+      'babylon-mmd/esm/Loader/Shaders/textureAlphaChecker.fragment',
+      'babylon-mmd/esm/Loader/Shaders/textureAlphaChecker.vertex',
+      'babylon-mmd/esm/Loader/ShadersWGSL/textureAlphaChecker.fragment',
+      'babylon-mmd/esm/Loader/ShadersWGSL/textureAlphaChecker.vertex',
     ],
     exclude: [
       '@babylonjs/loaders',

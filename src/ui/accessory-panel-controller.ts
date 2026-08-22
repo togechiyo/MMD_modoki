@@ -92,6 +92,10 @@ export class AccessoryPanelController {
         return this.selectedAccessoryIndex;
     }
 
+    public refreshSelectedTransform(): void {
+        this.syncTransformSlidersFromSelection();
+    }
+
     public selectAccessory(index: number | null): void {
         const exists = index !== null
             && this.mmdManager.getLoadedAccessories().some((accessory) => accessory.index === index);
@@ -251,7 +255,7 @@ export class AccessoryPanelController {
             { key: "rx", id: "accessory-rot-x", label: "Rx", min: -180, max: 180, step: 1, value: "0.0" },
             { key: "ry", id: "accessory-rot-y", label: "Ry", min: -180, max: 180, step: 1, value: "0.0" },
             { key: "rz", id: "accessory-rot-z", label: "Rz", min: -180, max: 180, step: 1, value: "0.0" },
-            { key: "s", id: "accessory-scale", label: "Si", min: 1, max: 5000, step: 1, value: "100" },
+            { key: "s", id: "accessory-scale", label: "Si", min: 0.01, max: 50, step: 0.01, value: "1" },
             { key: "tr", id: "accessory-tr", label: "Tr", min: 0, max: 1, step: 0.01, value: "0.00", disabled: true },
         ], "accessory-transform");
 
@@ -284,12 +288,12 @@ export class AccessoryPanelController {
                 y: this.getTransformInputNumber("ry", 0),
                 z: this.getTransformInputNumber("rz", 0),
             };
-            const scalePercent = this.getTransformInputNumber("s", 100);
+            const scale = this.getTransformInputNumber("s", 1);
 
             this.mmdManager.setAccessoryTransform(selectedIndex, {
                 position,
                 rotationDeg,
-                scale: scalePercent / 100,
+                scale,
             });
             this.onAccessoryTransformChanged(selectedIndex);
         };
@@ -439,7 +443,7 @@ export class AccessoryPanelController {
             this.setTransformInputValueClamped("rx", transform.rotationDeg.x);
             this.setTransformInputValueClamped("ry", transform.rotationDeg.y);
             this.setTransformInputValueClamped("rz", transform.rotationDeg.z);
-            this.setTransformInputValueClamped("s", transform.scale * 100);
+            this.setTransformInputValueClamped("s", transform.scale);
         } finally {
             this.isSyncingTransformUi = false;
         }
@@ -454,7 +458,7 @@ export class AccessoryPanelController {
             this.setTransformInputValueClamped("rx", 0);
             this.setTransformInputValueClamped("ry", 0);
             this.setTransformInputValueClamped("rz", 0);
-            this.setTransformInputValueClamped("s", 100);
+            this.setTransformInputValueClamped("s", 1);
         } finally {
             this.isSyncingTransformUi = false;
         }
@@ -484,7 +488,7 @@ export class AccessoryPanelController {
 
     private normalizeTransformInput(input: HTMLInputElement, key: AccessoryTransformSliderKey): void {
         const parsed = Number(input.value);
-        const fallback = key === "s" ? 100 : 0;
+        const fallback = key === "s" ? 1 : 0;
         const value = Number.isFinite(parsed) ? parsed : fallback;
         const min = input.min === "" ? Number.NEGATIVE_INFINITY : Number(input.min);
         const max = input.max === "" ? Number.POSITIVE_INFINITY : Number(input.max);
@@ -493,7 +497,7 @@ export class AccessoryPanelController {
     }
 
     private formatTransformInputValue(key: AccessoryTransformSliderKey, value: number): string {
-        if (key === "s") return String(Math.round(value));
+        if (key === "s") return String(Number(value.toFixed(2)));
         return value.toFixed(1);
     }
     private updateActionButtons(): void {

@@ -56,9 +56,10 @@
 - 手動のファイル編集は `apply_patch` を使う
 - ユーザーが行った無関係な差分は戻さない
 - ユーザーの明示的な依頼なしに branch を作成・切替しない。通常作業は現在の branch 上で行う
-- アプリの通常実行経路は offline-first とし、明示的に採用された機能を除いて外部ネットワーク、CDN、外部 API へ接続しない。localhost の開発・テスト用通信はこの制約に含めない
+- 配布・ビルド後のアプリの通常実行経路は offline-first とし、明示的に採用された機能を除いて外部ネットワーク、CDN、外部 API へ接続しない。開発時の公式情報検索、依存取得、権利確認済みtest/reference assetの取得、localhost通信はこの制約に含めない。ただし取得したassetはlocalへ固定し、自動testや配布アプリのremote runtime dependencyにしない
 - テストや調査のためにユーザー所有のモデルを探索・読み込みしない。ユーザーが対象ファイルを明示して利用を許可した場合だけ扱う
 - 自動テストは `test/fixtures/` の配布可能な fixture を使い、必要な再現データがなければ最小 fixture を作成する
+- GitHubへ載せない第三者asset、大型asset、比較資料はtop-levelの `local-references/` へ集約し、ignoredなreference directoryを `test/` や機能別directoryへ散在させない。これらを使うlocal testは未配置環境でskip可能にする
 - 明示的な依頼がない限り、大規模リファクタより小さく局所的な修正を優先する
 - 挙動変更や重要な知見が出たら、必要に応じて `docs/` にメモを残す
 - タスク管理は `docs/mmd-basic-task-checklist.md` に集約する
@@ -67,6 +68,7 @@
 - UI に機能を追加するときは、表示だけでなく初期値、保存/読み込み、backend 切替時の同期まで確認対象にする
 - UI 導線やファイル読込を変更した場合は、下位層のテストに加えてローカル Playwright Electron E2E で実際の GUI 操作と最終表示状態を確認する。OS file dialog を直接自動化しにくい場合も、fixture の供給だけを test hook に限定し、操作後の UI 状態は GUI 経由で検証する
 - Classic / Frame Graph / Experimental など複数経路がある機能では、UI と実行経路を混在させず、二重適用や古い PostProcess の残存を確認する
+- CSM / 通常 ShadowGenerator の選択、cascade、全体 bias、影距離などシーン全体へ波及する影設定は、個別形式の不具合対処として変更せず、プロジェクト所有者の明示的な許可を得てから扱う
 - 実機確認で OK / NG が分かった項目は、必要に応じて `docs/` の進捗メモに確認結果として残す
 
 ## 外部公式情報の確認

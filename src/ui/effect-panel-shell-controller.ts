@@ -20,10 +20,15 @@ function resolveElements(root: ParentNode = document): EffectPanelShellElements 
 
 export class EffectPanelShellController {
     private readonly elements: EffectPanelShellElements;
+    private readonly onTabChanged: ((tab: EffectPanelTabId) => void) | null;
     private activeTab: EffectPanelTabId = "materials";
 
-    constructor(root: ParentNode = document) {
+    constructor(
+        root: ParentNode = document,
+        onTabChanged: ((tab: EffectPanelTabId) => void) | null = null,
+    ) {
         this.elements = resolveElements(root);
+        this.onTabChanged = onTabChanged;
         this.setupEventListeners();
         this.applyActiveTab();
     }
@@ -32,6 +37,7 @@ export class EffectPanelShellController {
         if (this.activeTab === tab) return;
         this.activeTab = tab;
         this.applyActiveTab();
+        this.onTabChanged?.(tab);
     }
 
     public getActiveTab(): EffectPanelTabId {

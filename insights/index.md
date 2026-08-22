@@ -60,3 +60,4 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | policy | [エラーは通知先と回復可能性を分類する](./policies/classify-errors-before-logging.md) | catch、IPC、file IO、fallbackを追加する |
 | policy | [外部 runtime は現行一次情報で確かめる](./policies/verify-external-runtime-claims-with-current-primary-sources.md) | Babylon.js等の仕様を根拠に設計する |
 | policy | [Skill化は反復性・安定性・検証可能性で判断する](./policies/skill-adoption-requires-repeatability-and-verifiability.md) | 新しいSkillの追加や既存Skillの分割を判断する |
+| verified | [Babylon.js公式asset集をfixture候補の入口にする](./verified/babylon-official-assets-are-fixture-candidates.md) | loader、材質、texture用の配布可能なfixture候補を探す |

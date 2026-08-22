@@ -68,9 +68,26 @@ MTLやtextureに `http://` / `https://` が指定されていても取得しな�
 
 2026-08-21にPhase 1として、ローカルMTLとtextureの読み込みを実装した。OBJが最後に指定した単一の `mtllib` をElectron IPCで読み、`map_Ka` / `map_Kd` / `map_Ks` / `map_Bump` / `map_d` が参照するローカル画像をIPCで取得して `data:` URLへ置換した後、Babylon.js 9.2.0のOBJ / MTL loaderへ渡す。対応画像はPNG、JPEG、WebP、GIF、BMPで、1画像64 MiBを上限とする。`map_Bump` の `-bm` 以外のtexture optionと複数MTLの統合は初期対象外である。
 
-companion fileはOBJと同じdirectory tree内だけを許可する。外部URL、絶対path、別drive、OBJの配置rootを越える `..` は拒否し、通常実行経路から外部通信を発生させない。MTLが読めない場合はgeometry-only、textureだけが読めない場合は該当map行を除いてMTLの色・透明度などを保持し、警告toastとstructured logを残す。OBJ材質は元の `StandardMaterial` を保持し、`.x` 用WGSL toon presetを自動適用しない。
+companion fileはOBJと同じdirectory tree内だけを許可する。外部URL、絶対path、別drive、OBJの配置rootを越える `..` は拒否し、通常実行経路から外部通信を発生させない。MTLが読めない場合はgeometry-only、textureだけが読めない場合は該当map行を除いてMTLの色・透明度などを保持し、警告toastとstructured logを残す。Phase 1時点ではOBJ材質をBabylon.jsの `StandardMaterial` のまま保持していたが、後述の専用preset導入に伴い、現在はMMD用toon影を扱える材質へ値を引き継いでいる。
+
+2026-08-22にOBJ専用の材質presetを追加した。MTLを読み込めなかったOBJには `OBJ Untextured` を既定適用し、中立灰色の `MmdStandardMaterial` と穏やかなambient / specular値を補う。MTLを読み込めたOBJには `OBJ MTL` を既定適用し、MTL由来の色、texture、透明設定を `MmdStandardMaterial` へ引き継ぐ。両方とも `.x` accessoryと共通のtoon textureを使用し、遮蔽影を真っ黒なStandardMaterial影ではなくMMD画面になじむ段階影として表示する。両presetはOBJを選択しているときだけ材質panelへ表示し、Resetは各OBJの読込状態に対応する既定presetへ戻る。ユーザーが別presetを割り当てた場合だけprojectへ差分保存する。
 
 fixtureを使うunit testでは、path境界、外部URL拒否、欠損fallback、data URL変換とBabylon NullEngineでの材質・UV割当を確認した。Electron E2Eでは情報欄への追加、texture ready、project保存・再読み込み、外部HTTP requestなしを確認済みである。
+
+#### 2026-08-22時点のOBJ対応範囲
+
+- MTLなしOBJと、UV・単一MTL・ローカル画像を持つOBJを読み込める。
+- 情報欄からtransform、表示、影、削除を操作し、読み込み元path、transform、表示、影、材質preset差分をprojectへ保存・再読み込みできる。
+- OBJをモデル編集側のaccessoryとして扱い、viewport handleと材質panelの対象一覧から選択できる。
+- MTLなしは `OBJ Untextured`、MTLありは `OBJ MTL` を既定presetとする。材質panelのResetも各OBJの既定へ戻す。
+- OBJには単位metadataがないため、`.x` 用の10倍補正を適用せず authored coordinateを倍率1で保持する。自動的な単位推定やup-axis変換は行わない。
+- 複数MTL統合、拡張texture option、空白・日本語file名、より多様なDCC出力は追加検証が必要である。
+
+#### OBJと全体影設定の境界
+
+OBJの遮蔽影や材質影を調査するときは、OBJ材質、shadow caster登録、geometry、alpha、normalを先に局所診断する。CSMと通常 `ShadowGenerator` の選択、cascade、シーン全体のbiasや影距離はPMX、`.x`、背景、広域表示へ同時に影響し、Babylon.js WebGPU経路との組み合わせも繊細である。
+
+したがって、OBJだけの見た目を理由にこれらの全体影設定を変更しない。全体影設定の変更は別タスクへ分離し、プロジェクト所有者の明示的な許可を得たうえで、PMX / `.x` / OBJ、近景 / 広域、WebGPUの比較条件を決めてから行う。現在残る影品質の調整はOBJ読込完了条件から分離し、後続調査とする。
 
 ### STL
 

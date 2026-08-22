@@ -3889,6 +3889,10 @@ ${beforeFogAppendBlock}
             shadowGenerator.blurScale = this.shadowBlurScaleValue;
             shadowGenerator.blurBoxOffset = this.shadowBlurBoxOffsetValue;
             shadowGenerator.blurKernel = this.shadowBlurKernelValue;
+        } else if (shadowGenerator instanceof CascadedShadowGenerator && this.engine.isWebGPU) {
+            // Babylon.js 9.2's WGSL CSM PCF path samples outside the cascade UV range.
+            // On sparse scenes this turns the unsampled region into a large diagonal shadow.
+            shadowGenerator.filter = ShadowGenerator.FILTER_NONE;
         } else {
             shadowGenerator.filter = ShadowGenerator.FILTER_PCF;
         }
@@ -3962,13 +3966,20 @@ ${beforeFogAppendBlock}
         lightSamplingEnabled: boolean;
         reverseDepthBuffer: boolean;
         customProjectionBuilder: boolean;
+        filter: "none" | "pcf" | "pcss" | "other";
+        cascadedAutoCalcDepthBounds: boolean | null;
+        cascadedMinDistance: number | null;
+        cascadedMaxDistance: number | null;
         casterCount: number | null;
+        casterNames: string[];
         models: Array<{
             name: string;
             castsShadow: boolean;
             renderMeshCount: number;
             casterMeshCount: number;
             receiverMeshCount: number;
+            renderMeshNames: string[];
+            casterMeshNames: string[];
         }>;
     } {
         const renderList = this.shadowGenerator.getShadowMap()?.renderList;
@@ -3980,13 +3991,32 @@ ${beforeFogAppendBlock}
             lightSamplingEnabled: this.dirLight?.shadowEnabled ?? false,
             reverseDepthBuffer: this.engine.useReverseDepthBuffer,
             customProjectionBuilder: Boolean(this.dirLight?.customProjectionMatrixBuilder),
+            filter: this.shadowGenerator.filter === ShadowGenerator.FILTER_NONE
+                ? "none"
+                : this.shadowGenerator.filter === ShadowGenerator.FILTER_PCF
+                    ? "pcf"
+                    : this.shadowGenerator.filter === ShadowGenerator.FILTER_PCSS
+                        ? "pcss"
+                        : "other",
+            cascadedAutoCalcDepthBounds: this.shadowGenerator instanceof CascadedShadowGenerator
+                ? this.shadowGenerator.autoCalcDepthBounds
+                : null,
+            cascadedMinDistance: this.shadowGenerator instanceof CascadedShadowGenerator
+                ? this.shadowGenerator.minDistance
+                : null,
+            cascadedMaxDistance: this.shadowGenerator instanceof CascadedShadowGenerator
+                ? this.shadowGenerator.maxDistance
+                : null,
             casterCount: Array.isArray(renderList) ? renderList.length : null,
+            casterNames: Array.isArray(renderList) ? renderList.map((mesh) => mesh.name) : [],
             models: this.sceneModels.map((entry) => ({
                 name: entry.info.name,
                 castsShadow: entry.castShadow,
                 renderMeshCount: entry.renderMeshes.length,
                 casterMeshCount: entry.shadowCasterMeshes.length,
                 receiverMeshCount: entry.renderMeshes.filter((mesh) => mesh.receiveShadows).length,
+                renderMeshNames: entry.renderMeshes.map((mesh) => mesh.name),
+                casterMeshNames: entry.shadowCasterMeshes.map((mesh) => mesh.name),
             })),
         };
     }

@@ -38,6 +38,7 @@ type LightShadowHostStatics = {
 type LightShadowHost = {
     engine: {
         getCaps(): { maxTextureSize?: number };
+        isWebGPU?: boolean;
         releaseEffects?: () => void;
     };
     scene: Scene;
@@ -196,6 +197,10 @@ function applyShadowFilterSettings(host: LightShadowHost): void {
         host.shadowGenerator.blurScale = clampShadowBlurScale(host.shadowBlurScaleValue);
         host.shadowGenerator.blurBoxOffset = clampShadowBlurBoxOffset(host.shadowBlurBoxOffsetValue);
         host.shadowGenerator.blurKernel = blurKernel;
+    } else if (isCascaded && host.engine.isWebGPU) {
+        // Keep the WebGPU CSM path out of Babylon.js 9.2's unguarded WGSL PCF
+        // comparison sampling. Standard shadows and WebGL CSM keep PCF.
+        host.shadowGenerator.filter = ShadowGenerator.FILTER_NONE;
     } else {
         host.shadowGenerator.filter = ShadowGenerator.FILTER_PCF;
     }

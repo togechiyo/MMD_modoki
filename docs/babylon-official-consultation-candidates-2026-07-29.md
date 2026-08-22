@@ -68,6 +68,7 @@ required attachment の付け忘れは、まずアプリ側の graph 配線を�
 | WEBGPU-IBLSHADOW-11 | IBL Shadows / CDF の `r32float` mipmap が filterability validation に失敗する | capability 確認 / 不具合候補 | 高 | 要現行版再検証 |
 | WEBGPU-SCREENSHOT-12 | Frame Graph + MirrorTexture 併用時の screenshot が黒画像または destroyed texture になる | 不具合候補 / API 経路確認 | 中 | 要現行版再検証 |
 | FG-VOLUMETRIC-13 | WebGPU で方向光の shadow と FrameGraph Volumetric Lighting を組み合わせると renderer / GPU process が終了する | 不具合候補 / 正式な統合経路の質問 | 高 | 要追加再現 |
+| WEBGPU-CSM-PCF-14 | WebGPU CSM + PCF で shadow 投影範囲外が大きな斜め影になる | WGSL shadow sampling の不具合候補 | 高 | 要追加再現 |
 | FG-IPP-CLOSED | Image Processing 初期化順で起動直後だけ色が変わる | アプリ側修正 | - | アプリ側解決 |
 | MMD-EDGE-CLOSED | MMD エッジ有効時に WGSL の代わりに HTML が読み込まれて黒画面になる | アプリ側修正 | - | アプリ側解決 |
 
@@ -638,6 +639,69 @@ Babylon.js単体の最小再現を作り、少なくとも次の比較表を埋�
 
 `WebGPU renderer crashes when DirectionalLight shadows are connected to FrameGraphLightingVolumeTask and FrameGraphVolumetricLightingTask`
 
+## WEBGPU-CSM-PCF-14: WebGPU CSM + PCF の斜め誤影
+
+### 現象
+
+Babylon.js 9.2.0、Electron、WebGPU compatibility mode、WGSL-first の構成で、
+`CascadedShadowGenerator + FILTER_PCF` を使うと、箱などの小さな caster から
+画面端まで続く大きな斜め領域が地面へ影として描画される。本来の局所影も同時に存在する。
+
+MMD_modoki の配布可能な豆腐 PMX / OBJ fixture の両方で再現し、空 scene では再現しない。
+OBJ だけでなく PMX でも発生するため loader や MMD 材質固有ではなく、OBJ 1 mesh でも
+再現するため caster の重複登録でもない。
+
+### 現時点の切り分け
+
+- cascade 数を `3 / 2 / 1` に変えても残る
+- `autoCalcDepthBounds` を無効化しても残る
+- `depthClamp` を無効化しても残る
+- camera `maxZ` を `100000` から `10000` に縮めても残る
+- `frustumEdgeFalloff` を `0.26` から `1.0` にしても残る
+- CSM filter を `FILTER_NONE` にすると消え、正しい局所影は残る
+- console error、page error、WebGPU validation error はない
+
+Babylon.js 9.2.0 の WGSL shadow include では、通常 PCF 関数が UV / depth 範囲外を
+非遮蔽として返す guard を持つ一方、CSM PCF 関数は comparison texture array を直接
+sampling している。範囲外 sampling が暗い shadow factor になる可能性を疑うが、
+Babylon.js 単体最小再現前なので不具合とは断定しない。
+
+### アプリ側の暫定回避
+
+WebGPU + CSM + 半影 OFF に限って `FILTER_NONE` を使う。通常 `ShadowGenerator`、
+WebGL CSM、実験用 PCSS は変更しない。斜め誤影は消えるが、WebGPU CSM の通常影は
+PCF より硬くなる。
+
+関連メモ:
+
+- [WebGPU CSM + PCF 斜め誤影 調査・暫定回避メモ](./webgpu-csm-pcf-diagonal-shadow-investigation-2026-08-22.md)
+
+### 投稿前の切り分け
+
+Babylon.js Playground で box、ground、directional light、camera のみを使い、次を比較する。
+
+| Backend | reverse depth | CSM filter | 期待する記録 |
+|---|---:|---|---|
+| WebGPU | OFF | PCF | 未確認 |
+| WebGPU | ON | PCF | 未確認 |
+| WebGPU | ON / OFF | None | MMD_modoki では正常 |
+| WebGL2 | OFF | PCF | 未確認 |
+
+追加で Babylon.js 9.2.0 と投稿時点の現行版、cascade 数 `1 / 3`、
+auto depth bounds ON / OFF を比較する。MMD、PMX、OBJ、babylon-mmd、Electron、
+独自 shader、既定床を外しても再現することを確認する。
+
+### 公式へ確認したいこと
+
+1. WebGPU の CSM PCF 関数で cascade UV / depth が範囲外の場合、非遮蔽を返すのが期待仕様か。
+2. 通常 PCF と CSM PCF で範囲外 guard が異なるのは意図された実装か。
+3. comparison sampler の address mode に依存せず範囲外を非遮蔽にする推奨設定または既存 API があるか。
+4. 現行版で修正済みなら、修正 version または関連 PR / issue はどれか。
+
+### 投稿タイトル案
+
+`Large diagonal shadow outside the caster area with CSM PCF on WebGPU`
+
 ## WebGPU 案件に共通して記録する情報
 
 WebGPU の validation、device loss、上限、format 差分は Babylon.js、browser、
@@ -684,6 +748,7 @@ Chromium 側の問題と確認された過去事例もあるため、browser 最
 | IBL Shadows の CDF 用 `r32float` mipmap が filterability validation に失敗する | optional feature / format fallback / 旧版事象 | `WEBGPU-IBLSHADOW-11` |
 | Frame Graph + MirrorTexture で screenshot が黒画像または destroyed texture になる | resource lifetime / helper state / 旧版事象 | `WEBGPU-SCREENSHOT-12` |
 | WebGPUで方向光shadowをLightingVolume / VolumetricLightingへ接続するとrendererまたはGPU processが終了する | Frame Graph volumetric統合 / shadow ownership / GPU crash | `FG-VOLUMETRIC-13` |
+| WebGPU CSM + PCF で小さな caster から画面端まで大きな斜め影が伸びる | WGSL CSM comparison sampling / 範囲外座標 | `WEBGPU-CSM-PCF-14` |
 | GPU 生成 irradiance texture が黒くなり、IBL 強度が無反応に見える | 外部 HDR 経路の旧版事象 | 現行版で再発時に別候補化 |
 | GLB 読み込み時に `GPUVertexBufferLayout.arrayStride` で pipeline crash した | 原因が混在した旧版事象 | 現行版で再発時のみ候補化 |
 | 巨大な平面へ logarithmic depth を強制すると角度で消える | アプリ側 precision policy | 公式へ出さない |
@@ -770,17 +835,18 @@ WebGPU では reverse depth buffer を使えるため、すべての PBR 材質�
 
 1. `FG-SSS-01` は投稿済み。回答と追加再現依頼を追跡する。
 2. `FG-VOLUMETRIC-13` はGPU process crashのため優先し、Babylon.js単体でWebGPU / WebGL2と通常shadow / CSMの最小比較を作る。
-3. `FG-GEO-02` の Babylon.js 単体最小再現を作る。
-4. `WEBGPU-MORPH-08` を現行版と WebGL2 で再検証し、まず babylon-mmd 側へ相談する。
-5. `WEBGPU-IBLSHADOW-11` を現行版、optional feature、browser で再検証する。
-6. `WEBGPU-SCREENSHOT-12` を Frame Graph / MirrorTexture の小さい組み合わせで再現する。
-7. `FG-LUT-06` の通常 Image Processing / Frame Graph 比較 Playground を作る。
-8. `SSS-COLOR-03` を direct render と Frame Graph render に分けて比較する。
-9. `SSS-SHADOW-04` は描画回数と中間 RT を除外してから別投稿にする。
-10. `WEBGPU-READBACK-09` は public API の最小比較を作って API 質問として出す。
-11. `FG-LIFETIME-07` は class overview、API、公式例で解決しない質問だけに絞る。
-12. `FG-UTILITY-05` は正式な Frame Graph 構成へ寄せても問題が残る場合だけ相談する。
-13. `WEBGPU-DDS-10` と旧版 SSAO2 / PrePass / MRT は現行版で再発した場合だけ候補へ昇格する。
+3. `WEBGPU-CSM-PCF-14` は fixture で再現と回避条件が揃っているため、箱と平面の Playground へ縮小する。
+4. `FG-GEO-02` の Babylon.js 単体最小再現を作る。
+5. `WEBGPU-MORPH-08` を現行版と WebGL2 で再検証し、まず babylon-mmd 側へ相談する。
+6. `WEBGPU-IBLSHADOW-11` を現行版、optional feature、browser で再検証する。
+7. `WEBGPU-SCREENSHOT-12` を Frame Graph / MirrorTexture の小さい組み合わせで再現する。
+8. `FG-LUT-06` の通常 Image Processing / Frame Graph 比較 Playground を作る。
+9. `SSS-COLOR-03` を direct render と Frame Graph render に分けて比較する。
+10. `SSS-SHADOW-04` は描画回数と中間 RT を除外してから別投稿にする。
+11. `WEBGPU-READBACK-09` は public API の最小比較を作って API 質問として出す。
+12. `FG-LIFETIME-07` は class overview、API、公式例で解決しない質問だけに絞る。
+13. `FG-UTILITY-05` は正式な Frame Graph 構成へ寄せても問題が残る場合だけ相談する。
+14. `WEBGPU-DDS-10` と旧版 SSAO2 / PrePass / MRT は現行版で再発した場合だけ候補へ昇格する。
 
 ## 投稿パッケージのチェックリスト
 

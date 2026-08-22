@@ -60,10 +60,28 @@ WebGPU の reverse depth は広域表示の深度精度対策として併用し�
 一形式の表示結果からシーン全体の影方式を変更せず、OBJ 固有の問題は材質、geometry、caster登録を
 先に切り分けます。
 
+2026-08-22 の fixture 検証では、WebGPU の CSM + PCF だけ、影を落とす物体から
+画面端まで続く大きな斜め領域を誤って影として描くことを確認しました。
+Babylon.js 9.2.0 の WGSL `computeShadowWithCSMPCF*` は通常の PCF 経路と異なり、
+cascade UV / depth が範囲外の場合に明示的に `1.0` を返す guard を持たず、
+comparison sampler をそのまま読む実装です。`numCascades`、`autoCalcDepthBounds`、
+`depthClamp`、camera `maxZ`、`frustumEdgeFalloff` を個別に変えても解消せず、
+CSM の filter を `FILTER_NONE` にした場合だけ誤影が消えました。
+
+そのため Babylon.js 9.2.0 使用中は、**WebGPU + CSM + 半影 OFF に限って**
+`FILTER_NONE` を使います。通常 `ShadowGenerator`、WebGL CSM、実験用 PCSS は従来経路を
+維持します。これは CSM 自体や reverse depth を外す変更ではなく、比較サンプラを使う
+WGSL CSM PCF 経路だけを避ける互換処理です。代償として WebGPU CSM の通常影は PCF より
+輪郭が硬くなります。Babylon.js 更新時は fixture で再現を確認し、guard が入った版では
+このフォールバックを外して PCF へ戻します。
+
 共通設定:
 
 - マップ解像度: `min(8192, GPU上限)`
-- フィルタ既定: `PCF`
+- フィルタ既定:
+  - 通常 `ShadowGenerator`: `PCF`
+  - WebGL CSM: `PCF`
+  - WebGPU CSM: `FILTER_NONE`（Babylon.js 9.2.0 の WGSL CSM PCF 範囲外サンプリング回避）
 - 品質: `QUALITY_HIGH`
 - `Contact Hardening` / PCSS は実験用。既定では無効
 - `Blur ESM` は既定では無効
@@ -106,7 +124,8 @@ WebGPU の reverse depth は広域表示の深度精度対策として併用し�
   - `CascadedShadowGenerator` では Blur Exponential 系を使わず、PCF / PCSS 側に寄せる
   - `影ぼかし` / `ぼかし縮小` / `ぼかし範囲` は CSM 既定では効果が薄いため、照明/影品質設定 UI からは外しています。保存値と importer/exporter の互換は残します。
 - `半影` OFF かつ `影ぼかし = 0`:
-  - `filter = ShadowGenerator.FILTER_PCF`
+  - 通常 `ShadowGenerator` / WebGL CSM: `filter = ShadowGenerator.FILTER_PCF`
+  - WebGPU CSM: `filter = ShadowGenerator.FILTER_NONE`
 - `透過影` OFF:
   - `transparencyShadow = false`
   - `enableSoftTransparentShadow = false`
@@ -409,7 +428,8 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
   - ただし `半影サイズ = 0.04` でもボケが強く残るため、読み込み順だけが原因ではない可能性が高い
 - PCSS なしの CSM 最適化
   - 公式 CSM 実装では PCF / PCSS / None 系の filter が主経路で、Blur Exponential 系は通常 `ShadowGenerator` 用として扱う
-  - PCSS を既定から外したため、CSM 既定は `numCascades = 3` / `lambda = 0.9` / `cascadeBlendPercentage = 0.1` / `depthClamp = true` / `PCF QUALITY_HIGH` に寄せた
+  - PCSS を既定から外したため、CSM 既定は `numCascades = 3` / `lambda = 0.9` / `cascadeBlendPercentage = 0.1` / `depthClamp = true` に寄せた
+  - WebGL CSM は `PCF QUALITY_HIGH`、WebGPU CSM は Babylon.js 9.2.0 互換処理として `FILTER_NONE` を使う
   - `autoCalcDepthBounds = true` / `autoCalcDepthBoundsRefreshRate = 1` で、MMD 再生中のカメラ・モデル変化に追従させる
   - `QUALITY_HIGH` は PCF 5x5 kernel。CSM + PCF では物理的な半影ブラーは出ないが、Medium の 3x3 より境界 aliasing は抑えやすい。
   - 既存 project に `shadowFilteringQuality = Medium` などが保存されていても、CSM 使用中は実行時に `QUALITY_HIGH` を強制する。CSM のフィルタ品質 UI は通常表示しないため、保存値で PCF が弱いままになる経路を避ける。
@@ -420,6 +440,7 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
 
 - 影方式: `cascaded`
 - cascade 数: `3`
+- 通常フィルタ: WebGPU は `None`、WebGL は `PCF QUALITY_HIGH`
 - 半影: `OFF`
 - 半影サイズ: `0.08`（実験 ON 時の初期値）
 - 影の薄さ: `0.2`
@@ -435,16 +456,13 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
 - CSM + PCSS では cascade ごとに depth scale が変わるため、penumbra 計算が期待より大きく出ている可能性がある
 - 半透明影の dithering pattern と PCSS の多点サンプリングが干渉し、輪郭のぼけ・穴あき・雲状ノイズが混ざる可能性がある
 - PMX ステージ材質では、受け側材質の toon/shadow 合成が shadow filter の中間値を再加工している可能性がある
-- CSM + PCF の落ち影が、期待よりかなりくっきり出る事象が残っている
-  - `filter = FILTER_PCF` / `filteringQuality = QUALITY_HIGH` を強制しても、見た目の硬さは大きく変わらなかった
-  - `lambda`、`cascadeBlendPercentage`、`shadowMaxZ`、camera `maxZ`、`depthClamp`、`autoCalcDepthBounds`、読み込み直後の shadow 再同期、保存済み quality 値の上書きなどを試したが、輪郭の硬さは決定的には改善しなかった
-  - Babylon.js の CSM + PCF は 5x5 PCF による aliasing 軽減が主で、PCSS / Blur ESM のような大きな半影ブラーを出すものではない可能性が高い
-  - ただし、同条件でも PMX ステージや材質によって硬さの印象が違うため、shadow map 側だけでなく receiver material 側の shadow/toon 合成が中間値を潰している可能性も残る
-  - 現時点では「カスケードシャドウが謎にくっきりしすぎる既知事象」として扱い、PCSS に戻して解決しようとしない
+- WebGPU CSM は誤影回避のため PCF を外しており、落ち影の輪郭が硬い
+  - PCSS に戻して解決しようとせず、Babylon.js の WGSL CSM PCF guard 修正後に再評価する
+  - receiver material 側の shadow/toon 合成が中間値を潰す可能性は別件として残る
 
 次に見る候補:
 
-- CSM + PCF 既定を維持し、PCSS は実験 ON として通常影 / CSM の両方で原因を切り分ける
+- Babylon.js 更新時に WGSL CSM PCF の範囲外 guard と fixture の斜め誤影を再確認し、安全なら WebGPU CSM を PCF に戻す
 - CSM 時の `半影サイズ * 0.1` 補正で、実効値が小さすぎる / 大きすぎるケースを比較する
 - `numCascades` / `lambda` / `shadowMaxZ` の組み合わせで、penumbra が過剰に出る条件を切り分ける
 - 標準床と PMX ステージで receiver material の shadow 合成を分ける実験をする
@@ -483,7 +501,7 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
 
 半影と境界グラデの扱い:
 
-- 地面に落ちるキャストシャドウには、`PCF` による軽い柔らかさは残ります
+- 地面に落ちるキャストシャドウは、通常影と WebGL CSM では `PCF` による軽い柔らかさが残ります。WebGPU CSM は互換処理のため硬い輪郭になります
 - モデル表面の遮蔽影には、toon 側の境界グラデを入れます
 - 現在の既定値
   - `selfShadowEdgeSoftness = 0.05`

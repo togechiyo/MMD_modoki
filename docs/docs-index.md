@@ -258,6 +258,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 ## 照明 / 影 / GI / エフェクト
 
 - [影仕様と実装](./shadow-spec.md)
+- [WebGPU CSM + PCF 斜め誤影 調査・暫定回避メモ 2026-08-22](./webgpu-csm-pcf-diagonal-shadow-investigation-2026-08-22.md)
 - [影品質の調査メモ](./shadow-quality-investigation.md)
 - [光・影実装メモ（Toon分離 + フラット光）](./light-shadow-implementation.md)
 - [ライト / フェイス回りの調査メモ](./full-light-face-investigation-2026-03-13.md)

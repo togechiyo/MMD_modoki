@@ -285,7 +285,7 @@ describe("shadow filter controls", () => {
         expect(host.shadowGenerator.contactHardeningLightSizeUVRatio).toBeCloseTo(0.08);
     });
 
-    it("forces high PCF quality for cascaded shadows even when saved quality is lower", () => {
+    it("keeps high PCF quality for WebGL cascaded shadows even when saved quality is lower", () => {
         const csmShadowGenerator = {
             filter: ShadowGenerator.FILTER_PCF,
             filteringQuality: ShadowGenerator.QUALITY_LOW,
@@ -309,6 +309,7 @@ describe("shadow filter controls", () => {
             shadowFilteringQualityValue: ShadowGenerator.QUALITY_LOW,
             shadowGenerator: csmShadowGenerator,
             engine: {
+                isWebGPU: false,
                 releaseEffects: vi.fn(),
             },
         };
@@ -318,5 +319,46 @@ describe("shadow filter controls", () => {
         expect(host.shadowGenerator.filter).toBe(ShadowGenerator.FILTER_PCF);
         expect(host.shadowGenerator.filteringQuality).toBe(ShadowGenerator.QUALITY_HIGH);
         expect(host.shadowFilteringQualityValue).toBe(ShadowGenerator.QUALITY_LOW);
+    });
+
+    it("avoids the unguarded PCF comparison path for WebGPU cascaded shadows", () => {
+        const csmShadowGenerator = {
+            filter: ShadowGenerator.FILTER_PCF,
+            filteringQuality: ShadowGenerator.QUALITY_LOW,
+            contactHardeningLightSizeUVRatio: 0,
+            stabilizeCascades: true,
+            lambda: 0,
+            cascadeBlendPercentage: 0,
+            autoCalcDepthBounds: false,
+            autoCalcDepthBoundsRefreshRate: 0,
+            depthClamp: false,
+            penumbraDarkness: 1,
+        };
+        Object.setPrototypeOf(csmShadowGenerator, CascadedShadowGenerator.prototype);
+        const host = {
+            ...createHost(),
+            shadowBlurKernelValue: 0,
+            shadowBlurScaleValue: 2,
+            shadowBlurBoxOffsetValue: 1,
+            shadowPenumbraEnabledValue: false,
+            shadowPenumbraSizeValue: 0.08,
+            shadowFilteringQualityValue: ShadowGenerator.QUALITY_LOW,
+            shadowGenerator: csmShadowGenerator,
+            engine: {
+                isWebGPU: true,
+                releaseEffects: vi.fn(),
+            },
+        };
+
+        setShadowFilteringQuality(host, ShadowGenerator.QUALITY_LOW);
+
+        expect(host.shadowGenerator.filter).toBe(ShadowGenerator.FILTER_NONE);
+        expect(host.shadowGenerator.filteringQuality).toBe(ShadowGenerator.QUALITY_HIGH);
+
+        setShadowPenumbraEnabled(host, true);
+        expect(host.shadowGenerator.filter).toBe(ShadowGenerator.FILTER_PCSS);
+
+        setShadowPenumbraEnabled(host, false);
+        expect(host.shadowGenerator.filter).toBe(ShadowGenerator.FILTER_NONE);
     });
 });

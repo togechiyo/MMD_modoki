@@ -7,6 +7,7 @@ const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const pmxPath = resolve(repoRoot, "test", "fixtures", "external-parent", "tofu.pmx");
 const platePmxPath = resolve(repoRoot, "test", "fixtures", "external-parent", "plate.pmx");
 const objPath = resolve(repoRoot, "test", "fixtures", "accessory", "tofu.obj");
+const emptySceneScreenshotPath = resolve(repoRoot, "test-results", "shadow-csm-empty-scene.png");
 const pmxScreenshotPath = resolve(repoRoot, "test-results", "shadow-csm-tofu-pmx.png");
 const pmxReceiverScreenshotPath = resolve(repoRoot, "test-results", "shadow-csm-tofu-pmx-receiver.png");
 const objScreenshotPath = resolve(repoRoot, "test-results", "shadow-csm-tofu-obj.png");
@@ -32,10 +33,6 @@ test("keeps cascaded shadows active after loading the tofu PMX and OBJ fixtures"
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
 
-    expect(await page.evaluate(
-      async (filePath) => window.mmdModokiE2e.loadModel(filePath),
-      pmxPath,
-    )).not.toBeNull();
     await page.evaluate(() => window.mmdModokiE2e.setCameraPose(
       { x: 12, y: 12, z: -18 },
       { x: 0, y: 2, z: 0 },
@@ -45,7 +42,30 @@ test("keeps cascaded shadows active after loading the tofu PMX and OBJ fixtures"
         await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
       }
     });
+    await page.locator("#render-canvas").screenshot({ path: emptySceneScreenshotPath });
+
+    expect(await page.evaluate(
+      async (filePath) => window.mmdModokiE2e.loadModel(filePath),
+      pmxPath,
+    )).not.toBeNull();
+    await page.evaluate(async () => {
+      for (let frame = 0; frame < 5; frame += 1) {
+        await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
+      }
+    });
     await page.locator("#render-canvas").screenshot({ path: pmxScreenshotPath });
+
+    const pmxDiagnostics = await page.evaluate(
+      () => window.mmdModokiE2e.getShadowRuntimeDiagnostics(),
+    );
+    expect(pmxDiagnostics.casterCount).toBe(2);
+    expect(pmxDiagnostics.casterNames).toEqual(["豆腐", "正面マーカー"]);
+    expect(pmxDiagnostics.models).toHaveLength(1);
+    expect(pmxDiagnostics.models[0]).toMatchObject({
+      renderMeshCount: 3,
+      casterMeshCount: 2,
+      receiverMeshCount: 3,
+    });
 
     await page.locator("#info-model-select").selectOption("0");
     await page.locator("#chk-model-visibility").uncheck();
@@ -79,6 +99,8 @@ test("keeps cascaded shadows active after loading the tofu PMX and OBJ fixtures"
       requestedMode: "cascaded",
       effectiveMode: "cascaded",
       cascadedSupported: true,
+      cascadedAutoCalcDepthBounds: true,
+      filter: "none",
       engine: "WebGPU",
     });
 
@@ -123,6 +145,8 @@ test("renders the tofu OBJ as the first cascaded-shadow caster", async () => {
       requestedMode: "cascaded",
       effectiveMode: "cascaded",
       cascadedSupported: true,
+      cascadedAutoCalcDepthBounds: true,
+      filter: "none",
       engine: "WebGPU",
     });
     await page.locator("#render-canvas").screenshot({ path: freshObjScreenshotPath });
@@ -170,6 +194,8 @@ test("keeps PMX meshes registered as cascaded-shadow casters and receivers", asy
       requestedMode: "cascaded",
       effectiveMode: "cascaded",
       cascadedSupported: true,
+      cascadedAutoCalcDepthBounds: true,
+      filter: "none",
       enabled: true,
       lightSamplingEnabled: true,
       engine: "WebGPU",

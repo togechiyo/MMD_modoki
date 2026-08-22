@@ -204,7 +204,12 @@ declare global {
                 lightSamplingEnabled: boolean;
                 reverseDepthBuffer: boolean;
                 customProjectionBuilder: boolean;
+                filter: "none" | "pcf" | "pcss" | "other";
+                cascadedAutoCalcDepthBounds: boolean | null;
+                cascadedMinDistance: number | null;
+                cascadedMaxDistance: number | null;
                 casterCount: number | null;
+                casterNames: string[];
                 engine: string;
                 models: Array<{
                     name: string;
@@ -212,6 +217,8 @@ declare global {
                     renderMeshCount: number;
                     casterMeshCount: number;
                     receiverMeshCount: number;
+                    renderMeshNames: string[];
+                    casterMeshNames: string[];
                 }>;
             };
             getAccessoryMaterialDiagnostics: () => Array<{

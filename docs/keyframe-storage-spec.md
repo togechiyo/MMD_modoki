@@ -214,6 +214,10 @@ UI では以下を表示する。
 ### 再生中
 - runtime から viewport への毎フレーム同期を許可する
 - camera play 開始時は current frame を再 seek してから進める
+- camera / light / shadow / gravity はカテゴリごとにキーの有無を判定する
+- 1 件以上キーがあるカテゴリは runtime の再生値を正とし、対応する UI と viewport 操作をロックする
+- キーが 0 件のカテゴリは static な現在値を正とし、再生中も対応する UI と viewport 操作を許可する
+- あるカテゴリのキーは別カテゴリの UI をロックしない（例: light のキーだけでは shadow / gravity をロックしない）
 
 ## 今後の改善余地
 - `CameraTrackAdapter` の導入

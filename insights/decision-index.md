@@ -17,6 +17,7 @@
 | accepted-with-constraints | [シーン全体の影設定変更には所有者の許可を必要とする](./decisions/scene-wide-shadow-settings-require-owner-approval.md) | CSM、ShadowGenerator、cascade、全体bias、影距離を変更する |
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |
 | adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | シーン項目のキー登録順を決める |
+| adopted | [再生中の編集権限はカテゴリごとのキー有無で決める](./decisions/playback-ownership-follows-category-key-presence.md) | camera / light / shadow / gravity の再生中評価とUIロックを変更する |
 | adopted | [報告された要望をそのままロードマップ確約にしない](./decisions/reported-requests-are-not-roadmap-commitments.md) | Issue や外部報告を実装計画へ昇格するか判断する |
 | accepted-with-constraints | [配布アプリはoffline-first、開発作業はfixture中心でGUI確認する](./decisions/keep-agent-work-local-fixture-driven-and-gui-verified.md) | branch、runtime通信、開発時network、local reference配置、model asset、UI検証の安全境界を決める |
 

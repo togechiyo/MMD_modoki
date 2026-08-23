@@ -37,6 +37,7 @@ export class BottomPanel {
     private multipleBoneSelectionNames: string[] = [];
     private currentMorphFrameIndex: number | null = null;
     private mmdManager: MmdManager | null = null;
+    private cameraPlaybackLocked = false;
     public onBoneSelectionChanged: ((boneName: string | null) => void) | null = null;
     public onMorphFrameSelectionChanged: ((frameIndex: number | null) => void) | null = null;
     public onBoneTransformEditStarted: ((boneName: string | null) => void) | null = null;
@@ -56,6 +57,11 @@ export class BottomPanel {
 
     setMmdManager(manager: MmdManager): void {
         this.mmdManager = manager;
+    }
+
+    setCameraPlaybackLocked(locked: boolean): void {
+        this.cameraPlaybackLocked = locked;
+        this.syncCameraControlAvailability();
     }
 
     updateBoneControls(info: ModelInfo): void {
@@ -348,19 +354,19 @@ export class BottomPanel {
         const translationMax = isCameraControl ? 100000 : 30;
 
         controlDefs.push(
-            { key: "tx", label: "X", min: translationMin, max: translationMax, step: 1, displayStep: 0.01, value: transform.position.x, disabled: !boneControlInfo.movable },
-            { key: "ty", label: "Y", min: translationMin, max: translationMax, step: 1, displayStep: 0.01, value: transform.position.y, disabled: !boneControlInfo.movable },
-            { key: "tz", label: "Z", min: translationMin, max: translationMax, step: 1, displayStep: 0.01, value: transform.position.z, disabled: !boneControlInfo.movable },
-            { key: "rx", label: "Rx", min: -180, max: 180, step: 1, displayStep: 0.1, value: transform.rotation.x, disabled: !boneControlInfo.rotatable },
-            { key: "ry", label: "Ry", min: -180, max: 180, step: 1, displayStep: 0.1, value: transform.rotation.y, disabled: !boneControlInfo.rotatable },
-            { key: "rz", label: "Rz", min: -180, max: 180, step: 1, displayStep: 0.1, value: transform.rotation.z, disabled: !boneControlInfo.rotatable },
+            { key: "tx", label: "X", min: translationMin, max: translationMax, step: 1, displayStep: 0.01, value: transform.position.x, disabled: !boneControlInfo.movable || (isCameraControl && this.cameraPlaybackLocked) },
+            { key: "ty", label: "Y", min: translationMin, max: translationMax, step: 1, displayStep: 0.01, value: transform.position.y, disabled: !boneControlInfo.movable || (isCameraControl && this.cameraPlaybackLocked) },
+            { key: "tz", label: "Z", min: translationMin, max: translationMax, step: 1, displayStep: 0.01, value: transform.position.z, disabled: !boneControlInfo.movable || (isCameraControl && this.cameraPlaybackLocked) },
+            { key: "rx", label: "Rx", min: -180, max: 180, step: 1, displayStep: 0.1, value: transform.rotation.x, disabled: !boneControlInfo.rotatable || (isCameraControl && this.cameraPlaybackLocked) },
+            { key: "ry", label: "Ry", min: -180, max: 180, step: 1, displayStep: 0.1, value: transform.rotation.y, disabled: !boneControlInfo.rotatable || (isCameraControl && this.cameraPlaybackLocked) },
+            { key: "rz", label: "Rz", min: -180, max: 180, step: 1, displayStep: 0.1, value: transform.rotation.z, disabled: !boneControlInfo.rotatable || (isCameraControl && this.cameraPlaybackLocked) },
         );
 
         if (isCameraControl) {
             const externalParentActive = Boolean(this.mmdManager?.getCameraExternalParent());
             controlDefs.push(
-                { key: "camDistance", label: t("slider.distance"), min: 0, max: 100000, step: 0.1, value: cameraPose?.distance ?? 45, disabled: externalParentActive },
-                { key: "camFov", label: t("slider.fov"), min: 10, max: 120, step: 0.1, value: cameraPose?.fov ?? 30 },
+                { key: "camDistance", label: t("slider.distance"), min: 0, max: 100000, step: 0.1, value: cameraPose?.distance ?? 45, disabled: externalParentActive || this.cameraPlaybackLocked },
+                { key: "camFov", label: t("slider.fov"), min: 10, max: 120, step: 0.1, value: cameraPose?.fov ?? 30, disabled: this.cameraPlaybackLocked },
             );
         }
 
@@ -501,7 +507,7 @@ export class BottomPanel {
         if (this.currentBoneName === BottomPanel.CAMERA_CONTROL_NAME) {
             const pose = this.mmdManager.getCameraKeyframePose();
             this.syncSelectedBoneSlidersFromSnapshot(pose, force);
-            this.syncCameraDistanceAvailability();
+            this.syncCameraControlAvailability();
             return;
         }
 
@@ -562,13 +568,15 @@ export class BottomPanel {
         }
     }
 
-    private syncCameraDistanceAvailability(): void {
-        const input = this.boneSliders.get("camDistance");
-        if (!input) return;
-        const disabled = Boolean(this.mmdManager?.getCameraExternalParent());
-        input.disabled = disabled;
-        input.classList.toggle("is-channel-unavailable", disabled);
-        input.setAttribute("aria-disabled", disabled ? "true" : "false");
+    private syncCameraControlAvailability(): void {
+        if (this.currentBoneName !== BottomPanel.CAMERA_CONTROL_NAME) return;
+        const externalParentActive = Boolean(this.mmdManager?.getCameraExternalParent());
+        for (const [key, input] of this.boneSliders) {
+            const disabled = this.cameraPlaybackLocked || (key === "camDistance" && externalParentActive);
+            input.disabled = disabled;
+            input.classList.toggle("is-channel-unavailable", disabled);
+            input.setAttribute("aria-disabled", disabled ? "true" : "false");
+        }
     }
 
     private applyBoneTransformFromSliders(): void {

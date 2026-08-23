@@ -65,6 +65,7 @@ export class RuntimeFeatureUiController {
     private readonly showToast: (message: string, type?: ToastType) => void;
     private readonly syncRangeNumberInput: (slider: HTMLInputElement) => void;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
+    private gravityPlaybackLocked = false;
 
     constructor(deps: RuntimeFeatureUiControllerDeps) {
         this.elements = resolveRuntimeFeatureUiElements();
@@ -128,6 +129,11 @@ export class RuntimeFeatureUiController {
             }
             if (valueElement) valueElement.textContent = String(value);
         }
+    }
+
+    public setGravityPlaybackLocked(locked: boolean): void {
+        this.gravityPlaybackLocked = locked;
+        this.updateGravityControlAvailability(this.mmdManager.isPhysicsAvailable());
     }
 
     public refreshShadow(): void {
@@ -331,14 +337,23 @@ export class RuntimeFeatureUiController {
         this.elements.btnTogglePhysics.title = available
             ? (active ? t("toolbar.physics.title.on") : t("toolbar.physics.title.off"))
             : t("toolbar.physics.title.unavailable");
-        if (this.elements.physicsGravityAccelSlider) {
-            this.elements.physicsGravityAccelSlider.disabled = !available;
-        }
-        if (this.elements.physicsGravityDirXSlider) this.elements.physicsGravityDirXSlider.disabled = !available;
-        if (this.elements.physicsGravityDirYSlider) this.elements.physicsGravityDirYSlider.disabled = !available;
-        if (this.elements.physicsGravityDirZSlider) this.elements.physicsGravityDirZSlider.disabled = !available;
+        this.updateGravityControlAvailability(available);
         if (this.elements.physicsSimulationRateSelect) this.elements.physicsSimulationRateSelect.disabled = true;
         this.refreshPhysicsSimulationRateUi();
+    }
+
+    private updateGravityControlAvailability(available: boolean): void {
+        const disabled = !available || this.gravityPlaybackLocked;
+        for (const slider of [
+            this.elements.physicsGravityAccelSlider,
+            this.elements.physicsGravityDirXSlider,
+            this.elements.physicsGravityDirYSlider,
+            this.elements.physicsGravityDirZSlider,
+        ]) {
+            if (!slider) continue;
+            slider.disabled = disabled;
+            this.syncRangeNumberInput(slider);
+        }
     }
 
     private refreshPhysicsSimulationRateUi(): void {

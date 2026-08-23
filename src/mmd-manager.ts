@@ -2203,7 +2203,7 @@ ${beforeFogAppendBlock}
         }
     };
     private readonly onCanvasWheel = (event: WheelEvent) => {
-        if (this.hasActiveCameraAnimation() && this._isPlaying) {
+        if (this.hasCameraVmdExportKeys() && this._isPlaying) {
             return;
         }
 
@@ -2234,7 +2234,7 @@ ${beforeFogAppendBlock}
     private suspendSceneRenderCount = 0;
 
     private resolveCameraMouseDragMode(event: PointerEvent): "rotate" | "pan" | "zoom" | null {
-        if (this.hasActiveCameraAnimation() && this._isPlaying) {
+        if (this.hasCameraVmdExportKeys() && this._isPlaying) {
             return null;
         }
         if (event.button === 1) {
@@ -2313,12 +2313,12 @@ ${beforeFogAppendBlock}
     }
 
     private shouldApplyCameraMotionToViewport(): boolean {
-        return this.hasActiveCameraAnimation() && (this._isPlaying || this.externalPlaybackSimulationEnabled);
+        return this.hasCameraVmdExportKeys() && (this._isPlaying || this.externalPlaybackSimulationEnabled);
     }
 
     private shouldSyncViewportCameraToMmdCamera(): boolean {
         if (!this.hasActiveCameraAnimation()) return true;
-        if (this._isPlaying || this.externalPlaybackSimulationEnabled) return false;
+        if ((this._isPlaying || this.externalPlaybackSimulationEnabled) && this.hasCameraVmdExportKeys()) return false;
         return this.timelineTarget === "camera";
     }
 
@@ -5664,13 +5664,13 @@ ${beforeFogAppendBlock}
 
     private evaluateSceneTracksAtFrame(frame: number): void {
         const normalizedFrame = Math.max(0, Math.floor(frame));
-        if (this.lightSceneTrack && this.lastEvaluatedLightSceneFrame !== normalizedFrame) {
+        if (this.lightSceneTrack?.keyframes.length && this.lastEvaluatedLightSceneFrame !== normalizedFrame) {
             this.lastEvaluatedLightSceneFrame = normalizedFrame;
             const value = evaluateSceneKeyframeTrack(this.lightSceneTrack, normalizedFrame, interpolateLightSceneValue);
             this.setLightColor(value.color.r, value.color.g, value.color.b);
             this.setLightDirection(value.direction.x, value.direction.y, value.direction.z);
         }
-        if (this.shadowSceneTrack && this.lastEvaluatedShadowSceneFrame !== normalizedFrame) {
+        if (this.shadowSceneTrack?.keyframes.length && this.lastEvaluatedShadowSceneFrame !== normalizedFrame) {
             this.lastEvaluatedShadowSceneFrame = normalizedFrame;
             const value = evaluateSceneKeyframeTrack(
                 this.shadowSceneTrack,
@@ -5682,7 +5682,7 @@ ${beforeFogAppendBlock}
             this.shadowMaxZ = value.maxZ;
             this.lightIntensity = value.lightIntensity;
         }
-        if (this.gravitySceneTrack && this.lastEvaluatedGravitySceneFrame !== normalizedFrame) {
+        if (this.gravitySceneTrack?.keyframes.length && this.lastEvaluatedGravitySceneFrame !== normalizedFrame) {
             this.lastEvaluatedGravitySceneFrame = normalizedFrame;
             const value = evaluateSceneKeyframeTrack(
                 this.gravitySceneTrack,
@@ -9228,12 +9228,13 @@ ${beforeFogAppendBlock}
     }
 
     public refreshActiveRuntimeAnimationHandles(): void {
-        if (this.cameraSourceAnimation) {
-            if (this.cameraAnimationHandle !== null) {
-                this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
-                this.cameraAnimationHandle = null;
-            }
+        if (this.cameraAnimationHandle !== null) {
+            this.mmdCamera.setRuntimeAnimation(null);
+            this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
+            this.cameraAnimationHandle = null;
+        }
 
+        if (this.cameraSourceAnimation?.cameraTrack.frameNumbers.length) {
             const handle = this.mmdCamera.createRuntimeAnimation(
                 this.cameraSourceAnimation as unknown as IMmdBindableCameraAnimation,
             );
@@ -13947,15 +13948,18 @@ ${beforeFogAppendBlock}
 
     applyCameraAnimation(animation: MmdAnimation, sourcePath: string | null): void {
         if (this.cameraAnimationHandle !== null) {
+            this.mmdCamera.setRuntimeAnimation(null);
             this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
             this.cameraAnimationHandle = null;
         }
 
-        this.cameraAnimationHandle = this.mmdCamera.createRuntimeAnimation(
-            animation as unknown as IMmdBindableCameraAnimation,
-        );
-        this.mmdCamera.setRuntimeAnimation(this.cameraAnimationHandle);
-        this.hasCameraMotion = true;
+        if (animation.cameraTrack.frameNumbers.length > 0) {
+            this.cameraAnimationHandle = this.mmdCamera.createRuntimeAnimation(
+                animation as unknown as IMmdBindableCameraAnimation,
+            );
+            this.mmdCamera.setRuntimeAnimation(this.cameraAnimationHandle);
+        }
+        this.hasCameraMotion = animation.cameraTrack.frameNumbers.length > 0;
         this.cameraMotionPath = sourcePath;
         this.cameraSourceAnimation = animation;
         this.cameraKeyframeFrames = new Uint32Array(animation.cameraTrack.frameNumbers);
@@ -14673,7 +14677,7 @@ ${beforeFogAppendBlock}
     }
 
     private syncViewportCameraFromMmdCameraAfterSeek(): void {
-        if (!this.hasActiveCameraAnimation()) return;
+        if (!this.hasCameraVmdExportKeys()) return;
         if (!this._isPlaying && this.timelineTarget !== "camera") return;
         this.syncViewportCameraFromMmdCamera();
     }

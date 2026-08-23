@@ -80,6 +80,7 @@ import {
     buildMirrorPasteItems,
     type MirrorPasteClipboardItem,
 } from "./editor/mirror-paste-service";
+import { getScenePlaybackControlLocks } from "./editor/scene-playback-control-lock";
 import {
     POST_EFFECT_BACKEND_STORAGE_KEY,
     normalizePostEffectBackend,
@@ -7435,6 +7436,7 @@ export class UIController {
     }
 
     private updateTimelineEditState(): void {
+        this.updateScenePlaybackControlLocks();
         const track = this.getSelectedTimelineTrack();
         const selectedFrame = this.timeline.getSelectedFrame();
         const selectedKeys = this.timeline.getSelectedKeys();
@@ -10819,6 +10821,7 @@ export class UIController {
             this.mmdManager.seekTo(startFrame);
         }
         this.mmdManager.play();
+        this.updateScenePlaybackControlLocks();
         this.updateSectionKeyframeButtons();
         this.btnPlay.style.display = "none";
         this.btnPause.style.display = "flex";
@@ -10865,6 +10868,45 @@ export class UIController {
         this.btnPause.style.display = "none";
         this.setStatus("Stopped", false);
         this.refreshViewportBottomBar();
+    }
+
+    private updateScenePlaybackControlLocks(): void {
+        const locks = getScenePlaybackControlLocks(this.mmdManager.isPlaying, {
+            camera: this.mmdManager.hasCameraVmdExportKeys() ? 1 : 0,
+            light: this.mmdManager.getLightSceneKeyframeFrames().length,
+            shadow: this.mmdManager.getShadowSceneKeyframeFrames().length,
+            gravity: this.mmdManager.getGravitySceneKeyframeFrames().length,
+        });
+
+        this.bottomPanel.setCameraPlaybackLocked(locks.camera);
+        this.viewportTopBarController?.setCameraPlaybackLocked(locks.camera);
+        this.setRangeInputsPlaybackLocked([
+            "light-direction-x",
+            "light-direction-y",
+            "light-direction-z",
+            "light-color-r",
+            "light-color-g",
+            "light-color-b",
+        ], locks.light);
+        this.setRangeInputsPlaybackLocked([
+            "light-shadow-color-r",
+            "light-shadow-color-g",
+            "light-shadow-color-b",
+            "light-toon-shadow-influence",
+            "light-shadow-max-z",
+            "light-intensity",
+        ], locks.shadow);
+        this.runtimeFeatureUiController?.setGravityPlaybackLocked(locks.gravity);
+    }
+
+    private setRangeInputsPlaybackLocked(ids: readonly string[], locked: boolean): void {
+        for (const id of ids) {
+            const slider = document.getElementById(id) as HTMLInputElement | null;
+            if (!slider) continue;
+            slider.disabled = locked;
+            slider.setAttribute("aria-disabled", locked ? "true" : "false");
+            this.syncRangeNumberInput(slider);
+        }
     }
 
     private syncModelPanelFromRuntimeIfPlaybackIdle(frame = this.mmdManager.currentFrame): void {

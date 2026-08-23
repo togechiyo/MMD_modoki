@@ -1,6 +1,6 @@
 # タイムライン 仕様と実装メモ
 
-更新日: 2026-02-23
+更新日: 2026-08-23
 対象:
 - `src/timeline.ts`
 - `src/ui-controller.ts`
@@ -169,6 +169,23 @@
 - そのため矢印キーで実質上限なしに進められる。
 
 参照: `src/mmd-manager.ts:2298`
+
+### 7-5. Camera / Light / Shadow / Gravity の再生中編集権限
+
+再生中の操作可否は、再生状態だけで一括判定せず、次の4カテゴリごとに独立して判定する。
+
+| カテゴリ | キーが1件以上ある場合 | キーが0件の場合 |
+| --- | --- | --- |
+| Camera | camera track の再生値を正とし、下パネル、viewport上部のcamera tool、canvasの回転・pan・zoomをロックする | staticな現在cameraを正とし、再生中もUIとcanvasから操作できる |
+| Light | light track の再生値を正とし、光色RGBと方向XYZをロックする | staticな光色・方向を再生中も編集できる |
+| Shadow | shadow track の再生値を正とし、影色RGB、Toon影響度、影描画範囲、照度をロックする | 同じ影欄の値を再生中も編集できる |
+| Gravity | gravity track の再生値を正とし、加速度と方向XYZをロックする | 同じ重力欄の値を再生中も編集できる |
+
+この判定では、あるカテゴリのキー有無を別カテゴリへ波及させない。たとえばLightにキーがありShadowにキーがなければ、再生中はLightだけをロックし、Shadowは操作可能なままとする。
+
+キーが0件のanimation / scene trackはruntime評価の所有者として扱わない。空トラックを毎frame評価してstatic値をbase valueへ戻したり、空のcamera animationをruntimeへ接続して現在cameraを初期姿勢へ戻したりしない。停止・一時停止後は全カテゴリの再生ロックを解除する。
+
+保存値とruntime値の詳細は [キーフレーム保存仕様](./keyframe-storage-spec.md) を参照する。
 
 ## 8. 読み込み時のタイムライン反映
 - VMD:

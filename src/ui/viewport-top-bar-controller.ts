@@ -71,6 +71,7 @@ export class ViewportTopBarController {
         }
         | null = null;
     private viewMenu: HTMLElement | null = null;
+    private cameraPlaybackLocked = false;
 
     constructor(options: ViewportTopBarOptions) {
         this.getCameraTransform = options.getCameraTransform;
@@ -97,6 +98,12 @@ export class ViewportTopBarController {
         this.refreshModeToggle();
         this.refreshPerspectiveButton();
         this.refreshLocale();
+    }
+
+    public setCameraPlaybackLocked(locked: boolean): void {
+        this.cameraPlaybackLocked = locked;
+        if (locked) this.closeViewMenu(false);
+        this.refreshCameraToolAvailability();
     }
 
     public refreshLocale(): void {
@@ -333,6 +340,19 @@ export class ViewportTopBarController {
         this.perspectiveButton.setAttribute("aria-label", label);
         this.perspectiveButton.setAttribute("aria-pressed", this.state.perspectiveEnabled ? "true" : "false");
         this.perspectiveButton.classList.toggle("is-off", !this.state.perspectiveEnabled);
+        this.refreshCameraToolAvailability();
+    }
+
+    private refreshCameraToolAvailability(): void {
+        for (const button of [
+            this.fovButton,
+            this.distanceButton,
+            this.panButton,
+            this.perspectiveButton,
+            this.viewCubeButton,
+        ]) {
+            if (button) button.disabled = this.cameraPlaybackLocked;
+        }
     }
 
     private setButtonTitle(button: HTMLButtonElement | null, key: string): void {

@@ -16,13 +16,17 @@
  *   - Bidirectional scroll sync: labelsEl ↔ trackScrollEl
  */
 import type { KeyframeTrack, TimelineRotationOverlay, TrackCategory } from "./types";
+import {
+    createTimelineKeySelectionKey,
+    createTimelineRangeSelection,
+    normalizeTimelineKeySelection,
+    toggleTimelineKeySelection,
+    type TimelineKeySelectionRef,
+} from "./editor/timeline-key-selection";
+
+export type { TimelineKeySelectionRef } from "./editor/timeline-key-selection";
 
 export type TimelineSeekPhase = "jump" | "dragStart" | "dragMove" | "dragEnd";
-export type TimelineKeySelectionRef = {
-    trackCategory: TrackCategory;
-    trackName: string;
-    frame: number;
-};
 
 export type TimelineBoneTrackSelectionRef = {
     trackCategory: TrackCategory;
@@ -110,7 +114,7 @@ function hasFrame(a: Uint32Array, v: number): boolean {
 }
 
 function createSelectionKey(ref: TimelineKeySelectionRef): string {
-    return `${ref.trackCategory}${SELECTION_KEY_SEPARATOR}${ref.trackName}${SELECTION_KEY_SEPARATOR}${ref.frame}`;
+    return createTimelineKeySelectionKey(ref);
 }
 
 function createBoneTrackSelectionKey(ref: TimelineBoneTrackSelectionRef): string {
@@ -370,9 +374,16 @@ export class Timeline {
         this.scheduleWaveform();
     }
 
-    setKeyframeTracks(tracks: KeyframeTrack[]): void {
+    setKeyframeTracks(tracks: KeyframeTrack[], options: { resetSelection?: boolean } = {}): void {
         const prevSelectedTrack = this.getSelectedTrack();
         this.tracks = tracks;
+        if (options.resetSelection) {
+            this.selectedTrackIndex = this.tracks.length > 0 ? 0 : -1;
+            this.selectedFrame = null;
+            this.selectedKeySet.clear();
+            this.selectedBoneTrackSet.clear();
+            this.selectionAnchor = null;
+        }
         this.reconcileSelection(prevSelectedTrack);
         this.resize();
     }
@@ -706,6 +717,8 @@ export class Timeline {
             ctx.fillRect(sx, 0, 1, h);
         }
 
+        this.drawRectangleSelection(ctx);
+
     }
 
     // ── Overlay layer: ruler + playhead diamond ──────────────────────
@@ -816,7 +829,6 @@ export class Timeline {
             ctx.fillText("Waveform", 8, midY);
         }
 
-        this.drawRectangleSelection(ctx);
     }
 
     private applyFrameCanvasPan(): void {
@@ -1546,14 +1558,14 @@ export class Timeline {
         }
 
         if (event.ctrlKey || event.metaKey) {
-            const key = createSelectionKey(ref);
-            if (this.selectedKeySet.has(key)) {
-                this.selectedKeySet.delete(key);
+            const wasSelected = this.selectedKeySet.has(createSelectionKey(ref));
+            const next = toggleTimelineKeySelection(this.getSelectedKeys(), ref);
+            this.selectedKeySet = this.createNormalizedSelectionSet(next);
+            if (wasSelected) {
                 const fallback = this.getSelectedKeys()[this.selectedKeySet.size - 1] ?? null;
                 this.applyActiveSelection(fallback);
                 this.selectionAnchor = fallback;
             } else {
-                this.selectedKeySet.add(key);
                 this.applyActiveSelection(ref);
                 this.selectionAnchor = ref;
             }
@@ -1567,22 +1579,12 @@ export class Timeline {
 
     private applyRangeSelection(track: KeyframeTrack, clickedRef: TimelineKeySelectionRef): void {
         const anchor = this.selectionAnchor;
-        if (!anchor || anchor.trackCategory !== clickedRef.trackCategory || anchor.trackName !== clickedRef.trackName) {
-            this.selectedKeySet = new Set([createSelectionKey(clickedRef)]);
-            this.applyActiveSelection(clickedRef);
-            this.selectionAnchor = clickedRef;
-            return;
-        }
-
-        const start = Math.min(anchor.frame, clickedRef.frame);
-        const end = Math.max(anchor.frame, clickedRef.frame);
-        const refs: TimelineKeySelectionRef[] = [];
-        for (const frame of track.frames) {
-            if (frame < start || frame > end) continue;
-            refs.push(this.createSelectionRef(track, frame));
-        }
+        const refs = createTimelineRangeSelection(track, anchor, clickedRef.frame);
         this.selectedKeySet = this.createNormalizedSelectionSet(refs);
         this.applyActiveSelection(clickedRef);
+        if (!anchor || anchor.trackCategory !== clickedRef.trackCategory || anchor.trackName !== clickedRef.trackName) {
+            this.selectionAnchor = clickedRef;
+        }
     }
 
     private applyActiveSelection(ref: TimelineKeySelectionRef | null): void {
@@ -1617,17 +1619,7 @@ export class Timeline {
     }
 
     private createNormalizedSelectionSet(keys: readonly TimelineKeySelectionRef[]): Set<string> {
-        const normalized = new Set<string>();
-        for (const key of keys) {
-            const ref = {
-                trackCategory: key.trackCategory,
-                trackName: key.trackName,
-                frame: Math.max(0, Math.floor(key.frame)),
-            };
-            if (!this.hasSelectionRef(ref)) continue;
-            normalized.add(createSelectionKey(ref));
-        }
-        return normalized;
+        return new Set(normalizeTimelineKeySelection(keys, this.tracks).map(createSelectionKey));
     }
 
     private getSelectedKeyRefsFromSet(source: ReadonlySet<string>): TimelineKeySelectionRef[] {

@@ -102,24 +102,32 @@
 ## 5. 操作仕様
 
 ### 5-1. シーク
-- クリック:
-- static クリック: トラック選択 + 近傍キー選択 + シーク
-- overlay クリック: シークのみ
-- ドラッグ:
-- 左ボタンドラッグで横方向にフレーム移動
-- フレームは `max(0, frame)` でクランプ
-- API:
-- `timeline.onSeek(frame)` -> `mmdManager.seekTo(frame)`
+- タイムライン本体のstatic canvasはキー選択を担当し、シークは行わない。
+- シークはviewport下部のシークバー、現在フレーム入力、フレーム移動Actionから行う。
+- フレームは `max(0, frame)` でクランプする。
+- シークやフレーム移動では、選択中のキー集合を維持する。
 
 参照: `src/timeline.ts:115`, `src/timeline.ts:173`, `src/ui-controller.ts:333`
 
 ### 5-2. 選択
 - ラベルクリック: 行選択のみ
 - staticクリック: 行選択 + 近傍キー選択（8px以内）
+- `Ctrl` / `Cmd` + staticクリック: キーを選択集合へ追加、または集合から解除
+- `Shift` + staticクリック: 同一トラック内でanchorから範囲選択
+- static canvasドラッグ: 矩形内のキーを選択
+- `Ctrl` / `Cmd` + ドラッグ: 既存集合へ矩形選択を追加
+- ラベルのダブルクリック: 対象トラックの全キーを選択
+- ルーラーのダブルクリック: 対象フレームにある全トラックのキーを選択
+- 左上セルのダブルクリック: 表示中の全トラックの全キーを選択
+- `Escape`: キー選択集合を解除し、active trackは維持
 - 選択状態:
-- `selectedTrackIndex`
-- `selectedFrame`（未ヒットなら `null`）
-- 選択ラベルはキー種別を明示（`[Bone]` / `[Morph]` / `[Camera]`）
+- `selectedTrackIndex`: active row
+- `selectedFrame`: active key。未ヒットなら `null`
+- `selectedKeySet`: コピー、削除、移動などの編集対象集合
+- `selectionAnchor`: Shift範囲選択のanchor
+- `selectedBoneTrackSet`: 複数ボーン対象。キー選択集合とは別状態
+
+選択中のキー集合は通常のフレーム移動、スクラブ、キー移動後も維持する。モデルinstance、またはtimeline target（model/camera）が変わった場合は、同名トラックへの誤持ち越しを防ぐため明示的に解除する。選択状態はプロジェクト保存対象には含めない。
 
 参照: `src/timeline.ts:528`, `src/timeline.ts:544`, `src/timeline.ts:558`
 
@@ -210,10 +218,10 @@
 参照: `src/ui-controller.ts:336`, `src/ui-controller.ts:1201`, `src/ui-controller.ts:1214`, `src/ui-controller.ts:1228`
 
 ## 10. 現在の制約
-- キー編集の範囲操作（複数選択/コピー/貼り付け/スケール）は未実装。
+- 複数キー選択、コピー、貼り付け、削除、`±1`フレーム移動は実装済み。時間スケール編集は未実装。
+- 矩形選択は追加選択に対応するが、減算選択は未実装。
 - 補間は編集可能だが、Property（表示/IK）のステップ編集UIは未実装。
 - Property（表示/IK）トラック編集は未実装。
-- VMDエクスポートは未実装。
 - 回転補間のMMD実機比較テストは未整備。
 
 関連:

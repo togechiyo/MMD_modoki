@@ -1478,6 +1478,18 @@ function removeTimelineKeyframePayload(
         return true;
     }
 
+    if (track.category === "light") {
+        return host.applyLightSceneKeyframePayload?.(normalized, null) ?? false;
+    }
+
+    if (track.category === "shadow") {
+        return host.applyShadowSceneKeyframePayload?.(normalized, null) ?? false;
+    }
+
+    if (track.category === "gravity") {
+        return host.applyGravitySceneKeyframePayload?.(normalized, null) ?? false;
+    }
+
     const animation = getCurrentModelAnimation(host);
     if (!animation || !host.currentModel) return false;
 

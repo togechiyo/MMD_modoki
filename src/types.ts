@@ -196,6 +196,12 @@ declare global {
             loadModel: (filePath: string) => Promise<ModelInfo | null>;
             loadModelInteractively: (filePath: string) => Promise<ModelInfo | null>;
             loadAccessory: (filePath: string) => Promise<boolean>;
+            getTimelineSelection: () => {
+                activeTrack: { category: TrackCategory; name: string } | null;
+                activeFrame: number | null;
+                selectedKeys: Array<{ trackCategory: TrackCategory; trackName: string; frame: number }>;
+            };
+            nudgeTimelineSelection: (deltaFrames: -1 | 1) => void;
             getShadowRuntimeDiagnostics: () => {
                 requestedMode: "cascaded" | "standard";
                 effectiveMode: "cascaded" | "standard";

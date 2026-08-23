@@ -1,5 +1,6 @@
 import type { MmdManager } from "./mmd-manager";
 import { getTimelineTrackDisplayName, type Timeline, type TimelineBoneTrackSelectionRef, type TimelineKeySelectionRef } from "./timeline";
+import { createTimelineSelectionScopeKey } from "./editor/timeline-key-selection";
 import type { BottomPanel } from "./bottom-panel";
 import { applyI18nToDom, getLocale, setLocale, t } from "./i18n";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -58,7 +59,7 @@ import { ViewportAxisHandleController } from "./ui/viewport-axis-handle-controll
 import { ViewportTopBarController, type ViewportTopBarCameraTransform } from "./ui/viewport-top-bar-controller";
 import { ActionDispatcher } from "./actions/action-dispatcher";
 import type { ActionSource } from "./actions/types";
-import { executeCommand, type CommandExecutionContext } from "./actions/command-executor";
+import { executeCommand, type CommandExecutionContext, type CommandSelectedKeyRef } from "./actions/command-executor";
 import { HistoryManager } from "./actions/history-manager";
 import {
     buildKeyframeCommand,
@@ -505,6 +506,7 @@ export class UIController {
     private keyframeClipboard: KeyframeClipboard | null = null;
     private timelineWaveformRequestId = 0;
     private lastObservedFrame: number | null = null;
+    private timelineSelectionScopeKey: string | null = null;
     private accessoryPanelController: AccessoryPanelController | null = null;
     private appMenuController: AppMenuController | null = null;
     private bloomToneMapController: BloomToneMapController | null = null;
@@ -1664,9 +1666,6 @@ export class UIController {
                 this.clearTransientEditingStateForFrameChange();
                 this.refreshLightingUiFromRuntime();
                 this.runtimeFeatureUiController?.refreshGravityControls();
-                if (this.timeline.getSelectedKeys().length > 0) {
-                    this.timeline.clearSelectedKeys({ keepActiveTrack: true });
-                }
             }
             this.updateTimelineEditState();
             const sourcePose = this.getDisplayBonePoseSnapshot(frame);
@@ -1756,8 +1755,16 @@ export class UIController {
 
         // Keyframe data loaded
         this.mmdManager.onKeyframesLoaded = (tracks) => {
-            this.timeline.setKeyframeTracks(tracks);
-            if (this.mmdManager.getTimelineTarget() === "model") {
+            const timelineTarget = this.mmdManager.getTimelineTarget();
+            const nextSelectionScopeKey = createTimelineSelectionScopeKey(
+                timelineTarget,
+                this.mmdManager.getActiveModelInfo()?.instanceId ?? null,
+            );
+            const selectionScopeChanged = this.timelineSelectionScopeKey !== null
+                && this.timelineSelectionScopeKey !== nextSelectionScopeKey;
+            this.timelineSelectionScopeKey = nextSelectionScopeKey;
+            this.timeline.setKeyframeTracks(tracks, { resetSelection: selectionScopeChanged });
+            if (timelineTarget === "model") {
                 const selectedBone = this.bottomPanel.getSelectedBone();
                 if (selectedBone) {
                     this.syncTimelineBoneSelectionFromBottomPanel(selectedBone);
@@ -7019,6 +7026,14 @@ export class UIController {
         });
     }
 
+    public nudgeTimelineSelectionForE2e(deltaFrames: -1 | 1): void {
+        this.actionDispatcher.dispatch({
+            type: "keyframe.nudgeSelected",
+            source: "shortcut",
+            deltaFrames,
+        });
+    }
+
     private applyViewportAccessoryTransform(
         position: { x: number; y: number; z: number },
         rotation: { x: number; y: number; z: number },
@@ -7193,6 +7208,22 @@ export class UIController {
         const seekToFrame = options.seekToFrame ?? true;
         let timelineEditBatchDepth = 0;
         let pendingRuntimeRefresh = false;
+        let pendingSelectedFrame: number | null | undefined;
+        let pendingSelectedKeys: readonly CommandSelectedKeyRef[] | undefined;
+        const flushPendingSelection = (): void => {
+            if (pendingSelectedFrame !== undefined) {
+                this.timeline.setSelectedFrame(pendingSelectedFrame);
+                pendingSelectedFrame = undefined;
+            }
+            if (pendingSelectedKeys !== undefined) {
+                this.timeline.setSelectedKeys(pendingSelectedKeys.map((key) => ({
+                    trackCategory: key.track.category,
+                    trackName: key.track.name,
+                    frame: key.frame,
+                })));
+                pendingSelectedKeys = undefined;
+            }
+        };
         const refreshAfterPayloadEdit = (): void => {
             if (timelineEditBatchDepth > 0) {
                 pendingRuntimeRefresh = true;
@@ -7208,6 +7239,9 @@ export class UIController {
             endTimelineEditBatch: () => {
                 timelineEditBatchDepth = Math.max(0, timelineEditBatchDepth - 1);
                 this.mmdManager.endTimelineEditBatch();
+                if (timelineEditBatchDepth === 0) {
+                    flushPendingSelection();
+                }
                 if (timelineEditBatchDepth === 0 && pendingRuntimeRefresh) {
                     pendingRuntimeRefresh = false;
                     this.refreshRuntimeAnimationForTrack();
@@ -7231,8 +7265,18 @@ export class UIController {
             },
             applyBoneTransform: (boneName, snapshot) => this.applyBoneTransformSnapshotFromCommand(boneName, snapshot),
             applyCameraTransform: (snapshot) => this.applyCameraTransformSnapshotFromCommand(snapshot),
-            setSelectedFrame: (frame) => this.timeline.setSelectedFrame(frame),
+            setSelectedFrame: (frame) => {
+                if (timelineEditBatchDepth > 0) {
+                    pendingSelectedFrame = frame;
+                    return;
+                }
+                this.timeline.setSelectedFrame(frame);
+            },
             setSelectedKeys: (keys) => {
+                if (timelineEditBatchDepth > 0) {
+                    pendingSelectedKeys = [...keys];
+                    return;
+                }
                 this.timeline.setSelectedKeys(keys.map((key) => ({
                     trackCategory: key.track.category,
                     trackName: key.track.name,

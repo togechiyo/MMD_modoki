@@ -334,6 +334,17 @@ async function initializeApp(): Promise<void> {
         loadModel: (filePath) => mmdManager.loadPMX(filePath),
         loadModelInteractively: (filePath) => uiController.loadModelInteractively(filePath),
         loadAccessory: (filePath) => uiController.loadAccessoryFromPath(filePath),
+        getTimelineSelection: () => {
+          const activeTrack = timeline.getSelectedTrack();
+          return {
+            activeTrack: activeTrack
+              ? { category: activeTrack.category, name: activeTrack.name }
+              : null,
+            activeFrame: timeline.getSelectedFrame(),
+            selectedKeys: timeline.getSelectedKeys(),
+          };
+        },
+        nudgeTimelineSelection: (deltaFrames) => uiController.nudgeTimelineSelectionForE2e(deltaFrames),
         getShadowRuntimeDiagnostics: () => ({
           ...mmdManager.getShadowRuntimeDiagnostics(),
           engine: mmdManager.getEngineType(),

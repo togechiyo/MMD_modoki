@@ -101,12 +101,14 @@ function createHost(modelInfo: ModelInfo): { host: TestHost; model: TestModel } 
 describe("timeline edit service model animation tracks", () => {
     it("exposes and routes the shadow and gravity scene tracks", () => {
         const { host } = createHost(createModelInfo([]));
+        const applyLightSceneKeyframePayload = vi.fn(() => true);
         const applyShadowSceneKeyframePayload = vi.fn(() => true);
         const applyGravitySceneKeyframePayload = vi.fn(() => true);
         const editableHost = Object.assign(host, {
             getLightSceneKeyframeFrames: () => new Uint32Array([5]),
             getShadowSceneKeyframeFrames: () => new Uint32Array([10, 20]),
             getGravitySceneKeyframeFrames: () => new Uint32Array([15, 30]),
+            applyLightSceneKeyframePayload,
             applyShadowSceneKeyframePayload,
             applyGravitySceneKeyframePayload,
         });
@@ -145,6 +147,13 @@ describe("timeline edit service model animation tracks", () => {
             acceleration: 74,
             direction: { x: 50, y: -50, z: 0 },
         });
+
+        expect(applyTimelineKeyframePayload(editableHost, { name: "Light", category: "light" }, 5, null)).toBe(true);
+        expect(applyTimelineKeyframePayload(editableHost, { name: "Shadow", category: "shadow" }, 10, null)).toBe(true);
+        expect(applyTimelineKeyframePayload(editableHost, { name: "Gravity", category: "gravity" }, 15, null)).toBe(true);
+        expect(applyLightSceneKeyframePayload).toHaveBeenCalledWith(5, null);
+        expect(applyShadowSceneKeyframePayload).toHaveBeenCalledWith(10, null);
+        expect(applyGravitySceneKeyframePayload).toHaveBeenCalledWith(15, null);
     });
 
     it("creates a bone track for ordinary PMX bones", () => {

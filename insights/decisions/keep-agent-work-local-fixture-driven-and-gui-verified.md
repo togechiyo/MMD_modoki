@@ -3,14 +3,15 @@ id: keep-agent-work-local-fixture-driven-and-gui-verified
 status: decision
 scope: project/agent-operation
 confidence: high
-last_verified: 2026-08-22
+last_verified: 2026-08-23
 decision_owner: project-owner
 decision: accepted-with-constraints
-decided_on: 2026-08-22
+decided_on: 2026-08-23
 evidence:
   - conversation-explicit-instruction
 source_docs:
   - ../../AGENTS.md
+  - ../../docs/playwright-electron-e2e-operation-guide.md
 superseded_by: null
 ---
 
@@ -26,7 +27,7 @@ agentがbranch、配布アプリの通信、開発時の情報検索・asset取�
 開発時の公式情報検索、依存取得、licenseを確認したtest/reference assetの取得にはnetworkを利用してよい。取得したassetはlocalへ固定し、自動testや配布アプリからremote URLへ依存させない。
 共有する小型fixtureは `test/fixtures/`、GitHubへ載せない第三者asset・大型asset・比較資料はtop-levelの `local-references/` へ集約する。ignoredなreference directoryを `test/` や機能別directoryへ増やさない。
 ユーザー所有modelは明示的な許可がある場合だけ読み込み、自動確認には配布可能な最小fixtureを使う。
-UI導線とfile読込は下位テストだけで完了扱いにせず、local Playwright Electron E2EでGUI操作と最終状態も確認する。
+UI導線とfile読込は下位テストだけで完了扱いにせず、local Playwright Electron E2EでGUI操作と最終状態も確認する。Electron / WebGPU E2EはCodexの実行sandbox内で試さず、GPUを利用できるlocal環境でrepository導入済みPlaywrightをGUI実行権限付きで起動する。
 
 ## 避けること
 
@@ -37,10 +38,11 @@ UI導線とfile読込は下位テストだけで完了扱いにせず、local Pl
 - GitHubへ載せないassetを `test/` や複数の機能別directoryへ散在させ、追跡範囲と保守責任を曖昧にする。
 - filesystemを探索してユーザーmodelをテスト資産として使う。
 - loader APIやtest hookの直接呼出しだけでGUI導線まで確認済みとする。
+- sandbox内のrenderer ready timeoutやGPU process終了を、local Playwrightで再現確認せずアプリの回帰と判定する。
 
 ## 根拠
 
-project ownerが、offline-firstはビルド後アプリのsecurity方針であり、開発環境の情報検索やasset取得は禁止しないことを明示した。CC BY 4.0の公式assetはlocal保存し、test用途に限定する判断も明示した。さらに、管理が難しい借用assetを散在させず、top-levelの `local-references/` へ集約する方針を明示した。
+project ownerが、offline-firstはビルド後アプリのsecurity方針であり、開発環境の情報検索やasset取得は禁止しないことを明示した。CC BY 4.0の公式assetはlocal保存し、test用途に限定する判断も明示した。さらに、管理が難しい借用assetを散在させず、top-levelの `local-references/` へ集約する方針を明示した。Electron / WebGPU E2E用にlocal Playwrightを導入しており、GPUを使えないCodex実行sandboxではなくlocal側で実行するよう明示した。
 
 ## 再確認条件
 

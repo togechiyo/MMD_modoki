@@ -1,6 +1,6 @@
 # Playwright Electron E2E 実装・運用ガイド
 
-更新日: 2026-08-02
+更新日: 2026-08-23
 
 ## 目的
 
@@ -38,6 +38,10 @@ test-results/
 ElectronとWebGPUは同時実行時にGPU・プロセス資源を競合しやすいため、当面は1 workerで直列実行する。
 
 ## 実行方法
+
+Electron / WebGPU E2E は GPU を利用できるローカル環境で、リポジトリに導入済みの Playwright を使って実行する。Codex の実行 sandbox 内では Electron の GPU process が利用できず、renderer 初期化前の終了や `window.mmdModokiE2e` 待機の timeout になり得るため、E2E を試行しない。agent が実行する場合は最初から GUI 実行権限付きのローカルコマンドとして起動する。
+
+sandbox 内で発生した renderer ready timeout、GPU process 終了、ログ / userData の権限エラーだけをアプリの回帰とは判定しない。同じ focused spec をローカル Playwright で再現できるかを先に確認する。
 
 全E2Eを実行する。
 

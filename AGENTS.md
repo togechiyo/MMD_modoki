@@ -67,6 +67,7 @@
 - 文字化けしたコメント行を見つけた場合は、意味を復元できない限り削除してよい。ただしコードの挙動に影響しないことを確認し、可能な範囲で lint や関連する確認コマンドを実行する
 - UI に機能を追加するときは、表示だけでなく初期値、保存/読み込み、backend 切替時の同期まで確認対象にする
 - UI 導線やファイル読込を変更した場合は、下位層のテストに加えてローカル Playwright Electron E2E で実際の GUI 操作と最終表示状態を確認する。OS file dialog を直接自動化しにくい場合も、fixture の供給だけを test hook に限定し、操作後の UI 状態は GUI 経由で検証する
+- Electron / WebGPU の E2E は Codex の実行 sandbox 内では起動しない。GPU を利用できるローカル環境で、リポジトリに導入済みの Playwright を GUI 実行権限付きで使う。sandbox 内の renderer ready timeout や GPU process 終了をアプリの回帰判定に使わない
 - Classic / Frame Graph / Experimental など複数経路がある機能では、UI と実行経路を混在させず、二重適用や古い PostProcess の残存を確認する
 - CSM / 通常 ShadowGenerator の選択、cascade、全体 bias、影距離などシーン全体へ波及する影設定は、個別形式の不具合対処として変更せず、プロジェクト所有者の明示的な許可を得てから扱う
 - 実機確認で OK / NG が分かった項目は、必要に応じて `docs/` の進捗メモに確認結果として残す

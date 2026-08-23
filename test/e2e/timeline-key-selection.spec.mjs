@@ -49,8 +49,8 @@ test("keeps key selection while seeking or moving keys and clears it at a target
       const playheadX = Math.max(12, Math.round((tracks.clientWidth - labels.clientWidth) / 2));
       return {
         x: playheadX + 192,
-        // Camera is the active 36px row, followed by the 18px MMD spacer and the Light row.
-        y: 36 + 18 + 9,
+        // Camera is an 18px row, followed by the 18px MMD spacer and the Light row.
+        y: 18 + 18 + 9,
       };
     });
     await page.locator("#timeline-canvas").click({ position: keyPosition });

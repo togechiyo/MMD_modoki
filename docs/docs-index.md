@@ -127,7 +127,7 @@
 - [viewport 直下 現在値操作バー メモ](./viewport-current-value-bar-note-2026-04-22.md)
 - [viewport seekbar design note](./viewport-seekbar-design-note-2026-06-01.md)
 - [Viewport 見た目調整メモ](./viewport-visual-polish-2026-03-13.md)
-- [未選択ボーン回転 overlay メモ](./selected-bone-rotation-overlay-note-2026-04-20.md)
+- [選択ボーン回転 overlay メモ（均一行高方針を追記）](./selected-bone-rotation-overlay-note-2026-04-20.md)
 - [未実装 UI 棚卸しメモ 2026-06-20](./unimplemented-ui-inventory-2026-06-20.md)
 
 ## カメラ / タイムライン / キーフレーム
@@ -161,9 +161,9 @@
 - [補間カーブ仕様と実装](./interpolation-curve-spec-implementation.md)
 - [MMD 補間カーブ調査](./mmd-interpolation-curve-research.md)
 - [MMD ショートカット調査](./mmd-shortcuts-research.md)
-- [複数キー選択設計](./multi-key-selection-design-2026-06-25.md)
+- [複数キー選択設計（2026-06-25 履歴）](./multi-key-selection-design-2026-06-25.md)
 - [複数ボーン選択設計](./multi-bone-selection-design-2026-06-25.md)
-- [選択実装更新メモ](./selection-implementation-update-2026-06-25.md)
+- [選択実装更新メモ（2026-08-23 現行仕様への追記あり）](./selection-implementation-update-2026-06-25.md)
 - [ボーン操作仕様](./bone-operation-spec.md)
 - [VMD / VPD 読み込み挙動](./import-behavior-vmd-vpd.md)
 - [再生・シーク・物理ポリシー](./playback-seek-physics-policy.md)

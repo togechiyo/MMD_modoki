@@ -200,6 +200,11 @@ declare global {
                 activeTrack: { category: TrackCategory; name: string } | null;
                 activeFrame: number | null;
                 selectedKeys: Array<{ trackCategory: TrackCategory; trackName: string; frame: number }>;
+                headerSelection: {
+                    axis: "row" | "column" | null;
+                    rows: Array<{ trackCategory: TrackCategory; trackName: string }>;
+                    frames: number[];
+                };
             };
             nudgeTimelineSelection: (deltaFrames: -1 | 1) => void;
             getShadowRuntimeDiagnostics: () => {

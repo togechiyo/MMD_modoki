@@ -18,13 +18,18 @@
 import type { KeyframeTrack, TimelineRotationOverlay, TrackCategory } from "./types";
 import {
     createTimelineKeySelectionKey,
+    createTimelineRowSelectionKey,
     createTimelineRangeSelection,
     normalizeTimelineKeySelection,
     toggleTimelineKeySelection,
+    updateTimelineFrameColumnSelection,
+    updateTimelineRowSelection,
+    type TimelineHeaderSelectionMode,
     type TimelineKeySelectionRef,
+    type TimelineRowSelectionRef,
 } from "./editor/timeline-key-selection";
 
-export type { TimelineKeySelectionRef } from "./editor/timeline-key-selection";
+export type { TimelineKeySelectionRef, TimelineRowSelectionRef } from "./editor/timeline-key-selection";
 
 export type TimelineSeekPhase = "jump" | "dragStart" | "dragMove" | "dragEnd";
 
@@ -38,6 +43,17 @@ export type TimelineSelectionChange = {
     activeFrame: number | null;
     selectedKeys: TimelineKeySelectionRef[];
     selectedBoneTracks: TimelineBoneTrackSelectionRef[];
+    activeHeaderAxis: TimelineHeaderSelectionAxis;
+    selectedRows: TimelineRowSelectionRef[];
+    selectedFrameColumns: number[];
+};
+
+export type TimelineHeaderSelectionAxis = "row" | "column" | null;
+
+export type TimelineHeaderSelectionSnapshot = {
+    axis: TimelineHeaderSelectionAxis;
+    rows: TimelineRowSelectionRef[];
+    frames: number[];
 };
 
 export type TimelineFrameUpdateOptions = {
@@ -48,7 +64,6 @@ export type TimelineFrameUpdateOptions = {
 const RULER_H = 20;
 const ROW_H = 18;
 const CAMERA_FOLLOWING_SPACER_H = ROW_H;
-const SELECTED_ROW_H = 36;
 const PX_PER_F = 6;
 const PLAYHEAD_X_FALLBACK = 24;
 const WAVEFORM_H = 22;
@@ -67,6 +82,8 @@ const FRAME_PAN_BUFFER_PX = 192;
 const LIGHTWEIGHT_FRAME_REDRAW_PX = 144;
 const MULTI_BONE_TRACK_ROW_BG = "rgba(57,197,187,0.12)";
 const MULTI_BONE_LABEL_BG = "rgba(57,197,187,0.16)";
+const HEADER_ROW_SELECTION_BG = "rgba(130,135,145,0.13)";
+const HEADER_COLUMN_SELECTION_BG = "rgba(130,135,145,0.10)";
 const EMPTY_FRAMES = new Uint32Array(0);
 
 // ── Category palette ───────────────────────────────────────────────
@@ -218,6 +235,11 @@ export class Timeline {
     private selectedKeySet = new Set<string>();
     private selectedBoneTrackSet = new Set<string>();
     private selectionAnchor: TimelineKeySelectionRef | null = null;
+    private activeHeaderSelectionAxis: TimelineHeaderSelectionAxis = null;
+    private selectedRowHeaderSet = new Set<string>();
+    private selectedFrameColumnSet = new Set<number>();
+    private rowHeaderSelectionAnchor: TimelineRowSelectionRef | null = null;
+    private frameColumnSelectionAnchor: number | null = null;
     private pendingPointerSelection: {
         startX: number;
         startY: number;
@@ -231,6 +253,14 @@ export class Timeline {
         currentY: number;
         baseSelection: Set<string>;
         additive: boolean;
+    } | null = null;
+    private timelinePan: {
+        startClientX: number;
+        startClientY: number;
+        startFrame: number;
+        startScrollTop: number;
+        lastFrame: number;
+        horizontalSeekStarted: boolean;
     } | null = null;
     private waveformPeaks: Float32Array | null = null;
     private rotationOverlay: TimelineRotationOverlay | null = null;
@@ -248,6 +278,7 @@ export class Timeline {
 
     public onSelectionChanged: ((track: KeyframeTrack | null, frame: number | null) => void) | null = null;
     public onKeySelectionChanged: ((change: TimelineSelectionChange) => void) | null = null;
+    public onSeek: ((frame: number, phase: TimelineSeekPhase) => void) | null = null;
 
     // ── Constructor ─────────────────────────────────────────────────
 
@@ -281,6 +312,16 @@ export class Timeline {
     // ── Events ──────────────────────────────────────────────────────
 
     private setupEvents(): void {
+        const panSurfaces = [this.trackScrollEl, this.overlayCanvas, this.labelsEl];
+        for (const surface of panSurfaces) {
+            surface.addEventListener("mousedown", (e) => this.beginTimelinePan(e), { capture: true });
+            surface.addEventListener("auxclick", (e) => {
+                if (e.button === 1) e.preventDefault();
+            }, { capture: true });
+        }
+        window.addEventListener("mousemove", (e) => this.updateTimelinePan(e));
+        window.addEventListener("mouseup", (e) => this.endTimelinePan(e));
+
         // Seek and select: static layer
         this.staticCanvas.style.pointerEvents = "auto";
         this.staticCanvas.addEventListener("mousedown", (e) => {
@@ -289,19 +330,22 @@ export class Timeline {
         window.addEventListener("mousemove", (e) => this.updateStaticPointerSelection(e));
         window.addEventListener("mouseup", (e) => this.endStaticPointerSelection(e));
 
-        // Seek only: overlay layer
+        // Frame-column header selection and seek: overlay layer
         this.overlayCanvas.style.pointerEvents = "auto";
+        this.overlayCanvas.addEventListener("mousedown", (e) => {
+            this.selectFrameColumnFromRulerEvent(e);
+        });
         this.overlayCanvas.addEventListener("dblclick", (e) => {
-            this.selectAllKeysAtFrameFromRulerEvent(e);
+            this.selectKeysFromFrameColumnSelectionEvent(e);
         });
 
         // Select from labels
         this.labelCanvas.style.pointerEvents = "auto";
         this.labelCanvas.addEventListener("mousedown", (e) => {
-            this.selectTrackFromLabelEvent(e);
+            this.selectRowHeaderFromLabelEvent(e);
         });
         this.labelCanvas.addEventListener("dblclick", (e) => {
-            this.selectAllKeysFromLabelEvent(e);
+            this.selectKeysFromRowHeaderSelectionEvent(e);
         });
 
         // ── Bidirectional scroll sync ──────────────────────────────
@@ -320,6 +364,56 @@ export class Timeline {
             this.syncingScroll = false;
             this.scheduleStatic();
         }, { passive: true });
+    }
+
+    private beginTimelinePan(e: MouseEvent): void {
+        if (e.button !== 1) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.timelinePan = {
+            startClientX: e.clientX,
+            startClientY: e.clientY,
+            startFrame: this.currentFrame,
+            startScrollTop: this.trackScrollEl.scrollTop,
+            lastFrame: this.currentFrame,
+            horizontalSeekStarted: false,
+        };
+        this.trackScrollEl.closest("#timeline-container")?.classList.add("timeline-panning");
+    }
+
+    private updateTimelinePan(e: MouseEvent): void {
+        const pan = this.timelinePan;
+        if (!pan) return;
+        if ((e.buttons & 4) === 0) {
+            this.endTimelinePan(e);
+            return;
+        }
+
+        e.preventDefault();
+        const deltaX = e.clientX - pan.startClientX;
+        const deltaY = e.clientY - pan.startClientY;
+        this.trackScrollEl.scrollTop = pan.startScrollTop + deltaY;
+
+        const frame = Math.max(0, Math.min(this.totalFrames, Math.round(pan.startFrame + deltaX / PX_PER_F)));
+        if (frame === pan.lastFrame) return;
+
+        const phase: TimelineSeekPhase = pan.horizontalSeekStarted ? "dragMove" : "dragStart";
+        pan.horizontalSeekStarted = true;
+        pan.lastFrame = frame;
+        if (this.onSeek) this.onSeek(frame, phase);
+        else this.setCurrentFrame(frame);
+    }
+
+    private endTimelinePan(e: MouseEvent): void {
+        if (e.button !== 1 && this.timelinePan && (e.buttons & 4) !== 0) return;
+        const pan = this.timelinePan;
+        if (!pan) return;
+
+        e.preventDefault();
+        this.timelinePan = null;
+        this.trackScrollEl.closest("#timeline-container")?.classList.remove("timeline-panning");
+        if (pan.horizontalSeekStarted) this.onSeek?.(pan.lastFrame, "dragEnd");
     }
 
     private getPlayheadX(): number {
@@ -365,7 +459,14 @@ export class Timeline {
         const normalized = Math.max(0, Math.floor(total));
         if (this.totalFrames === normalized) return;
         this.totalFrames = normalized;
+        this.selectedFrameColumnSet = new Set(
+            Array.from(this.selectedFrameColumnSet).filter((frame) => frame <= normalized),
+        );
+        if (this.selectedFrameColumnSet.size === 0 && this.activeHeaderSelectionAxis === "column") {
+            this.clearHeaderSelectionState();
+        }
         this.scheduleOverlay();
+        this.scheduleStatic();
         this.scheduleWaveform();
     }
 
@@ -383,6 +484,7 @@ export class Timeline {
             this.selectedKeySet.clear();
             this.selectedBoneTrackSet.clear();
             this.selectionAnchor = null;
+            this.clearHeaderSelectionState();
         }
         this.reconcileSelection(prevSelectedTrack);
         this.resize();
@@ -408,6 +510,14 @@ export class Timeline {
         return this.getSelectedKeyRefsFromSet(this.selectedKeySet);
     }
 
+    getHeaderSelection(): TimelineHeaderSelectionSnapshot {
+        return {
+            axis: this.activeHeaderSelectionAxis,
+            rows: this.getSelectedRowHeaderRefs(),
+            frames: Array.from(this.selectedFrameColumnSet).sort((a, b) => a - b),
+        };
+    }
+
     getSelectedBoneTracks(): TimelineBoneTrackSelectionRef[] {
         return this.getSelectedBoneTrackRefsFromSet(this.selectedBoneTrackSet);
     }
@@ -421,6 +531,7 @@ export class Timeline {
     }
 
     setSelectedKeys(keys: readonly TimelineKeySelectionRef[], activeKey: TimelineKeySelectionRef | null = null): void {
+        this.clearHeaderSelectionState();
         this.selectedKeySet = this.createNormalizedSelectionSet(keys);
         this.selectedBoneTrackSet.clear();
         const active = activeKey && this.hasSelectionRef(activeKey)
@@ -444,7 +555,19 @@ export class Timeline {
         this.emitSelectionChanged();
     }
 
+    clearAllSelections(options: { keepActiveTrack?: boolean } = {}): void {
+        this.selectedKeySet.clear();
+        this.selectedBoneTrackSet.clear();
+        this.selectionAnchor = null;
+        this.clearHeaderSelectionState();
+        this.selectedFrame = null;
+        if (!options.keepActiveTrack) this.selectedTrackIndex = -1;
+        this.resize();
+        this.emitSelectionChanged();
+    }
+
     setSelectedFrame(frame: number | null): void {
+        this.clearHeaderSelectionState();
         const track = this.getSelectedTrack();
         if (!track) {
             this.selectedFrame = null;
@@ -488,6 +611,7 @@ export class Timeline {
         this.selectedKeySet.clear();
         this.selectedBoneTrackSet = this.createSingleBoneTrackSelectionSet(this.tracks[targetIndex]);
         this.selectionAnchor = null;
+        this.clearHeaderSelectionState();
         this.resize();
         if (changed) {
             this.emitSelectionChanged();
@@ -503,7 +627,9 @@ export class Timeline {
         const track = this.tracks[targetIndex];
         this.selectedFrame = null;
         this.selectedKeySet.clear();
+        this.selectedBoneTrackSet.clear();
         this.selectionAnchor = null;
+        this.clearHeaderSelectionState();
 
         if (options.additive === true) {
             const activeRef = this.toggleBoneTrackSelection(track);
@@ -639,10 +765,12 @@ export class Timeline {
         for (let i = firstRow; i <= lastRow; i++) {
             const track = this.tracks[i];
             const ry = this.getRowTop(i);   // NO ruler offset – ruler is outside scroll
-            const rowH = this.getRowHeight(i);
+            const rowH = ROW_H;
             const col = CAT[track.category];
             const isSelectedRow = i === this.selectedTrackIndex;
             const isSelectedBoneTrack = this.selectedBoneTrackSet.has(this.createTrackSelectionKey(track));
+            const isSelectedHeaderRow = this.activeHeaderSelectionAxis === "row"
+                && this.selectedRowHeaderSet.has(createTimelineRowSelectionKey(this.createRowSelectionRef(track)));
 
             ctx.fillStyle = TRACK_ROW_BG;
             ctx.fillRect(0, ry, w, rowH);
@@ -656,6 +784,13 @@ export class Timeline {
                 ctx.fillStyle = TRACK_ROW_BG_SELECTED;
                 ctx.fillRect(0, ry, w, rowH);
             }
+
+            if (isSelectedHeaderRow) {
+                ctx.fillStyle = HEADER_ROW_SELECTION_BG;
+                ctx.fillRect(0, ry, w, rowH);
+            }
+
+            this.drawSelectedFrameColumnBands(ctx, ry, rowH, playheadX, visStart, visEnd);
 
             // Row separator
             ctx.fillStyle = "rgba(255,255,255,0.04)";
@@ -737,6 +872,8 @@ export class Timeline {
 
         const visStart = Math.max(0, Math.floor((this.viewOffset - playheadX) / PX_PER_F));
         const visEnd = Math.min(this.totalFrames, visStart + Math.ceil(w / PX_PER_F) + 2);
+
+        this.drawSelectedFrameColumnBands(ctx, 0, RULER_H, playheadX, visStart, visEnd);
 
         // Ruler ticks + labels
         for (let f = visStart; f <= visEnd; f++) {
@@ -897,11 +1034,13 @@ export class Timeline {
 
         for (let i = 0; i < this.tracks.length; i++) {
             const track = this.tracks[i];
-            const rowH = this.getRowHeight(i);
+            const rowH = ROW_H;
             const y = RULER_H + this.getRowTop(i);
             const col = CAT[track.category];
             const isSelectedRow = i === this.selectedTrackIndex;
             const isSelectedBoneTrack = this.selectedBoneTrackSet.has(this.createTrackSelectionKey(track));
+            const isSelectedHeaderRow = this.activeHeaderSelectionAxis === "row"
+                && this.selectedRowHeaderSet.has(createTimelineRowSelectionKey(this.createRowSelectionRef(track)));
 
             ctx.fillStyle = col.bg;
             ctx.fillRect(0, y, w, rowH);
@@ -913,6 +1052,11 @@ export class Timeline {
 
             if (isSelectedRow) {
                 ctx.fillStyle = "rgba(255,255,255,0.08)";
+                ctx.fillRect(0, y, w, rowH);
+            }
+
+            if (isSelectedHeaderRow) {
+                ctx.fillStyle = HEADER_ROW_SELECTION_BG;
                 ctx.fillRect(0, y, w, rowH);
             }
 
@@ -969,6 +1113,7 @@ export class Timeline {
 
         if (!this.rectangleSelection && dragDistance < RECT_SELECTION_THRESHOLD_PX) return;
         if (!this.rectangleSelection) {
+            this.clearHeaderSelectionState();
             this.rectangleSelection = {
                 startX: pending.startX,
                 startY: pending.startY,
@@ -1014,6 +1159,7 @@ export class Timeline {
         if (row < 0 || row >= this.tracks.length) return;
 
         const selectionChanged = this.selectedTrackIndex !== row;
+        this.clearHeaderSelectionState();
         this.selectedTrackIndex = row;
         const pickedFrame = this.pickFrameOnTrackFromX(this.tracks[row], localX);
         if (pickedFrame === null) {
@@ -1028,32 +1174,32 @@ export class Timeline {
         this.emitSelectionChanged();
     }
 
-    private selectAllKeysFromLabelEvent(e: MouseEvent): void {
-        const rect = this.labelCanvas.getBoundingClientRect();
-        const localY = e.clientY - rect.top;
-        if (localY >= 0 && localY < RULER_H) {
+    private selectKeysFromRowHeaderSelectionEvent(e: MouseEvent): void {
+        if (e.button !== 0 || this.hasHeaderSelectionModifier(e)) return;
+
+        const { viewportY, contentY } = this.getLabelPointerY(e);
+        if (viewportY >= 0 && viewportY < RULER_H) {
             this.selectAllKeysFromAllTracks();
             return;
         }
 
-        const row = this.getRowIndexAtOffset(localY - RULER_H);
+        const row = this.getRowIndexAtOffset(contentY - RULER_H);
         if (row < 0 || row >= this.tracks.length) return;
 
-        const track = this.tracks[row];
-        const selectionChanged = this.selectedTrackIndex !== row;
-        this.selectedTrackIndex = row;
-        this.selectedBoneTrackSet.clear();
-        this.selectAllKeysOnTrack(track, e.ctrlKey || e.metaKey);
-        if (selectionChanged) this.resize();
-        else {
-            this.scheduleStatic();
-            this.scheduleLabel();
+        const target = this.createRowSelectionRef(this.tracks[row]);
+        if (this.activeHeaderSelectionAxis !== "row" || !this.selectedRowHeaderSet.has(createTimelineRowSelectionKey(target))) {
+            this.selectedRowHeaderSet = new Set([createTimelineRowSelectionKey(target)]);
         }
-        this.emitSelectionChanged();
+        const refs: TimelineKeySelectionRef[] = [];
+        for (const track of this.tracks) {
+            if (!this.selectedRowHeaderSet.has(createTimelineRowSelectionKey(this.createRowSelectionRef(track)))) continue;
+            for (const frame of track.frames) refs.push(this.createSelectionRef(track, frame));
+        }
+        this.applyKeySelectionRefs(refs);
     }
 
-    private selectAllKeysAtFrameFromRulerEvent(e: MouseEvent): void {
-        if (e.button !== 0) return;
+    private selectKeysFromFrameColumnSelectionEvent(e: MouseEvent): void {
+        if (e.button !== 0 || this.hasHeaderSelectionModifier(e)) return;
 
         const rect = this.overlayCanvas.getBoundingClientRect();
         const localX = e.clientX - rect.left;
@@ -1061,31 +1207,58 @@ export class Timeline {
         if (localX < 0 || localX > rect.width || localY < 0 || localY > rect.height) return;
 
         const frame = Math.max(0, Math.round(this.frameFromRulerCanvasX(localX)));
-        this.selectAllKeysAtFrame(frame);
+        if (this.activeHeaderSelectionAxis !== "column" || !this.selectedFrameColumnSet.has(frame)) {
+            this.selectedFrameColumnSet = new Set([frame]);
+        }
+        const refs: TimelineKeySelectionRef[] = [];
+        for (const track of this.tracks) {
+            for (const selectedFrame of this.selectedFrameColumnSet) {
+                if (hasFrame(track.frames, selectedFrame)) refs.push(this.createSelectionRef(track, selectedFrame));
+            }
+        }
+        this.applyKeySelectionRefs(refs);
     }
 
-    private selectTrackFromLabelEvent(e: MouseEvent): void {
+    private selectRowHeaderFromLabelEvent(e: MouseEvent): void {
         if (e.detail > 1) return;
 
-        const rect = this.labelCanvas.getBoundingClientRect();
-        const localY = e.clientY - rect.top;
-        const row = this.getRowIndexAtOffset(localY - RULER_H);
+        const { viewportY, contentY } = this.getLabelPointerY(e);
+        if (viewportY >= 0 && viewportY < RULER_H) {
+            e.preventDefault();
+            this.clearAllSelections({ keepActiveTrack: true });
+            return;
+        }
+        const row = this.getRowIndexAtOffset(contentY - RULER_H);
         if (row < 0 || row >= this.tracks.length) return;
 
         const previousSelectedTrackIndex = this.selectedTrackIndex;
+        const track = this.tracks[row];
+        const target = this.createRowSelectionRef(track);
+        const switchingAxis = this.activeHeaderSelectionAxis !== "row";
+        const currentRows = switchingAxis ? [] : this.getSelectedRowHeaderRefs();
+        const currentAnchor = switchingAxis ? null : this.rowHeaderSelectionAnchor;
+        const mode = this.getHeaderSelectionMode(e);
+        const preserveMultiSelection = mode === "replace"
+            && currentRows.length > 1
+            && this.selectedRowHeaderSet.has(createTimelineRowSelectionKey(target));
+        const nextRows = preserveMultiSelection
+            ? currentRows
+            : updateTimelineRowSelection(currentRows, target, currentAnchor, this.tracks, mode);
+
+        this.activeHeaderSelectionAxis = nextRows.length > 0 ? "row" : null;
+        this.selectedRowHeaderSet = new Set(nextRows.map(createTimelineRowSelectionKey));
+        this.selectedFrameColumnSet.clear();
+        this.frameColumnSelectionAnchor = null;
+        this.rowHeaderSelectionAnchor = nextRows.length === 0
+            ? null
+            : mode === "range" && currentAnchor
+                ? currentAnchor
+                : target;
         this.selectedFrame = null;
         this.selectedKeySet.clear();
         this.selectionAnchor = null;
-        const track = this.tracks[row];
-        if (e.shiftKey && this.isMultiSelectableBoneTrack(track)) {
-            const activeRef = this.toggleBoneTrackSelection(track);
-            this.selectedTrackIndex = activeRef
-                ? this.findTrackIndexByBoneTrackRef(activeRef)
-                : row;
-        } else {
-            this.selectedTrackIndex = row;
-            this.selectedBoneTrackSet = this.createSingleBoneTrackSelectionSet(track);
-        }
+        this.selectedTrackIndex = row;
+        this.selectedBoneTrackSet = this.createSingleBoneTrackSelectionSet(track);
         const selectionChanged = this.selectedTrackIndex !== previousSelectedTrackIndex;
         if (selectionChanged) this.resize();
         else {
@@ -1093,6 +1266,114 @@ export class Timeline {
             this.scheduleLabel();
         }
         this.emitSelectionChanged();
+    }
+
+    private selectFrameColumnFromRulerEvent(e: MouseEvent): void {
+        if (e.button !== 0 || e.detail > 1) return;
+
+        const rect = this.overlayCanvas.getBoundingClientRect();
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
+        if (localX < 0 || localX > rect.width || localY < 0 || localY > rect.height) return;
+
+        e.preventDefault();
+        const frame = Math.max(0, Math.round(this.frameFromRulerCanvasX(localX)));
+        const switchingAxis = this.activeHeaderSelectionAxis !== "column";
+        const currentFrames = switchingAxis ? [] : Array.from(this.selectedFrameColumnSet);
+        const currentAnchor = switchingAxis ? null : this.frameColumnSelectionAnchor;
+        const mode = this.getHeaderSelectionMode(e);
+        const preserveMultiSelection = mode === "replace"
+            && currentFrames.length > 1
+            && this.selectedFrameColumnSet.has(frame);
+        const nextFrames = preserveMultiSelection
+            ? currentFrames
+            : updateTimelineFrameColumnSelection(currentFrames, frame, currentAnchor, mode)
+                .filter((selectedFrame) => selectedFrame <= this.totalFrames);
+
+        this.activeHeaderSelectionAxis = nextFrames.length > 0 ? "column" : null;
+        this.selectedFrameColumnSet = new Set(nextFrames);
+        this.selectedRowHeaderSet.clear();
+        this.rowHeaderSelectionAnchor = null;
+        this.frameColumnSelectionAnchor = nextFrames.length === 0
+            ? null
+            : mode === "range" && currentAnchor !== null
+                ? currentAnchor
+                : frame;
+        this.selectedKeySet.clear();
+        this.selectedBoneTrackSet.clear();
+        this.selectionAnchor = null;
+        this.selectedFrame = null;
+        this.scheduleOverlay();
+        this.scheduleStatic();
+        this.scheduleLabel();
+        this.emitSelectionChanged();
+        this.onSeek?.(frame, "jump");
+    }
+
+    private getHeaderSelectionMode(e: Pick<MouseEvent, "ctrlKey" | "metaKey" | "shiftKey">): TimelineHeaderSelectionMode {
+        if (e.shiftKey) return "range";
+        if (e.ctrlKey || e.metaKey) return "toggle";
+        return "replace";
+    }
+
+    private hasHeaderSelectionModifier(e: Pick<MouseEvent, "ctrlKey" | "metaKey" | "shiftKey">): boolean {
+        return e.shiftKey || e.ctrlKey || e.metaKey;
+    }
+
+    private getLabelPointerY(e: Pick<MouseEvent, "clientY">): { viewportY: number; contentY: number } {
+        const viewportY = e.clientY - this.labelsEl.getBoundingClientRect().top;
+        return {
+            viewportY,
+            contentY: viewportY + this.labelsEl.scrollTop,
+        };
+    }
+
+    private createRowSelectionRef(track: Pick<KeyframeTrack, "category" | "name">): TimelineRowSelectionRef {
+        return {
+            trackCategory: track.category,
+            trackName: track.name,
+        };
+    }
+
+    private getSelectedRowHeaderRefs(): TimelineRowSelectionRef[] {
+        return this.tracks
+            .map((track) => this.createRowSelectionRef(track))
+            .filter((ref) => this.selectedRowHeaderSet.has(createTimelineRowSelectionKey(ref)));
+    }
+
+    private clearHeaderSelectionState(): void {
+        const changed = this.activeHeaderSelectionAxis !== null
+            || this.selectedRowHeaderSet.size > 0
+            || this.selectedFrameColumnSet.size > 0;
+        this.activeHeaderSelectionAxis = null;
+        this.selectedRowHeaderSet.clear();
+        this.selectedFrameColumnSet.clear();
+        this.rowHeaderSelectionAnchor = null;
+        this.frameColumnSelectionAnchor = null;
+        if (!changed) return;
+        this.scheduleStatic();
+        this.scheduleOverlay();
+        this.scheduleLabel();
+    }
+
+    private drawSelectedFrameColumnBands(
+        ctx: CanvasRenderingContext2D,
+        top: number,
+        height: number,
+        playheadX: number,
+        visibleStart: number,
+        visibleEnd: number,
+    ): void {
+        if (this.activeHeaderSelectionAxis !== "column" || this.selectedFrameColumnSet.size === 0) return;
+
+        ctx.save();
+        for (const frame of this.selectedFrameColumnSet) {
+            if (frame < visibleStart || frame > visibleEnd) continue;
+            const x = frame * PX_PER_F - this.viewOffset + playheadX;
+            ctx.fillStyle = HEADER_COLUMN_SELECTION_BG;
+            ctx.fillRect(x - PX_PER_F / 2, top, PX_PER_F, height);
+        }
+        ctx.restore();
     }
 
     private getStaticCanvasPoint(e: MouseEvent): { x: number; y: number } {
@@ -1165,7 +1446,7 @@ export class Timeline {
 
         for (let row = firstRow; row <= lastRow; row += 1) {
             const track = this.tracks[row];
-            const midY = this.getRowTop(row) + this.getRowHeight(row) / 2;
+            const midY = this.getRowTop(row) + ROW_H / 2;
             if (midY < bounds.top || midY > bounds.bottom) continue;
 
             const lo = lowerBound(track.frames, minFrame);
@@ -1255,6 +1536,7 @@ export class Timeline {
     }
 
     private applyKeySelectionRefs(refs: readonly TimelineKeySelectionRef[]): void {
+        this.clearHeaderSelectionState();
         this.selectedBoneTrackSet.clear();
         this.selectedKeySet = this.createNormalizedSelectionSet(refs);
         const active = refs[0] && this.hasSelectionRef(refs[0])
@@ -1300,6 +1582,7 @@ export class Timeline {
             this.selectedKeySet.clear();
             this.selectedBoneTrackSet.clear();
             this.selectionAnchor = null;
+            this.clearHeaderSelectionState();
             this.emitSelectionChanged();
             return;
         }
@@ -1316,6 +1599,7 @@ export class Timeline {
                 this.selectedKeySet.clear();
                 this.selectedBoneTrackSet.clear();
                 this.selectionAnchor = null;
+                this.clearHeaderSelectionState();
                 this.emitSelectionChanged();
                 return;
             }
@@ -1329,6 +1613,16 @@ export class Timeline {
         }
         this.selectedKeySet = this.createNormalizedSelectionSet(this.getSelectedKeys());
         this.selectedBoneTrackSet = this.createNormalizedBoneTrackSelectionSet(this.getSelectedBoneTracks());
+        this.selectedRowHeaderSet = new Set(this.getSelectedRowHeaderRefs().map(createTimelineRowSelectionKey));
+        if (this.activeHeaderSelectionAxis === "row" && this.selectedRowHeaderSet.size === 0) {
+            this.clearHeaderSelectionState();
+        }
+        if (this.rowHeaderSelectionAnchor) {
+            const anchorKey = createTimelineRowSelectionKey(this.rowHeaderSelectionAnchor);
+            if (!this.tracks.some((candidate) => createTimelineRowSelectionKey(this.createRowSelectionRef(candidate)) === anchorKey)) {
+                this.rowHeaderSelectionAnchor = null;
+            }
+        }
         if (this.selectionAnchor && !this.hasSelectionRef(this.selectionAnchor)) {
             this.selectionAnchor = null;
         }
@@ -1496,16 +1790,12 @@ export class Timeline {
         return previousX + span * t;
     }
 
-    private getRowHeight(index: number): number {
-        return index >= 0 && index === this.selectedTrackIndex ? SELECTED_ROW_H : ROW_H;
-    }
-
     private getTrackRowsHeight(): number {
         if (this.tracks.length === 0) return ROW_H;
 
         let total = 0;
         for (let i = 0; i < this.tracks.length; i += 1) {
-            total += this.getRowHeight(i) + this.getSpacerHeightAfterRow(i);
+            total += ROW_H + this.getSpacerHeightAfterRow(i);
         }
         return total;
     }
@@ -1515,7 +1805,7 @@ export class Timeline {
 
         let top = 0;
         for (let i = 0; i < index; i += 1) {
-            top += this.getRowHeight(i) + this.getSpacerHeightAfterRow(i);
+            top += ROW_H + this.getSpacerHeightAfterRow(i);
         }
         return top;
     }
@@ -1526,7 +1816,7 @@ export class Timeline {
 
         let top = 0;
         for (let i = 0; i < this.tracks.length; i += 1) {
-            const rowH = this.getRowHeight(i);
+            const rowH = ROW_H;
             if (offsetY < top + rowH) return i;
             top += rowH;
 
@@ -1543,6 +1833,7 @@ export class Timeline {
     }
 
     private applyKeySelectionFromPointer(track: KeyframeTrack, pickedFrame: number | null, event: MouseEvent): void {
+        this.clearHeaderSelectionState();
         if (pickedFrame === null) {
             this.selectedFrame = null;
             this.selectedKeySet.clear();
@@ -1736,6 +2027,9 @@ export class Timeline {
             activeFrame: this.selectedFrame,
             selectedKeys: this.getSelectedKeys(),
             selectedBoneTracks: this.getSelectedBoneTracks(),
+            activeHeaderAxis: this.activeHeaderSelectionAxis,
+            selectedRows: this.getSelectedRowHeaderRefs(),
+            selectedFrameColumns: Array.from(this.selectedFrameColumnSet).sort((a, b) => a - b),
         });
     }
 }

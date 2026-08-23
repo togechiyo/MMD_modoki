@@ -1574,6 +1574,20 @@ body.shader-resizing #shader-resizer::before {
   background: var(--bg-secondary);
 }
 
+#timeline-container::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  width: var(--timeline-label-width);
+  height: 20px;
+  pointer-events: none;
+  background: #0e0e1a;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 /* Fixed left label column – scroll synced to track area via JS */
 #timeline-labels {
   flex-shrink: 0;
@@ -1641,6 +1655,11 @@ body.shader-resizing #shader-resizer::before {
 
 #timeline-tracks-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--bg-active);
+}
+
+#timeline-container.timeline-panning,
+#timeline-container.timeline-panning canvas {
+  cursor: grabbing;
 }
 
 /* ============================================

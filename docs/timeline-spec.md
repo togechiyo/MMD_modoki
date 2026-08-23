@@ -2,16 +2,21 @@
 
 更新日: 2026-08-23
 対象:
+
 - `src/timeline.ts`
+- `src/editor/timeline-key-selection.ts`
 - `src/ui-controller.ts`
 - `src/mmd-manager.ts`
 - `src/types.ts`
+- `src/index.css`
 - `index.html`
 
 ## 1. 目的
+
 - フレーム単位でモーションを可視化し、シーク/選択/キー編集を行う。
 - モデル編集とカメラ編集を同じUIで扱う。
-- ボーン欄・3Dボーン選択とトラック選択を同期する。
+- active track とボーン欄・3Dボーン選択を同期する。
+- 見出しの行・列選択と、実際の編集対象であるキー選択を分離する。
 
 ## 2. UI仕様
 
@@ -20,9 +25,9 @@
 - 編集ツールバー: `#btn-kf-add`, `#btn-kf-delete`, `#btn-kf-nudge-left`, `#btn-kf-nudge-right`
 - 選択表示: `#timeline-selection-label`
 - 描画領域:
-- 左ラベル: `#timeline-label-canvas`
-- 上ルーラー/プレイヘッド: `#timeline-overlay-canvas`
-- 本体トラック: `#timeline-canvas`
+  - 左ラベル: `#timeline-label-canvas`
+  - 上ルーラー/プレイヘッド: `#timeline-overlay-canvas`
+  - 本体トラック: `#timeline-canvas`
 
 参照: `index.html:122`
 
@@ -31,11 +36,14 @@
 - Static: 行背景 + キー点 (`#timeline-canvas`)
 - Overlay: ルーラー + プレイヘッド (`#timeline-overlay-canvas`)
 - Label: 左ラベル (`#timeline-label-canvas`)
+- 左上ルーラーマスク: `#timeline-container::after`。左ラベルが縦スクロールしても、上20pxへボーン名を侵入させない固定レイヤ
 
 再描画は必要最小限に分離される。
 - `setCurrentFrame`: overlay + static
 - `setKeyframeTracks`: static + label (+ resize)
 - スクロール: static
+
+左ラベルのクリック座標は、固定された上20pxをviewport座標で判定し、各行は `scrollTop` を加えたcontent座標で判定する。これにより、縦スクロール後も左上セルのクリック（全解除）とダブルクリック（全キー選択）を維持する。
 
 参照: `src/timeline.ts:13`, `src/timeline.ts:294`
 
@@ -43,9 +51,9 @@
 
 ### 3-1. トラック型
 - `KeyframeTrack`:
-- `name`: ボーン/モーフ/カメラチャンネル名
-- `category`: `root | camera | semi-standard | bone | morph`
-- `frames`: 昇順 `Uint32Array`
+  - `name`: ボーン / モーフ / シーン項目の内部名
+  - `category`: `root | camera | light | shadow | gravity | semi-standard | bone | morph`
+  - `frames`: 昇順 `Uint32Array`
 
 参照: `src/types.ts:45`
 
@@ -103,35 +111,73 @@
 
 ### 5-1. シーク
 - タイムライン本体のstatic canvasはキー選択を担当し、シークは行わない。
-- シークはviewport下部のシークバー、現在フレーム入力、フレーム移動Actionから行う。
+- Frame見出し（ルーラー）のクリックは対象Frameの列を選択し、そのFrameへシークする。
+- タイムライン上の中ボタンドラッグは、横移動量でFrameをスクロールし、縦移動量でトラック一覧をスクロールする。斜めドラッグでは両方を同時に行う。
+- 中ボタンの右ドラッグは後方Frame、左ドラッグは前方Frameへ移動し、Frame範囲は `0..totalFrames` にクランプする。
+- viewport下部のシークバー、現在フレーム入力、フレーム移動Actionからもシークできる。
 - フレームは `max(0, frame)` でクランプする。
 - シークやフレーム移動では、選択中のキー集合を維持する。
 
 参照: `src/timeline.ts:115`, `src/timeline.ts:173`, `src/ui-controller.ts:333`
 
 ### 5-2. 選択
-- ラベルクリック: 行選択のみ
-- staticクリック: 行選択 + 近傍キー選択（8px以内）
+選択は、編集範囲を示す「行・列見出し選択」と、実際の編集対象である「キー選択」を分ける。行と列は同時に保持せず、最後に操作した軸だけを有効にする。見出し選択とキー選択も排他とする。
+
+| 見出し | 通常クリック | `Shift` + クリック | `Ctrl` / `Cmd` + クリック | ダブルクリック |
+| --- | --- | --- | --- | --- |
+| 行名 | 対象行だけを選択 | anchorから対象行まで連続選択 | 対象行を個別に追加 / 解除 | 選択中の全行に含まれるキーを選択 |
+| Frame見出し | 対象列だけを選択してシーク | anchorから対象列まで連続選択してシーク | 対象列を個別に追加 / 解除してシーク | 選択中の全列にあるキーを選択 |
+| 左上セル | 行・列・キー選択を解除 | 同左 | 同左 | 表示中の全キーを選択 |
+
+- 修飾キー付きクリックは素早く続けてもダブルクリック変換を発火させず、行・列選択を優先する。
+- 行選択中にFrame見出しを操作した場合は行選択を解除し、列選択へ切り替える。逆方向も同様。
+- 行と列の和集合が必要な操作は見出し選択へ持ち込まず、キー本体の矩形選択を使う。
+- 見出しのダブルクリックは、先に作った見出し選択集合を実キー選択へ変換する操作である。
+
+キー選択:
+
+- staticクリック: 行をactiveにし、近傍キー（8px以内）を選択
 - `Ctrl` / `Cmd` + staticクリック: キーを選択集合へ追加、または集合から解除
 - `Shift` + staticクリック: 同一トラック内でanchorから範囲選択
 - static canvasドラッグ: 矩形内のキーを選択
 - `Ctrl` / `Cmd` + ドラッグ: 既存集合へ矩形選択を追加
-- ラベルのダブルクリック: 対象トラックの全キーを選択
-- ルーラーのダブルクリック: 対象フレームにある全トラックのキーを選択
-- 左上セルのダブルクリック: 表示中の全トラックの全キーを選択
+- キー直接操作または矩形選択を開始すると、行・列見出し選択は解除する
 - `Escape`: キー選択集合を解除し、active trackは維持
-- 選択状態:
+
+選択状態の切り替え:
+
+| 起点 | 次の操作 | 結果 |
+| --- | --- | --- |
+| 行見出し選択 | 列見出しクリック | 行選択を解除し、列選択へ切り替える |
+| 列見出し選択 | 行見出しクリック | 列選択を解除し、行選択へ切り替える |
+| 見出し選択 | 同じ軸のダブルクリック | 対象範囲内の実キーを選択し、見出し選択を解除する |
+| 見出し選択 | キークリック / 矩形選択 | 見出し選択を解除し、実キー選択へ切り替える |
+| 任意の選択 | 左上セルクリック | すべて解除する |
+
+主な選択状態:
+
 - `selectedTrackIndex`: active row
 - `selectedFrame`: active key。未ヒットなら `null`
 - `selectedKeySet`: コピー、削除、移動などの編集対象集合
 - `selectionAnchor`: Shift範囲選択のanchor
+- `activeHeaderSelectionAxis`: `row` / `column` / `null`
+- `selectedRowHeaderSet`, `selectedFrameColumnSet`: 見出し選択集合
+- `rowHeaderSelectionAnchor`, `frameColumnSelectionAnchor`: 見出しのShift範囲anchor
 - `selectedBoneTrackSet`: 複数ボーン対象。キー選択集合とは別状態
 
 選択中のキー集合は通常のフレーム移動、スクラブ、キー移動後も維持する。モデルinstance、またはtimeline target（model/camera）が変わった場合は、同名トラックへの誤持ち越しを防ぐため明示的に解除する。選択状態はプロジェクト保存対象には含めない。
 
 参照: `src/timeline.ts:528`, `src/timeline.ts:544`, `src/timeline.ts:558`
 
-### 5-3. キー編集
+### 5-3. 選択表示と行レイアウト
+
+- 全トラックは選択状態にかかわらず18pxの均一行高を使う。
+- Camera と Light の間だけは、MMD寄せの区切りとして通常1行分の空白を置く。
+- 行・列見出しの選択範囲は、通常背景より一段明るい無彩色グレーの塗りだけで示す。選択枠線は描かない。
+- キー点のカテゴリ色は維持し、見出し選択の背景と競合させない。
+- 回転量や補間曲線の詳細表示は、将来の独立したGraphエディタへ分離する。選択行だけを拡張しない。
+
+### 5-4. キー編集
 - 登録:
 - 現在フレームに登録
 - 既存フレームでは最新登録を優先して上書き（後勝ち）
@@ -211,7 +257,8 @@
 参照: `src/mmd-manager.ts:2026`, `src/mmd-manager.ts:2077`, `src/mmd-manager.ts:2148`
 
 ## 9. ボーン選択同期
-- タイムライン行選択 <-> ボーン欄選択 <-> 3Dボーン選択を同期する。
+- active row (`selectedTrackIndex`) <-> ボーン欄選択 <-> 3Dボーン選択を同期する。
+- 複数の行見出し選択はタイムライン上の編集範囲であり、viewportの複数ボーン選択 (`selectedBoneTrackSet`) とは別状態として扱う。
 - `syncingBoneSelection` フラグで再帰更新を回避。
 - 対象は `root/semi-standard/bone` カテゴリのみ。
 
@@ -223,6 +270,14 @@
 - 補間は編集可能だが、Property（表示/IK）のステップ編集UIは未実装。
 - Property（表示/IK）トラック編集は未実装。
 - 回転補間のMMD実機比較テストは未整備。
+
+## 11. 関連テスト
+
+- pure helper: `test/editor/timeline-key-selection.test.ts`
+- 見出し選択と左上セル: `test/e2e/timeline-header-selection.spec.mjs`
+- キー直接選択と矩形選択: `test/e2e/timeline-key-selection.spec.mjs`
+
+Electron / WebGPU のUI確認は、ローカルに導入済みのPlaywrightから実行する。GPUを利用できないsandbox上のE2Eは確認経路にしない。
 
 関連:
 - `docs/mmd-basic-task-checklist.md`

@@ -342,6 +342,7 @@ async function initializeApp(): Promise<void> {
               : null,
             activeFrame: timeline.getSelectedFrame(),
             selectedKeys: timeline.getSelectedKeys(),
+            headerSelection: timeline.getHeaderSelection(),
           };
         },
         nudgeTimelineSelection: (deltaFrames) => uiController.nudgeTimelineSelectionForE2e(deltaFrames),

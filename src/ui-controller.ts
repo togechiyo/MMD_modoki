@@ -1136,6 +1136,14 @@ export class UIController {
                 frame: this.timeline.getSelectedFrame(),
             });
         };
+        this.timeline.onSeek = (frame, phase) => {
+            this.actionDispatcher.dispatch({
+                type: "timeline.seekFrame",
+                source: "timeline",
+                frame,
+                phase,
+            });
+        };
         this.bottomPanel.onBoneSelectionChanged = (boneName) => {
             this.actionDispatcher.dispatch({ type: "selection.setBone", source: "panel", boneName });
             this.modelExternalParentController?.refresh();

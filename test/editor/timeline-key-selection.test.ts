@@ -5,6 +5,8 @@ import {
     createTimelineSelectionScopeKey,
     normalizeTimelineKeySelection,
     toggleTimelineKeySelection,
+    updateTimelineFrameColumnSelection,
+    updateTimelineRowSelection,
     type TimelineKeySelectionRef,
 } from "../../src/editor/timeline-key-selection";
 import type { KeyframeTrack } from "../../src/types";
@@ -67,5 +69,31 @@ describe("timeline key selection", () => {
         expect(createTimelineSelectionScopeKey("camera", "model-a")).toBe("camera");
         expect(createTimelineSelectionScopeKey("model", "model-a")).toBe("model:model-a");
         expect(createTimelineSelectionScopeKey("model", "model-b")).toBe("model:model-b");
+    });
+
+    it("replaces, toggles, and ranges row header selection in track order", () => {
+        const tracks = [
+            track("Camera", "camera", []),
+            track("Light", "light", []),
+            track("Shadow", "shadow", []),
+            track("Gravity", "gravity", []),
+        ];
+        const camera = { trackCategory: "camera" as const, trackName: "Camera" };
+        const light = { trackCategory: "light" as const, trackName: "Light" };
+        const shadow = { trackCategory: "shadow" as const, trackName: "Shadow" };
+        const gravity = { trackCategory: "gravity" as const, trackName: "Gravity" };
+
+        expect(updateTimelineRowSelection([], light, null, tracks, "replace")).toEqual([light]);
+        expect(updateTimelineRowSelection([camera, shadow], light, camera, tracks, "toggle"))
+            .toEqual([camera, light, shadow]);
+        expect(updateTimelineRowSelection([camera], gravity, light, tracks, "range"))
+            .toEqual([light, shadow, gravity]);
+    });
+
+    it("replaces, toggles, and ranges frame column selection", () => {
+        expect(updateTimelineFrameColumnSelection([], 10.8, null, "replace")).toEqual([10]);
+        expect(updateTimelineFrameColumnSelection([0, 10], 5, 0, "toggle")).toEqual([0, 5, 10]);
+        expect(updateTimelineFrameColumnSelection([0, 5, 10], 5, 0, "toggle")).toEqual([0, 10]);
+        expect(updateTimelineFrameColumnSelection([20], 13, 10, "range")).toEqual([10, 11, 12, 13]);
     });
 });

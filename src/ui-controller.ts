@@ -1086,6 +1086,9 @@ export class UIController {
         this.btnBoneKeyframe = document.getElementById("btn-bone-keyframe") as HTMLButtonElement | null;
         this.btnPhysicsKeyframe = document.querySelector(".timeline-edit-btn--physics-toggle") as HTMLButtonElement | null;
         this.btnMorphKeyframe = document.getElementById("btn-morph-keyframe") as HTMLButtonElement | null;
+        const btnLightKeyframe = document.getElementById("btn-light-keyframe") as HTMLButtonElement | null;
+        const btnShadowKeyframe = document.getElementById("btn-shadow-keyframe") as HTMLButtonElement | null;
+        const btnGravityKeyframe = document.getElementById("btn-gravity-keyframe") as HTMLButtonElement | null;
         this.btnInfoKeyframe?.addEventListener("click", () => {
             if ((this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null) !== null) {
                 this.actionDispatcher.dispatch({ type: "keyframe.registerAccessoryTransform", source: "button" });
@@ -1104,6 +1107,15 @@ export class UIController {
         });
         this.btnMorphKeyframe?.addEventListener("click", () => {
             this.actionDispatcher.dispatch({ type: "keyframe.registerMorph", source: "button" });
+        });
+        btnLightKeyframe?.addEventListener("click", () => {
+            this.actionDispatcher.dispatch({ type: "keyframe.registerLight", source: "button" });
+        });
+        btnShadowKeyframe?.addEventListener("click", () => {
+            this.actionDispatcher.dispatch({ type: "keyframe.registerShadow", source: "button" });
+        });
+        btnGravityKeyframe?.addEventListener("click", () => {
+            this.actionDispatcher.dispatch({ type: "keyframe.registerGravity", source: "button" });
         });
 
         this.timeline.onSelectionChanged = (track) => {
@@ -1624,6 +1636,8 @@ export class UIController {
             });
             if (frameChanged) {
                 this.clearTransientEditingStateForFrameChange();
+                this.refreshLightingUiFromRuntime();
+                this.runtimeFeatureUiController?.refreshGravityControls();
                 if (this.timeline.getSelectedKeys().length > 0) {
                     this.timeline.clearSelectedKeys({ keepActiveTrack: true });
                 }
@@ -2248,6 +2262,15 @@ export class UIController {
         this.actionDispatcher.register("keyframe.registerMorph", () => this.registerMorphKeyframesAtCurrentFrame());
         this.actionDispatcher.register("keyframe.registerAccessoryTransform", () => {
             this.registerAccessoryTransformKeyframe();
+        });
+        this.actionDispatcher.register("keyframe.registerLight", () => {
+            this.registerLightKeyframeAtCurrentFrame();
+        });
+        this.actionDispatcher.register("keyframe.registerShadow", () => {
+            this.registerShadowKeyframeAtCurrentFrame();
+        });
+        this.actionDispatcher.register("keyframe.registerGravity", () => {
+            this.registerGravityKeyframeAtCurrentFrame();
         });
         this.actionDispatcher.register("interpolation.copy", () => this.copyInterpolationCurves());
         this.actionDispatcher.register("interpolation.paste", () => this.pasteInterpolationCurves());
@@ -3238,7 +3261,9 @@ export class UIController {
                 }
             }
             this.reapplyImportedLightingState(parsedProject.lighting);
+            this.mmdManager.refreshSceneTracksAtCurrentFrame();
             this.refreshLightingUiFromRuntime();
+            this.runtimeFeatureUiController?.refreshGravityControls();
             this.updateTimelineEditState();
 
             if (result.warnings.length > 0) {
@@ -7199,6 +7224,12 @@ export class UIController {
         switch (track.category) {
             case "camera":
                 return "Camera";
+            case "light":
+                return "Light";
+            case "shadow":
+                return "Shadow";
+            case "gravity":
+                return "Gravity";
             case "morph":
                 return "Morph";
             case "root":
@@ -9054,6 +9085,84 @@ export class UIController {
         };
     }
 
+    private registerLightKeyframeAtCurrentFrame(): void {
+        const track: Pick<KeyframeTrack, "name" | "category"> = { name: "Light", category: "light" };
+        const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
+        const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
+        const after = this.mmdManager.captureCurrentLightKeyframePayload();
+        const command = this.createKeyframePasteCommand(
+            track,
+            frame,
+            before,
+            after,
+            `Register light keyframe at frame ${frame}`,
+        );
+        const registered = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
+        if (!registered) {
+            this.showToast(`Frame ${frame}: light keyframe failed`, "error");
+            return;
+        }
+
+        this.commandHistory.push(command);
+        this.updateTimelineEditState();
+        this.updateSectionKeyframeButtons();
+        this.refreshLightingUiFromRuntime();
+        this.showToast(before ? `Frame ${frame} light keyframe updated` : `Frame ${frame}: light keyframe added`, "success");
+    }
+
+    private registerShadowKeyframeAtCurrentFrame(): void {
+        const track: Pick<KeyframeTrack, "name" | "category"> = { name: "Shadow", category: "shadow" };
+        const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
+        const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
+        const after = this.mmdManager.captureCurrentShadowKeyframePayload();
+        const command = this.createKeyframePasteCommand(
+            track,
+            frame,
+            before,
+            after,
+            `Register shadow keyframe at frame ${frame}`,
+        );
+        const registered = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
+        if (!registered) {
+            this.showToast(`Frame ${frame}: shadow keyframe failed`, "error");
+            return;
+        }
+
+        this.commandHistory.push(command);
+        this.updateTimelineEditState();
+        this.updateSectionKeyframeButtons();
+        this.refreshLightingUiFromRuntime();
+        this.showToast(before ? `Frame ${frame} shadow keyframe updated` : `Frame ${frame}: shadow keyframe added`, "success");
+    }
+
+    private registerGravityKeyframeAtCurrentFrame(): void {
+        const track: Pick<KeyframeTrack, "name" | "category"> = { name: "Gravity", category: "gravity" };
+        const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
+        const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
+        const after = this.mmdManager.captureCurrentGravityKeyframePayload();
+        const command = this.createKeyframePasteCommand(
+            track,
+            frame,
+            before,
+            after,
+            `Register gravity keyframe at frame ${frame}`,
+        );
+        const registered = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
+        if (!registered) {
+            this.showToast(`Frame ${frame}: gravity keyframe failed`, "error");
+            return;
+        }
+
+        this.commandHistory.push(command);
+        this.updateTimelineEditState();
+        this.updateSectionKeyframeButtons();
+        this.runtimeFeatureUiController?.refreshGravityControls();
+        this.showToast(before ? `Frame ${frame} gravity keyframe updated` : `Frame ${frame}: gravity keyframe added`, "success");
+    }
+
     private addKeyframeAtCurrentFrame(
         poseSnapshotOverride: SelectedBonePoseSnapshot | null = null,
         source: ActionSource = "system",
@@ -9061,6 +9170,18 @@ export class UIController {
         const track = this.getSelectedTimelineTrack();
         if (!track) {
             this.showToast("Please select a track", "error");
+            return;
+        }
+        if (track.category === "light") {
+            this.registerLightKeyframeAtCurrentFrame();
+            return;
+        }
+        if (track.category === "shadow") {
+            this.registerShadowKeyframeAtCurrentFrame();
+            return;
+        }
+        if (track.category === "gravity") {
+            this.registerGravityKeyframeAtCurrentFrame();
             return;
         }
 
@@ -9683,7 +9804,7 @@ export class UIController {
     }
 
     private shouldUseMovableBoneTrack(track: Pick<KeyframeTrack, "name" | "category">): boolean {
-        if (track.category === "camera" || track.category === "morph") return false;
+        if (track.category === "camera" || track.category === "light" || track.category === "shadow" || track.category === "gravity" || track.category === "morph") return false;
         const modelInfo = this.mmdManager.getActiveModelInfo();
         const boneControl = modelInfo?.boneControlInfos?.find((candidate) => candidate.name === track.name);
         if (boneControl) return boneControl.movable;
@@ -10364,6 +10485,12 @@ export class UIController {
         switch (payload.kind) {
             case "camera":
                 return track.category === "camera";
+            case "light":
+                return track.category === "light";
+            case "shadow":
+                return track.category === "shadow";
+            case "gravity":
+                return track.category === "gravity";
             case "morph":
                 return track.category === "morph";
             case "bone":
@@ -10412,6 +10539,26 @@ export class UIController {
                 return {
                     kind: "morph",
                     weights: [...payload.weights],
+                };
+            case "light":
+                return {
+                    kind: "light",
+                    color: { ...payload.color },
+                    direction: { ...payload.direction },
+                };
+            case "shadow":
+                return {
+                    kind: "shadow",
+                    color: { ...payload.color },
+                    toonInfluence: payload.toonInfluence,
+                    maxZ: payload.maxZ,
+                    lightIntensity: payload.lightIntensity,
+                };
+            case "gravity":
+                return {
+                    kind: "gravity",
+                    acceleration: payload.acceleration,
+                    direction: { ...payload.direction },
                 };
         }
     }
@@ -10683,6 +10830,8 @@ export class UIController {
         this.mmdManager.pause();
         this.timeline.refreshFrameContent();
         this.syncModelPanelFromRuntimeIfPlaybackIdle();
+        this.refreshLightingUiFromRuntime();
+        this.runtimeFeatureUiController?.refreshGravityControls();
         this.updateTimelineEditState();
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
@@ -10694,6 +10843,8 @@ export class UIController {
         this.mmdManager.pause();
         this.timeline.refreshFrameContent();
         this.syncModelPanelFromRuntimeIfPlaybackIdle();
+        this.refreshLightingUiFromRuntime();
+        this.runtimeFeatureUiController?.refreshGravityControls();
         if (!this.isPlaybackFrameStopEnabled()) {
             this.mmdManager.seekToBoundary(this.getPlaybackFrameRange().startFrame);
         }

@@ -373,7 +373,7 @@ export interface MotionInfo {
 }
 
 /** Track category for timeline row ordering */
-export type TrackCategory = 'root' | 'camera' | 'semi-standard' | 'bone' | 'morph';
+export type TrackCategory = 'root' | 'camera' | 'light' | 'shadow' | 'gravity' | 'semi-standard' | 'bone' | 'morph';
 
 /** A single row in the keyframe timeline */
 export interface KeyframeTrack {
@@ -773,6 +773,34 @@ export interface ProjectSerializedCameraExternalParentTrack {
     boneNames: Array<string | null>;
 }
 
+export interface ProjectSerializedLightSceneTrack {
+    baseColor: ProjectRgbColor;
+    baseDirection: { x: number; y: number; z: number };
+    frameNumbers: number[];
+    colors: number[];
+    directions: number[];
+}
+
+export interface ProjectSerializedShadowSceneTrack {
+    baseColor: ProjectRgbColor;
+    baseToonInfluence: number;
+    baseMaxZ: number;
+    baseLightIntensity: number;
+    frameNumbers: number[];
+    colors: number[];
+    toonInfluences: number[];
+    maxZs: number[];
+    lightIntensities: number[];
+}
+
+export interface ProjectSerializedGravitySceneTrack {
+    baseAcceleration: number;
+    baseDirection: { x: number; y: number; z: number };
+    frameNumbers: number[];
+    accelerations: number[];
+    directions: number[];
+}
+
 export interface ProjectSerializedModelExternalParentTrack {
     modelInstanceId?: string;
     modelPath: string;
@@ -811,6 +839,9 @@ export interface ProjectKeyframeBundle {
     modelExternalParents?: ProjectSerializedModelExternalParentTrack[];
     cameraExternalParents?: ProjectSerializedCameraExternalParentTrack | null;
     accessoryTransformAnimations?: Array<ProjectSerializedAccessoryTransformTrack | null>;
+    lightAnimation?: ProjectSerializedLightSceneTrack | null;
+    shadowAnimation?: ProjectSerializedShadowSceneTrack | null;
+    gravityAnimation?: ProjectSerializedGravitySceneTrack | null;
 }
 
 export interface MmdModokiProjectFileV1 {

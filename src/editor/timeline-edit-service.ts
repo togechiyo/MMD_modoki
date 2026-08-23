@@ -114,6 +114,24 @@ type TimelineEditHost = {
     upsertModelExternalParentKeyframe?: (frame: number, payload: ModelExternalParentKeyframePayload) => boolean;
     removeModelExternalParentKeyframes?: (frames: readonly number[], childBoneName: string) => boolean;
     moveModelExternalParentKeyframe?: (fromFrame: number, toFrame: number, childBoneName: string) => boolean;
+    getLightSceneKeyframeFrames?: () => Uint32Array;
+    captureCurrentLightKeyframePayload?: () => LightKeyframePayload;
+    readLightSceneKeyframePayload?: (frame: number) => LightKeyframePayload | null;
+    applyLightSceneKeyframePayload?: (frame: number, payload: LightKeyframePayload | null) => boolean;
+    removeLightSceneKeyframePayloads?: (frames: readonly number[]) => boolean;
+    moveLightSceneKeyframe?: (fromFrame: number, toFrame: number) => boolean;
+    getShadowSceneKeyframeFrames?: () => Uint32Array;
+    captureCurrentShadowKeyframePayload?: () => ShadowKeyframePayload;
+    readShadowSceneKeyframePayload?: (frame: number) => ShadowKeyframePayload | null;
+    applyShadowSceneKeyframePayload?: (frame: number, payload: ShadowKeyframePayload | null) => boolean;
+    removeShadowSceneKeyframePayloads?: (frames: readonly number[]) => boolean;
+    moveShadowSceneKeyframe?: (fromFrame: number, toFrame: number) => boolean;
+    getGravitySceneKeyframeFrames?: () => Uint32Array;
+    captureCurrentGravityKeyframePayload?: () => GravityKeyframePayload;
+    readGravitySceneKeyframePayload?: (frame: number) => GravityKeyframePayload | null;
+    applyGravitySceneKeyframePayload?: (frame: number, payload: GravityKeyframePayload | null) => boolean;
+    removeGravitySceneKeyframePayloads?: (frames: readonly number[]) => boolean;
+    moveGravitySceneKeyframe?: (fromFrame: number, toFrame: number) => boolean;
 };
 
 export type BoneKeyframePayload = {
@@ -158,11 +176,34 @@ export type CameraExternalParentKeyframePayload = {
     boneName: string | null;
 };
 
+export type LightKeyframePayload = {
+    kind: "light";
+    color: { r: number; g: number; b: number };
+    direction: { x: number; y: number; z: number };
+};
+
+export type ShadowKeyframePayload = {
+    kind: "shadow";
+    color: { r: number; g: number; b: number };
+    toonInfluence: number;
+    maxZ: number;
+    lightIntensity: number;
+};
+
+export type GravityKeyframePayload = {
+    kind: "gravity";
+    acceleration: number;
+    direction: { x: number; y: number; z: number };
+};
+
 export type TimelineKeyframePayload =
     | BoneKeyframePayload
     | MovableBoneKeyframePayload
     | MorphKeyframePayload
-    | CameraKeyframePayload;
+    | CameraKeyframePayload
+    | LightKeyframePayload
+    | ShadowKeyframePayload
+    | GravityKeyframePayload;
 
 export function getOrCreateModelTrackFrameMap(host: TimelineEditHost, model: TimelineEditRuntimeModel): Map<string, Uint32Array> {
     let frameMap = host.modelKeyframeTracksByModel.get(model);
@@ -464,6 +505,24 @@ export function getRegisteredKeyframeStats(host: TimelineEditHost): { hasAnyKeyf
         maxFrame = host.cameraKeyframeFrames[host.cameraKeyframeFrames.length - 1];
     }
 
+    const lightFrames = host.getLightSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
+    if (lightFrames.length > 0) {
+        hasAnyKeyframe = true;
+        maxFrame = Math.max(maxFrame, lightFrames[lightFrames.length - 1]);
+    }
+
+    const shadowFrames = host.getShadowSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
+    if (shadowFrames.length > 0) {
+        hasAnyKeyframe = true;
+        maxFrame = Math.max(maxFrame, shadowFrames[shadowFrames.length - 1]);
+    }
+
+    const gravityFrames = host.getGravitySceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
+    if (gravityFrames.length > 0) {
+        hasAnyKeyframe = true;
+        maxFrame = Math.max(maxFrame, gravityFrames[gravityFrames.length - 1]);
+    }
+
     for (const sceneModel of host.sceneModels) {
         const frameMap = host.modelKeyframeTracksByModel.get(sceneModel.model);
         if (!frameMap) continue;
@@ -620,11 +679,29 @@ export function getActiveModelTimelineTracks(host: TimelineEditHost): KeyframeTr
 }
 
 export function getCameraTimelineTracks(host: TimelineEditHost): KeyframeTrack[] {
+    const lightFrames = host.getLightSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
+    const shadowFrames = host.getShadowSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
+    const gravityFrames = host.getGravitySceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
     return [
         {
             name: "Camera",
             category: "camera",
             frames: host.cameraKeyframeFrames.length > 0 ? host.cameraKeyframeFrames : EMPTY_KEYFRAME_FRAMES,
+        },
+        {
+            name: "Light",
+            category: "light",
+            frames: lightFrames,
+        },
+        {
+            name: "Shadow",
+            category: "shadow",
+            frames: shadowFrames,
+        },
+        {
+            name: "Gravity",
+            category: "gravity",
+            frames: gravityFrames,
         },
     ];
 }
@@ -686,6 +763,18 @@ export function hasTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyframe
         return hasFrameNumber(host.cameraKeyframeFrames, normalized);
     }
 
+    if (track.category === "light") {
+        return hasFrameNumber(host.getLightSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES, normalized);
+    }
+
+    if (track.category === "shadow") {
+        return hasFrameNumber(host.getShadowSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES, normalized);
+    }
+
+    if (track.category === "gravity") {
+        return hasFrameNumber(host.getGravitySceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES, normalized);
+    }
+
     if (!host.currentModel) return false;
     const frameMap = getOrCreateModelTrackFrameMap(host, host.currentModel);
     const key = createTrackKey(track.category, track.name);
@@ -710,6 +799,21 @@ export function addTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyframe
         host.cameraKeyframeFrames = nextFrames;
         emitMergedKeyframeTracks(host);
         return true;
+    }
+
+    if (track.category === "light") {
+        const payload = host.captureCurrentLightKeyframePayload?.();
+        return payload ? (host.applyLightSceneKeyframePayload?.(normalized, payload) ?? false) : false;
+    }
+
+    if (track.category === "shadow") {
+        const payload = host.captureCurrentShadowKeyframePayload?.();
+        return payload ? (host.applyShadowSceneKeyframePayload?.(normalized, payload) ?? false) : false;
+    }
+
+    if (track.category === "gravity") {
+        const payload = host.captureCurrentGravityKeyframePayload?.();
+        return payload ? (host.applyGravitySceneKeyframePayload?.(normalized, payload) ?? false) : false;
     }
 
     if (!host.currentModel) return false;
@@ -908,7 +1012,7 @@ function createBoneTrackFromMovableTrack(track: MmdMovableBoneAnimationTrack): M
 }
 
 function shouldUseMovableBoneTrack(host: TimelineEditHost, track: Pick<KeyframeTrack, "name" | "category">): boolean {
-    if (track.category === "camera" || track.category === "morph") return false;
+    if (track.category === "camera" || track.category === "light" || track.category === "shadow" || track.category === "gravity" || track.category === "morph") return false;
     const boneControl = host.activeModelInfo?.boneControlInfos?.find((candidate) => candidate.name === track.name);
     if (boneControl) return boneControl.movable;
     return track.category === "root";
@@ -924,6 +1028,18 @@ export function removeTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyfr
         host.removeCameraExternalParentKeyframes?.([normalized]);
         emitMergedKeyframeTracks(host);
         return true;
+    }
+
+    if (track.category === "light") {
+        return host.applyLightSceneKeyframePayload?.(normalized, null) ?? false;
+    }
+
+    if (track.category === "shadow") {
+        return host.applyShadowSceneKeyframePayload?.(normalized, null) ?? false;
+    }
+
+    if (track.category === "gravity") {
+        return host.applyGravitySceneKeyframePayload?.(normalized, null) ?? false;
     }
 
     if (!host.currentModel) return false;
@@ -954,6 +1070,18 @@ export function moveTimelineKeyframe(
         host.moveCameraExternalParentKeyframe?.(normalizedFrom, normalizedTo);
         emitMergedKeyframeTracks(host);
         return true;
+    }
+
+    if (track.category === "light") {
+        return host.moveLightSceneKeyframe?.(normalizedFrom, normalizedTo) ?? false;
+    }
+
+    if (track.category === "shadow") {
+        return host.moveShadowSceneKeyframe?.(normalizedFrom, normalizedTo) ?? false;
+    }
+
+    if (track.category === "gravity") {
+        return host.moveGravitySceneKeyframe?.(normalizedFrom, normalizedTo) ?? false;
     }
 
     if (!host.currentModel) return false;
@@ -995,6 +1123,18 @@ export function readTimelineKeyframePayload(
                 boneName: null,
             },
         };
+    }
+
+    if (track.category === "light") {
+        return host.readLightSceneKeyframePayload?.(normalized) ?? null;
+    }
+
+    if (track.category === "shadow") {
+        return host.readShadowSceneKeyframePayload?.(normalized) ?? null;
+    }
+
+    if (track.category === "gravity") {
+        return host.readGravitySceneKeyframePayload?.(normalized) ?? null;
     }
 
     const animation = getCurrentModelAnimation(host);
@@ -1081,6 +1221,12 @@ export function applyTimelineKeyframePayload(
             return applyMovableBoneKeyframePayload(host, track, normalized, payload);
         case "bone":
             return applyBoneKeyframePayload(host, track, normalized, payload);
+        case "light":
+            return host.applyLightSceneKeyframePayload?.(normalized, payload) ?? false;
+        case "shadow":
+            return host.applyShadowSceneKeyframePayload?.(normalized, payload) ?? false;
+        case "gravity":
+            return host.applyGravitySceneKeyframePayload?.(normalized, payload) ?? false;
     }
 }
 
@@ -1111,6 +1257,18 @@ export function removeTimelineKeyframePayloads(
         host.cameraKeyframeFrames = new Uint32Array(cameraTrack.frameNumbers);
         emitMergedKeyframeTracks(host);
         return true;
+    }
+
+    if (track.category === "light") {
+        return host.removeLightSceneKeyframePayloads?.([...normalizedFrames]) ?? false;
+    }
+
+    if (track.category === "shadow") {
+        return host.removeShadowSceneKeyframePayloads?.([...normalizedFrames]) ?? false;
+    }
+
+    if (track.category === "gravity") {
+        return host.removeGravitySceneKeyframePayloads?.([...normalizedFrames]) ?? false;
     }
 
     const animation = getCurrentModelAnimation(host);

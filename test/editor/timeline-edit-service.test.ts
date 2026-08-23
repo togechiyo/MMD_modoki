@@ -12,6 +12,7 @@ import {
     applyTimelineKeyframePayload,
     ensureModelAnimationForEditing,
     getActiveModelTimelineTracks,
+    getCameraTimelineTracks,
     removeTimelineKeyframePayloads,
 } from "../../src/editor/timeline-edit-service";
 import type { KeyframeTrack, ModelInfo } from "../../src/types";
@@ -98,6 +99,54 @@ function createHost(modelInfo: ModelInfo): { host: TestHost; model: TestModel } 
 }
 
 describe("timeline edit service model animation tracks", () => {
+    it("exposes and routes the shadow and gravity scene tracks", () => {
+        const { host } = createHost(createModelInfo([]));
+        const applyShadowSceneKeyframePayload = vi.fn(() => true);
+        const applyGravitySceneKeyframePayload = vi.fn(() => true);
+        const editableHost = Object.assign(host, {
+            getLightSceneKeyframeFrames: () => new Uint32Array([5]),
+            getShadowSceneKeyframeFrames: () => new Uint32Array([10, 20]),
+            getGravitySceneKeyframeFrames: () => new Uint32Array([15, 30]),
+            applyShadowSceneKeyframePayload,
+            applyGravitySceneKeyframePayload,
+        });
+
+        expect(getCameraTimelineTracks(editableHost).map((track) => ({
+            name: track.name,
+            category: track.category,
+            frames: Array.from(track.frames),
+        }))).toEqual([
+            { name: "Camera", category: "camera", frames: [] },
+            { name: "Light", category: "light", frames: [5] },
+            { name: "Shadow", category: "shadow", frames: [10, 20] },
+            { name: "Gravity", category: "gravity", frames: [15, 30] },
+        ]);
+        expect(applyTimelineKeyframePayload(editableHost, { name: "Shadow", category: "shadow" }, 12, {
+            kind: "shadow",
+            color: { r: 0.2, g: 0.3, b: 0.4 },
+            toonInfluence: 0.6,
+            maxZ: 2400,
+            lightIntensity: 1.4,
+        })).toBe(true);
+        expect(applyShadowSceneKeyframePayload).toHaveBeenCalledWith(12, {
+            kind: "shadow",
+            color: { r: 0.2, g: 0.3, b: 0.4 },
+            toonInfluence: 0.6,
+            maxZ: 2400,
+            lightIntensity: 1.4,
+        });
+        expect(applyTimelineKeyframePayload(editableHost, { name: "Gravity", category: "gravity" }, 18, {
+            kind: "gravity",
+            acceleration: 74,
+            direction: { x: 50, y: -50, z: 0 },
+        })).toBe(true);
+        expect(applyGravitySceneKeyframePayload).toHaveBeenCalledWith(18, {
+            kind: "gravity",
+            acceleration: 74,
+            direction: { x: 50, y: -50, z: 0 },
+        });
+    });
+
     it("creates a bone track for ordinary PMX bones", () => {
         const { host, model } = createHost(createModelInfo([{ name: "左肩", movable: false }]));
         const animation = createAnimation();

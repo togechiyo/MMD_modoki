@@ -3,10 +3,10 @@ id: v023-theme-is-timeline-and-scene-key-editing
 status: decision
 scope: roadmap/v0.2.3
 confidence: high
-last_verified: 2026-08-20
+last_verified: 2026-08-23
 decision_owner: project-owner
 decision: adopted
-decided_on: 2026-08-20
+decided_on: 2026-08-23
 evidence:
   - conversation-explicit-instruction
   - roadmap-document
@@ -23,7 +23,7 @@ v0.2.3の作業範囲と優先順位を選ぶとき。
 
 ## 判断
 
-タイムラインを中心に、照明、セルフ影、重力、選択keyのXYZ補正、frame操作整理へ進む。対象選択から登録、評価、保存、undoまで一貫したscene編集基盤を目標とする。
+タイムラインを中心に、照明、既存UIの影欄、重力、選択keyのXYZ補正、frame操作整理へ進む。対象選択から登録、評価、保存、undoまで一貫したscene編集基盤を目標とする。MMDのself-shadow modeは対象外とする。
 
 ## 避けること
 

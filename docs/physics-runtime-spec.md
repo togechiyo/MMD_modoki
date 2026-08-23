@@ -1,6 +1,6 @@
 # 物理実装仕様（現行）
 
-更新日: 2026-08-13
+更新日: 2026-08-23
 
 ## 目的
 
@@ -69,6 +69,12 @@ WASM runtime は `MmdWasmRuntime` + `MmdWasmPhysics` を使う実験経路。`Mm
 - `MultiPhysicsRuntime.timeStep`: 既定値のまま。`useDeltaForWorldStep=true` のため通常は未使用
 - evaluation type: 再生中の Bullet MPR は `Buffered`、停止 / seek / Bullet SPR は `Immediate`
 - gravity: `Vector3(0, -98, 0)`
+
+### 重力 scene track
+
+下パネルに表示する加速度と方向 XYZ は `scene.gravity` のキーフレーム対象にできる。値は全成分を線形補間し、対象フレームの値を runtime seek / 物理姿勢適用より先に backend へ渡す。方向は project と UI では未正規化値を保持し、backend 適用時に正規化して加速度を掛ける。
+
+この仕組みが保証するのは「対象フレームで使う重力値」の再現である。布や髪などの物理姿勢はそれ以前の step 履歴にも依存するため、任意フレームへの直接 seek とフレーム 0 からの連続再生の完全一致は別課題として扱う。
 
 ## 物理 step / solver / ERP / CFM 設定
 

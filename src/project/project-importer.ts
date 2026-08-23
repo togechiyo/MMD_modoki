@@ -7,6 +7,9 @@ import type {
     ProjectSerializedCameraExternalParentTrack,
     ProjectSerializedModelExternalParentTrack,
     ProjectSerializedModelAnimation,
+    ProjectSerializedLightSceneTrack,
+    ProjectSerializedShadowSceneTrack,
+    ProjectSerializedGravitySceneTrack,
     SsgiBlendMode,
     ProjectRingParticleState,
 } from "../types";
@@ -173,6 +176,9 @@ type ProjectImportHost = {
     setPhysicsSimulationRateHz(value: number): void;
     setPhysicsGravityAcceleration(value: number): void;
     setPhysicsGravityDirection(x: number, y: number, z: number): void;
+    setSerializedLightSceneTrack?: (data: ProjectSerializedLightSceneTrack | null | undefined) => void;
+    setSerializedShadowSceneTrack?: (data: ProjectSerializedShadowSceneTrack | null | undefined) => void;
+    setSerializedGravitySceneTrack?: (data: ProjectSerializedGravitySceneTrack | null | undefined) => void;
     setPhysicsFloorCollisionEnabled(enabled: boolean): void;
     isPhysicsAvailable(): boolean;
     setPhysicsEnabled(enabled: boolean): void;
@@ -925,6 +931,7 @@ export async function importProjectState(
         Number.isFinite(data.lighting.lightColor.b)) {
         host.setLightColor(data.lighting.lightColor.r, data.lighting.lightColor.g, data.lighting.lightColor.b);
     }
+    host.setSerializedLightSceneTrack?.(data.keyframes?.lightAnimation);
     host.lightFlatStrength = typeof data.lighting.lightFlatStrength === "number" && Number.isFinite(data.lighting.lightFlatStrength)
         ? data.lighting.lightFlatStrength
         : 0;
@@ -1036,6 +1043,7 @@ export async function importProjectState(
     if (typeof selfShadowEdgeSoftness === "number") host.selfShadowEdgeSoftness = selfShadowEdgeSoftness;
     if (typeof occlusionShadowEdgeSoftness === "number") host.occlusionShadowEdgeSoftness = occlusionShadowEdgeSoftness;
     host.setShadowEnabled(Boolean(data.lighting.shadowEnabled));
+    host.setSerializedShadowSceneTrack?.(data.keyframes?.shadowAnimation);
 
     host.setPhysicsSimulationRateHz(data.physics.simulationRateHz ?? 60);
     host.setPhysicsGravityAcceleration(data.physics.gravityAcceleration);
@@ -1044,6 +1052,7 @@ export async function importProjectState(
         data.physics.gravityDirection.y,
         data.physics.gravityDirection.z,
     );
+    host.setSerializedGravitySceneTrack?.(data.keyframes?.gravityAnimation);
     host.setPhysicsFloorCollisionEnabled(data.physics.floorCollisionEnabled ?? true);
     if (host.isPhysicsAvailable()) {
         host.setPhysicsEnabled(Boolean(data.physics.enabled));

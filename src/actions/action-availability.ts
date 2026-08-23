@@ -46,6 +46,10 @@ export function canExecuteEditorAction(
             return snapshot.hasSelectedMorphFrame ?? true;
         case "keyframe.registerAccessoryTransform":
             return snapshot.hasSelectedAccessory ?? true;
+        case "keyframe.registerLight":
+        case "keyframe.registerShadow":
+        case "keyframe.registerGravity":
+            return true;
         case "keyframe.toggleAutoKey":
             return true;
         case "history.undo":

@@ -38,7 +38,10 @@ export type KeyframeAction =
     | { type: "keyframe.registerInfo"; source: ActionSource }
     | { type: "keyframe.registerBone"; source: ActionSource }
     | { type: "keyframe.registerMorph"; source: ActionSource }
-    | { type: "keyframe.registerAccessoryTransform"; source: ActionSource };
+    | { type: "keyframe.registerAccessoryTransform"; source: ActionSource }
+    | { type: "keyframe.registerLight"; source: ActionSource }
+    | { type: "keyframe.registerShadow"; source: ActionSource }
+    | { type: "keyframe.registerGravity"; source: ActionSource };
 
 export type HistoryAction =
     | { type: "history.undo"; source: ActionSource }

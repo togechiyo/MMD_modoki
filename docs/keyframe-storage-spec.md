@@ -1,6 +1,6 @@
 # キーフレーム保存仕様
 
-更新日: 2026-03-23
+更新日: 2026-08-23
 
 ## この文書の役割
 この文書は、`MMD_modoki` 内で保持するキーフレーム情報の意味を整理する。
@@ -38,7 +38,47 @@
 - `camera`
 - `property`
 - `light`
+- `shadow`
+- `gravity`
 - `accessory`
+
+現行実装では、`light`、`shadow`、`gravity` は babylon-mmd の `MmdAnimation` へ混在させず、MMD_modoki が所有する scene track として保持する。`accessory` は project 内の専用 transform track であり、現時点では通常の `TrackCategory` へ統合していない。
+
+## MMD_modoki 所有のシーントラック
+
+シーントラックは共通して、安定した ID、補間方式、トラック開始前に復元する base value、昇順の keyframe 列を持つ。キー列の追加、上書き、削除、移動、指定フレーム評価は `src/editor/scene-keyframe-track.ts` の pure helper を正本とする。
+
+### 照明トラック
+
+- track ID: `scene.light`
+- payload: 光色 RGB、編集用の未正規化方向 XYZ
+- 補間: 線形
+- runtime 適用時: 方向は既存の照明 API で正規化される
+- project 保存先: `keyframes.lightAnimation`
+- 旧 project: `lightAnimation` がなければ従来の `lighting` 単一値を使う
+
+照度、色温度、影品質、bias、cascade、解像度は現段階の照明キーへ含めない。
+
+### 影欄トラック
+
+- track ID: `scene.shadow`
+- payload: 現行の影欄で表示している影色 RGB、Toon 影響度、影描画範囲、照度
+- 補間: 全項目を線形補間
+- project 保存先: `keyframes.shadowAnimation`
+- 旧 project: `shadowAnimation` がなければ従来の `lighting` 単一値を使う
+
+MMD のセルフ影 mode は MMD_modoki では採用しない。影 ON/OFF、影方式、品質、bias、cascade、解像度、半影、PostFX と、非表示の詳細設定はこのトラックへ含めない。
+
+### 重力欄トラック
+
+- track ID: `scene.gravity`
+- payload: 現行の重力欄で表示している加速度、方向 XYZ
+- 補間: 全項目を線形補間
+- runtime 適用時: 表示・保存する方向 XYZ は未正規化値のまま保持し、物理 backend へ渡す段階で既存 API が正規化する
+- project 保存先: `keyframes.gravityAnimation`
+- 旧 project: `gravityAnimation` がなければ従来の `physics.gravityAcceleration` / `physics.gravityDirection` 単一値を使う
+
+物理 ON/OFF、simulation rate、床衝突、ノイズ、backend 固有値はこのトラックへ含めない。seek では対象フレームの重力を runtime の animation / physics 評価より先に適用する。ただし再生途中の布や髪の状態は過去の物理 step に依存するため、フレーム 0 から連続再生した物理姿勢と任意フレームへの直接 seek が完全一致することまでは保証しない。
 
 ## ボーントラック
 

@@ -93,6 +93,9 @@ function createHost() {
         getPhysicsSimulationRateHz: (): number => 60,
         getPhysicsGravityAcceleration: (): number => 98,
         getPhysicsGravityDirection: (): { x: number; y: number; z: number } => ({ x: 0, y: -100, z: 0 }),
+        getSerializedLightSceneTrack: () => null,
+        getSerializedShadowSceneTrack: () => null,
+        getSerializedGravitySceneTrack: () => null,
         physicsSimulationRateHz: 60,
         physicsGravityAcceleration: 98,
         physicsGravityDirection: { x: 0, y: -100, z: 0 },
@@ -220,6 +223,58 @@ function createHost() {
         cameraSourceAnimation: null,
     };
 }
+
+it("writes modoki-owned light keyframes", () => {
+    const lightAnimation = {
+        baseColor: { r: 1, g: 1, b: 1 },
+        baseDirection: { x: 0, y: -1, z: 0 },
+        frameNumbers: [0, 30],
+        colors: [1, 1, 1, 0.4, 0.6, 0.8],
+        directions: [0, -1, 0, 1, -0.2, 0.5],
+    };
+    const project = exportProjectState({
+        ...createHost(),
+        getSerializedLightSceneTrack: () => lightAnimation,
+    });
+
+    expect(project.keyframes?.lightAnimation).toEqual(lightAnimation);
+});
+
+it("writes modoki-owned shadow controls keyframes", () => {
+    const shadowAnimation = {
+        baseColor: { r: 0.5, g: 0.5, b: 0.5 },
+        baseToonInfluence: 1,
+        baseMaxZ: 1000,
+        baseLightIntensity: 1,
+        frameNumbers: [0, 30],
+        colors: [0.5, 0.5, 0.5, 0.2, 0.3, 0.4],
+        toonInfluences: [1, 0.6],
+        maxZs: [1000, 5000],
+        lightIntensities: [1, 1.5],
+    };
+    const project = exportProjectState({
+        ...createHost(),
+        getSerializedShadowSceneTrack: () => shadowAnimation,
+    });
+
+    expect(project.keyframes?.shadowAnimation).toEqual(shadowAnimation);
+});
+
+it("writes modoki-owned gravity controls keyframes", () => {
+    const gravityAnimation = {
+        baseAcceleration: 98,
+        baseDirection: { x: 0, y: -100, z: 0 },
+        frameNumbers: [0, 30],
+        accelerations: [98, 50],
+        directions: [0, -100, 0, 100, 0, 20],
+    };
+    const project = exportProjectState({
+        ...createHost(),
+        getSerializedGravitySceneTrack: () => gravityAnimation,
+    });
+
+    expect(project.keyframes?.gravityAnimation).toEqual(gravityAnimation);
+});
 
 describe("exportProjectState", () => {
     it("writes accessory visibility and shadow state", () => {

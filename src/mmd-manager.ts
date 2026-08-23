@@ -423,7 +423,35 @@ import {
     removeTimelineKeyframe as removeTimelineKeyframeImpl,
     removeTimelineKeyframePayloads as removeTimelineKeyframePayloadsImpl,
     type TimelineKeyframePayload,
+    type LightKeyframePayload,
+    type ShadowKeyframePayload,
+    type GravityKeyframePayload,
 } from "./editor/timeline-edit-service";
+import {
+    createGravitySceneTrack,
+    createLightSceneTrack,
+    createShadowSceneTrack,
+    deserializeGravitySceneTrack,
+    deserializeLightSceneTrack,
+    deserializeShadowSceneTrack,
+    evaluateSceneKeyframeTrack,
+    interpolateGravitySceneValue,
+    interpolateLightSceneValue,
+    interpolateShadowSceneValue,
+    moveSceneKeyframe,
+    removeSceneKeyframe,
+    serializeGravitySceneTrack,
+    serializeLightSceneTrack,
+    serializeShadowSceneTrack,
+    upsertSceneKeyframe,
+    type GravitySceneKeyframeValue,
+    type LightSceneKeyframeValue,
+    type ShadowSceneKeyframeValue,
+    type SceneKeyframeTrack,
+    type SerializedLightSceneTrack,
+    type SerializedGravitySceneTrack,
+    type SerializedShadowSceneTrack,
+} from "./editor/scene-keyframe-track";
 import {
     buildMmdAnimationFromEditorMotion,
     createEditorModelMotionFromMmdAnimation,
@@ -1751,6 +1779,12 @@ ${beforeFogAppendBlock}
     private cameraMotionPath: string | null = null;
     private audioSourcePath: string | null = null;
     private cameraKeyframeFrames: Uint32Array = EMPTY_KEYFRAME_FRAMES;
+    private lightSceneTrack: SceneKeyframeTrack<LightSceneKeyframeValue> | null = null;
+    private lastEvaluatedLightSceneFrame: number | null = null;
+    private shadowSceneTrack: SceneKeyframeTrack<ShadowSceneKeyframeValue> | null = null;
+    private lastEvaluatedShadowSceneFrame: number | null = null;
+    private gravitySceneTrack: SceneKeyframeTrack<GravitySceneKeyframeValue> | null = null;
+    private lastEvaluatedGravitySceneFrame: number | null = null;
     private timelineTarget: "model" | "camera" = "model";
     private boneVisualizerTarget: { mesh: Mesh; skeleton: Skeleton | null; pairs: Array<[number, number]>; positionMesh: Mesh; runtimeBones: readonly IMmdRuntimeBone[] | null; runtimeUseMeshWorldMatrix: boolean; boneControlInfoByName: ReadonlyMap<string, BoneControlInfo> } | null = null;
     private boneOverlayCanvas: HTMLCanvasElement | null = null;
@@ -5362,6 +5396,304 @@ ${beforeFogAppendBlock}
         return applyTimelineKeyframePayloadImpl(this, track, frame, payload);
     }
 
+    public getLightSceneKeyframeFrames(): Uint32Array {
+        return new Uint32Array(this.lightSceneTrack?.keyframes.map((keyframe) => keyframe.frame) ?? []);
+    }
+
+    public captureCurrentLightKeyframePayload(): LightKeyframePayload {
+        const color = this.getLightColor();
+        const direction = this.getSerializedLightDirection();
+        return {
+            kind: "light",
+            color: { r: color.r, g: color.g, b: color.b },
+            direction: { x: direction.x, y: direction.y, z: direction.z },
+        };
+    }
+
+    public readLightSceneKeyframePayload(frame: number): LightKeyframePayload | null {
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        const keyframe = this.lightSceneTrack?.keyframes.find((candidate) => candidate.frame === normalizedFrame);
+        if (!keyframe) return null;
+        return {
+            kind: "light",
+            color: { ...keyframe.value.color },
+            direction: { ...keyframe.value.direction },
+        };
+    }
+
+    public applyLightSceneKeyframePayload(frame: number, payload: LightKeyframePayload | null): boolean {
+        if (payload === null) {
+            if (!this.lightSceneTrack) return false;
+            const next = removeSceneKeyframe(this.lightSceneTrack, frame);
+            if (!next) return false;
+            this.lightSceneTrack = next;
+        } else {
+            const current = this.captureCurrentLightKeyframePayload();
+            const baseValue = { color: current.color, direction: current.direction };
+            const track = this.lightSceneTrack ?? createLightSceneTrack(baseValue);
+            this.lightSceneTrack = upsertSceneKeyframe(track, frame, {
+                color: { ...payload.color },
+                direction: { ...payload.direction },
+            });
+        }
+        this.lastEvaluatedLightSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public removeLightSceneKeyframePayloads(frames: readonly number[]): boolean {
+        if (!this.lightSceneTrack) return false;
+        let next = this.lightSceneTrack;
+        for (const frame of frames) {
+            const removed = removeSceneKeyframe(next, frame);
+            if (!removed) return false;
+            next = removed;
+        }
+        this.lightSceneTrack = next;
+        this.lastEvaluatedLightSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public moveLightSceneKeyframe(fromFrame: number, toFrame: number): boolean {
+        if (!this.lightSceneTrack) return false;
+        const next = moveSceneKeyframe(this.lightSceneTrack, fromFrame, toFrame);
+        if (!next) return false;
+        this.lightSceneTrack = next;
+        this.lastEvaluatedLightSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public getSerializedLightSceneTrack(): SerializedLightSceneTrack | null {
+        return serializeLightSceneTrack(this.lightSceneTrack);
+    }
+
+    public setSerializedLightSceneTrack(data: SerializedLightSceneTrack | null | undefined): void {
+        this.lightSceneTrack = deserializeLightSceneTrack(data);
+        this.lastEvaluatedLightSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+    }
+
+    public getShadowSceneKeyframeFrames(): Uint32Array {
+        return new Uint32Array(this.shadowSceneTrack?.keyframes.map((keyframe) => keyframe.frame) ?? []);
+    }
+
+    public captureCurrentShadowKeyframePayload(): ShadowKeyframePayload {
+        const color = this.getShadowColor();
+        return {
+            kind: "shadow",
+            color: { r: color.r, g: color.g, b: color.b },
+            toonInfluence: this.toonShadowInfluence,
+            maxZ: this.shadowMaxZ,
+            lightIntensity: this.lightIntensity,
+        };
+    }
+
+    public readShadowSceneKeyframePayload(frame: number): ShadowKeyframePayload | null {
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        const keyframe = this.shadowSceneTrack?.keyframes.find((candidate) => candidate.frame === normalizedFrame);
+        if (!keyframe) return null;
+        return {
+            kind: "shadow",
+            color: { ...keyframe.value.color },
+            toonInfluence: keyframe.value.toonInfluence,
+            maxZ: keyframe.value.maxZ,
+            lightIntensity: keyframe.value.lightIntensity,
+        };
+    }
+
+    public applyShadowSceneKeyframePayload(frame: number, payload: ShadowKeyframePayload | null): boolean {
+        if (payload === null) {
+            if (!this.shadowSceneTrack) return false;
+            const next = removeSceneKeyframe(this.shadowSceneTrack, frame);
+            if (!next) return false;
+            this.shadowSceneTrack = next;
+        } else {
+            const current = this.captureCurrentShadowKeyframePayload();
+            const track = this.shadowSceneTrack ?? createShadowSceneTrack({
+                color: current.color,
+                toonInfluence: current.toonInfluence,
+                maxZ: current.maxZ,
+                lightIntensity: current.lightIntensity,
+            });
+            this.shadowSceneTrack = upsertSceneKeyframe(track, frame, {
+                color: { ...payload.color },
+                toonInfluence: payload.toonInfluence,
+                maxZ: payload.maxZ,
+                lightIntensity: payload.lightIntensity,
+            });
+        }
+        this.lastEvaluatedShadowSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public removeShadowSceneKeyframePayloads(frames: readonly number[]): boolean {
+        if (!this.shadowSceneTrack) return false;
+        let next = this.shadowSceneTrack;
+        for (const frame of frames) {
+            const removed = removeSceneKeyframe(next, frame);
+            if (!removed) return false;
+            next = removed;
+        }
+        this.shadowSceneTrack = next;
+        this.lastEvaluatedShadowSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public moveShadowSceneKeyframe(fromFrame: number, toFrame: number): boolean {
+        if (!this.shadowSceneTrack) return false;
+        const next = moveSceneKeyframe(this.shadowSceneTrack, fromFrame, toFrame);
+        if (!next) return false;
+        this.shadowSceneTrack = next;
+        this.lastEvaluatedShadowSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public getSerializedShadowSceneTrack(): SerializedShadowSceneTrack | null {
+        return serializeShadowSceneTrack(this.shadowSceneTrack);
+    }
+
+    public setSerializedShadowSceneTrack(data: SerializedShadowSceneTrack | null | undefined): void {
+        this.shadowSceneTrack = deserializeShadowSceneTrack(data);
+        this.lastEvaluatedShadowSceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+    }
+
+    public getGravitySceneKeyframeFrames(): Uint32Array {
+        return new Uint32Array(this.gravitySceneTrack?.keyframes.map((keyframe) => keyframe.frame) ?? []);
+    }
+
+    public captureCurrentGravityKeyframePayload(): GravityKeyframePayload {
+        const direction = this.getPhysicsGravityDirection();
+        return {
+            kind: "gravity",
+            acceleration: this.getPhysicsGravityAcceleration(),
+            direction: { ...direction },
+        };
+    }
+
+    public readGravitySceneKeyframePayload(frame: number): GravityKeyframePayload | null {
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        const keyframe = this.gravitySceneTrack?.keyframes.find((candidate) => candidate.frame === normalizedFrame);
+        if (!keyframe) return null;
+        return {
+            kind: "gravity",
+            acceleration: keyframe.value.acceleration,
+            direction: { ...keyframe.value.direction },
+        };
+    }
+
+    public applyGravitySceneKeyframePayload(frame: number, payload: GravityKeyframePayload | null): boolean {
+        if (payload === null) {
+            if (!this.gravitySceneTrack) return false;
+            const next = removeSceneKeyframe(this.gravitySceneTrack, frame);
+            if (!next) return false;
+            this.gravitySceneTrack = next;
+        } else {
+            const current = this.captureCurrentGravityKeyframePayload();
+            const track = this.gravitySceneTrack ?? createGravitySceneTrack({
+                acceleration: current.acceleration,
+                direction: current.direction,
+            });
+            this.gravitySceneTrack = upsertSceneKeyframe(track, frame, {
+                acceleration: payload.acceleration,
+                direction: { ...payload.direction },
+            });
+        }
+        this.lastEvaluatedGravitySceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public removeGravitySceneKeyframePayloads(frames: readonly number[]): boolean {
+        if (!this.gravitySceneTrack) return false;
+        let next = this.gravitySceneTrack;
+        for (const frame of frames) {
+            const removed = removeSceneKeyframe(next, frame);
+            if (!removed) return false;
+            next = removed;
+        }
+        this.gravitySceneTrack = next;
+        this.lastEvaluatedGravitySceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public moveGravitySceneKeyframe(fromFrame: number, toFrame: number): boolean {
+        if (!this.gravitySceneTrack) return false;
+        const next = moveSceneKeyframe(this.gravitySceneTrack, fromFrame, toFrame);
+        if (!next) return false;
+        this.gravitySceneTrack = next;
+        this.lastEvaluatedGravitySceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+        return true;
+    }
+
+    public getSerializedGravitySceneTrack(): SerializedGravitySceneTrack | null {
+        return serializeGravitySceneTrack(this.gravitySceneTrack);
+    }
+
+    public setSerializedGravitySceneTrack(data: SerializedGravitySceneTrack | null | undefined): void {
+        this.gravitySceneTrack = deserializeGravitySceneTrack(data);
+        this.lastEvaluatedGravitySceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+        emitMergedKeyframeTracksImpl(this);
+    }
+
+    public refreshSceneTracksAtCurrentFrame(): void {
+        this.lastEvaluatedLightSceneFrame = null;
+        this.lastEvaluatedShadowSceneFrame = null;
+        this.lastEvaluatedGravitySceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
+    }
+
+    private evaluateSceneTracksAtFrame(frame: number): void {
+        const normalizedFrame = Math.max(0, Math.floor(frame));
+        if (this.lightSceneTrack && this.lastEvaluatedLightSceneFrame !== normalizedFrame) {
+            this.lastEvaluatedLightSceneFrame = normalizedFrame;
+            const value = evaluateSceneKeyframeTrack(this.lightSceneTrack, normalizedFrame, interpolateLightSceneValue);
+            this.setLightColor(value.color.r, value.color.g, value.color.b);
+            this.setLightDirection(value.direction.x, value.direction.y, value.direction.z);
+        }
+        if (this.shadowSceneTrack && this.lastEvaluatedShadowSceneFrame !== normalizedFrame) {
+            this.lastEvaluatedShadowSceneFrame = normalizedFrame;
+            const value = evaluateSceneKeyframeTrack(
+                this.shadowSceneTrack,
+                normalizedFrame,
+                interpolateShadowSceneValue,
+            );
+            this.setShadowColor(value.color.r, value.color.g, value.color.b);
+            this.toonShadowInfluence = value.toonInfluence;
+            this.shadowMaxZ = value.maxZ;
+            this.lightIntensity = value.lightIntensity;
+        }
+        if (this.gravitySceneTrack && this.lastEvaluatedGravitySceneFrame !== normalizedFrame) {
+            this.lastEvaluatedGravitySceneFrame = normalizedFrame;
+            const value = evaluateSceneKeyframeTrack(
+                this.gravitySceneTrack,
+                normalizedFrame,
+                interpolateGravitySceneValue,
+            );
+            this.setPhysicsGravityAcceleration(value.acceleration);
+            this.setPhysicsGravityDirection(value.direction.x, value.direction.y, value.direction.z);
+        }
+    }
+
     public getShowPhysicsBonesInTimeline(): boolean {
         return this.showPhysicsBonesInTimeline;
     }
@@ -6941,6 +7273,10 @@ ${beforeFogAppendBlock}
 
             let sectionStartMs = this.framePerformanceLogEnabled ? performance.now() : 0;
             const advancedManualPlayback = this.advanceManualPlaybackWithoutAudio(deltaMs);
+            const sceneTrackFrame = advancedManualPlayback
+                ? this._currentFrame
+                : (this._isPlaying ? Math.floor(this.mmdRuntime.currentFrameTime) : this._currentFrame);
+            this.evaluateSceneTracksAtFrame(sceneTrackFrame);
             if (this.framePerformanceLogEnabled) {
                 this.recordFramePerformanceSection("manualPlayback", performance.now() - sectionStartMs);
             }
@@ -8797,6 +9133,10 @@ ${beforeFogAppendBlock}
         this._isPlaying = true;
         this.manualPlaybackWithoutAudio = false;
         this.refreshActiveRuntimeAnimationHandles();
+        this.lastEvaluatedLightSceneFrame = null;
+        this.lastEvaluatedShadowSceneFrame = null;
+        this.lastEvaluatedGravitySceneFrame = null;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
         this.mmdRuntime.seekAnimation(this._currentFrame, true);
         this.syncBackgroundVideoFrame(true);
         if (!this.getPhysicsEnabled()) {
@@ -8839,10 +9179,11 @@ ${beforeFogAppendBlock}
         this.syncScenePhysicsSimulationState();
         this.mmdRuntime.pauseAnimation();
         this.refreshActiveRuntimeAnimationHandles();
+        this._currentFrame = 0;
+        this.evaluateSceneTracksAtFrame(0);
         this.mmdRuntime.seekAnimation(0, true);
         this.syncViewportCameraFromMmdCameraAfterSeek();
         this.applyPhysicsStateToAllModels();
-        this._currentFrame = 0;
         this.syncBackgroundVideoFrame(true);
         this.onFrameUpdate?.(0, this._totalFrames);
     }
@@ -8854,6 +9195,7 @@ ${beforeFogAppendBlock}
             this._totalFrames = targetFrame;
         }
         this._currentFrame = targetFrame;
+        this.evaluateSceneTracksAtFrame(this._currentFrame);
         this.mmdRuntime.seekAnimation(this._currentFrame, true);
         this.syncViewportCameraFromMmdCameraAfterSeek();
         if (!this._isPlaying && this.getPhysicsEnabled()) {
@@ -9282,6 +9624,12 @@ ${beforeFogAppendBlock}
         this.cameraKeyframeFrames = EMPTY_KEYFRAME_FRAMES;
         this.cameraMotionPath = null;
         this.cameraSourceAnimation = null;
+        this.lightSceneTrack = null;
+        this.lastEvaluatedLightSceneFrame = null;
+        this.shadowSceneTrack = null;
+        this.lastEvaluatedShadowSceneFrame = null;
+        this.gravitySceneTrack = null;
+        this.lastEvaluatedGravitySceneFrame = null;
 
         if (this.audioPlayer) {
             void this.mmdRuntime.setAudioPlayer(null);
@@ -14317,6 +14665,7 @@ ${beforeFogAppendBlock}
         const nextFrame = Math.floor(this.manualPlaybackFrameCursor);
         if (nextFrame !== this._currentFrame) {
             this._currentFrame = nextFrame;
+            this.evaluateSceneTracksAtFrame(this._currentFrame);
             this.mmdRuntime.seekAnimation(this._currentFrame, true);
             this.syncViewportCameraFromMmdCameraAfterSeek();
         }
@@ -14453,6 +14802,10 @@ ${beforeFogAppendBlock}
         const engineWithDelta = this.engine as typeof this.engine & { _deltaTime?: number };
         engineWithDelta._deltaTime = clampedDeltaMs;
         const advancedManualPlayback = this.advanceManualPlaybackWithoutAudio(clampedDeltaMs);
+        const sceneTrackFrame = advancedManualPlayback
+            ? this._currentFrame
+            : (this._isPlaying ? Math.floor(this.mmdRuntime.currentFrameTime) : this._currentFrame);
+        this.evaluateSceneTracksAtFrame(sceneTrackFrame);
 
         this.updateSimpleMotionBlurState(clampedDeltaMs);
         this.syncBackgroundVideoFrame();
@@ -14477,6 +14830,10 @@ ${beforeFogAppendBlock}
         const engineWithDelta = this.engine as typeof this.engine & { _deltaTime?: number };
         engineWithDelta._deltaTime = clampedDeltaMs;
         const advancedManualPlayback = this.advanceManualPlaybackWithoutAudio(clampedDeltaMs);
+        const sceneTrackFrame = advancedManualPlayback
+            ? this._currentFrame
+            : (this._isPlaying ? Math.floor(this.mmdRuntime.currentFrameTime) : this._currentFrame);
+        this.evaluateSceneTracksAtFrame(sceneTrackFrame);
 
         this.syncExportRenderSurfaceTarget();
         this.syncFrameGraphRenderTargetState();

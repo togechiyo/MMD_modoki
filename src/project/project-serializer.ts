@@ -7,6 +7,9 @@ import type {
     ProjectSerializedCameraExternalParentTrack,
     ProjectSerializedModelExternalParentTrack,
     ProjectSerializedAccessoryTransformTrack,
+    ProjectSerializedLightSceneTrack,
+    ProjectSerializedShadowSceneTrack,
+    ProjectSerializedGravitySceneTrack,
     SsgiBlendMode,
     ProjectRingParticleState,
 } from "../types";
@@ -241,6 +244,9 @@ type ProjectExportHost = {
     getPhysicsSimulationRateHz: () => number;
     getPhysicsGravityAcceleration: () => number;
     getPhysicsGravityDirection: () => { x: number; y: number; z: number };
+    getSerializedLightSceneTrack?: () => ProjectSerializedLightSceneTrack | null;
+    getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
+    getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
     getDofFocusTargetModelPath?: () => string | null;
     getDofFocusTargetModelInstanceId?: () => string | null;
     getDofFocusTargetBoneName?: () => string | null;
@@ -326,6 +332,18 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         modelExternalParents: host.getModelExternalParentKeyframes?.() ?? [],
         cameraExternalParents: host.getCameraExternalParentKeyframes?.() ?? null,
     };
+    const lightAnimation = host.getSerializedLightSceneTrack?.() ?? null;
+    if (lightAnimation) {
+        keyframes.lightAnimation = lightAnimation;
+    }
+    const shadowAnimation = host.getSerializedShadowSceneTrack?.() ?? null;
+    if (shadowAnimation) {
+        keyframes.shadowAnimation = shadowAnimation;
+    }
+    const gravityAnimation = host.getSerializedGravitySceneTrack?.() ?? null;
+    if (gravityAnimation) {
+        keyframes.gravityAnimation = gravityAnimation;
+    }
 
     const accessoryTransformAnimations = (accessoryExtension.getLoadedAccessories?.() ?? [])
         .map((entry) => accessoryExtension.getAccessoryTransformKeyframes?.(entry.index) ?? null);

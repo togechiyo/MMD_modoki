@@ -68,6 +68,9 @@ const EMPTY_FRAMES = new Uint32Array(0);
 const CAT = {
     root: { bg: "rgba(236,72,153,0.12)", kf: "#ec4899", text: "#f472b6", bar: "#ec4899" },
     camera: { bg: "rgba(96,165,250,0.10)", kf: "#60a5fa", text: "#93c5fd", bar: "#60a5fa" },
+    light: { bg: "rgba(250,204,21,0.10)", kf: "#facc15", text: "#fde68a", bar: "#facc15" },
+    shadow: { bg: "rgba(167,139,250,0.10)", kf: "#a78bfa", text: "#c4b5fd", bar: "#a78bfa" },
+    gravity: { bg: "rgba(74,222,128,0.10)", kf: "#4ade80", text: "#86efac", bar: "#4ade80" },
     "semi-standard": { bg: "rgba(99,102,241,0.08)", kf: "#818cf8", text: "#a5b4fc", bar: "" },
     bone: { bg: "rgba(57,197,187,0.08)", kf: "#39c5bb", text: "#7ddfd8", bar: "" },
     morph: { bg: "rgba(251,191,36,0.07)", kf: "#fbbf24", text: "#fcd34d", bar: "" },
@@ -639,7 +642,7 @@ export class Timeline {
             const frames = track.frames;
             const lo = lowerBound(frames, visStart);
             const hi = upperBound(frames, visEnd);
-            const markerSize = track.category === "root" ? 9 : track.category === "camera" ? 8 : 6;
+            const markerSize = track.category === "root" ? 9 : (track.category === "camera" || track.category === "light" || track.category === "shadow" || track.category === "gravity") ? 8 : 6;
             const midY = ry + rowH / 2;
             const selectedFrames = selectedFramesByTrack.get(this.createTrackSelectionKey(track));
             const physicsOnFrames = track.physicsOnFrames ?? EMPTY_FRAMES;
@@ -894,7 +897,7 @@ export class Timeline {
             ctx.beginPath();
             ctx.rect(4, y, w - 6, rowH);
             ctx.clip();
-            ctx.font = (track.category === "root" || track.category === "camera")
+            ctx.font = (track.category === "root" || track.category === "camera" || track.category === "light" || track.category === "shadow" || track.category === "gravity")
                 ? `600 10px ${UI_FONT_FAMILY}`
                 : `400 9px ${UI_FONT_FAMILY}`;
             ctx.fillStyle = col.text;

@@ -119,6 +119,9 @@ function createHost() {
         setPhysicsSimulationRateHz: vi.fn(),
         setPhysicsGravityAcceleration: vi.fn(),
         setPhysicsGravityDirection: vi.fn(),
+        setSerializedLightSceneTrack: vi.fn(),
+        setSerializedShadowSceneTrack: vi.fn(),
+        setSerializedGravitySceneTrack: vi.fn(),
         setPhysicsFloorCollisionEnabled: vi.fn(),
         setPhysicsEnabled: vi.fn(),
         isPhysicsAvailable: vi.fn(() => false),
@@ -194,6 +197,82 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores modoki-owned light keyframes", async () => {
+        const host = createHost();
+        const lightAnimation = {
+            baseColor: { r: 1, g: 1, b: 1 },
+            baseDirection: { x: 0, y: -1, z: 0 },
+            frameNumbers: [0, 30],
+            colors: [1, 1, 1, 0.4, 0.6, 0.8],
+            directions: [0, -1, 0, 1, -0.2, 0.5],
+        };
+        const project = createProject({
+            keyframes: {
+                modelAnimations: [],
+                cameraAnimation: null,
+                lightAnimation,
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setSerializedLightSceneTrack).toHaveBeenCalledWith(lightAnimation);
+    });
+
+    it("restores modoki-owned shadow controls keyframes after static shadow settings", async () => {
+        const host = createHost();
+        const shadowAnimation = {
+            baseColor: { r: 0.5, g: 0.5, b: 0.5 },
+            baseToonInfluence: 1,
+            baseMaxZ: 1000,
+            baseLightIntensity: 1,
+            frameNumbers: [0, 30],
+            colors: [0.5, 0.5, 0.5, 0.2, 0.3, 0.4],
+            toonInfluences: [1, 0.6],
+            maxZs: [1000, 5000],
+            lightIntensities: [1, 1.5],
+        };
+        const project = createProject({
+            keyframes: {
+                modelAnimations: [],
+                cameraAnimation: null,
+                shadowAnimation,
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setSerializedShadowSceneTrack).toHaveBeenCalledWith(shadowAnimation);
+        expect(host.setShadowEnabled.mock.invocationCallOrder[0]).toBeLessThan(
+            host.setSerializedShadowSceneTrack.mock.invocationCallOrder[0],
+        );
+    });
+
+    it("restores gravity controls keyframes after the static gravity fallback", async () => {
+        const host = createHost();
+        const gravityAnimation = {
+            baseAcceleration: 98,
+            baseDirection: { x: 0, y: -100, z: 0 },
+            frameNumbers: [0, 30],
+            accelerations: [98, 50],
+            directions: [0, -100, 0, 100, 0, 20],
+        };
+        const project = createProject({
+            keyframes: {
+                modelAnimations: [],
+                cameraAnimation: null,
+                gravityAnimation,
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setSerializedGravitySceneTrack).toHaveBeenCalledWith(gravityAnimation);
+        expect(host.setPhysicsGravityDirection.mock.invocationCallOrder[0]).toBeLessThan(
+            host.setSerializedGravitySceneTrack.mock.invocationCallOrder[0],
+        );
+    });
+
     it("restores duplicate-path model animations and active model by instance ID", async () => {
         const host = createHost();
         host.loadPMX.mockImplementation(async (modelPath: string, _pipeline, _renderOrder, requestedInstanceId) => {

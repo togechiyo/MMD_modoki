@@ -34,13 +34,19 @@ test("registers, evaluates, and serializes light keyframes", async () => {
     )).not.toBeNull();
     await page.locator("#btn-toolbar-mode-toggle").click();
     await expect(page.locator(".bottom-panel-inner")).toHaveAttribute("data-bottom-panel-mode", "camera");
-    await expect(page.locator("#btn-light-keyframe")).toBeEnabled();
+    await expect.poll(() => page.locator("#timeline-label-canvas").evaluate((element) => element.style.height)).toBe("128px");
+    await expect(page.locator("#timeline-selection-label")).toContainText("[カメラ] カメラ");
+    await expect(page.locator("#light-direction-x")).toHaveCSS("accent-color", "rgb(224, 113, 123)");
+    await expect(page.locator("#btn-light-keyframe")).toBeDisabled();
+    await expect(page.locator("#btn-light-keyframe")).toHaveText("");
 
     await setRange(page, "#light-color-r", 255);
     await setRange(page, "#light-direction-x", 0);
     await setRange(page, "#light-direction-y", -1);
     await setRange(page, "#light-direction-z", 0);
+    await expect(page.locator("#btn-light-keyframe")).toHaveText("♢");
     await page.locator("#btn-light-keyframe").click();
+    await expect(page.locator("#btn-light-keyframe")).toHaveText("♦");
 
     await seek(page, 30);
     await setRange(page, "#light-color-r", 0);

@@ -34,7 +34,9 @@ test("registers, evaluates, and serializes visible shadow controls", async () =>
     )).not.toBeNull();
     await page.locator("#btn-toolbar-mode-toggle").click();
     await expect(page.locator(".bottom-panel-inner")).toHaveAttribute("data-bottom-panel-mode", "camera");
-    await expect(page.locator("#btn-shadow-keyframe")).toBeEnabled();
+    await expect(page.locator("#light-shadow-color-r")).toHaveCSS("accent-color", "rgb(111, 159, 218)");
+    await expect(page.locator("#btn-shadow-keyframe")).toBeDisabled();
+    await expect(page.locator("#btn-shadow-keyframe")).toHaveText("");
 
     await setRange(page, "#light-shadow-color-r", 51);
     await setRange(page, "#light-shadow-color-g", 102);
@@ -42,7 +44,9 @@ test("registers, evaluates, and serializes visible shadow controls", async () =>
     await setRange(page, "#light-toon-shadow-influence", 25);
     await setRange(page, "#light-shadow-max-z", 1000);
     await setRange(page, "#light-intensity", 50);
+    await expect(page.locator("#btn-shadow-keyframe")).toHaveText("♢");
     await page.locator("#btn-shadow-keyframe").click();
+    await expect(page.locator("#btn-shadow-keyframe")).toHaveText("♦");
 
     await seek(page, 30);
     await setRange(page, "#light-shadow-color-r", 204);

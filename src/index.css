@@ -5591,6 +5591,8 @@ body.bottom-panel-resizing {
    ============================================ */
 
 .lighting-controls {
+  --scene-slider-accent: #e0717b;
+  --scene-slider-glow: rgba(224, 113, 123, 0.5);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -5602,12 +5604,8 @@ body.bottom-panel-resizing {
 }
 
 .shadow-controls .light-slider {
-  accent-color: #a78bfa;
-}
-
-.shadow-controls .light-slider::-webkit-slider-thumb {
-  background: #a78bfa;
-  box-shadow: 0 0 4px rgba(167, 139, 250, 0.5);
+  --scene-slider-accent: #6f9fda;
+  --scene-slider-glow: rgba(111, 159, 218, 0.5);
 }
 
 .lighting-controls::-webkit-scrollbar {
@@ -5695,7 +5693,7 @@ body.bottom-panel-resizing {
   background: var(--bg-hover);
   outline: none;
   cursor: pointer;
-  accent-color: var(--accent-amber, #f59e0b);
+  accent-color: var(--scene-slider-accent, var(--accent-amber, #f59e0b));
 }
 
 .light-slider::-webkit-slider-thumb {
@@ -5703,9 +5701,9 @@ body.bottom-panel-resizing {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--accent-amber, #f59e0b);
+  background: var(--scene-slider-accent, var(--accent-amber, #f59e0b));
   cursor: pointer;
-  box-shadow: 0 0 4px rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 4px var(--scene-slider-glow, rgba(245, 158, 11, 0.5));
   transition: transform var(--transition-fast);
 }
 
@@ -6085,6 +6083,8 @@ body.bottom-panel-resizing {
    ============================================ */
 
 .gravity-controls {
+  --scene-slider-accent: #d98fb7;
+  --scene-slider-glow: rgba(217, 143, 183, 0.5);
   display: flex;
   flex: 1;
   min-height: 0;
@@ -6093,15 +6093,6 @@ body.bottom-panel-resizing {
   padding: var(--bottom-panel-content-pad-y) var(--bottom-panel-content-pad-x);
   overflow-y: auto;
   overflow-x: hidden;
-}
-
-.gravity-controls .light-slider {
-  accent-color: var(--accent-green);
-}
-
-.gravity-controls .light-slider::-webkit-slider-thumb {
-  background: var(--accent-green);
-  box-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
 }
 
 .accessory-row.range-has-number {

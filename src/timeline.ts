@@ -43,6 +43,7 @@ export type TimelineFrameUpdateOptions = {
 // ── Layout ─────────────────────────────────────────────────────────
 const RULER_H = 20;
 const ROW_H = 18;
+const CAMERA_FOLLOWING_SPACER_H = ROW_H;
 const SELECTED_ROW_H = 36;
 const PX_PER_F = 6;
 const PLAYHEAD_X_FALLBACK = 24;
@@ -67,14 +68,29 @@ const EMPTY_FRAMES = new Uint32Array(0);
 // ── Category palette ───────────────────────────────────────────────
 const CAT = {
     root: { bg: "rgba(236,72,153,0.12)", kf: "#ec4899", text: "#f472b6", bar: "#ec4899" },
-    camera: { bg: "rgba(96,165,250,0.10)", kf: "#60a5fa", text: "#93c5fd", bar: "#60a5fa" },
-    light: { bg: "rgba(250,204,21,0.10)", kf: "#facc15", text: "#fde68a", bar: "#facc15" },
-    shadow: { bg: "rgba(167,139,250,0.10)", kf: "#a78bfa", text: "#c4b5fd", bar: "#a78bfa" },
-    gravity: { bg: "rgba(74,222,128,0.10)", kf: "#4ade80", text: "#86efac", bar: "#4ade80" },
+    camera: { bg: "rgba(57,197,187,0.11)", kf: "#39c5bb", text: "#7ddfd8", bar: "#39c5bb" },
+    light: { bg: "rgba(224,113,123,0.11)", kf: "#e0717b", text: "#efa2a9", bar: "#e0717b" },
+    shadow: { bg: "rgba(111,159,218,0.11)", kf: "#6f9fda", text: "#a9c7ea", bar: "#6f9fda" },
+    gravity: { bg: "rgba(217,143,183,0.11)", kf: "#d98fb7", text: "#ebbad4", bar: "#d98fb7" },
     "semi-standard": { bg: "rgba(99,102,241,0.08)", kf: "#818cf8", text: "#a5b4fc", bar: "" },
     bone: { bg: "rgba(57,197,187,0.08)", kf: "#39c5bb", text: "#7ddfd8", bar: "" },
     morph: { bg: "rgba(251,191,36,0.07)", kf: "#fbbf24", text: "#fcd34d", bar: "" },
 } as const;
+
+export function getTimelineTrackDisplayName(track: Pick<KeyframeTrack, "name" | "category">): string {
+    switch (track.category) {
+        case "camera":
+            return "カメラ";
+        case "light":
+            return "照明";
+        case "shadow":
+            return "影";
+        case "gravity":
+            return "重力";
+        default:
+            return track.name;
+    }
+}
 
 // ── Binary search ──────────────────────────────────────────────────
 function lowerBound(a: Uint32Array, v: number): number {
@@ -884,7 +900,7 @@ export class Timeline {
             }
 
             if (isSelectedRow) {
-                ctx.fillStyle = "rgba(99,102,241,0.18)";
+                ctx.fillStyle = "rgba(255,255,255,0.08)";
                 ctx.fillRect(0, y, w, rowH);
             }
 
@@ -903,7 +919,7 @@ export class Timeline {
             ctx.fillStyle = col.text;
             ctx.textAlign = "left";
             ctx.textBaseline = "middle";
-            ctx.fillText(track.name, 6, y + rowH / 2);
+            ctx.fillText(getTimelineTrackDisplayName(track), 6, y + rowH / 2);
             ctx.restore();
 
             ctx.fillStyle = "rgba(255,255,255,0.04)";
@@ -1477,7 +1493,7 @@ export class Timeline {
 
         let total = 0;
         for (let i = 0; i < this.tracks.length; i += 1) {
-            total += this.getRowHeight(i);
+            total += this.getRowHeight(i) + this.getSpacerHeightAfterRow(i);
         }
         return total;
     }
@@ -1487,7 +1503,7 @@ export class Timeline {
 
         let top = 0;
         for (let i = 0; i < index; i += 1) {
-            top += this.getRowHeight(i);
+            top += this.getRowHeight(i) + this.getSpacerHeightAfterRow(i);
         }
         return top;
     }
@@ -1501,8 +1517,17 @@ export class Timeline {
             const rowH = this.getRowHeight(i);
             if (offsetY < top + rowH) return i;
             top += rowH;
+
+            const spacerH = this.getSpacerHeightAfterRow(i);
+            if (offsetY < top + spacerH) return clampToRange ? i : -1;
+            top += spacerH;
         }
         return clampToRange ? this.tracks.length - 1 : -1;
+    }
+
+    private getSpacerHeightAfterRow(index: number): number {
+        if (index < 0 || index >= this.tracks.length - 1) return 0;
+        return this.tracks[index].category === "camera" ? CAMERA_FOLLOWING_SPACER_H : 0;
     }
 
     private applyKeySelectionFromPointer(track: KeyframeTrack, pickedFrame: number | null, event: MouseEvent): void {

@@ -34,13 +34,17 @@ test("registers, evaluates, and serializes visible gravity controls", async () =
     )).not.toBeNull();
     await page.locator("#btn-toolbar-mode-toggle").click();
     await expect(page.locator(".bottom-panel-inner")).toHaveAttribute("data-bottom-panel-mode", "camera");
-    await expect(page.locator("#btn-gravity-keyframe")).toBeEnabled();
+    await expect(page.locator("#physics-gravity-accel")).toHaveCSS("accent-color", "rgb(217, 143, 183)");
+    await expect(page.locator("#btn-gravity-keyframe")).toBeDisabled();
+    await expect(page.locator("#btn-gravity-keyframe")).toHaveText("");
 
     await setRange(page, "#physics-gravity-accel", 98);
     await setRange(page, "#physics-gravity-dir-x", 0);
     await setRange(page, "#physics-gravity-dir-y", -100);
     await setRange(page, "#physics-gravity-dir-z", 0);
+    await expect(page.locator("#btn-gravity-keyframe")).toHaveText("♢");
     await page.locator("#btn-gravity-keyframe").click();
+    await expect(page.locator("#btn-gravity-keyframe")).toHaveText("♦");
 
     await seek(page, 30);
     await setRange(page, "#physics-gravity-accel", 50);

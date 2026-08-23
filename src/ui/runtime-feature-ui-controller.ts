@@ -32,6 +32,7 @@ export type RuntimeFeatureUiControllerDeps = {
     showToast: (message: string, type?: ToastType) => void;
     syncRangeNumberInput: (slider: HTMLInputElement) => void;
     dispatchAction?: (action: EditorAction) => boolean;
+    onGravityChanged?: () => void;
 };
 
 function resolveRuntimeFeatureUiElements(): RuntimeFeatureUiElements {
@@ -65,6 +66,7 @@ export class RuntimeFeatureUiController {
     private readonly showToast: (message: string, type?: ToastType) => void;
     private readonly syncRangeNumberInput: (slider: HTMLInputElement) => void;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
+    private readonly onGravityChanged: (() => void) | null;
     private gravityPlaybackLocked = false;
 
     constructor(deps: RuntimeFeatureUiControllerDeps) {
@@ -73,6 +75,7 @@ export class RuntimeFeatureUiController {
         this.showToast = deps.showToast;
         this.syncRangeNumberInput = deps.syncRangeNumberInput;
         this.dispatchAction = deps.dispatchAction ?? null;
+        this.onGravityChanged = deps.onGravityChanged ?? null;
 
         this.setupEventListeners();
         this.setupPhysicsControls();
@@ -291,6 +294,7 @@ export class RuntimeFeatureUiController {
                 const next = Number(accelSlider.value);
                 this.mmdManager.setPhysicsGravityAcceleration(next);
                 accelValue.textContent = String(Math.round(next));
+                this.onGravityChanged?.();
             });
         }
 
@@ -318,6 +322,7 @@ export class RuntimeFeatureUiController {
             xValue.textContent = String(Math.round(x));
             yValue.textContent = String(Math.round(y));
             zValue.textContent = String(Math.round(z));
+            this.onGravityChanged?.();
         };
 
         xSlider.addEventListener("input", applyGravityDirection);

@@ -1,5 +1,5 @@
 import type { MmdManager } from "./mmd-manager";
-import type { Timeline, TimelineBoneTrackSelectionRef, TimelineKeySelectionRef } from "./timeline";
+import { getTimelineTrackDisplayName, type Timeline, type TimelineBoneTrackSelectionRef, type TimelineKeySelectionRef } from "./timeline";
 import type { BottomPanel } from "./bottom-panel";
 import { applyI18nToDom, getLocale, setLocale, t } from "./i18n";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -99,7 +99,7 @@ import type { VmdSaveResult } from "./export/vmd-export-document";
 import type { VpdExportDocument, VpdSaveResult } from "./export/vpd-export-document";
 
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
-type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory";
+type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory" | "light" | "shadow" | "gravity";
 type NumericArrayLike = ArrayLike<number> | null | undefined;
 const FIXED_DOF_FSTOP = 2.0;
 type SelectedBonePoseSnapshot = {
@@ -480,6 +480,9 @@ export class UIController {
     private btnPhysicsKeyframe: HTMLButtonElement | null = null;
     private physicsKeyframeInputMode: 0 | 1 = 1;
     private btnMorphKeyframe: HTMLButtonElement | null = null;
+    private btnLightKeyframe: HTMLButtonElement | null = null;
+    private btnShadowKeyframe: HTMLButtonElement | null = null;
+    private btnGravityKeyframe: HTMLButtonElement | null = null;
     private shortcutEdgeWidthRestore = 1;
     private readonly rangeNumberInputs = new WeakMap<HTMLInputElement, HTMLInputElement>();
     private syncingBoneSelection = false;
@@ -490,6 +493,9 @@ export class UIController {
         bone: new Set<string>(),
         morph: new Set<string>(),
         accessory: new Set<string>(),
+        light: new Set<string>(),
+        shadow: new Set<string>(),
+        gravity: new Set<string>(),
     };
     private readonly pendingBonePoseSnapshots = new Map<string, { frame: number; snapshot: SelectedBonePoseSnapshot }>();
     private readonly interpolationChannelBindings = new Map<string, InterpolationChannelBinding>();
@@ -888,6 +894,7 @@ export class UIController {
             showToast: (message, type) => this.showToast(message, type),
             syncRangeNumberInput: (slider) => this.syncRangeNumberInput(slider),
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
+            onGravityChanged: () => this.markSceneSectionKeyframeDirty("gravity"),
         });
         this.accessoryPanelController = new AccessoryPanelController({
             mmdManager: this.mmdManager,
@@ -1087,9 +1094,9 @@ export class UIController {
         this.btnBoneKeyframe = document.getElementById("btn-bone-keyframe") as HTMLButtonElement | null;
         this.btnPhysicsKeyframe = document.querySelector(".timeline-edit-btn--physics-toggle") as HTMLButtonElement | null;
         this.btnMorphKeyframe = document.getElementById("btn-morph-keyframe") as HTMLButtonElement | null;
-        const btnLightKeyframe = document.getElementById("btn-light-keyframe") as HTMLButtonElement | null;
-        const btnShadowKeyframe = document.getElementById("btn-shadow-keyframe") as HTMLButtonElement | null;
-        const btnGravityKeyframe = document.getElementById("btn-gravity-keyframe") as HTMLButtonElement | null;
+        this.btnLightKeyframe = document.getElementById("btn-light-keyframe") as HTMLButtonElement | null;
+        this.btnShadowKeyframe = document.getElementById("btn-shadow-keyframe") as HTMLButtonElement | null;
+        this.btnGravityKeyframe = document.getElementById("btn-gravity-keyframe") as HTMLButtonElement | null;
         this.btnInfoKeyframe?.addEventListener("click", () => {
             if ((this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null) !== null) {
                 this.actionDispatcher.dispatch({ type: "keyframe.registerAccessoryTransform", source: "button" });
@@ -1109,13 +1116,13 @@ export class UIController {
         this.btnMorphKeyframe?.addEventListener("click", () => {
             this.actionDispatcher.dispatch({ type: "keyframe.registerMorph", source: "button" });
         });
-        btnLightKeyframe?.addEventListener("click", () => {
+        this.btnLightKeyframe?.addEventListener("click", () => {
             this.actionDispatcher.dispatch({ type: "keyframe.registerLight", source: "button" });
         });
-        btnShadowKeyframe?.addEventListener("click", () => {
+        this.btnShadowKeyframe?.addEventListener("click", () => {
             this.actionDispatcher.dispatch({ type: "keyframe.registerShadow", source: "button" });
         });
-        btnGravityKeyframe?.addEventListener("click", () => {
+        this.btnGravityKeyframe?.addEventListener("click", () => {
             this.actionDispatcher.dispatch({ type: "keyframe.registerGravity", source: "button" });
         });
 
@@ -1316,9 +1323,13 @@ export class UIController {
         }
         applyLightMode();
 
-        elLightDirectionX.addEventListener("input", updateDir);
-        elLightDirectionY.addEventListener("input", updateDir);
-        elLightDirectionZ.addEventListener("input", updateDir);
+        const updateEditedLightDirection = (): void => {
+            updateDir();
+            this.markSceneSectionKeyframeDirty("light");
+        };
+        elLightDirectionX.addEventListener("input", updateEditedLightDirection);
+        elLightDirectionY.addEventListener("input", updateEditedLightDirection);
+        elLightDirectionZ.addEventListener("input", updateEditedLightDirection);
 
         const initialLightDirection = this.mmdManager.getSerializedLightDirection();
         elLightDirectionX.value = this.formatRangeInputValue(elLightDirectionX, initialLightDirection.x);
@@ -1332,6 +1343,7 @@ export class UIController {
             if (!this.actionDispatcher.dispatch({ type: "effect.setLightIntensity", source: "panel", value: v })) {
                 this.mmdManager.lightIntensity = v;
             }
+            this.markSceneSectionKeyframeDirty("shadow");
         });
         elAmbient.addEventListener("input", () => {
             const v = Number(elAmbient.value) / 100;
@@ -1351,9 +1363,13 @@ export class UIController {
             valLightColorG.textContent = `${Math.round(g * 100)}%`;
             valLightColorB.textContent = `${Math.round(b * 100)}%`;
         };
-        elLightColorR.addEventListener("input", applyLightColor);
-        elLightColorG.addEventListener("input", applyLightColor);
-        elLightColorB.addEventListener("input", applyLightColor);
+        const applyEditedLightColor = (): void => {
+            applyLightColor();
+            this.markSceneSectionKeyframeDirty("light");
+        };
+        elLightColorR.addEventListener("input", applyEditedLightColor);
+        elLightColorG.addEventListener("input", applyEditedLightColor);
+        elLightColorB.addEventListener("input", applyEditedLightColor);
         const applyLightFlatStrength = () => {
             const v = Number(elLightFlatStrength.value) / 100;
             if (!this.actionDispatcher.dispatch({ type: "effect.setLightFlatStrength", source: "panel", value: v })) {
@@ -1406,6 +1422,7 @@ export class UIController {
             if (!this.actionDispatcher.dispatch({ type: "effect.setShadowMaxZ", source: "panel", value: v })) {
                 this.mmdManager.shadowMaxZ = v;
             }
+            this.markSceneSectionKeyframeDirty("shadow");
         });
         const formatShadowFilteringQuality = (quality: number): string => {
             if (quality <= 0) return "High";
@@ -1494,9 +1511,13 @@ export class UIController {
             valShadowColorG.textContent = String(Math.round(g * 255));
             valShadowColorB.textContent = String(Math.round(b * 255));
         };
-        elShadowColorR.addEventListener("input", applyShadowColor);
-        elShadowColorG.addEventListener("input", applyShadowColor);
-        elShadowColorB.addEventListener("input", applyShadowColor);
+        const applyEditedShadowColor = (): void => {
+            applyShadowColor();
+            this.markSceneSectionKeyframeDirty("shadow");
+        };
+        elShadowColorR.addEventListener("input", applyEditedShadowColor);
+        elShadowColorG.addEventListener("input", applyEditedShadowColor);
+        elShadowColorB.addEventListener("input", applyEditedShadowColor);
         const applyToonShadowInfluence = () => {
             const influence = Number(elToonShadowInfluence.value) / 100;
             if (!this.actionDispatcher.dispatch({ type: "effect.setToonShadowInfluence", source: "panel", value: influence })) {
@@ -1504,7 +1525,11 @@ export class UIController {
             }
             valToonShadowInfluence.textContent = `${Math.round(influence * 100)}%`;
         };
-        elToonShadowInfluence.addEventListener("input", applyToonShadowInfluence);
+        const applyEditedToonShadowInfluence = (): void => {
+            applyToonShadowInfluence();
+            this.markSceneSectionKeyframeDirty("shadow");
+        };
+        elToonShadowInfluence.addEventListener("input", applyEditedToonShadowInfluence);
         elSelfShadowSoftness.addEventListener("input", () => {
             const v = Number(elSelfShadowSoftness.value) / 1000;
             valSelfShSoftness.textContent = v.toFixed(3);
@@ -7224,13 +7249,13 @@ export class UIController {
     private getTrackTypeLabel(track: Pick<KeyframeTrack, "category">): string {
         switch (track.category) {
             case "camera":
-                return "Camera";
+                return "カメラ";
             case "light":
-                return "Light";
+                return "照明";
             case "shadow":
-                return "Shadow";
+                return "影";
             case "gravity":
-                return "Gravity";
+                return "重力";
             case "morph":
                 return "Morph";
             case "root":
@@ -7469,15 +7494,16 @@ export class UIController {
             ? ` (${selectedKeys.length} keys)`
             : selectedFrame !== null ? ` @${selectedFrame}` : "";
         const trackTypeLabel = this.getTrackTypeLabel(track);
+        const trackDisplayName = getTimelineTrackDisplayName(track);
         if (this.timelineSelectionLabel) {
             this.timelineSelectionLabel.textContent = selectedBoneTracks.length > 1
                 ? `[Bone] ${selectedBoneTracks.length} bones selected`
-                : `[${trackTypeLabel}] ${track.name}${frameLabel}`;
+                : `[${trackTypeLabel}] ${trackDisplayName}${frameLabel}`;
         }
         const interpolationFrame = selectedKeys.length > 1 ? currentFrame : selectedFrame ?? currentFrame;
         this.interpolationTrackNameLabel.textContent = selectedBoneTracks.length > 1
             ? `Bone: ${selectedBoneTracks.length} selected`
-            : `${trackTypeLabel}: ${track.name}`;
+            : `${trackTypeLabel}: ${trackDisplayName}`;
         this.interpolationFrameLabel.textContent = String(interpolationFrame);
         if (selectedBoneTracks.length > 1) {
             this.resetInterpolationTypeSelect();
@@ -7539,6 +7565,9 @@ export class UIController {
         this.setSectionKeyframeButtonState(this.btnBoneKeyframe, this.getBoneKeyframeButtonState());
         this.updatePhysicsKeyframeButtonState();
         this.setSectionKeyframeButtonState(this.btnMorphKeyframe, this.getMorphKeyframeButtonState());
+        this.setSectionKeyframeButtonState(this.btnLightKeyframe, this.getSceneKeyframeButtonState("light"));
+        this.setSectionKeyframeButtonState(this.btnShadowKeyframe, this.getSceneKeyframeButtonState("shadow"));
+        this.setSectionKeyframeButtonState(this.btnGravityKeyframe, this.getSceneKeyframeButtonState("gravity"));
     }
 
     private updatePhysicsKeyframeButtonState(): void {
@@ -7828,6 +7857,15 @@ export class UIController {
     ): string | null {
         if (accessoryIndex === null || accessoryIndex < 0) return null;
         return `${this.getSectionKeyframeContextPrefix("accessory")}:${accessoryIndex}:frame:${this.mmdManager.currentFrame}`;
+    }
+
+    private getSceneKeyframeContextKey(section: "light" | "shadow" | "gravity"): string {
+        return `${this.getSectionKeyframeContextPrefix(section)}:frame:${this.mmdManager.currentFrame}`;
+    }
+
+    private markSceneSectionKeyframeDirty(section: "light" | "shadow" | "gravity"): void {
+        this.markSectionKeyframeDirty(section, this.getSceneKeyframeContextKey(section));
+        this.updateSectionKeyframeButtons();
     }
 
     private getSelectedBonePoseSnapshotFromSource(frame: number): SelectedBonePoseSnapshot | null {
@@ -8239,6 +8277,17 @@ export class UIController {
         if (this.sectionKeyframeDirtyKeys.accessory.has(contextKey)) return "dirty";
         if (this.hasAccessoryTransformKeyframe(accessoryIndex, this.mmdManager.currentFrame)) return "registered";
         return "none";
+    }
+
+    private getSceneKeyframeButtonState(section: "light" | "shadow" | "gravity"): SectionKeyframeButtonState {
+        const contextKey = this.getSceneKeyframeContextKey(section);
+        if (this.sectionKeyframeDirtyKeys[section].has(contextKey)) return "dirty";
+        const track = {
+            light: { name: "Light", category: "light" },
+            shadow: { name: "Shadow", category: "shadow" },
+            gravity: { name: "Gravity", category: "gravity" },
+        }[section] as Pick<KeyframeTrack, "name" | "category">;
+        return this.mmdManager.hasTimelineKeyframe(track, this.mmdManager.currentFrame) ? "registered" : "none";
     }
 
     private updateInterpolationPreview(track: KeyframeTrack, frame: number): void {
@@ -9107,6 +9156,7 @@ export class UIController {
         }
 
         this.commandHistory.push(command);
+        this.clearSectionKeyframeDirty("light", this.getSceneKeyframeContextKey("light"));
         this.updateTimelineEditState();
         this.updateSectionKeyframeButtons();
         this.refreshLightingUiFromRuntime();
@@ -9133,6 +9183,7 @@ export class UIController {
         }
 
         this.commandHistory.push(command);
+        this.clearSectionKeyframeDirty("shadow", this.getSceneKeyframeContextKey("shadow"));
         this.updateTimelineEditState();
         this.updateSectionKeyframeButtons();
         this.refreshLightingUiFromRuntime();
@@ -9159,6 +9210,7 @@ export class UIController {
         }
 
         this.commandHistory.push(command);
+        this.clearSectionKeyframeDirty("gravity", this.getSceneKeyframeContextKey("gravity"));
         this.updateTimelineEditState();
         this.updateSectionKeyframeButtons();
         this.runtimeFeatureUiController?.refreshGravityControls();

@@ -47,8 +47,15 @@
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.pasteKeyframe"><span data-i18n="menu.edit.pasteKeyframe">キーを貼り付け</span><span class="app-menu-shortcut">Ctrl+V</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.mirrorPasteKeyframe"><span data-i18n="menu.edit.mirrorPasteKeyframe">反転ペースト</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.deleteKeyframe"><span data-i18n="menu.edit.deleteKeyframe">選択キーフレームを削除</span><span class="app-menu-shortcut">Del</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.insertEmptyFrame"><span data-i18n="menu.edit.insertEmptyFrame">現在位置に空フレームを挿入</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.deleteFrameColumn"><span data-i18n="menu.edit.deleteFrameColumn">現在位置のフレーム列を削除</span></button>
           <div class="app-menu-separator" role="separator"></div>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.addKeyframe"><span data-i18n="menu.edit.addKeyframe">現在フレームに登録</span><span class="app-menu-shortcut">Enter</span></button>
+          <div class="app-menu-section-label" data-i18n="menu.edit.autoKeyTarget">Autoキー対象</div>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="true" data-menu-command="edit.autoKeyScope.all"><span data-i18n="menu.edit.autoKeyScope.all">すべて</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="edit.autoKeyScope.bone"><span data-i18n="menu.edit.autoKeyScope.bone">選択ボーンのみ</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="edit.autoKeyScope.morph"><span data-i18n="menu.edit.autoKeyScope.morph">モーフのみ</span></button>
+          <button class="app-menu-item app-menu-item--radio" type="button" role="menuitemradio" aria-checked="false" data-menu-command="edit.autoKeyScope.camera"><span data-i18n="menu.edit.autoKeyScope.camera">カメラのみ</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.prevKeyframe"><span data-i18n="menu.edit.prevKeyframe">前のキーフレームへ</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.nextKeyframe"><span data-i18n="menu.edit.nextKeyframe">次のキーフレームへ</span></button>
           <div class="app-menu-separator" role="separator"></div>
@@ -734,6 +741,10 @@
                     <span data-i18n="model.shadowCaster.label">影</span>
                   </label>
                 </div>
+                <details id="info-model-ik-details" class="info-ik-details">
+                  <summary data-i18n="model.property.ik">IK ON・OFF</summary>
+                  <div id="info-model-ik-list" class="info-check-list info-ik-list"></div>
+                </details>
               </div>
               <div class="info-compact-stats">
                 <span class="info-compact-item"><span class="info-compact-key" data-i18n="label.model">モデル</span><span id="info-model-name"

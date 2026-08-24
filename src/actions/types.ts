@@ -16,6 +16,8 @@ export type ActionSource =
     | "midi"
     | "system";
 
+export type AutoKeyScope = "all" | "bone" | "morph" | "camera";
+
 export type PlaybackAction =
     | { type: "playback.play"; source: ActionSource }
     | { type: "playback.pause"; source: ActionSource }
@@ -33,8 +35,11 @@ export type KeyframeAction =
     | { type: "keyframe.paste"; source: ActionSource }
     | { type: "keyframe.mirrorPaste"; source: ActionSource }
     | { type: "keyframe.deleteSelected"; source: ActionSource }
+    | { type: "keyframe.insertEmptyFrame"; source: ActionSource }
+    | { type: "keyframe.deleteFrameColumn"; source: ActionSource }
     | { type: "keyframe.nudgeSelected"; source: ActionSource; deltaFrames: -1 | 1 }
     | { type: "keyframe.toggleAutoKey"; source: ActionSource }
+    | { type: "keyframe.setAutoKeyScope"; source: ActionSource; scope: AutoKeyScope }
     | { type: "keyframe.togglePhysicsInputMode"; source: ActionSource }
     | { type: "keyframe.registerInfo"; source: ActionSource }
     | { type: "keyframe.registerBone"; source: ActionSource }

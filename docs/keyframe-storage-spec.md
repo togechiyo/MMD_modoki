@@ -113,6 +113,27 @@ MMD のセルフ影 mode は MMD_modoki では採用しない。影 ON/OFF、影
 ### weight
 - `0.0 .. 1.0`
 
+## Propertyトラック
+
+### 保存する値
+
+- 共通のframe列
+- モデル表示 `visible`
+- IKボーン名の列
+- IKボーンごとのON/OFF列
+
+### 評価
+
+- 連続補間は行わず、直前キーを維持するステップ評価とする。
+- 先頭キーより前は先頭値、最終キーより後は最終値を使う。
+- runtimeに新しく見つかったIK名をtrackへ加える場合、既存フレームの初期状態はONとする。
+
+### 保存と編集
+
+- source animation上の `MmdPropertyAnimationTrack` を正本とする。
+- 登録、読出し、削除、copy / paste、Undo / Redoは `PropertyKeyframePayload` を共通利用する。
+- project保存先は各 `keyframes.modelAnimations[].animation.propertyTrack`、VMD出力先はmodel property sectionである。
+
 ## カメラトラック
 
 camera は最も意味ずれを起こしやすいので、保存値の意味を明示する。

@@ -30,6 +30,8 @@ type ModelInfoPanelElements = {
     modelContent: HTMLElement | null;
     chkVisibility: HTMLInputElement | null;
     chkShadow: HTMLInputElement | null;
+    ikDetails: HTMLDetailsElement | null;
+    ikList: HTMLElement | null;
     btnLoad: HTMLButtonElement | null;
     btnDelete: HTMLButtonElement | null;
 };
@@ -39,6 +41,7 @@ export type ModelInfoPanelControllerDeps = {
     showToast: (message: string, type?: ToastType) => void;
     onTargetSelected: (value: string, showToast: boolean) => void;
     onModelVisibilityChanged: (visible: boolean) => void;
+    onModelIkStateChanged: (boneName: string, enabled: boolean) => void;
     onModelDeleted: (hasRemainingModels: boolean) => void;
     getSelectedAccessoryIndex: () => number | null;
     dispatchAction?: (action: EditorAction) => boolean;
@@ -50,6 +53,8 @@ function resolveModelInfoPanelElements(): ModelInfoPanelElements {
         modelContent: document.getElementById("info-model-content"),
         chkVisibility: document.getElementById("chk-model-visibility") as HTMLInputElement | null,
         chkShadow: document.getElementById("chk-model-shadow") as HTMLInputElement | null,
+        ikDetails: document.getElementById("info-model-ik-details") as HTMLDetailsElement | null,
+        ikList: document.getElementById("info-model-ik-list"),
         btnLoad: document.getElementById("btn-model-load") as HTMLButtonElement | null,
         btnDelete: document.getElementById("btn-model-delete") as HTMLButtonElement | null,
     };
@@ -61,6 +66,7 @@ export class ModelInfoPanelController {
     private readonly showToast: (message: string, type?: ToastType) => void;
     private readonly onTargetSelected: (value: string, showToast: boolean) => void;
     private readonly onModelVisibilityChanged: (visible: boolean) => void;
+    private readonly onModelIkStateChanged: (boneName: string, enabled: boolean) => void;
     private readonly onModelDeleted: (hasRemainingModels: boolean) => void;
     private readonly getSelectedAccessoryIndex: () => number | null;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
@@ -71,6 +77,7 @@ export class ModelInfoPanelController {
         this.showToast = deps.showToast;
         this.onTargetSelected = deps.onTargetSelected;
         this.onModelVisibilityChanged = deps.onModelVisibilityChanged;
+        this.onModelIkStateChanged = deps.onModelIkStateChanged;
         this.onModelDeleted = deps.onModelDeleted;
         this.getSelectedAccessoryIndex = deps.getSelectedAccessoryIndex;
         this.dispatchAction = deps.dispatchAction ?? null;
@@ -154,6 +161,7 @@ export class ModelInfoPanelController {
         if (this.elements.btnDelete) {
             this.elements.btnDelete.disabled = !enabled;
         }
+        this.refreshIkControls(enabled);
     }
 
     public getSelectState(): ModelInfoSelectState {
@@ -171,6 +179,7 @@ export class ModelInfoPanelController {
             option.title = model.path;
             select.appendChild(option);
         }
+
         for (const accessory of accessories) {
             const option = document.createElement("option");
             option.value = createModelInfoAccessorySelectValue(accessory.index);
@@ -193,6 +202,36 @@ export class ModelInfoPanelController {
             value,
             disabled: models.length === 0 && accessories.length === 0,
         };
+    }
+
+    private refreshIkControls(enabled: boolean): void {
+        const list = this.elements.ikList;
+        if (!list) return;
+        const states = enabled ? this.mmdManager.getActiveModelIkStates() : [];
+        list.replaceChildren();
+        if (this.elements.ikDetails) {
+            this.elements.ikDetails.hidden = !enabled || states.length === 0;
+        }
+        for (const state of states) {
+            const label = document.createElement("label");
+            label.className = "info-toggle-label";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = state.enabled;
+            checkbox.dataset.ikBoneName = state.boneName;
+            checkbox.addEventListener("change", () => {
+                if (!this.mmdManager.setActiveModelIkState(state.boneName, checkbox.checked)) {
+                    checkbox.checked = !checkbox.checked;
+                    this.showToast(`IK state update failed: ${state.boneName}`, "error");
+                    return;
+                }
+                this.onModelIkStateChanged(state.boneName, checkbox.checked);
+            });
+            const text = document.createElement("span");
+            text.textContent = state.boneName;
+            label.append(checkbox, text);
+            list.appendChild(label);
+        }
     }
 
     public selectTimelineTarget(value: string, showToast: boolean): void {

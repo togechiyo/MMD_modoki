@@ -206,6 +206,12 @@ declare global {
                     frames: number[];
                 };
             };
+            getTimelineTracks: () => Array<{
+                category: TrackCategory;
+                name: string;
+                frames: number[];
+            }>;
+            getCommandHistoryState: () => { undoCount: number; redoCount: number };
             nudgeTimelineSelection: (deltaFrames: -1 | 1) => void;
             getShadowRuntimeDiagnostics: () => {
                 requestedMode: "cascaded" | "standard";
@@ -384,7 +390,7 @@ export interface MotionInfo {
 }
 
 /** Track category for timeline row ordering */
-export type TrackCategory = 'root' | 'camera' | 'light' | 'shadow' | 'gravity' | 'semi-standard' | 'bone' | 'morph';
+export type TrackCategory = 'root' | 'camera' | 'light' | 'shadow' | 'gravity' | 'property' | 'semi-standard' | 'bone' | 'morph';
 
 /** A single row in the keyframe timeline */
 export interface KeyframeTrack {

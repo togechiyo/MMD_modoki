@@ -73,3 +73,16 @@
 4. キー登録補助とオートキー対象制御
 5. 回転補間のMMD本家互換確認
 6. 再生速度切り替えと物理整合確認
+
+## 2026-08-24 追記: Property / 時間軸編集 / 登録補助の実装反映
+
+同日追記の「現在残る編集課題」1〜4のうち、次を実装・自動確認した。
+
+- Property（表示 / IK）のタイムライン行、登録、削除、copy / paste、Undo / Redo、ステップ式seek / preview
+- 情報欄のIK ON/OFF UI
+- 空フレーム挿入 / フレーム列削除のbatch Command
+- 登録時の未変更スキップ、手動上書き確認、複数ボーン / モーフの一括登録
+- Auto Key対象の `すべて / 選択ボーン / モーフ / カメラ` 切替
+- PMX、VMD path、無音WAV、Property、camera animation、照明、重力、主要PostFXを含むElectron project round-trip E2E
+
+残るものは、全sceneと音声を同時にずらすリップル編集、実データによる音声同期の聴感確認、DoF / LUT / Fogを含めた同時手動確認、回転補間のMMD本家互換確認である。詳細は [Propertyキー・時間軸編集・キー登録・project round-trip 実装メモ](./property-frame-edit-registration-roundtrip-2026-08-24.md) を参照する。

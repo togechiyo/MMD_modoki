@@ -52,7 +52,7 @@
 ### 3-1. トラック型
 - `KeyframeTrack`:
   - `name`: ボーン / モーフ / シーン項目の内部名
-  - `category`: `root | camera | light | shadow | gravity | semi-standard | bone | morph`
+  - `category`: `root | camera | light | shadow | gravity | semi-standard | bone | morph | property`
   - `frames`: 昇順 `Uint32Array`
 
 参照: `src/types.ts:45`
@@ -78,6 +78,7 @@
 
 ### 4-1. モデル対象
 モデル対象時は `getActiveModelTimelineTracks()` を使う。
+- `Property`（表示 / IK）行を先頭へ配置する
 - 可視ボーンのみ通す（`activeModelInfo.boneNames`）
 - PMX順のボーンをベースにトラックを埋める
 - `root` カテゴリを先頭グループに配置
@@ -265,10 +266,10 @@
 参照: `src/ui-controller.ts:336`, `src/ui-controller.ts:1201`, `src/ui-controller.ts:1214`, `src/ui-controller.ts:1228`
 
 ## 10. 現在の制約
-- 複数キー選択、コピー、貼り付け、削除、`±1`フレーム移動は実装済み。時間スケール編集は未実装。
+- 複数キー選択、コピー、貼り付け、削除、`±1`フレーム移動、空フレーム挿入、フレーム列削除は実装済み。時間スケール編集は未実装。
 - 矩形選択は追加選択に対応するが、減算選択は未実装。
-- 補間は編集可能だが、Property（表示/IK）のステップ編集UIは未実装。
-- Property（表示/IK）トラック編集は未実装。
+- Property（表示/IK）は連続補間ではなく、直前キー値を維持するステップ評価として登録、削除、copy / paste、Undo / Redo、seek / previewへ接続済み。
+- 空フレーム挿入 / フレーム列削除は現在のtimeline targetだけを対象とし、音声を含む全sceneのリップル編集ではない。
 - 回転補間のMMD実機比較テストは未整備。
 
 ## 11. 関連テスト
@@ -276,6 +277,7 @@
 - pure helper: `test/editor/timeline-key-selection.test.ts`
 - 見出し選択と左上セル: `test/e2e/timeline-header-selection.spec.mjs`
 - キー直接選択と矩形選択: `test/e2e/timeline-key-selection.spec.mjs`
+- Property、時間軸構造操作、project round-trip: `test/e2e/property-frame-edit-project-roundtrip.spec.mjs`
 
 Electron / WebGPU のUI確認は、ローカルに導入済みのPlaywrightから実行する。GPUを利用できないsandbox上のE2Eは確認経路にしない。
 

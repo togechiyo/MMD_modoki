@@ -84,6 +84,21 @@ export type KeyframeCommandDiff =
             before: TimelineKeyframePayload;
             after: TimelineKeyframePayload;
         }[];
+    }
+    | {
+        type: "keyframe.frameColumnEdit";
+        mode: "insert" | "delete";
+        anchorFrame: number;
+        before: {
+            track: CommandTrackRef;
+            frame: number;
+            payload: TimelineKeyframePayload;
+        }[];
+        after: {
+            track: CommandTrackRef;
+            frame: number;
+            payload: TimelineKeyframePayload;
+        }[];
     };
 
 export type BoneTransformCommandSnapshot = {

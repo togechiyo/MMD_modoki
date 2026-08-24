@@ -5627,6 +5627,24 @@ body.bottom-panel-resizing {
   --scene-slider-glow: rgba(111, 159, 218, 0.5);
 }
 
+.info-ik-details {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--bottom-panel-font-xs);
+}
+
+.info-ik-details summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.info-ik-list {
+  max-height: 78px;
+  margin-top: 4px;
+  overflow-y: auto;
+}
+
 .lighting-controls::-webkit-scrollbar {
   width: 4px;
 }

@@ -380,6 +380,47 @@ describe("executeCommand", () => {
         ]);
     });
 
+    it("applies and reverts an empty-frame insertion as one frame-column command", () => {
+        const payload = { kind: "morph" as const, weights: [0.5] };
+        const command = createCommand({
+            type: "keyframe.frameColumnEdit",
+            mode: "insert",
+            anchorFrame: 10,
+            before: [
+                { track, frame: 10, payload },
+                { track, frame: 20, payload },
+            ],
+            after: [
+                { track, frame: 11, payload },
+                { track, frame: 21, payload },
+            ],
+        });
+
+        const applyContext = createContext(true, { batchRemove: true });
+        expect(executeCommand(command, "apply", applyContext.context)).toBe(true);
+        expect(applyContext.calls).toEqual([
+            ["batchRemove", track, [10, 20]],
+            ["paste", track, 11, "payload"],
+            ["paste", track, 21, "payload"],
+            ["select", null],
+            ["selectKeys", []],
+            ["seek", 10],
+            ["refresh"],
+        ]);
+
+        const revertContext = createContext(true, { batchRemove: true });
+        expect(executeCommand(command, "revert", revertContext.context)).toBe(true);
+        expect(revertContext.calls).toEqual([
+            ["batchRemove", track, [11, 21]],
+            ["paste", track, 10, "payload"],
+            ["paste", track, 20, "payload"],
+            ["select", null],
+            ["selectKeys", []],
+            ["seek", 10],
+            ["refresh"],
+        ]);
+    });
+
     it("applies and reverts batch correction while preserving the corrected selection", () => {
         const before = { kind: "morph" as const, weights: [0.5] };
         const after = { kind: "morph" as const, weights: [0.25] };

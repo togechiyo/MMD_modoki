@@ -58,7 +58,7 @@ import { ViewportSeekBarController } from "./ui/viewport-bottom-bar-controller";
 import { ViewportAxisHandleController } from "./ui/viewport-axis-handle-controller";
 import { ViewportTopBarController, type ViewportTopBarCameraTransform } from "./ui/viewport-top-bar-controller";
 import { ActionDispatcher } from "./actions/action-dispatcher";
-import type { ActionSource } from "./actions/types";
+import type { ActionSource, AutoKeyScope } from "./actions/types";
 import { executeCommand, type CommandExecutionContext, type CommandSelectedKeyRef } from "./actions/command-executor";
 import { HistoryManager } from "./actions/history-manager";
 import {
@@ -426,6 +426,7 @@ export class UIController {
     private static readonly TIMELINE_WAVEFORM_FPS = 30;
     private static readonly RUNTIME_MODE_STORAGE_KEY = "mmd_modoki.runtimeMode";
     private static readonly AUTO_KEY_STORAGE_KEY = "mmd_modoki.autoKey.enabled";
+    private static readonly AUTO_KEY_SCOPE_STORAGE_KEY = "mmd_modoki.autoKey.scope";
     private mmdManager: MmdManager;
     private timeline: Timeline;
     private bottomPanel: BottomPanel;
@@ -545,6 +546,8 @@ export class UIController {
     private readonly commandHistory = new HistoryManager();
     private pendingBoneTransformCommand: PendingBoneTransformCommand | null = null;
     private autoKeyEnabled = false;
+    private autoKeyScope: AutoKeyScope = "all";
+    private pendingCameraAutoKeyTimer: number | null = null;
     private postFxWgslToonPath: string | null = null;
     private postFxWgslToonText: string | null = null;
     private currentProjectFilePath: string | null = null;
@@ -657,6 +660,10 @@ export class UIController {
                 this.runtimeFeatureUiController?.refreshRigidBodies();
                 this.updateSectionKeyframeButtons();
             },
+            onModelIkStateChanged: () => {
+                this.markSectionKeyframeDirty("info", this.getInfoKeyframeContextKey());
+                this.updateSectionKeyframeButtons();
+            },
             onModelDeleted: (hasRemainingModels) => {
                 if (!hasRemainingModels) {
                     this.mmdManager.setTimelineTarget("camera");
@@ -722,6 +729,7 @@ export class UIController {
             refreshMaterialUi: () => this.shaderPanelController?.refresh(),
             isUiVisible: () => !this.layoutUiController?.isUiFullscreenModeActive(),
             getUiScalePercentage: () => this.layoutUiController?.getUiScalePercentage() ?? 100,
+            getAutoKeyScope: () => this.autoKeyScope,
             countTimelineKeysByCategories: (categories) => this.timeline.countKeysByCategories(categories),
             previewKeyframeCorrection: (correction) => this.previewSelectedKeyframeCorrection(correction),
             previewBodyMotionCorrection: (sourceModelIndex) => this.previewBodyMotionCorrection(sourceModelIndex),
@@ -773,6 +781,7 @@ export class UIController {
             },
         });
         this.setupEventListeners();
+        this.setAutoKeyScope(this.loadAutoKeyScope(), { persist: false, toast: false });
         this.setAutoKeyEnabled(false, { persist: false, toast: false });
         this.setupCallbacks();
         this.setupKeyboard();
@@ -1692,6 +1701,7 @@ export class UIController {
                 this.clearTransientEditingStateForFrameChange();
                 this.refreshLightingUiFromRuntime();
                 this.runtimeFeatureUiController?.refreshGravityControls();
+                this.modelInfoPanelController?.updateActionButtons();
             }
             this.updateTimelineEditState();
             const sourcePose = this.getDisplayBonePoseSnapshot(frame);
@@ -2309,6 +2319,8 @@ export class UIController {
         this.actionDispatcher.register("keyframe.paste", () => this.pasteKeyframeClipboard());
         this.actionDispatcher.register("keyframe.mirrorPaste", () => this.pasteMirroredKeyframeClipboard());
         this.actionDispatcher.register("keyframe.deleteSelected", (action) => this.deleteSelectedKeyframe(action.source));
+        this.actionDispatcher.register("keyframe.insertEmptyFrame", () => this.editFrameColumn("insert"));
+        this.actionDispatcher.register("keyframe.deleteFrameColumn", () => this.editFrameColumn("delete"));
         this.actionDispatcher.register("keyframe.nudgeSelected", (action) => {
             this.nudgeSelectedKeyframe(action.deltaFrames);
         });
@@ -2320,6 +2332,9 @@ export class UIController {
         });
         this.actionDispatcher.register("keyframe.toggleAutoKey", () => {
             this.setAutoKeyEnabled(!this.autoKeyEnabled, { persist: true, toast: true });
+        });
+        this.actionDispatcher.register("keyframe.setAutoKeyScope", (action) => {
+            this.setAutoKeyScope(action.scope, { persist: true, toast: true });
         });
         this.actionDispatcher.register("keyframe.togglePhysicsInputMode", () => {
             this.physicsKeyframeInputMode = this.physicsKeyframeInputMode === 1 ? 0 : 1;
@@ -2552,7 +2567,7 @@ export class UIController {
                 name: "Camera",
                 category: "camera",
                 frames: new Uint32Array(0),
-            }, this.captureCurrentBonePoseSnapshot("Camera"), externalParent);
+            }, this.captureCurrentBonePoseSnapshot("Camera"), externalParent, "panel");
         });
         this.actionDispatcher.register("camera.setMirroringFloorEnabled", (action) => {
             this.mmdManager.mirroringFloorEnabled = action.enabled;
@@ -6884,6 +6899,7 @@ export class UIController {
 
     private registerAutoKeyForEditedBone(boneName: string): void {
         if (!this.autoKeyEnabled || boneName === "Camera") return;
+        if (this.autoKeyScope !== "all" && this.autoKeyScope !== "bone") return;
         this.registerBoneKeyframeForBoneAtCurrentFrame(boneName, "system");
     }
 
@@ -6949,7 +6965,19 @@ export class UIController {
 
     private registerAutoKeyForEditedMorph(morph: { frameIndex: number; name: string; value: number }): void {
         if (!this.autoKeyEnabled) return;
+        if (this.autoKeyScope !== "all" && this.autoKeyScope !== "morph") return;
         this.registerSingleMorphKeyframeAtCurrentFrame(morph, { toast: false });
+    }
+
+    private queueAutoKeyForEditedCamera(): void {
+        if (!this.autoKeyEnabled) return;
+        if (this.autoKeyScope !== "all" && this.autoKeyScope !== "camera") return;
+        if (this.mmdManager.getTimelineTarget() !== "camera") return;
+        if (this.pendingCameraAutoKeyTimer !== null) window.clearTimeout(this.pendingCameraAutoKeyTimer);
+        this.pendingCameraAutoKeyTimer = window.setTimeout(() => {
+            this.pendingCameraAutoKeyTimer = null;
+            this.registerBoneKeyframeForBoneAtCurrentFrame("Camera", "system");
+        }, 180);
     }
 
     private setAutoKeyEnabled(enabled: boolean, options: { persist: boolean; toast: boolean }): void {
@@ -7063,12 +7091,45 @@ export class UIController {
         });
     }
 
+    private loadAutoKeyScope(): AutoKeyScope {
+        try {
+            const value = localStorage.getItem(UIController.AUTO_KEY_SCOPE_STORAGE_KEY);
+            if (value === "bone" || value === "morph" || value === "camera") return value;
+        } catch {
+            // localStorage can be unavailable in restricted test/browser contexts.
+        }
+        return "all";
+    }
+
+    private setAutoKeyScope(
+        scope: AutoKeyScope,
+        options: { persist: boolean; toast: boolean },
+    ): void {
+        this.autoKeyScope = scope;
+        if (options.persist) {
+            try {
+                localStorage.setItem(UIController.AUTO_KEY_SCOPE_STORAGE_KEY, scope);
+            } catch {
+                // localStorage can be unavailable in restricted test/browser contexts.
+            }
+        }
+        this.appMenuController?.refresh();
+        if (options.toast) this.showToast(`Auto Key target: ${scope}`, "info");
+    }
+
     public nudgeTimelineSelectionForE2e(deltaFrames: -1 | 1): void {
         this.actionDispatcher.dispatch({
             type: "keyframe.nudgeSelected",
             source: "shortcut",
             deltaFrames,
         });
+    }
+
+    public getCommandHistoryStateForE2e(): { undoCount: number; redoCount: number } {
+        return {
+            undoCount: this.commandHistory.getUndoCount(),
+            redoCount: this.commandHistory.getRedoCount(),
+        };
     }
 
     private applyViewportAccessoryTransform(
@@ -7181,6 +7242,7 @@ export class UIController {
     private handleCameraTransformChanged(source: ActionSource): void {
         if (source === "panel") {
             this.handleCameraControlEdited();
+            this.queueAutoKeyForEditedCamera();
             return;
         }
 
@@ -7194,6 +7256,7 @@ export class UIController {
         this.refreshCameraUiFromRuntime();
         this.refreshViewportBottomBar();
         this.updateSectionKeyframeButtons();
+        this.queueAutoKeyForEditedCamera();
     }
 
     private refreshCameraUiFromRuntime(force = false): void {
@@ -9223,6 +9286,11 @@ export class UIController {
         this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentLightKeyframePayload();
+        const decision = this.getKeyframeRegistrationDecision(before, after, "button", `Frame ${frame} の照明キー`);
+        if (decision !== "proceed") {
+            if (decision === "unchanged") this.showToast(`Frame ${frame}: light keyframe unchanged`, "info");
+            return;
+        }
         const command = this.createKeyframePasteCommand(
             track,
             frame,
@@ -9250,6 +9318,11 @@ export class UIController {
         this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentShadowKeyframePayload();
+        const decision = this.getKeyframeRegistrationDecision(before, after, "button", `Frame ${frame} の影キー`);
+        if (decision !== "proceed") {
+            if (decision === "unchanged") this.showToast(`Frame ${frame}: shadow keyframe unchanged`, "info");
+            return;
+        }
         const command = this.createKeyframePasteCommand(
             track,
             frame,
@@ -9277,6 +9350,11 @@ export class UIController {
         this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentGravityKeyframePayload();
+        const decision = this.getKeyframeRegistrationDecision(before, after, "button", `Frame ${frame} の重力キー`);
+        if (decision !== "proceed") {
+            if (decision === "unchanged") this.showToast(`Frame ${frame}: gravity keyframe unchanged`, "info");
+            return;
+        }
         const command = this.createKeyframePasteCommand(
             track,
             frame,
@@ -9319,6 +9397,10 @@ export class UIController {
             this.registerGravityKeyframeAtCurrentFrame();
             return;
         }
+        if (track.category === "property") {
+            this.registerInfoKeyframe();
+            return;
+        }
 
         const frame = this.mmdManager.currentFrame;
         const poseSnapshot = poseSnapshotOverride
@@ -9331,10 +9413,10 @@ export class UIController {
             poseSnapshotOverride,
             poseSnapshot,
         });
-        if (this.tryRegisterEditorCameraKeyframe(track, poseSnapshot)) {
+        if (this.tryRegisterEditorCameraKeyframe(track, poseSnapshot, undefined, source)) {
             return;
         }
-        if (this.tryRegisterEditorBoneKeyframe(track, poseSnapshot)) {
+        if (this.tryRegisterEditorBoneKeyframe(track, poseSnapshot, source)) {
             return;
         }
 
@@ -9408,14 +9490,41 @@ export class UIController {
     private registerInfoKeyframe(): void {
         const contextKey = this.getInfoKeyframeContextKey();
         if (!contextKey) return;
-        if (!this.mmdManager.addInfoKeyframe(this.mmdManager.currentFrame)) {
+        const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        const track = { name: "Property", category: "property" as const };
+        if (!this.mmdManager.ensureModelAnimationForEditing(track)) {
             this.showToast("Please select a model", "error");
             return;
         }
+        const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
+        const after: TimelineKeyframePayload = {
+            kind: "property",
+            visible: this.mmdManager.getActiveModelVisibility(),
+            ikStates: this.mmdManager.getActiveModelIkStates(),
+        };
+        if (before && this.areKeyframePayloadsEqual(before, after)) {
+            this.clearSectionKeyframeDirty("info", contextKey);
+            this.updateSectionKeyframeButtons();
+            this.showToast(`Frame ${frame}: info keyframe unchanged`, "info");
+            return;
+        }
+        if (before && !window.confirm(`Frame ${frame} の表示・IKキーを上書きしますか？`)) return;
+        const command = this.createKeyframePasteCommand(
+            track,
+            frame,
+            before,
+            after,
+            `Register property keyframe at frame ${frame}`,
+        );
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) {
+            this.showToast(`Frame ${frame}: info keyframe registration failed`, "error");
+            return;
+        }
+        this.commandHistory.push(command);
         this.clearSectionKeyframeDirty("info", contextKey);
         this.updateSectionKeyframeButtons();
         this.updateTimelineEditState();
-        this.showToast(`Frame ${this.mmdManager.currentFrame}: info keyframe saved`, "success");
+        this.showToast(`Frame ${frame}: info keyframe saved`, "success");
     }
 
     private registerBoneKeyframeAtCurrentFrame(): void {
@@ -9479,10 +9588,10 @@ export class UIController {
         this.syncBoneVisualizerSelection(this.timeline.getSelectedTrack());
         const selectedTrack = this.timeline.getSelectedTrack();
         if (selectedTrack) {
-            if (this.tryRegisterEditorCameraKeyframe(selectedTrack, poseSnapshot)) {
+            if (this.tryRegisterEditorCameraKeyframe(selectedTrack, poseSnapshot, undefined, source)) {
                 return;
             }
-            if (this.tryRegisterEditorBoneKeyframe(selectedTrack, poseSnapshot)) {
+            if (this.tryRegisterEditorBoneKeyframe(selectedTrack, poseSnapshot, source)) {
                 return;
             }
         }
@@ -9520,10 +9629,18 @@ export class UIController {
             return;
         }
 
+        const changedItems = items.filter((item) => !item.before || !this.areKeyframePayloadsEqual(item.before, item.after));
+        if (changedItems.length === 0) {
+            this.showToast(`Frame ${frame}: selected bone keyframes unchanged`, "info");
+            return;
+        }
+        if (changedItems.some((item) => item.before)
+            && !window.confirm(`Frame ${frame} の${changedItems.length}件のボーンキーを上書きしますか？`)) return;
+
         const nowMs = Date.now();
         const command: BuiltCommand = {
-            id: `keyframe.boneBatch:${items.length}:${frame}:${nowMs}`,
-            label: `Register ${items.length} bone keyframes at frame ${frame}`,
+            id: `keyframe.boneBatch:${changedItems.length}:${frame}:${nowMs}`,
+            label: `Register ${changedItems.length} bone keyframes at frame ${frame}`,
             scope: "keyframe",
             createdAtMs: nowMs,
             diff: {
@@ -9547,13 +9664,14 @@ export class UIController {
         this.refreshSelectedTrackRotationOverlay();
         this.updateTimelineEditState();
         this.updateSectionKeyframeButtons();
-        this.showToast(`Frame ${frame}: ${items.length} bone keyframes registered`, "success");
+        this.showToast(`Frame ${frame}: ${changedItems.length} bone keyframes registered`, "success");
     }
 
     private tryRegisterEditorCameraKeyframe(
         track: KeyframeTrack,
         poseSnapshot: SelectedBonePoseSnapshot | null,
         externalParentOverride?: CameraExternalParentKeyframePayload,
+        source: ActionSource = "button",
     ): boolean {
         if (track.category !== "camera") {
             return false;
@@ -9567,6 +9685,13 @@ export class UIController {
             interpolationSnapshot,
             externalParentOverride,
         );
+        const decision = this.getKeyframeRegistrationDecision(before, after, source, `Frame ${frame} のカメラキー`);
+        if (decision !== "proceed") {
+            if (decision === "unchanged" && source !== "system") {
+                this.showToast(`Frame ${frame}: camera keyframe unchanged`, "info");
+            }
+            return true;
+        }
         const nowMs = Date.now();
         const command: BuiltCommand = {
             id: `keyframe.camera:${createCommandTrackKey(track)}:${frame}:${nowMs}`,
@@ -9680,6 +9805,7 @@ export class UIController {
     private tryRegisterEditorBoneKeyframe(
         track: KeyframeTrack,
         poseSnapshot: SelectedBonePoseSnapshot | null,
+        source: ActionSource = "button",
     ): boolean {
         if (!poseSnapshot || !this.isBoneTrackForEditor(track) || track.name === "Camera") {
             return false;
@@ -9689,6 +9815,13 @@ export class UIController {
         const interpolationSnapshot = this.captureInterpolationCurveSnapshot(track, frame);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.createBoneKeyframePayload(track, poseSnapshot, interpolationSnapshot, this.physicsKeyframeInputMode);
+        const decision = this.getKeyframeRegistrationDecision(before, after, source, `Frame ${frame} の${track.name}キー`);
+        if (decision !== "proceed") {
+            if (decision === "unchanged" && source !== "system") {
+                this.showToast(`Frame ${frame}: ${track.name} keyframe unchanged`, "info");
+            }
+            return true;
+        }
         const command = this.createKeyframePasteCommand(
             track,
             frame,
@@ -9770,16 +9903,23 @@ export class UIController {
         });
 
         if (items.length > 0) {
+            const changedItems = items.filter((item) => !item.before || !this.areKeyframePayloadsEqual(item.before, item.after));
+            if (changedItems.length === 0) {
+                this.showToast(`Frame ${frame}: morph keyframes unchanged`, "info");
+                return;
+            }
+            if (changedItems.some((item) => item.before)
+                && !window.confirm(`Frame ${frame} の${changedItems.length}件のモーフキーを上書きしますか？`)) return;
             const nowMs = Date.now();
             const command: BuiltCommand = {
-                id: `keyframe.morphBatch:${items.length}:${frame}:${nowMs}`,
-                label: `Register ${items.length} morph keyframes at frame ${frame}`,
+                id: `keyframe.morphBatch:${changedItems.length}:${frame}:${nowMs}`,
+                label: `Register ${changedItems.length} morph keyframes at frame ${frame}`,
                 scope: "keyframe",
                 createdAtMs: nowMs,
                 diff: {
                     type: "keyframe.batchPaste",
                     pasteBaseFrame: frame,
-                    items,
+                    items: changedItems,
                 },
             };
             const registered = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
@@ -9795,7 +9935,7 @@ export class UIController {
             this.clearRegisteredKeySelection();
             this.updateTimelineEditState();
             this.showToast(
-                items.some((item) => item.before)
+                changedItems.some((item) => item.before)
                     ? `Frame ${frame}: morph keyframes updated`
                     : `Frame ${frame}: morph keyframes added`,
                 "success",
@@ -9810,11 +9950,17 @@ export class UIController {
         const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
         const track = { name: morph.name, category: "morph" as const };
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
+        const after = this.createMorphKeyframePayload(morph);
+        if (before && this.areKeyframePayloadsEqual(before, after)) {
+            if (options.toast) this.showToast(`Frame ${frame}: ${morph.name} morph keyframe unchanged`, "info");
+            return;
+        }
+        if (before && options.toast && !window.confirm(`Frame ${frame} の${morph.name}モーフキーを上書きしますか？`)) return;
         const command = this.createKeyframePasteCommand(
             track,
             frame,
             before,
-            this.createMorphKeyframePayload(morph),
+            after,
             `Register ${morph.name} morph keyframe at frame ${frame}`,
         );
         const registered = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
@@ -10628,6 +10774,8 @@ export class UIController {
                 return track.category === "gravity";
             case "morph":
                 return track.category === "morph";
+            case "property":
+                return track.category === "property";
             case "bone":
             case "movableBone":
                 return track.category === "root" || track.category === "semi-standard" || track.category === "bone";
@@ -10675,6 +10823,12 @@ export class UIController {
                     kind: "morph",
                     weights: [...payload.weights],
                 };
+            case "property":
+                return {
+                    kind: "property",
+                    visible: payload.visible,
+                    ikStates: payload.ikStates.map((state) => ({ ...state })),
+                };
             case "light":
                 return {
                     kind: "light",
@@ -10696,6 +10850,25 @@ export class UIController {
                     direction: { ...payload.direction },
                 };
         }
+    }
+
+    private areKeyframePayloadsEqual(
+        left: TimelineKeyframePayload | null,
+        right: TimelineKeyframePayload | null,
+    ): boolean {
+        if (left === null || right === null) return left === right;
+        return JSON.stringify(left) === JSON.stringify(right);
+    }
+
+    private getKeyframeRegistrationDecision(
+        before: TimelineKeyframePayload | null,
+        after: TimelineKeyframePayload,
+        source: ActionSource,
+        label: string,
+    ): "proceed" | "unchanged" | "cancel" {
+        if (before && this.areKeyframePayloadsEqual(before, after)) return "unchanged";
+        if (before && source !== "system" && !window.confirm(`${label}を上書きしますか？`)) return "cancel";
+        return "proceed";
     }
 
     private getSelectedKeyframePayloads(): {
@@ -11163,6 +11336,58 @@ export class UIController {
         this.btnPause.style.display = "none";
         this.setStatus("Stopped", false);
         this.refreshViewportBottomBar();
+    }
+
+    private editFrameColumn(mode: "insert" | "delete"): void {
+        const selectedColumns = this.timeline.getHeaderSelection().frames;
+        const anchorFrame = selectedColumns[0] ?? Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        const before = this.timeline.getKeyframeTracks().flatMap((timelineTrack) => {
+            const track = { category: timelineTrack.category, name: timelineTrack.name };
+            return Array.from(timelineTrack.frames).flatMap((frame) => {
+                if (frame < anchorFrame) return [];
+                const payload = this.mmdManager.readTimelineKeyframePayload(track, frame);
+                return payload ? [{ track, frame, payload: this.cloneKeyframePayload(payload) }] : [];
+            });
+        });
+        if (before.length === 0) {
+            this.showToast(`Frame ${anchorFrame} 以降に移動するキーがありません`, "info");
+            return;
+        }
+
+        const after = before.flatMap((item) => {
+            if (mode === "delete" && item.frame === anchorFrame) return [];
+            return [{
+                track: item.track,
+                frame: item.frame + (mode === "insert" ? 1 : -1),
+                payload: this.cloneKeyframePayload(item.payload),
+            }];
+        });
+        const nowMs = Date.now();
+        const command: BuiltCommand = {
+            id: `keyframe.frameColumn:${mode}:${anchorFrame}:${nowMs}`,
+            label: `${mode === "insert" ? "Insert empty" : "Delete"} frame column ${anchorFrame}`,
+            scope: "keyframe",
+            createdAtMs: nowMs,
+            diff: {
+                type: "keyframe.frameColumnEdit",
+                mode,
+                anchorFrame,
+                before,
+                after,
+            },
+        };
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) {
+            this.showToast(`Frame ${anchorFrame}: フレーム列操作に失敗しました`, "error");
+            return;
+        }
+        this.commandHistory.push(command);
+        this.updateTimelineEditState();
+        this.showToast(
+            mode === "insert"
+                ? `Frame ${anchorFrame}: 空フレームを挿入しました`
+                : `Frame ${anchorFrame}: フレーム列を削除しました`,
+            "success",
+        );
     }
 
     private updateScenePlaybackControlLocks(): void {

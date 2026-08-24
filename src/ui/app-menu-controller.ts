@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 import type { MmdManager } from "../mmd-manager";
-import type { EditorAction } from "../actions/types";
+import type { AutoKeyScope, EditorAction } from "../actions/types";
 import { BackgroundSettingsDialogController } from "./background-settings-dialog-controller";
 import { ContactShadowSettingsDialogController } from "./contact-shadow-settings-dialog-controller";
 import { EdgeSettingsDialogController } from "./edge-settings-dialog-controller";
@@ -43,6 +43,7 @@ type AppMenuControllerDeps = {
     createExportSettingsAdapter: () => WebmExportSettingsAdapter;
     isUiVisible: () => boolean;
     getUiScalePercentage: () => UiScalePercentage;
+    getAutoKeyScope: () => AutoKeyScope;
     countTimelineKeysByCategories: (categories: readonly TrackCategory[]) => number;
     previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
     previewBodyMotionCorrection: (sourceModelIndex: number) => ModelBodyMotionCorrectionPreview;
@@ -84,6 +85,7 @@ export class AppMenuController {
     private readonly createExportSettingsAdapter: () => WebmExportSettingsAdapter;
     private readonly isUiVisible: () => boolean;
     private readonly getUiScalePercentage: () => UiScalePercentage;
+    private readonly getAutoKeyScope: () => AutoKeyScope;
     private readonly countTimelineKeysByCategories: (categories: readonly TrackCategory[]) => number;
     private readonly previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
     private readonly previewBodyMotionCorrection: (sourceModelIndex: number) => ModelBodyMotionCorrectionPreview;
@@ -105,6 +107,7 @@ export class AppMenuController {
         this.createExportSettingsAdapter = deps.createExportSettingsAdapter;
         this.isUiVisible = deps.isUiVisible;
         this.getUiScalePercentage = deps.getUiScalePercentage;
+        this.getAutoKeyScope = deps.getAutoKeyScope;
         this.countTimelineKeysByCategories = deps.countTimelineKeysByCategories;
         this.previewKeyframeCorrection = deps.previewKeyframeCorrection;
         this.previewBodyMotionCorrection = deps.previewBodyMotionCorrection;
@@ -283,6 +286,14 @@ export class AppMenuController {
         }
 
         switch (command) {
+            case "edit.autoKeyScope.all":
+            case "edit.autoKeyScope.bone":
+            case "edit.autoKeyScope.morph":
+            case "edit.autoKeyScope.camera":
+                return {
+                    checked: command.endsWith(this.getAutoKeyScope()),
+                    disabled: false,
+                };
             case "window.toggleUi":
                 return { checked: this.isUiVisible(), disabled: false };
             case "view.toggleGround":
@@ -427,6 +438,22 @@ export class AppMenuController {
                 return;
             case "edit.deleteKeyframe":
                 this.dispatchAction({ type: "keyframe.deleteSelected", source: "menu" });
+                return;
+            case "edit.insertEmptyFrame":
+                this.dispatchAction({ type: "keyframe.insertEmptyFrame", source: "menu" });
+                return;
+            case "edit.deleteFrameColumn":
+                this.dispatchAction({ type: "keyframe.deleteFrameColumn", source: "menu" });
+                return;
+            case "edit.autoKeyScope.all":
+            case "edit.autoKeyScope.bone":
+            case "edit.autoKeyScope.morph":
+            case "edit.autoKeyScope.camera":
+                this.dispatchAction({
+                    type: "keyframe.setAutoKeyScope",
+                    source: "menu",
+                    scope: command.slice("edit.autoKeyScope.".length) as AutoKeyScope,
+                });
                 return;
             case "edit.prevKeyframe":
                 this.dispatchAction({ type: "playback.seekAdjacentKeyframe", source: "menu", direction: -1 });

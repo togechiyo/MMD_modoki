@@ -345,6 +345,12 @@ async function initializeApp(): Promise<void> {
             headerSelection: timeline.getHeaderSelection(),
           };
         },
+        getTimelineTracks: () => timeline.getKeyframeTracks().map((track) => ({
+          category: track.category,
+          name: track.name,
+          frames: Array.from(track.frames),
+        })),
+        getCommandHistoryState: () => uiController.getCommandHistoryStateForE2e(),
         nudgeTimelineSelection: (deltaFrames) => uiController.nudgeTimelineSelectionForE2e(deltaFrames),
         getShadowRuntimeDiagnostics: () => ({
           ...mmdManager.getShadowRuntimeDiagnostics(),

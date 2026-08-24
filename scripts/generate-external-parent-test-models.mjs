@@ -22,6 +22,7 @@ const BONE_FLAGS = {
     movable: 0x0004,
     visible: 0x0008,
     controllable: 0x0010,
+    ik: 0x0020,
 };
 
 class PmxWriter {
@@ -288,11 +289,12 @@ function createDynamicFollowerModel() {
 
 function createBodyCorrectionModel(scale, label) {
     const base = createTofuModel();
-    const bone = (name, englishName, parentBoneIndex, position) => ({
+    const bone = (name, englishName, parentBoneIndex, position, options = {}) => ({
         name,
         englishName,
         parentBoneIndex,
         position: position.map((value) => value * scale),
+        ...options,
     });
     return {
         ...base,
@@ -304,11 +306,15 @@ function createBodyCorrectionModel(scale, label) {
             bone("左足", "Left Leg", 0, [2, 10, 0]),
             bone("左ひざ", "Left Knee", 1, [2, 5, 0]),
             bone("左足首", "Left Ankle", 2, [2, 0, 0]),
-            bone("左足ＩＫ", "Left Leg IK", 0, [2, 0, 0]),
+            bone("左足ＩＫ", "Left Leg IK", 0, [2, 0, 0], {
+                ik: { targetBoneIndex: 3, linkBoneIndices: [2, 1] },
+            }),
             bone("右足", "Right Leg", 0, [-2, 10, 0]),
             bone("右ひざ", "Right Knee", 5, [-2, 5, 0]),
             bone("右足首", "Right Ankle", 6, [-2, 0, 0]),
-            bone("右足ＩＫ", "Right Leg IK", 0, [-2, 0, 0]),
+            bone("右足ＩＫ", "Right Leg IK", 0, [-2, 0, 0], {
+                ik: { targetBoneIndex: 7, linkBoneIndices: [6, 5] },
+            }),
             bone("左腕", "Left Arm", 0, [3, 15, 0]),
             bone("左ひじ", "Left Elbow", 9, [7, 15, 0]),
             bone("左手首", "Left Wrist", 10, [10, 15, 0]),
@@ -390,8 +396,23 @@ function writePmx(model) {
         writer.vector(bone.position ?? [0, 0, 0]);
         writer.int8(bone.parentBoneIndex);
         writer.int32(0);
-        writer.uint16(BONE_FLAGS.rotatable | BONE_FLAGS.movable | BONE_FLAGS.visible | BONE_FLAGS.controllable);
+        const boneFlags = BONE_FLAGS.rotatable
+            | BONE_FLAGS.movable
+            | BONE_FLAGS.visible
+            | BONE_FLAGS.controllable
+            | (bone.ik ? BONE_FLAGS.ik : 0);
+        writer.uint16(boneFlags);
         writer.vector([0, 1, 0]);
+        if (bone.ik) {
+            writer.int8(bone.ik.targetBoneIndex);
+            writer.int32(40);
+            writer.float32(4 * Math.PI / 180);
+            writer.int32(bone.ik.linkBoneIndices.length);
+            for (const linkBoneIndex of bone.ik.linkBoneIndices) {
+                writer.int8(linkBoneIndex);
+                writer.uint8(0);
+            }
+        }
     }
 
     writer.int32(0); // morphs

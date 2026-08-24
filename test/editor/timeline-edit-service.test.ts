@@ -10,9 +10,12 @@ import {
 
 import {
     applyTimelineKeyframePayload,
+    captureCurrentPropertyKeyframePayload,
     ensureModelAnimationForEditing,
+    evaluatePropertyTrackAtFrame,
     getActiveModelTimelineTracks,
     getCameraTimelineTracks,
+    readTimelineKeyframePayload,
     removeTimelineKeyframePayloads,
 } from "../../src/editor/timeline-edit-service";
 import type { KeyframeTrack, ModelInfo } from "../../src/types";
@@ -99,6 +102,62 @@ function createHost(modelInfo: ModelInfo): { host: TestHost; model: TestModel } 
 }
 
 describe("timeline edit service model animation tracks", () => {
+    it("exposes Property keys and evaluates visibility/IK as held step values", () => {
+        const { host, model } = createHost(createModelInfo([]));
+        const animation = createAnimation();
+        const propertyTrack = new MmdPropertyAnimationTrack(2, ["左足ＩＫ"]);
+        propertyTrack.frameNumbers.set([5, 20]);
+        propertyTrack.visibles.set([1, 0]);
+        propertyTrack.getIkState(0).set([1, 0]);
+        (animation as unknown as { propertyTrack: MmdPropertyAnimationTrack }).propertyTrack = propertyTrack;
+        host.modelSourceAnimationsByModel.set(model, animation);
+
+        const propertyRow = getActiveModelTimelineTracks(host)[0];
+        expect(propertyRow).toMatchObject({ name: "Property", category: "property" });
+        expect(Array.from(propertyRow.frames)).toEqual([5, 20]);
+        expect(evaluatePropertyTrackAtFrame(propertyTrack, 0)).toEqual({
+            kind: "property",
+            visible: true,
+            ikStates: [{ boneName: "左足ＩＫ", enabled: true }],
+        });
+        expect(evaluatePropertyTrackAtFrame(propertyTrack, 19)?.visible).toBe(true);
+        expect(evaluatePropertyTrackAtFrame(propertyTrack, 20)).toEqual({
+            kind: "property",
+            visible: false,
+            ikStates: [{ boneName: "左足ＩＫ", enabled: false }],
+        });
+    });
+
+    it("captures current Property state and supports payload add/read/delete", () => {
+        const { host, model } = createHost(createModelInfo([]));
+        const animation = createAnimation();
+        host.modelSourceAnimationsByModel.set(model, animation);
+        const editableHost = Object.assign(host, {
+            getActiveModelVisibility: () => false,
+            getActiveModelIkStates: () => [
+                { boneName: "左足ＩＫ", enabled: true },
+                { boneName: "右足ＩＫ", enabled: false },
+            ],
+        });
+        const track = { name: "Property", category: "property" as const };
+        const payload = captureCurrentPropertyKeyframePayload(editableHost, 12);
+
+        expect(payload).toEqual({
+            kind: "property",
+            visible: false,
+            ikStates: [
+                { boneName: "左足ＩＫ", enabled: true },
+                { boneName: "右足ＩＫ", enabled: false },
+            ],
+        });
+        expect(payload && applyTimelineKeyframePayload(editableHost, track, 12, payload)).toBe(true);
+        expect(readTimelineKeyframePayload(editableHost, track, 12)).toEqual(payload);
+        expect(applyTimelineKeyframePayload(editableHost, track, 12, null)).toBe(true);
+        expect(Array.from(animation.propertyTrack.frameNumbers)).toEqual([]);
+        expect(Array.from(animation.propertyTrack.visibles)).toEqual([]);
+        expect(Array.from(animation.propertyTrack.getIkState(0))).toEqual([]);
+    });
+
     it("exposes and routes the shadow and gravity scene tracks", () => {
         const { host } = createHost(createModelInfo([]));
         const applyLightSceneKeyframePayload = vi.fn(() => true);
@@ -304,7 +363,7 @@ describe("timeline edit service model animation tracks", () => {
             ["bone\u001fスカート_0_0", new Uint32Array([12])],
         ]));
 
-        expect(getActiveModelTimelineTracks(host).map((track) => track.name)).toEqual(["センター"]);
+        expect(getActiveModelTimelineTracks(host).map((track) => track.name)).toEqual(["Property", "センター"]);
 
         host.showPhysicsBonesInTimeline = true;
         const tracks = getActiveModelTimelineTracks(host);
@@ -323,6 +382,7 @@ describe("timeline edit service model animation tracks", () => {
         const { host } = createHost(modelInfo);
 
         expect(getActiveModelTimelineTracks(host).map((track) => track.name)).toEqual([
+            "Property",
             modelInfo.boneNames[0],
             visiblePhysicsBoneName,
         ]);

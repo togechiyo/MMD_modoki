@@ -52,6 +52,8 @@ export function executeCommand(
             return executeKeyframeBatchPaste(command.diff, direction, context);
         case "keyframe.batchCorrect":
             return executeKeyframeBatchCorrect(command.diff, direction, context);
+        case "keyframe.frameColumnEdit":
+            return executeKeyframeFrameColumnEdit(command.diff, direction, context);
         case "edit.boneTransform":
             return executeBoneTransform(command.diff, direction, context);
         case "edit.cameraTransform":
@@ -193,6 +195,45 @@ function executeKeyframeBatchPaste(
     context.seekToBoundary(diff.pasteBaseFrame);
     context.refreshAfterKeyframeEdit();
     return true;
+}
+
+function executeKeyframeFrameColumnEdit(
+    diff: Extract<KeyframeCommandDiff, { type: "keyframe.frameColumnEdit" }>,
+    direction: CommandDirection,
+    context: CommandExecutionContext,
+): boolean {
+    if (!context.applyTimelineKeyframePayload || !context.removeTimelineKeyframePayloads) return false;
+    const removeItems = direction === "apply" ? diff.before : diff.after;
+    const restoreItems = direction === "apply" ? diff.after : diff.before;
+    context.beginTimelineEditBatch?.();
+    try {
+        for (const group of groupPayloadItemsByTrack(removeItems)) {
+            if (!context.removeTimelineKeyframePayloads(group.track, group.frames)) return false;
+        }
+        for (const item of restoreItems) {
+            if (!applyKeyframePayload(context, item.track, item.frame, item.payload)) return false;
+        }
+    } finally {
+        context.endTimelineEditBatch?.();
+    }
+    context.setSelectedFrame(null);
+    context.setSelectedKeys?.([]);
+    context.seekToBoundary(diff.anchorFrame);
+    context.refreshAfterKeyframeEdit();
+    return true;
+}
+
+function groupPayloadItemsByTrack(
+    items: readonly { track: CommandTrackRef; frame: number }[],
+): { track: CommandTrackRef; frames: number[] }[] {
+    const groups = new Map<string, { track: CommandTrackRef; frames: number[] }>();
+    for (const item of items) {
+        const key = `${item.track.category}\u001f${item.track.name}`;
+        const group = groups.get(key) ?? { track: item.track, frames: [] };
+        group.frames.push(item.frame);
+        groups.set(key, group);
+    }
+    return [...groups.values()];
 }
 
 function executeKeyframeBatchCorrect(

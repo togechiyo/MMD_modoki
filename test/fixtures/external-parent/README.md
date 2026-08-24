@@ -12,6 +12,7 @@
 - 材質は本体と正面マーカーの2個
 - `plate.pmx`と`tofu.pmx`のボーンは移動・回転可能な`センター`1本で、剛体とジョイントはなし
 - `dynamic-follower.pmx`は3ボーン、2剛体、1ジョイント
+- `body-source.pmx` / `body-target.pmx` は左右の足IKを含む体格差・Propertyキー確認用モデル
 - モーフとテクスチャはなし
 - 文字列エンコードはUTF-16LE
 

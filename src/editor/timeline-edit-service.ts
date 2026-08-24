@@ -106,6 +106,7 @@ type TimelineEditHost = {
     onFrameUpdate?: (currentFrame: number, totalFrames: number) => void;
     onKeyframesLoaded?: (tracks: KeyframeTrack[]) => void;
     getActiveModelVisibility?: () => boolean;
+    getActiveModelIkStates?: () => readonly { boneName: string; enabled: boolean }[];
     readCameraExternalParentKeyframe?: (frame: number) => CameraExternalParentKeyframePayload | null;
     upsertCameraExternalParentKeyframe?: (frame: number, payload: CameraExternalParentKeyframePayload) => boolean;
     removeCameraExternalParentKeyframes?: (frames: readonly number[]) => boolean;
@@ -157,6 +158,12 @@ export type MorphKeyframePayload = {
     weights: number[];
 };
 
+export type PropertyKeyframePayload = {
+    kind: "property";
+    visible: boolean;
+    ikStates: { boneName: string; enabled: boolean }[];
+};
+
 export type CameraKeyframePayload = {
     kind: "camera";
     positions: number[];
@@ -200,6 +207,7 @@ export type TimelineKeyframePayload =
     | BoneKeyframePayload
     | MovableBoneKeyframePayload
     | MorphKeyframePayload
+    | PropertyKeyframePayload
     | CameraKeyframePayload
     | LightKeyframePayload
     | ShadowKeyframePayload
@@ -563,6 +571,11 @@ export function getActiveModelTimelineTracks(host: TimelineEditHost): KeyframeTr
 
     const frameMap = getOrCreateModelTrackFrameMap(host, host.currentModel);
     const trackMap = new Map<string, KeyframeTrack>();
+    trackMap.set(createTrackKey("property", "Property"), {
+        name: "Property",
+        category: "property",
+        frames: animation?.propertyTrack.frameNumbers ?? EMPTY_KEYFRAME_FRAMES,
+    });
 
     for (const [key, frames] of frameMap.entries()) {
         const parsed = parseTrackKey(key);
@@ -652,6 +665,8 @@ export function getActiveModelTimelineTracks(host: TimelineEditHost): KeyframeTr
         ordered.push(track);
         consumed.add(key);
     };
+
+    appendByKey(createTrackKey("property", "Property"));
 
     // Keep the timeline row order aligned with the bone selection list.
     // Category is still preserved in the track key, but row ordering follows
@@ -775,6 +790,10 @@ export function hasTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyframe
         return hasFrameNumber(host.getGravitySceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES, normalized);
     }
 
+    if (track.category === "property") {
+        return hasInfoKeyframe(host, normalized);
+    }
+
     if (!host.currentModel) return false;
     const frameMap = getOrCreateModelTrackFrameMap(host, host.currentModel);
     const key = createTrackKey(track.category, track.name);
@@ -814,6 +833,10 @@ export function addTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyframe
     if (track.category === "gravity") {
         const payload = host.captureCurrentGravityKeyframePayload?.();
         return payload ? (host.applyGravitySceneKeyframePayload?.(normalized, payload) ?? false) : false;
+    }
+
+    if (track.category === "property") {
+        return addInfoKeyframe(host, normalized);
     }
 
     if (!host.currentModel) return false;
@@ -902,7 +925,44 @@ function readUint8Block(
     return block;
 }
 
-export function addInfoKeyframe(host: TimelineEditHost, frame: number): boolean {
+export function captureCurrentPropertyKeyframePayload(
+    host: TimelineEditHost,
+    frame: number,
+): PropertyKeyframePayload | null {
+    const animation = getCurrentModelAnimation(host);
+    if (!animation) return null;
+
+    const normalizedFrame = Math.max(0, Math.floor(frame));
+    const propertyTrack = animation.propertyTrack as RuntimePropertyTrackLike;
+    const referenceIndex = resolveInsertReferenceIndex(propertyTrack.frameNumbers, normalizedFrame);
+    const runtimeStates = new Map(
+        (host.getActiveModelIkStates?.() ?? []).map((state) => [state.boneName, state.enabled] as const),
+    );
+    const ikBoneNames = [...propertyTrack.ikBoneNames];
+    for (const boneName of runtimeStates.keys()) {
+        if (!ikBoneNames.includes(boneName)) ikBoneNames.push(boneName);
+    }
+
+    return {
+        kind: "property",
+        visible: host.getActiveModelVisibility?.() ?? true,
+        ikStates: ikBoneNames.map((boneName) => {
+            const runtimeValue = runtimeStates.get(boneName);
+            if (runtimeValue !== undefined) return { boneName, enabled: runtimeValue };
+            const ikIndex = propertyTrack.ikBoneNames.indexOf(boneName);
+            const heldValue = ikIndex >= 0
+                ? readUint8Block(propertyTrack.getIkState(ikIndex), referenceIndex, 1, [1])[0]
+                : 1;
+            return { boneName, enabled: heldValue !== 0 };
+        }),
+    };
+}
+
+function applyPropertyKeyframePayload(
+    host: TimelineEditHost,
+    frame: number,
+    payload: PropertyKeyframePayload,
+): boolean {
     const animation = getCurrentModelAnimation(host);
     if (!animation) return false;
 
@@ -911,11 +971,15 @@ export function addInfoKeyframe(host: TimelineEditHost, frame: number): boolean 
     const insertIndex = findInsertIndex(propertyTrack.frameNumbers, normalizedFrame);
     const exists = insertIndex < propertyTrack.frameNumbers.length && (propertyTrack.frameNumbers[insertIndex] ?? 0) === normalizedFrame;
     const referenceIndex = resolveInsertReferenceIndex(propertyTrack.frameNumbers, normalizedFrame);
-    const visibleValue = host.getActiveModelVisibility?.() ? 1 : 0;
+    const ikStateByName = new Map(payload.ikStates.map((state) => [state.boneName, state.enabled] as const));
+    const ikBoneNames = [...propertyTrack.ikBoneNames];
+    for (const boneName of ikStateByName.keys()) {
+        if (!ikBoneNames.includes(boneName)) ikBoneNames.push(boneName);
+    }
 
     const nextTrack = new MmdPropertyAnimationTrack(
         propertyTrack.frameNumbers.length + (exists ? 0 : 1),
-        propertyTrack.ikBoneNames,
+        ikBoneNames,
     );
     const nextFrameNumbers = exists
         ? new Uint32Array(propertyTrack.frameNumbers)
@@ -930,18 +994,55 @@ export function addInfoKeyframe(host: TimelineEditHost, frame: number): boolean 
         })();
 
     nextTrack.frameNumbers.set(nextFrameNumbers);
-    nextTrack.visibles.set(upsertUint8Values(propertyTrack.visibles, 1, insertIndex, exists, [visibleValue]));
+    nextTrack.visibles.set(upsertUint8Values(propertyTrack.visibles, 1, insertIndex, exists, [payload.visible ? 1 : 0]));
 
-    for (let i = 0; i < propertyTrack.ikBoneNames.length; i += 1) {
-        const currentIkState = propertyTrack.getIkState(i);
-        const fallback = readUint8Block(currentIkState, referenceIndex, 1, [0]);
-        nextTrack.getIkState(i).set(upsertUint8Values(currentIkState, 1, insertIndex, exists, fallback));
+    for (let i = 0; i < ikBoneNames.length; i += 1) {
+        const boneName = ikBoneNames[i];
+        const currentIndex = propertyTrack.ikBoneNames.indexOf(boneName);
+        const currentIkState = currentIndex >= 0
+            ? propertyTrack.getIkState(currentIndex)
+            : new Uint8Array(propertyTrack.frameNumbers.length).fill(1);
+        const heldValue = readUint8Block(currentIkState, referenceIndex, 1, [1])[0] !== 0;
+        const nextValue = ikStateByName.get(boneName) ?? heldValue;
+        nextTrack.getIkState(i).set(upsertUint8Values(
+            currentIkState,
+            1,
+            insertIndex,
+            exists,
+            [nextValue ? 1 : 0],
+        ));
     }
 
     (animation as unknown as { propertyTrack: MmdPropertyAnimationTrack }).propertyTrack = nextTrack;
     refreshAnimationFrameRange(animation);
     emitMergedKeyframeTracks(host);
     return true;
+}
+
+export function addInfoKeyframe(host: TimelineEditHost, frame: number): boolean {
+    const payload = captureCurrentPropertyKeyframePayload(host, frame);
+    return payload ? applyPropertyKeyframePayload(host, frame, payload) : false;
+}
+
+export function evaluatePropertyTrackAtFrame(
+    track: RuntimePropertyTrackLike,
+    frame: number,
+): PropertyKeyframePayload | null {
+    if (track.frameNumbers.length === 0) return null;
+    const normalizedFrame = Math.max(0, Math.floor(frame));
+    const clampedFrame = Math.max(
+        track.frameNumbers[0] ?? normalizedFrame,
+        Math.min(track.frameNumbers[track.frameNumbers.length - 1] ?? normalizedFrame, normalizedFrame),
+    );
+    const frameIndex = Math.max(0, resolveInsertReferenceIndex(track.frameNumbers, clampedFrame));
+    return {
+        kind: "property",
+        visible: (track.visibles[frameIndex] ?? 0) !== 0,
+        ikStates: track.ikBoneNames.map((boneName, ikIndex) => ({
+            boneName,
+            enabled: (track.getIkState(ikIndex)[frameIndex] ?? 0) !== 0,
+        })),
+    };
 }
 
 export function ensureCameraAnimationForEditing(host: TimelineEditHost): boolean {
@@ -971,6 +1072,8 @@ export function ensureModelAnimationForEditing(host: TimelineEditHost, track: Pi
         movableBoneTracks: MmdMovableBoneAnimationTrack[];
         morphTracks: MmdMorphAnimationTrack[];
     };
+
+    if (track.category === "property") return true;
 
     if (track.category === "morph") {
         if (!animationMutable.morphTracks.some((candidate) => candidate.name === track.name)) {
@@ -1012,7 +1115,7 @@ function createBoneTrackFromMovableTrack(track: MmdMovableBoneAnimationTrack): M
 }
 
 function shouldUseMovableBoneTrack(host: TimelineEditHost, track: Pick<KeyframeTrack, "name" | "category">): boolean {
-    if (track.category === "camera" || track.category === "light" || track.category === "shadow" || track.category === "gravity" || track.category === "morph") return false;
+    if (track.category === "camera" || track.category === "light" || track.category === "shadow" || track.category === "gravity" || track.category === "property" || track.category === "morph") return false;
     const boneControl = host.activeModelInfo?.boneControlInfos?.find((candidate) => candidate.name === track.name);
     if (boneControl) return boneControl.movable;
     return track.category === "root";
@@ -1040,6 +1143,10 @@ export function removeTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyfr
 
     if (track.category === "gravity") {
         return host.applyGravitySceneKeyframePayload?.(normalized, null) ?? false;
+    }
+
+    if (track.category === "property") {
+        return removeTimelineKeyframePayloads(host, track, [normalized]);
     }
 
     if (!host.currentModel) return false;
@@ -1140,6 +1247,19 @@ export function readTimelineKeyframePayload(
     const animation = getCurrentModelAnimation(host);
     if (!animation) return null;
 
+    if (track.category === "property") {
+        const frameIndex = findFrameIndex(animation.propertyTrack.frameNumbers, normalized);
+        if (frameIndex < 0) return null;
+        return {
+            kind: "property",
+            visible: (animation.propertyTrack.visibles[frameIndex] ?? 0) !== 0,
+            ikStates: animation.propertyTrack.ikBoneNames.map((boneName, ikIndex) => ({
+                boneName,
+                enabled: (animation.propertyTrack.getIkState(ikIndex)[frameIndex] ?? 0) !== 0,
+            })),
+        };
+    }
+
     if (track.category === "morph") {
         const morphTrack = animation.morphTracks.find((candidate) => candidate.name === track.name);
         if (!morphTrack) return null;
@@ -1199,6 +1319,7 @@ export function readTimelineKeyframePayload(
             ? { externalParent: host.readModelExternalParentKeyframe(normalized, track.name) ?? undefined }
             : {}),
     };
+
 }
 
 export function applyTimelineKeyframePayload(
@@ -1217,6 +1338,8 @@ export function applyTimelineKeyframePayload(
             return applyCameraKeyframePayload(host, normalized, payload);
         case "morph":
             return applyMorphKeyframePayload(host, track, normalized, payload);
+        case "property":
+            return applyPropertyKeyframePayload(host, normalized, payload);
         case "movableBone":
             return applyMovableBoneKeyframePayload(host, track, normalized, payload);
         case "bone":
@@ -1273,6 +1396,23 @@ export function removeTimelineKeyframePayloads(
 
     const animation = getCurrentModelAnimation(host);
     if (!animation || !host.currentModel) return false;
+
+    if (track.category === "property") {
+        const propertyTrack = animation.propertyTrack as RuntimePropertyTrackLike;
+        const frameEdit = removeFrameNumbersForPayloads(propertyTrack.frameNumbers, normalizedFrames);
+        if (!frameEdit) return false;
+        const nextTrack = new MmdPropertyAnimationTrack(frameEdit.frames.length, propertyTrack.ikBoneNames);
+        nextTrack.frameNumbers.set(frameEdit.frames);
+        nextTrack.visibles.set(removeUint8ValuesByIndexes(propertyTrack.visibles, 1, frameEdit.removedIndexes));
+        for (let ikIndex = 0; ikIndex < propertyTrack.ikBoneNames.length; ikIndex += 1) {
+            const current = propertyTrack.getIkState(ikIndex);
+            nextTrack.getIkState(ikIndex).set(removeUint8ValuesByIndexes(current, 1, frameEdit.removedIndexes));
+        }
+        (animation as unknown as { propertyTrack: MmdPropertyAnimationTrack }).propertyTrack = nextTrack;
+        refreshAnimationFrameRange(animation);
+        emitMergedKeyframeTracks(host);
+        return true;
+    }
 
     if (track.category === "morph") {
         const morphTrack = animation.morphTracks.find((candidate) =>
@@ -1492,6 +1632,10 @@ function removeTimelineKeyframePayload(
 
     const animation = getCurrentModelAnimation(host);
     if (!animation || !host.currentModel) return false;
+
+    if (track.category === "property") {
+        return removeTimelineKeyframePayloads(host, track, [normalized]);
+    }
 
     if (track.category === "morph") {
         const sourceMorphTrack = animation.morphTracks.find((candidate) => candidate.name === track.name);

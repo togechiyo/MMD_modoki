@@ -406,6 +406,7 @@ import {
     buildModelTrackFrameMapFromAnimation as buildModelTrackFrameMapFromAnimationImpl,
     addInfoKeyframe as addInfoKeyframeImpl,
     emitMergedKeyframeTracks as emitMergedKeyframeTracksImpl,
+    evaluatePropertyTrackAtFrame,
     endTimelineEditBatch as endTimelineEditBatchImpl,
     createOffsetModelAnimation as createOffsetModelAnimationImpl,
     ensureCameraAnimationForEditing as ensureCameraAnimationForEditingImpl,
@@ -4114,10 +4115,10 @@ ${beforeFogAppendBlock}
 
     public getActiveModelVisibility(): boolean {
         if (!this.currentMesh) return false;
-        if (this.currentMesh.isEnabled() && this.currentMesh.isVisible) return true;
+        if (this.currentMesh.isEnabled() && this.currentMesh.isVisible && this.currentMesh.visibility > 0) return true;
 
         for (const childMesh of this.currentMesh.getChildMeshes()) {
-            if (childMesh.isEnabled() && childMesh.isVisible) {
+            if (childMesh.isEnabled() && childMesh.isVisible && childMesh.visibility > 0) {
                 return true;
             }
         }
@@ -4139,11 +4140,59 @@ ${beforeFogAppendBlock}
     private applySceneMeshVisibility(mesh: MmdMesh, visible: boolean): void {
         mesh.setEnabled(visible);
         mesh.isVisible = visible;
+        mesh.visibility = visible ? 1 : 0;
 
         for (const childMesh of mesh.getChildMeshes()) {
             childMesh.setEnabled(visible);
             childMesh.isVisible = visible;
+            childMesh.visibility = visible ? 1 : 0;
         }
+    }
+
+    private applySceneMeshPropertyVisibility(mesh: MmdMesh, visible: boolean): void {
+        mesh.setEnabled(true);
+        mesh.isVisible = true;
+        mesh.visibility = visible ? 1 : 0;
+        for (const childMesh of mesh.getChildMeshes()) {
+            childMesh.setEnabled(true);
+            childMesh.isVisible = true;
+            childMesh.visibility = visible ? 1 : 0;
+        }
+    }
+
+    public getActiveModelIkStates(): { boneName: string; enabled: boolean }[] {
+        if (!this.currentModel) return [];
+        return this.currentModel.runtimeBones.flatMap((bone) => {
+            const solverIndex = bone.ikSolverIndex;
+            if (solverIndex < 0) return [];
+            return [{
+                boneName: bone.name,
+                enabled: (this.currentModel?.ikSolverStates[solverIndex] ?? 0) !== 0,
+            }];
+        });
+    }
+
+    public setActiveModelIkState(boneName: string, enabled: boolean): boolean {
+        if (!this.currentModel) return false;
+        const bone = this.currentModel.runtimeBones.find((candidate) => candidate.name === boneName);
+        const solverIndex = bone?.ikSolverIndex ?? -1;
+        if (solverIndex < 0) return false;
+        this.currentModel.ikSolverStates[solverIndex] = enabled ? 1 : 0;
+        return true;
+    }
+
+    private applyActiveModelPropertyPreview(frame: number): void {
+        if (!this.currentModel || !this.currentMesh) return;
+        const animation = this.modelSourceAnimationsByModel.get(this.currentModel);
+        if (!animation) return;
+        const property = evaluatePropertyTrackAtFrame(animation.propertyTrack, frame);
+        if (!property) return;
+        this.applySceneMeshPropertyVisibility(this.currentMesh, property.visible);
+        for (const state of property.ikStates) {
+            this.setActiveModelIkState(state.boneName, state.enabled);
+        }
+        this.syncBoneVisualizerVisibility();
+        this.syncRigidBodyVisualizerVisibility();
     }
 
     public toggleActiveModelVisibility(): boolean {
@@ -8907,6 +8956,7 @@ ${beforeFogAppendBlock}
         this.lastEvaluatedGravitySceneFrame = null;
         this.evaluateSceneTracksAtFrame(this._currentFrame);
         this.mmdRuntime.seekAnimation(this._currentFrame, true);
+        this.applyActiveModelPropertyPreview(this._currentFrame);
         this.syncBackgroundVideoFrame(true);
         if (!this.getPhysicsEnabled()) {
             this.applyPhysicsStateToAllModels();
@@ -8951,6 +9001,7 @@ ${beforeFogAppendBlock}
         this._currentFrame = 0;
         this.evaluateSceneTracksAtFrame(0);
         this.mmdRuntime.seekAnimation(0, true);
+        this.applyActiveModelPropertyPreview(0);
         this.syncViewportCameraFromMmdCameraAfterSeek();
         this.applyPhysicsStateToAllModels();
         this.syncBackgroundVideoFrame(true);
@@ -8966,6 +9017,7 @@ ${beforeFogAppendBlock}
         this._currentFrame = targetFrame;
         this.evaluateSceneTracksAtFrame(this._currentFrame);
         this.mmdRuntime.seekAnimation(this._currentFrame, true);
+        this.applyActiveModelPropertyPreview(this._currentFrame);
         this.syncViewportCameraFromMmdCameraAfterSeek();
         if (!this._isPlaying && this.getPhysicsEnabled()) {
             this.applyPhysicsStateToAllModels();
@@ -14491,6 +14543,7 @@ ${beforeFogAppendBlock}
             this._currentFrame = nextFrame;
             this.evaluateSceneTracksAtFrame(this._currentFrame);
             this.mmdRuntime.seekAnimation(this._currentFrame, true);
+            this.applyActiveModelPropertyPreview(this._currentFrame);
             this.syncViewportCameraFromMmdCameraAfterSeek();
         }
         return true;

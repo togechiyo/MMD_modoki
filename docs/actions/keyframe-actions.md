@@ -81,10 +81,43 @@
 - canExecute:
   - 登録対象が存在する。
 - undo:
-  - 対象候補。対象trackのbefore / after差分が必要。
+  - 対象。Property payloadのbefore / after差分を使う。
 - テスト観点:
   - 対象なしで実行されない。
   - 登録後にtimelineへ反映される。
+  - モデル表示と全IK状態を同じキーへ保存する。
+  - 未変更時は履歴へ積まず、異なる既存キーは上書き確認する。
+
+### `keyframe.insertEmptyFrame` / `keyframe.deleteFrameColumn`
+
+- 意図:
+  - 現在位置または列見出し選択位置で、現在timeline targetの時間軸構造を編集する。
+- 入力:
+  - `source`: `menu`
+- 出力:
+  - 挿入は対象フレーム以上の全キーを `+1` する。
+  - 削除は対象列のキーを削除し、後続キーを `-1` する。
+- undo:
+  - 対象。全trackのbefore / after payload snapshotを `keyframe.frameColumnEdit` 1件へまとめる。
+- テスト観点:
+  - 複数trackを同じ規則で移動する。
+  - Undo / Redoでpayloadとフレーム列を完全に復元する。
+  - model / cameraの非アクティブtargetへ波及しない。
+
+### `keyframe.setAutoKeyScope`
+
+- 意図:
+  - Auto Keyの登録対象を `all / bone / morph / camera` から選ぶ。
+- 入力:
+  - `source`: `menu`
+  - `scope`: Auto Key対象
+- 出力:
+  - 選択値をlocalStorageへ保存し、radio表示へ反映する。
+- undo:
+  - 対象外。編集データではなくUI設定として扱う。
+- テスト観点:
+  - radio状態が現在値と一致する。
+  - 対象外カテゴリの編集でAuto Keyを作らない。
 
 ### `keyframe.registerBone`
 

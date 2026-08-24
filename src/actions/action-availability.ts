@@ -64,6 +64,9 @@ export function canExecuteEditorAction(
         case "keyframe.registerGravity":
             return true;
         case "keyframe.toggleAutoKey":
+        case "keyframe.setAutoKeyScope":
+        case "keyframe.insertEmptyFrame":
+        case "keyframe.deleteFrameColumn":
             return true;
         case "history.undo":
             return snapshot.canUndo ?? true;

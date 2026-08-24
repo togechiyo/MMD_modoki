@@ -2,7 +2,7 @@
 
 作成日: 2026-06-15
 
-更新: 2026-08-24 に、読み込み済み PMX の bind pose を比較してセンター系・足IKの position key を補正する最小機能を独自 VMD track 変換として実装した。現行仕様は [PMX 体格差モーション補正 仕様・実装ガイド](./pmx-body-proportion-motion-correction-2026-08-24.md) を参照。
+更新: 2026-08-24 に、読み込み済み PMX 間のposition補正に加え、元PMX・元VMD・適用先PMXを選んでrotation basisと体格差を変換し、別VMDへ保存する独立popup toolを実装した。後半にある「rotationは変更しない」「名前対応だけから始める」は当時の段階案であり、現行仕様ではない。現行仕様と近似の限界は [VMDリターゲット変換ツール 仕様・実装メモ](./vmd-retarget-tool-2026-08-24.md) を参照。
 
 ## 概要
 

@@ -41,6 +41,8 @@ export type ModelBodyMotionCorrectionPreview = {
     changedKeyCount: number;
 };
 
+export type ModelBodyMotionTrackKind = "global" | "leftLegIk" | "rightLegIk";
+
 const MIN_MEASURE = 1e-6;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
@@ -151,21 +153,37 @@ export function createModelBodyCorrectionPlan(
     };
 }
 
-function getTrackScale(trackName: string, plan: ModelBodyCorrectionPlan): number | null {
+export function classifyModelBodyMotionTrack(trackName: string): ModelBodyMotionTrackKind | null {
     const normalized = normalizeBoneName(trackName);
     if (["全ての親", "allparent", "root", "センター", "center", "グルーブ", "groove", "腰", "waist"]
         .some((name) => normalized === normalizeBoneName(name))) {
-        return plan.globalScale;
+        return "global";
     }
     if (["左足ik親", "左足ik", "左つま先ik", "leftlegikparent", "leftlegik", "lefttoeik"]
         .some((name) => normalized === normalizeBoneName(name))) {
-        return plan.leftLegScale;
+        return "leftLegIk";
     }
     if (["右足ik親", "右足ik", "右つま先ik", "rightlegikparent", "rightlegik", "righttoeik"]
         .some((name) => normalized === normalizeBoneName(name))) {
-        return plan.rightLegScale;
+        return "rightLegIk";
     }
     return null;
+}
+
+export function getModelBodyMotionPositionScale(
+    trackName: string,
+    plan: ModelBodyCorrectionPlan,
+): number | null {
+    switch (classifyModelBodyMotionTrack(trackName)) {
+        case "global":
+            return plan.globalScale;
+        case "leftLegIk":
+            return plan.leftLegScale;
+        case "rightLegIk":
+            return plan.rightLegScale;
+        default:
+            return null;
+    }
 }
 
 export function applyModelBodyMotionCorrection(
@@ -174,7 +192,7 @@ export function applyModelBodyMotionCorrection(
     plan: ModelBodyCorrectionPlan,
 ): MovableBoneKeyframePayload | null {
     if (!plan.valid) return null;
-    const scale = getTrackScale(trackName, plan);
+    const scale = getModelBodyMotionPositionScale(trackName, plan);
     if (scale === null || !Number.isFinite(scale)) return null;
     const positions = payload.positions.slice(0, 3).map((value) => value * scale);
     if (!positions.every(Number.isFinite)) return null;

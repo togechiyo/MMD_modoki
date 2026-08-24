@@ -9,7 +9,6 @@ MMD 本体機能より優先度は低いものの、再開時の判断や撤退�
 | observation | [SQLite WASM は観測基盤の隔離実験に限定する](./observations/sqlite-wasm-only-as-isolated-observability-experiment.md) | 検索可能な操作・診断event DBを検討する |
 | observation | [入力デバイス拡張より先にアプリ設定を永続化する](./observations/persist-app-settings-before-custom-input-devices.md) | shortcut、Gamepad、MIDI、自動backupを始める |
 | observation | [VMDU は VMD 出力の後に文字列制約だけを解決する](./observations/vmdu-follows-vmd-export-and-only-fixes-text-encoding.md) | Unicode VMD派生形式を検討する |
-| observation | [MMD retarget は VMD track の名前対応bakeから始める](./observations/retarget-vmd-tracks-before-babylon-animation-groups.md) | bone名差・体格差のmotion変換を始める |
 | verified | [下パネル配置は単数・複数で分類する](./verified/accessory-selection-follows-cardinality.md) | scene対象selectorや固定欄を再整理する |
 
 ## Rendering / materials
@@ -36,3 +35,9 @@ MMD 本体機能より優先度は低いものの、再開時の判断や撤退�
 | --- | --- | --- |
 | observation | [GPU YUV化はjob全体時間で採否を決める](./observations/gate-gpu-yuv-by-end-to-end-export-time.md) | WebMのRGBA→I420実験を再開する |
 | verified | [連番PNGはthroughputとmain分離を優先する](./verified/png-workers-optimize-throughput-before-compression-ratio.md) | PNG worker、filter、4K/8Kを変更する |
+
+## Retired
+
+| Status | Insight | Replaced by |
+| --- | --- | --- |
+| retired | [MMD retargetはVMD trackの名前対応bakeから始める](./retired/retarget-vmd-tracks-before-babylon-animation-groups.md) | `vmd-retarget-is-an-isolated-popup-tool` |

@@ -24,6 +24,7 @@ import {
 } from "../editor/keyframe-value-correction";
 import { KeyframeValueCorrectionDialogController } from "./keyframe-value-correction-dialog-controller";
 import { ModelBodyMotionCorrectionDialogController } from "./model-body-motion-correction-dialog-controller";
+import { VmdRetargetDialogController } from "./vmd-retarget-dialog-controller";
 import type { ModelBodyMotionCorrectionPreview } from "../editor/model-body-motion-correction";
 import type { TrackCategory } from "../types";
 
@@ -633,6 +634,9 @@ export class AppMenuController {
             case "physics.settings":
                 this.openPhysicsSettingsDialog(invoker ?? null);
                 return;
+            case "tools.vmdRetarget":
+                this.openVmdRetargetDialog(invoker ?? null);
+                return;
             case "dialog.preferences":
                 this.openDialog("preferences", invoker ?? null);
                 return;
@@ -910,6 +914,22 @@ export class AppMenuController {
                 models: this.mmdManager.getModelBodyCorrectionModels(),
                 dispatchAction: (action) => this.dispatchAction(action),
                 previewCorrection: (sourceModelIndex) => this.previewBodyMotionCorrection(sourceModelIndex),
+                close: () => this.popupDialogController.close(),
+            }),
+        });
+    }
+
+    private openVmdRetargetDialog(invoker: HTMLElement | null): void {
+        this.popupDialogController.open({
+            id: "vmd-retarget",
+            surface: "modal",
+            title: t("dialog.vmdRetarget.title"),
+            size: "lg",
+            restoreFocusTo: invoker,
+            content: new VmdRetargetDialogController({
+                fileApi: window.electronAPI,
+                setStatus: this.setStatus,
+                showToast: this.showToast,
                 close: () => this.popupDialogController.close(),
             }),
         });

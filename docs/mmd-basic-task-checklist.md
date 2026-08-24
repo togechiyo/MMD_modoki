@@ -185,6 +185,8 @@
 
 2026-08-24: 読み込み済みの別 PMX を補正元として、アクティブ PMX の全モーションに体格差補正を適用する編集メニューを追加した。bind pose から腰高・左右脚長を計測し、センター系は全体比、足IK系は左右の脚長比で position XYZ を調整する。回転、補間、物理設定は保持し、全変更を1操作で undo / redo できる。詳細は [PMX 体格差モーション補正 仕様・実装ガイド 2026-08-24](./pmx-body-proportion-motion-correction-2026-08-24.md) を参照。
 
+2026-08-24: 元PMX・元VMD・適用先PMXを選び、bone / morph名、静止姿勢のbone方向差によるrotation basis、center系と左右足IKの体格比を変換して別VMDへ保存する独立popup toolを追加した。現在のproject、scene、再生、undo / redoには触れない。詳細は [VMDリターゲット変換ツール 仕様・実装メモ 2026-08-24](./vmd-retarget-tool-2026-08-24.md) を参照。
+
 2026-08-24: Property（表示 / IK）をmodel timeline先頭行へ追加し、情報欄のIK ON/OFF、ステップ式seek / preview、登録、上書き、削除、copy / paste、undo / redoへ接続した。編集メニューには空フレーム挿入 / フレーム列削除とAuto Key対象切替を追加し、登録時の未変更スキップ・上書き確認・複数対象batch化も整理した。PMX、モデル / カメラVMD path、無音WAV、Property、camera animation、照明、重力、主要PostFXを含むElectron project round-trip E2Eを追加した。詳細は [Propertyキー・時間軸編集・キー登録・project round-trip 実装メモ 2026-08-24](./property-frame-edit-registration-roundtrip-2026-08-24.md) を参照。
 
 ## 4. 物理

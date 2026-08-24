@@ -1574,6 +1574,56 @@ body.shader-resizing #shader-resizer::before {
   background: var(--bg-secondary);
 }
 
+.popup-form-file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.popup-form-file-value {
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.025);
+  text-align: left;
+}
+
+.popup-form-check-group {
+  display: grid;
+  gap: 7px;
+  padding: 4px 0;
+}
+
+.popup-form-check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.popup-form-result {
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.popup-form-result-summary {
+  color: var(--text-primary);
+}
+
+.popup-form-result-details summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
 #timeline-container::after {
   content: "";
   position: absolute;

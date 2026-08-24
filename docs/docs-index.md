@@ -178,6 +178,7 @@
 - [GLB loading investigation](./glb-loading-investigation-2026-04-01.md)
 - [Generic object panel design](./generic-object-panel-design.md)
 - [Babylon animation retarget research](./babylon-animation-retarget-research-2026-06-15.md)
+- [VMDリターゲット変換ツール 仕様・実装メモ 2026-08-24](./vmd-retarget-tool-2026-08-24.md)
 - [MMD Manager 分割計画](./mmd-manager-split-plan.md)
 
 ## レンダリング / 材質 / テクスチャ

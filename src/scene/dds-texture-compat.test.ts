@@ -59,6 +59,12 @@ describe("dds texture compatibility", () => {
         expect(info).toBeNull();
     });
 
+    it("keeps unsupported compressed formats on Babylon's standard path", () => {
+        const info = shouldSkipDdsTextureForWebGpu(createDds("ATI2"), false);
+
+        expect(info).toBeNull();
+    });
+
     it("decodes a DXT1 color block to RGBA", () => {
         const buffer = createDds("DXT1", 8, 4, 4);
         const view = new DataView(buffer);

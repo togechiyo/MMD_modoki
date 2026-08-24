@@ -1,5 +1,7 @@
 # BMP alpha transparency investigation 2026-06-28
 
+> 2026-08-24 注記: この文書はBMP alpha問題の調査履歴である。現在はbabylon-mmdのDirectX互換BMP loaderを第一経路とし、CPU decodeは標準loader失敗時だけ使う。また、white-matted BMPという理由だけでdepth writeやshadowを後段変更する処理は撤去した。現行動作は [MMD モデルテクスチャ読み込み 現行仕様](./mmd-texture-loading-current-spec-2026-08-24.md) を参照する。
+
 ## 対象
 
 - モデル: `シァンユェ(香月) Ver1.05 軽量版 MMDサイズ.pmx`

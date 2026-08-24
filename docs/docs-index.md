@@ -181,6 +181,7 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [MMD モデルテクスチャ読み込み 現行仕様 2026-08-24](./mmd-texture-loading-current-spec-2026-08-24.md)
 - [材質 alpha / 同一平面描画ポリシー 2026-08-20](./material-alpha-coplanar-rendering-policy-2026-08-20.md)
 - [MMD 描画順整理 実装メモ 2026-08-13](./mmd-render-order-implementation-2026-08-13.md)
 

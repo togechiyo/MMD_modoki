@@ -777,6 +777,7 @@ import { MmdPluginMaterial as MmdStandardShaderPluginGLSL } from "babylon-mmd/es
 import { MmdPluginMaterial as MmdStandardShaderPluginWGSL } from "babylon-mmd/esm/Loader/ShadersWGSL/mmdStandard";
 import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
 import { PathNormalize } from "babylon-mmd/esm/Loader/Util/pathNormalize";
+import { RegisterDxBmpTextureLoader } from "babylon-mmd/esm/Loader/registerDxBmpTextureLoader";
 import { SdefInjector } from "babylon-mmd/esm/Loader/sdefInjector";
 import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer";
 import { MmdWasmPhysics } from "babylon-mmd/esm/Runtime/Optimized/Physics/mmdWasmPhysics";
@@ -815,6 +816,8 @@ import sepiaLutText from "../lut/sepia.3dl?raw";
 import tealOrangeLutText from "../lut/teal-orange.3dl?raw";
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
 import type { MmdRuntimeAnimationHandle } from "babylon-mmd/esm/Runtime/mmdRuntimeAnimationHandle";
+
+RegisterDxBmpTextureLoader();
 
 // IBL Shadows is intentionally frozen: Babylon.js 9.2 WebGPU validation issues
 // and dynamic/skinned mesh costs made it unsuitable for MMD contact shadows.
@@ -8259,153 +8262,18 @@ ${beforeFogAppendBlock}
             return false;
         }
         let materialChanged = false;
-        const materialName = typeof material.name === "string" ? material.name : "";
 
-        // Some loaders leave opaque materials at alpha=0, but restoring alpha on
-        // texture-driven transparent materials can break face/eyelash draw order.
-        const diffuseTextureHasAlpha = this.textureHasAlphaForMmdMaterial(material.diffuseTexture);
-        const albedoTextureHasAlpha = this.textureHasAlphaForMmdMaterial(material.albedoTexture);
-        const hasDecodedDdsFallbackTexture = Boolean(material.diffuseTexture?.metadata?.mmdModokiDecodedDdsFallback)
-            || Boolean(material.albedoTexture?.metadata?.mmdModokiDecodedDdsFallback);
-        const hasOpaqueDecodedDdsFallbackTexture = (material.diffuseTexture?.metadata?.mmdModokiDecodedDdsFallback === true && !diffuseTextureHasAlpha)
-            || (material.albedoTexture?.metadata?.mmdModokiDecodedDdsFallback === true && !albedoTextureHasAlpha);
-        const hasOpacityTexture = Boolean(material.opacityTexture);
-        const usesTextureAlpha = Boolean(material.useAlphaFromDiffuseTexture || material.useAlphaFromAlbedoTexture);
-        const isTransparencyModeEnabled = typeof material.transparencyMode === "number" && material.transparencyMode !== 0;
-        const shouldUseOpaqueTextureAlphaFallback = this.shouldUseOpaqueTextureAlphaFallback(materialName, material);
-
-        // babylon-mmd already evaluates PMX transparency using actual texture
-        // contents. Keep that result intact here so we do not accidentally force
-        // opaque PNG textures into the transparent queue.
-        const hasTransparentTexturePath = diffuseTextureHasAlpha || albedoTextureHasAlpha || hasOpacityTexture || usesTextureAlpha || isTransparencyModeEnabled;
-
-        if (material.alpha === 0) {
-            if (hasDecodedDdsFallbackTexture || (!hasTransparentTexturePath && !isTransparencyModeEnabled && (material.diffuseTexture || material.albedoTexture))) {
-                material.alpha = 1;
-                materialChanged = true;
-            }
-        }
-        if (hasOpaqueDecodedDdsFallbackTexture) {
-            if (material.alpha !== 1) {
-                material.alpha = 1;
-                materialChanged = true;
-            }
-            if (material.useAlphaFromDiffuseTexture !== false) {
-                material.useAlphaFromDiffuseTexture = false;
-                materialChanged = true;
-            }
-            if (material.useAlphaFromAlbedoTexture !== false) {
-                material.useAlphaFromAlbedoTexture = false;
-                materialChanged = true;
-            }
-            if ("transparencyMode" in material) {
-                if (material.transparencyMode !== Material.MATERIAL_OPAQUE) {
-                    material.transparencyMode = Material.MATERIAL_OPAQUE;
-                    materialChanged = true;
-                }
-            }
-        }
-        const shouldUseDecodedDdsAlpha = hasDecodedDdsFallbackTexture
-            && (diffuseTextureHasAlpha || albedoTextureHasAlpha)
-            && this.shouldUseDecodedDdsTextureAlphaForMaterial(materialName);
-        if (shouldUseDecodedDdsAlpha) {
-            if (material.alpha !== 1) {
-                material.alpha = 1;
-                materialChanged = true;
-            }
-            if (material.diffuseTexture && material.useAlphaFromDiffuseTexture !== true) {
-                material.useAlphaFromDiffuseTexture = true;
-                materialChanged = true;
-            }
-            if (material.albedoTexture && material.useAlphaFromAlbedoTexture !== true) {
-                material.useAlphaFromAlbedoTexture = true;
-                materialChanged = true;
-            }
-            if ("alphaCutOff" in material && Number(material.alphaCutOff) !== 0.02) {
-                material.alphaCutOff = 0.02;
-                materialChanged = true;
-            }
-            if ("transparencyMode" in material && material.transparencyMode !== Material.MATERIAL_ALPHATESTANDBLEND) {
-                material.transparencyMode = Material.MATERIAL_ALPHATESTANDBLEND;
-                materialChanged = true;
-            }
-        }
-        if (shouldUseOpaqueTextureAlphaFallback) {
-            if (material.alpha !== 1) {
-                material.alpha = 1;
-                materialChanged = true;
-            }
-            if (material.diffuseTexture && material.useAlphaFromDiffuseTexture !== true) {
-                material.useAlphaFromDiffuseTexture = true;
-                materialChanged = true;
-            }
-            if (material.albedoTexture && material.useAlphaFromAlbedoTexture !== true) {
-                material.useAlphaFromAlbedoTexture = true;
-                materialChanged = true;
-            }
-            if ("alphaCutOff" in material && Number(material.alphaCutOff) !== 0.02) {
-                material.alphaCutOff = 0.02;
-                materialChanged = true;
-            }
-            if ("transparencyMode" in material && material.transparencyMode !== Material.MATERIAL_ALPHATESTANDBLEND) {
-                material.transparencyMode = Material.MATERIAL_ALPHATESTANDBLEND;
-                materialChanged = true;
-            }
-            if ("forceDepthWrite" in material && material.forceDepthWrite !== true) {
-                material.forceDepthWrite = true;
-                materialChanged = true;
-            }
-            logInfo("asset", "opaque alpha texture material fallback applied", {
-                materialName,
-                texture: this.getMaterialTextureAlphaSearchText(material),
-                transparencyMode: material.transparencyMode,
-                useAlphaFromDiffuseTexture: material.useAlphaFromDiffuseTexture ?? null,
-                useAlphaFromAlbedoTexture: material.useAlphaFromAlbedoTexture ?? null,
-                alphaCutOff: material.alphaCutOff ?? null,
-                forceDepthWrite: material.forceDepthWrite ?? null,
-            });
-        }
-        if (this.shouldDisableDepthWriteForAlphaOverlayMaterial(materialName, material)) {
-            const alphaRange = this.getDecodedTextureAlphaRangeForMaterial(material);
-            if (material.alpha !== 1) {
-                material.alpha = 1;
-                materialChanged = true;
-            }
-            if (material.diffuseTexture && material.useAlphaFromDiffuseTexture !== true) {
-                material.useAlphaFromDiffuseTexture = true;
-                materialChanged = true;
-            }
-            if (material.albedoTexture && material.useAlphaFromAlbedoTexture !== true) {
-                material.useAlphaFromAlbedoTexture = true;
-                materialChanged = true;
-            }
-            if ("alphaCutOff" in material && Number(material.alphaCutOff) !== 0.02) {
-                material.alphaCutOff = 0.02;
-                materialChanged = true;
-            }
-            if ("transparencyMode" in material && material.transparencyMode !== Material.MATERIAL_ALPHABLEND) {
-                material.transparencyMode = Material.MATERIAL_ALPHABLEND;
-                materialChanged = true;
-            }
-            if ("forceDepthWrite" in material && material.forceDepthWrite !== false) {
-                material.forceDepthWrite = false;
-                materialChanged = true;
-            }
-            logInfo("asset", "alpha overlay depth-write patch applied", {
-                materialName,
-                texture: this.getMaterialTextureAlphaSearchText(material),
-                alphaRange,
-                transparencyMode: material.transparencyMode,
-                useAlphaFromDiffuseTexture: material.useAlphaFromDiffuseTexture ?? null,
-                useAlphaFromAlbedoTexture: material.useAlphaFromAlbedoTexture ?? null,
-                alphaCutOff: material.alphaCutOff ?? null,
-                forceDepthWrite: material.forceDepthWrite ?? null,
-            });
-        }
-        if (hasDecodedDdsFallbackTexture && material.backFaceCulling !== false) {
-            material.backFaceCulling = false;
-            materialChanged = true;
-        }
+        // babylon-mmd evaluates the alpha values actually referenced by each PMX/PMD
+        // material in UV space. Preserve that result here instead of reclassifying
+        // materials from filenames, decoded texture metadata, or semantic guesses.
+        const hasTransparentTexturePath = Boolean(
+            material.opacityTexture
+            || material.useAlphaFromDiffuseTexture
+            || material.useAlphaFromAlbedoTexture
+            || (typeof material.transparencyMode === "number"
+                && material.transparencyMode !== Material.MATERIAL_OPAQUE)
+            || (typeof material.alpha === "number" && material.alpha < 1),
+        );
 
         // Preserve the loader/runtime depth setup for transparent materials.
         // The forced zOffset helped some face-layer cases, but it breaks normal
@@ -8429,7 +8297,7 @@ ${beforeFogAppendBlock}
             }
         }
 
-        if (materialChanged || hasDecodedDdsFallbackTexture) {
+        if (materialChanged) {
             this.markMaterialShaderDirty(material);
         }
 
@@ -8438,115 +8306,12 @@ ${beforeFogAppendBlock}
         return hasTransparentTexturePath;
     }
 
-    private shouldUseOpaqueTextureAlphaFallback(materialName: string, material: MmdManagerMaterialLike): boolean {
-        const hasAlphaTexture = this.textureHasAlphaForMmdMaterial(material.diffuseTexture)
-            || this.textureHasAlphaForMmdMaterial(material.albedoTexture);
-        if (!hasAlphaTexture) return false;
-        if (material.useAlphaFromDiffuseTexture === true || material.useAlphaFromAlbedoTexture === true) return false;
-        if (!this.isOpaqueMaterialTransparencyMode(material.transparencyMode)) return false;
-
-        const searchText = `${materialName} ${this.getMaterialTextureAlphaSearchText(material)}`.toLowerCase();
-        if (this.isLikelyMmdFaceOrHairAlphaMaterial(searchText)) return true;
-
-        const hasDecodedDdsFallbackTexture = material.diffuseTexture?.metadata?.mmdModokiDecodedDdsFallback === true
-            || material.albedoTexture?.metadata?.mmdModokiDecodedDdsFallback === true;
-        return hasDecodedDdsFallbackTexture && (
-            searchText.includes("face")
-            || searchText.includes("hair")
-            || searchText.includes("eye")
-            || searchText.includes("lash")
-            || searchText.includes("hs")
-        );
-    }
-
-    private shouldDisableDepthWriteForAlphaOverlayMaterial(materialName: string, material: MmdManagerMaterialLike): boolean {
-        const hasAlphaTexture = this.textureHasAlphaForMmdMaterial(material.diffuseTexture)
-            || this.textureHasAlphaForMmdMaterial(material.albedoTexture);
-        if (!hasAlphaTexture) return false;
-
-        const searchText = `${materialName} ${this.getMaterialTextureAlphaSearchText(material)}`.toLowerCase();
-        if (this.isLikelyMmdAlphaOverlayMaterial(searchText)) return true;
-        if (this.isDecodedWhiteMattedAlphaTextureForMaterial(material)) return true;
-
-        const alphaRange = this.getDecodedTextureAlphaRangeForMaterial(material);
-        if (!alphaRange) return false;
-
-        return alphaRange.maxAlpha <= 220;
-    }
-
-    private isDecodedWhiteMattedAlphaTextureForMaterial(material: MmdManagerMaterialLike): boolean {
-        return this.isDecodedWhiteMattedAlphaTexture(material.diffuseTexture)
-            || this.isDecodedWhiteMattedAlphaTexture(material.albedoTexture);
-    }
-
-    private isDecodedWhiteMattedAlphaTexture(texture: MmdManagerMaterialLike["diffuseTexture"]): boolean {
-        return texture?.metadata?.mmdModokiDecodedWhiteMattedAlpha === true;
-    }
-
-    private isLikelyMmdAlphaOverlayMaterial(searchText: string): boolean {
-        return searchText.includes("eye_hi")
-            || searchText.includes("hairshadow")
-            || searchText.includes("shadow")
-            || searchText.includes("highlight")
-            || searchText.includes("lash")
-            || searchText.includes("eyelash")
-            || searchText.includes("hs+")
-            || searchText.includes("アイシャドウ")
-            || searchText.includes("頬紅")
-            || searchText.includes("口紅")
-            || searchText.includes("ハイライト")
-            || searchText.includes("まつげ")
-            || searchText.includes("睫");
-    }
-
-    private getDecodedTextureAlphaRangeForMaterial(material: MmdManagerMaterialLike): { minAlpha: number; maxAlpha: number } | null {
-        return this.getDecodedTextureAlphaRange(material.diffuseTexture)
-            ?? this.getDecodedTextureAlphaRange(material.albedoTexture);
-    }
-
-    private getDecodedTextureAlphaRange(texture: MmdManagerMaterialLike["diffuseTexture"]): { minAlpha: number; maxAlpha: number } | null {
-        const metadata = texture?.metadata;
-        if (!metadata) return null;
-
-        const minAlpha = Number(metadata.mmdModokiDecodedTextureMinAlpha);
-        const maxAlpha = Number(metadata.mmdModokiDecodedTextureMaxAlpha);
-        if (!Number.isFinite(minAlpha) || !Number.isFinite(maxAlpha)) return null;
-
-        return { minAlpha, maxAlpha };
-    }
-
     private textureHasAlphaForMmdMaterial(texture: MmdManagerMaterialLike["diffuseTexture"]): boolean {
         if (!texture) return false;
-        const metadata = texture.metadata;
-        if (metadata?.mmdModokiDecodedDdsFallback === true) {
-            return metadata.mmdModokiDecodedDdsHasAlpha === true;
+        if (texture.metadata?.mmdModokiDecodedDdsFallback === true) {
+            return texture.metadata.mmdModokiDecodedDdsHasAlpha === true;
         }
         return texture.hasAlpha === true;
-    }
-
-    private isOpaqueMaterialTransparencyMode(transparencyMode: unknown): boolean {
-        return transparencyMode === Material.MATERIAL_OPAQUE
-            || transparencyMode === 0
-            || transparencyMode === null
-            || transparencyMode === undefined;
-    }
-
-    private isLikelyMmdFaceOrHairAlphaMaterial(searchText: string): boolean {
-        return searchText.includes("face")
-            || searchText.includes("eye")
-            || searchText.includes("hair")
-            || searchText.includes("lash")
-            || searchText.includes("eyelash")
-            || searchText.includes("eye_hi")
-            || searchText.includes("hs")
-            || searchText.includes("顔")
-            || searchText.includes("目")
-            || searchText.includes("髪")
-            || searchText.includes("前髪")
-            || searchText.includes("後髪")
-            || searchText.includes("睫")
-            || searchText.includes("まつげ")
-            || searchText.includes("猫耳");
     }
 
     private getMaterialTextureAlphaSearchText(material: MmdManagerMaterialLike): string {
@@ -8566,15 +8331,6 @@ ${beforeFogAppendBlock}
         if (!texturePath || typeof texturePath !== "object") return "";
         const record = texturePath as Record<string, unknown>;
         return `${String(record.fileName ?? "")}${String(record.extension ?? "")}`;
-    }
-
-    private shouldUseDecodedDdsTextureAlphaForMaterial(materialName: string): boolean {
-        const normalized = materialName.toLowerCase();
-        return normalized.includes("eye_hi")
-            || normalized.includes("hair")
-            || materialName.includes("髪")
-            || materialName.includes("ドリル")
-            || materialName.includes("HS");
     }
 
     private buildPmxMaterialFlagMap(metadata: {
@@ -8612,18 +8368,10 @@ ${beforeFogAppendBlock}
         const modelSubMaterials = subMaterials.filter((subMaterial): subMaterial is MmdManagerMaterialLike =>
             Boolean(subMaterial) && typeof subMaterial === "object",
         );
-        if (
-            modelSubMaterials.length > 0
-            && modelSubMaterials.every((subMaterial) => this.shouldTreatAsAlphaOverlayShadowlessMaterial(subMaterial))
-        ) {
-            return { castsShadow: false, receivesShadow: false };
-        }
-
         let castsShadow = false;
         // Toon-oriented PMX models often disable self-shadow receiving on face
         // materials. Keep that authoring choice in MMD mode, but PBR needs the
-        // Babylon shadow map to reach opaque model surfaces. Alpha overlays were
-        // already excluded above and remain shadowless.
+        // Babylon shadow map to reach opaque model surfaces.
         let receivesShadow = forceReceiveShadow;
         let sawMappedMaterial = false;
 
@@ -8645,11 +8393,6 @@ ${beforeFogAppendBlock}
         }
 
         return { castsShadow, receivesShadow };
-    }
-
-    private shouldTreatAsAlphaOverlayShadowlessMaterial(material: MmdManagerMaterialLike): boolean {
-        const materialName = typeof material.name === "string" ? material.name : "";
-        return this.shouldDisableDepthWriteForAlphaOverlayMaterial(materialName, material);
     }
 
     private getSkeletonBoneTextureSize(skeleton: Skeleton): { width: number; height: number; elementCount: number } {
@@ -9847,8 +9590,9 @@ ${beforeFogAppendBlock}
         return Boolean(this.engine.getCaps().s3tc);
     }
 
-    private shouldSkipDdsTextureUrlForWebGpu(textureUrl: string): boolean {
-        return isDdsTexturePath(textureUrl) && !this.supportsS3tcCompressedTextures();
+    private shouldInspectDdsTextureUrlForWebGpuFallback(textureUrl: string, forcedExtension?: string): boolean {
+        const isDdsTexture = isDdsTexturePath(textureUrl) || forcedExtension?.toLowerCase() === ".dds";
+        return isDdsTexture && !this.supportsS3tcCompressedTextures();
     }
 
     private shouldTryBmpAlphaFallbackTextureUrl(textureUrl: string): boolean {
@@ -9893,6 +9637,10 @@ ${beforeFogAppendBlock}
         assetContainer: unknown,
         options: { invertY?: boolean; samplingMode?: number },
     ): Promise<Texture | null> {
+        if (this.supportsS3tcCompressedTextures()) {
+            return null;
+        }
+
         const invertY = options.invertY ?? true;
         const cacheKey = `${textureName}|${invertY}|${options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE}`;
         const cached = this.webGpuTextureFallbackCache.get(cacheKey);
@@ -9903,7 +9651,7 @@ ${beforeFogAppendBlock}
         }
 
         const arrayBuffer = arrayBufferOrBlob instanceof Blob ? await arrayBufferOrBlob.arrayBuffer() : arrayBufferOrBlob;
-        if (!shouldSkipDdsTextureForWebGpu(arrayBuffer, this.supportsS3tcCompressedTextures())) {
+        if (!shouldSkipDdsTextureForWebGpu(arrayBuffer, false)) {
             return null;
         }
 
@@ -10038,6 +9786,7 @@ ${beforeFogAppendBlock}
             noMipmap?: boolean;
             invertY?: boolean;
             samplingMode?: number;
+            forcedExtension?: string;
         };
         const textureLoader = ((builder as { [key: string]: unknown })._textureLoader as {
             loadTextureAsync?: (
@@ -10069,19 +9818,38 @@ ${beforeFogAppendBlock}
                 const textureOptions = { ...options };
                 if (typeof relativeTexturePathOrIndex === "string") {
                     const textureUrl = PathNormalize(rootUrl + relativeTexturePathOrIndex);
-                    if (this.shouldSkipDdsTextureUrlForWebGpu(textureUrl)) {
+                    if (this.shouldInspectDdsTextureUrlForWebGpuFallback(textureUrl, textureOptions.forcedExtension)) {
                         try {
                             const arrayBuffer = await this.loadArrayBufferFromUrl(textureUrl);
-                            return await this.createWebGpuDdsFallbackTexture(textureUrl, arrayBuffer, scene, assetContainer, textureOptions);
+                            const ddsFallbackTexture = await this.createWebGpuDdsFallbackTexture(
+                                textureUrl,
+                                arrayBuffer,
+                                scene,
+                                assetContainer,
+                                textureOptions,
+                            );
+                            if (ddsFallbackTexture) {
+                                return ddsFallbackTexture;
+                            }
                         } catch (err) {
-                            logWarn("asset", "DDS texture fallback load failed", {
+                            logWarn("asset", "DDS texture fallback inspection failed; continuing with Babylon.js", {
                                 textureUrl,
                                 ...toLogErrorData(err),
                             });
-                            return null;
                         }
                     }
                     if (this.shouldTryBmpAlphaFallbackTextureUrl(textureUrl)) {
+                        const officialTexture = await originalLoadTextureAsync(
+                            uniqueId,
+                            rootUrl,
+                            relativeTexturePathOrIndex,
+                            scene,
+                            assetContainer,
+                            textureOptions,
+                        );
+                        if (officialTexture) {
+                            return officialTexture;
+                        }
                         try {
                             const arrayBuffer = await this.loadArrayBufferFromUrl(textureUrl);
                             const bmpAlphaTexture = await this.createWebGpuBmpAlphaFallbackTexture(
@@ -10100,13 +9868,16 @@ ${beforeFogAppendBlock}
                                 ...toLogErrorData(err),
                             });
                         }
+                        return null;
                     }
                 }
-                if (!textureOptions.noMipmap) {
+                const textureUrl = PathNormalize(rootUrl + relativeTexturePathOrIndex);
+                const isDdsTexture = isDdsTexturePath(textureUrl)
+                    || textureOptions.forcedExtension?.toLowerCase() === ".dds";
+                if (!textureOptions.noMipmap && !isDdsTexture) {
                     if (typeof relativeTexturePathOrIndex === "number") {
                         textureOptions.noMipmap = true;
                     } else {
-                        const textureUrl = PathNormalize(rootUrl + relativeTexturePathOrIndex);
                         const dimensions = await this.inspectImageDimensionsFromUrl(textureUrl);
                         if (!dimensions && this.isBrowserInspectableImageTexturePath(textureUrl)) {
                             logWarn("asset", "texture file missing or unreadable; skipped for model load", {
@@ -10134,17 +9905,37 @@ ${beforeFogAppendBlock}
         if (originalLoadTextureFromBufferAsync) {
             textureLoader.loadTextureFromBufferAsync = (async (uniqueId, textureName, arrayBufferOrBlob, scene, assetContainer, options, applyPathNormalization = true) => {
                 const textureOptions = { ...options };
-                const ddsFallbackTexture = await this.createWebGpuDdsFallbackTexture(
-                    textureName,
-                    arrayBufferOrBlob,
-                    scene,
-                    assetContainer,
-                    textureOptions,
-                );
+                let ddsFallbackTexture: Texture | null = null;
+                try {
+                    ddsFallbackTexture = await this.createWebGpuDdsFallbackTexture(
+                        textureName,
+                        arrayBufferOrBlob,
+                        scene,
+                        assetContainer,
+                        textureOptions,
+                    );
+                } catch (err) {
+                    logWarn("asset", "DDS texture fallback inspection failed; continuing with Babylon.js", {
+                        textureName,
+                        ...toLogErrorData(err),
+                    });
+                }
                 if (ddsFallbackTexture) {
                     return ddsFallbackTexture;
                 }
                 if (this.shouldTryBmpAlphaFallbackTextureUrl(textureName)) {
+                    const officialTexture = await originalLoadTextureFromBufferAsync(
+                        uniqueId,
+                        textureName,
+                        arrayBufferOrBlob,
+                        scene,
+                        assetContainer,
+                        textureOptions,
+                        applyPathNormalization,
+                    );
+                    if (officialTexture) {
+                        return officialTexture;
+                    }
                     const bmpAlphaTexture = await this.createWebGpuBmpAlphaFallbackTexture(
                         textureName,
                         arrayBufferOrBlob,
@@ -10155,8 +9946,11 @@ ${beforeFogAppendBlock}
                     if (bmpAlphaTexture) {
                         return bmpAlphaTexture;
                     }
+                    return null;
                 }
-                if (!textureOptions.noMipmap) {
+                const isDdsTexture = isDdsTexturePath(textureName)
+                    || textureOptions.forcedExtension?.toLowerCase() === ".dds";
+                if (!textureOptions.noMipmap && !isDdsTexture) {
                     const cacheKey = applyPathNormalization ? PathNormalize(textureName) : textureName;
                     textureOptions.noMipmap = !(await this.shouldGenerateMipmapsForWebGpuTextureBuffer(cacheKey, arrayBufferOrBlob));
                 }

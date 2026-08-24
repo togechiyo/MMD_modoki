@@ -468,3 +468,44 @@ Tda式重音テトTypeS.pmx の顔まわり、目ハイライト、前髪影な�
 - シァンユェ(香月) Ver1.05 軽量版で、顔まわりの白っぽいフチが大きく改善したことをユーザー実機で確認した。
 - 対応は顔材質名の個別対応ではなく、32bit BMP fallback decode の共通処理として整理した。
 - 詳細は [BMP alpha transparency investigation 2026-06-28](./bmp-alpha-transparency-investigation-2026-06-28.md) に分離する。
+
+## 2026-08-24 babylon-mmd 標準 alpha 評価への整理
+
+`babylon-mmd@1.2.0` の公式ドキュメントと同梱実装を再確認し、PMX / PMD の透過分類は material builder の結果を正本とするよう整理した。
+
+### 採用する標準経路
+
+- 通常の「評価方式」は `MmdMaterialRenderMethod.DepthWriteAlphaBlendingWithEvaluation` を使う。
+- 「MMD固定順（実験）」は `MmdMaterialRenderMethod.DepthWriteAlphaBlending` を使う。
+- `TextureAlphaChecker` は材質が参照するジオメトリを UV 空間へ描画し、実際に使う texture alpha から opaque / transparent を判定する。
+- 32bit BMP は `RegisterDxBmpTextureLoader()` を登録し、babylon-mmd の DirectX 互換 BMP loader を第一経路とする。
+
+### 撤去した後段補正
+
+material builder の判定後に、材質名または texture 名の `face`、`eye`、`hair`、`頬紅`、`まつげ` などを使って次を再設定していた処理を撤去した。
+
+- `transparencyMode` の `ALPHATESTANDBLEND` / `ALPHABLEND` への変更
+- `forceDepthWrite` の強制 ON / OFF
+- decoded DDS 材質の一律両面化
+- 顔 overlay と推測した材質の shadow caster / receiver 除外
+- PMX の材質 alpha が `0` の場合の一律復元
+
+これらはモデルの意味をファイル名・材質名から推測しており、babylon-mmd の UV 領域評価や PMX の材質・影フラグを上書きするため、別モデルへ副作用を広げる可能性があった。
+
+### 維持する互換処理
+
+- DDS は Babylon.js 標準 loader を第一経路とし、S3TC / BC 圧縮を GPU が利用できる場合は自前処理へ入らない。
+- S3TC 非対応時だけ DDS header を確認し、既存 decoder が対応する DXT1 / DXT3 / DXT5 を CPU decode fallback する。
+- 非圧縮 DDS、DXT1 / DXT3 / DXT5 以外、header 読み取り・fallback decode に失敗した DDS は Babylon.js 標準経路へ戻す。
+- Babylon.js 標準 DDS 経路では汎用画像向けの `noMipmap` 判定を適用せず、DDS 内蔵 mip chain と loader の既定判定を保持する。
+- 公式 BMP loader が失敗した場合だけ、既存の CPU BMP decode fallback を使う。
+- CPU BMP fallback の white matte 解除、透明境界 RGB bleed、alpha range 診断 metadata は fallback 時だけ維持する。
+- `.x` アクセサリは babylon-mmd の PMX material builder を通らないため、`.x` 用の Opaque / Alpha Test / Alpha Blend 分類を維持する。
+- PMX 材質へ残存する `zOffset` / `zOffsetUnits` と全体 logarithmic depth の解除は、alpha 分類とは独立した従来互換処理として維持する。
+
+### 残る確認
+
+- PNG / TGA / BMP / DDS の cutout、グラデーション透過、不透明 texture を同じ配布可能 fixture で比較する。
+- WebGPU / WebGL2 で「評価方式」と「MMD固定順」を比較する。
+- 顔、目ハイライト、前髪、衣装透過、両面材質、self shadow をユーザー実機で確認する。
+- 公式評価でも外れる材質がある場合は、材質名 heuristic を戻さず、材質単位の明示 override と診断表示を検討する。

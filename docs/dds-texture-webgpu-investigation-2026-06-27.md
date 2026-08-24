@@ -1,5 +1,7 @@
 # DDS テクスチャ読み込み調査メモ 2026-06-27
 
+> 2026-08-24 注記: この文書は初期調査と試行の履歴であり、「材質名でalpha対象を絞る」「fallback DDSを一律両面化する」などの後段補正は現行実装から撤去した。現在のloader順序、S3TC capability分岐、mipmap方針、欠落textureの扱いは [MMD モデルテクスチャ読み込み 現行仕様](./mmd-texture-loading-current-spec-2026-08-24.md) を正本とする。
+
 ## 背景
 
 Tda式重音テトTypeS.pmx の読み込みで、ほぼ DDS テクスチャ構成のモデルが WebGPU 環境で正しく表示されない問題を調査した。

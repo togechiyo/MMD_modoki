@@ -46,6 +46,29 @@ Linux の zip 配布では `chrome-sandbox` の所有者や `4755` 属性をそ�
 - PMX とテクスチャの相対配置が崩れていないか
 - 読み込みパスに日本語・特殊文字が多い場合は一旦短いパスで試す
 
+## PMX / PMD読込時に赤い `ERR_FILE_NOT_FOUND` が出る
+
+### 症状
+
+- モデルは読み込めて表示されるが、DevTools Consoleに赤い `GET file:///... net::ERR_FILE_NOT_FOUND` が出る
+- stackにMMD texture loaderや `loadPMX` が表示される
+
+### 原因
+
+- PMX / PMDが参照するtextureと実ファイルの配置・名前が一致していない
+- babylon-mmdの標準loader、特にBMP loaderがlocal file URLを読み込んだ際、Chromiumが欠落resourceを赤いGET errorとして表示している
+
+この表示はWebGPUやDDS展開の失敗とは限らない。texture単位の失敗が `null` として処理され、モデルが `Model Loaded` まで到達している場合、モデル本体の読み込みは継続できている。
+
+### 対処
+
+1. 赤いGET行のURLを展開し、要求された完全なファイル名を確認する
+2. PMX / PMDとtextureの相対配置、サブディレクトリ、拡張子を確認する
+3. 見た目に白、市松、無地の材質がないか確認する
+4. 見た目とモデル操作に支障がなければ、現状は非致命的な欠落resource警告として許容できる
+
+形式別の標準loaderとfallbackについては [MMD モデルテクスチャ読み込み 現行仕様](./mmd-texture-loading-current-spec-2026-08-24.md) を参照する。
+
 ## Xアクセサリーが白黒/市松になる
 
 ### 症状

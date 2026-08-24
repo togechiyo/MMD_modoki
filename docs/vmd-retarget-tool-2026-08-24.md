@@ -136,14 +136,43 @@ camera VMDは対象外で、model VMDだけを受け付ける。出力VMDのmode
   - 変換後VMDを保存し、center positionが `[1, 2, 3]` から `[2, 4, 6]` になることを確認
   - 変換前後のproject stateが `savedAt` 以外で同一であることを確認
 
-## 次の候補
+## 高度補正の構想（保留）
 
-優先順の候補は次の通り。
+2026-08-24の所有者判断として、現行の局所的なVMD変換をfull-body retargetへ拡大し続けることは当面行わない。Babylon.js側のretarget品質を優先して評価し、自前のshoulder / arm補助basis、twist分配、足接地bakeは実装予定ではなく再検討用の構想として残す。
 
-1. target model上での変換前後preview
-2. bone mapの手動overrideとpreset保存
-3. shoulder / armの補助basis、twist分配
-4. foot contactを参照したroot / ground correction
-5. 変換reportのtext保存
+### shoulder / armの補助basisとtwist分配
 
-改善時も、現在のprojectへ暗黙に適用せず、独立toolとして明示的にVMDを書き出す境界を維持する。
+主方向1本だけでなく、肩・腕・ひじの静止姿勢から作った平面を第2軸として使い、rollを含む直交basisを構成する案。変換rotationをswing / twistへ分解し、twist成分を`腕捩`、`手捩`などへ比率配分する。
+
+再開する場合に必要な検討:
+
+- 左右でhandednessを崩さないbasis構築と、平面が潰れるposeでのfallback
+- T pose / A pose差、PMX local axis / fixed axis / append parentの扱い
+- 元VMDに既存の捩りtrackがある場合のmerge規則
+- 新規生成trackのframeと補間curveをどう決めるか
+- 肩、腕、ひじ、手首の見た目を比較できる配布可能fixture
+
+### 足接地とつま先曲げへの分散
+
+足首だけで接地誤差を吸収せず、かかと・つま先の接触状態に応じて足首rotation、足IK、つま先rotation / つま先IKへ分散する案。VMDには接地flagがないため、単一keyの変換ではなくmotion全体をsamplingして接地区間を推定する必要がある。
+
+再開する場合に必要な検討:
+
+- target PMXの足長、足裏高さ、ground referenceの計測
+- かかと接地、つま先接地、遊脚の分類と切替hysteresis
+- IK評価後の最終poseを基準にするか、raw VMD keyだけで近似するか
+- 最大つま先曲げ角、足首との配分率、足滑りを抑える時間方向filter
+- 1frame samplingからVMD keyへ戻す場合のkey削減と補間近似
+
+肩・捩り補正よりも足接地補正の方が難度は高い。接触状態は時間方向の情報とIK最終結果へ依存し、誤判定すると足滑りや細かな振動を新たに作るためである。
+
+### 再開条件
+
+次のいずれかが明確になった場合だけ実装を再検討する。
+
+1. Babylon.jsのretarget経路ではMMD固有のVMD出力要件を満たせないことが実機比較で確認された。
+2. 現行converterで肩・捩り・足接地の同じ破綻が複数fixtureへ再現する。
+3. 変換前後を比較できる配布可能fixtureと評価基準が揃う。
+4. 所有者が自前の高度補正を改めて採用する。
+
+再開する場合も、現在のprojectへ暗黙に適用せず、独立toolとして明示的にVMDを書き出す境界を維持する。

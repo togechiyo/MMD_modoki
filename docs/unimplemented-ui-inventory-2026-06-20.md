@@ -97,3 +97,31 @@ v0.2 をまとめる前に、現時点で「UI は見えているが中身が未
 - `docs/v0.2-task-memo.md`
 - `docs/v0.2-task-checklist.md`
 - `docs/viewport-bottom-bar-implementation-note-2026-06-01.md`
+
+## 2026-08-24 追記: 現行UIとの差分
+
+この文書の表は2026-06-20時点の棚卸しとして残す。現在の実装と矛盾する項目は次の表で読み替える。残件の正本は [MMD基本機能タスクチェックリスト](./mmd-basic-task-checklist.md) とする。
+
+| 2026-06-20時点の項目 | 2026-08-24時点の状況 |
+| --- | --- |
+| 複数キー選択 | 通常クリック、Shift範囲、Ctrl / Cmd追加・解除、矩形、行・列、カテゴリ別全選択まで実装済み |
+| 選択キー削除 | 複数キー削除をCommand / undo / redoへ接続済み |
+| copy / paste / 反転paste | 選択キーpayloadと補間を保持する複数キー操作として実装済み |
+| Auto Key | ボーン / カメラの基本登録を実装済み。発火対象の限定設定は未実装 |
+| ボーン位置 / 回転、モーフ、カメラ値の補正 | 編集メニューから複数選択へ適用し、previewとundo / redoに対応済み |
+| 照明キー | 色RGB / 方向XYZをscene trackとして実装済み |
+| 影設定キー | 影色RGB / Toon影響度 / 影描画範囲 / 照度をproject独自trackとして実装済み |
+| 重力キー | 方向XYZ / 加速度をproject独自trackとして実装済み |
+| Accessory欄 | 専用欄を廃止して情報欄の対象一覧へ統合済み。Accessory独自timelineとの同期は未完成 |
+| モデル / カメラVMD出力 | β実装済み。ユーザー実機のMMD本家で基本読み込み成功を確認済み |
+| 選択ボーンVPD出力 | β実装済み。ユーザー実機のMMD本家で基本読み込み成功を確認済み |
+| Propertyトラック | データ保持、project codec、VMD入出力は存在するが、表示 / IKのステップ編集UIとruntime previewは未実装 |
+
+### 現在UIとして優先する残件
+
+1. Property（表示 / IK）の登録、ステップ表示、copy / paste、削除、再生・シーク反映
+2. 空フレーム挿入 / フレーム列削除の範囲指定UI
+3. 上書き確認、未変更時スキップ、複数対象登録、オートキー対象制御
+4. 情報欄、下パネル、タイムライン間のModel / Camera / Accessory対象同期
+
+HDRI / IBL Shadows / WGSL実験、汎用3D形式、入力デバイス拡張は、上記のMMD編集導線より低優先またはExperimental扱いを維持する。

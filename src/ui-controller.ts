@@ -86,6 +86,13 @@ import {
     type KeyframeValueCorrectionPreview,
 } from "./editor/keyframe-value-correction";
 import {
+    applyModelBodyMotionCorrection,
+    createModelBodyCorrectionPlan,
+    createModelBodyProfile,
+    type ModelBodyMotionCorrectionPreview,
+} from "./editor/model-body-motion-correction";
+import { classifyBone } from "./shared/timeline-helpers";
+import {
     buildMirrorPasteItems,
     type MirrorPasteClipboardItem,
 } from "./editor/mirror-paste-service";
@@ -717,6 +724,7 @@ export class UIController {
             getUiScalePercentage: () => this.layoutUiController?.getUiScalePercentage() ?? 100,
             countTimelineKeysByCategories: (categories) => this.timeline.countKeysByCategories(categories),
             previewKeyframeCorrection: (correction) => this.previewSelectedKeyframeCorrection(correction),
+            previewBodyMotionCorrection: (sourceModelIndex) => this.previewBodyMotionCorrection(sourceModelIndex),
             createExportSettingsAdapter: () => this.exportUiController?.createExportSettingsAdapter() ?? {
                 getState: () => ({
                     aspectPreset: "16:9",
@@ -2306,6 +2314,9 @@ export class UIController {
         });
         this.actionDispatcher.register("keyframe.correctSelected", (action) => {
             this.correctSelectedKeyframes(action.correction);
+        });
+        this.actionDispatcher.register("keyframe.correctBodyScale", (action) => {
+            this.correctBodyMotion(action.sourceModelIndex);
         });
         this.actionDispatcher.register("keyframe.toggleAutoKey", () => {
             this.setAutoKeyEnabled(!this.autoKeyEnabled, { persist: true, toast: true });
@@ -10749,6 +10760,104 @@ export class UIController {
         this.updateTimelineEditState();
         this.commandHistory.push(command);
         this.showToast(t("dialog.keyCorrection.applied", { count: items.length }), "success");
+    }
+
+    private collectBodyMotionCorrection(sourceModelIndex: number): {
+        preview: ModelBodyMotionCorrectionPreview;
+        items: {
+            track: CommandTrackRef;
+            frame: number;
+            before: TimelineKeyframePayload;
+            after: TimelineKeyframePayload;
+        }[];
+    } {
+        const models = this.mmdManager.getModelBodyCorrectionModels();
+        const sourceModel = models.find((model) => model.index === sourceModelIndex && !model.active) ?? null;
+        const targetModel = models.find((model) => model.active) ?? null;
+        const plan = createModelBodyCorrectionPlan(
+            createModelBodyProfile(sourceModel?.restBones ?? []),
+            createModelBodyProfile(targetModel?.restBones ?? []),
+        );
+        const items: {
+            track: CommandTrackRef;
+            frame: number;
+            before: TimelineKeyframePayload;
+            after: TimelineKeyframePayload;
+        }[] = [];
+        const compatibleTracks = new Set<string>();
+        let compatibleKeyCount = 0;
+        const animation = this.mmdManager.getActiveModelVmdExportSource()?.animation;
+
+        if (sourceModel && targetModel && animation && plan.valid) {
+            for (const animationTrack of animation.movableBoneTracks) {
+                const track: CommandTrackRef = {
+                    name: animationTrack.name,
+                    category: classifyBone(animationTrack.name),
+                };
+                for (const frame of animationTrack.frameNumbers) {
+                    const payload = this.mmdManager.readTimelineKeyframePayload(track, frame);
+                    if (!payload || payload.kind !== "movableBone") continue;
+                    const before = this.cloneKeyframePayload(payload) as MovableBoneKeyframePayload;
+                    const after = applyModelBodyMotionCorrection(animationTrack.name, before, plan);
+                    if (!after) continue;
+                    compatibleTracks.add(animationTrack.name);
+                    compatibleKeyCount += 1;
+                    if (JSON.stringify(after) === JSON.stringify(before)) continue;
+                    items.push({ track, frame, before, after });
+                }
+            }
+        }
+
+        return {
+            preview: {
+                valid: Boolean(sourceModel && targetModel && animation && plan.valid),
+                sourceModelName: sourceModel?.name ?? "",
+                targetModelName: targetModel?.name ?? "",
+                plan,
+                compatibleTrackCount: compatibleTracks.size,
+                compatibleKeyCount,
+                changedKeyCount: items.length,
+            },
+            items,
+        };
+    }
+
+    private previewBodyMotionCorrection(sourceModelIndex: number): ModelBodyMotionCorrectionPreview {
+        return this.collectBodyMotionCorrection(sourceModelIndex).preview;
+    }
+
+    private correctBodyMotion(sourceModelIndex: number): void {
+        const { preview, items } = this.collectBodyMotionCorrection(sourceModelIndex);
+        if (!preview.valid) {
+            this.showToast(t("dialog.bodyMotionCorrection.invalidProfile"), "info");
+            return;
+        }
+        if (items.length === 0) {
+            this.showToast(t("dialog.bodyMotionCorrection.noCompatibleKeys"), "info");
+            return;
+        }
+
+        const nowMs = Date.now();
+        const command: BuiltCommand = {
+            id: `keyframe.batchCorrect:body:${items.length}:${nowMs}`,
+            label: `Correct ${items.length} keyframes for model body scale`,
+            scope: "keyframe",
+            createdAtMs: nowMs,
+            diff: {
+                type: "keyframe.batchCorrect",
+                correctionKind: "bone",
+                items,
+            },
+        };
+        const corrected = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
+        if (!corrected) {
+            this.showToast(t("dialog.bodyMotionCorrection.failed"), "error");
+            return;
+        }
+
+        this.updateTimelineEditState();
+        this.commandHistory.push(command);
+        this.showToast(t("dialog.bodyMotionCorrection.applied", { count: items.length }), "success");
     }
 
     private deleteSelectedKeyframe(source: ActionSource = "system"): void {

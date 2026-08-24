@@ -2,6 +2,8 @@
 
 作成日: 2026-06-15
 
+更新: 2026-08-24 に、読み込み済み PMX の bind pose を比較してセンター系・足IKの position key を補正する最小機能を独自 VMD track 変換として実装した。現行仕様は [PMX 体格差モーション補正 仕様・実装ガイド](./pmx-body-proportion-motion-correction-2026-08-24.md) を参照。
+
 ## 概要
 
 Babylon.js 9.2.0 には、アニメーションターゲットの差し替えやリターゲットに使えそうな API が複数ある。

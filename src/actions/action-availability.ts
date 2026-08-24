@@ -47,6 +47,10 @@ export function canExecuteEditorAction(
             return (snapshot.selectedKeyCount ?? 0) > 0
                 && isKeyframeValueCorrectionValid(action.correction)
                 && !isKeyframeValueCorrectionIdentity(action.correction);
+        case "keyframe.correctBodyScale":
+            return (snapshot.hasModelVmdExportKeys ?? false)
+                && Number.isInteger(action.sourceModelIndex)
+                && action.sourceModelIndex >= 0;
         case "keyframe.registerInfo":
             return snapshot.hasInfoKeyframeTarget ?? true;
         case "keyframe.registerBone":

@@ -60,6 +60,24 @@ describe("canExecuteEditorAction", () => {
         }, { ...readySnapshot, selectedKeyCount: 0 })).toBe(false);
     });
 
+    it("requires model motion keys and a valid source model index for body correction", () => {
+        expect(canExecuteEditorAction({
+            type: "keyframe.correctBodyScale",
+            source: "menu",
+            sourceModelIndex: 1,
+        }, { ...readySnapshot, hasModelVmdExportKeys: true })).toBe(true);
+        expect(canExecuteEditorAction({
+            type: "keyframe.correctBodyScale",
+            source: "menu",
+            sourceModelIndex: -1,
+        }, { ...readySnapshot, hasModelVmdExportKeys: true })).toBe(false);
+        expect(canExecuteEditorAction({
+            type: "keyframe.correctBodyScale",
+            source: "menu",
+            sourceModelIndex: 1,
+        }, { ...readySnapshot, hasModelVmdExportKeys: false })).toBe(false);
+    });
+
     it("allows mirror paste when a keyframe clipboard exists", () => {
         expect(canExecuteEditorAction(
             { type: "keyframe.mirrorPaste", source: "button" },

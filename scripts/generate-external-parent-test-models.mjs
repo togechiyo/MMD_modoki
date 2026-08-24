@@ -286,6 +286,39 @@ function createDynamicFollowerModel() {
     };
 }
 
+function createBodyCorrectionModel(scale, label) {
+    const base = createTofuModel();
+    const bone = (name, englishName, parentBoneIndex, position) => ({
+        name,
+        englishName,
+        parentBoneIndex,
+        position: position.map((value) => value * scale),
+    });
+    return {
+        ...base,
+        modelName: `体格補正確認用・${label}`,
+        englishModelName: `Body Correction ${label}`,
+        comment: "PMX bind pose based body proportion correction E2E fixture",
+        bones: [
+            bone("センター", "Center", -1, [0, 10, 0]),
+            bone("左足", "Left Leg", 0, [2, 10, 0]),
+            bone("左ひざ", "Left Knee", 1, [2, 5, 0]),
+            bone("左足首", "Left Ankle", 2, [2, 0, 0]),
+            bone("左足ＩＫ", "Left Leg IK", 0, [2, 0, 0]),
+            bone("右足", "Right Leg", 0, [-2, 10, 0]),
+            bone("右ひざ", "Right Knee", 5, [-2, 5, 0]),
+            bone("右足首", "Right Ankle", 6, [-2, 0, 0]),
+            bone("右足ＩＫ", "Right Leg IK", 0, [-2, 0, 0]),
+            bone("左腕", "Left Arm", 0, [3, 15, 0]),
+            bone("左ひじ", "Left Elbow", 9, [7, 15, 0]),
+            bone("左手首", "Left Wrist", 10, [10, 15, 0]),
+            bone("右腕", "Right Arm", 0, [-3, 15, 0]),
+            bone("右ひじ", "Right Elbow", 12, [-7, 15, 0]),
+            bone("右手首", "Right Wrist", 13, [-10, 15, 0]),
+        ],
+    };
+}
+
 function writePmx(model) {
     const writer = new PmxWriter();
     const vertexIndexSize = model.vertices.length <= 255 ? 1 : 2;
@@ -354,7 +387,7 @@ function writePmx(model) {
     for (const bone of bones) {
         writer.text(bone.name);
         writer.text(bone.englishName);
-        writer.vector([0, 0, 0]);
+        writer.vector(bone.position ?? [0, 0, 0]);
         writer.int8(bone.parentBoneIndex);
         writer.int32(0);
         writer.uint16(BONE_FLAGS.rotatable | BONE_FLAGS.movable | BONE_FLAGS.visible | BONE_FLAGS.controllable);
@@ -455,7 +488,7 @@ async function validateModel(PmxReader, filePath, model) {
     assert.equal(parsed.header.modelName, model.modelName);
     assert.equal(parsed.bones.length, expectedBones.length);
     assert.deepEqual(parsed.bones.map((bone) => bone.name), expectedBones.map((bone) => bone.name));
-    assert.deepEqual(parsed.bones[0].position, [0, 0, 0]);
+    assert.deepEqual(parsed.bones[0].position, expectedBones[0].position ?? [0, 0, 0]);
     assert.equal(parsed.rigidBodies.length, model.rigidBodies?.length ?? 0);
     assert.equal(parsed.joints.length, model.joints?.length ?? 0);
     assert.ok(parsed.vertices.length > 0);
@@ -472,6 +505,8 @@ async function main() {
         ["tofu.pmx", createTofuModel()],
         ["plate.pmx", createPlateModel()],
         ["dynamic-follower.pmx", createDynamicFollowerModel()],
+        ["body-source.pmx", createBodyCorrectionModel(1, "Source")],
+        ["body-target.pmx", createBodyCorrectionModel(2, "Target")],
     ];
 
     const vite = await createServer({

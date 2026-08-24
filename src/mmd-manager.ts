@@ -499,6 +499,7 @@ import {
 } from "./physics/physics-model-controller";
 import { externalParentSubtreeHasDynamicRigidBody } from "./physics/model-external-parent-physics";
 import { applyMmdOutlineTaperingShader } from "./render/mmd-outline-tuning";
+import type { ModelBodyCorrectionModel } from "./editor/model-body-motion-correction";
 
 type EditorRuntimeBone = IMmdRuntimeBone & {
     getAnimationPositionOffsetToRef?: (target: Vector3) => Vector3;
@@ -2456,6 +2457,31 @@ ${beforeFogAppendBlock}
             castsShadow: entry.castShadow,
             renderOrder: entry.renderOrder,
         }));
+    }
+
+    public getModelBodyCorrectionModels(): ModelBodyCorrectionModel[] {
+        return this.sceneModels.map((entry, index) => {
+            const runtimeBones = entry.model.runtimeBones as readonly EditorRuntimeBone[] | undefined;
+            const restBones = (runtimeBones ?? []).flatMap((runtimeBone) => {
+                const linkedBone = runtimeBone.linkedBone;
+                if (!linkedBone) return [];
+                const restMatrix = linkedBone.getAbsoluteInverseBindMatrix().clone();
+                restMatrix.invert();
+                const position = restMatrix.getTranslation();
+                if (![position.x, position.y, position.z].every(Number.isFinite)) return [];
+                return [{
+                    name: runtimeBone.name,
+                    position: [position.x, position.y, position.z] as [number, number, number],
+                }];
+            });
+            return {
+                index,
+                instanceId: entry.info.instanceId,
+                name: entry.info.name,
+                active: entry.model === this.currentModel,
+                restBones,
+            };
+        });
     }
 
     private findSceneModelIndexByIdentity(

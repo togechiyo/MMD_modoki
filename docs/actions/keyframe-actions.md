@@ -166,6 +166,29 @@
   - 複数キーを1操作でundo / redoできる。
   - 適用前プレビューの対象数、変更数、値域が実結果と一致する。
 
+### `keyframe.correctBodyScale`
+
+- 意図:
+  - 読み込み済み補正元 PMX とアクティブ PMX の静止姿勢を比較し、全モーションのセンター系・足IK position keyを体格比で補正する。
+- 入力:
+  - `source`: `menu`
+  - `sourceModelIndex`: 補正元モデルの scene index
+- 出力:
+  - `全ての親` / `センター` / `グルーブ` / `腰` は全体比、左右の足IK系は対応する脚長比でposition XYZが更新される。
+- 副作用:
+  - source animation、runtime、timeline表示が更新される。
+- canExecute:
+  - アクティブモデルにVMD出力対象キーがあり、`sourceModelIndex` が非負の整数である。
+  - 補正元が別モデルであること、静止姿勢を計測できること、互換キーがあることは実行直前にも検証する。
+- undo:
+  - 対象。全変更を `keyframe.batchCorrect` 1件へまとめる。
+- テスト観点:
+  - bind pose由来の比率を使い、現在ポーズに左右されない。
+  - 回転、補間、物理toggle、非対象trackを変更しない。
+  - 複数キーを1操作でundo / redoできる。
+
+詳細: [PMX 体格差モーション補正 実装メモ](../pmx-body-proportion-motion-correction-2026-08-24.md)
+
 ## Command化方針
 
 - 最初のPoCは `keyframe.addCurrent` と `keyframe.deleteSelected` から始める。

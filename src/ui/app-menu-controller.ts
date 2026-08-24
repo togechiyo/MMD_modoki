@@ -23,6 +23,8 @@ import {
     type KeyframeValueCorrectionPreview,
 } from "../editor/keyframe-value-correction";
 import { KeyframeValueCorrectionDialogController } from "./keyframe-value-correction-dialog-controller";
+import { ModelBodyMotionCorrectionDialogController } from "./model-body-motion-correction-dialog-controller";
+import type { ModelBodyMotionCorrectionPreview } from "../editor/model-body-motion-correction";
 import type { TrackCategory } from "../types";
 
 type ToastType = "success" | "error" | "info";
@@ -43,6 +45,7 @@ type AppMenuControllerDeps = {
     getUiScalePercentage: () => UiScalePercentage;
     countTimelineKeysByCategories: (categories: readonly TrackCategory[]) => number;
     previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
+    previewBodyMotionCorrection: (sourceModelIndex: number) => ModelBodyMotionCorrectionPreview;
 };
 
 type DialogKind = "about" | "shortcuts" | "preferences";
@@ -83,6 +86,7 @@ export class AppMenuController {
     private readonly getUiScalePercentage: () => UiScalePercentage;
     private readonly countTimelineKeysByCategories: (categories: readonly TrackCategory[]) => number;
     private readonly previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
+    private readonly previewBodyMotionCorrection: (sourceModelIndex: number) => ModelBodyMotionCorrectionPreview;
     private readonly popupDialogController: PopupDialogController;
     private openGroup: HTMLElement | null = null;
 
@@ -103,6 +107,7 @@ export class AppMenuController {
         this.getUiScalePercentage = deps.getUiScalePercentage;
         this.countTimelineKeysByCategories = deps.countTimelineKeysByCategories;
         this.previewKeyframeCorrection = deps.previewKeyframeCorrection;
+        this.previewBodyMotionCorrection = deps.previewBodyMotionCorrection;
         this.popupDialogController = new PopupDialogController();
         this.setupMenuEvents();
     }
@@ -256,6 +261,10 @@ export class AppMenuController {
                 return this.previewKeyframeCorrection(createIdentityKeyframeValueCorrection("camera")).compatibleKeyCount === 0;
             case "edit.correctMorph":
                 return this.previewKeyframeCorrection(createIdentityKeyframeValueCorrection("morph")).compatibleKeyCount === 0;
+            case "edit.correctMotionForBody":
+                return this.mmdManager.getTimelineTarget() !== "model"
+                    || !this.mmdManager.hasActiveModelVmdExportKeys()
+                    || this.mmdManager.getModelBodyCorrectionModels().filter((model) => !model.active).length === 0;
             case "file.exportModelVmd":
                 return !this.mmdManager.hasActiveModelVmdExportKeys();
             case "file.exportCameraVmd":
@@ -455,6 +464,9 @@ export class AppMenuController {
                 return;
             case "edit.correctMorph":
                 this.openKeyframeCorrectionDialog("morph", invoker ?? null);
+                return;
+            case "edit.correctMotionForBody":
+                this.openBodyMotionCorrectionDialog(invoker ?? null);
                 return;
             case "edit.deleteActiveModel":
                 this.dispatchAction({ type: "model.deleteActive", source: "menu" });
@@ -855,6 +867,22 @@ export class AppMenuController {
                 kind,
                 dispatchAction: (action) => this.dispatchAction(action),
                 previewCorrection: (correction) => this.previewKeyframeCorrection(correction),
+                close: () => this.popupDialogController.close(),
+            }),
+        });
+    }
+
+    private openBodyMotionCorrectionDialog(invoker: HTMLElement | null): void {
+        this.popupDialogController.open({
+            id: "model-body-motion-correction",
+            surface: "modal",
+            title: t("dialog.bodyMotionCorrection.title"),
+            size: "sm",
+            restoreFocusTo: invoker,
+            content: new ModelBodyMotionCorrectionDialogController({
+                models: this.mmdManager.getModelBodyCorrectionModels(),
+                dispatchAction: (action) => this.dispatchAction(action),
+                previewCorrection: (sourceModelIndex) => this.previewBodyMotionCorrection(sourceModelIndex),
                 close: () => this.popupDialogController.close(),
             }),
         });

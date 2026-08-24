@@ -43,7 +43,8 @@ export type KeyframeAction =
     | { type: "keyframe.registerLight"; source: ActionSource }
     | { type: "keyframe.registerShadow"; source: ActionSource }
     | { type: "keyframe.registerGravity"; source: ActionSource }
-    | { type: "keyframe.correctSelected"; source: ActionSource; correction: KeyframeValueCorrection };
+    | { type: "keyframe.correctSelected"; source: ActionSource; correction: KeyframeValueCorrection }
+    | { type: "keyframe.correctBodyScale"; source: ActionSource; sourceModelIndex: number };
 
 export type HistoryAction =
     | { type: "history.undo"; source: ActionSource }

@@ -151,6 +151,7 @@ function createCommandId(diff: KeyframeCommandDiff, nowMs: number): string {
         case "keyframe.batchDelete":
         case "keyframe.batchMove":
         case "keyframe.batchPaste":
+        case "keyframe.batchCorrect":
             return `${diff.type}:${diff.items.length}:${nowMs}`;
     }
 }

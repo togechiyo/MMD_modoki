@@ -11,6 +11,7 @@ const readySnapshot: EditorActionAvailabilitySnapshot = {
     selectedTrackKeyframeCount: 2,
     hasEditableInterpolationChannels: true,
     hasInterpolationClipboard: true,
+    selectedKeyCount: 2,
 };
 
 describe("canExecuteEditorAction", () => {
@@ -34,6 +35,29 @@ describe("canExecuteEditorAction", () => {
             { type: "keyframe.nudgeSelected", source: "shortcut", deltaFrames: -1 },
             { ...readySnapshot, hasSelectedFrame: false },
         )).toBe(false);
+    });
+
+    it("requires selected keys and a non-identity finite correction", () => {
+        expect(canExecuteEditorAction({
+            type: "keyframe.correctSelected",
+            source: "menu",
+            correction: { kind: "morph", weight: { multiply: 0.5, add: 0 } },
+        }, readySnapshot)).toBe(true);
+        expect(canExecuteEditorAction({
+            type: "keyframe.correctSelected",
+            source: "menu",
+            correction: { kind: "morph", weight: { multiply: 1, add: 0 } },
+        }, readySnapshot)).toBe(false);
+        expect(canExecuteEditorAction({
+            type: "keyframe.correctSelected",
+            source: "menu",
+            correction: { kind: "morph", weight: { multiply: Number.NaN, add: 0 } },
+        }, readySnapshot)).toBe(false);
+        expect(canExecuteEditorAction({
+            type: "keyframe.correctSelected",
+            source: "menu",
+            correction: { kind: "morph", weight: { multiply: 0.5, add: 0 } },
+        }, { ...readySnapshot, selectedKeyCount: 0 })).toBe(false);
     });
 
     it("allows mirror paste when a keyframe clipboard exists", () => {

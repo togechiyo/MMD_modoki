@@ -1,6 +1,6 @@
 # Keyframe Actions
 
-更新日: 2026-05-18
+更新日: 2026-08-24
 
 キーフレーム登録、削除、移動のAction仕様。将来の `Action -> Command -> diff -> HistoryManager` で最初に対象にする領域。
 
@@ -142,6 +142,29 @@
 - テスト観点:
   - accessory未選択時は実行されない。
   - transform値が保存対象と一致する。
+
+### `keyframe.correctSelected`
+
+- 意図:
+  - 選択中の互換キーへ、チャンネルごとの `元値 × 倍率 + 加算` を一括適用する。
+- 入力:
+  - `source`: `menu`
+  - `correction`: `bone` / `camera` / `morph` の型付き補正値
+- 出力:
+  - ボーン位置XYZ・回転XYZ、カメラ注視点XYZ・回転XYZ・距離・FoV、または表情値が更新される。
+  - timelineの複数キー選択が維持される。
+- 副作用:
+  - source animation、runtime、timeline表示が更新される。
+- canExecute:
+  - 互換キーが1件以上選択され、倍率と加算が有限かつ恒等変換ではない。
+- undo:
+  - 対象。全キーのbefore / afterを `keyframe.batchCorrect` 1件へまとめる。
+- テスト観点:
+  - 非互換キーを変更しない。
+  - 指定していない位置・回転と補間値を変更しない。
+  - ボーンQuaternionを正規化し、元Quaternionと同じ半球へ符号を揃える。
+  - 複数キーを1操作でundo / redoできる。
+  - 適用前プレビューの対象数、変更数、値域が実結果と一致する。
 
 ## Command化方針
 

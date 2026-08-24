@@ -78,6 +78,14 @@ import type {
 } from "./editor/timeline-edit-service";
 import type { ModelExternalParentKeyframePayload } from "./shared/model-external-parent";
 import {
+    applyKeyframeValueCorrection,
+    createKeyframeValueCorrectionPreview,
+    isKeyframeValueCorrectionIdentity,
+    isKeyframeValueCorrectionValid,
+    type KeyframeValueCorrection,
+    type KeyframeValueCorrectionPreview,
+} from "./editor/keyframe-value-correction";
+import {
     buildMirrorPasteItems,
     type MirrorPasteClipboardItem,
 } from "./editor/mirror-paste-service";
@@ -707,6 +715,8 @@ export class UIController {
             refreshMaterialUi: () => this.shaderPanelController?.refresh(),
             isUiVisible: () => !this.layoutUiController?.isUiFullscreenModeActive(),
             getUiScalePercentage: () => this.layoutUiController?.getUiScalePercentage() ?? 100,
+            countTimelineKeysByCategories: (categories) => this.timeline.countKeysByCategories(categories),
+            previewKeyframeCorrection: (correction) => this.previewSelectedKeyframeCorrection(correction),
             createExportSettingsAdapter: () => this.exportUiController?.createExportSettingsAdapter() ?? {
                 getState: () => ({
                     aspectPreset: "16:9",
@@ -2281,6 +2291,11 @@ export class UIController {
         this.actionDispatcher.register("playback.seekAdjacentKeyframe", (action) => {
             this.seekToAdjacentKeyframePoint(action.direction);
         });
+        this.actionDispatcher.register("timeline.selectAllKeysByCategories", (action) => {
+            if (!this.timeline.selectAllKeysByCategories(action.categories)) {
+                this.showToast(t("menu.toast.noMatchingKeyframes"), "info");
+            }
+        });
         this.actionDispatcher.register("keyframe.addCurrent", (action) => this.addKeyframeAtCurrentFrame(null, action.source));
         this.actionDispatcher.register("keyframe.copySelected", () => this.copySelectedKeyframe());
         this.actionDispatcher.register("keyframe.paste", () => this.pasteKeyframeClipboard());
@@ -2288,6 +2303,9 @@ export class UIController {
         this.actionDispatcher.register("keyframe.deleteSelected", (action) => this.deleteSelectedKeyframe(action.source));
         this.actionDispatcher.register("keyframe.nudgeSelected", (action) => {
             this.nudgeSelectedKeyframe(action.deltaFrames);
+        });
+        this.actionDispatcher.register("keyframe.correctSelected", (action) => {
+            this.correctSelectedKeyframes(action.correction);
         });
         this.actionDispatcher.register("keyframe.toggleAutoKey", () => {
             this.setAutoKeyEnabled(!this.autoKeyEnabled, { persist: true, toast: true });
@@ -10667,6 +10685,70 @@ export class UIController {
                     direction: { ...payload.direction },
                 };
         }
+    }
+
+    private getSelectedKeyframePayloads(): {
+        track: CommandTrackRef;
+        frame: number;
+        payload: TimelineKeyframePayload;
+    }[] {
+        return this.timeline.getSelectedKeys()
+            .map((selectedKey) => {
+                const track = this.selectionRefToCommandTrack(selectedKey);
+                const payload = this.mmdManager.readTimelineKeyframePayload(track, selectedKey.frame);
+                return payload ? { track, frame: selectedKey.frame, payload } : null;
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
+    }
+
+    private previewSelectedKeyframeCorrection(correction: KeyframeValueCorrection): KeyframeValueCorrectionPreview {
+        return createKeyframeValueCorrectionPreview(
+            this.getSelectedKeyframePayloads().map((item) => item.payload),
+            correction,
+        );
+    }
+
+    private correctSelectedKeyframes(correction: KeyframeValueCorrection): void {
+        if (!isKeyframeValueCorrectionValid(correction) || isKeyframeValueCorrectionIdentity(correction)) {
+            this.showToast(t("dialog.keyCorrection.invalid"), "info");
+            return;
+        }
+
+        const items = this.getSelectedKeyframePayloads()
+            .map(({ track, frame, payload }) => {
+                const before = this.cloneKeyframePayload(payload);
+                const after = applyKeyframeValueCorrection(before, correction);
+                if (!after || JSON.stringify(after) === JSON.stringify(before)) return null;
+                return { track, frame, before, after };
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
+
+        if (items.length === 0) {
+            this.showToast(t("dialog.keyCorrection.noCompatibleKeys"), "info");
+            return;
+        }
+
+        const nowMs = Date.now();
+        const command: BuiltCommand = {
+            id: `keyframe.batchCorrect:${correction.kind}:${items.length}:${nowMs}`,
+            label: `Correct ${items.length} ${correction.kind} keyframes`,
+            scope: "keyframe",
+            createdAtMs: nowMs,
+            diff: {
+                type: "keyframe.batchCorrect",
+                correctionKind: correction.kind,
+                items,
+            },
+        };
+        const corrected = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
+        if (!corrected) {
+            this.showToast(t("dialog.keyCorrection.failed"), "error");
+            return;
+        }
+
+        this.updateTimelineEditState();
+        this.commandHistory.push(command);
+        this.showToast(t("dialog.keyCorrection.applied", { count: items.length }), "success");
     }
 
     private deleteSelectedKeyframe(source: ActionSource = "system"): void {

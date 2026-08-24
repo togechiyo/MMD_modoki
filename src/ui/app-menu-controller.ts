@@ -16,6 +16,14 @@ import { PopupDialogController } from "./popup-dialog-controller";
 import type { WebmExportSettingsAdapter } from "./export-ui-controller";
 import { WebmExportDialogController } from "./webm-export-dialog-controller";
 import { parseUiScalePercentage, type UiScalePercentage } from "../shared/ui-scale";
+import {
+    createIdentityKeyframeValueCorrection,
+    type KeyframeValueCorrection,
+    type KeyframeValueCorrectionKind,
+    type KeyframeValueCorrectionPreview,
+} from "../editor/keyframe-value-correction";
+import { KeyframeValueCorrectionDialogController } from "./keyframe-value-correction-dialog-controller";
+import type { TrackCategory } from "../types";
 
 type ToastType = "success" | "error" | "info";
 
@@ -33,6 +41,8 @@ type AppMenuControllerDeps = {
     createExportSettingsAdapter: () => WebmExportSettingsAdapter;
     isUiVisible: () => boolean;
     getUiScalePercentage: () => UiScalePercentage;
+    countTimelineKeysByCategories: (categories: readonly TrackCategory[]) => number;
+    previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
 };
 
 type DialogKind = "about" | "shortcuts" | "preferences";
@@ -71,6 +81,8 @@ export class AppMenuController {
     private readonly createExportSettingsAdapter: () => WebmExportSettingsAdapter;
     private readonly isUiVisible: () => boolean;
     private readonly getUiScalePercentage: () => UiScalePercentage;
+    private readonly countTimelineKeysByCategories: (categories: readonly TrackCategory[]) => number;
+    private readonly previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
     private readonly popupDialogController: PopupDialogController;
     private openGroup: HTMLElement | null = null;
 
@@ -89,6 +101,8 @@ export class AppMenuController {
         this.createExportSettingsAdapter = deps.createExportSettingsAdapter;
         this.isUiVisible = deps.isUiVisible;
         this.getUiScalePercentage = deps.getUiScalePercentage;
+        this.countTimelineKeysByCategories = deps.countTimelineKeysByCategories;
+        this.previewKeyframeCorrection = deps.previewKeyframeCorrection;
         this.popupDialogController = new PopupDialogController();
         this.setupMenuEvents();
     }
@@ -224,15 +238,24 @@ export class AppMenuController {
         const timelineTarget = this.mmdManager.getTimelineTarget();
         switch (command) {
             case "edit.selectAllCameraKeys":
+                return timelineTarget !== "camera" || this.countTimelineKeysByCategories(["camera"]) === 0;
             case "edit.selectAllLightKeys":
+                return timelineTarget !== "camera" || this.countTimelineKeysByCategories(["light"]) === 0;
             case "edit.selectAllSelfShadowKeys":
+                return timelineTarget !== "camera" || this.countTimelineKeysByCategories(["shadow"]) === 0;
             case "edit.selectAllGravityKeys":
-            case "edit.selectAllAccessoryKeys":
-                return timelineTarget !== "camera";
+                return timelineTarget !== "camera" || this.countTimelineKeysByCategories(["gravity"]) === 0;
             case "edit.selectAllBoneKeys":
+                return timelineTarget !== "model"
+                    || this.countTimelineKeysByCategories(["root", "semi-standard", "bone"]) === 0;
             case "edit.selectAllMorphKeys":
-            case "edit.selectAllDisplayIkParentKeys":
-                return timelineTarget !== "model";
+                return timelineTarget !== "model" || this.countTimelineKeysByCategories(["morph"]) === 0;
+            case "edit.correctBonePosition":
+                return this.previewKeyframeCorrection(createIdentityKeyframeValueCorrection("bone")).compatibleKeyCount === 0;
+            case "edit.correctCamera":
+                return this.previewKeyframeCorrection(createIdentityKeyframeValueCorrection("camera")).compatibleKeyCount === 0;
+            case "edit.correctMorph":
+                return this.previewKeyframeCorrection(createIdentityKeyframeValueCorrection("morph")).compatibleKeyCount === 0;
             case "file.exportModelVmd":
                 return !this.mmdManager.hasActiveModelVmdExportKeys();
             case "file.exportCameraVmd":
@@ -381,6 +404,15 @@ export class AppMenuController {
             case "edit.redo":
                 this.dispatchAction({ type: "history.redo", source: "menu" });
                 return;
+            case "edit.copyKeyframe":
+                this.dispatchAction({ type: "keyframe.copySelected", source: "menu" });
+                return;
+            case "edit.pasteKeyframe":
+                this.dispatchAction({ type: "keyframe.paste", source: "menu" });
+                return;
+            case "edit.mirrorPasteKeyframe":
+                this.dispatchAction({ type: "keyframe.mirrorPaste", source: "menu" });
+                return;
             case "edit.addKeyframe":
                 this.dispatchAction({ type: "keyframe.addCurrent", source: "menu" });
                 return;
@@ -394,14 +426,35 @@ export class AppMenuController {
                 this.dispatchAction({ type: "playback.seekAdjacentKeyframe", source: "menu", direction: 1 });
                 return;
             case "edit.selectAllCameraKeys":
+                this.dispatchAction({ type: "timeline.selectAllKeysByCategories", source: "menu", categories: ["camera"] });
+                return;
             case "edit.selectAllLightKeys":
+                this.dispatchAction({ type: "timeline.selectAllKeysByCategories", source: "menu", categories: ["light"] });
+                return;
             case "edit.selectAllSelfShadowKeys":
+                this.dispatchAction({ type: "timeline.selectAllKeysByCategories", source: "menu", categories: ["shadow"] });
+                return;
             case "edit.selectAllGravityKeys":
-            case "edit.selectAllAccessoryKeys":
+                this.dispatchAction({ type: "timeline.selectAllKeysByCategories", source: "menu", categories: ["gravity"] });
+                return;
             case "edit.selectAllBoneKeys":
+                this.dispatchAction({
+                    type: "timeline.selectAllKeysByCategories",
+                    source: "menu",
+                    categories: ["root", "semi-standard", "bone"],
+                });
+                return;
             case "edit.selectAllMorphKeys":
-            case "edit.selectAllDisplayIkParentKeys":
-                this.showToast(t("menu.toast.unhandled"), "info");
+                this.dispatchAction({ type: "timeline.selectAllKeysByCategories", source: "menu", categories: ["morph"] });
+                return;
+            case "edit.correctBonePosition":
+                this.openKeyframeCorrectionDialog("bone", invoker ?? null);
+                return;
+            case "edit.correctCamera":
+                this.openKeyframeCorrectionDialog("camera", invoker ?? null);
+                return;
+            case "edit.correctMorph":
+                this.openKeyframeCorrectionDialog("morph", invoker ?? null);
                 return;
             case "edit.deleteActiveModel":
                 this.dispatchAction({ type: "model.deleteActive", source: "menu" });
@@ -782,6 +835,27 @@ export class AppMenuController {
                 close: () => {
                     this.popupDialogController.close();
                 },
+            }),
+        });
+    }
+
+    private openKeyframeCorrectionDialog(kind: KeyframeValueCorrectionKind, invoker: HTMLElement | null): void {
+        const titleKey = kind === "bone"
+            ? "dialog.keyCorrection.bonePositionTitle"
+            : kind === "camera"
+                ? "dialog.keyCorrection.cameraTitle"
+                : "dialog.keyCorrection.morphTitle";
+        this.popupDialogController.open({
+            id: `keyframe-correction-${kind}`,
+            surface: "modal",
+            title: t(titleKey),
+            size: "sm",
+            restoreFocusTo: invoker,
+            content: new KeyframeValueCorrectionDialogController({
+                kind,
+                dispatchAction: (action) => this.dispatchAction(action),
+                previewCorrection: (correction) => this.previewKeyframeCorrection(correction),
+                close: () => this.popupDialogController.close(),
             }),
         });
     }

@@ -43,8 +43,12 @@
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.undo"><span data-i18n="menu.edit.undo">元に戻す</span><span class="app-menu-shortcut">Ctrl+Z</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.redo"><span data-i18n="menu.edit.redo">やり直し</span><span class="app-menu-shortcut">Ctrl+Y</span></button>
           <div class="app-menu-separator" role="separator"></div>
-          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.addKeyframe"><span data-i18n="menu.edit.addKeyframe">現在フレームに登録</span><span class="app-menu-shortcut">Enter</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.copyKeyframe"><span data-i18n="menu.edit.copyKeyframe">選択キーをコピー</span><span class="app-menu-shortcut">Ctrl+C</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.pasteKeyframe"><span data-i18n="menu.edit.pasteKeyframe">キーを貼り付け</span><span class="app-menu-shortcut">Ctrl+V</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.mirrorPasteKeyframe"><span data-i18n="menu.edit.mirrorPasteKeyframe">反転ペースト</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.deleteKeyframe"><span data-i18n="menu.edit.deleteKeyframe">選択キーフレームを削除</span><span class="app-menu-shortcut">Del</span></button>
+          <div class="app-menu-separator" role="separator"></div>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.addKeyframe"><span data-i18n="menu.edit.addKeyframe">現在フレームに登録</span><span class="app-menu-shortcut">Enter</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.prevKeyframe"><span data-i18n="menu.edit.prevKeyframe">前のキーフレームへ</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.nextKeyframe"><span data-i18n="menu.edit.nextKeyframe">次のキーフレームへ</span></button>
           <div class="app-menu-separator" role="separator"></div>
@@ -52,11 +56,13 @@
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.selectAllLightKeys"><span data-i18n="menu.edit.selectAllLightKeys">照明フレームすべて選択</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.selectAllSelfShadowKeys"><span data-i18n="menu.edit.selectAllSelfShadowKeys">セルフ影フレームすべて選択</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.selectAllGravityKeys"><span data-i18n="menu.edit.selectAllGravityKeys">重力フレームすべて選択</span></button>
-          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.selectAllAccessoryKeys"><span data-i18n="menu.edit.selectAllAccessoryKeys">アクセサリフレームすべて選択</span></button>
           <div class="app-menu-separator" role="separator"></div>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.selectAllBoneKeys"><span data-i18n="menu.edit.selectAllBoneKeys">ボーンフレームすべて選択</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.selectAllMorphKeys"><span data-i18n="menu.edit.selectAllMorphKeys">表情フレームすべて選択</span></button>
-          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.selectAllDisplayIkParentKeys"><span data-i18n="menu.edit.selectAllDisplayIkParentKeys">表示・IK・外親フレームすべて選択</span></button>
+          <div class="app-menu-separator" role="separator"></div>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.correctBonePosition"><span data-i18n="menu.edit.correctBonePosition">選択ボーンキーを補正...</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.correctCamera"><span data-i18n="menu.edit.correctCamera">選択カメラキーを補正...</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.correctMorph"><span data-i18n="menu.edit.correctMorph">選択表情キーを補正...</span></button>
           <div class="app-menu-separator" role="separator"></div>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="edit.deleteActiveModel"><span data-i18n="menu.edit.deleteActiveModel">選択モデルを削除</span></button>
           <div class="app-menu-separator" role="separator"></div>

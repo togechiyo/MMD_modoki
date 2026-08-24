@@ -133,6 +133,7 @@
 ## カメラ / タイムライン / キーフレーム
 
 - [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)
+- [キーフレーム値補正 実装メモ 2026-08-24](./keyframe-value-correction-implementation-2026-08-24.md)
 - [カメラ実装仕様](./camera-implementation-spec.md)
 - [カメラ用ポストエフェクト現行仕様](./camera-postfx-current-spec.md)
 - [カメラVMD対応メモ](./camera-vmd.md)

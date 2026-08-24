@@ -1,6 +1,7 @@
-import type { KeyframeTrack } from "../types";
+import type { KeyframeTrack, TrackCategory } from "../types";
 import type { BackgroundDisplayMode } from "../shared/background-display-mode";
 import type { UiScalePercentage } from "../shared/ui-scale";
+import type { KeyframeValueCorrection } from "../editor/keyframe-value-correction";
 
 export type ActionSource =
     | "button"
@@ -41,7 +42,8 @@ export type KeyframeAction =
     | { type: "keyframe.registerAccessoryTransform"; source: ActionSource }
     | { type: "keyframe.registerLight"; source: ActionSource }
     | { type: "keyframe.registerShadow"; source: ActionSource }
-    | { type: "keyframe.registerGravity"; source: ActionSource };
+    | { type: "keyframe.registerGravity"; source: ActionSource }
+    | { type: "keyframe.correctSelected"; source: ActionSource; correction: KeyframeValueCorrection };
 
 export type HistoryAction =
     | { type: "history.undo"; source: ActionSource }
@@ -142,6 +144,7 @@ export type TimelineSeekPhase = "jump" | "dragStart" | "dragMove" | "dragEnd";
 
 export type TimelineAction =
     | { type: "timeline.seekFrame"; source: ActionSource; frame: number; phase: TimelineSeekPhase }
+    | { type: "timeline.selectAllKeysByCategories"; source: ActionSource; categories: TrackCategory[] }
     | { type: "timeline.selectionChanged"; source: ActionSource; track: KeyframeTrack | null; frame: number | null };
 
 export type EditAction =

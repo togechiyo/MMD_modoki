@@ -50,6 +50,8 @@ export function executeCommand(
             return executeKeyframeBatchMove(command.diff, direction, context);
         case "keyframe.batchPaste":
             return executeKeyframeBatchPaste(command.diff, direction, context);
+        case "keyframe.batchCorrect":
+            return executeKeyframeBatchCorrect(command.diff, direction, context);
         case "edit.boneTransform":
             return executeBoneTransform(command.diff, direction, context);
         case "edit.cameraTransform":
@@ -189,6 +191,31 @@ function executeKeyframeBatchPaste(
         context.setSelectedKeys?.([]);
     }
     context.seekToBoundary(diff.pasteBaseFrame);
+    context.refreshAfterKeyframeEdit();
+    return true;
+}
+
+function executeKeyframeBatchCorrect(
+    diff: Extract<KeyframeCommandDiff, { type: "keyframe.batchCorrect" }>,
+    direction: CommandDirection,
+    context: CommandExecutionContext,
+): boolean {
+    if (!context.applyTimelineKeyframePayload) return false;
+    context.beginTimelineEditBatch?.();
+    try {
+        const items = direction === "apply" ? diff.items : [...diff.items].reverse();
+        for (const item of items) {
+            const payload = direction === "apply" ? item.after : item.before;
+            if (!applyKeyframePayload(context, item.track, item.frame, payload)) return false;
+        }
+    } finally {
+        context.endTimelineEditBatch?.();
+    }
+
+    const selected = diff.items.map((item) => ({ track: item.track, frame: item.frame }));
+    context.setSelectedFrame(selected[0]?.frame ?? null);
+    context.setSelectedKeys?.(selected);
+    context.seekToBoundary(selected[0]?.frame ?? 0);
     context.refreshAfterKeyframeEdit();
     return true;
 }

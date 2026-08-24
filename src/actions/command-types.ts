@@ -74,6 +74,16 @@ export type KeyframeCommandDiff =
             before: TimelineKeyframePayload | null;
             after: TimelineKeyframePayload;
         }[];
+    }
+    | {
+        type: "keyframe.batchCorrect";
+        correctionKind: "bone" | "camera" | "morph";
+        items: {
+            track: CommandTrackRef;
+            frame: number;
+            before: TimelineKeyframePayload;
+            after: TimelineKeyframePayload;
+        }[];
     };
 
 export type BoneTransformCommandSnapshot = {

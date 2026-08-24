@@ -1,5 +1,9 @@
 import type { EditorAction } from "./types";
 import { isUiScalePercentage } from "../shared/ui-scale";
+import {
+    isKeyframeValueCorrectionIdentity,
+    isKeyframeValueCorrectionValid,
+} from "../editor/keyframe-value-correction";
 
 export type EditorActionAvailabilitySnapshot = {
     hasSelectedTimelineTrack: boolean;
@@ -8,6 +12,7 @@ export type EditorActionAvailabilitySnapshot = {
     hasEditableInterpolationChannels: boolean;
     hasInterpolationClipboard: boolean;
     hasKeyframeClipboard?: boolean;
+    selectedKeyCount?: number;
     hasLoadedModels?: boolean;
     hasModelVmdExportKeys?: boolean;
     hasCameraVmdExportKeys?: boolean;
@@ -38,6 +43,10 @@ export function canExecuteEditorAction(
             return snapshot.hasKeyframeClipboard ?? false;
         case "keyframe.nudgeSelected":
             return snapshot.hasSelectedTimelineTrack && snapshot.hasSelectedFrame;
+        case "keyframe.correctSelected":
+            return (snapshot.selectedKeyCount ?? 0) > 0
+                && isKeyframeValueCorrectionValid(action.correction)
+                && !isKeyframeValueCorrectionIdentity(action.correction);
         case "keyframe.registerInfo":
             return snapshot.hasInfoKeyframeTarget ?? true;
         case "keyframe.registerBone":
@@ -143,6 +152,7 @@ export function canExecuteEditorAction(
         case "output.markFrameRangeCustomized":
         case "output.sanitizeFrameRange":
         case "timeline.selectionChanged":
+        case "timeline.selectAllKeysByCategories":
         case "interpolation.finishHandleDrag":
         case "edit.boneTransformChanged":
         case "edit.setBoneTransformFromBottomBar":

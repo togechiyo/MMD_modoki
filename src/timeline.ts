@@ -510,6 +510,27 @@ export class Timeline {
         return this.getSelectedKeyRefsFromSet(this.selectedKeySet);
     }
 
+    countKeysByCategories(categories: readonly TrackCategory[]): number {
+        const categorySet = new Set(categories);
+        let count = 0;
+        for (const track of this.tracks) {
+            if (categorySet.has(track.category)) count += track.frames.length;
+        }
+        return count;
+    }
+
+    selectAllKeysByCategories(categories: readonly TrackCategory[]): boolean {
+        const categorySet = new Set(categories);
+        const refs: TimelineKeySelectionRef[] = [];
+        for (const track of this.tracks) {
+            if (!categorySet.has(track.category)) continue;
+            for (const frame of track.frames) refs.push(this.createSelectionRef(track, frame));
+        }
+        if (refs.length === 0) return false;
+        this.applyKeySelectionRefs(refs);
+        return true;
+    }
+
     getHeaderSelection(): TimelineHeaderSelectionSnapshot {
         return {
             axis: this.activeHeaderSelectionAxis,

@@ -380,6 +380,41 @@ describe("executeCommand", () => {
         ]);
     });
 
+    it("applies and reverts batch correction while preserving the corrected selection", () => {
+        const before = { kind: "morph" as const, weights: [0.5] };
+        const after = { kind: "morph" as const, weights: [0.25] };
+        const command = createCommand({
+            type: "keyframe.batchCorrect",
+            correctionKind: "morph",
+            items: [
+                { track, frame: 10, before, after },
+                { track, frame: 20, before, after },
+            ],
+        });
+
+        const applyContext = createContext();
+        expect(executeCommand(command, "apply", applyContext.context)).toBe(true);
+        expect(applyContext.calls).toEqual([
+            ["paste", track, 10, "payload"],
+            ["paste", track, 20, "payload"],
+            ["select", 10],
+            ["selectKeys", [10, 20]],
+            ["seek", 10],
+            ["refresh"],
+        ]);
+
+        const revertContext = createContext();
+        expect(executeCommand(command, "revert", revertContext.context)).toBe(true);
+        expect(revertContext.calls).toEqual([
+            ["paste", track, 20, "payload"],
+            ["paste", track, 10, "payload"],
+            ["select", 10],
+            ["selectKeys", [10, 20]],
+            ["seek", 10],
+            ["refresh"],
+        ]);
+    });
+
     it("applies and reverts bone transform commands", () => {
         const before = {
             position: { x: 0, y: 0, z: 0 },

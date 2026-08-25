@@ -69,6 +69,8 @@ describe("timeline key selection", () => {
         expect(createTimelineSelectionScopeKey("camera", "model-a")).toBe("camera");
         expect(createTimelineSelectionScopeKey("model", "model-a")).toBe("model:model-a");
         expect(createTimelineSelectionScopeKey("model", "model-b")).toBe("model:model-b");
+        expect(createTimelineSelectionScopeKey("accessory", "model-a", 0)).toBe("accessory:0");
+        expect(createTimelineSelectionScopeKey("accessory", "model-a", 1)).toBe("accessory:1");
     });
 
     it("replaces, toggles, and ranges row header selection in track order", () => {

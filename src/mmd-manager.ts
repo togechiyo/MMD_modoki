@@ -66,6 +66,7 @@ import type {
     ProjectSerializedModelExternalParentTrack,
     ProjectModelMaterialShaderState,
     KeyframeTrack,
+    TimelineTarget,
     MirroringFloorShape,
     SsgiBlendMode,
     WebmInitialPhysicsState,
@@ -1797,7 +1798,8 @@ ${beforeFogAppendBlock}
     private lastEvaluatedShadowSceneFrame: number | null = null;
     private gravitySceneTrack: SceneKeyframeTrack<GravitySceneKeyframeValue> | null = null;
     private lastEvaluatedGravitySceneFrame: number | null = null;
-    private timelineTarget: "model" | "camera" = "model";
+    private timelineTarget: TimelineTarget = "model";
+    private activeTimelineAccessoryIndex: number | null = null;
     private boneVisualizerTarget: { mesh: Mesh; skeleton: Skeleton | null; pairs: Array<[number, number]>; positionMesh: Mesh; runtimeBones: readonly IMmdRuntimeBone[] | null; runtimeUseMeshWorldMatrix: boolean; boneControlInfoByName: ReadonlyMap<string, BoneControlInfo> } | null = null;
     private boneOverlayCanvas: HTMLCanvasElement | null = null;
     private boneOverlayCtx: CanvasRenderingContext2D | null = null;
@@ -4365,6 +4367,7 @@ ${beforeFogAppendBlock}
 
     public setTimelineTarget(target: "model" | "camera"): void {
         this.timelineTarget = target;
+        this.activeTimelineAccessoryIndex = null;
         if (target === "camera" && this.hasActiveCameraAnimation() && !this._isPlaying) {
             this.syncViewportCameraFromMmdCamera();
         }
@@ -4374,7 +4377,25 @@ ${beforeFogAppendBlock}
         this.emitMergedKeyframeTracks();
         this.dumpRenderDiagnostics(`after setTimelineTarget:${target}`);
     }
-    public getTimelineTarget(): "model" | "camera" {
+    public setAccessoryTimelineTarget(index: number): boolean {
+        if (!this.getLoadedAccessories().some((accessory) => accessory.index === index)) return false;
+        this.timelineTarget = "accessory";
+        this.activeTimelineAccessoryIndex = index;
+        this.syncBoneVisualizerVisibility();
+        this.syncRigidBodyVisualizerVisibility();
+        this.updateBoneGizmoTarget();
+        this.emitMergedKeyframeTracks();
+        this.dumpRenderDiagnostics(`after setAccessoryTimelineTarget:${index}`);
+        return true;
+    }
+
+    public getActiveTimelineAccessoryIndex(): number | null {
+        const index = this.activeTimelineAccessoryIndex;
+        if (index === null) return null;
+        return this.getLoadedAccessories().some((accessory) => accessory.index === index) ? index : null;
+    }
+
+    public getTimelineTarget(): TimelineTarget {
         return this.timelineTarget;
     }
 
@@ -5749,6 +5770,7 @@ ${beforeFogAppendBlock}
 
     private evaluateSceneTracksAtFrame(frame: number): void {
         const normalizedFrame = Math.max(0, Math.floor(frame));
+        this.evaluateAccessoryTransformKeyframes(normalizedFrame);
         if (this.lightSceneTrack?.keyframes.length && this.lastEvaluatedLightSceneFrame !== normalizedFrame) {
             this.lastEvaluatedLightSceneFrame = normalizedFrame;
             const value = evaluateSceneKeyframeTrack(this.lightSceneTrack, normalizedFrame, interpolateLightSceneValue);

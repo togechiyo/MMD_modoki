@@ -353,6 +353,8 @@ async function initializeApp(): Promise<void> {
           name: track.name,
           frames: Array.from(track.frames),
         })),
+        getAccessoryTransform: (index) => mmdManager.getAccessoryTransform(index),
+        getAccessoryTransformKeyframe: (index, frame) => mmdManager.readAccessoryTransformKeyframeValue(index, frame),
         getCommandHistoryState: () => uiController.getCommandHistoryStateForE2e(),
         nudgeTimelineSelection: (deltaFrames) => uiController.nudgeTimelineSelectionForE2e(deltaFrames),
         getShadowRuntimeDiagnostics: () => ({

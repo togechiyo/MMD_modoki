@@ -1,6 +1,7 @@
 import { MmdAnimation } from "babylon-mmd/esm/Loader/Animation/mmdAnimation";
 import { MmdBoneAnimationTrack, MmdCameraAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack, MmdPropertyAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
-import type { KeyframeTrack, ModelInfo, TrackCategory } from "../types";
+import type { KeyframeTrack, ModelInfo, TimelineTarget, TrackCategory } from "../types";
+import type { AccessoryTransformKeyframeValue } from "./accessory-transform-keyframe-track";
 import type { ModelExternalParentKeyframePayload } from "../shared/model-external-parent";
 import { addFrameNumber, classifyBone, createTrackKey, hasFrameNumber, mergeFrameNumbers, moveFrameNumber, parseTrackKey, removeFrameNumber } from "../shared/timeline-helpers";
 
@@ -90,7 +91,16 @@ type TimelineEditHost = {
     cameraKeyframeFrames: Uint32Array;
     cameraSourceAnimation: MmdAnimation | null;
     cameraMotionPath: string | null;
-    timelineTarget: "model" | "camera";
+    timelineTarget: TimelineTarget;
+    getActiveTimelineAccessoryIndex?: () => number | null;
+    getLoadedAccessories?: () => readonly { index: number; name: string; kind?: string }[];
+    getAccessoryTransformKeyframeFrames?: (index: number) => Uint32Array;
+    getAllAccessoryTransformKeyframeFrames?: () => Uint32Array[];
+    captureAccessoryTransformKeyframeValue?: (index: number) => AccessoryTransformKeyframeValue | null;
+    readAccessoryTransformKeyframeValue?: (index: number, frame: number) => AccessoryTransformKeyframeValue | null;
+    applyAccessoryTransformKeyframeValue?: (index: number, frame: number, value: AccessoryTransformKeyframeValue | null) => boolean;
+    removeAccessoryTransformKeyframeValues?: (index: number, frames: readonly number[]) => boolean;
+    moveAccessoryTransformKeyframeValue?: (index: number, fromFrame: number, toFrame: number) => boolean;
     showPhysicsBonesInTimeline?: boolean;
     mmdRuntime: {
         animationFrameTimeDuration: number;
@@ -203,12 +213,17 @@ export type GravityKeyframePayload = {
     direction: { x: number; y: number; z: number };
 };
 
+export type AccessoryKeyframePayload = AccessoryTransformKeyframeValue & {
+    kind: "accessory";
+};
+
 export type TimelineKeyframePayload =
     | BoneKeyframePayload
     | MovableBoneKeyframePayload
     | MorphKeyframePayload
     | PropertyKeyframePayload
     | CameraKeyframePayload
+    | AccessoryKeyframePayload
     | LightKeyframePayload
     | ShadowKeyframePayload
     | GravityKeyframePayload;
@@ -531,6 +546,12 @@ export function getRegisteredKeyframeStats(host: TimelineEditHost): { hasAnyKeyf
         maxFrame = Math.max(maxFrame, gravityFrames[gravityFrames.length - 1]);
     }
 
+    for (const accessoryFrames of host.getAllAccessoryTransformKeyframeFrames?.() ?? []) {
+        if (accessoryFrames.length === 0) continue;
+        hasAnyKeyframe = true;
+        maxFrame = Math.max(maxFrame, accessoryFrames[accessoryFrames.length - 1]);
+    }
+
     for (const sceneModel of host.sceneModels) {
         const frameMap = host.modelKeyframeTracksByModel.get(sceneModel.model);
         if (!frameMap) continue;
@@ -721,6 +742,18 @@ export function getCameraTimelineTracks(host: TimelineEditHost): KeyframeTrack[]
     ];
 }
 
+export function getAccessoryTimelineTracks(host: TimelineEditHost): KeyframeTrack[] {
+    const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+    if (accessoryIndex === null) return [];
+    const accessory = host.getLoadedAccessories?.().find((candidate) => candidate.index === accessoryIndex);
+    if (!accessory) return [];
+    return [{
+        name: `${accessory.name}${accessory.kind ? ` [${accessory.kind.toUpperCase()}]` : ""}`,
+        category: "accessory",
+        frames: host.getAccessoryTransformKeyframeFrames?.(accessoryIndex) ?? EMPTY_KEYFRAME_FRAMES,
+    }];
+}
+
 export function refreshTotalFramesFromContent(host: TimelineEditHost): void {
     const runtimeDurationFrame = Math.max(0, Math.floor(host.mmdRuntime.animationFrameTimeDuration));
     const { hasAnyKeyframe, maxFrame } = getRegisteredKeyframeStats(host);
@@ -755,6 +788,11 @@ export function emitMergedKeyframeTracks(host: TimelineEditHost): void {
         return;
     }
 
+    if (host.timelineTarget === "accessory") {
+        host.onKeyframesLoaded(getAccessoryTimelineTracks(host));
+        return;
+    }
+
     host.onKeyframesLoaded(getActiveModelTimelineTracks(host));
 }
 
@@ -773,6 +811,12 @@ export function endTimelineEditBatch(host: TimelineEditHost): void {
 
 export function hasTimelineKeyframe(host: TimelineEditHost, track: Pick<KeyframeTrack, "name" | "category">, frame: number): boolean {
     const normalized = Math.max(0, Math.floor(frame));
+
+    if (track.category === "accessory") {
+        const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+        return accessoryIndex !== null
+            && hasFrameNumber(host.getAccessoryTransformKeyframeFrames?.(accessoryIndex) ?? EMPTY_KEYFRAME_FRAMES, normalized);
+    }
 
     if (track.category === "camera") {
         return hasFrameNumber(host.cameraKeyframeFrames, normalized);
@@ -810,6 +854,17 @@ export function hasInfoKeyframe(host: TimelineEditHost, frame: number): boolean 
 
 export function addTimelineKeyframe(host: TimelineEditHost, track: Pick<KeyframeTrack, "name" | "category">, frame: number): boolean {
     const normalized = Math.max(0, Math.floor(frame));
+
+    if (track.category === "accessory") {
+        const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+        if (accessoryIndex === null) return false;
+        const value = host.captureAccessoryTransformKeyframeValue?.(accessoryIndex) ?? null;
+        const applied = value
+            ? (host.applyAccessoryTransformKeyframeValue?.(accessoryIndex, normalized, value) ?? false)
+            : false;
+        if (applied) emitMergedKeyframeTracks(host);
+        return applied;
+    }
 
     if (track.category === "camera") {
         if (!ensureCameraAnimationForEditing(host)) return false;
@@ -1115,7 +1170,7 @@ function createBoneTrackFromMovableTrack(track: MmdMovableBoneAnimationTrack): M
 }
 
 function shouldUseMovableBoneTrack(host: TimelineEditHost, track: Pick<KeyframeTrack, "name" | "category">): boolean {
-    if (track.category === "camera" || track.category === "light" || track.category === "shadow" || track.category === "gravity" || track.category === "property" || track.category === "morph") return false;
+    if (track.category === "camera" || track.category === "accessory" || track.category === "light" || track.category === "shadow" || track.category === "gravity" || track.category === "property" || track.category === "morph") return false;
     const boneControl = host.activeModelInfo?.boneControlInfos?.find((candidate) => candidate.name === track.name);
     if (boneControl) return boneControl.movable;
     return track.category === "root";
@@ -1123,6 +1178,14 @@ function shouldUseMovableBoneTrack(host: TimelineEditHost, track: Pick<KeyframeT
 
 export function removeTimelineKeyframe(host: TimelineEditHost, track: Pick<KeyframeTrack, "name" | "category">, frame: number): boolean {
     const normalized = Math.max(0, Math.floor(frame));
+
+    if (track.category === "accessory") {
+        const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+        if (accessoryIndex === null) return false;
+        const removed = host.applyAccessoryTransformKeyframeValue?.(accessoryIndex, normalized, null) ?? false;
+        if (removed) emitMergedKeyframeTracks(host);
+        return removed;
+    }
 
     if (track.category === "camera") {
         const nextFrames = removeFrameNumber(host.cameraKeyframeFrames, normalized);
@@ -1170,6 +1233,14 @@ export function moveTimelineKeyframe(
     const normalizedFrom = Math.max(0, Math.floor(fromFrame));
     const normalizedTo = Math.max(0, Math.floor(toFrame));
 
+    if (track.category === "accessory") {
+        const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+        if (accessoryIndex === null) return false;
+        const moved = host.moveAccessoryTransformKeyframeValue?.(accessoryIndex, normalizedFrom, normalizedTo) ?? false;
+        if (moved) emitMergedKeyframeTracks(host);
+        return moved;
+    }
+
     if (track.category === "camera") {
         const nextFrames = moveFrameNumber(host.cameraKeyframeFrames, normalizedFrom, normalizedTo);
         if (nextFrames === host.cameraKeyframeFrames) return false;
@@ -1209,6 +1280,13 @@ export function readTimelineKeyframePayload(
     frame: number,
 ): TimelineKeyframePayload | null {
     const normalized = Math.max(0, Math.floor(frame));
+
+    if (track.category === "accessory") {
+        const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+        if (accessoryIndex === null) return null;
+        const value = host.readAccessoryTransformKeyframeValue?.(accessoryIndex, normalized) ?? null;
+        return value ? { kind: "accessory", ...value } : null;
+    }
 
     if (track.category === "camera") {
         const cameraTrack = host.cameraSourceAnimation?.cameraTrack;
@@ -1334,6 +1412,13 @@ export function applyTimelineKeyframePayload(
 
     const normalized = Math.max(0, Math.floor(frame));
     switch (payload.kind) {
+        case "accessory": {
+            const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+            if (accessoryIndex === null) return false;
+            const applied = host.applyAccessoryTransformKeyframeValue?.(accessoryIndex, normalized, payload) ?? false;
+            if (applied) emitMergedKeyframeTracks(host);
+            return applied;
+        }
         case "camera":
             return applyCameraKeyframePayload(host, normalized, payload);
         case "morph":
@@ -1360,6 +1445,14 @@ export function removeTimelineKeyframePayloads(
 ): boolean {
     const normalizedFrames = createNormalizedFrameSet(frames);
     if (normalizedFrames.size === 0) return true;
+
+    if (track.category === "accessory") {
+        const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+        if (accessoryIndex === null) return false;
+        const removed = host.removeAccessoryTransformKeyframeValues?.(accessoryIndex, [...normalizedFrames]) ?? false;
+        if (removed) emitMergedKeyframeTracks(host);
+        return removed;
+    }
 
     if (track.category === "camera") {
         const cameraTrack = host.cameraSourceAnimation?.cameraTrack as unknown as CameraTrackBatchMutable | undefined;
@@ -1595,6 +1688,14 @@ function removeTimelineKeyframePayload(
     frame: number,
 ): boolean {
     const normalized = Math.max(0, Math.floor(frame));
+
+    if (track.category === "accessory") {
+        const accessoryIndex = host.getActiveTimelineAccessoryIndex?.() ?? null;
+        if (accessoryIndex === null) return false;
+        const removed = host.applyAccessoryTransformKeyframeValue?.(accessoryIndex, normalized, null) ?? false;
+        if (removed) emitMergedKeyframeTracks(host);
+        return removed;
+    }
 
     if (track.category === "camera") {
         const sourceCameraTrack = host.cameraSourceAnimation?.cameraTrack;

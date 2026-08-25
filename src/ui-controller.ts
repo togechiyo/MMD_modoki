@@ -14,6 +14,7 @@ import type {
     ProjectLightingState,
     ProjectOutputState,
     TimelineRotationOverlay,
+    TimelineTarget,
     UiLocale,
     TrackCategory,
     TimelineInterpolationPreview,
@@ -141,7 +142,7 @@ type PendingBoneTransformCommand = {
 type SingleKeyframeClipboard = {
     version: 1;
     mode: "single";
-    sourceTarget: "model" | "camera";
+    sourceTarget: TimelineTarget;
     sourceFrame: number;
     track: CommandTrackRef;
     payload: TimelineKeyframePayload;
@@ -150,7 +151,7 @@ type SingleKeyframeClipboard = {
 type BatchKeyframeClipboard = {
     version: 2;
     mode: "batch";
-    sourceTarget: "model" | "camera";
+    sourceTarget: TimelineTarget;
     sourceBaseFrame: number;
     items: {
         track: CommandTrackRef;
@@ -1738,6 +1739,9 @@ export class UIController {
                 this.refreshLightingUiFromRuntime();
                 this.runtimeFeatureUiController?.refreshGravityControls();
                 this.modelInfoPanelController?.updateActionButtons();
+                if (this.mmdManager.getTimelineTarget() === "accessory") {
+                    this.accessoryPanelController?.refreshSelectedTransform();
+                }
             }
             this.updateTimelineEditState();
             const sourcePose = this.getDisplayBonePoseSnapshot(frame);
@@ -1831,6 +1835,7 @@ export class UIController {
             const nextSelectionScopeKey = createTimelineSelectionScopeKey(
                 timelineTarget,
                 this.mmdManager.getActiveModelInfo()?.instanceId ?? null,
+                this.mmdManager.getActiveTimelineAccessoryIndex(),
             );
             const selectionScopeChanged = this.timelineSelectionScopeKey !== null
                 && this.timelineSelectionScopeKey !== nextSelectionScopeKey;
@@ -1841,8 +1846,10 @@ export class UIController {
                 if (selectedBone) {
                     this.syncTimelineBoneSelectionFromBottomPanel(selectedBone);
                 }
-            } else {
+            } else if (timelineTarget === "camera") {
                 this.timeline.selectTrackByNameAndCategory("Camera", ["camera"]);
+            } else if (tracks[0]) {
+                this.timeline.selectTrackByNameAndCategory(tracks[0].name, ["accessory"]);
             }
             this.syncBoneVisualizerSelection(this.timeline.getSelectedTrack());
             this.syncBottomBoneSelectionFromTimeline(this.timeline.getSelectedTrack());
@@ -3862,7 +3869,7 @@ export class UIController {
         const loadedAccessory = accessories[accessories.length - 1] ?? null;
         if (loadedAccessory) {
             this.lastModelSideTargetValue = createModelInfoAccessorySelectValue(loadedAccessory.index);
-            this.mmdManager.setTimelineTarget("camera");
+            if (!this.mmdManager.setAccessoryTimelineTarget(loadedAccessory.index)) return false;
             this.applyCameraSelectionUI();
             this.accessoryPanelController?.selectAccessory(loadedAccessory.index);
             this.bottomPanelLayoutController?.applyMode("accessory");
@@ -4184,7 +4191,7 @@ export class UIController {
                 .find((candidate) => candidate.index === accessoryIndex) ?? null;
             if (!accessory) return;
             this.lastModelSideTargetValue = value;
-            this.mmdManager.setTimelineTarget("camera");
+            if (!this.mmdManager.setAccessoryTimelineTarget(accessoryIndex)) return;
             this.applyCameraSelectionUI();
             this.accessoryPanelController?.selectAccessory(accessoryIndex);
             this.bottomPanelLayoutController?.applyMode("accessory");
@@ -7539,6 +7546,8 @@ export class UIController {
         switch (track.category) {
             case "camera":
                 return "カメラ";
+            case "accessory":
+                return "アクセサリ";
             case "light":
                 return "照明";
             case "shadow":
@@ -8491,13 +8500,6 @@ export class UIController {
             hasAccessoryTransformKeyframe?: (index: number, frame: number) => boolean;
         };
         return manager.hasAccessoryTransformKeyframe?.(accessoryIndex, frame) ?? false;
-    }
-
-    private addAccessoryTransformKeyframe(accessoryIndex: number, frame: number): boolean {
-        const manager = this.mmdManager as unknown as {
-            addAccessoryTransformKeyframe?: (index: number, frame: number) => boolean;
-        };
-        return manager.addAccessoryTransformKeyframe?.(accessoryIndex, frame) ?? false;
     }
 
     private getInfoKeyframeButtonState(): SectionKeyframeButtonState {
@@ -9542,6 +9544,10 @@ export class UIController {
             this.registerGravityKeyframeAtCurrentFrame();
             return;
         }
+        if (track.category === "accessory") {
+            this.registerAccessoryTransformKeyframe();
+            return;
+        }
         if (track.category === "property") {
             this.registerInfoKeyframe();
             return;
@@ -10145,12 +10151,44 @@ export class UIController {
             return;
         }
 
-        const frame = this.mmdManager.currentFrame;
-        const created = this.addAccessoryTransformKeyframe(accessoryIndex, frame);
+        const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        const accessory = this.mmdManager.getLoadedAccessories().find((candidate) => candidate.index === accessoryIndex);
+        const value = this.mmdManager.captureAccessoryTransformKeyframeValue(accessoryIndex);
+        if (!accessory || !value) {
+            this.showToast("Failed to capture accessory transform", "error");
+            return;
+        }
+        const track = {
+            name: `${accessory.name}${accessory.kind ? ` [${accessory.kind.toUpperCase()}]` : ""}`,
+            category: "accessory" as const,
+        };
+        const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
+        const after: TimelineKeyframePayload = { kind: "accessory", ...value };
+        const decision = this.getKeyframeRegistrationDecision(before, after, "panel", `Frame ${frame} のアクセサリキー`);
+        if (decision === "cancel") return;
+        if (decision === "unchanged") {
+            this.showToast(`Frame ${frame}: accessory keyframe unchanged`, "info");
+            return;
+        }
+        const command = this.createKeyframePasteCommand(
+            track,
+            frame,
+            before,
+            after,
+            `Register accessory transform keyframe at frame ${frame}`,
+        );
+        const created = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
+        if (!created) {
+            this.showToast(`Frame ${frame}: accessory keyframe failed`, "error");
+            return;
+        }
+        this.commandHistory.push(command);
         this.clearSectionKeyframeDirty("accessory", this.getAccessoryKeyframeContextKey(accessoryIndex));
         this.updateSectionKeyframeButtons();
+        this.clearRegisteredKeySelection();
+        this.updateTimelineEditState();
         this.showToast(
-            created ? `Frame ${frame}: accessory keyframe added` : `Frame ${frame}: accessory keyframe already registered`,
+            before ? `Frame ${frame}: accessory keyframe updated` : `Frame ${frame}: accessory keyframe added`,
             "success",
         );
     }
@@ -10909,6 +10947,8 @@ export class UIController {
         payload: TimelineKeyframePayload,
     ): boolean {
         switch (payload.kind) {
+            case "accessory":
+                return track.category === "accessory";
             case "camera":
                 return track.category === "camera";
             case "light":
@@ -10929,6 +10969,13 @@ export class UIController {
 
     private cloneKeyframePayload(payload: TimelineKeyframePayload): TimelineKeyframePayload {
         switch (payload.kind) {
+            case "accessory":
+                return {
+                    kind: "accessory",
+                    position: { ...payload.position },
+                    rotationDeg: { ...payload.rotationDeg },
+                    scale: payload.scale,
+                };
             case "camera":
                 return {
                     kind: "camera",

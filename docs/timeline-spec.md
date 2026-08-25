@@ -1,5 +1,7 @@
 # タイムライン 仕様と実装メモ
 
+アクセサリ固有の対象選択、変形チャンネル、補間、project保存、制約は [アクセサリ・タイムライン仕様](./accessory-timeline-spec.md) を参照する。
+
 更新日: 2026-08-23
 対象:
 
@@ -52,7 +54,7 @@
 ### 3-1. トラック型
 - `KeyframeTrack`:
   - `name`: ボーン / モーフ / シーン項目の内部名
-  - `category`: `root | camera | light | shadow | gravity | semi-standard | bone | morph | property`
+  - `category`: `root | camera | accessory | light | shadow | gravity | semi-standard | bone | morph | property`
   - `frames`: 昇順 `Uint32Array`
 
 参照: `src/types.ts:45`
@@ -62,6 +64,7 @@
 - モデル別トラック: `WeakMap<MmdModel, Map<string, Uint32Array>>`
 - カメラトラック: `cameraKeyframeFrames`（共通フレーム列）
 - トラックキー: `category + separator + name`
+- アクセサリトラック: 選択中の `.x` / OBJ 1件につき位置 XYZ、回転 XYZ、等倍スケールをまとめた1行
 
 参照: `src/mmd-manager.ts:133`, `src/mmd-manager.ts:210`, `src/mmd-manager.ts:3442`
 
@@ -245,6 +248,13 @@
 キーが0件のanimation / scene trackはruntime評価の所有者として扱わない。空トラックを毎frame評価してstatic値をbase valueへ戻したり、空のcamera animationをruntimeへ接続して現在cameraを初期姿勢へ戻したりしない。停止・一時停止後は全カテゴリの再生ロックを解除する。
 
 保存値とruntime値の詳細は [キーフレーム保存仕様](./keyframe-storage-spec.md) を参照する。
+
+### 7-6. Accessory 変形トラック
+
+- `.x` と OBJ は共通の `accessory` categoryを使用し、形式別の編集経路を作らない。
+- 位置 XYZ、回転 XYZ、等倍スケールを線形補間し、seek / 再生時に全アクセサリへ評価する。
+- 停止中に同じフレームを描画し続けるだけでは再評価せず、手入力中の静的値を直前のキー値へ戻さない。
+- projectにはアクセサリ配列と同じ順序の `accessoryTransformAnimations` として保存する。
 
 ## 8. 読み込み時のタイムライン反映
 - VMD:

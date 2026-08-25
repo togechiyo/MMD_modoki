@@ -13,10 +13,12 @@ import {
     captureCurrentPropertyKeyframePayload,
     ensureModelAnimationForEditing,
     evaluatePropertyTrackAtFrame,
+    getAccessoryTimelineTracks,
     getActiveModelTimelineTracks,
     getCameraTimelineTracks,
     readTimelineKeyframePayload,
     removeTimelineKeyframePayloads,
+    moveTimelineKeyframe,
 } from "../../src/editor/timeline-edit-service";
 import type { KeyframeTrack, ModelInfo } from "../../src/types";
 
@@ -456,5 +458,39 @@ describe("timeline edit service model animation tracks", () => {
         expect(Array.from(physicsTrack.frameNumbers)).toEqual([]);
         expect(Array.from(physicsTrack.physicsToggles)).toEqual([]);
         expect(Array.from(host.modelKeyframeTracksByModel.get(model)?.get(`bone\u001f${physicsBoneName}`) ?? [])).toEqual([]);
+    });
+});
+
+describe("timeline edit service accessory tracks", () => {
+    it("routes X and OBJ accessory transforms through the common timeline payload path", () => {
+        const value = {
+            position: { x: 1, y: 2, z: 3 },
+            rotationDeg: { x: 10, y: 20, z: 30 },
+            scale: 1.5,
+        };
+        const apply = vi.fn(() => true);
+        const move = vi.fn(() => true);
+        const remove = vi.fn(() => true);
+        const host = Object.assign(createHost(createModelInfo([])).host, {
+            timelineTarget: "accessory" as const,
+            getActiveTimelineAccessoryIndex: () => 0,
+            getLoadedAccessories: () => [{ index: 0, name: "simple-triangle", kind: "x" as const }],
+            getAccessoryTransformKeyframeFrames: () => new Uint32Array([0, 20]),
+            readAccessoryTransformKeyframeValue: (_index: number, frame: number) => frame === 20 ? value : null,
+            applyAccessoryTransformKeyframeValue: apply,
+            moveAccessoryTransformKeyframeValue: move,
+            removeAccessoryTransformKeyframeValues: remove,
+        });
+        const track = getAccessoryTimelineTracks(host)[0];
+
+        expect(track).toMatchObject({ name: "simple-triangle [X]", category: "accessory" });
+        expect(Array.from(track.frames)).toEqual([0, 20]);
+        expect(readTimelineKeyframePayload(host, track, 20)).toEqual({ kind: "accessory", ...value });
+        expect(applyTimelineKeyframePayload(host, track, 10, { kind: "accessory", ...value })).toBe(true);
+        expect(apply).toHaveBeenCalledWith(0, 10, { kind: "accessory", ...value });
+        expect(moveTimelineKeyframe(host, track, 20, 30)).toBe(true);
+        expect(move).toHaveBeenCalledWith(0, 20, 30);
+        expect(removeTimelineKeyframePayloads(host, track, [0, 30])).toBe(true);
+        expect(remove).toHaveBeenCalledWith(0, [0, 30]);
     });
 });

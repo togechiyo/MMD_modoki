@@ -13,6 +13,7 @@
 | adopted | [v0.2.3 はキー機能追加より UI 整理を先行する](./decisions/v023-moves-ui-before-adding-key-functions.md) | タイムライン機能の実装順を決める |
 | adopted | [アクセサリ欄はモデルに近い構成にする](./decisions/accessories-use-a-model-like-panel-layout.md) | `.x` の下部パネルを変更する |
 | adopted | [アクセサリはモデル編集モードへ置く](./decisions/accessories-belong-to-model-edit-mode.md) | `.x` の編集モードや操作表示を変更する |
+| adopted | [XとOBJは共通のアクセサリ変形タイムラインを使う](./decisions/x-and-obj-share-accessory-transform-timeline.md) | `.x` / OBJ の変形キー、タイムライン、保存を変更する |
 | adopted | [街モデルを扱える広域描画を支援する](./decisions/support-city-scale-wide-area-rendering.md) | far、空ドーム、影距離を変更する |
 | accepted-with-constraints | [シーン全体の影設定変更には所有者の許可を必要とする](./decisions/scene-wide-shadow-settings-require-owner-approval.md) | CSM、ShadowGenerator、cascade、全体bias、影距離を変更する |
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |

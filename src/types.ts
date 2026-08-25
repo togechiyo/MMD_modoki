@@ -215,6 +215,8 @@ declare global {
                 name: string;
                 frames: number[];
             }>;
+            getAccessoryTransform: (index: number) => ProjectAccessoryState["transform"] | null;
+            getAccessoryTransformKeyframe: (index: number, frame: number) => ProjectAccessoryState["transform"] | null;
             getCommandHistoryState: () => { undoCount: number; redoCount: number };
             nudgeTimelineSelection: (deltaFrames: -1 | 1) => void;
             getShadowRuntimeDiagnostics: () => {
@@ -398,7 +400,10 @@ export interface MotionInfo {
 }
 
 /** Track category for timeline row ordering */
-export type TrackCategory = 'root' | 'camera' | 'light' | 'shadow' | 'gravity' | 'property' | 'semi-standard' | 'bone' | 'morph';
+export type TrackCategory = 'root' | 'camera' | 'accessory' | 'light' | 'shadow' | 'gravity' | 'property' | 'semi-standard' | 'bone' | 'morph';
+
+/** Active editor target whose keyframe rows are shown in the timeline. */
+export type TimelineTarget = "model" | "camera" | "accessory";
 
 /** A single row in the keyframe timeline */
 export interface KeyframeTrack {

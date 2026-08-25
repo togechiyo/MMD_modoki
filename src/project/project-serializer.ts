@@ -12,6 +12,7 @@ import type {
     ProjectSerializedGravitySceneTrack,
     SsgiBlendMode,
     ProjectRingParticleState,
+    TimelineTarget,
 } from "../types";
 import type { FrameGraphPostEffectStackEntry } from "../shared/frame-graph-post-effect-stack";
 import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
@@ -41,7 +42,7 @@ type ProjectExportSceneModel = {
 type ProjectExportHost = {
     sceneModels: ProjectExportSceneModel[];
     activeModelInfo: { instanceId: string; path: string } | null;
-    timelineTarget: "model" | "camera";
+    timelineTarget: TimelineTarget;
     _currentFrame: number;
     _playbackSpeed: number;
     cameraMotionPath: string | null;
@@ -371,7 +372,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             coplanarMaterialDepthBiasStrength: host.getMmdCoplanarDepthBiasStrength?.() ?? 0,
             activeModelInstanceId: host.activeModelInfo?.instanceId ?? null,
             activeModelPath: host.activeModelInfo?.path ?? null,
-            timelineTarget: host.timelineTarget,
+            timelineTarget: host.timelineTarget === "camera" ? "camera" : "model",
             currentFrame: host._currentFrame,
             playbackSpeed: host._playbackSpeed,
         },

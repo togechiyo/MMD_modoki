@@ -1,4 +1,4 @@
-import type { KeyframeTrack, TrackCategory } from "../types";
+import type { KeyframeTrack, TimelineTarget, TrackCategory } from "../types";
 
 export type TimelineKeySelectionRef = {
     trackCategory: TrackCategory;
@@ -137,8 +137,11 @@ export function createTimelineRangeSelection(
 }
 
 export function createTimelineSelectionScopeKey(
-    target: "model" | "camera",
+    target: TimelineTarget,
     modelInstanceId: string | null,
+    accessoryIndex: number | null = null,
 ): string {
-    return target === "camera" ? "camera" : `model:${modelInstanceId ?? "none"}`;
+    if (target === "camera") return "camera";
+    if (target === "accessory") return `accessory:${accessoryIndex ?? "none"}`;
+    return `model:${modelInstanceId ?? "none"}`;
 }

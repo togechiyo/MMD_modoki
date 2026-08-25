@@ -1,5 +1,5 @@
 # WebM 出力 現行仕様 / 実装
-更新日: 2026-08-09
+更新日: 2026-08-25
 
 ## 1. 概要
 - `出力 > WebM動画` から `.webm` を保存する
@@ -152,12 +152,27 @@ MMD タイムラインは 30fps 基準で扱う。
 
 既定 bitrate:
 
-- 1080p30: `8 Mbps`
-- 1080p60: `12 Mbps`
-- 1440p30: `16 Mbps`
-- 1440p60: `24 Mbps`
-- 4K30: `35 Mbps`
-- 4K60: `53 Mbps`
+- 720p: `10 Mbps`
+- 1080p30: `20 Mbps`
+- 1080p60: `25 Mbps`
+- 1440p30 / 60: `30 Mbps`
+- 4K30: `60 Mbps`
+- 4K60: `68 Mbps`
+- 4K超: 30fps以下 `80 Mbps`、60fps `100 Mbps`
+
+方針:
+
+- 配布用の標準出力として、主要動画サイトの推奨upload bitrateレンジ上端付近を解像度別に使う。
+- YouTubeのSDR upload推奨値は1080pで8 / 12 Mbps、1440pで16 / 24 Mbps、4Kで35-45 / 53-68 Mbps（標準 / 高frame rate）。VBR uploadに明確なbitrate limitは要求していない。
+- Vimeoの推奨rangeは1080pで10-20 Mbps、2Kで20-30 Mbps、4Kで30-60 Mbps。
+- Xは最大25 Mbpsかつ最大1920x1200のため、1080p tierは60fpsでも25 Mbpsを越えない。
+- codec差と再encodeを考慮し、各サイトの値と完全一致させるものではない。画質改善を理由にframe rate比例で単純に2倍化しない。
+
+2026-08-25確認先:
+
+- [YouTube recommended upload encoding settings](https://support.google.com/youtube/answer/1722171)
+- [Vimeo video and audio compression guidelines](https://help.vimeo.com/hc/en-us/articles/12426043233169-Video-and-audio-compression-guidelines)
+- [How to share and watch videos on X](https://help.x.com/en/using-x/x-videos)
 
 補足:
 

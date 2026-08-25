@@ -271,6 +271,13 @@ export class LutPanelController {
         });
     }
 
+    public getRuntimeReloadExternalAsset(): { path: string | null; text: string | null } {
+        return {
+            path: this.postFxLutExternalPath,
+            text: this.postFxLutExternalText,
+        };
+    }
+
     public clearExternalAsset(): void {
         this.postFxLutExternalPath = null;
         this.postFxLutExternalText = null;

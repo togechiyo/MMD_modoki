@@ -113,6 +113,12 @@ import {
 } from "./export/vmd-export-adapter";
 import type { VmdSaveResult } from "./export/vmd-export-document";
 import type { VpdExportDocument, VpdSaveResult } from "./export/vpd-export-document";
+import {
+    decodeRuntimeReloadProjectState,
+    encodeRuntimeReloadProjectState,
+    RUNTIME_RELOAD_PROJECT_STORAGE_KEY,
+    type RuntimeReloadProjectState,
+} from "./project/runtime-reload-project-state";
 
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
 type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory" | "light" | "shadow" | "gravity";
@@ -1098,9 +1104,20 @@ export class UIController {
             const currentMode = this.getConfiguredRuntimeMode();
             if (nextMode === currentMode) return;
 
+            if (!this.storeProjectForRuntimeModeReload()) {
+                this.syncRuntimeModeSelect();
+                this.showToast("Runtime change canceled: the current project could not be preserved", "error");
+                return;
+            }
+
             try {
                 localStorage.setItem(UIController.RUNTIME_MODE_STORAGE_KEY, nextMode);
             } catch {
+                try {
+                    sessionStorage.removeItem(RUNTIME_RELOAD_PROJECT_STORAGE_KEY);
+                } catch {
+                    // The original project remains open even if transient cleanup is unavailable.
+                }
                 this.syncRuntimeModeSelect();
                 this.showToast("Runtime mode setting could not be saved", "error");
                 return;
@@ -3115,6 +3132,126 @@ export class UIController {
         return project;
     }
 
+    private storeProjectForRuntimeModeReload(): boolean {
+        try {
+            const externalLut = this.lutPanelController?.getRuntimeReloadExternalAsset() ?? {
+                path: null,
+                text: null,
+            };
+            const state: RuntimeReloadProjectState = {
+                project: this.buildProjectStateForPersistence(),
+                projectFilePath: this.currentProjectFilePath,
+                externalLut,
+                externalWgslToon: {
+                    path: this.postFxWgslToonPath,
+                    text: this.postFxWgslToonText,
+                },
+            };
+            sessionStorage.setItem(
+                RUNTIME_RELOAD_PROJECT_STORAGE_KEY,
+                encodeRuntimeReloadProjectState(state),
+            );
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    public async restoreProjectAfterRuntimeModeReload(): Promise<boolean> {
+        let storedValue: string | null = null;
+        try {
+            storedValue = sessionStorage.getItem(RUNTIME_RELOAD_PROJECT_STORAGE_KEY);
+        } catch {
+            return false;
+        }
+
+        const state = decodeRuntimeReloadProjectState(storedValue);
+        if (!state) {
+            if (storedValue) {
+                sessionStorage.removeItem(RUNTIME_RELOAD_PROJECT_STORAGE_KEY);
+            }
+            return false;
+        }
+
+        this.setStatus("Restoring project after Runtime change...", true);
+        try {
+            const result = await this.mmdManager.importProjectState(state.project);
+            this.commandHistory.clear("runtime-mode-reload");
+            this.currentProjectFilePath = state.projectFilePath;
+
+            const lutMode = state.project.effects.lutSourceMode === "project-relative"
+                ? "project-relative"
+                : "external-absolute";
+            if (state.externalLut.path && state.externalLut.text) {
+                const restored = await this.lutPanelController?.importExternalLutFile(
+                    state.externalLut.path,
+                    "project",
+                    false,
+                    state.externalLut.text,
+                    lutMode,
+                ) ?? false;
+                if (!restored) {
+                    result.warnings.push(`External LUT restore failed: ${state.externalLut.path}`);
+                    this.mmdManager.postEffectLutEnabled = false;
+                }
+            }
+
+            this.postFxWgslToonPath = state.externalWgslToon.path;
+            this.postFxWgslToonText = state.externalWgslToon.text;
+            this.shaderPanelController?.setExternalWgslToonAsset(
+                state.externalWgslToon.path,
+                state.externalWgslToon.text,
+            );
+            this.mmdManager.setExternalWgslToonShader(
+                state.externalWgslToon.path,
+                state.externalWgslToon.text,
+            );
+            this.applyOutputProjectState(state.project.output);
+            this.refreshUiAfterProjectImport(state.project.lighting);
+
+            sessionStorage.removeItem(RUNTIME_RELOAD_PROJECT_STORAGE_KEY);
+            if (result.warnings.length > 0) {
+                this.setStatus("Project restored after Runtime change (with warnings)", false);
+                this.showToast(
+                    `Project restored (${result.loadedModels} models, ${result.warnings.length} warnings)`,
+                    "info",
+                );
+            } else {
+                this.setStatus("Project restored after Runtime change", false);
+                this.showToast(`Project restored (${result.loadedModels} models)`, "success");
+            }
+            return true;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus("Project restore failed", false);
+            this.showToast(`Project restore error: ${message}`, "error");
+            return false;
+        }
+    }
+
+    private refreshUiAfterProjectImport(lighting: Partial<ProjectLightingState> | null | undefined): void {
+        this.refreshModelSelector();
+        this.refreshShaderPanel();
+        this.applyLocalizedUiState();
+        this.refreshCameraUiFromRuntime();
+        this.refreshLightingUiFromRuntime();
+        this.runtimeFeatureUiController?.refreshPhysics();
+        this.accessoryPanelController?.refresh();
+        if (this.mmdManager.getTimelineTarget() === "camera") {
+            this.applyCameraSelectionUI();
+        } else {
+            const activeModel = this.mmdManager.getLoadedModels().find((item) => item.active);
+            if (activeModel) {
+                this.mmdManager.setActiveModelByIndex(activeModel.index);
+            }
+        }
+        this.reapplyImportedLightingState(lighting);
+        this.mmdManager.refreshSceneTracksAtCurrentFrame();
+        this.refreshLightingUiFromRuntime();
+        this.runtimeFeatureUiController?.refreshGravityControls();
+        this.updateTimelineEditState();
+    }
+
     private exportOutputProjectState(): ProjectOutputState {
         return this.exportUiController?.exportProjectState() ?? {
             aspectPreset: "16:9",
@@ -3353,26 +3490,7 @@ export class UIController {
                 result.warnings.push(wgslToonWarning);
             }
 
-            this.refreshModelSelector();
-            this.refreshShaderPanel();
-            this.applyLocalizedUiState();
-            this.refreshCameraUiFromRuntime();
-            this.refreshLightingUiFromRuntime();
-            this.runtimeFeatureUiController?.refreshPhysics();
-            this.accessoryPanelController?.refresh();
-            if (this.mmdManager.getTimelineTarget() === "camera") {
-                this.applyCameraSelectionUI();
-            } else {
-                const activeModel = this.mmdManager.getLoadedModels().find((item) => item.active);
-                if (activeModel) {
-                    this.mmdManager.setActiveModelByIndex(activeModel.index);
-                }
-            }
-            this.reapplyImportedLightingState(parsedProject.lighting);
-            this.mmdManager.refreshSceneTracksAtCurrentFrame();
-            this.refreshLightingUiFromRuntime();
-            this.runtimeFeatureUiController?.refreshGravityControls();
-            this.updateTimelineEditState();
+            this.refreshUiAfterProjectImport(parsedProject.lighting);
 
             if (result.warnings.length > 0) {
                 this.setStatus("Project loaded (with warnings)", false);

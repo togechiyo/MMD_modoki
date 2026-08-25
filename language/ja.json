@@ -839,6 +839,7 @@
     "dialog.physics.bulletBackendAuto": "Auto (MPR優先)",
     "dialog.physics.bulletBackendMpr": "MPR",
     "dialog.physics.bulletBackendSpr": "SPR",
+    "dialog.physics.bulletBackendRestartRequired": "モデル読込中の backend 変更は安全のため次回起動時に適用します",
     "dialog.physics.bufferedEvaluation": "Buffered評価",
     "dialog.physics.bufferedOn": "On",
     "dialog.physics.bufferedOff": "Off",

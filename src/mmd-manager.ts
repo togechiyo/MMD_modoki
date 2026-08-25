@@ -382,6 +382,12 @@ import {
     getDefaultSkydomeDiameter,
 } from "./scene/viewport-depth-range";
 import {
+    CAMERA_DISTANCE_MIN,
+    clampCameraDistance,
+    clampCameraFovDegrees,
+} from "./ui/camera-control-limits";
+import { shouldDeferBulletBackendSwitch } from "./physics/physics-backend-switch-policy";
+import {
     decodeDdsTextureToRgba,
     isDdsTexturePath,
     shouldSkipDdsTextureForWebGpu,
@@ -1686,6 +1692,7 @@ ${beforeFogAppendBlock}
     private manualPlaybackWithoutAudio = false;
     private externalPlaybackSimulationEnabled = false;
     private preferredBulletPhysicsBackend = MmdManager.readPreferredBulletBackendLocalStorage();
+    private bulletBackendSwitchDeferredUntilRestart = false;
     private physicsBufferedEvaluationDuringPlayback = MmdManager.readBooleanLocalStorage(
         MmdManager.PHYSICS_BUFFERED_EVALUATION_STORAGE_KEY,
         true,
@@ -6608,7 +6615,9 @@ ${beforeFogAppendBlock}
         this.physicsController.setPreferredBulletBackend(next);
         MmdManager.writePreferredBulletBackendLocalStorage(next);
 
-        if (this.runtimeMode !== "wasm") {
+        const deferred = shouldDeferBulletBackendSwitch(this.runtimeMode, this.sceneModels.length);
+        this.bulletBackendSwitchDeferredUntilRestart = deferred;
+        if (this.runtimeMode !== "wasm" && !deferred) {
             await this.physicsController.initializeClassic();
             this.physicsController.syncBulletEvaluationTypeForPlayback(this._isPlaying);
             this.syncScenePhysicsSimulationState();
@@ -6620,8 +6629,17 @@ ${beforeFogAppendBlock}
             activeBackend: this.getPhysicsBackendLabel(),
             evaluationType: this.getPhysicsEvaluationTypeLabel(),
             bufferedEvaluationDuringPlayback: this.getPhysicsBufferedEvaluationEnabled(),
+            deferredUntilRestart: deferred,
         });
         return this.preferredBulletPhysicsBackend;
+    }
+
+    public isPreferredBulletPhysicsBackendActive(): boolean {
+        if (this.bulletBackendSwitchDeferredUntilRestart) return false;
+        const preferred = this.preferredBulletPhysicsBackend;
+        if (preferred === "auto" || this.runtimeMode === "wasm") return true;
+        const active = this.physicsController.getBackendLabel();
+        return preferred === "bullet-mpr" ? active === "Bullet MPR" : active === "Bullet SPR";
     }
 
     public async waitForPhysicsInitialization(): Promise<boolean> {
@@ -7070,7 +7088,7 @@ ${beforeFogAppendBlock}
         this.camera.fov = (30 * Math.PI) / 180;
         this.camera.minZ = DEFAULT_CAMERA_MIN_Z;
         this.camera.maxZ = DEFAULT_CAMERA_MAX_Z;
-        this.camera.lowerRadiusLimit = 3;
+        this.camera.lowerRadiusLimit = CAMERA_DISTANCE_MIN;
         this.camera.upperRadiusLimit = null;
         this.camera.angularSensibilityX = VIEWPORT_CAMERA_ROTATE_SENSIBILITY;
         this.camera.angularSensibilityY = VIEWPORT_CAMERA_ROTATE_SENSIBILITY;
@@ -13540,7 +13558,7 @@ ${beforeFogAppendBlock}
 
     getCameraDistance(): number {
         if (this.cameraExternalParentModelIndex !== null) return 0;
-        return Math.max(this.camera.minZ, Vector3.Distance(this.camera.position, this.camera.target));
+        return Math.max(CAMERA_DISTANCE_MIN, Vector3.Distance(this.camera.position, this.camera.target));
     }
 
     getCameraKeyframePose(): {
@@ -13771,9 +13789,9 @@ ${beforeFogAppendBlock}
             this.syncViewportCameraFromMmdCamera(true);
             return;
         }
-        const min = Math.max(0.1, this.camera.lowerRadiusLimit ?? this.camera.minZ);
+        const min = Math.max(CAMERA_DISTANCE_MIN, this.camera.lowerRadiusLimit ?? this.camera.minZ);
         const max = this.camera.upperRadiusLimit ?? Number.POSITIVE_INFINITY;
-        this.camera.radius = Math.max(min, Math.min(max, distance));
+        this.camera.radius = Math.max(min, Math.min(max, clampCameraDistance(distance)));
         this.syncCameraRotationFromCurrentView({ preserveRoll: true });
         this.clearCameraInertialOffsets();
         this.syncMmdCameraFromViewportCamera();
@@ -13782,13 +13800,14 @@ ${beforeFogAppendBlock}
     }
 
     setCameraFov(degrees: number): void {
+        const normalizedDegrees = clampCameraFovDegrees(degrees);
         if (this.cameraExternalParentModelIndex !== null) {
-            this.mmdCamera.fov = (degrees * Math.PI) / 180;
+            this.mmdCamera.fov = (normalizedDegrees * Math.PI) / 180;
             this.syncViewportCameraFromMmdCamera(true);
             this.updateEditorDofFocusAndFStop();
             return;
         }
-        this.camera.fov = (degrees * Math.PI) / 180;
+        this.camera.fov = (normalizedDegrees * Math.PI) / 180;
         this.syncMmdCameraFromViewportCamera();
         this.updateOrthographicCameraBounds();
         this.updateEditorDofFocusAndFStop();
@@ -13810,9 +13829,11 @@ ${beforeFogAppendBlock}
             (rotationDeg.y * Math.PI) / 180,
             (rotationDeg.z * Math.PI) / 180,
         );
-        this.mmdCamera.distance = this.cameraExternalParentModelIndex !== null ? 0 : -Math.abs(distance);
+        this.mmdCamera.distance = this.cameraExternalParentModelIndex !== null
+            ? 0
+            : -clampCameraDistance(Math.abs(distance));
         if (typeof fovDeg === "number") {
-            this.mmdCamera.fov = (fovDeg * Math.PI) / 180;
+            this.mmdCamera.fov = (clampCameraFovDegrees(fovDeg) * Math.PI) / 180;
         }
         this.syncViewportCameraFromMmdCamera();
         this.updateOrthographicCameraBounds();

@@ -11,6 +11,12 @@ import {
     setPanelEmptyState,
 } from "./ui/panel-control-helpers";
 import { TRANSLATION_CONTROL_MAX, TRANSLATION_CONTROL_MIN } from "./ui/transform-control-limits";
+import {
+    CAMERA_DISTANCE_MAX,
+    CAMERA_DISTANCE_MIN,
+    CAMERA_FOV_MAX_DEG,
+    CAMERA_FOV_MIN_DEG,
+} from "./ui/camera-control-limits";
 
 type BoneSliderKey = "tx" | "ty" | "tz" | "rx" | "ry" | "rz" | "camDistance" | "camFov";
 type BonePoseSnapshot = {
@@ -366,8 +372,8 @@ export class BottomPanel {
         if (isCameraControl) {
             const externalParentActive = Boolean(this.mmdManager?.getCameraExternalParent());
             controlDefs.push(
-                { key: "camDistance", label: t("slider.distance"), min: 0, max: 100000, step: 0.1, value: cameraPose?.distance ?? 45, disabled: externalParentActive || this.cameraPlaybackLocked },
-                { key: "camFov", label: t("slider.fov"), min: 10, max: 120, step: 0.1, value: cameraPose?.fov ?? 30, disabled: this.cameraPlaybackLocked },
+                { key: "camDistance", label: t("slider.distance"), min: CAMERA_DISTANCE_MIN, max: CAMERA_DISTANCE_MAX, step: 0.1, value: cameraPose?.distance ?? 45, disabled: externalParentActive || this.cameraPlaybackLocked },
+                { key: "camFov", label: t("slider.fov"), min: CAMERA_FOV_MIN_DEG, max: CAMERA_FOV_MAX_DEG, step: 0.1, value: cameraPose?.fov ?? 30, disabled: this.cameraPlaybackLocked },
             );
         }
 

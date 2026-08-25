@@ -21,6 +21,7 @@ import type {
     WebmExportPhase,
     WebmExportRequest,
 } from "./types";
+import { getWebmVideoEncodingQuality } from "./export/webm-video-quality-policy";
 
 export interface WebmExportCallbacks {
     onStatus?: (message: string, phase: WebmExportPhase) => void;
@@ -539,25 +540,6 @@ const selectWebmVideoEncoding = async (
     return null;
 };
 
-const estimateVideoBitrate = (width: number, height: number, fps: number): number => {
-    const megapixels = (width * height) / 1_000_000;
-    const isHighFps = fps > 30;
-
-    if (megapixels <= 2.2) {
-        return isHighFps ? 12_000_000 : 8_000_000;
-    }
-    if (megapixels <= 3.8) {
-        return isHighFps ? 24_000_000 : 16_000_000;
-    }
-    if (megapixels <= 8.6) {
-        return isHighFps ? 53_000_000 : 35_000_000;
-    }
-
-    const bitratePerMegapixel = isHighFps ? 6_500_000 : 4_200_000;
-    const fallbackBitrate = megapixels * bitratePerMegapixel;
-    return Math.max(8_000_000, Math.min(80_000_000, Math.round(fallbackBitrate)));
-};
-
 const estimateAudioBitrate = (channelCount: number): number => {
     if (channelCount <= 1) {
         return 128_000;
@@ -768,7 +750,8 @@ export async function runWebmExportJob(
             }
         }
 
-        const videoBitrate = estimateVideoBitrate(outputWidth, outputHeight, fps);
+        const videoQuality = getWebmVideoEncodingQuality(outputWidth, outputHeight, fps);
+        const videoBitrate = videoQuality.bitrate;
 
         updateStatus(callbacks, "Checking WebM codec support...", "checking-codec");
         const selectedVideoEncoding = await selectWebmVideoEncoding(
@@ -879,6 +862,8 @@ export async function runWebmExportJob(
         const videoSource = new VideoSampleSource({
             codec,
             bitrate: videoBitrate,
+            bitrateMode: videoQuality.bitrateMode,
+            latencyMode: videoQuality.latencyMode,
             keyFrameInterval: 10,
             hardwareAcceleration,
             onEncoderConfig: () => {

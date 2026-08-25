@@ -801,6 +801,7 @@ export class AppMenuController {
                 mmdManager: this.mmdManager,
                 getRuntimeMode: () => this.getRuntimeMode(),
                 setRuntimeMode: (mode) => this.setRuntimeMode(mode),
+                showToast: (message, type) => this.showToast(message, type),
             }),
         });
     }

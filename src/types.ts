@@ -264,6 +264,10 @@ declare global {
                 }>;
             }>;
             getLoadedModelCount: () => number;
+            getPhysicsRuntimeState: () => {
+                preferred: "auto" | "bullet-mpr" | "bullet-spr";
+                active: "Bullet MPR" | "Bullet SPR" | "WASM MPR" | "Off";
+            };
             getModelBoneRenderedPosition: (
                 modelIndex: number,
                 boneName: string,

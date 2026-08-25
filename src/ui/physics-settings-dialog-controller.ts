@@ -7,17 +7,20 @@ export type PhysicsSettingsDialogControllerDeps = {
     mmdManager: MmdManager;
     getRuntimeMode: () => "classic" | "wasm";
     setRuntimeMode: (mode: "classic" | "wasm") => void;
+    showToast?: (message: string, type?: "info" | "error" | "success") => void;
 };
 
 export class PhysicsSettingsDialogController implements PopupContentController {
     private readonly mmdManager: MmdManager;
     private readonly getRuntimeMode: () => "classic" | "wasm";
     private readonly setRuntimeMode: (mode: "classic" | "wasm") => void;
+    private readonly showToast?: (message: string, type?: "info" | "error" | "success") => void;
 
     constructor(deps: PhysicsSettingsDialogControllerDeps) {
         this.mmdManager = deps.mmdManager;
         this.getRuntimeMode = deps.getRuntimeMode;
         this.setRuntimeMode = deps.setRuntimeMode;
+        this.showToast = deps.showToast;
     }
 
     public mount(container: HTMLElement): void {
@@ -80,6 +83,9 @@ export class PhysicsSettingsDialogController implements PopupContentController {
             bulletBackend.disabled = true;
             void this.mmdManager.setPreferredBulletPhysicsBackend(next).then((applied) => {
                 bulletBackend.value = applied;
+                if (!this.mmdManager.isPreferredBulletPhysicsBackendActive()) {
+                    this.showToast?.(t("dialog.physics.bulletBackendRestartRequired"), "info");
+                }
             }).finally(() => {
                 bulletBackend.disabled = false;
             });

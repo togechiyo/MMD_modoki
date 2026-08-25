@@ -384,11 +384,13 @@ export class PhysicsRuntimeController {
         backend: BulletPhysicsBackend,
         wasmInstance: IMmdWasmInstance,
     ): void {
+        // A scene cannot safely retain two registered MultiPhysicsRuntime instances.
+        // Dispose the previous runtime before registering its replacement.
+        this.disposeClassicResources();
         const runtime = new MultiPhysicsRuntime(wasmInstance);
         this.installBulletStepTiming(runtime);
         runtime.register(this.scene);
 
-        this.disposeClassicResources();
         this.bulletPhysicsRuntime = runtime;
         this.physicsRuntime = new MmdBulletPhysics(runtime);
         (this.runtime as unknown as { _physics: MmdBulletPhysics | null })._physics = this.physicsRuntime;

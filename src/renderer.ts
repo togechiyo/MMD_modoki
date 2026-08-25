@@ -327,6 +327,7 @@ async function initializeApp(): Promise<void> {
     bottomPanel.setMmdManager(mmdManager);
 
     const uiController = new UIController(mmdManager, timeline, bottomPanel);
+    await uiController.restoreProjectAfterRuntimeModeReload();
     if (new URLSearchParams(window.location.search).get("e2e") === "1") {
       window.mmdModokiE2e = {
         exportProjectState: () => mmdManager.exportProjectState(),
@@ -401,6 +402,10 @@ async function initializeApp(): Promise<void> {
           })),
         })),
         getLoadedModelCount: () => mmdManager.getLoadedModels().length,
+        getPhysicsRuntimeState: () => ({
+          preferred: mmdManager.getPreferredBulletPhysicsBackend(),
+          active: mmdManager.getPhysicsBackendLabel(),
+        }),
         getModelBoneRenderedPosition: (modelIndex, boneName) => (
           mmdManager.getModelBoneRenderedPosition(modelIndex, boneName)
         ),

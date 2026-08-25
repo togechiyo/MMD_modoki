@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -77,6 +78,32 @@ test("V022-015: ボーン数値入力を各軸へ反映してキー登録でき�
     });
     expect(track).not.toBeNull();
     expect(unpackNumbers(track.positions)).toEqual([11, -12, 13]);
+  } finally {
+    await launched.close();
+  }
+});
+
+test("V022-017: 影チェックにfocusがあってもCtrl+Sでprojectを保存できる", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    expect(await page.evaluate((filePath) => window.mmdModokiE2e.loadModel(filePath), modelPath))
+      .not.toBeNull();
+
+    const projectPath = resolve(launched.tempDir, "v022-017-shortcut-save.mmdproj");
+    await launched.app.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    }, projectPath);
+
+    const shadow = page.locator("#chk-model-shadow");
+    await expect(shadow).toBeEnabled();
+    await shadow.uncheck();
+    await expect(shadow).toBeFocused();
+    await shadow.press("Control+s");
+
+    await expect.poll(() => existsSync(projectPath)).toBe(true);
+    expect(JSON.parse(readFileSync(projectPath, "utf8")).format).toBe("mmd-modoki-project");
   } finally {
     await launched.close();
   }

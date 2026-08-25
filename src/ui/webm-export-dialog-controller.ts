@@ -30,6 +30,7 @@ export class WebmExportDialogController implements PopupContentController {
     private usePlaybackRangeInput: HTMLInputElement | null = null;
     private startFrameInput: HTMLInputElement | null = null;
     private endFrameInput: HTMLInputElement | null = null;
+    private resetFrameRangeButton: HTMLButtonElement | null = null;
 
     constructor(deps: WebmExportDialogDeps) {
         this.dispatchAction = deps.dispatchAction;
@@ -62,6 +63,11 @@ export class WebmExportDialogController implements PopupContentController {
         this.usePlaybackRangeInput = this.createCheckbox("webm-output-use-playback-range", state.usePlaybackRange);
         this.startFrameInput = this.createNumberInput("webm-output-start-frame", state.startFrame, 0, 999999);
         this.endFrameInput = this.createNumberInput("webm-output-end-frame", state.endFrame, 0, 999999);
+        this.resetFrameRangeButton = createPopupFormButton(
+            t("dialog.webmExport.useTimelineRange"),
+            "secondary",
+        );
+        this.resetFrameRangeButton.id = "webm-output-reset-frame-range";
 
         form.appendChild(createPopupFormField(t("dialog.webmExport.aspect"), this.aspectSelect));
         form.appendChild(createPopupFormField(t("dialog.webmExport.longSide"), this.sizePresetSelect));
@@ -150,6 +156,11 @@ export class WebmExportDialogController implements PopupContentController {
                 revert: () => this.syncFrameRangeFromOutputState(),
             });
         }
+        this.resetFrameRangeButton?.addEventListener("click", () => {
+            const state = this.output.resetFrameRangeToTimeline();
+            if (this.usePlaybackRangeInput) this.usePlaybackRangeInput.checked = state.usePlaybackRange;
+            this.syncFrameRangeFromOutputState();
+        });
     }
 
     private createSizeField(): HTMLElement {
@@ -161,9 +172,13 @@ export class WebmExportDialogController implements PopupContentController {
     }
 
     private createFrameRangeField(): HTMLElement {
+        const row = document.createElement("div");
+        row.className = "popup-form-frame-range";
+        row.append(createPopupFormInline(this.startFrameInput, "-", this.endFrameInput));
+        if (this.resetFrameRangeButton) row.append(this.resetFrameRangeButton);
         return createPopupFormField(
             t("dialog.webmExport.frameRange"),
-            createPopupFormInline(this.startFrameInput, "-", this.endFrameInput),
+            row,
             "div",
         );
     }

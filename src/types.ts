@@ -712,6 +712,7 @@ export interface ProjectOutputState {
     webmCodec?: "auto" | "vp8" | "vp9";
     webmCaptureMode?: WebmCaptureMode;
     usePlaybackRange?: boolean;
+    frameRangeMode?: "timeline" | "custom";
     startFrame?: number;
     endFrame?: number;
     frameStartEnabled?: boolean;

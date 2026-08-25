@@ -710,6 +710,19 @@ select.popup-form-control {
   gap: 8px;
 }
 
+.popup-form-frame-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.popup-form-frame-range .popup-form-button {
+  min-width: auto;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+
 .popup-form-separator {
   color: var(--text-muted);
   font-size: 12px;

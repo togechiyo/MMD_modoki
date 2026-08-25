@@ -10,6 +10,7 @@ import {
     installEnterCommitNumberInput,
     setPanelEmptyState,
 } from "./ui/panel-control-helpers";
+import { TRANSLATION_CONTROL_MAX, TRANSLATION_CONTROL_MIN } from "./ui/transform-control-limits";
 
 type BoneSliderKey = "tx" | "ty" | "tz" | "rx" | "ry" | "rz" | "camDistance" | "camFov";
 type BonePoseSnapshot = {
@@ -350,8 +351,8 @@ export class BottomPanel {
             value: number;
             disabled?: boolean;
         }[] = [];
-        const translationMin = isCameraControl ? -100000 : -30;
-        const translationMax = isCameraControl ? 100000 : 30;
+        const translationMin = TRANSLATION_CONTROL_MIN;
+        const translationMax = TRANSLATION_CONTROL_MAX;
 
         controlDefs.push(
             { key: "tx", label: "X", min: translationMin, max: translationMax, step: 1, displayStep: 0.01, value: transform.position.x, disabled: !boneControlInfo.movable || (isCameraControl && this.cameraPlaybackLocked) },
@@ -411,9 +412,9 @@ export class BottomPanel {
             value: number;
             disabled?: boolean;
         }[] = [
-            { key: "tx", label: "X", min: -30, max: 30, step: 1, displayStep: 0.01, value: 0, disabled: true },
-            { key: "ty", label: "Y", min: -30, max: 30, step: 1, displayStep: 0.01, value: 0, disabled: true },
-            { key: "tz", label: "Z", min: -30, max: 30, step: 1, displayStep: 0.01, value: 0, disabled: true },
+            { key: "tx", label: "X", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, displayStep: 0.01, value: 0, disabled: true },
+            { key: "ty", label: "Y", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, displayStep: 0.01, value: 0, disabled: true },
+            { key: "tz", label: "Z", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, displayStep: 0.01, value: 0, disabled: true },
             { key: "rx", label: "Rx", min: -180, max: 180, step: 1, displayStep: 0.1, value: 0, disabled: true },
             { key: "ry", label: "Ry", min: -180, max: 180, step: 1, displayStep: 0.1, value: 0, disabled: true },
             { key: "rz", label: "Rz", min: -180, max: 180, step: 1, displayStep: 0.1, value: 0, disabled: true },

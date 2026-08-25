@@ -1,3 +1,5 @@
+import { TRANSLATION_CONTROL_MAX, TRANSLATION_CONTROL_MIN } from "./transform-control-limits";
+
 export type ViewportEditMode = "model" | "camera" | "accessory";
 type ViewportHandleKind = "move" | "rotate";
 type ViewportHandleAxis = "x" | "y" | "z";
@@ -72,6 +74,19 @@ export class ViewportAxisHandleController {
             scale: number;
         }
         | null = null;
+    private wheelEdit:
+        | {
+            element: HTMLElement;
+            mode: ViewportEditMode;
+            kind: ViewportHandleKind;
+            axis: ViewportHandleAxis;
+            startEditValue: ViewportAxisHandleEditValue;
+            currentEditValue: ViewportAxisHandleEditValue;
+            min: number;
+            max: number;
+            commitTimer: number;
+        }
+        | null = null;
 
     constructor(options: ViewportAxisHandleOptions) {
         this.onPreviewBoneTransform = options.onPreviewBoneTransform ?? (() => false);
@@ -84,18 +99,19 @@ export class ViewportAxisHandleController {
     }
 
     public applyMode(mode: ViewportEditMode): void {
+        if (this.mode !== mode) this.finishWheelEdit(true);
         this.mode = mode;
     }
 
     public updateModelTransform(transform: { position: Vector3Like; rotation: Vector3Like } | null): void {
-        if (this.handleDrag?.mode === "model") return;
+        if (this.handleDrag?.mode === "model" || this.wheelEdit?.mode === "model") return;
         this.lastModelTransform = transform
             ? { position: { ...transform.position }, rotation: { ...transform.rotation } }
             : null;
     }
 
     public updateCameraTransform(transform: { target: Vector3Like; rotation: Vector3Like; distance: number; fov: number }): void {
-        if (this.handleDrag?.mode === "camera") return;
+        if (this.handleDrag?.mode === "camera" || this.wheelEdit?.mode === "camera") return;
         this.lastCameraTransform = {
             target: { ...transform.target },
             rotation: { ...transform.rotation },
@@ -105,7 +121,7 @@ export class ViewportAxisHandleController {
     }
 
     public updateAccessoryTransform(transform: { position: Vector3Like; rotation: Vector3Like } | null): void {
-        if (this.handleDrag?.mode === "accessory") return;
+        if (this.handleDrag?.mode === "accessory" || this.wheelEdit?.mode === "accessory") return;
         this.lastAccessoryTransform = transform
             ? { position: { ...transform.position }, rotation: { ...transform.rotation } }
             : null;
@@ -114,6 +130,7 @@ export class ViewportAxisHandleController {
     private installHandleDragHandlers(): void {
         for (const element of document.querySelectorAll<HTMLElement>(".viewport-axis-handle-tool")) {
             element.addEventListener("pointerdown", (event) => this.beginHandleDrag(event, element));
+            element.addEventListener("wheel", (event) => this.updateHandleFromWheel(event, element), { passive: false });
         }
         window.addEventListener("pointermove", (event) => this.updateHandleDrag(event));
         window.addEventListener("pointerup", (event) => this.finishHandleDrag(event, true));
@@ -122,6 +139,7 @@ export class ViewportAxisHandleController {
 
     private beginHandleDrag(event: PointerEvent, element: HTMLElement): void {
         if (event.button !== 0 || this.handleDrag) return;
+        this.finishWheelEdit(true);
         const kind = this.parseHandleKind(element.dataset.handleKind);
         const axis = this.parseHandleAxis(element.dataset.handleAxis);
         if (!kind || !axis) return;
@@ -173,23 +191,98 @@ export class ViewportAxisHandleController {
             this.previewEditValue(drag.mode, drag.startEditValue);
             return;
         }
-        if (drag.mode === "model") {
+        this.commitEditValue(drag.mode, drag.currentEditValue, drag.startEditValue);
+    }
+
+    private updateHandleFromWheel(event: WheelEvent, element: HTMLElement): void {
+        if (this.handleDrag || event.deltaY === 0) return;
+        const kind = this.parseHandleKind(element.dataset.handleKind);
+        const axis = this.parseHandleAxis(element.dataset.handleAxis);
+        if (!kind || !axis) return;
+
+        const active = this.wheelEdit;
+        if (
+            active
+            && (active.element !== element || active.mode !== this.mode || active.kind !== kind || active.axis !== axis)
+        ) {
+            this.finishWheelEdit(true);
+        }
+
+        if (!this.wheelEdit) {
+            const startEditValue = this.getCurrentEditValue();
+            if (!startEditValue) return;
+            const range = this.resolveRange(kind);
+            this.wheelEdit = {
+                element,
+                mode: this.mode,
+                kind,
+                axis,
+                startEditValue: this.cloneEditValue(startEditValue),
+                currentEditValue: this.cloneEditValue(startEditValue),
+                min: range.min,
+                max: range.max,
+                commitTimer: 0,
+            };
+        }
+
+        event.preventDefault();
+        const wheelEdit = this.wheelEdit;
+        window.clearTimeout(wheelEdit.commitTimer);
+        const direction = event.deltaY < 0 ? 1 : -1;
+        const baseStep = wheelEdit.kind === "move" ? 0.1 : 1;
+        const modifierScale = event.shiftKey ? 10 : event.altKey ? 0.1 : 1;
+        const currentValue = this.resolveAxisValue(wheelEdit.currentEditValue, wheelEdit.kind, wheelEdit.axis);
+        const steppedValue = Number((currentValue + direction * baseStep * modifierScale).toFixed(10));
+        const nextValue = Math.max(
+            wheelEdit.min,
+            Math.min(wheelEdit.max, steppedValue),
+        );
+        const nextEditValue = this.withAxisValue(
+            wheelEdit.currentEditValue,
+            wheelEdit.kind,
+            wheelEdit.axis,
+            nextValue,
+        );
+        if (this.previewEditValue(wheelEdit.mode, nextEditValue)) {
+            wheelEdit.currentEditValue = nextEditValue;
+        }
+        wheelEdit.commitTimer = window.setTimeout(() => this.finishWheelEdit(true), 180);
+    }
+
+    private finishWheelEdit(shouldCommit: boolean): void {
+        const wheelEdit = this.wheelEdit;
+        if (!wheelEdit) return;
+        this.wheelEdit = null;
+        window.clearTimeout(wheelEdit.commitTimer);
+        if (!shouldCommit) {
+            this.previewEditValue(wheelEdit.mode, wheelEdit.startEditValue);
+            return;
+        }
+        this.commitEditValue(wheelEdit.mode, wheelEdit.currentEditValue, wheelEdit.startEditValue);
+    }
+
+    private commitEditValue(
+        mode: ViewportEditMode,
+        currentEditValue: ViewportAxisHandleEditValue,
+        startEditValue: ViewportAxisHandleEditValue,
+    ): void {
+        if (mode === "model") {
             this.onCommitBoneTransform(
-                drag.currentEditValue as ViewportAxisHandleBoneEditValue,
-                drag.startEditValue as ViewportAxisHandleBoneEditValue,
+                currentEditValue as ViewportAxisHandleBoneEditValue,
+                startEditValue as ViewportAxisHandleBoneEditValue,
             );
             return;
         }
-        if (drag.mode === "accessory") {
+        if (mode === "accessory") {
             this.onCommitAccessoryTransform(
-                drag.currentEditValue as ViewportAxisHandleAccessoryEditValue,
-                drag.startEditValue as ViewportAxisHandleAccessoryEditValue,
+                currentEditValue as ViewportAxisHandleAccessoryEditValue,
+                startEditValue as ViewportAxisHandleAccessoryEditValue,
             );
             return;
         }
         this.onCommitCameraTransform(
-            drag.currentEditValue as ViewportAxisHandleCameraEditValue,
-            drag.startEditValue as ViewportAxisHandleCameraEditValue,
+            currentEditValue as ViewportAxisHandleCameraEditValue,
+            startEditValue as ViewportAxisHandleCameraEditValue,
         );
     }
 
@@ -242,7 +335,7 @@ export class ViewportAxisHandleController {
 
     private resolveRange(kind: ViewportHandleKind): { min: number; max: number; scale: number } {
         return kind === "move"
-            ? { min: -30, max: 30, scale: 0.02 }
+            ? { min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, scale: 0.02 }
             : { min: -180, max: 180, scale: 0.2 };
     }
 

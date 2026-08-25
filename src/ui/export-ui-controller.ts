@@ -9,6 +9,7 @@ import { logError, logInfo } from "../app-logger";
 import type { MmdManager } from "../mmd-manager";
 import { PngEncoderWebWorkerPool } from "../output/png-encoder-web-worker-pool";
 import type { EditorAction } from "../actions/types";
+import { resolveOutputFrameRangeOnProjectLoad } from "./output-frame-range-policy";
 import type {
     MmdModokiProjectFileV1,
     PngSequenceExportProgress,
@@ -40,6 +41,7 @@ export type OutputFormState = {
     preferredVideoCodec: "auto" | "vp8" | "vp9";
     captureMode: WebmCaptureMode;
     usePlaybackRange: boolean;
+    frameRangeMode: "timeline" | "custom";
     startFrame: number;
     endFrame: number;
 };
@@ -59,6 +61,7 @@ export type WebmExportSettingsAdapter = OutputSizeSettingsAdapter & {
     setIncludeAudio: (value: boolean) => void;
     setUsePlaybackRange: (value: boolean) => void;
     syncPlaybackRange: () => OutputFormState;
+    resetFrameRangeToTimeline: () => OutputFormState;
     setStartFrame: (value: number) => void;
     setEndFrame: (value: number) => void;
     setCaptureMode: (value: WebmCaptureMode) => void;
@@ -211,6 +214,7 @@ export class ExportUiController {
         preferredVideoCodec: "vp8",
         captureMode: "rgba-surface",
         usePlaybackRange: false,
+        frameRangeMode: "timeline",
         startFrame: 0,
         endFrame: 0,
     };
@@ -275,6 +279,7 @@ export class ExportUiController {
             webmCodec: this.getWebmOutputOptions().preferredVideoCodec,
             webmCaptureMode: FIXED_WEBM_CAPTURE_MODE,
             usePlaybackRange: this.outputState.usePlaybackRange,
+            frameRangeMode: this.isFrameRangeCustomized ? "custom" : "timeline",
             startFrame: outputFrameRange.startFrame,
             endFrame: outputFrameRange.endFrame,
             frameStartEnabled: Boolean(this.elements.playbackFrameStartToggleInput?.checked),
@@ -314,15 +319,17 @@ export class ExportUiController {
             this.outputState.preferredVideoCodec = state.webmCodec;
         }
         this.outputState.captureMode = FIXED_WEBM_CAPTURE_MODE;
-        if (Number.isFinite(state.startFrame) && Number.isFinite(state.endFrame)) {
-            this.isFrameRangeCustomized = true;
+        const hasStoredFrameRange = Number.isFinite(state.startFrame) && Number.isFinite(state.endFrame);
+        if (hasStoredFrameRange) {
             this.isPlaybackRangeCustomized = true;
-            this.setOutputFrameRangeValues(state.startFrame ?? 0, state.endFrame ?? 0);
             this.setPlaybackFrameRangeValues(state.startFrame ?? 0, state.endFrame ?? 0);
         } else {
-            this.isFrameRangeCustomized = false;
-            this.syncFrameRangeFromTimeline(true);
+            this.isPlaybackRangeCustomized = false;
         }
+        const outputRange = resolveOutputFrameRangeOnProjectLoad(state, this.getMaxOutputFrame());
+        this.isFrameRangeCustomized = outputRange.customized;
+        this.outputState.frameRangeMode = outputRange.mode;
+        this.setOutputFrameRangeValues(outputRange.startFrame, outputRange.endFrame);
         if (this.elements.playbackFrameStartToggleInput) {
             this.elements.playbackFrameStartToggleInput.checked = Boolean(state.frameStartEnabled);
         }
@@ -346,6 +353,10 @@ export class ExportUiController {
         }
         if (!force && this.isFrameRangeCustomized) return;
 
+        if (force) {
+            this.isFrameRangeCustomized = false;
+            this.outputState.frameRangeMode = "timeline";
+        }
         this.setOutputFrameRangeValues(0, maxFrame);
     }
 
@@ -842,6 +853,7 @@ export class ExportUiController {
                 this.markOutputFrameRangeCustomized();
                 return this.getOutputFormState();
             },
+            resetFrameRangeToTimeline: () => this.resetOutputFrameRangeToTimeline(),
             setStartFrame: (value) => {
                 this.outputState.startFrame = this.parseOutputFrameDraft(value, 0);
                 if (this.elements.outputStartFrameInput) this.elements.outputStartFrameInput.value = String(this.outputState.startFrame);
@@ -925,6 +937,15 @@ export class ExportUiController {
     public markOutputFrameRangeCustomized(): void {
         if (this.isSyncingFrameRange) return;
         this.isFrameRangeCustomized = true;
+        this.outputState.frameRangeMode = "custom";
+    }
+
+    public resetOutputFrameRangeToTimeline(): OutputFormState {
+        this.outputState.usePlaybackRange = false;
+        this.isFrameRangeCustomized = false;
+        this.outputState.frameRangeMode = "timeline";
+        this.setOutputFrameRangeValues(0, this.getMaxOutputFrame());
+        return this.getOutputFormState();
     }
 
     public sanitizeOutputFrameRange(source: "start" | "end"): void {

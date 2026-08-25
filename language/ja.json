@@ -862,6 +862,7 @@
     "dialog.webmExport.fps": "FPS",
     "dialog.webmExport.includeAudio": "音声あり",
     "dialog.webmExport.usePlaybackRange": "再生範囲を使う",
+    "dialog.webmExport.useTimelineRange": "タイムライン全体",
     "dialog.webmExport.frameRange": "出力フレーム",
     "dialog.webmExport.captureMode": "方式",
     "dialog.webmExport.captureModeStable": "安定",

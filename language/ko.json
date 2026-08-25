@@ -862,6 +862,7 @@
     "dialog.webmExport.fps": "FPS",
     "dialog.webmExport.includeAudio": "Include audio",
     "dialog.webmExport.usePlaybackRange": "Use playback range",
+    "dialog.webmExport.useTimelineRange": "전체 타임라인",
     "dialog.webmExport.frameRange": "Output frames",
     "dialog.webmExport.captureMode": "Mode",
     "dialog.webmExport.captureModeStable": "Stable",

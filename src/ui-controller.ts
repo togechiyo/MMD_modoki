@@ -747,6 +747,7 @@ export class UIController {
                     preferredVideoCodec: "vp8",
                     captureMode: "rgba-surface",
                     usePlaybackRange: false,
+                    frameRangeMode: "timeline",
                     startFrame: 0,
                     endFrame: 0,
                 }),
@@ -772,6 +773,24 @@ export class UIController {
                     preferredVideoCodec: "vp8",
                     captureMode: "rgba-surface",
                     usePlaybackRange: false,
+                    frameRangeMode: "timeline",
+                    startFrame: 0,
+                    endFrame: 0,
+                }),
+                resetFrameRangeToTimeline: () => ({
+                    aspectPreset: "16:9",
+                    sizePreset: "1920",
+                    width: 1920,
+                    height: 1080,
+                    lockAspect: false,
+                    qualityScale: 1,
+                    pngTransparentBackground: false,
+                    fps: 30,
+                    includeAudio: false,
+                    preferredVideoCodec: "vp8",
+                    captureMode: "rgba-surface",
+                    usePlaybackRange: false,
+                    frameRangeMode: "timeline",
                     startFrame: 0,
                     endFrame: 0,
                 }),
@@ -2068,10 +2087,20 @@ export class UIController {
                 return;
             }
 
+            const lowerKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+
+            // Project save remains global even when a checkbox or editable field has focus.
+            // Numeric edits still keep their explicit Enter commit semantics; saving does not
+            // implicitly commit the active field's draft value.
+            if (!e.altKey && !e.shiftKey && (e.ctrlKey || e.metaKey) && lowerKey === "s") {
+                e.preventDefault();
+                this.actionDispatcher.dispatch({ type: "project.save", source: "shortcut" });
+                return;
+            }
+
             // Don't handle shortcuts while editing text fields.
             if (this.isTextInputLikeTarget(e.target)) return;
 
-            const lowerKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
             const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
 
             if (!hasModifier && e.key === "Escape" && this.timeline.getSelectedKeys().length > 0) {
@@ -2085,13 +2114,6 @@ export class UIController {
             if (!e.ctrlKey && !e.metaKey && e.altKey && e.key === "Enter") {
                 e.preventDefault();
                 this.actionDispatcher.dispatch({ type: "layout.fullscreen.toggle", source: "shortcut" });
-                return;
-            }
-
-            // Ctrl+S: save project (overwrite current project when possible)
-            if (!e.metaKey && !e.altKey && e.ctrlKey && !e.shiftKey && lowerKey === "s") {
-                e.preventDefault();
-                void this.saveProject();
                 return;
             }
 
@@ -3106,6 +3128,7 @@ export class UIController {
             includeAudio: false,
             webmCodec: "vp8",
             webmCaptureMode: "rgba-surface",
+            frameRangeMode: "timeline",
             startFrame: 0,
             endFrame: 0,
             frameStartEnabled: false,

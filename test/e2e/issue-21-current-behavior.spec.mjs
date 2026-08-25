@@ -32,7 +32,7 @@ async function openWebmDialog(page) {
   return dialog;
 }
 
-test("Issue 21: numeric Enter commit works, model translation remains clamped, and Ctrl+ArrowLeft seeks the previous key", async () => {
+test("Issue 21: numeric Enter commit allows wide model translation and Ctrl+ArrowLeft seeks the previous key", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -43,8 +43,8 @@ test("Issue 21: numeric Enter commit works, model translation remains clamped, a
     await selectCenterBone(page);
 
     const x = page.locator("#bone-controls input[data-control-key='tx']");
-    await expect(x).toHaveAttribute("min", "-30");
-    await expect(x).toHaveAttribute("max", "30");
+    await expect(x).toHaveAttribute("min", "-100000");
+    await expect(x).toHaveAttribute("max", "100000");
 
     await x.fill("11");
     await x.press("Enter");
@@ -73,13 +73,13 @@ test("Issue 21: numeric Enter commit works, model translation remains clamped, a
     await x.press("Enter");
     await expect.poll(() => page.evaluate(
       () => window.mmdModokiE2e.getActiveBoneTransform("センター")?.position.x ?? null,
-    )).toBe(30);
+    )).toBe(45);
   } finally {
     await launched.close();
   }
 });
 
-test("Issue 21: a customized WebM end frame remains after the timeline is extended", async () => {
+test("Issue 21: a customized WebM end frame can return to following the full timeline", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -89,14 +89,21 @@ test("Issue 21: a customized WebM end frame remains after the timeline is extend
     const endFrame = dialog.locator("#webm-output-end-frame");
     await endFrame.fill("120");
     await endFrame.press("Enter");
-    await dialog.locator(".popup-form-button-secondary").click();
+    await dialog.locator(".popup-form-actions .popup-form-button-secondary").click();
 
     await setCurrentFrame(page, 400);
     await expect(page.locator("#viewport-seek-total-frame")).toHaveText("400");
 
     dialog = await openWebmDialog(page);
     await expect(dialog.locator("#webm-output-end-frame")).toHaveValue("120");
-    await dialog.locator(".popup-form-button-secondary").click();
+    await dialog.locator("#webm-output-reset-frame-range").click();
+    await expect(dialog.locator("#webm-output-end-frame")).toHaveValue("400");
+    await dialog.locator(".popup-form-actions .popup-form-button-secondary").click();
+
+    await setCurrentFrame(page, 500);
+    dialog = await openWebmDialog(page);
+    await expect(dialog.locator("#webm-output-end-frame")).toHaveValue("500");
+    await dialog.locator(".popup-form-actions .popup-form-button-secondary").click();
 
     await expect(page.locator("#viewport-seek-frame-stop-toggle")).toHaveCount(0);
   } finally {

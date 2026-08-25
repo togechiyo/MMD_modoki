@@ -103,7 +103,7 @@ test("V022-017: 影チェックにfocusがあってもCtrl+Sでprojectを保存�
     await shadow.press("Control+s");
 
     await expect.poll(() => existsSync(projectPath)).toBe(true);
-    expect(JSON.parse(readFileSync(projectPath, "utf8")).format).toBe("mmd-modoki-project");
+    expect(JSON.parse(readFileSync(projectPath, "utf8")).format).toBe("mmd_modoki_project");
   } finally {
     await launched.close();
   }

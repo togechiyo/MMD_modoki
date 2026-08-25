@@ -130,7 +130,10 @@ function resolveExportUiElements(): ExportUiElements {
         outputStartFrameInput: document.getElementById("output-start-frame") as HTMLInputElement | null,
         outputEndFrameInput: document.getElementById("output-end-frame") as HTMLInputElement | null,
         playbackFrameStartToggleInput: document.getElementById("playback-frame-start-toggle") as HTMLInputElement | null,
-        playbackFrameStopToggleInput: document.getElementById("playback-frame-stop-toggle") as HTMLInputElement | null,
+        playbackFrameStopToggleInput: (
+            document.getElementById("playback-frame-stop-toggle")
+            ?? document.getElementById("viewport-seek-frame-stop-toggle")
+        ) as HTMLInputElement | null,
     };
 }
 

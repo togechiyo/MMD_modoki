@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -84,6 +84,8 @@ test("Issue 21: a customized WebM end frame can return to following the full tim
   try {
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    expect(await page.evaluate((filePath) => window.mmdModokiE2e.loadModel(filePath), modelPath))
+      .not.toBeNull();
 
     let dialog = await openWebmDialog(page);
     const endFrame = dialog.locator("#webm-output-end-frame");
@@ -105,7 +107,30 @@ test("Issue 21: a customized WebM end frame can return to following the full tim
     await expect(dialog.locator("#webm-output-end-frame")).toHaveValue("500");
     await dialog.locator(".popup-form-actions .popup-form-button-secondary").click();
 
-    await expect(page.locator("#viewport-seek-frame-stop-toggle")).toHaveCount(0);
+    await page.locator("#info-model-select").selectOption("0");
+    await selectCenterBone(page);
+    const x = page.locator("#bone-controls input[data-control-key='tx']");
+    await x.fill("1");
+    await x.press("Enter");
+    await expect(page.locator("#btn-bone-keyframe")).toBeEnabled();
+    await page.locator("#btn-bone-keyframe").click();
+
+    const frameStop = page.locator("#viewport-seek-frame-stop-toggle");
+    await expect(frameStop).toBeVisible();
+    await frameStop.check();
+    await setCurrentFrame(page, 499);
+    await page.locator("#viewport-seek-play-toggle").click();
+    await expect(page.locator("#viewport-seek-current-frame")).toHaveValue("500");
+    await expect(page.locator("#viewport-seek-play-toggle")).toHaveAttribute("aria-label", "再生");
+
+    const projectPath = resolve(launched.tempDir, "frame-stop-enabled.mmdproj");
+    await launched.app.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    }, projectPath);
+    await page.keyboard.press("Control+s");
+    await expect.poll(() => existsSync(projectPath)).toBe(true);
+    const saved = JSON.parse(readFileSync(projectPath, "utf8"));
+    expect(saved.output.frameStopEnabled).toBe(true);
   } finally {
     await launched.close();
   }

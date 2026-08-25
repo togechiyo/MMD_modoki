@@ -2005,10 +2005,9 @@ body.file-drag-active #viewport-container {
 }
 
 .viewport-bottom-bar {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  width: auto;
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
   min-height: 52px;
   display: grid;
   grid-template-columns: auto auto auto minmax(16px, 1fr) auto auto;

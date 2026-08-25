@@ -62,6 +62,9 @@ test("camera external parent follows parent rotation once and stores zoom in cen
       { boneName: selectedBoneName },
     );
     await page.locator("#info-model-select").selectOption("0");
+    await page.locator("#timeline-label-canvas").click({ position: { x: 40, y: 47 } });
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack))
+      .toEqual({ category: "root", name: "センター" });
     const parentYInput = page.locator("#bone-controls input[data-control-key='ty']");
     await parentYInput.fill("5");
     await parentYInput.press("Enter");

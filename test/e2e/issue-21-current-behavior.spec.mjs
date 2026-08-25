@@ -1,0 +1,156 @@
+import { expect, test } from "@playwright/test";
+import { existsSync, statSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { launchMmdModoki } from "./electron-app.mjs";
+
+const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const modelPath = resolve(repoRoot, "test", "fixtures", "external-parent", "tofu.pmx");
+const accessoryPath = resolve(repoRoot, "test", "fixtures", "accessory", "simple-triangle.x");
+
+async function selectCenterBone(page) {
+  await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineTracks()))
+    .toContainEqual({ category: "root", name: "センター", frames: [] });
+  await page.locator("#timeline-label-canvas").click({ position: { x: 40, y: 47 } });
+  await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack))
+    .toEqual({ category: "root", name: "センター" });
+}
+
+async function setCurrentFrame(page, frame) {
+  const input = page.locator("#viewport-seek-current-frame");
+  await input.fill(String(frame));
+  await input.press("Enter");
+  await expect(input).toHaveValue(String(frame));
+}
+
+async function openWebmDialog(page) {
+  const fileMenu = page.locator(".app-menu-group").first();
+  await fileMenu.locator(".app-menu-trigger").click();
+  await fileMenu.locator('[data-menu-command="file.webmExportSettings"]').click();
+  const dialog = page.locator('[data-popup-id="webm-export"]');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test("Issue 21: numeric Enter commit works, model translation remains clamped, and Ctrl+ArrowLeft seeks the previous key", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    expect(await page.evaluate((filePath) => window.mmdModokiE2e.loadModel(filePath), modelPath))
+      .not.toBeNull();
+    await page.locator("#info-model-select").selectOption("0");
+    await selectCenterBone(page);
+
+    const x = page.locator("#bone-controls input[data-control-key='tx']");
+    await expect(x).toHaveAttribute("min", "-30");
+    await expect(x).toHaveAttribute("max", "30");
+
+    await x.fill("11");
+    await x.press("Enter");
+    await expect.poll(() => page.evaluate(
+      () => window.mmdModokiE2e.getActiveBoneTransform("センター")?.position.x ?? null,
+    )).toBe(11);
+
+    await x.focus();
+    await x.press("ArrowUp");
+    await x.press("Enter");
+    await expect.poll(() => page.evaluate(
+      () => window.mmdModokiE2e.getActiveBoneTransform("センター")?.position.x ?? null,
+    )).toBe(12);
+    await page.locator("#btn-bone-keyframe").click();
+
+    await setCurrentFrame(page, 10);
+    await x.fill("13");
+    await x.press("Enter");
+    await page.locator("#btn-bone-keyframe").click();
+
+    await setCurrentFrame(page, 20);
+    await page.keyboard.press("Control+ArrowLeft");
+    await expect(page.locator("#viewport-seek-current-frame")).toHaveValue("10");
+
+    await x.fill("45");
+    await x.press("Enter");
+    await expect.poll(() => page.evaluate(
+      () => window.mmdModokiE2e.getActiveBoneTransform("センター")?.position.x ?? null,
+    )).toBe(30);
+  } finally {
+    await launched.close();
+  }
+});
+
+test("Issue 21: a customized WebM end frame remains after the timeline is extended", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+
+    let dialog = await openWebmDialog(page);
+    const endFrame = dialog.locator("#webm-output-end-frame");
+    await endFrame.fill("120");
+    await endFrame.press("Enter");
+    await dialog.locator(".popup-form-button-secondary").click();
+
+    await setCurrentFrame(page, 400);
+    await expect(page.locator("#viewport-seek-total-frame")).toHaveText("400");
+
+    dialog = await openWebmDialog(page);
+    await expect(dialog.locator("#webm-output-end-frame")).toHaveValue("120");
+    await dialog.locator(".popup-form-button-secondary").click();
+
+    await expect(page.locator("#viewport-seek-frame-stop-toggle")).toHaveCount(0);
+  } finally {
+    await launched.close();
+  }
+});
+
+test("Issue 21: an X accessory survives project round-trip and permits one-frame WebM export", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+
+    expect(await page.evaluate(
+      (filePath) => window.mmdModokiE2e.loadAccessory(filePath),
+      accessoryPath,
+    )).toBe(true);
+    const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    expect(saved.accessories).toHaveLength(1);
+    expect(saved.accessories[0].path).toBe(accessoryPath);
+
+    const imported = await page.evaluate(
+      (project) => window.mmdModokiE2e.importProjectState(project),
+      saved,
+    );
+    expect(imported.warnings).toEqual([]);
+    const restored = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    expect(restored.accessories).toHaveLength(1);
+    expect(restored.accessories[0].path).toBe(accessoryPath);
+
+    const webmPath = resolve(launched.tempDir, "issue_21_x_accessory.webm");
+    const started = await page.evaluate(async ({ project, outputFilePath }) => (
+      window.electronAPI.startWebmExportWindow({
+        project,
+        outputFilePath,
+        startFrame: 0,
+        endFrame: 0,
+        fps: 30,
+        outputWidth: 320,
+        outputHeight: 180,
+        includeAudio: false,
+        preferredVideoCodec: "vp8",
+        captureMode: "rgba-surface",
+      })
+    ), { project: restored, outputFilePath: webmPath });
+    expect(started?.jobId).toBeTruthy();
+    await expect.poll(
+      () => existsSync(webmPath) && statSync(webmPath).size > 1_000,
+      { timeout: 30_000 },
+    ).toBe(true);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await launched.close();
+  }
+});

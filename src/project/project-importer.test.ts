@@ -126,6 +126,7 @@ function createHost() {
         setPhysicsEnabled: vi.fn(),
         isPhysicsAvailable: vi.fn(() => false),
         setDofFocusTargetByPath: vi.fn(),
+        setDofFocusMode: vi.fn(),
         setModelEdgeColor: vi.fn(),
         modelEdgeColorOverrideEnabled: false,
         updateEditorDofFocusAndFStop: vi.fn(),
@@ -1072,11 +1073,35 @@ describe("importProjectState", () => {
             "C:/models/test.pmx",
         );
         expect(host.setDofFocusTargetByPath).toHaveBeenLastCalledWith("C:/models/test.pmx", "頭");
+        expect(host.setDofFocusMode).toHaveBeenLastCalledWith("model-target");
         expect(host.updateEditorDofFocusAndFStop).toHaveBeenCalledTimes(1);
         expect(host.applyEditorDofSettings).toHaveBeenCalledTimes(1);
         expect(host.applyDofLensBlurSettings).toHaveBeenCalledTimes(1);
         expect(host.setLightDirection).toHaveBeenLastCalledWith(-0.5, -1, 0.5);
         expect(host.engine.releaseEffects).toHaveBeenCalledTimes(1);
+    });
+
+    it("restores the person-priority DoF autofocus mode", async () => {
+        const host = createHost();
+        const baseProject = createProject();
+        const project = createProject({
+            effects: {
+                ...baseProject.effects,
+                dofFocusMode: "person-auto",
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setDofFocusMode).toHaveBeenLastCalledWith("person-auto");
+    });
+
+    it("keeps the camera-target fallback for old projects without a saved focus mode or target", async () => {
+        const host = createHost();
+
+        await importProjectState(host, createProject());
+
+        expect(host.setDofFocusMode).toHaveBeenLastCalledWith("camera-target");
     });
 
     it("accepts legacy serialized light direction keys", async () => {

@@ -174,6 +174,9 @@
 - [x] 読み込み済み PMX の静止姿勢を比較し、センター系・足IK移動キーを体格比で一括補正（プレビュー、undo / redo対応）
 - [x] 既存 UI の影色 RGB / Toon 影響度 / 影描画範囲 / 照度キーを project 独自トラックとして実装（MMD のセルフ影 mode は不採用）
 - [x] 重力値のシーク再現性を調査し、下パネルの方向 XYZ / 加速度だけを project 独自トラックとして実装
+- [x] エフェクト数値と DoF 対象切替のキー化可能範囲、FrameGraph rebuild 境界、段階案を事前調査（[事前検討](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)）
+- [x] dropdownだけで使える DoF autofocus を調査し、人物 / 中央 / 手前優先、subject lock、切替抑制、seek / 出力再現性の設計候補を整理（[事前検討](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)）
+- [x] DoF `オートフォーカス`（人物優先）を新規sceneの既定として実装（頭 / 首 / 上半身系boneを持つmodelのみ、中央score、25%切替hysteresis、camera target fallback、project round-trip、focused E2E）
 - [ ] エフェクトキーは安定した1〜2パラメータに限定して Experimental PoC を行う
 
 詳細: [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)

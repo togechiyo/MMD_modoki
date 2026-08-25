@@ -115,10 +115,10 @@ export class DofPanelController {
         const modelSelect = this.elements.targetModelSelect;
         const boneSelect = this.elements.targetBoneSelect;
         const loadedModels = this.mmdManager.getLoadedModels();
-        const targetModelPath = this.mmdManager.getDofFocusTargetModelPath();
+        const targetModelInstanceId = this.mmdManager.getDofFocusTargetModelInstanceId();
         const targetBoneName = this.mmdManager.getDofFocusTargetBoneName();
-        const resolvedModel = targetModelPath
-            ? loadedModels.find((model) => model.path === targetModelPath) ?? null
+        const resolvedModel = targetModelInstanceId
+            ? loadedModels.find((model) => model.instanceId === targetModelInstanceId) ?? null
             : null;
 
         modelSelect.innerHTML = "";
@@ -134,7 +134,7 @@ export class DofPanelController {
             modelSelect.appendChild(option);
         }
 
-        if (targetModelPath && !resolvedModel) {
+        if (targetModelInstanceId && !resolvedModel) {
             this.mmdManager.setDofFocusTargetByIndex(null, null);
             return;
         }

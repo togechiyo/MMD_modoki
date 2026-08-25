@@ -102,6 +102,7 @@ function createHost() {
         dofEnabled: false,
         dofFocusDistanceMm: 10000,
         dofAutoFocusNearOffsetMm: 0,
+        getDofFocusMode: () => "person-auto" as const,
         getDofFocusTargetModelPath: (): null => null,
         getDofFocusTargetBoneName: (): null => null,
         dofBlurLevel: 1,
@@ -277,6 +278,12 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("writes the DoF focus mode", () => {
+        const project = exportProjectState(createHost());
+
+        expect(project.effects.dofFocusMode).toBe("person-auto");
+    });
+
     it("writes accessory visibility and shadow state", () => {
         const project = exportProjectState({
             ...createHost(),

@@ -4686,6 +4686,11 @@ export class UIController {
                         <span data-frame-graph-dof-val="focus" class="effect-value">55.0m</span>
                     </div>
                     <div class="effect-row">
+                        <span class="effect-label">フォーカス方式</span>
+                        <select data-frame-graph-dof-select="focus-mode" class="effect-select"></select>
+                        <span data-frame-graph-dof-val="focus-mode" class="effect-value"></span>
+                    </div>
+                    <div class="effect-row">
                         <span class="effect-label">DoF中心モデル</span>
                         <select data-frame-graph-dof-select="target-model" class="effect-select"></select>
                         <span class="effect-value"></span>
@@ -5440,6 +5445,30 @@ export class UIController {
         return this.mmdManager.getDofFocusTargetBoneName() ?? "-";
     }
 
+    private buildFrameGraphPostStackDofFocusModeOptionsHtml(): string {
+        const currentMode = this.mmdManager.getDofFocusMode();
+        const options = [
+            ["person-auto", t("effect.frameGraphPost.dofFocusModes.personAuto")],
+            ["model-target", t("effect.frameGraphPost.dofFocusModes.modelTarget")],
+            ["camera-target", t("effect.frameGraphPost.dofFocusModes.cameraTarget")],
+        ] as const;
+        return options.map(([value, label]) => (
+            `<option value="${value}"${currentMode === value ? " selected" : ""}>${this.escapeEffectStackHtml(label)}</option>`
+        )).join("");
+    }
+
+    private getFrameGraphPostStackDofFocusModeLabel(): string {
+        switch (this.mmdManager.getDofFocusMode()) {
+            case "person-auto":
+                return t("effect.frameGraphPost.dofFocusModes.personAuto");
+            case "model-target":
+                return t("effect.frameGraphPost.dofFocusModes.modelTarget");
+            case "camera-target":
+            default:
+                return t("effect.frameGraphPost.dofFocusModes.cameraTarget");
+        }
+    }
+
     private async applyFrameGraphPostStackAction(action: string): Promise<void> {
         if (action !== "lutFile") return;
         await this.lutPanelController?.chooseExternalLut();
@@ -5537,17 +5566,25 @@ export class UIController {
                 this.applySimplifiedDofDefaults();
                 rows.push(
                     select(
-                        "dofTargetModel",
-                        label("target"),
-                        this.buildFrameGraphPostStackDofTargetModelOptionsHtml(),
-                        this.getFrameGraphPostStackDofTargetModelLabel(),
+                        "dofFocusMode",
+                        label("focusMode"),
+                        this.buildFrameGraphPostStackDofFocusModeOptionsHtml(),
+                        this.getFrameGraphPostStackDofFocusModeLabel(),
                     ),
-                    select(
-                        "dofTargetBone",
-                        label("bone"),
-                        this.buildFrameGraphPostStackDofTargetBoneOptionsHtml(),
-                        this.getFrameGraphPostStackDofTargetBoneLabel(),
-                    ),
+                    ...(this.mmdManager.getDofFocusMode() === "model-target" ? [
+                        select(
+                            "dofTargetModel",
+                            label("target"),
+                            this.buildFrameGraphPostStackDofTargetModelOptionsHtml(),
+                            this.getFrameGraphPostStackDofTargetModelLabel(),
+                        ),
+                        select(
+                            "dofTargetBone",
+                            label("bone"),
+                            this.buildFrameGraphPostStackDofTargetBoneOptionsHtml(),
+                            this.getFrameGraphPostStackDofTargetBoneLabel(),
+                        ),
+                    ] : []),
                     range("dofFocusOffset", label("offset"), this.mmdManager.dofAutoFocusNearOffsetMm, `${(this.mmdManager.dofAutoFocusNearOffsetMm / 1000).toFixed(1)}m`),
                     range(
                         "dofLensSize",
@@ -5777,6 +5814,9 @@ export class UIController {
                 if (!this.mmdManager.dofAutoFocusEnabled) {
                     this.mmdManager.dofFocusDistanceMm = Number(rawValue);
                 }
+                break;
+            case "dofFocusMode":
+                this.mmdManager.setDofFocusMode(rawValue);
                 break;
             case "dofTargetModel": {
                 const modelIndex = Number.parseInt(String(rawValue), 10);
@@ -6044,6 +6084,7 @@ export class UIController {
             case "luminousGlarePower":
                 return "luminous";
             case "dofFocus":
+            case "dofFocusMode":
             case "dofTargetModel":
             case "dofTargetBone":
             case "dofFocusOffset":
@@ -6173,6 +6214,9 @@ export class UIController {
                 break;
             case "dofFocus":
                 valueElement.textContent = `${(this.mmdManager.dofFocusDistanceMm / 1000).toFixed(1)}m`;
+                break;
+            case "dofFocusMode":
+                valueElement.textContent = this.getFrameGraphPostStackDofFocusModeLabel();
                 break;
             case "dofTargetModel":
                 valueElement.textContent = this.getFrameGraphPostStackDofTargetModelLabel();
@@ -6624,6 +6668,8 @@ export class UIController {
         const enabledValue = root.querySelector<HTMLElement>('span[data-frame-graph-dof-val="enabled"]');
         const focusSlider = root.querySelector<HTMLInputElement>('input[data-frame-graph-dof="focus"]');
         const focusValue = root.querySelector<HTMLElement>('span[data-frame-graph-dof-val="focus"]');
+        const focusModeSelect = root.querySelector<HTMLSelectElement>('select[data-frame-graph-dof-select="focus-mode"]');
+        const focusModeValue = root.querySelector<HTMLElement>('span[data-frame-graph-dof-val="focus-mode"]');
         const targetModelSelect = root.querySelector<HTMLSelectElement>('select[data-frame-graph-dof-select="target-model"]');
         const targetBoneSelect = root.querySelector<HTMLSelectElement>('select[data-frame-graph-dof-select="target-bone"]');
         const focusOffsetSlider = root.querySelector<HTMLInputElement>('input[data-frame-graph-dof="focus-offset"]');
@@ -6639,6 +6685,8 @@ export class UIController {
             !enabledValue ||
             !focusSlider ||
             !focusValue ||
+            !focusModeSelect ||
+            !focusModeValue ||
             !targetModelSelect ||
             !targetBoneSelect ||
             !focusOffsetSlider ||
@@ -6660,6 +6708,12 @@ export class UIController {
         lensSizeSlider.max = "4096";
 
         const refreshTargetControls = (): void => {
+            const hasSpecifiedTarget = this.mmdManager.getDofFocusMode() === "model-target";
+            const targetModelRow = targetModelSelect.closest<HTMLElement>(".effect-row");
+            const targetBoneRow = targetBoneSelect.closest<HTMLElement>(".effect-row");
+            if (targetModelRow) targetModelRow.hidden = !hasSpecifiedTarget;
+            if (targetBoneRow) targetBoneRow.hidden = !hasSpecifiedTarget;
+
             const loadedModels = this.mmdManager.getLoadedModels();
             const targetModelInstanceId = this.mmdManager.getDofFocusTargetModelInstanceId();
             const targetBoneName = this.mmdManager.getDofFocusTargetBoneName();
@@ -6712,6 +6766,9 @@ export class UIController {
             this.applySimplifiedDofDefaults();
             enabledInput.checked = this.mmdManager.dofEnabled;
             enabledValue.textContent = this.mmdManager.dofEnabled ? t("status.on") : t("status.off");
+            focusModeSelect.innerHTML = this.buildFrameGraphPostStackDofFocusModeOptionsHtml();
+            focusModeSelect.value = this.mmdManager.getDofFocusMode();
+            focusModeValue.textContent = this.getFrameGraphPostStackDofFocusModeLabel();
             focusSlider.value = String(Math.round(this.mmdManager.dofFocusDistanceMm));
             focusValue.textContent = `${(this.mmdManager.dofFocusDistanceMm / 1000).toFixed(1)}m`;
             focusOffsetSlider.value = String(Math.round(this.mmdManager.dofAutoFocusNearOffsetMm));
@@ -6745,6 +6802,10 @@ export class UIController {
             }) && !this.mmdManager.dofAutoFocusEnabled) {
                 this.mmdManager.dofFocusDistanceMm = Number(focusSlider.value);
             }
+            refreshValues();
+        });
+        focusModeSelect.addEventListener("change", () => {
+            this.mmdManager.setDofFocusMode(focusModeSelect.value);
             refreshValues();
         });
         targetModelSelect.addEventListener("change", () => {

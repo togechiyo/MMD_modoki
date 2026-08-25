@@ -592,6 +592,7 @@ export interface ProjectPhysicsState {
 export interface ProjectEffectState {
     dofEnabled: boolean;
     dofFocusDistanceMm: number;
+    dofFocusMode?: "camera-target" | "person-auto" | "model-target";
     dofFocusOffsetMm?: number;
     dofTargetModelInstanceId?: string | null;
     dofTargetModelPath?: string | null;

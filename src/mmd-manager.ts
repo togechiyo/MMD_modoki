@@ -87,6 +87,14 @@ import {
     type BackgroundDisplayMode,
 } from "./shared/background-display-mode";
 import {
+    DEFAULT_DOF_FOCUS_MODE,
+    findDofPersonFocusBoneName,
+    normalizeDofFocusMode,
+    selectDofPersonAutoFocusCandidate,
+    type DofFocusMode,
+    type DofPersonAutoFocusCandidate,
+} from "./shared/dof-person-autofocus";
+import {
     DEFAULT_MMD_MATERIAL_PIPELINE_PRESET,
     normalizeMmdMaterialPipelinePreset,
     normalizePbrMaterialShaderPreset,
@@ -2100,9 +2108,12 @@ ${beforeFogAppendBlock}
     private readonly dofAutoFocusLensCompensationExponent = 0.72;
     private dofNearSuppressionScaleValue = 4.0;
     private dofAutoFocusNearOffsetMmValue = 0;
+    private dofFocusModeValue: DofFocusMode = DEFAULT_DOF_FOCUS_MODE;
     private dofFocusTargetModelInstanceIdValue: string | null = null;
     private dofFocusTargetModelPathValue: string | null = null;
     private dofFocusTargetBoneNameValue: string | null = null;
+    private dofPersonAutoFocusLockedModelInstanceIdValue: string | null = null;
+    private dofPersonAutoFocusLockedBoneNameValue: string | null = null;
     private resizeObserver: ResizeObserver | null = null;
     private autoRenderEnabled = true;
     private readonly onWindowResize = () => {
@@ -4309,6 +4320,38 @@ ${beforeFogAppendBlock}
 
     public getDofFocusTargetBoneName(): string | null {
         return this.dofFocusTargetBoneNameValue;
+    }
+
+    public getDofFocusMode(): DofFocusMode {
+        return this.dofFocusModeValue;
+    }
+
+    public setDofFocusMode(value: unknown): DofFocusMode {
+        const next = normalizeDofFocusMode(value);
+        if (this.dofFocusModeValue === next) {
+            return next;
+        }
+
+        this.dofFocusModeValue = next;
+        this.resetDofPersonAutoFocusLock();
+        if (this.dofAutoFocusEnabled) {
+            this.dofFocusDistanceMmValue = this.getDofAutoFocusDistanceMm();
+            this.updateEditorDofFocusAndFStop();
+        }
+        this.onDofFocusTargetChanged?.();
+        return next;
+    }
+
+    public getDofResolvedFocusTargetModelInstanceId(): string | null {
+        return this.dofFocusModeValue === "person-auto"
+            ? this.dofPersonAutoFocusLockedModelInstanceIdValue
+            : this.dofFocusTargetModelInstanceIdValue;
+    }
+
+    public getDofResolvedFocusTargetBoneName(): string | null {
+        return this.dofFocusModeValue === "person-auto"
+            ? this.dofPersonAutoFocusLockedBoneNameValue
+            : this.dofFocusTargetBoneNameValue;
     }
 
     public setDofFocusTargetByIndex(index: number | null, boneName: string | null): void {
@@ -13136,6 +13179,14 @@ ${beforeFogAppendBlock}
     }
 
     private getDofFocusTargetPosition(): Vector3 | null {
+        if (this.dofFocusModeValue === "person-auto") {
+            return this.getDofPersonAutoFocusTargetPosition();
+        }
+
+        if (this.dofFocusModeValue === "camera-target") {
+            return this.camera.target.clone();
+        }
+
         const modelInstanceId = this.dofFocusTargetModelInstanceIdValue;
         if (!modelInstanceId) {
             return this.camera.target.clone();
@@ -13159,6 +13210,61 @@ ${beforeFogAppendBlock}
         }
 
         return entry.mesh.getBoundingInfo().boundingBox.centerWorld.clone();
+    }
+
+    private resetDofPersonAutoFocusLock(): void {
+        this.dofPersonAutoFocusLockedModelInstanceIdValue = null;
+        this.dofPersonAutoFocusLockedBoneNameValue = null;
+    }
+
+    private getDofPersonAutoFocusTargetPosition(): Vector3 {
+        const transform = this.camera.getTransformationMatrix();
+        const candidates: DofPersonAutoFocusCandidate[] = [];
+        const worldPositions = new Map<string, Vector3>();
+
+        for (const entry of this.sceneModels) {
+            if (!entry.renderMeshes.some((mesh) => mesh.isEnabled() && mesh.isVisible && mesh.visibility > 0)) {
+                continue;
+            }
+
+            const boneName = findDofPersonFocusBoneName(entry.info.boneNames);
+            if (!boneName) {
+                continue;
+            }
+
+            const runtimeBone = this.getRuntimeBoneByNameFromModel(entry.model, boneName);
+            if (!runtimeBone) {
+                continue;
+            }
+
+            const worldMatrix = Matrix.Identity();
+            const worldPosition = Vector3.Zero();
+            runtimeBone.getWorldMatrixToRef(worldMatrix);
+            worldMatrix.getTranslationToRef(worldPosition);
+            const projected = Vector3.TransformCoordinates(worldPosition, transform);
+            candidates.push({
+                modelInstanceId: entry.info.instanceId,
+                boneName,
+                screenX: projected.x,
+                screenY: projected.y,
+                depth: projected.z,
+                cameraDistance: Vector3.Distance(this.camera.globalPosition, worldPosition),
+            });
+            worldPositions.set(entry.info.instanceId, worldPosition);
+        }
+
+        const selection = selectDofPersonAutoFocusCandidate(
+            candidates,
+            this.dofPersonAutoFocusLockedModelInstanceIdValue,
+        );
+        if (!selection) {
+            this.resetDofPersonAutoFocusLock();
+            return this.camera.target.clone();
+        }
+
+        this.dofPersonAutoFocusLockedModelInstanceIdValue = selection.modelInstanceId;
+        this.dofPersonAutoFocusLockedBoneNameValue = selection.boneName;
+        return worldPositions.get(selection.modelInstanceId)?.clone() ?? this.camera.target.clone();
     }
 
     private getDofAutoFocusDistanceMm(): number {

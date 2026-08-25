@@ -133,6 +133,7 @@
 ## カメラ / タイムライン / キーフレーム
 
 - [アクセサリ・タイムライン仕様](./accessory-timeline-spec.md)
+- [エフェクト・DoF 対象のタイムラインキー化 事前検討 2026-08-25](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)
 - [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)
 - [Propertyキー・時間軸編集・キー登録・project round-trip 実装メモ 2026-08-24](./property-frame-edit-registration-roundtrip-2026-08-24.md)
 - [キーフレーム値補正 実装メモ 2026-08-24](./keyframe-value-correction-implementation-2026-08-24.md)

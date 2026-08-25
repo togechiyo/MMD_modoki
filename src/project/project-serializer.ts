@@ -18,6 +18,7 @@ import type { FrameGraphPostEffectStackEntry } from "../shared/frame-graph-post-
 import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "../shared/mmd-render-order";
 import type { BackgroundDisplayMode } from "../shared/background-display-mode";
+import { DEFAULT_DOF_FOCUS_MODE } from "../shared/dof-person-autofocus";
 import {
     normalizeSkydomeBackgroundStyle,
     type SkydomeBackgroundStyle,
@@ -248,6 +249,7 @@ type ProjectExportHost = {
     getSerializedLightSceneTrack?: () => ProjectSerializedLightSceneTrack | null;
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
+    getDofFocusMode?: () => "camera-target" | "person-auto" | "model-target";
     getDofFocusTargetModelPath?: () => string | null;
     getDofFocusTargetModelInstanceId?: () => string | null;
     getDofFocusTargetBoneName?: () => string | null;
@@ -476,6 +478,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         effects: {
             dofEnabled: host.dofEnabled,
             dofFocusDistanceMm: host.dofFocusDistanceMm,
+            dofFocusMode: host.getDofFocusMode?.() ?? DEFAULT_DOF_FOCUS_MODE,
             dofFocusOffsetMm: host.dofAutoFocusNearOffsetMm,
             dofTargetModelInstanceId: host.getDofFocusTargetModelInstanceId?.() ?? null,
             dofTargetModelPath: host.getDofFocusTargetModelPath?.() ?? null,

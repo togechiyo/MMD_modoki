@@ -19,6 +19,7 @@
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |
 | adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | シーン項目のキー登録順を決める |
 | adopted | [再生中の編集権限はカテゴリごとのキー有無で決める](./decisions/playback-ownership-follows-category-key-presence.md) | camera / light / shadow / gravity の再生中評価とUIロックを変更する |
+| adopted | [DoF autofocusは手前のsurfaceより人物を優先する](./decisions/dof-autofocus-prefers-people-over-foreground-depth.md) | DoFの自動対象選択やfocus modeを変更する |
 | confirmed | [動画出力は現在のviewport物理状態から開始する](./decisions/webm-export-starts-from-current-viewport-physics-state.md) | WebM出力開始時の物理reset、warm-up、snapshot引き継ぎを変更する |
 | adopted | [WebM標準bitrateは動画サイトの推奨上限付近に合わせる](./decisions/webm-default-bitrate-targets-video-site-recommendation-ceilings.md) | WebMの既定bitrateや品質presetを変更する |
 | adopted | [タイムラインの行高は選択状態で変えない](./decisions/timeline-rows-stay-uniform-height.md) | timelineの行レイアウトやGraph表示を変更する |

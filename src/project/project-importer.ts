@@ -83,6 +83,7 @@ type ProjectImportHost = {
     setLightDirection(x: number, y: number, z: number): void;
     setDofFocusTargetByPath?: (modelPath: string | null, boneName: string | null) => void;
     setDofFocusTargetByInstanceId?: (instanceId: string | null, boneName: string | null) => void;
+    setDofFocusMode?: (mode: unknown) => unknown;
     updateEditorDofFocusAndFStop?: () => void;
     applyEditorDofSettings?: () => void;
     applyDofLensBlurSettings?: () => void;
@@ -380,6 +381,10 @@ function finalizeImportedRenderState(
             dofTargetBoneName,
         );
     }
+    host.setDofFocusMode?.(
+        data.effects.dofFocusMode
+        ?? (dofTargetInstanceId || data.effects.dofTargetModelPath ? "model-target" : "camera-target"),
+    );
     host.updateEditorDofFocusAndFStop?.();
     host.applyEditorDofSettings?.();
     host.applyDofLensBlurSettings?.();
@@ -1079,6 +1084,10 @@ export async function importProjectState(
             dofTargetBoneName,
         );
     }
+    host.setDofFocusMode?.(
+        data.effects.dofFocusMode
+        ?? (dofTargetInstanceId || data.effects.dofTargetModelPath ? "model-target" : "camera-target"),
+    );
     host.dofFStop = 2.0;
     host.dofNearSuppressionScale = readFiniteNumber(data.effects.dofNearSuppressionScale, 4);
     host.dofLensSize = readFiniteNumber(data.effects.dofLensSize, 1000);

@@ -10,6 +10,11 @@ import type { MmdManager } from "../mmd-manager";
 import { PngEncoderWebWorkerPool } from "../output/png-encoder-web-worker-pool";
 import type { EditorAction } from "../actions/types";
 import { resolveOutputFrameRangeOnProjectLoad } from "./output-frame-range-policy";
+import {
+    advanceWebmProgressMetrics,
+    formatEtaSeconds,
+    type WebmProgressMetricsState,
+} from "./webm-progress-metrics";
 import type {
     MmdModokiProjectFileV1,
     PngSequenceExportProgress,
@@ -102,6 +107,10 @@ type ExportUiElements = {
     appRoot: HTMLElement;
     busyOverlay: HTMLElement | null;
     busyText: HTMLElement | null;
+    busyProgress: HTMLElement | null;
+    busyProgressFill: HTMLElement | null;
+    busyMetrics: HTMLElement | null;
+    busyCancel: HTMLButtonElement | null;
     viewportOutputAspectSelect: HTMLSelectElement | null;
     outputStartFrameInput: HTMLInputElement | null;
     outputEndFrameInput: HTMLInputElement | null;
@@ -126,6 +135,10 @@ function resolveExportUiElements(): ExportUiElements {
         appRoot: document.getElementById("app") as HTMLElement,
         busyOverlay: document.getElementById("ui-busy-overlay"),
         busyText: document.getElementById("ui-busy-text"),
+        busyProgress: document.getElementById("ui-busy-progress"),
+        busyProgressFill: document.getElementById("ui-busy-progress-fill"),
+        busyMetrics: document.getElementById("ui-busy-metrics"),
+        busyCancel: document.getElementById("ui-busy-cancel") as HTMLButtonElement | null,
         viewportOutputAspectSelect: document.getElementById("viewport-output-aspect") as HTMLSelectElement | null,
         outputStartFrameInput: document.getElementById("output-start-frame") as HTMLInputElement | null,
         outputEndFrameInput: document.getElementById("output-end-frame") as HTMLInputElement | null,
@@ -147,6 +160,8 @@ function formatWebmExportPhaseLabel(phase: WebmExportProgress["phase"]): string 
         case "closing-track": return t("webm.phase.closingTrack");
         case "finalizing": return t("webm.phase.finalizing");
         case "finishing-job": return t("webm.phase.finishingJob");
+        case "canceling": return t("webm.phase.canceling");
+        case "canceled": return t("webm.phase.canceled");
         case "completed": return t("webm.phase.completed");
         case "failed": return t("webm.phase.failed");
         default: return phase;
@@ -194,6 +209,10 @@ export class ExportUiController {
     private isWebmExportActive = false;
     private webmExportActiveCount = 0;
     private latestWebmExportProgress: WebmExportProgress | null = null;
+    private webmProgressMetricsState: WebmProgressMetricsState | null = null;
+    private webmFramesPerSecond: number | null = null;
+    private webmEtaSeconds: number | null = null;
+    private webmCancelPending = false;
     private backgroundExportMonitorIntervalId: number | null = null;
     private outputAspectRatio = 16 / 9;
     private isSyncingOutputSettings = false;
@@ -237,6 +256,7 @@ export class ExportUiController {
         this.setupOutputControls();
         this.setupPngSequenceExportStateBridge();
         this.setupWebmExportStateBridge();
+        this.elements.busyCancel?.addEventListener("click", this.onWebmCancelClick);
         this.startBackgroundExportMonitor();
     }
 
@@ -249,6 +269,7 @@ export class ExportUiController {
         this.webmExportStateUnsubscribe = null;
         this.webmExportProgressUnsubscribe?.();
         this.webmExportProgressUnsubscribe = null;
+        this.elements.busyCancel?.removeEventListener("click", this.onWebmCancelClick);
         if (this.backgroundExportMonitorIntervalId !== null) {
             window.clearInterval(this.backgroundExportMonitorIntervalId);
             this.backgroundExportMonitorIntervalId = null;
@@ -486,6 +507,7 @@ export class ExportUiController {
         const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
         const project = this.buildProjectState();
         project.assets.audioPath = null;
+        const externalLut = this.mmdManager.getPostEffectExternalLutAsset();
 
         logInfo("ui", "detached PNG export launching", {
             frame,
@@ -496,6 +518,7 @@ export class ExportUiController {
         this.setStatus("Launching high-resolution PNG export...", true);
         const result = await window.electronAPI.startPngSequenceExportWindow({
             project,
+            externalLut,
             outputDirectoryPath: saveTarget.directoryPath,
             startFrame: frame,
             endFrame: frame,
@@ -561,10 +584,12 @@ export class ExportUiController {
 
         const project = this.buildProjectState();
         project.assets.audioPath = null;
+        const externalLut = this.mmdManager.getPostEffectExternalLutAsset();
 
         this.setStatus("Launching PNG sequence export window...", true);
         const result = await window.electronAPI.startPngSequenceExportWindow({
             project,
+            externalLut,
             outputDirectoryPath,
             startFrame,
             endFrame,
@@ -631,6 +656,7 @@ export class ExportUiController {
         }
 
         const project = this.buildProjectState();
+        const externalLut = this.mmdManager.getPostEffectExternalLutAsset();
         const audioFilePath = project.assets.audioPath;
         const webmOutputOptions = this.getWebmOutputOptions();
         const includeAudio = webmOutputOptions.includeAudio && typeof audioFilePath === "string" && audioFilePath.length > 0;
@@ -659,6 +685,7 @@ export class ExportUiController {
         this.setStatus(t("busy.webmExportLaunching"), true);
         const result = await window.electronAPI.startWebmExportWindow({
             project,
+            externalLut,
             outputFilePath,
             startFrame,
             endFrame,
@@ -1082,14 +1109,47 @@ export class ExportUiController {
         this.webmExportActiveCount = Math.max(0, Math.floor(state?.activeCount ?? 0));
         if (!this.isWebmExportActive) {
             this.latestWebmExportProgress = null;
+            this.webmProgressMetricsState = null;
+            this.webmFramesPerSecond = null;
+            this.webmEtaSeconds = null;
+            this.webmCancelPending = false;
         }
         this.refreshBackgroundExportLock();
     }
 
     private applyWebmExportProgress(progress: WebmExportProgress): void {
         if (!this.isWebmExportActive) return;
+        if (this.latestWebmExportProgress?.jobId !== progress.jobId) {
+            this.webmProgressMetricsState = null;
+            this.webmCancelPending = false;
+        }
         this.latestWebmExportProgress = progress;
+        const metrics = advanceWebmProgressMetrics(this.webmProgressMetricsState, progress.jobId, {
+            encoded: progress.encoded,
+            total: progress.total,
+            timestampMs: progress.timestampMs,
+        });
+        this.webmProgressMetricsState = metrics.state;
+        this.webmFramesPerSecond = metrics.framesPerSecond;
+        this.webmEtaSeconds = metrics.etaSeconds;
         this.refreshBackgroundExportLock();
+    }
+
+    private readonly onWebmCancelClick = (): void => {
+        void this.cancelActiveWebmExport();
+    };
+
+    private async cancelActiveWebmExport(): Promise<void> {
+        const jobId = this.latestWebmExportProgress?.jobId;
+        if (!jobId || this.webmCancelPending) return;
+        this.webmCancelPending = true;
+        this.updateBackgroundExportBusyMessage();
+        const accepted = await window.electronAPI.cancelWebmExportJob(jobId);
+        if (!accepted) {
+            this.webmCancelPending = false;
+            this.showToast(t("toast.webmCancelFailed"), "error");
+            this.updateBackgroundExportBusyMessage();
+        }
     }
 
     private refreshBackgroundExportLock(): void {
@@ -1102,6 +1162,7 @@ export class ExportUiController {
             if (this.elements.busyText) {
                 this.elements.busyText.textContent = t("busy.backgroundExportFinished");
             }
+            this.updateWebmBusyControls(null);
             return;
         }
 
@@ -1118,18 +1179,20 @@ export class ExportUiController {
         if (this.isWebmExportActive) {
             const progress = this.latestWebmExportProgress;
             if (progress) {
-                const { currentFrame, progressCount, totalCount } = normalizeExportFrameProgress(
+                const { currentFrame } = normalizeExportFrameProgress(
                     progress.frame,
                     progress.startFrame,
                     progress.endFrame,
                 );
                 const phaseLabel = formatWebmExportPhaseLabel(progress.phase);
-                if (totalCount > 0) {
-                    const ratio = Math.min(100, Math.max(0, (progressCount / totalCount) * 100));
+                const encodedCount = Math.max(0, Math.min(progress.total, progress.encoded));
+                const outputTotal = Math.max(0, progress.total);
+                if (outputTotal > 0) {
+                    const ratio = Math.min(100, Math.max(0, (encodedCount / outputTotal) * 100));
                     const baseText = t("busy.webmProgress", {
                         phase: phaseLabel,
-                        encoded: progressCount,
-                        total: totalCount,
+                        encoded: encodedCount,
+                        total: outputTotal,
                         ratio: ratio.toFixed(1),
                         frame: currentFrame,
                     });
@@ -1139,9 +1202,11 @@ export class ExportUiController {
                     busyText.textContent = detailText.length > 0
                         ? `${baseText}\n${detailText}`
                         : baseText;
+                    this.updateWebmBusyControls(progress, ratio);
                     return;
                 }
                 busyText.textContent = t("busy.webmExportRunning");
+                this.updateWebmBusyControls(progress, 0);
                 return;
             }
             if (this.webmExportActiveCount > 1) {
@@ -1149,8 +1214,11 @@ export class ExportUiController {
                 return;
             }
             busyText.textContent = t("busy.webmExportRunning");
+            this.updateWebmBusyControls(null);
             return;
         }
+
+        this.updateWebmBusyControls(null);
 
         if (this.isPngSequenceExportActive) {
             const progress = this.latestPngSequenceExportProgress;
@@ -1179,6 +1247,40 @@ export class ExportUiController {
             busyText.textContent = progress?.exportKind === "sequence"
                 ? t("busy.exportingPngSequence")
                 : t("busy.exportingPng");
+        }
+    }
+
+    private updateWebmBusyControls(progress: WebmExportProgress | null, ratio = 0): void {
+        const { busyProgress, busyProgressFill, busyMetrics, busyCancel } = this.elements;
+        const showWebmDetails = this.isWebmExportActive && progress !== null;
+        busyProgress?.classList.toggle("hidden", !showWebmDetails);
+        busyMetrics?.classList.toggle("hidden", !showWebmDetails);
+        if (busyProgress && showWebmDetails) {
+            const clampedRatio = Math.min(100, Math.max(0, ratio));
+            busyProgress.setAttribute("aria-valuenow", clampedRatio.toFixed(1));
+            if (busyProgressFill) busyProgressFill.style.width = `${clampedRatio}%`;
+        } else if (busyProgressFill) {
+            busyProgressFill.style.width = "0%";
+        }
+        if (busyMetrics && showWebmDetails) {
+            busyMetrics.textContent = t("busy.webmMetrics", {
+                rate: this.webmFramesPerSecond === null ? "--" : this.webmFramesPerSecond.toFixed(1),
+                eta: formatEtaSeconds(this.webmEtaSeconds),
+            });
+        }
+        const cancelable = progress !== null && (
+            progress.phase === "initializing"
+            || progress.phase === "loading-project"
+            || progress.phase === "checking-codec"
+            || progress.phase === "opening-output"
+            || progress.phase === "encoding"
+        );
+        busyCancel?.classList.toggle("hidden", !cancelable);
+        if (busyCancel) {
+            busyCancel.disabled = this.webmCancelPending;
+            busyCancel.textContent = this.webmCancelPending
+                ? t("busy.cancelingWebm")
+                : t("busy.cancelWebm");
         }
     }
 }

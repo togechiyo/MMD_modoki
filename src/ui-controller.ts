@@ -7292,6 +7292,10 @@ export class UIController {
         return true;
     }
 
+    public async loadExternalLutForE2e(filePath: string): Promise<boolean> {
+        return await this.lutPanelController?.importExternalLutFile(filePath, "dialog", false) ?? false;
+    }
+
     private previewTopBarCameraPan(
         before: ViewportTopBarCameraTransform,
         deltaX: number,

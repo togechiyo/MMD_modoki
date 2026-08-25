@@ -89,6 +89,13 @@ export async function runPngSequenceExportJob(
     try {
         callbacks.onStatus?.("Loading project into export renderer...");
         const importResult = await mmdManager.importProjectState(request.project, { forExport: true });
+        if (request.externalLut) {
+            mmdManager.setPostEffectExternalLut(
+                request.externalLut.path,
+                request.externalLut.runtimeText,
+                request.externalLut.sourceFormat,
+            );
+        }
         const expectedModelCount = request.project.scene.models.length;
         if (importResult.loadedModels < expectedModelCount) {
             const warningText = importResult.warnings.slice(0, 3).join(" | ");

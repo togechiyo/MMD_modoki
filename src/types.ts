@@ -61,10 +61,12 @@ export interface ElectronAPI {
         request: WebmExportRequest,
     ) => Promise<WebmExportLaunchResult | null>;
     takeWebmExportJob: (jobId: string) => Promise<WebmExportRequest | null>;
+    cancelWebmExportJob: (jobId: string) => Promise<boolean>;
     finishWebmExportJob: (jobId: string) => Promise<boolean>;
     reportWebmExportProgress: (progress: WebmExportProgress) => void;
     onWebmExportState: (callback: (state: WebmExportState) => void) => () => void;
     onWebmExportProgress: (callback: (progress: WebmExportProgress) => void) => () => void;
+    onWebmExportCancelRequested: (callback: (jobId: string) => void) => () => void;
     logDebug: (scope: AppLogScope, message: string, data?: AppLogData) => void;
     logInfo: (scope: AppLogScope, message: string, data?: AppLogData) => void;
     logWarn: (scope: AppLogScope, message: string, data?: AppLogData) => void;
@@ -196,6 +198,8 @@ declare global {
             loadModel: (filePath: string) => Promise<ModelInfo | null>;
             loadModelInteractively: (filePath: string) => Promise<ModelInfo | null>;
             loadAccessory: (filePath: string) => Promise<boolean>;
+            loadExternalLut: (filePath: string) => Promise<boolean>;
+            getExternalLutExportAsset: () => ExportExternalLutAsset | null;
             getTimelineSelection: () => {
                 activeTrack: { category: TrackCategory; name: string } | null;
                 activeFrame: number | null;
@@ -897,6 +901,7 @@ export interface MmdModokiProjectFileV1 {
 
 export interface PngSequenceExportRequest {
     project: MmdModokiProjectFileV1;
+    externalLut?: ExportExternalLutAsset | null;
     outputDirectoryPath: string;
     startFrame: number;
     endFrame: number;
@@ -992,6 +997,7 @@ export interface WebmInitialPhysicsState {
 
 export interface WebmExportRequest {
     project: MmdModokiProjectFileV1;
+    externalLut?: ExportExternalLutAsset | null;
     outputFilePath: string;
     startFrame: number;
     endFrame: number;
@@ -1007,6 +1013,12 @@ export interface WebmExportRequest {
 }
 
 export type WebmCaptureMode = "rgba-surface" | "readpixels" | "canvas" | "webgpu-copy";
+
+export interface ExportExternalLutAsset {
+    path: string;
+    runtimeText: string;
+    sourceFormat: "3dl" | "cube";
+}
 
 export interface WebmExportLaunchResult {
     jobId: string;
@@ -1026,6 +1038,8 @@ export type WebmExportPhase =
     | "closing-track"
     | "finalizing"
     | "finishing-job"
+    | "canceling"
+    | "canceled"
     | "completed"
     | "failed";
 

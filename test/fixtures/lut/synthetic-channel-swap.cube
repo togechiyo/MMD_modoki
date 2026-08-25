@@ -1,0 +1,11 @@
+TITLE "MMD_modoki synthetic channel swap"
+# Output = (blue, 1 - green, red). Intentionally strong for export pixel comparisons.
+LUT_3D_SIZE 2
+0 1 0
+0 1 1
+0 0 0
+0 0 1
+1 1 0
+1 1 1
+1 0 0
+1 0 1

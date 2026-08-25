@@ -36,6 +36,24 @@ export interface WebmExportResult {
     diagnostics: WebmExportDiagnostics;
 }
 
+export class WebmExportCanceledError extends Error {
+    constructor() {
+        super("WebM export canceled");
+        this.name = "WebmExportCanceledError";
+    }
+}
+
+export function isWebmExportCanceledError(error: unknown): boolean {
+    return error instanceof WebmExportCanceledError
+        || (error instanceof Error && error.name === "WebmExportCanceledError");
+}
+
+const throwIfWebmExportCanceled = (signal?: AbortSignal): void => {
+    if (signal?.aborted) {
+        throw new WebmExportCanceledError();
+    }
+};
+
 const updateStatus = (
     callbacks: WebmExportCallbacks,
     message: string,
@@ -675,7 +693,9 @@ export async function runWebmExportJob(
     request: WebmExportRequest,
     callbacks: WebmExportCallbacks = {},
     enginePreference: RenderEnginePreference = "auto",
+    signal?: AbortSignal,
 ): Promise<WebmExportResult> {
+    throwIfWebmExportCanceled(signal);
     if (!window.isSecureContext) {
         throw new Error("WebCodecs requires a secure context");
     }
@@ -707,6 +727,7 @@ export async function runWebmExportJob(
 
     updateStatus(callbacks, "Initializing WebM export renderer...", "initializing");
     const mmdManager = await MmdManager.create(canvas, enginePreference);
+    throwIfWebmExportCanceled(signal);
 
     try {
         const exportRuntimeInternals = mmdManager as unknown as ExportRuntimeInternals & {
@@ -719,6 +740,14 @@ export async function runWebmExportJob(
 
         updateStatus(callbacks, "Loading project into export renderer...", "loading-project");
         const importResult = await mmdManager.importProjectState(request.project, { forExport: true });
+        throwIfWebmExportCanceled(signal);
+        if (request.externalLut) {
+            mmdManager.setPostEffectExternalLut(
+                request.externalLut.path,
+                request.externalLut.runtimeText,
+                request.externalLut.sourceFormat,
+            );
+        }
         const expectedModelCount = request.project.scene.models.length;
         if (importResult.loadedModels < expectedModelCount) {
             const warningText = importResult.warnings.slice(0, 3).join(" | ");
@@ -734,6 +763,7 @@ export async function runWebmExportJob(
 
         mmdManager.setTimelineTarget("camera");
         await waitForAnimationFrames(1);
+        throwIfWebmExportCanceled(signal);
         mmdManager.pause();
         mmdManager.setAutoRenderEnabled(false);
         mmdManager.seekTo(startFrame);
@@ -745,10 +775,18 @@ export async function runWebmExportJob(
         if (captureMode !== "readpixels") {
             updateStatus(callbacks, "Preparing post effects for WebM capture...", "initializing");
             const postEffectReady = await mmdManager.waitForPostEffectBackendReadyForCapture();
+            throwIfWebmExportCanceled(signal);
             if (!postEffectReady) {
                 throw new Error("FrameGraph post effects were not ready for WebM capture");
             }
         }
+        if (captureMode === "readpixels") {
+            mmdManager.renderOnce(0);
+        } else {
+            mmdManager.renderOnceForCapture(0);
+        }
+        await waitForAnimationFrames(1);
+        throwIfWebmExportCanceled(signal);
 
         const videoQuality = getWebmVideoEncodingQuality(outputWidth, outputHeight, fps);
         const videoBitrate = videoQuality.bitrate;
@@ -762,6 +800,7 @@ export async function runWebmExportJob(
                 ? request.preferredVideoCodec
                 : "auto",
         );
+        throwIfWebmExportCanceled(signal);
         if (!selectedVideoEncoding) {
             throw new Error("No supported WebM codec available (vp9/vp8)");
         }
@@ -774,6 +813,7 @@ export async function runWebmExportJob(
         if (request.includeAudio && request.audioFilePath) {
             updateStatus(callbacks, "Decoding audio for WebM track...", "loading-project");
             const decodedAudio = await decodeAudioFile(request.audioFilePath);
+            throwIfWebmExportCanceled(signal);
             audioSegment = sliceAudioBuffer(
                 decodedAudio,
                 startFrame / TIMELINE_FPS,
@@ -789,6 +829,7 @@ export async function runWebmExportJob(
                 audioSegment.sampleRate,
                 audioBitrate,
             );
+            throwIfWebmExportCanceled(signal);
             if (!audioCodec) {
                 throw new Error("No supported WebM audio codec available (opus/vorbis)");
             }
@@ -809,6 +850,7 @@ export async function runWebmExportJob(
             outputHeight,
         );
         updateStatus(callbacks, "Opening WebM output file...", "opening-output");
+        throwIfWebmExportCanceled(signal);
         const saveSession = await window.electronAPI.beginWebmStreamSave(request.outputFilePath);
         if (!saveSession) {
             throw new Error("Failed to open WebM output file");
@@ -819,6 +861,7 @@ export async function runWebmExportJob(
         let outputBytes = 0;
         const target = new StreamTarget(new WritableStream({
             write: async (chunk) => {
+                throwIfWebmExportCanceled(signal);
                 if (!saveSessionId) {
                     throw new Error("WebM output stream is not open");
                 }
@@ -834,6 +877,12 @@ export async function runWebmExportJob(
             },
             close: async () => {
                 if (!saveSessionId) {
+                    return;
+                }
+                if (signal?.aborted) {
+                    await window.electronAPI.cancelWebmStreamSave(saveSessionId);
+                    saveSessionId = null;
+                    savedPath = null;
                     return;
                 }
                 const finishedPath = await window.electronAPI.finishWebmStreamSave(saveSessionId);
@@ -908,6 +957,7 @@ export async function runWebmExportJob(
         const consumeQueue = async (): Promise<void> => {
             try {
                 while (!producerDone || queue.length > 0) {
+                    throwIfWebmExportCanceled(signal);
                     if (fatalError) break;
                     const item = queue.shift();
                     if (!item) {
@@ -918,6 +968,7 @@ export async function runWebmExportJob(
                     try {
                         const encodeStartedAt = performance.now();
                         await videoSource.add(item.videoSample);
+                        throwIfWebmExportCanceled(signal);
                         encodeWaitMsTotal += performance.now() - encodeStartedAt;
                     } finally {
                         item.videoSample.close();
@@ -937,6 +988,7 @@ export async function runWebmExportJob(
         let started = false;
         let sourceClosed = false;
         try {
+            throwIfWebmExportCanceled(signal);
             output.addVideoTrack(videoSource, {
                 frameRate: fps,
                 maximumPacketCount: totalFrames,
@@ -946,6 +998,7 @@ export async function runWebmExportJob(
             }
             await output.start();
             started = true;
+            throwIfWebmExportCanceled(signal);
 
             if (audioSource) {
                 if (!audioSegment) {
@@ -953,6 +1006,7 @@ export async function runWebmExportJob(
                 }
                 updateStatus(callbacks, `Encoding audio track (${audioCodec ?? "unknown"})...`, "encoding");
                 await audioSource.add(audioSegment);
+                throwIfWebmExportCanceled(signal);
                 audioSource.close();
                 audioSourceClosed = true;
             }
@@ -963,12 +1017,14 @@ export async function runWebmExportJob(
             try {
                 let playbackStarted = false;
                 for (let outputFrameIndex = 0; outputFrameIndex < totalFrames; outputFrameIndex += 1) {
+                    throwIfWebmExportCanceled(signal);
                     if (fatalError) break;
 
                     if (queue.length >= maxQueueLength) {
                         const queueWaitStartedAt = performance.now();
                         queueWaitCount += 1;
                         while (queue.length >= maxQueueLength && !fatalError) {
+                            throwIfWebmExportCanceled(signal);
                             await sleepMs(1);
                         }
                         queueWaitMsTotal += performance.now() - queueWaitStartedAt;
@@ -1004,6 +1060,7 @@ export async function runWebmExportJob(
                     const captureStartedAt = performance.now();
                     try {
                         capturedItem = await frameCapture.captureFrameAsync(frame, outputFrameIndex / fps, frameDuration);
+                        throwIfWebmExportCanceled(signal);
                         captureMsTotal += performance.now() - captureStartedAt;
                         const timing = capturedItem?.captureTiming;
                         if (timing) {
@@ -1023,7 +1080,7 @@ export async function runWebmExportJob(
                     }
                 }
             } finally {
-                if (!fatalError) {
+                if (!fatalError && !signal?.aborted) {
                     try {
                         const pendingItems = await frameCapture.flushPendingAsync();
                         for (const pendingItem of pendingItems) {
@@ -1044,10 +1101,12 @@ export async function runWebmExportJob(
             if (fatalError) {
                 throw fatalError;
             }
+            throwIfWebmExportCanceled(signal);
 
             updateStatus(callbacks, `Closing WebM track (${codec})...`, "closing-track");
             videoSource.close();
             sourceClosed = true;
+            throwIfWebmExportCanceled(signal);
 
             updateStatus(callbacks, `Finalizing WebM (${codec})...`, "finalizing");
             const finalizeStartedAt = performance.now();

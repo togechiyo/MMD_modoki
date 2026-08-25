@@ -5039,6 +5039,15 @@ body.bottom-panel-resizing #bottom-panel-resizer::before {
   display: flex;
   align-items: center;
   gap: 8px;
+  pointer-events: auto;
+}
+
+.ui-busy-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .ui-busy-text {
@@ -5049,6 +5058,56 @@ body.bottom-panel-resizing #bottom-panel-resizer::before {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   min-width: 0;
+}
+
+.ui-busy-progress {
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.ui-busy-progress.hidden,
+.ui-busy-metrics.hidden,
+.ui-busy-cancel.hidden {
+  display: none;
+}
+
+.ui-busy-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-primary), #ff4fa3);
+  transition: width 160ms linear;
+}
+
+.ui-busy-metrics {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-busy-cancel {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ui-busy-cancel:hover:not(:disabled) {
+  border-color: #ff4fa3;
+  background: rgba(255, 79, 163, 0.18);
+}
+
+.ui-busy-cancel:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 #app.ui-export-lock #toolbar,

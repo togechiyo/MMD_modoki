@@ -14,7 +14,7 @@ import { UIController } from "./ui-controller";
 import { enhanceBottomPanelControls } from "./ui/panel-control-helpers";
 import { runPngSequenceExportJob } from "./png-sequence-exporter";
 import { PngEncoderWebWorkerPool } from "./output/png-encoder-web-worker-pool";
-import { runWebmExportJob } from "./webm-exporter";
+import { isWebmExportCanceledError, runWebmExportJob } from "./webm-exporter";
 import { applyI18nToDom, getLocale, initializeI18n, setLocale, t } from "./i18n";
 import { isDebugLogEnabled, logDebug, logError, logInfo, toLogErrorData } from "./app-logger";
 import type {
@@ -335,6 +335,8 @@ async function initializeApp(): Promise<void> {
         loadModel: (filePath) => mmdManager.loadPMX(filePath),
         loadModelInteractively: (filePath) => uiController.loadModelInteractively(filePath),
         loadAccessory: (filePath) => uiController.loadAccessoryFromPath(filePath),
+        loadExternalLut: (filePath) => uiController.loadExternalLutForE2e(filePath),
+        getExternalLutExportAsset: () => mmdManager.getPostEffectExternalLutAsset(),
         getTimelineSelection: () => {
           const activeTrack = timeline.getSelectedTrack();
           return {
@@ -748,6 +750,12 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
   }
 
   let request: WebmExportRequest | null = null;
+  const abortController = new AbortController();
+  let cancelUnsubscribe: (() => void) | null = null;
+  let encodedFrames = 0;
+  let capturedFrames = 0;
+  let currentFrame = 0;
+  let totalOutputFrames = 0;
 
   try {
     request = await window.electronAPI.takeWebmExportJob(jobId);
@@ -757,6 +765,13 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
       closeExporterWindowSoon();
       return;
     }
+    currentFrame = request.startFrame;
+    totalOutputFrames = Math.max(1, Math.round(((request.endFrame - request.startFrame + 1) / 30) * Math.max(1, request.fps || 30)));
+    cancelUnsubscribe = window.electronAPI.onWebmExportCancelRequested((requestedJobId) => {
+      if (requestedJobId === jobId) {
+        abortController.abort();
+      }
+    });
 
     canvas.style.width = `${request.outputWidth}px`;
     canvas.style.height = `${request.outputHeight}px`;
@@ -766,10 +781,6 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
     let lastProgressReportAt = 0;
     let lastPhase = "initializing";
     let lastMessage = "";
-    let encodedFrames = 0;
-    let capturedFrames = 0;
-    let currentFrame = request.startFrame;
-    const totalOutputFrames = Math.max(1, Math.round(((request.endFrame - request.startFrame + 1) / 30) * Math.max(1, request.fps || 30)));
     logInfo("webm", "exporter job accepted", {
       jobId,
       startFrame: request.startFrame,
@@ -830,7 +841,7 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
         setStatus(progressMessage);
         emitWebmProgress("encoding", progressMessage, encoded === total);
       },
-    }, rendererBackend);
+    }, rendererBackend, abortController.signal);
 
     setStatus(`Done: ${result.encodedFrames} frame(s) ${result.codec}`);
     logInfo("webm", "exporter job completed", {
@@ -855,6 +866,28 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    const canceled = isWebmExportCanceledError(err) || abortController.signal.aborted;
+    if (canceled) {
+      logInfo("webm", "exporter job canceled", { jobId, encodedFrames, capturedFrames });
+      setStatus("Export canceled");
+      window.electronAPI.reportWebmExportProgress({
+        jobId,
+        phase: "canceled",
+        encoded: encodedFrames,
+        total: totalOutputFrames,
+        frame: currentFrame,
+        startFrame: request?.startFrame ?? 0,
+        endFrame: request?.endFrame ?? 0,
+        captured: capturedFrames,
+        message: "WebM export canceled",
+        timestampMs: Date.now(),
+      });
+      const finished = await window.electronAPI.finishWebmExportJob(jobId);
+      if (!finished) {
+        closeExporterWindowSoon();
+      }
+      return;
+    }
     logError("webm", "exporter job failed", {
       jobId,
       ...toLogErrorData(err),
@@ -876,5 +909,7 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
     if (!finished) {
       closeExporterWindowSoon();
     }
+  } finally {
+    cancelUnsubscribe?.();
   }
 }

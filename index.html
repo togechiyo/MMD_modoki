@@ -1169,7 +1169,14 @@
     <div id="ui-busy-overlay" class="ui-busy-overlay hidden" aria-hidden="true">
       <div class="ui-busy-card">
         <div class="loading-spinner"></div>
-        <div id="ui-busy-text" class="ui-busy-text" data-i18n="busy.exportingPngSequence">Exporting PNG sequence...</div>
+        <div class="ui-busy-content">
+          <div id="ui-busy-text" class="ui-busy-text" data-i18n="busy.exportingPngSequence">Exporting PNG sequence...</div>
+          <div id="ui-busy-progress" class="ui-busy-progress hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="ui-busy-progress-fill" class="ui-busy-progress-fill"></div>
+          </div>
+          <div id="ui-busy-metrics" class="ui-busy-metrics hidden"></div>
+        </div>
+        <button id="ui-busy-cancel" class="ui-busy-cancel hidden" type="button" data-i18n="busy.cancelWebm">Cancel</button>
       </div>
     </div>
   </div>

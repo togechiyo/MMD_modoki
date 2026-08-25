@@ -64,6 +64,9 @@
 - [x] 豆腐＋皿＋SSGI＋DoFの代表シーンで1080p・100フレーム性能と反復時readback安定性を測定（[代表シーン性能評価](./export-rgba-representative-scene-evaluation-2026-08-09.md)）
 - [x] 連番PNGをrenderer Web Worker＋`CompressionStream("deflate")`へ移し、filter None固定の直接RGBA encoderへ統合（[実装・性能評価](./png-sequence-web-worker-implementation-evaluation-2026-08-09.md)）
 - [ ] 連番PNG Web Workerを500〜1000frame・4K / 8K・slow diskでhardeningし、旧main-thread fallbackを削除
+  - [x] 明示実行stress testで500frame / 320x180を完走（2026-08-25、500 files、9.054秒）
+  - [x] 明示実行stress testで4K / 3840x2160を2frame完走（2026-08-25、2 files、6.026秒）
+  - [ ] 1000frame、8K、slow disk、旧main-thread fallback削除は未確認
 - [x] 単発PNGを連番PNGと同じWeb Worker encoderへ統合（単発は1 worker固定）
 - [x] メニューバーの単発PNG出力に比率・長辺プリセット・幅×高さの詳細ダイアログを追加し、指定解像度で描くhidden exporterへ接続（8Kプリセット含む。シークバーの即時スクリーンショットはviewport経路を維持）
 - [ ] 単発8K PNG向けにscanlineを分割投入し、filter済み全量バッファを削減

@@ -11764,6 +11764,25 @@ ${beforeFogAppendBlock}
         return this.postEffectLutExternalPathValue;
     }
 
+    /** Runtime-normalized external LUT data for detached export renderers. */
+    public getPostEffectExternalLutAsset(): {
+        path: string;
+        runtimeText: string;
+        sourceFormat: "3dl" | "cube";
+    } | null {
+        if (
+            !this.postEffectLutExternalPathValue
+            || !this.postEffectLutExternalTextValue
+        ) {
+            return null;
+        }
+        return {
+            path: this.postEffectLutExternalPathValue,
+            runtimeText: this.postEffectLutExternalTextValue,
+            sourceFormat: this.postEffectLutExternalSourceFormatValue ?? "3dl",
+        };
+    }
+
     /** Set external LUT source path/text. */
     public setPostEffectExternalLut(path: string | null, text: string | null, sourceFormat: "3dl" | "cube" | null = null): void {
         setPostEffectExternalLutImpl(this, path, text, sourceFormat);

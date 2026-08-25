@@ -224,6 +224,7 @@ const pngSequenceExportOwnerByJobId = new Map<string, number>();
 const webmExportJobMap = new Map<string, WebmExportRequest>();
 const webmExportActiveCountByOwner = new Map<number, number>();
 const webmExportOwnerByJobId = new Map<string, number>();
+const webmExportWindowByJobId = new Map<string, BrowserWindow>();
 const webmExportCleanupByJobId = new Map<string, () => void>();
 const webmSaveSessionMap = new Map<string, { filePath: string; handle: fs.promises.FileHandle }>();
 const ensuredDirectoryPathSet = new Set<string>();
@@ -372,6 +373,20 @@ const snapWindowContentAspect = (window: BrowserWindow, aspectRatio: number): vo
   }
 };
 
+const sanitizeExportExternalLut = (
+  value: PngSequenceExportRequest['externalLut'] | WebmExportRequest['externalLut'],
+): NonNullable<PngSequenceExportRequest['externalLut']> | null => {
+  if (!value || typeof value !== 'object') return null;
+  if (typeof value.path !== 'string' || value.path.trim().length === 0) return null;
+  if (typeof value.runtimeText !== 'string' || value.runtimeText.length === 0) return null;
+  if (value.runtimeText.length > 16 * 1024 * 1024) return null;
+  return {
+    path: value.path.trim(),
+    runtimeText: value.runtimeText,
+    sourceFormat: value.sourceFormat === 'cube' ? 'cube' : '3dl',
+  };
+};
+
 const sanitizePngSequenceExportRequest = (request: PngSequenceExportRequest): PngSequenceExportRequest | null => {
   if (!request || typeof request !== 'object') return null;
   if (!request.project || typeof request.project !== 'object') return null;
@@ -404,6 +419,7 @@ const sanitizePngSequenceExportRequest = (request: PngSequenceExportRequest): Pn
 
   return {
     project: request.project,
+    externalLut: sanitizeExportExternalLut(request.externalLut),
     outputDirectoryPath: request.outputDirectoryPath,
     startFrame,
     endFrame,
@@ -526,6 +542,7 @@ const sanitizeWebmExportRequest = (request: WebmExportRequest): WebmExportReques
 
   return {
     project: request.project,
+    externalLut: sanitizeExportExternalLut(request.externalLut),
     outputFilePath: safeOutputFilePath,
     startFrame,
     endFrame,
@@ -1860,6 +1877,7 @@ ipcMain.handle(
       if (jobId) {
         webmExportJobMap.delete(jobId);
         webmExportOwnerByJobId.delete(jobId);
+        webmExportWindowByJobId.delete(jobId);
         webmExportCleanupByJobId.delete(jobId);
       }
       releaseOwnerExport();
@@ -1915,6 +1933,7 @@ ipcMain.handle(
           backgroundThrottling: false,
         },
       });
+      webmExportWindowByJobId.set(jobId, exportWindow);
       exportWindow.setAspectRatio(sanitized.outputWidth / sanitized.outputHeight);
       exportWindow.setMenuBarVisibility(false);
       exportWindow.setContentSize(sanitized.outputWidth, sanitized.outputHeight);
@@ -1944,6 +1963,17 @@ ipcMain.handle('export:takeWebmJob', async (_event, jobId: string): Promise<Webm
   if (!job) return null;
   webmExportJobMap.delete(jobId);
   return job;
+});
+
+ipcMain.handle('export:cancelWebmJob', async (event, jobId: string): Promise<boolean> => {
+  if (!jobId || typeof jobId !== 'string') return false;
+  const ownerId = webmExportOwnerByJobId.get(jobId);
+  if (ownerId !== event.sender.id) return false;
+  const exporterWindow = webmExportWindowByJobId.get(jobId);
+  if (!exporterWindow || exporterWindow.isDestroyed()) return false;
+  exporterWindow.webContents.send('export:webmCancelRequested', jobId);
+  writeAppLog('info', 'webm', 'WebM export cancellation requested', { jobId, ownerWebContentsId: ownerId });
+  return true;
 });
 
 ipcMain.handle('export:finishWebmJob', async (event, jobId: string): Promise<boolean> => {

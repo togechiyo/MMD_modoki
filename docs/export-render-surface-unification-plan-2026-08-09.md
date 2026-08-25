@@ -1,7 +1,7 @@
 # 出力レンダリング経路 共通 RGBA Surface 統合計画
 
 作成日: 2026-08-09
-状態: Phase 1〜3・5〜6、単発 PNG、空・代表シーン性能検証済み / 透過・高解像度hardeningは未着手
+状態: Phase 1〜3・5〜6、単発 PNG、空・代表シーン性能検証済み / 高解像度hardeningは500frame・4Kまで部分確認
 
 ## 2026-08-09 実装状況
 
@@ -337,6 +337,8 @@ BGRA PoC は小さい比較対象として先に実施してよいが、BGRA bac
 - [x] filter None固定のRGBA8直接encoderへ統合する。
 - [x] IPCとworker queueのbackpressure、失敗伝播、終了処理を整理する。
 - [ ] 4K / 8Kと500〜1000frameでmemory・worker数をhardeningする。
+  - [x] `png-export-stress.spec.mjs` を通常E2Eから環境変数で分離し、500frame / 320x180と2frame / 4Kを実走（2026-08-25）。
+  - [ ] 1000frame / 8K / slow diskと、process単位のpeak memory計測は残る。
 
 ### Phase 6: 単発 PNG と legacy 経路の整理
 

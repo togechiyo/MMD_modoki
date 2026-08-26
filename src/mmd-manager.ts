@@ -177,6 +177,8 @@ import {
     setExternalWgslToonShaderForModel as setExternalWgslToonShaderForModelImpl,
     setWgslMaterialShaderPreset as setWgslMaterialShaderPresetImpl,
     syncLuminousGlowLayer as syncLuminousGlowLayerImpl,
+    syncSkinSssPrePass as syncSkinSssPrePassImpl,
+    WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB,
 } from "./scene/material-shader-service";
 import {
     DEFAULT_RING_PARTICLE_SETTINGS,
@@ -854,6 +856,8 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-black-key-cutout"
     | "wgsl-full-shadow"
     | "wgsl-self-shadow"
+    | "wgsl-sss-standard"
+    | "wgsl-sss-skin"
     | "wgsl-light-and-shadow"
     | "wgsl-gloss-highlight"
     | "wgsl-semi-matte-highlight"
@@ -1098,6 +1102,16 @@ export class MmdManager {
             description: "Read the full toon ramp from the light-facing normal without cast-shadow occlusion",
         },
         {
+            id: "wgsl-sss-standard",
+            label: "SSS Standard",
+            description: "Lift the shadow side with toon-colored scattering over stable flat direct lighting",
+        },
+        {
+            id: "wgsl-sss-skin",
+            label: "SSS Skin",
+            description: "Depth-aware Burley skin diffusion with a fixed red profile and uniform-thickness backlighting",
+        },
+        {
             id: "wgsl-light-and-shadow",
             label: "Light and Shadow",
             description: "Use the standard MMD light-and-shadow path, including fallback toon ramps for non-toon materials",
@@ -1201,6 +1215,7 @@ export class MmdManager {
     private static externalWgslToonSourcePath: string | null = null;
     private static readonly externalWgslToonFragmentByMaterial = new WeakMap<object, string>();
     private static readonly presetWgslToonFragmentByMaterial = new WeakMap<object, string>();
+    private static readonly skinSssPrePassByMaterial = new WeakMap<object, boolean>();
 
     private static shadowSoftnessToToonBoundaryWidth(v: number): number {
         if (!Number.isFinite(v)) return 0.09;
@@ -1636,6 +1651,7 @@ ${beforeFogAppendBlock}
         type MmdStandardMaterialInternal = MmdStandardMaterial & {
             _initPluginShaderSourceAsync?: (shaderLanguage: ShaderLanguage) => Promise<void>;
             markAsDirty?: (flag?: number) => void;
+            setPrePassRenderer?: (prePassRenderer?: unknown) => boolean;
         };
         const prototype = MmdStandardMaterial.prototype as MmdStandardMaterialInternal;
         const originalInit = prototype._initPluginShaderSourceAsync;
@@ -1654,6 +1670,20 @@ ${beforeFogAppendBlock}
                     // Keep babylon-mmd startup resilient if a material is already disposed.
                 }
             }
+        };
+        const originalSetPrePassRenderer = prototype.setPrePassRenderer;
+        prototype.setPrePassRenderer = function patchedSetPrePassRenderer(prePassRenderer?: unknown): boolean {
+            if (
+                MmdManager.skinSssPrePassByMaterial.get(this as object) === true
+                && this.alpha > 0.0001
+            ) {
+                const configuration = this.getScene().enableSubSurfaceForPrePass?.();
+                if (configuration) {
+                    configuration.enabled = true;
+                    return true;
+                }
+            }
+            return originalSetPrePassRenderer?.call(this, prePassRenderer) ?? false;
         };
         MmdManager.mmdStandardMaterialPluginInitPatched = true;
     }
@@ -3240,6 +3270,41 @@ ${beforeFogAppendBlock}
         };
     }
 
+    public getWgslSssSkinDiagnostics(): {
+        materialCount: number;
+        visibleMaterialCount: number;
+        configurationEnabled: boolean;
+        prePassEnabled: boolean;
+        metersPerUnit: number | null;
+        diffusionProfile: readonly [number, number, number];
+        profileIndex: number;
+        compositionUsesLocalGamma: boolean | null;
+        standardMaterialPatch: ReturnType<typeof getStandardMaterialSssPrePassPatchDiagnostics>;
+    } {
+        const skinMaterials = this.sceneModels.flatMap((entry) => entry.materials)
+            .filter(({ material }) => (
+                this.materialShaderPresetByMaterial.get(material as object) === "wgsl-sss-skin"
+            ))
+            .map(({ material }) => material);
+        const configuration = this.scene.subSurfaceConfiguration;
+        const profileIndex = configuration?.ssDiffusionProfileColors.findIndex((color) => (
+            color.r === WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB[0]
+            && color.g === WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB[1]
+            && color.b === WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB[2]
+        )) ?? -1;
+        return {
+            materialCount: skinMaterials.length,
+            visibleMaterialCount: skinMaterials.filter((material) => this.isMaterialVisible(material)).length,
+            configurationEnabled: configuration?.enabled === true,
+            prePassEnabled: this.scene.prePassRenderer?.enabled === true,
+            metersPerUnit: configuration?.metersPerUnit ?? null,
+            diffusionProfile: WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB,
+            profileIndex,
+            compositionUsesLocalGamma: this.subSurfaceCompositionUsesLocalGamma,
+            standardMaterialPatch: getStandardMaterialSssPrePassPatchDiagnostics(),
+        };
+    }
+
     public setEnvironmentLightingEnabled(enabled: boolean): boolean {
         this.environmentLightingEnabledValue = Boolean(enabled);
         MmdManager.writeBooleanLocalStorage(
@@ -3530,6 +3595,7 @@ ${beforeFogAppendBlock}
         }
 
         syncLuminousGlowLayerImpl(this);
+        syncSkinSssPrePassImpl(this);
         this.onMaterialShaderStateChanged?.();
         return true;
     }
@@ -3544,6 +3610,11 @@ ${beforeFogAppendBlock}
         presetId: WgslMaterialShaderPresetId,
     ): boolean {
         return setWgslMaterialShaderPresetImpl(this, modelIndex, materialKey, presetId);
+    }
+
+    public onSkinSssPrePassStateChanged(): void {
+        this.subSurfaceCompositionUsesLocalGamma = null;
+        this.syncFrameGraphRenderTargetState();
     }
 
     public setPbrMaterialShaderPreset(
@@ -4272,6 +4343,7 @@ ${beforeFogAppendBlock}
             );
         }
         this.syncLuminousGlowLayer();
+        syncSkinSssPrePassImpl(this);
 
         if (this.sceneModels.length === 0) {
             this.currentMesh = null;
@@ -9562,6 +9634,7 @@ ${beforeFogAppendBlock}
 
         this.sceneModels = [];
         this.syncLuminousGlowLayer();
+        syncSkinSssPrePassImpl(this);
         this.currentMesh = null;
         this.currentModel = null;
         this.activeModelInfo = null;
@@ -10154,12 +10227,17 @@ ${beforeFogAppendBlock}
     }
 
     private hasActivePbrMmdLikeScattering(): boolean {
-        return this.scene.materials.some((material) => {
+        const pbrScatteringActive = this.scene.materials.some((material) => {
             const subSurface = (material as Material & {
                 subSurface?: { isScatteringEnabled?: boolean };
             }).subSurface;
             return subSurface?.isScatteringEnabled === true;
         });
+        if (pbrScatteringActive) return true;
+        return this.sceneModels.some((entry) => entry.materials.some(({ material }) => (
+            this.materialShaderPresetByMaterial.get(material as object) === "wgsl-sss-skin"
+            && this.isMaterialVisible(material)
+        )));
     }
 
     private disablePrePassRendererIfSupported(): void {

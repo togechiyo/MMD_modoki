@@ -452,6 +452,9 @@ async function initializeApp(): Promise<void> {
         getWebGpuValidationDiagnostics: () => (
           mmdManager.getWebGpuValidationDiagnostics()
         ),
+        getWgslSssSkinDiagnostics: () => (
+          mmdManager.getWgslSssSkinDiagnostics()
+        ),
         captureExportSurfaceProbe: async (width, height) => {
           mmdManager.setAutoRenderEnabled(false);
           mmdManager.postEffectExposure = 1.05;

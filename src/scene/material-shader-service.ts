@@ -13,6 +13,10 @@ import fullShadowWgslText from "../../wgsl/full_shadow.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
 import selfShadowWgslText from "../../wgsl/self_shadow.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
+import sssSkinWgslText from "../../wgsl/sss_skin.wgsl?raw";
+// eslint-disable-next-line import/no-unresolved
+import sssStandardWgslText from "../../wgsl/sss_standard.wgsl?raw";
+// eslint-disable-next-line import/no-unresolved
 import matteHighlightWgslText from "../../wgsl/matte_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
 import semiMatteHighlightWgslText from "../../wgsl/semi_matte_highlight.wgsl?raw";
@@ -59,6 +63,8 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-black-key-cutout"
     | "wgsl-full-shadow"
     | "wgsl-self-shadow"
+    | "wgsl-sss-standard"
+    | "wgsl-sss-skin"
     | "wgsl-light-and-shadow"
     | "wgsl-gloss-highlight"
     | "wgsl-semi-matte-highlight"
@@ -115,6 +121,7 @@ type MaterialShaderHostStatics = {
     DEFAULT_WGSL_MATERIAL_SHADER_PRESET?: WgslMaterialShaderPresetId;
     externalWgslToonFragmentByMaterial: WeakMap<object, string>;
     presetWgslToonFragmentByMaterial: WeakMap<object, string>;
+    skinSssPrePassByMaterial: WeakMap<object, boolean>;
 };
 
 type MaterialShaderHost = Record<string, unknown> & {
@@ -127,6 +134,7 @@ type MaterialShaderHost = Record<string, unknown> & {
     externalWgslToonShaderPathValue: string | null;
     luminousGlowMorphScaleByModel?: WeakMap<object, { timelineKey: number; revision: number; scale: number }>;
     luminousGlowModelByMesh?: WeakMap<object, object>;
+    skinSssPrePassMaterials?: Set<object>;
     defaultRenderingPipeline?: { glowLayerEnabled: boolean; bloomEnabled: boolean; bloomWeight: number; bloomThreshold: number; bloomKernel: number } | null;
     postEffectGlowEnabledValue?: boolean;
     postEffectGlowIntensityValue?: number;
@@ -141,11 +149,22 @@ type MaterialShaderHost = Record<string, unknown> & {
     scene?: {
         glowLayers?: GlowLayer[];
         getEngine?: () => unknown;
+        materials?: MaterialShaderMaterial[];
+        subSurfaceConfiguration?: SkinSssConfiguration | null;
+        enableSubSurfaceForPrePass?: () => SkinSssConfiguration | null;
     };
     engine: { releaseEffects?: () => void };
     isWebGpuEngine?: () => boolean;
     isMaterialVisible?: (material: MaterialShaderMaterial) => boolean;
     onMaterialShaderStateChanged?: () => void;
+    onSkinSssPrePassStateChanged?: () => void;
+};
+
+type SkinSssConfiguration = {
+    enabled: boolean;
+    metersPerUnit: number;
+    needsImageProcessing: boolean;
+    addDiffusionProfile: (color: Color3) => number;
 };
 
 type MaterialShaderEffectLike = {
@@ -168,6 +187,14 @@ type LuminousGlowLayerAlphaCutOverrideState = {
 };
 
 const DEFAULT_WGSL_MATERIAL_SHADER_PRESET = "wgsl-mmd-standard";
+const SKIN_SSS_PROFILE_INDEX_TOKEN = "__MMD_SKIN_SSS_PROFILE_INDEX__";
+export const WGSL_SKIN_SSS_METERS_PER_UNIT = 0.08;
+export const WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB = [2.4, 0.9, 0.35] as const;
+const SKIN_SSS_DIFFUSION_PROFILE = new Color3(...WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB);
+const skinSssProfileByScene = new WeakMap<object, {
+    configuration: SkinSssConfiguration;
+    index: number;
+}>();
 const AUTO_LUMINOUS_BASE_LEVEL = 1.28;
 const AUTO_LUMINOUS_BRIGHTNESS_BIAS = 0.14;
 const AUTO_LUMINOUS_TINT_STRENGTH = 0.72;
@@ -1218,6 +1245,109 @@ function setPresetWgslToonFragmentForMaterial(host: MaterialShaderHost, material
     host.constructor.presetWgslToonFragmentByMaterial.delete(key);
 }
 
+function isPbrScreenSpaceScatteringMaterial(material: MaterialShaderMaterial): boolean {
+    const subSurface = material.subSurface;
+    return Boolean(
+        subSurface
+        && typeof subSurface === "object"
+        && (subSurface as { isScatteringEnabled?: boolean }).isScatteringEnabled === true,
+    );
+}
+
+function hasSkinSssPreset(host: MaterialShaderHost): boolean {
+    const sceneMaterials = host.scene?.materials;
+    const trackedMaterials = host.sceneModels.flatMap(
+        (entry) => entry.materials.map(({ material }) => material),
+    );
+    const materials = trackedMaterials.length > 0 ? trackedMaterials : sceneMaterials ?? [];
+    return materials.some((material) => (
+        host.materialShaderPresetByMaterial.get(material as object) === "wgsl-sss-skin"
+        && host.isMaterialVisible?.(material) !== false
+    ));
+}
+
+function syncSkinSssMaterialFlags(host: MaterialShaderHost): void {
+    const sceneMaterials = host.scene?.materials;
+    const trackedMaterials = host.sceneModels.flatMap(
+        (entry) => entry.materials.map(({ material }) => material),
+    );
+    const materials = trackedMaterials.length > 0 ? trackedMaterials : sceneMaterials ?? [];
+    const next = new Set<object>();
+    for (const material of materials) {
+        if (
+            host.materialShaderPresetByMaterial.get(material as object) === "wgsl-sss-skin"
+            && host.isMaterialVisible?.(material) !== false
+        ) {
+            next.add(material as object);
+        }
+    }
+    for (const material of host.skinSssPrePassMaterials ?? []) {
+        if (!next.has(material)) {
+            host.constructor.skinSssPrePassByMaterial.delete(material);
+        }
+    }
+    for (const material of next) {
+        host.constructor.skinSssPrePassByMaterial.set(material, true);
+    }
+    host.skinSssPrePassMaterials = next;
+}
+
+function ensureSkinSssConfiguration(host: MaterialShaderHost): {
+    configuration: SkinSssConfiguration;
+    profileIndex: number;
+} | null {
+    const scene = host.scene;
+    if (!scene || typeof scene !== "object") return null;
+
+    const cached = skinSssProfileByScene.get(scene as object);
+    const existingConfiguration = scene.subSurfaceConfiguration ?? null;
+    if (cached && cached.configuration === existingConfiguration) {
+        cached.configuration.metersPerUnit = WGSL_SKIN_SSS_METERS_PER_UNIT;
+        cached.configuration.needsImageProcessing = false;
+        return {
+            configuration: cached.configuration,
+            profileIndex: cached.index,
+        };
+    }
+
+    const configuration = scene.enableSubSurfaceForPrePass?.() ?? null;
+    if (!configuration) return null;
+
+    configuration.metersPerUnit = WGSL_SKIN_SSS_METERS_PER_UNIT;
+    // The selected Classic / Frame Graph output path owns final image processing.
+    configuration.needsImageProcessing = false;
+    const profileIndex = configuration.addDiffusionProfile(SKIN_SSS_DIFFUSION_PROFILE);
+    skinSssProfileByScene.set(scene as object, {
+        configuration,
+        index: profileIndex,
+    });
+    return { configuration, profileIndex };
+}
+
+function createSkinSssWgslSource(host: MaterialShaderHost): string {
+    const profileIndex = ensureSkinSssConfiguration(host)?.profileIndex ?? 255;
+    return sssSkinWgslText.replace(
+        SKIN_SSS_PROFILE_INDEX_TOKEN,
+        Number(profileIndex).toFixed(1),
+    );
+}
+
+export function syncSkinSssPrePass(host: MaterialShaderHost): void {
+    const scene = host.scene;
+    if (!scene || typeof scene !== "object") return;
+
+    syncSkinSssMaterialFlags(host);
+    const skinSssActive = hasSkinSssPreset(host);
+    const configuration = skinSssActive
+        ? ensureSkinSssConfiguration(host)?.configuration ?? null
+        : scene.subSurfaceConfiguration ?? null;
+    if (configuration) {
+        const pbrSssActive = scene.materials?.some(isPbrScreenSpaceScatteringMaterial) === true;
+        configuration.enabled = skinSssActive || pbrSssActive;
+    }
+    host.onSkinSssPrePassStateChanged?.();
+}
+
 function getPresetFallbackShadowToonTexture(host: MaterialShaderHost): Texture | null {
     const scene = host?.scene;
     if (!scene || typeof scene !== "object") return null;
@@ -1692,6 +1822,20 @@ function applyWgslShaderPresetToMaterial(host: MaterialShaderHost, material: Mat
             setPresetWgslToonFragmentForMaterial(host, material, selfShadowWgslText);
             break;
         }
+        case "wgsl-sss-standard": {
+            if ("disableLighting" in material) {
+                material.disableLighting = false;
+            }
+            setPresetWgslToonFragmentForMaterial(host, material, sssStandardWgslText);
+            break;
+        }
+        case "wgsl-sss-skin": {
+            if ("disableLighting" in material) {
+                material.disableLighting = false;
+            }
+            setPresetWgslToonFragmentForMaterial(host, material, createSkinSssWgslSource(host));
+            break;
+        }
         case "wgsl-light-and-shadow": {
             if ("disableLighting" in material) {
                 material.disableLighting = false;
@@ -2003,6 +2147,7 @@ export function setWgslMaterialShaderPreset(
     }
 
     syncLuminousGlowLayer(host);
+    syncSkinSssPrePass(host);
     host.engine.releaseEffects?.();
     host.onMaterialShaderStateChanged?.();
     return true;
@@ -2031,6 +2176,7 @@ export function applyWgslShaderPresetToMaterials(
     if (!applied) return false;
 
     syncLuminousGlowLayer(host);
+    syncSkinSssPrePass(host);
     host.engine.releaseEffects?.();
     host.onMaterialShaderStateChanged?.();
     return true;

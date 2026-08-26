@@ -332,6 +332,17 @@ declare global {
                 count: number;
                 messages: readonly string[];
             };
+            getWgslSssSkinDiagnostics: () => {
+                materialCount: number;
+                visibleMaterialCount: number;
+                configurationEnabled: boolean;
+                prePassEnabled: boolean;
+                metersPerUnit: number | null;
+                diffusionProfile: readonly [number, number, number];
+                profileIndex: number;
+                compositionUsesLocalGamma: boolean | null;
+                standardMaterialPatch: Record<string, boolean>;
+            };
             captureExportSurfaceProbe: (width: number, height: number) => Promise<{
                 backend: string;
                 ready: boolean;

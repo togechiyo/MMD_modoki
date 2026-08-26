@@ -31,6 +31,12 @@ function createHost() {
             getMorphWeight: (name: string) => morphWeights.get(name) ?? 0,
         },
     };
+    const subSurfaceConfiguration = {
+        enabled: false,
+        metersPerUnit: 1,
+        needsImageProcessing: true,
+        addDiffusionProfile: vi.fn(() => 1),
+    };
 
     return {
         constructor: {
@@ -40,6 +46,8 @@ function createHost() {
                 { id: "wgsl-autoluminous", label: "Luminous" },
                 { id: "wgsl-full-shadow", label: "full_shadow" },
                 { id: "wgsl-self-shadow", label: "Self Shadow" },
+                { id: "wgsl-sss-standard", label: "SSS Standard" },
+                { id: "wgsl-sss-skin", label: "SSS Skin" },
                 { id: "wgsl-cel-shadow-sharp", label: "Cel Shadow Sharp" },
                 { id: "wgsl-gloss-highlight", label: "Gloss Highlight" },
                 { id: "wgsl-semi-matte-highlight", label: "Semi Matte Highlight" },
@@ -49,11 +57,18 @@ function createHost() {
             ],
             externalWgslToonFragmentByMaterial: new WeakMap<object, string>(),
             presetWgslToonFragmentByMaterial: new WeakMap<object, string>(),
+            skinSssPrePassByMaterial: new WeakMap<object, boolean>(),
         },
         material,
         mesh,
         model,
         morphWeights,
+        subSurfaceConfiguration,
+        scene: undefined as undefined | {
+            materials: Array<typeof material>;
+            subSurfaceConfiguration: typeof subSurfaceConfiguration;
+            enableSubSurfaceForPrePass: ReturnType<typeof vi.fn>;
+        },
         sceneModels: [{
             mesh,
             model,
@@ -216,6 +231,97 @@ describe("material shader preset restore", () => {
         expect(source).toContain("let toonLookupY=clamp(info.ndl,0.02,0.98);");
         expect(source).toContain("textureSample(toonSampler,toonSamplerSampler,vec2f(0.5,toonLookupY)).rgb");
         expect(source).not.toMatch(/\bshadow\b/);
+    });
+
+    it.each([
+        ["wgsl-sss-standard", "0.48", "0.18", "0.72", "0.85", "0.65", false],
+    ] as const)("keeps the deferred local response for %s", (
+        presetId,
+        curvatureScale,
+        redRadiusMin,
+        redRadiusMax,
+        shadowLiftStrength,
+        transmissionStrength,
+        hasVermilionBias,
+    ) => {
+        const host = createHost();
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", presetId)).toBe(true);
+
+        const source = host.constructor.presetWgslToonFragmentByMaterial.get(host.material);
+        expect(source).toContain("let toonShadowPixel=vec2i(0,0);");
+        expect(source).toContain("textureLoad(toonSampler,toonShadowPixel,0).rgb");
+        expect(source).toContain("#ifdef DIRLIGHT0");
+        expect(source).toContain("let sssLightVectorW=normalize(-light0.vLightData.xyz);");
+        expect(source).toContain("let rawNdl=clamp(dot(normalW,sssLightVectorW),-1.0,1.0);");
+        expect(source).toContain("let curvatureX=length(dpdx(normalW))/max(length(dpdx(fragmentInputs.vPositionW)),0.0001);");
+        expect(source).toContain("let curvatureY=length(dpdy(normalW))/max(length(dpdy(fragmentInputs.vPositionW)),0.0001);");
+        expect(source).toContain(`let curvatureSignal=max(curvatureWorld*${curvatureScale},0.0);`);
+        expect(source).toContain("let curvature=curvatureSignal/(1.0+curvatureSignal);");
+        expect(source).toContain(`let redScatterRadius=mix(${redRadiusMin},${redRadiusMax},curvature);`);
+        expect(source).toContain("let profileR=smoothstep(-redScatterRadius,1.0,rawNdl);");
+        expect(source).toContain("let shadowGradient=max(length(vec2f(dpdx(shadowValue),dpdy(shadowValue))),0.0001);");
+        expect(source).toContain("let preIntegratedScatter=clamp(vec3f(profileR,profileG,profileB)*shadowProfile,vec3f(0.0),vec3f(1.0));");
+        expect(source).toContain("let selfTransitionWidth=max(length(vec2f(dpdx(rawNdl),dpdy(rawNdl)))*1.5,0.005);");
+        expect(source).toContain("let selfLightingMask=smoothstep(-selfTransitionWidth,0.0,rawNdl);");
+        expect(source).toContain("let baseLitMask=selfLightingMask*castLightingMask;");
+        expect(source).toContain("let baseLighting=mix(toonShadowBand,one,baseLitMask);");
+        expect(source).toContain("let shadowSideMask=smoothstep(");
+        expect(source).toContain("let shadowScatterExcess=max(preIntegratedScatter-vec3f(baseLitMask),vec3f(0.0));");
+        expect(source).toContain("let shadowLiftColor=clamp(");
+        expect(source).toContain("*shadowScatterExcess");
+        expect(source).toContain("let shadowLiftHeadroom=one-baseLighting;");
+        expect(source).toContain(`let sssLift=shadowLiftHeadroom*shadowLiftColor*shadowSideMask*${shadowLiftStrength};`);
+        expect(source).toContain("let liftedLighting=clamp(baseLighting+sssLift,vec3f(0.0),one);");
+        expect(source).toContain("let shadowTerm=info.diffuse*liftedLighting;");
+        expect(source).toContain("toonFlatLightMask=baseLitMask*");
+        expect(source).toContain("let backLightAlignment=pow(clamp(-dot(sssLightVectorW,viewDirectionW),0.0,1.0),2.0);");
+        expect(source).toContain(`*${transmissionStrength}`);
+        expect(source?.includes("let vermilion=vec3f(1.0,0.18,0.06);")).toBe(hasVermilionBias);
+        expect(source).not.toContain("mix(toonShadowBand,one,preIntegratedLight)");
+        expect(source).not.toContain("energyBalancedScatterTint");
+        expect(source).not.toContain("*preIntegratedScatter,vec3f(0.0),one);");
+        expect(source).not.toContain("selfBoundary");
+        expect(source).not.toContain("wideSelfLobe");
+        expect(source).not.toContain("castShadowBoundary");
+        expect(source).not.toContain("smoothstep(-0.18,0.30,rawNdl)");
+        expect(source).not.toContain("smoothstep(-0.22,0.26,rawNdl)");
+        expect(host.material.toonTexture).toBeNull();
+    });
+
+    it("routes SSS Skin diffuse irradiance through Babylon's screen-space Burley pass", () => {
+        const host = createHost();
+        host.scene = {
+            materials: [host.material],
+            subSurfaceConfiguration: host.subSurfaceConfiguration,
+            enableSubSurfaceForPrePass: vi.fn(() => host.subSurfaceConfiguration),
+        };
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-sss-skin")).toBe(true);
+
+        const source = host.constructor.presetWgslToonFragmentByMaterial.get(host.material);
+        expect(source).toContain("// @apply-without-toon");
+        expect(source).toContain("let surfaceIrradiance=mix(info.diffuse*shadow,toonNdl*info.diffuse,info.isToon);");
+        expect(source).toContain("let skinSssUniformThicknessMm=1.20;");
+        expect(source).toContain("let skinSssScatterDistanceMm=vec3f(2.40,0.90,0.35);");
+        expect(source).toContain("let skinSssBackFacing=smoothstep(0.02,0.72,-skinSssRawNdl);");
+        expect(source).toContain("mmdSkinSssIrradiance+=skinSssIrradiance;");
+        expect(source).toContain("mmdSkinSssEnabled=1.0;");
+        expect(source).toContain("mmdSkinSssProfileIndex=1.0;");
+        expect(source).not.toContain("__MMD_SKIN_SSS_PROFILE_INDEX__");
+        expect(source).not.toContain("curvatureWorld");
+        expect(host.scene.enableSubSurfaceForPrePass).toHaveBeenCalledOnce();
+        expect(host.subSurfaceConfiguration.addDiffusionProfile).toHaveBeenCalledWith(
+            new Color3(2.4, 0.9, 0.35),
+        );
+        expect(host.subSurfaceConfiguration.metersPerUnit).toBe(0.08);
+        expect(host.subSurfaceConfiguration.needsImageProcessing).toBe(false);
+        expect(host.subSurfaceConfiguration.enabled).toBe(true);
+        expect(host.constructor.skinSssPrePassByMaterial.get(host.material)).toBe(true);
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-mmd-standard")).toBe(true);
+        expect(host.subSurfaceConfiguration.enabled).toBe(false);
+        expect(host.constructor.skinSssPrePassByMaterial.get(host.material)).toBeUndefined();
     });
 
     it.each([

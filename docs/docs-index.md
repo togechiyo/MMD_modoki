@@ -185,6 +185,8 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [リアルタイム SSS 手法調査と独自プリセット方針 2026-08-26](./realtime-sss-methods-research-2026-08-26.md)
+- [SSS Skin シェーダープリセット実装メモ 2026-08-26](./sss-standard-skin-shader-presets-2026-08-26.md)
 - [シェーダープリセット影側色の統一 2026-08-26](./shader-preset-shadow-color-unification-2026-08-26.md)
 - [Self Shadow シェーダープリセット 2026-08-26](./self-shadow-shader-preset-2026-08-26.md)
 - [MMD Standard Toon 影色サンプリング変更 2026-08-26](./mmd-standard-toon-shadow-color-sampling-2026-08-26.md)

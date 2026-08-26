@@ -26,6 +26,10 @@ MMD Toon の一部計算（`diffuseBase` 加算部分）を差し替えるため
   - 影境界を硬くしたハイコントラスト型
 - `self_shadow.wgsl`
   - Toonテクスチャを法線のライト向きで評価し、shadow map遮蔽を使わないSelf Shadowプリセット
+- `sss_standard.wgsl`
+  - 再設計を保留している旧SSS Standard局所近似。Toon影色、signed N dot L、world-space曲率を使う
+- `sss_skin.wgsl`
+  - MMD direct diffuseをBabylon PrePassへ渡し、固定赤優勢Burley profileと均一厚みの逆光透過を使うSSS Skinプリセット
 - `toon_soft_pastel.wgsl`
   - 影を柔らかくしたパステル寄り
 - `toon_debug_white_shadow.wgsl`

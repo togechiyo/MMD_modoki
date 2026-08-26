@@ -17,7 +17,7 @@ MMD 本体機能より優先度は低いものの、再開時の判断や撤退�
 | --- | --- | --- |
 | observation | [外部 WGSL は段階的contractにする](./observations/external-wgsl-needs-a-bounded-contract.md) | MME風shader拡張を再公開する |
 | verified | [PBR実験はMMD Standard既定経路から外す](./verified/keep-pbr-experiments-out-of-the-default-mmd-path.md) | PBR/IBL/HDRI UIを再開する |
-| verified | [現行screen-space SSSは薄い部位の透過に使わない](./verified/pbr-skin-screen-space-sss-does-not-match-thin-part-transmission.md) | PBR Skin SSSを再調査する |
+| verified | [Screen-space diffusionだけを薄い部位の透過表現に使わない](./verified/pbr-skin-screen-space-sss-does-not-match-thin-part-transmission.md) | 肌SSSの逆光透過やthicknessを変更する |
 | verified | [IBL Shadowsは性能とWebGPU条件が改善するまで凍結する](./verified/keep-ibl-shadows-frozen-until-cost-and-webgpu-improve.md) | IBL接地影を再評価する |
 | verified | [OpenPBR読込は明示的なGLB実験に限定する](./verified/openpbr-import-stays-an-explicit-glb-experiment.md) | OpenPBR/MaterialX/USD読込を検討する |
 
@@ -41,3 +41,4 @@ MMD 本体機能より優先度は低いものの、再開時の判断や撤退�
 | Status | Insight | Replaced by |
 | --- | --- | --- |
 | retired | [MMD retargetはVMD trackの名前対応bakeから始める](./retired/retarget-vmd-tracks-before-babylon-animation-groups.md) | `vmd-retarget-is-an-isolated-popup-tool` |
+| retired | [SSSをToon影色ベースの二つの局所プリセットから始める](./retired/sss-starts-with-toon-shadow-color-presets.md) | `sss-skin-uses-screen-space-burley-diffusion` |

@@ -46,7 +46,7 @@ test("loads, edits, saves, and restores a material-free OBJ accessory", async ()
     await page.locator(".shader-material-item").click();
     await page.locator("#shader-preset-select").selectOption("wgsl-full-light");
     await page.locator("#btn-shader-apply-selected").click();
-    await expect(page.locator(".shader-material-preset")).toHaveText("full_light");
+    await expect(page.locator(".shader-material-preset")).toHaveText("Full Light");
     await page.locator("#btn-toggle-shader-panel").click();
 
     const vertexBufferDiagnostics = await page.evaluate(

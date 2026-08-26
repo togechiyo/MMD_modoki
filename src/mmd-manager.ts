@@ -1048,12 +1048,12 @@ export class MmdManager {
         },
         {
             id: "wgsl-full-alpha-test",
-            label: "AlphaCutOff",
+            label: "Alpha Cutoff",
             description: "Convert semi-transparent layers into softer alpha-cutoff rendering with more preserved edge coverage",
         },
         {
             id: "wgsl-full-alpha-test-hard",
-            label: "AlphaCutOff Hard",
+            label: "Alpha Cutoff Hard",
             description: "Stronger alpha-cutoff rendering for textures that need a firmer transparency mask",
         },
         {
@@ -1078,22 +1078,22 @@ export class MmdManager {
         },
         {
             id: "wgsl-full-light",
-            label: "full_light",
+            label: "Full Light",
             description: "Treat the material as always facing light regardless of PMX toon flags",
         },
         {
             id: "wgsl-full-light-add",
-            label: "full_light_add",
+            label: "Full Light Add",
             description: "Read light sliders directly and add a dedicated light boost regardless of PMX toon flags",
         },
         {
             id: "wgsl-full-shadow",
-            label: "full_shadow",
+            label: "Full Shadow",
             description: "Treat the material as always in shadow regardless of PMX toon flags",
         },
         {
             id: "wgsl-light-and-shadow",
-            label: "light_and_shadow",
+            label: "Light and Shadow",
             description: "Use the standard MMD light-and-shadow path, including fallback toon ramps for non-toon materials",
         },
         {
@@ -1108,7 +1108,7 @@ export class MmdManager {
         },
         {
             id: "wgsl-semi-matte-highlight",
-            label: "Semi-Matte Highlight",
+            label: "Semi Matte Highlight",
             description: "Balanced highlight with moderate spread toward the light direction",
         },
         {
@@ -1158,7 +1158,7 @@ export class MmdManager {
         },
         {
             id: "wgsl-debug-white",
-            label: "debug_white",
+            label: "Debug White",
             description: "White-shadow debug view using the built-in toon debug WGSL",
         },
     ];

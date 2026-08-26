@@ -25,6 +25,23 @@
 
 このため、現状のカスタマイズは「PBR ベースの物理表現を増やす」というより、「MMD 材質と toon シェーダーをどこまで気持ちよく拡張するか」という方向が中心になる。
 
+## プリセット名の表記規約
+
+Shader パネルに表示する built-in プリセット名は、英語の Title Case と半角スペースで統一する。
+
+- 単語区切りに `_` や `-` を表示しない。
+- `MMD`、`OBJ`、`SSR`、`PBR` などの略語は大文字を維持する。
+- 内部 ID は project 保存互換のため `wgsl-full-light` のような kebab-case を維持する。
+- `.wgsl` ファイル名はコード上の asset 名として snake_case を維持し、UI 表示名とは分離する。
+
+例:
+
+| 用途 | 表記 |
+| --- | --- |
+| UI 表示名 | `Full Light` |
+| 内部 ID | `wgsl-full-light` |
+| WGSL ファイル | `full_light.wgsl` |
+
 ## 触れる層
 
 ### 1. MMD 材質側で触れるもの

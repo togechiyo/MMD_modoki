@@ -212,7 +212,7 @@ test("V022-013: debug-white survives project round-trip and matches WebM", async
 
     await page.locator("#btn-toggle-shader-panel").click();
     await page.locator('[data-effect-tab="materials"]').click();
-    await expect(page.locator('#shader-preset-select option[value="wgsl-debug-white"]')).toHaveText("debug_white");
+    await expect(page.locator('#shader-preset-select option[value="wgsl-debug-white"]')).toHaveText("Debug White");
     await page.locator("#shader-preset-select").selectOption("wgsl-debug-white");
     await page.locator("#btn-shader-apply-all").click();
     const savedProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());

@@ -39,6 +39,11 @@ function createHost() {
                 { id: "wgsl-mmd-standard", label: "standard" },
                 { id: "wgsl-autoluminous", label: "Luminous" },
                 { id: "wgsl-full-shadow", label: "full_shadow" },
+                { id: "wgsl-self-shadow", label: "Self Shadow" },
+                { id: "wgsl-cel-shadow-sharp", label: "Cel Shadow Sharp" },
+                { id: "wgsl-gloss-highlight", label: "Gloss Highlight" },
+                { id: "wgsl-semi-matte-highlight", label: "Semi Matte Highlight" },
+                { id: "wgsl-matte-highlight", label: "Matte Highlight" },
                 { id: "wgsl-obj-untextured", label: "OBJ Untextured" },
                 { id: "wgsl-obj-mtl", label: "OBJ MTL" },
             ],
@@ -200,6 +205,45 @@ describe("material shader preset restore", () => {
         expect(host.externalWgslToonShaderPathByMaterial.get(host.material)).toBeUndefined();
         expect(host.constructor.externalWgslToonFragmentByMaterial.get(host.material)).toBeUndefined();
         expect(host.constructor.presetWgslToonFragmentByMaterial.get(host.material)).toBe(presetBefore);
+    });
+
+    it("applies Self Shadow with a toon lookup driven only by the light-facing normal", () => {
+        const host = createHost();
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-self-shadow")).toBe(true);
+
+        const source = host.constructor.presetWgslToonFragmentByMaterial.get(host.material);
+        expect(source).toContain("let toonLookupY=clamp(info.ndl,0.02,0.98);");
+        expect(source).toContain("textureSample(toonSampler,toonSamplerSampler,vec2f(0.5,toonLookupY)).rgb");
+        expect(source).not.toMatch(/\bshadow\b/);
+    });
+
+    it.each([
+        "wgsl-full-shadow",
+        "wgsl-cel-shadow-sharp",
+        "wgsl-gloss-highlight",
+        "wgsl-semi-matte-highlight",
+        "wgsl-matte-highlight",
+    ] as const)("uses the common fixed toon shadow color for %s", (presetId) => {
+        const host = createHost();
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", presetId)).toBe(true);
+
+        const source = host.constructor.presetWgslToonFragmentByMaterial.get(host.material);
+        expect(source).toContain("let toonShadowPixel=vec2i(0,0);");
+        expect(source).toContain("textureLoad(toonSampler,toonShadowPixel,0).rgb");
+        expect(source).not.toContain("textureSample(toonSampler,toonSamplerSampler");
+    });
+
+    it("keeps Full Shadow in the standard material color pipeline", () => {
+        const host = createHost();
+
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-full-shadow")).toBe(true);
+
+        const source = host.constructor.presetWgslToonFragmentByMaterial.get(host.material);
+        expect(source).toContain("diffuseBase+=info.diffuse*toonShadowBand;");
+        expect(source).not.toContain("toonFinalOverrideMix=1.0;");
+        expect(source).not.toContain("forcedShadowColor");
     });
 
     it("configures LuminousGlow selector from shininess and diffuse/ambient colors", () => {

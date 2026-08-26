@@ -185,6 +185,9 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [シェーダープリセット影側色の統一 2026-08-26](./shader-preset-shadow-color-unification-2026-08-26.md)
+- [Self Shadow シェーダープリセット 2026-08-26](./self-shadow-shader-preset-2026-08-26.md)
+- [MMD Standard Toon 影色サンプリング変更 2026-08-26](./mmd-standard-toon-shadow-color-sampling-2026-08-26.md)
 - [MMD モデルテクスチャ読み込み 現行仕様 2026-08-24](./mmd-texture-loading-current-spec-2026-08-24.md)
 - [材質 alpha / 同一平面描画ポリシー 2026-08-20](./material-alpha-coplanar-rendering-policy-2026-08-20.md)
 - [MMD 描画順整理 実装メモ 2026-08-13](./mmd-render-order-implementation-2026-08-13.md)

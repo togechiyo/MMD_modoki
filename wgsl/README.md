@@ -24,6 +24,8 @@ MMD Toon の一部計算（`diffuseBase` 加算部分）を差し替えるため
   - 標準寄りのバランス型
 - `toon_hard_shadow.wgsl`
   - 影境界を硬くしたハイコントラスト型
+- `self_shadow.wgsl`
+  - Toonテクスチャを法線のライト向きで評価し、shadow map遮蔽を使わないSelf Shadowプリセット
 - `toon_soft_pastel.wgsl`
   - 影を柔らかくしたパステル寄り
 - `toon_debug_white_shadow.wgsl`

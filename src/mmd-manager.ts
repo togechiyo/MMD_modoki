@@ -853,6 +853,7 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-white-key-cutout"
     | "wgsl-black-key-cutout"
     | "wgsl-full-shadow"
+    | "wgsl-self-shadow"
     | "wgsl-light-and-shadow"
     | "wgsl-gloss-highlight"
     | "wgsl-semi-matte-highlight"
@@ -1092,6 +1093,11 @@ export class MmdManager {
             description: "Treat the material as always in shadow regardless of PMX toon flags",
         },
         {
+            id: "wgsl-self-shadow",
+            label: "Self Shadow",
+            description: "Read the full toon ramp from the light-facing normal without cast-shadow occlusion",
+        },
+        {
             id: "wgsl-light-and-shadow",
             label: "Light and Shadow",
             description: "Use the standard MMD light-and-shadow path, including fallback toon ramps for non-toon materials",
@@ -1245,7 +1251,6 @@ export class MmdManager {
                 const occlusionMaskMin = (0.5 - occlusionWidth).toFixed(6);
                 const occlusionMaskMax = (0.5 + occlusionWidth).toFixed(6);
                 const lightColorInfluence = MmdManager.toonFlatLightColorInfluence.toFixed(6);
-                const toonBandAlignment = 0.75;
                 const defaultReplacementLine = isWgsl
                     ? `#ifdef TOON_TEXTURE_COLOR
 {
@@ -1254,15 +1259,12 @@ let lightTint=max(uniforms.toonTextureMultiplicativeColor.rgb,vec3f(0.0));
 let flatStrength=clamp(uniforms.toonTextureMultiplicativeColor.a,0.0,1.0);
 let shadowTint=clamp(uniforms.toonTextureAdditiveColor.rgb,vec3f(0.0),vec3f(1.0));
 let toonInfluence=clamp(uniforms.toonTextureAdditiveColor.a,0.0,1.0);
-var toonRaw=vec3f(clamp(info.ndl*shadow,0.02,0.98));
-toonRaw.r=textureSample(toonSampler,toonSamplerSampler,vec2f(0.5,toonRaw.r)).r;
-toonRaw.g=textureSample(toonSampler,toonSamplerSampler,vec2f(0.5,toonRaw.g)).g;
-toonRaw.b=textureSample(toonSampler,toonSamplerSampler,vec2f(0.5,toonRaw.b)).b;
+let toonShadowPixel=vec2i(0,0);
+let toonRaw=clamp(textureLoad(toonSampler,toonShadowPixel,0).rgb,vec3f(0.0),vec3f(1.0));
 let selfMask=smoothstep(${selfMaskMin},${selfMaskMax},clamp(info.ndl,0.0,1.0));
 let occlusionMask=smoothstep(${occlusionMaskMin},${occlusionMaskMax},clamp(shadow,0.0,1.0));
-let toneBandLuma=clamp(dot(toonRaw,vec3f(0.299,0.587,0.114)),0.0,1.0);
 let geometricLitMask=clamp(selfMask*occlusionMask,0.0,1.0);
-let litMask=clamp(geometricLitMask*mix(1.0,toneBandLuma,${toonBandAlignment.toFixed(6)}),0.0,1.0);
+let litMask=geometricLitMask;
 let shadowMask=1.0-litMask;
 let toonShadowBand=mix(shadowTint,toonRaw,toonInfluence);
 let shadowTerm=info.diffuse*mix(one,toonShadowBand,shadowMask);
@@ -1282,15 +1284,12 @@ vec3 lightTint=max(toonTextureMultiplicativeColor.rgb,vec3(0.0));
 float flatStrength=clamp(toonTextureMultiplicativeColor.a,0.0,1.0);
 vec3 shadowTint=clamp(toonTextureAdditiveColor.rgb,vec3(0.0),vec3(1.0));
 float toonInfluence=clamp(toonTextureAdditiveColor.a,0.0,1.0);
-vec3 toonRaw=vec3(clamp(info.ndl*shadow,0.02,0.98));
-toonRaw.r=texture2D(toonSampler,vec2(0.5,toonRaw.r)).r;
-toonRaw.g=texture2D(toonSampler,vec2(0.5,toonRaw.g)).g;
-toonRaw.b=texture2D(toonSampler,vec2(0.5,toonRaw.b)).b;
+ivec2 toonShadowPixel=ivec2(0,0);
+vec3 toonRaw=clamp(texelFetch(toonSampler,toonShadowPixel,0).rgb,vec3(0.0),vec3(1.0));
 float selfMask=smoothstep(${selfMaskMin},${selfMaskMax},clamp(info.ndl,0.0,1.0));
 float occlusionMask=smoothstep(${occlusionMaskMin},${occlusionMaskMax},clamp(shadow,0.0,1.0));
-float toneBandLuma=clamp(dot(toonRaw,vec3(0.299,0.587,0.114)),0.0,1.0);
 float geometricLitMask=clamp(selfMask*occlusionMask,0.0,1.0);
-float litMask=clamp(geometricLitMask*mix(1.0,toneBandLuma,${toonBandAlignment.toFixed(6)}),0.0,1.0);
+float litMask=geometricLitMask;
 float shadowMask=1.0-litMask;
 vec3 toonShadowBand=mix(shadowTint,toonRaw,toonInfluence);
 vec3 shadowTerm=info.diffuse*mix(one,toonShadowBand,shadowMask);

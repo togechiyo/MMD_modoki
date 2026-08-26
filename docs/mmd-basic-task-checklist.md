@@ -48,6 +48,9 @@
 - [x] AA ON/OFF
 - [x] DoF / レンズ関連調整
 - [x] モデル輪郭調整
+- [x] MMD Standardの影色をToonテクスチャ左下1px参照へ変更し、明暗境界と影色評価を分離（[実装メモ](./mmd-standard-toon-shadow-color-sampling-2026-08-26.md)）
+- [x] Toonテクスチャを`N dot L`で連続評価し、shadow map遮蔽を使わない`Self Shadow`材質プリセットを追加（[実装メモ](./self-shadow-shader-preset-2026-08-26.md)）
+- [x] 例外プリセットを除くbuilt-in WGSL材質プリセットの影側色をMMD Standardの左下1px方式へ統一（[実装メモ](./shader-preset-shadow-color-unification-2026-08-26.md)）
 - [x] FrameGraph 効果スタックで Luminous を追加 / 並べ替え / 保存復元
 - [x] FrameGraph 効果スタックで Bloom / DoF / LUT / SSR / SSAO / Luminous / Offset Shadow / Offset Rim などを追加 / 並べ替え / 保存復元
 - [x] FrameGraph 効果スタックの詳細スライダーを UI 操作値 `0..100` に統一し、実値・project 保存値との変換を pure helper へ集約

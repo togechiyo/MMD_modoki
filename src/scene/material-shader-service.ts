@@ -11,6 +11,8 @@ import glossHighlightWgslText from "../../wgsl/gloss_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
 import fullShadowWgslText from "../../wgsl/full_shadow.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
+import selfShadowWgslText from "../../wgsl/self_shadow.wgsl?raw";
+// eslint-disable-next-line import/no-unresolved
 import matteHighlightWgslText from "../../wgsl/matte_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
 import semiMatteHighlightWgslText from "../../wgsl/semi_matte_highlight.wgsl?raw";
@@ -56,6 +58,7 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-white-key-cutout"
     | "wgsl-black-key-cutout"
     | "wgsl-full-shadow"
+    | "wgsl-self-shadow"
     | "wgsl-light-and-shadow"
     | "wgsl-gloss-highlight"
     | "wgsl-semi-matte-highlight"
@@ -1679,6 +1682,14 @@ function applyWgslShaderPresetToMaterial(host: MaterialShaderHost, material: Mat
             }
             ensurePresetFallbackToonTexture(host, material);
             setPresetWgslToonFragmentForMaterial(host, material, fullShadowWgslText);
+            break;
+        }
+        case "wgsl-self-shadow": {
+            if ("disableLighting" in material) {
+                material.disableLighting = false;
+            }
+            ensurePresetFallbackToonTexture(host, material);
+            setPresetWgslToonFragmentForMaterial(host, material, selfShadowWgslText);
             break;
         }
         case "wgsl-light-and-shadow": {

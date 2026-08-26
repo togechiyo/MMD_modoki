@@ -27,6 +27,7 @@
 | adopted | [報告された要望をそのままロードマップ確約にしない](./decisions/reported-requests-are-not-roadmap-commitments.md) | Issue や外部報告を実装計画へ昇格するか判断する |
 | accepted-with-constraints | [配布アプリはoffline-first、開発作業はfixture中心でGUI確認する](./decisions/keep-agent-work-local-fixture-driven-and-gui-verified.md) | branch、runtime通信、開発時network、local reference配置、model asset、UI検証の安全境界を決める |
 | adopted | [VMD retargetは現在のprojectから独立したpopup toolにする](./decisions/vmd-retarget-is-an-isolated-popup-tool.md) | PMX間のVMD変換、rotation・体格差補正、preview導線を変更する |
+| adopted | [MMDプリセットはfallbackの役割を保ち影側色を共通化する](./decisions/mmd-standard-respects-missing-toon-and-light-shadow-forces-fallback.md) | Toonなし材質、fallback Toon、共通影色、shader presetの役割を変更する |
 
 ## 却下
 

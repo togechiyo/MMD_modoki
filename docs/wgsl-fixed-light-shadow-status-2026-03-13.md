@@ -2,6 +2,8 @@
 
 更新日: 2026-03-13
 
+> 2026-08-26更新: `Full Shadow`の最終色上書きを廃止し、例外を除くbuilt-inプリセットの影側色を`MMD Standard`と同じ左下1px方式へ統一した。現行仕様は[シェーダープリセット影側色の統一](./shader-preset-shadow-color-unification-2026-08-26.md)を参照する。
+
 ## 概要
 
 2026-03-13 時点で、`MMD Standard` の明暗処理を材質単位で強制したい目的で複数の built-in WGSL プリセットを試した。

@@ -139,7 +139,7 @@ v0.2 では、操作を直接状態変更へつなぐだけでなく、Action / 
 - `src/editor/rigid-body-visualizer-controller.ts`
   - 剛体表示。
 - `src/editor/physics-bone-visibility.ts`
-  - 物理ボーンの timeline 表示制御。
+  - PMX表示フラグを基準にした、viewport / timeline共通の物理ボーン表示制御。
 
 v0.2 では現行 `MmdRuntime + MmdBulletPhysics(MultiPhysicsRuntime)` 経路を安定版として扱い、`MmdWasmRuntime` は別 PoC 寄りです。物理はモデル依存の破綻が出やすいため、`docs/physics-task-list.md` と `docs/v0.2-physics-investigation-note.md` に検証結果を残します。
 

@@ -367,7 +367,7 @@ describe("timeline edit service model animation tracks", () => {
 
         expect(getActiveModelTimelineTracks(host).map((track) => track.name)).toEqual(["Property", "センター"]);
 
-        host.showPhysicsBonesInTimeline = true;
+        host.showPhysicsBones = true;
         const tracks = getActiveModelTimelineTracks(host);
         const physicsRow = tracks.find((track) => track.name === "スカート_0_0");
         expect(physicsRow).toBeTruthy();
@@ -403,7 +403,7 @@ describe("timeline edit service model animation tracks", () => {
         host.modelKeyframeTracksByModel.set(model, new Map([
             ["bone\u001fスカート_0_0", new Uint32Array([10, 20])],
         ]));
-        host.showPhysicsBonesInTimeline = true;
+        host.showPhysicsBones = true;
 
         const physicsRow = getActiveModelTimelineTracks(host).find((track) => track.name === "スカート_0_0");
 
@@ -427,7 +427,7 @@ describe("timeline edit service model animation tracks", () => {
         host.modelKeyframeTracksByModel.set(model, new Map([
             [`bone\u001f${physicsBoneName}`, new Uint32Array([0, 10])],
         ]));
-        host.showPhysicsBonesInTimeline = true;
+        host.showPhysicsBones = true;
 
         const physicsRow = getActiveModelTimelineTracks(host).find((track) => track.name === physicsBoneName);
 

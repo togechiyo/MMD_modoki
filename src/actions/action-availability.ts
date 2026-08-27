@@ -113,7 +113,6 @@ export function canExecuteEditorAction(
         case "viewport.setBackgroundDisplayMode":
         case "viewport.toggleEnvironmentBackground":
         case "viewport.toggleSkydome":
-        case "viewport.togglePhysicsBones":
         case "project.newWindow":
         case "project.openFile":
         case "project.openEnvironmentHdr":
@@ -137,6 +136,7 @@ export function canExecuteEditorAction(
         case "runtime.toggleRigidBodies":
         case "runtime.toggleGlobalIllumination":
         case "model.selectTimelineTarget":
+        case "model.togglePhysicsBones":
         case "model.toggleActiveVisibility":
         case "model.setActiveShadow":
         case "model.deleteActive":

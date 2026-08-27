@@ -2485,14 +2485,9 @@ export class UIController {
         this.actionDispatcher.register("viewport.toggleSkydome", () => {
             this.sceneEnvironmentUiController?.toggleSkydome();
         });
-        this.actionDispatcher.register("viewport.togglePhysicsBones", () => {
-            const visible = this.mmdManager.toggleShowPhysicsBonesInViewport();
-            this.showToast(visible ? "Physics bones shown in viewport" : "Physics bones hidden in viewport", "info");
-            this.appMenuController?.refresh();
-        });
-        this.actionDispatcher.register("timeline.togglePhysicsBones", () => {
-            const visible = this.mmdManager.toggleShowPhysicsBonesInTimeline();
-            this.showToast(visible ? "Physics bones shown in timeline" : "Physics bones hidden in timeline", "info");
+        this.actionDispatcher.register("model.togglePhysicsBones", () => {
+            const visible = this.mmdManager.toggleShowPhysicsBones();
+            this.showToast(visible ? "Physics bones shown" : "Physics bones follow PMX visibility", "info");
             this.updateTimelineEditState();
             this.appMenuController?.refresh();
         });

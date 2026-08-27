@@ -266,6 +266,16 @@ v0.2 初期対応として、次を実装した。
 
 0f の物理 ON key は、初期対応では表示上のデフォルト marker として扱う。表示トグルだけで project 内へ大量の物理 key を自動追加しない。0f に `physicsToggle === 0` の明示 key がある場合は、物理 OFF で固める意図を優先し、仮想 `×` は出さない。
 
+## 2026-08-27 表示フィルター統合
+
+project所有者判断により、`ビューポートに物理ボーンを表示`と`タイムラインに物理ボーンを表示`は、`表示 > 物理ボーンを表示`の1項目へ統合した。
+
+- 初期値はOFFとする。
+- OFFではPMXのボーン表示フラグに従う。動的剛体に関連していてもPMXで表示対象なら通常ボーンとして表示し、PMXで非表示の物理専用ボーンは表示しない。
+- ONではPMXの表示フラグにかかわらず、物理関連ボーンをビューポートとタイムラインの両方へ追加する。
+- 物理OFFキーが存在することだけを理由に、PMXで非表示のボーンをビューポートへ例外表示しない。
+- この表示フィルターはruntime物理やVMDの`physicsToggles`を変更しない。従来どおりwindow内の一時UI状態とし、project dataへは保存しない。
+
 ## 参考リンク
 
 - [babylon-mmd: Introduction to VMD and VPD](https://noname0310.github.io/babylon-mmd/docs/reference/understanding-mmd-behaviour/introduction-to-vmd-and-vpd/)

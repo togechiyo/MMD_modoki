@@ -482,7 +482,7 @@ import {
     createEditorModelMotionFromMmdAnimation,
     resolveBoneTrackKind,
 } from "./editor/mmd-animation-builder";
-import { getPhysicsOffBoneNamesAtFrame } from "./editor/physics-bone-visibility";
+import { resolveVisibleBoneNames } from "./editor/physics-bone-visibility";
 import { upsertBoneKey, type EditorBoneTrackKind } from "./editor/motion-document";
 import { bindModelAnimationToRuntime } from "./editor/runtime-animation-binder";
 import {
@@ -1861,8 +1861,7 @@ ${beforeFogAppendBlock}
     private bonePickPointerDown: { pointerId: number; clientX: number; clientY: number } | null = null;
     private captureEditorOverlaysSuppressed = false;
     private rigidBodyVisualizerEnabled = false;
-    private showPhysicsBonesInViewport = false;
-    private showPhysicsBonesInTimeline = false;
+    private showPhysicsBones = false;
     private rigidBodyVisualizerTargets: {
         sceneModel: SceneModelEntry;
         backend: "ammo" | "bullet";
@@ -5382,30 +5381,11 @@ ${beforeFogAppendBlock}
 
     public getBoneVisualizerVisibleBoneNames(): ReadonlySet<string> | null {
         if (!this.activeModelInfo) return null;
-
-        const visibleBoneNames = new Set(this.activeModelInfo.boneNames);
-        if (!this.currentModel || !this.activeModelInfo.physicsBoneNames || this.activeModelInfo.physicsBoneNames.length === 0) {
-            return visibleBoneNames;
-        }
-
-        if (this.showPhysicsBonesInViewport) {
-            for (const boneName of this.activeModelInfo.physicsBoneNames) {
-                visibleBoneNames.add(boneName);
-            }
-            return visibleBoneNames;
-        }
-
-        const animation = this.modelSourceAnimationsByModel.get(this.currentModel) ?? null;
-        const physicsOffBoneNames = getPhysicsOffBoneNamesAtFrame(
-            animation,
+        return resolveVisibleBoneNames(
+            this.activeModelInfo.boneNames,
             this.activeModelInfo.physicsBoneNames,
-            this._currentFrame,
+            this.showPhysicsBones,
         );
-        for (const boneName of physicsOffBoneNames) {
-            visibleBoneNames.add(boneName);
-        }
-
-        return visibleBoneNames;
     }
 
     public setCaptureEditorOverlaysSuppressed(suppressed: boolean): void {
@@ -5967,36 +5947,21 @@ ${beforeFogAppendBlock}
         }
     }
 
-    public getShowPhysicsBonesInTimeline(): boolean {
-        return this.showPhysicsBonesInTimeline;
+    public getShowPhysicsBones(): boolean {
+        return this.showPhysicsBones;
     }
 
-    public setShowPhysicsBonesInTimeline(visible: boolean): boolean {
+    public setShowPhysicsBones(visible: boolean): boolean {
         const next = Boolean(visible);
-        if (this.showPhysicsBonesInTimeline === next) return next;
-        this.showPhysicsBonesInTimeline = next;
+        if (this.showPhysicsBones === next) return next;
+        this.showPhysicsBones = next;
         emitMergedKeyframeTracksImpl(this);
-        return next;
-    }
-
-    public toggleShowPhysicsBonesInTimeline(): boolean {
-        return this.setShowPhysicsBonesInTimeline(!this.showPhysicsBonesInTimeline);
-    }
-
-    public getShowPhysicsBonesInViewport(): boolean {
-        return this.showPhysicsBonesInViewport;
-    }
-
-    public setShowPhysicsBonesInViewport(visible: boolean): boolean {
-        const next = Boolean(visible);
-        if (this.showPhysicsBonesInViewport === next) return next;
-        this.showPhysicsBonesInViewport = next;
         this.updateBoneVisualizer();
         return next;
     }
 
-    public toggleShowPhysicsBonesInViewport(): boolean {
-        return this.setShowPhysicsBonesInViewport(!this.showPhysicsBonesInViewport);
+    public toggleShowPhysicsBones(): boolean {
+        return this.setShowPhysicsBones(!this.showPhysicsBones);
     }
 
     public beginTimelineEditBatch(): void {

@@ -318,14 +318,9 @@ export class AppMenuController {
                 return { checked: this.mmdManager.isGlobalIlluminationEnabled(), disabled: this.mmdManager.isGlobalIlluminationPending() };
             case "view.toggleFxPanel":
                 return { checked: this.isShaderPanelVisible(), disabled: false };
-            case "view.toggleTimelinePhysicsBones":
+            case "view.togglePhysicsBones":
                 return {
-                    checked: this.mmdManager.getShowPhysicsBonesInTimeline(),
-                    disabled: this.mmdManager.getTimelineTarget() !== "model",
-                };
-            case "view.toggleViewportPhysicsBones":
-                return {
-                    checked: this.mmdManager.getShowPhysicsBonesInViewport(),
+                    checked: this.mmdManager.getShowPhysicsBones(),
                     disabled: this.mmdManager.getTimelineTarget() !== "model" || !this.hasActiveModel(),
                 };
             case "view.fpsUnlimited":
@@ -566,11 +561,8 @@ export class AppMenuController {
             case "view.toggleFxPanel":
                 this.dispatchAction({ type: "layout.shaderPanel.toggle", source: "menu" });
                 return;
-            case "view.toggleTimelinePhysicsBones":
-                this.dispatchAction({ type: "timeline.togglePhysicsBones", source: "menu" });
-                return;
-            case "view.toggleViewportPhysicsBones":
-                this.dispatchAction({ type: "viewport.togglePhysicsBones", source: "menu" });
+            case "view.togglePhysicsBones":
+                this.dispatchAction({ type: "model.togglePhysicsBones", source: "menu" });
                 return;
             case "view.fpsUnlimited":
                 this.dispatchAction({ type: "runtime.setRenderFpsLimit", source: "menu", limit: 0 });

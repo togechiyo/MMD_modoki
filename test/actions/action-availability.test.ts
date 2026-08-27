@@ -310,6 +310,7 @@ describe("canExecuteEditorAction", () => {
             readySnapshot,
         )).toBe(true);
         expect(canExecuteEditorAction({ type: "viewport.toggleSkydome", source: "button" }, readySnapshot)).toBe(true);
+        expect(canExecuteEditorAction({ type: "model.togglePhysicsBones", source: "menu" }, readySnapshot)).toBe(true);
     });
 
     it("allows project file and export actions", () => {

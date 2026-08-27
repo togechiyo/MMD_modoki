@@ -101,7 +101,7 @@ type TimelineEditHost = {
     applyAccessoryTransformKeyframeValue?: (index: number, frame: number, value: AccessoryTransformKeyframeValue | null) => boolean;
     removeAccessoryTransformKeyframeValues?: (index: number, frames: readonly number[]) => boolean;
     moveAccessoryTransformKeyframeValue?: (index: number, fromFrame: number, toFrame: number) => boolean;
-    showPhysicsBonesInTimeline?: boolean;
+    showPhysicsBones?: boolean;
     mmdRuntime: {
         animationFrameTimeDuration: number;
         seekAnimation(frame: number, forceEvaluate: boolean): void;
@@ -584,7 +584,7 @@ export function getActiveModelTimelineTracks(host: TimelineEditHost): KeyframeTr
 
     const visibleBoneNameSet = new Set(host.activeModelInfo.boneNames);
     const physicsBoneNameSet = new Set(host.activeModelInfo.physicsBoneNames ?? []);
-    const showPhysicsBones = host.showPhysicsBonesInTimeline === true;
+    const showPhysicsBones = host.showPhysicsBones === true;
     const animation = getCurrentModelAnimation(host);
     const isVisibleBoneCategory = (category: TrackCategory): boolean => {
         return category === "root" || category === "semi-standard" || category === "bone";

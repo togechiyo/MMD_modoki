@@ -78,9 +78,7 @@ export type ViewportAction =
     | { type: "viewport.setBackgroundDisplayMode"; source: ActionSource; mode: BackgroundDisplayMode }
     | { type: "viewport.toggleEnvironmentBackground"; source: ActionSource }
     | { type: "viewport.toggleSkydome"; source: ActionSource }
-    | { type: "viewport.togglePhysicsBones"; source: ActionSource }
-    | { type: "viewport.setWaterSurfaceSettings"; source: ActionSource; settings: Partial<WaterSurfaceSettings> }
-    | { type: "timeline.togglePhysicsBones"; source: ActionSource };
+    | { type: "viewport.setWaterSurfaceSettings"; source: ActionSource; settings: Partial<WaterSurfaceSettings> };
 
 export type ProjectAction =
     | { type: "project.newWindow"; source: ActionSource }
@@ -118,6 +116,7 @@ export type RuntimeAction =
 
 export type ModelAction =
     | { type: "model.selectTimelineTarget"; source: ActionSource; value: string; showToast: boolean }
+    | { type: "model.togglePhysicsBones"; source: ActionSource }
     | { type: "model.toggleActiveVisibility"; source: ActionSource }
     | { type: "model.setActiveShadow"; source: ActionSource; castShadow: boolean }
     | { type: "model.deleteActive"; source: ActionSource }

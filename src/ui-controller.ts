@@ -5733,6 +5733,7 @@ export class UIController {
                 const settings = this.mmdManager.getRingParticleSettings();
                 const colorA = this.toEffectStackHexColor(settings.colorA);
                 const colorB = this.toEffectStackHexColor(settings.colorB);
+                const colorC = this.toEffectStackHexColor(settings.colorC);
                 rows.push(
                     range("ringParticleCount", label("particleCount"), settings.count, String(toFrameGraphEffectSliderValue("ringParticleCount", settings.count))),
                     range("ringParticleDensity", label("particleDensity"), settings.density, String(toFrameGraphEffectSliderValue("ringParticleDensity", settings.density))),
@@ -5741,6 +5742,7 @@ export class UIController {
                     range("ringParticleIntensity", label("emissionStrength"), settings.intensity, String(toFrameGraphEffectSliderValue("ringParticleIntensity", settings.intensity))),
                     color("ringParticleColorA", label("primaryColor"), colorA, colorA),
                     color("ringParticleColorB", label("secondaryColor"), colorB, colorB),
+                    color("ringParticleColorC", label("tertiaryColor"), colorC, colorC),
                 );
                 break;
             }
@@ -6012,13 +6014,19 @@ export class UIController {
                 break;
             }
             case "ringParticleColorA":
-            case "ringParticleColorB": {
+            case "ringParticleColorB":
+            case "ringParticleColorC": {
                 const colorValue = this.readEffectStackHexColor(String(rawValue));
                 if (!colorValue) return;
                 const settings = this.mmdManager.getRingParticleSettings();
+                const propertyByField = {
+                    ringParticleColorA: "colorA",
+                    ringParticleColorB: "colorB",
+                    ringParticleColorC: "colorC",
+                } as const;
                 this.mmdManager.setRingParticleSettings({
                     ...settings,
-                    [field === "ringParticleColorA" ? "colorA" : "colorB"]: colorValue,
+                    [propertyByField[field]]: colorValue,
                 });
                 break;
             }
@@ -6187,6 +6195,7 @@ export class UIController {
             case "ringParticleIntensity":
             case "ringParticleColorA":
             case "ringParticleColorB":
+            case "ringParticleColorC":
                 return "ringParticles";
             case "offsetShadowStrength":
             case "offsetShadowOffsetX":
@@ -6400,6 +6409,11 @@ export class UIController {
             case "ringParticleColorB":
                 valueElement.textContent = this.toEffectStackHexColor(
                     this.mmdManager.getRingParticleSettings().colorB,
+                );
+                break;
+            case "ringParticleColorC":
+                valueElement.textContent = this.toEffectStackHexColor(
+                    this.mmdManager.getRingParticleSettings().colorC,
                 );
                 break;
             case "offsetShadowStrength":

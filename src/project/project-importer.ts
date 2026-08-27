@@ -1432,6 +1432,11 @@ export async function importProjectState(
         host.setPostEffectFogColor(data.effects.fogColor.r, data.effects.fogColor.g, data.effects.fogColor.b);
     }
     const ringParticles = data.effects.ringParticles;
+    const ringParticleColorB = {
+        r: readFiniteNumber(ringParticles?.colorB?.r, 1),
+        g: readFiniteNumber(ringParticles?.colorB?.g, 1),
+        b: readFiniteNumber(ringParticles?.colorB?.b, 1),
+    };
     host.setRingParticleSettings?.({
         enabled: typeof ringParticles?.enabled === "boolean" ? ringParticles.enabled : false,
         count: readFiniteNumber(ringParticles?.count, 180),
@@ -1440,14 +1445,15 @@ export async function importProjectState(
         speed: readFiniteNumber(ringParticles?.speed, 0.05),
         intensity: readFiniteNumber(ringParticles?.intensity, 4),
         colorA: {
-            r: readFiniteNumber(ringParticles?.colorA?.r, 0),
-            g: readFiniteNumber(ringParticles?.colorA?.g, 0.8),
-            b: readFiniteNumber(ringParticles?.colorA?.b, 0.8),
+            r: readFiniteNumber(ringParticles?.colorA?.r, 1),
+            g: readFiniteNumber(ringParticles?.colorA?.g, 1),
+            b: readFiniteNumber(ringParticles?.colorA?.b, 1),
         },
-        colorB: {
-            r: readFiniteNumber(ringParticles?.colorB?.r, 1),
-            g: readFiniteNumber(ringParticles?.colorB?.g, 1),
-            b: readFiniteNumber(ringParticles?.colorB?.b, 1),
+        colorB: ringParticleColorB,
+        colorC: {
+            r: readFiniteNumber(ringParticles?.colorC?.r, ringParticleColorB.r),
+            g: readFiniteNumber(ringParticles?.colorC?.g, ringParticleColorB.g),
+            b: readFiniteNumber(ringParticles?.colorC?.b, ringParticleColorB.b),
         },
     });
     if (Array.isArray(data.effects.frameGraphPostStack) || ringParticles?.enabled || waterSurfaceSettings.enabled) {

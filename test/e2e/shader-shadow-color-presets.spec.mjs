@@ -28,6 +28,19 @@ test("renders the unified-shadow-color material presets", async () => {
     await page.locator("#btn-toggle-shader-panel").click();
     await page.locator('[data-effect-tab="materials"]').click();
 
+    await expect.poll(async () => (
+      await page.locator("#shader-preset-select option").allTextContents()
+    ).slice(0, 8)).toEqual([
+        "MMD Standard",
+        "Cel Shadow Sharp",
+        "Light and Shadow",
+        "Self Shadow",
+        "Full Light",
+        "Full Shadow",
+        "Luminous",
+        "Alpha Test",
+      ]);
+
     for (const [presetId, label] of presets) {
       await expect(page.locator(`#shader-preset-select option[value="${presetId}"]`))
         .toHaveText(label);

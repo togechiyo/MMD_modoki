@@ -945,6 +945,7 @@ export interface ProjectRingParticleState {
     intensity: number;
     colorA: ProjectRgbColor;
     colorB: ProjectRgbColor;
+    colorC?: ProjectRgbColor;
     /** Legacy pre-FrameGraph particle layout values. */
     radius?: number;
     spread?: number;

@@ -182,8 +182,10 @@ import {
 } from "./scene/material-shader-service";
 import {
     DEFAULT_RING_PARTICLE_SETTINGS,
+    normalizeRingParticleSettings,
     RingParticleController,
     type RingParticleSettings,
+    type RingParticleSettingsInput,
 } from "./scene/ring-particle-controller";
 import { WaterSurfaceController } from "./scene/water-surface-controller";
 import {
@@ -1049,19 +1051,39 @@ export class MmdManager {
             description: "Default MMD shading",
         },
         {
-            id: "wgsl-unlit",
-            label: "Unlit Flat",
-            description: "Disable lighting for flat anime-like output",
+            id: "wgsl-cel-shadow-sharp",
+            label: "Cel Shadow Sharp",
+            description: "Hardens the self-shadow boundary for a crisper cel-look shadow band",
         },
         {
-            id: "wgsl-soft-lit",
-            label: "Soft Lit",
-            description: "Softer highlights with gentle emissive lift",
+            id: "wgsl-light-and-shadow",
+            label: "Light and Shadow",
+            description: "Use the standard MMD light-and-shadow path, including fallback toon ramps for non-toon materials",
+        },
+        {
+            id: "wgsl-self-shadow",
+            label: "Self Shadow",
+            description: "Read the full toon ramp from the light-facing normal without cast-shadow occlusion",
+        },
+        {
+            id: "wgsl-full-light",
+            label: "Full Light",
+            description: "Treat the material as always facing light regardless of PMX toon flags",
+        },
+        {
+            id: "wgsl-full-shadow",
+            label: "Full Shadow",
+            description: "Treat the material as always in shadow regardless of PMX toon flags",
+        },
+        {
+            id: "wgsl-autoluminous",
+            label: "Luminous",
+            description: "GlowLayer-based luminous preset that routes into LuminousGlow",
         },
         {
             id: "wgsl-full-alpha-test",
-            label: "Alpha Cutoff",
-            description: "Convert semi-transparent layers into softer alpha-cutoff rendering with more preserved edge coverage",
+            label: "Alpha Test",
+            description: "Switch alpha textures to alpha-test rendering with a softer cutoff threshold",
         },
         {
             id: "wgsl-full-alpha-test-hard",
@@ -1084,29 +1106,19 @@ export class MmdManager {
             description: "Cut out dark backgrounds by keying on luminance instead of texture alpha",
         },
         {
-            id: "wgsl-autoluminous",
-            label: "Luminous",
-            description: "GlowLayer-based luminous preset that routes into LuminousGlow",
+            id: "wgsl-unlit",
+            label: "Unlit Flat",
+            description: "Disable lighting for flat anime-like output",
         },
         {
-            id: "wgsl-full-light",
-            label: "Full Light",
-            description: "Treat the material as always facing light regardless of PMX toon flags",
+            id: "wgsl-soft-lit",
+            label: "Soft Lit",
+            description: "Softer highlights with gentle emissive lift",
         },
         {
             id: "wgsl-full-light-add",
             label: "Full Light Add",
             description: "Read light sliders directly and add a dedicated light boost regardless of PMX toon flags",
-        },
-        {
-            id: "wgsl-full-shadow",
-            label: "Full Shadow",
-            description: "Treat the material as always in shadow regardless of PMX toon flags",
-        },
-        {
-            id: "wgsl-self-shadow",
-            label: "Self Shadow",
-            description: "Read the full toon ramp from the light-facing normal without cast-shadow occlusion",
         },
         {
             id: "wgsl-sss-standard",
@@ -1117,16 +1129,6 @@ export class MmdManager {
             id: "wgsl-sss-skin",
             label: "SSS Skin",
             description: "Depth-aware Burley skin diffusion with a fixed red profile and uniform-thickness backlighting",
-        },
-        {
-            id: "wgsl-light-and-shadow",
-            label: "Light and Shadow",
-            description: "Use the standard MMD light-and-shadow path, including fallback toon ramps for non-toon materials",
-        },
-        {
-            id: "wgsl-cel-shadow-sharp",
-            label: "Cel Shadow Sharp",
-            description: "Hardens the self-shadow boundary for a crisper cel-look shadow band",
         },
         {
             id: "wgsl-gloss-highlight",
@@ -11880,10 +11882,10 @@ ${beforeFogAppendBlock}
         return structuredClone(this.ringParticleSettingsValue);
     }
 
-    setRingParticleSettings(settings: RingParticleSettings): void {
+    setRingParticleSettings(settings: RingParticleSettingsInput): void {
         this.ringParticleController?.setSettings(settings);
         this.ringParticleSettingsValue = this.ringParticleController?.getSettings()
-            ?? structuredClone(settings);
+            ?? normalizeRingParticleSettings(settings);
     }
 
     /** LuminousGlow threshold (0..1.5). */

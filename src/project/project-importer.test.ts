@@ -182,6 +182,7 @@ function createHost() {
         setPostEffectExternalLut: vi.fn(),
         setExternalWgslToonShader: vi.fn(),
         setPostEffectFogColor: vi.fn(),
+        setRingParticleSettings: vi.fn(),
         setFrameGraphPostEffectStackIds: vi.fn(),
         setFrameGraphPostEffectStackEntries: vi.fn(),
         refreshTotalFramesFromContent: vi.fn(),
@@ -199,6 +200,33 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("旧2色パーティクルは第3色へ第2色を補完する", async () => {
+        const host = createHost();
+        const project = createProject({
+            effects: {
+                ...createProject().effects,
+                ringParticles: {
+                    enabled: true,
+                    count: 180,
+                    density: 32.5,
+                    size: 0.335,
+                    speed: 0.05,
+                    intensity: 4,
+                    colorA: { r: 1, g: 0, b: 0 },
+                    colorB: { r: 0, g: 0.5, b: 1 },
+                },
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setRingParticleSettings).toHaveBeenCalledWith(expect.objectContaining({
+            colorA: { r: 1, g: 0, b: 0 },
+            colorB: { r: 0, g: 0.5, b: 1 },
+            colorC: { r: 0, g: 0.5, b: 1 },
+        }));
+    });
+
     it("restores modoki-owned light keyframes", async () => {
         const host = createHost();
         const lightAnimation = {

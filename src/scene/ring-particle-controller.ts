@@ -21,7 +21,12 @@ export interface RingParticleSettings {
     intensity: number;
     colorA: { r: number; g: number; b: number };
     colorB: { r: number; g: number; b: number };
+    colorC: { r: number; g: number; b: number };
 }
+
+export type RingParticleSettingsInput = Omit<RingParticleSettings, "colorC"> & {
+    colorC?: RingParticleSettings["colorC"];
+};
 
 export const DEFAULT_RING_PARTICLE_SETTINGS: RingParticleSettings = {
     enabled: false,
@@ -30,8 +35,9 @@ export const DEFAULT_RING_PARTICLE_SETTINGS: RingParticleSettings = {
     size: 0.335,
     speed: 0.05,
     intensity: 4,
-    colorA: { r: 0, g: 0.8, b: 0.8 },
+    colorA: { r: 1, g: 1, b: 1 },
     colorB: { r: 1, g: 1, b: 1 },
+    colorC: { r: 1, g: 1, b: 1 },
 };
 
 export interface RingParticleSample {
@@ -39,8 +45,10 @@ export interface RingParticleSample {
     y: number;
     z: number;
     scale: number;
-    colorGroup: 0 | 1;
+    colorGroup: 0 | 1 | 2;
 }
+
+export const RING_PARTICLE_COLOR_RATIOS = [0.6, 0.3, 0.1] as const;
 
 function fract(value: number): number {
     return value - Math.floor(value);
@@ -49,6 +57,12 @@ function fract(value: number): number {
 /** Stable scalar hash used so seeking a frame recreates the same particle field. */
 export function hashRingParticle(index: number, channel: number): number {
     return fract(Math.sin((index + 1) * 127.1 + (channel + 1) * 311.7) * 43758.5453123);
+}
+
+export function resolveRingParticleColorGroup(index: number): 0 | 1 | 2 {
+    const colorHash = hashRingParticle(index, 11);
+    if (colorHash < RING_PARTICLE_COLOR_RATIOS[0]) return 0;
+    return colorHash < RING_PARTICLE_COLOR_RATIOS[0] + RING_PARTICLE_COLOR_RATIOS[1] ? 1 : 2;
 }
 
 export function sampleRingParticle(
@@ -90,7 +104,7 @@ export function sampleRingParticle(
         y: height,
         z: Math.sin(angle) * radius,
         scale,
-        colorGroup: hashRingParticle(index, 11) < 0.68 ? 0 : 1,
+        colorGroup: resolveRingParticleColorGroup(index),
     };
 }
 
@@ -149,12 +163,30 @@ export function resolveRingParticleMaterialState(
     };
 }
 
+export function normalizeRingParticleSettings(settings: RingParticleSettingsInput): RingParticleSettings {
+    return {
+        enabled: Boolean(settings.enabled),
+        count: Math.max(8, Math.min(512, Math.round(settings.count))),
+        density: Math.max(5, Math.min(60, settings.density)),
+        size: Math.max(0.03, Math.min(3, settings.size)),
+        speed: Math.max(-2, Math.min(2, settings.speed)),
+        intensity: Math.max(0, Math.min(8, settings.intensity)),
+        colorA: clampColor(settings.colorA),
+        colorB: clampColor(settings.colorB),
+        colorC: clampColor(settings.colorC ?? settings.colorB),
+    };
+}
+
 export class RingParticleController {
     private settings: RingParticleSettings = structuredClone(DEFAULT_RING_PARTICLE_SETTINGS);
     private readonly texture: RawTexture;
-    private readonly meshes: [Mesh, Mesh];
-    private readonly materials: [StandardMaterial, StandardMaterial];
-    private readonly matrixBuffers: [Float32Array, Float32Array] = [new Float32Array(), new Float32Array()];
+    private readonly meshes: [Mesh, Mesh, Mesh];
+    private readonly materials: [StandardMaterial, StandardMaterial, StandardMaterial];
+    private readonly matrixBuffers: [Float32Array, Float32Array, Float32Array] = [
+        new Float32Array(),
+        new Float32Array(),
+        new Float32Array(),
+    ];
     private observer: Observer<Scene> | null = null;
     private allocatedCount = -1;
     private lastFrame = Number.NaN;
@@ -166,7 +198,7 @@ export class RingParticleController {
         private readonly getFrame: () => number,
     ) {
         this.texture = createSoftParticleTexture(scene);
-        this.materials = [0, 1].map((group) => {
+        this.materials = [0, 1, 2].map((group) => {
             const material = new StandardMaterial(`ringParticleMaterial${group}`, scene);
             material.disableLighting = true;
             material.backFaceCulling = false;
@@ -183,8 +215,8 @@ export class RingParticleController {
             material.ambientColor = Color3.Black();
             (material as StandardMaterial & { mmdLuminousPreserveChroma: boolean }).mmdLuminousPreserveChroma = true;
             return material;
-        }) as [StandardMaterial, StandardMaterial];
-        this.meshes = [0, 1].map((group) => {
+        }) as [StandardMaterial, StandardMaterial, StandardMaterial];
+        this.meshes = [0, 1, 2].map((group) => {
             const mesh = CreatePlane(`ringParticleMesh${group}`, { size: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
             mesh.material = this.materials[group];
             mesh.isPickable = false;
@@ -192,7 +224,7 @@ export class RingParticleController {
             mesh.alwaysSelectAsActiveMesh = true;
             mesh.setEnabled(false);
             return mesh;
-        }) as [Mesh, Mesh];
+        }) as [Mesh, Mesh, Mesh];
         this.observer = scene.onBeforeRenderObservable.add(() => this.update());
         this.applyMaterialState();
     }
@@ -201,20 +233,10 @@ export class RingParticleController {
         return structuredClone(this.settings);
     }
 
-    public setSettings(settings: RingParticleSettings): void {
-        const normalizedCount = Math.max(8, Math.min(512, Math.round(settings.count)));
-        this.settings = {
-            enabled: Boolean(settings.enabled),
-            count: normalizedCount,
-            density: Math.max(5, Math.min(60, settings.density)),
-            size: Math.max(0.03, Math.min(3, settings.size)),
-            speed: Math.max(-2, Math.min(2, settings.speed)),
-            intensity: Math.max(0, Math.min(8, settings.intensity)),
-            colorA: clampColor(settings.colorA),
-            colorB: clampColor(settings.colorB),
-        };
+    public setSettings(settings: RingParticleSettingsInput): void {
+        this.settings = normalizeRingParticleSettings(settings);
         this.lastFrame = Number.NaN;
-        if (this.allocatedCount !== normalizedCount) {
+        if (this.allocatedCount !== this.settings.count) {
             this.rebuildBuffers();
         }
         this.applyMaterialState();
@@ -238,8 +260,12 @@ export class RingParticleController {
     }
 
     private applyMaterialState(): void {
-        const colors = [clampColor(this.settings.colorA), clampColor(this.settings.colorB)];
-        for (let group = 0; group < 2; group++) {
+        const colors = [
+            clampColor(this.settings.colorA),
+            clampColor(this.settings.colorB),
+            clampColor(this.settings.colorC),
+        ];
+        for (let group = 0; group < 3; group++) {
             const material = this.materials[group];
             const state = resolveRingParticleMaterialState(colors[group], this.settings.intensity);
             // Always eligible for the existing Classic / FrameGraph Luminous mask.
@@ -258,13 +284,14 @@ export class RingParticleController {
     }
 
     private rebuildBuffers(): void {
-        const counts: [number, number] = [0, 0];
+        const counts: [number, number, number] = [0, 0, 0];
         for (let index = 0; index < this.settings.count; index++) {
-            counts[hashRingParticle(index, 11) < 0.68 ? 0 : 1] += 1;
+            counts[resolveRingParticleColorGroup(index)] += 1;
         }
         this.matrixBuffers[0] = new Float32Array(counts[0] * 16);
         this.matrixBuffers[1] = new Float32Array(counts[1] * 16);
-        for (let group = 0; group < 2; group++) {
+        this.matrixBuffers[2] = new Float32Array(counts[2] * 16);
+        for (let group = 0; group < 3; group++) {
             this.meshes[group].thinInstanceSetBuffer("matrix", this.matrixBuffers[group], 16, false);
             this.meshes[group].thinInstanceCount = counts[group];
         }
@@ -284,7 +311,7 @@ export class RingParticleController {
         this.lastFrame = frame;
         this.lastCameraRotation.copyFrom(rotation);
 
-        const offsets: [number, number] = [0, 0];
+        const offsets: [number, number, number] = [0, 0, 0];
         const scale = new Vector3();
         const translation = new Vector3();
         const matrix = new Matrix();
@@ -296,7 +323,7 @@ export class RingParticleController {
             matrix.copyToArray(this.matrixBuffers[sample.colorGroup], offsets[sample.colorGroup] * 16);
             offsets[sample.colorGroup] += 1;
         }
-        for (let group = 0; group < 2; group++) {
+        for (let group = 0; group < 3; group++) {
             this.meshes[group].thinInstanceBufferUpdated("matrix");
         }
     }

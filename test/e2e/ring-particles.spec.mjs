@@ -20,14 +20,19 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
     await page.locator('[data-effect-add-post="ringParticles"]').click();
     const particleRow = page.locator('[data-effect-stack-row="ringParticles"]');
     await expect(particleRow).toBeVisible();
+    await expect(particleRow.locator(".effect-layer-name")).toHaveText("パーティクル");
     await expect(particleRow.locator('[data-effect-stack-control="ringParticleCount"]')).toHaveValue("50");
     await expect(particleRow.locator('[data-effect-stack-value="ringParticleCount"]')).toHaveText("50");
     await expect(particleRow.locator('[data-effect-stack-value="ringParticleDensity"]')).toHaveText("50");
     await expect(particleRow.locator('[data-effect-stack-value="ringParticleSize"]')).toHaveText("30");
     await expect(particleRow.locator('[data-effect-stack-value="ringParticleSpeed"]')).toHaveText("10");
     await expect(particleRow.locator('[data-effect-stack-value="ringParticleIntensity"]')).toHaveText("100");
-    await expect(particleRow.locator('[data-effect-stack-control="ringParticleColorA"]')).toHaveValue("#00cccc");
+    await expect(particleRow.locator('[data-effect-stack-control="ringParticleColorA"]')).toHaveValue("#ffffff");
     await expect(particleRow.locator('[data-effect-stack-control="ringParticleColorB"]')).toHaveValue("#ffffff");
+    await expect(particleRow.locator('[data-effect-stack-control="ringParticleColorC"]')).toHaveValue("#ffffff");
+    await particleRow.locator('[data-effect-stack-control="ringParticleColorA"]').fill("#ff0000");
+    await particleRow.locator('[data-effect-stack-control="ringParticleColorB"]').fill("#00ff00");
+    await particleRow.locator('[data-effect-stack-control="ringParticleColorC"]').fill("#0000ff");
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="luminous"]').click();
     await page.waitForFunction(() => {
@@ -43,6 +48,9 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
       size: 0.335,
       speed: 0.05,
       intensity: 4,
+      colorA: { r: 1, g: 0, b: 0 },
+      colorB: { r: 0, g: 1, b: 0 },
+      colorC: { r: 0, g: 0, b: 1 },
     });
 
     const enabledFrame = await page.evaluate(() => window.mmdModokiE2e.captureExportSurfaceProbe(160, 90));

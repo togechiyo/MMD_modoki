@@ -85,6 +85,25 @@ function createHost() {
         mirroringFloorSize: 100,
         mirroringFloorHeight: 0,
         mirroringFloorResolution: 1024,
+        getWaterSurfaceSettings: () => ({
+            enabled: false,
+            size: 120,
+            height: 0,
+            resolution: 512,
+            windForce: 6,
+            windDirectionDegrees: 25,
+            waveHeight: 0.12,
+            bumpHeight: 0.35,
+            waveLength: 0.2,
+            waveSpeed: 0.8,
+            waveCount: 20,
+            bumpTextureScale: 8,
+            waterColor: { r: 0.03, g: 0.28, b: 0.36 },
+            colorBlendFactor: 0.28,
+            waterColor2: { r: 0.08, g: 0.32, b: 0.44 },
+            colorBlendFactor2: 0.2,
+            fresnelSeparate: true,
+        }),
         getBackgroundImagePath: (): null => null,
         getBackgroundVideoPath: (): null => null,
         physicsEnabled: true,
@@ -361,7 +380,7 @@ describe("exportProjectState", () => {
         expect(project.effects.frameGraphPostStack).toEqual([{ id: "ssgi", enabled: false }]);
     });
 
-    it("writes ocean tuning independently from the stack enabled state", () => {
+    it("writes the shared WaterMaterial height and underwater tuning independently from the stack enabled state", () => {
         const project = exportProjectState({
             ...createHost(),
             postEffectOceanWaterHeight: 12.5,
@@ -369,6 +388,10 @@ describe("exportProjectState", () => {
             postEffectOceanClarity: 0.92,
             postEffectOceanCausticsStrength: 1.65,
             postEffectOceanVolumeStrength: 1.25,
+            getWaterSurfaceSettings: () => ({
+                ...createHost().getWaterSurfaceSettings(),
+                height: 12.5,
+            }),
             getFrameGraphPostEffectStackEntries: () => [{ id: "ocean", enabled: false }],
         });
 
@@ -377,7 +400,7 @@ describe("exportProjectState", () => {
         expect(project.effects.oceanClarity).toBe(0.92);
         expect(project.effects.oceanCausticsStrength).toBe(1.65);
         expect(project.effects.oceanVolumeStrength).toBe(1.25);
-        expect(project.effects.frameGraphPostStack).toEqual([]);
+        expect(project.effects.frameGraphPostStack).toEqual([{ id: "ocean", enabled: false }]);
     });
 
     it("writes aerial perspective tuning and enabled stack state", () => {
@@ -452,6 +475,28 @@ describe("exportProjectState", () => {
         expect(project.viewport.mirroringFloorSize).toBe(60);
         expect(project.viewport.mirroringFloorHeight).toBe(0.02);
         expect(project.viewport.mirroringFloorResolution).toBe(1024);
+    });
+
+    it("writes Babylon water surface settings", () => {
+        const host = {
+            ...createHost(),
+            getWaterSurfaceSettings: () => ({
+                ...createHost().getWaterSurfaceSettings(),
+                enabled: true,
+                height: 1.25,
+                waveHeight: 0.3,
+                windDirectionDegrees: 135,
+            }),
+        };
+
+        const project = exportProjectState(host);
+
+        expect(project.viewport.waterSurface).toMatchObject({
+            enabled: true,
+            height: 1.25,
+            waveHeight: 0.3,
+            windDirectionDegrees: 135,
+        });
     });
 
     it("writes skydome background style", () => {

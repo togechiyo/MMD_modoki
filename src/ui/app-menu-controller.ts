@@ -9,6 +9,7 @@ import { HdriSettingsDialogController } from "./hdri-settings-dialog-controller"
 import { IblShadowSettingsDialogController } from "./ibl-shadow-settings-dialog-controller";
 import { LightingShadowSettingsDialogController } from "./lighting-shadow-settings-dialog-controller";
 import { MirrorFloorSettingsDialogController } from "./mirror-floor-settings-dialog-controller";
+import { WaterSurfaceSettingsDialogController } from "./water-surface-settings-dialog-controller";
 import { PhysicsSettingsDialogController } from "./physics-settings-dialog-controller";
 import { RenderOrderSettingsDialogController } from "./render-order-settings-dialog-controller";
 import { PngExportDialogController } from "./png-export-dialog-controller";
@@ -311,6 +312,8 @@ export class AppMenuController {
                 return { checked: this.mmdManager.characterContactShadowEnabled, disabled: false };
             case "view.toggleMirrorFloor":
                 return { checked: this.mmdManager.mirroringFloorEnabled, disabled: false };
+            case "view.toggleWaterSurface":
+                return { checked: this.mmdManager.waterSurfaceEnabled, disabled: false };
             case "view.toggleGi":
                 return { checked: this.mmdManager.isGlobalIlluminationEnabled(), disabled: this.mmdManager.isGlobalIlluminationPending() };
             case "view.toggleFxPanel":
@@ -537,6 +540,16 @@ export class AppMenuController {
                 return;
             case "view.mirrorFloorSettings":
                 this.openMirrorFloorSettingsDialog(invoker ?? null);
+                return;
+            case "view.toggleWaterSurface":
+                this.dispatchAction({
+                    type: "viewport.setWaterSurfaceSettings",
+                    source: "menu",
+                    settings: { enabled: !this.mmdManager.waterSurfaceEnabled },
+                });
+                return;
+            case "view.waterSurfaceSettings":
+                this.openWaterSurfaceSettingsDialog(invoker ?? null);
                 return;
             case "view.toggleGi":
                 this.dispatchAction({ type: "runtime.toggleGlobalIllumination", source: "menu" });
@@ -879,6 +892,21 @@ export class AppMenuController {
                 close: () => {
                     this.popupDialogController.close();
                 },
+            }),
+        });
+    }
+
+    private openWaterSurfaceSettingsDialog(invoker: HTMLElement | null): void {
+        this.popupDialogController.open({
+            id: "water-surface-settings",
+            surface: "modal",
+            title: t("dialog.waterSurface.title"),
+            size: "md",
+            restoreFocusTo: invoker,
+            content: new WaterSurfaceSettingsDialogController({
+                mmdManager: this.mmdManager,
+                dispatchAction: (action) => this.dispatchAction(action),
+                refreshUi: () => this.refreshCameraUi(),
             }),
         });
     }

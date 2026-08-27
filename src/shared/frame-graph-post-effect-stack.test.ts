@@ -64,19 +64,21 @@ describe("frame graph post effect stack helpers", () => {
             { id: "lut" },
         ])).toEqual([
             { id: "bloom", enabled: true },
+            { id: "ocean", enabled: true },
             { id: "lut", enabled: false },
         ]);
     });
 
-    it("retires ocean from saved and runtime stack ids", () => {
+    it("keeps ocean as a hybrid surface and underwater stack entry", () => {
         expect(normalizeFrameGraphPostEffectIds(["ssao", "ocean", "bloom"])).toEqual([
             "ssao",
+            "ocean",
             "bloom",
         ]);
-        expect(addFrameGraphPostEffectId(["ssao"], "ocean")).toEqual(["ssao"]);
+        expect(addFrameGraphPostEffectId(["ssao"], "ocean")).toEqual(["ssao", "ocean"]);
         expect(isFrameGraphPostEffectActiveInSettings(createActivationSettings({
             oceanEnabled: true,
-        }), "ocean")).toBe(false);
+        }), "ocean")).toBe(true);
     });
 
     it("inserts new ids by canonical order", () => {
@@ -135,7 +137,7 @@ describe("frame graph post effect stack helpers", () => {
         expect(isFrameGraphPostEffectActiveInSettings(settings, "luminous")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssao")).toBe(false);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "ssgi")).toBe(true);
-        expect(isFrameGraphPostEffectActiveInSettings(settings, "ocean")).toBe(false);
+        expect(isFrameGraphPostEffectActiveInSettings(settings, "ocean")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "aerialPerspective")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "directionalLightShafts")).toBe(true);
         expect(isFrameGraphPostEffectActiveInSettings(settings, "motionBlur")).toBe(true);
@@ -166,7 +168,7 @@ describe("frame graph post effect stack helpers", () => {
             lutEnabled: true,
             gammaEnabled: true,
             motionBlurEnabled: true,
-        }))).toEqual(["ssr", "ssgi", "offsetShadow", "offsetHighlight", "bloom", "lut", "gamma", "motionBlur", "grain"]);
+        }))).toEqual(["ssr", "ssgi", "ocean", "offsetShadow", "offsetHighlight", "bloom", "lut", "gamma", "motionBlur", "grain"]);
     });
 });
 

@@ -3,7 +3,7 @@
 This project includes third-party software.
 Each component remains licensed by its original author under its own license.
 
-Last updated: 2026-08-02
+Last updated: 2026-08-27
 
 ## Runtime dependencies
 
@@ -12,6 +12,7 @@ Last updated: 2026-08-02
 | `@babylonjs/core` | `9.2.0` | Apache-2.0 | https://github.com/BabylonJS/Babylon.js |
 | `@babylonjs/gui` | `9.2.0` | Apache-2.0 | https://github.com/BabylonJS/Babylon.js |
 | `@babylonjs/loaders` | `9.2.0` | Apache-2.0 | https://github.com/BabylonJS/Babylon.js |
+| `@babylonjs/materials` | `9.2.0` | Apache-2.0 | https://github.com/BabylonJS/Babylon.js |
 | `babylon-mmd` | `1.2.0` | MIT | https://github.com/noname0310/babylon-mmd |
 | `electron-log` | `5.4.3` | MIT | https://github.com/megahertz/electron-log |
 | `electron-squirrel-startup` | `1.0.1` | Apache-2.0 | https://github.com/mongodb-js/electron-squirrel-startup |
@@ -51,6 +52,7 @@ Last updated: 2026-08-02
 | Asset | Modification | License | Credit | Source |
 | --- | --- | --- | --- | --- |
 | `YamagataField_20181231_1137` TrueHDRI | Linear box downsample from 16384×8192 Radiance HDR to 2048×1024 | CC0-1.0 | ©Bandai Namco Studios Inc. | https://www.bandainamcostudios.com/projects/truehdri/library/16878 |
+| `waterbump.png` | Unmodified local copy | CC-BY-4.0 | BabylonJS | https://github.com/BabylonJS/Assets/blob/master/textures/waterbump.png |
 
 ## Notes
 

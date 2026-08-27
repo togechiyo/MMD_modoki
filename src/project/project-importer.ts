@@ -40,6 +40,10 @@ import {
     type BackgroundDisplayMode,
 } from "../shared/background-display-mode";
 import { normalizeModelInstanceId } from "../shared/model-instance-id";
+import {
+    normalizeWaterSurfaceSettings,
+    type WaterSurfaceSettings,
+} from "../scene/water-surface-settings";
 
 type ProjectImportRuntimeModel = {
     createRuntimeAnimation(animation: object): unknown;
@@ -130,6 +134,7 @@ type ProjectImportHost = {
     mirroringFloorHeight: number;
     mirroringFloorResolution: number;
     mirroringFloorEnabled: boolean;
+    setWaterSurfaceSettings: (settings: WaterSurfaceSettings) => WaterSurfaceSettings;
     setBackgroundVideoFromPath(path: string): Promise<void>;
     setBackgroundImageFromPath(path: string): Promise<void>;
     clearBackgroundMedia(): void;
@@ -906,6 +911,17 @@ export async function importProjectState(
     host.mirroringFloorEnabled = typeof data.viewport.mirroringFloorEnabled === "boolean"
         ? data.viewport.mirroringFloorEnabled
         : false;
+    const legacyOceanEnabled = Array.isArray(data.effects.frameGraphPostStack)
+        && data.effects.frameGraphPostStack.some((entry) => entry?.id === "ocean" && entry.enabled);
+    const waterSurfaceSettings = normalizeWaterSurfaceSettings(data.viewport.waterSurface);
+    if (data.viewport.waterSurface === undefined && legacyOceanEnabled) {
+        waterSurfaceSettings.enabled = true;
+        waterSurfaceSettings.height = Math.max(
+            -20,
+            Math.min(20, readFiniteNumber(data.effects.oceanWaterHeight, 8)),
+        );
+    }
+    host.setWaterSurfaceSettings(waterSurfaceSettings);
     if (typeof data.viewport.backgroundVideoPath === "string" && data.viewport.backgroundVideoPath.trim().length > 0) {
         try {
             await host.setBackgroundVideoFromPath(data.viewport.backgroundVideoPath);
@@ -1320,10 +1336,8 @@ export async function importProjectState(
         readFiniteNumber(data.effects.ssgiSampleRadius, 64),
     ));
     host.postEffectSsgiBlendMode = "softLight";
-    host.postEffectOceanWaterHeight = Math.max(-20, Math.min(
-        40,
-        readFiniteNumber(data.effects.oceanWaterHeight, 8),
-    ));
+    // The Babylon surface and the legacy underwater pass must use one waterline.
+    host.postEffectOceanWaterHeight = waterSurfaceSettings.height;
     host.postEffectOceanWaveStrength = Math.max(0, Math.min(
         2,
         readFiniteNumber(data.effects.oceanWaveStrength, 0.7),
@@ -1436,10 +1450,21 @@ export async function importProjectState(
             b: readFiniteNumber(ringParticles?.colorB?.b, 1),
         },
     });
-    if (Array.isArray(data.effects.frameGraphPostStack) || ringParticles?.enabled) {
+    if (Array.isArray(data.effects.frameGraphPostStack) || ringParticles?.enabled || waterSurfaceSettings.enabled) {
         const stackEntries = normalizeFrameGraphPostEffectStack(data.effects.frameGraphPostStack ?? []);
         if (ringParticles?.enabled && !stackEntries.some((entry) => entry.id === "ringParticles")) {
             stackEntries.push({ id: "ringParticles", enabled: true });
+        }
+        if (waterSurfaceSettings.enabled && !stackEntries.some((entry) => entry.id === "ocean")) {
+            const enabledById = new Map(stackEntries.map((entry) => [entry.id, entry.enabled]));
+            const migratedIds = addFrameGraphPostEffectId(
+                stackEntries.map((entry) => entry.id),
+                "ocean",
+            );
+            stackEntries.splice(0, stackEntries.length, ...migratedIds.map((id) => ({
+                id,
+                enabled: id === "ocean" ? true : (enabledById.get(id) ?? false),
+            })));
         }
         if (
             gammaEncodingVersion === 2

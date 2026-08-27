@@ -185,6 +185,13 @@ import {
     RingParticleController,
     type RingParticleSettings,
 } from "./scene/ring-particle-controller";
+import { WaterSurfaceController } from "./scene/water-surface-controller";
+import {
+    cloneWaterSurfaceSettings,
+    DEFAULT_WATER_SURFACE_SETTINGS,
+    normalizeWaterSurfaceSettings,
+    type WaterSurfaceSettings,
+} from "./scene/water-surface-settings";
 import {
     getAntialiasEnabled as getAntialiasEnabledImpl,
     getDofAutoFocusEnabled as getDofAutoFocusEnabledImpl,
@@ -1761,6 +1768,8 @@ ${beforeFogAppendBlock}
     private mirroringFloorSizeValue = 100;
     private mirroringFloorHeightValue = 0;
     private mirroringFloorResolutionValue = 1024;
+    private waterSurfaceController: WaterSurfaceController | null = null;
+    private waterSurfaceSettingsValue = cloneWaterSurfaceSettings(DEFAULT_WATER_SURFACE_SETTINGS);
     private skydome: Mesh | null = null;
     private skydomeMaterial: BackgroundMaterial | null = null;
     private skydomeGradientTexture: DynamicTexture | null = null;
@@ -5313,6 +5322,49 @@ ${beforeFogAppendBlock}
         this.mirroringFloorTexture = null;
     }
 
+    private collectWaterSurfaceRenderMeshes(): Mesh[] {
+        const meshes: Mesh[] = [];
+        const seen = new Set<Mesh>();
+        const waterMesh = this.waterSurfaceController?.mesh ?? null;
+        const addMesh = (mesh: unknown): void => {
+            if (!(mesh instanceof Mesh)) return;
+            if (seen.has(mesh)) return;
+            if (mesh === this.mirroringFloor || mesh === waterMesh) return;
+            if (mesh.name.startsWith("characterContactShadow:")) return;
+            if (mesh.isDisposed()) return;
+            if (!mesh.isEnabled() || !mesh.isVisible) return;
+            if ((mesh.getTotalVertices?.() ?? 0) <= 0) return;
+            seen.add(mesh);
+            meshes.push(mesh);
+        };
+
+        addMesh(this.ground);
+        addMesh(this.skydome);
+        for (const entry of this.sceneModels) {
+            if (!this.getModelVisibility(entry.mesh)) continue;
+            addMesh(entry.mesh);
+            for (const mesh of entry.mesh.getChildMeshes(false)) addMesh(mesh);
+        }
+        const accessoryMeshes = (this as unknown as { getAccessoryMeshes?: () => AbstractMesh[] }).getAccessoryMeshes?.() ?? [];
+        for (const mesh of accessoryMeshes) addMesh(mesh);
+
+        return meshes;
+    }
+
+    private syncWaterSurfaceState(): void {
+        if (!this.waterSurfaceController && !this.waterSurfaceSettingsValue.enabled) return;
+        if (!this.waterSurfaceController) {
+            this.waterSurfaceController = new WaterSurfaceController(this.scene, this.waterSurfaceSettingsValue);
+        }
+        this.waterSurfaceController.setSettings(this.waterSurfaceSettingsValue);
+        this.updateWaterSurfaceRenderList();
+    }
+
+    private updateWaterSurfaceRenderList(): void {
+        if (!this.waterSurfaceSettingsValue.enabled) return;
+        this.waterSurfaceController?.setRenderList(this.collectWaterSurfaceRenderMeshes());
+    }
+
     public setBoneVisualizerSelectedBone(boneName: string | null): void {
         this.boneVisualizerSelectedBoneName = boneName && boneName.length > 0 ? boneName : null;
         this.boneVisualizerSelectedBoneNames = this.boneVisualizerSelectedBoneName
@@ -6130,6 +6182,39 @@ ${beforeFogAppendBlock}
         if (this.mirroringFloorTexture) {
             this.disposeMirroringFloorResources();
             this.syncMirroringFloorState();
+        }
+    }
+
+    public get waterSurfaceEnabled(): boolean {
+        return this.waterSurfaceSettingsValue.enabled;
+    }
+
+    public set waterSurfaceEnabled(enabled: boolean) {
+        this.setWaterSurfaceSettings({ enabled });
+    }
+
+    public getWaterSurfaceSettings(): WaterSurfaceSettings {
+        return cloneWaterSurfaceSettings(this.waterSurfaceSettingsValue);
+    }
+
+    public setWaterSurfaceSettings(value: unknown): WaterSurfaceSettings {
+        this.waterSurfaceSettingsValue = normalizeWaterSurfaceSettings(value, this.waterSurfaceSettingsValue);
+        this.postEffectOceanWaterHeightValue = this.waterSurfaceSettingsValue.height;
+        this.syncWaterSurfaceState();
+        this.syncFrameGraphOceanEntryFromWaterSurface();
+        return this.getWaterSurfaceSettings();
+    }
+
+    private syncFrameGraphOceanEntryFromWaterSurface(): void {
+        const stackIds = this.getFrameGraphPostEffectStackIds();
+        if (this.waterSurfaceSettingsValue.enabled) {
+            if (!stackIds.includes("ocean")) {
+                this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(stackIds, "ocean"));
+            } else if (!this.isFrameGraphPostEffectStackEnabled("ocean")) {
+                this.setFrameGraphPostEffectStackEntryEnabled("ocean", true);
+            }
+        } else if (stackIds.includes("ocean") && this.isFrameGraphPostEffectStackEnabled("ocean")) {
+            this.setFrameGraphPostEffectStackEntryEnabled("ocean", false);
         }
     }
 
@@ -7446,6 +7531,7 @@ ${beforeFogAppendBlock}
                 this.updateRigidBodyVisualizer();
                 this.updateCharacterContactShadows();
                 this.updateMirroringFloorRenderList();
+                this.updateWaterSurfaceRenderList();
                 this.updateEditorDofFocusAndFStop();
                 this.maybeLogRenderStabilityDiagnostics();
                 return;
@@ -7472,6 +7558,7 @@ ${beforeFogAppendBlock}
             this.updateCharacterContactShadows();
             this.recordFramePerformanceSection("characterContactShadow", performance.now() - sectionStartMs);
             this.updateMirroringFloorRenderList();
+            this.updateWaterSurfaceRenderList();
             sectionStartMs = performance.now();
             this.updateEditorDofFocusAndFStop();
             this.recordFramePerformanceSection("editorDof", performance.now() - sectionStartMs);
@@ -8074,6 +8161,7 @@ ${beforeFogAppendBlock}
             boneGizmoActive: this.boneGizmoManager !== null,
             characterContactShadowEnabled: this.characterContactShadowEnabledValue,
             mirroringFloorEnabled: this.mirroringFloorEnabledValue,
+            waterSurfaceEnabled: this.waterSurfaceSettingsValue.enabled,
             shadowEnabled: this.shadowEnabled,
             antialiasEnabled: this.antialiasEnabledValue,
         };
@@ -8110,6 +8198,16 @@ ${beforeFogAppendBlock}
                 ssaoDepth: this.createTextureSnapshot("ssaoDepth", ssaoDepthMap, "depth"),
                 shadowMap: this.createTextureSnapshot("shadowMap", shadowMap, "shadow"),
                 mirroringFloor: this.createTextureSnapshot("mirroringFloor", this.mirroringFloorTexture, "reflection"),
+                waterReflection: this.createTextureSnapshot(
+                    "waterReflection",
+                    this.waterSurfaceController?.getRenderTargets().reflection ?? null,
+                    "reflection",
+                ),
+                waterRefraction: this.createTextureSnapshot(
+                    "waterRefraction",
+                    this.waterSurfaceController?.getRenderTargets().refraction ?? null,
+                    "refraction",
+                ),
             },
         };
     }
@@ -8154,6 +8252,13 @@ ${beforeFogAppendBlock}
         }
         if (this.mirroringFloorTexture) {
             details.push(this.createRenderTargetDetail("mirroringFloor", this.mirroringFloorTexture, "reflection"));
+        }
+        const waterRenderTargets = this.waterSurfaceController?.getRenderTargets();
+        if (waterRenderTargets?.reflection) {
+            details.push(this.createRenderTargetDetail("waterReflection", waterRenderTargets.reflection, "reflection"));
+        }
+        if (waterRenderTargets?.refraction) {
+            details.push(this.createRenderTargetDetail("waterRefraction", waterRenderTargets.refraction, "refraction"));
         }
 
         return details;
@@ -8291,6 +8396,9 @@ ${beforeFogAppendBlock}
             appMeshes: [
                 this.ground ? this.createRenderStabilityMeshSample(this.ground, activeMeshSet, cameraForward) : null,
                 this.mirroringFloor ? this.createRenderStabilityMeshSample(this.mirroringFloor, activeMeshSet, cameraForward) : null,
+                this.waterSurfaceController?.mesh
+                    ? this.createRenderStabilityMeshSample(this.waterSurfaceController.mesh, activeMeshSet, cameraForward)
+                    : null,
                 this.skydome ? this.createRenderStabilityMeshSample(this.skydome, activeMeshSet, cameraForward) : null,
             ].filter(Boolean),
             modelMeshes: modelMeshes
@@ -10432,7 +10540,7 @@ ${beforeFogAppendBlock}
             ssgiSampleRadius: this.postEffectSsgiSampleRadiusValue,
             ssgiBlendMode: "softLight",
             oceanEnabled: this.isFrameGraphPostEffectActive("ocean"),
-            oceanWaterHeight: this.postEffectOceanWaterHeightValue,
+            oceanWaterHeight: this.waterSurfaceSettingsValue.height,
             oceanWaveStrength: this.postEffectOceanWaveStrengthValue,
             oceanClarity: this.postEffectOceanClarityValue,
             oceanCausticsStrength: this.postEffectOceanCausticsStrengthValue,
@@ -10976,6 +11084,7 @@ ${beforeFogAppendBlock}
         }
         this.frameGraphPostEffectStackIdsValue = normalized;
         this.syncRingParticleEnabledFromFrameGraphStack();
+        this.syncWaterSurfaceEnabledFromFrameGraphStack();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
 
@@ -11004,6 +11113,7 @@ ${beforeFogAppendBlock}
         this.frameGraphPostEffectStackIdsValue = normalized;
         this.frameGraphPostEffectStackEnabledValue = enabledById;
         this.syncRingParticleEnabledFromFrameGraphStack();
+        this.syncWaterSurfaceEnabledFromFrameGraphStack();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
 
@@ -11037,6 +11147,7 @@ ${beforeFogAppendBlock}
         }
         this.frameGraphPostEffectStackEnabledValue.set(id, next);
         this.syncRingParticleEnabledFromFrameGraphStack();
+        this.syncWaterSurfaceEnabledFromFrameGraphStack();
         this.refreshFrameGraphPostEffectsBackendForStackStateChange();
     }
 
@@ -11111,6 +11222,14 @@ ${beforeFogAppendBlock}
             ...this.ringParticleSettingsValue,
             enabled,
         });
+    }
+
+    private syncWaterSurfaceEnabledFromFrameGraphStack(): void {
+        const enabled = this.frameGraphPostEffectStackIdsValue.includes("ocean")
+            && (this.frameGraphPostEffectStackEnabledValue.get("ocean") ?? true);
+        if (this.waterSurfaceSettingsValue.enabled === enabled) return;
+        this.waterSurfaceSettingsValue = normalizeWaterSurfaceSettings({ enabled }, this.waterSurfaceSettingsValue);
+        this.syncWaterSurfaceState();
     }
 
     private areFrameGraphPostEffectIdsEqual(
@@ -15229,6 +15348,8 @@ ${beforeFogAppendBlock}
             this.skydome = null;
         }
         this.disposeMirroringFloorResources();
+        this.waterSurfaceController?.dispose();
+        this.waterSurfaceController = null;
         this.clearBackgroundMedia();
         this.checkerBackgroundLayer?.dispose();
         this.checkerBackgroundLayer = null;

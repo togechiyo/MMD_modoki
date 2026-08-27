@@ -586,6 +586,7 @@ export interface ProjectViewportState {
     mirroringFloorSize?: number;
     mirroringFloorHeight?: number;
     mirroringFloorResolution?: number;
+    waterSurface?: import("./scene/water-surface-settings").WaterSurfaceSettings;
     backgroundImagePath?: string | null;
     backgroundVideoPath?: string | null;
 }

@@ -29,6 +29,7 @@
 | adopted | [VMD retargetは現在のprojectから独立したpopup toolにする](./decisions/vmd-retarget-is-an-isolated-popup-tool.md) | PMX間のVMD変換、rotation・体格差補正、preview導線を変更する |
 | adopted | [MMDプリセットはfallbackの役割を保ち影側色を共通化する](./decisions/mmd-standard-respects-missing-toon-and-light-shadow-forces-fallback.md) | Toonなし材質、fallback Toon、共通影色、shader presetの役割を変更する |
 | adopted | [次のSSSはプロジェクト所有のWGSL経路で完全自作する](./decisions/future-sss-uses-project-owned-wgsl-pipeline.md) | MMD材質のSSSを再検討・試作する |
+| adopted | [海はWaterMaterial水面と旧水中パスを使い白い直接光ハイライトを足さない](./decisions/ocean-uses-watermaterial-surface-without-direct-specular.md) | 海の水面、水中合成、specular、通常UI導線を変更する |
 
 ## 却下
 
@@ -37,7 +38,6 @@
 | rejected | [アセット名に依存する描画補正は入れない](./decisions/reject-asset-name-specific-rendering-fixes.md) | 特定モデルだけの描画崩れへ対応する |
 | rejected | [v0.2.3 で全エフェクトをキー化しない](./decisions/reject-universal-effect-keyframing-in-v023.md) | エフェクトのキー登録範囲を決める |
 | rejected | [PBR を通常 UI に出さない](./decisions/keep-pbr-out-of-normal-ui.md) | PBR 実験の公開導線を変更する |
-| rejected | [品質が戻るまで海面エフェクトを通常 UI に出さない](./decisions/reject-ocean-effect-from-normal-ui-until-quality-recovers.md) | 海面エフェクトを再利用・再公開する |
 | rejected | [独自 VP8 と無圧縮 AVI は当面採用しない](./decisions/reject-custom-vp8-and-uncompressed-avi-for-now.md) | 動画出力方式を追加する |
 | rejected | [SSS SkinとSSS Standardを通常UIから外す](./decisions/reject-sss-shader-presets-from-normal-ui.md) | MMD材質のSSSプリセットを再公開・再設計する |
 
@@ -47,5 +47,6 @@
 | --- | --- | --- |
 | deferred | [汎用オブジェクト形式の拡張は v0.2.3 より後へ送る](./decisions/defer-generic-object-format-expansion-beyond-v023.md) | OBJ、PLY、glTF 等の対応を提案する |
 | deferred | [IBL Shadows は保留する](./decisions/defer-ibl-shadows.md) | IBL Shadows の調査・再実装を検討する |
+| deferred | [海エフェクトは品質改善まで通常UIから隠す](./decisions/defer-ocean-effect-ui-until-quality-improves.md) | 海エフェクト、水面設定、FrameGraph追加候補、Release公開範囲を変更する |
 | deferred | [VMDU は VMD 出力要件が固まるまで保留する](./decisions/defer-vmdu-until-vmd-export-proves-requirements.md) | VMDU や VMD 差分形式を検討する |
 | deferred | [自前の高度VMD retarget補正は構想に留める](./decisions/defer-custom-advanced-vmd-retarget-corrections.md) | 肩・腕basis、捩り分配、足接地bakeを提案する |

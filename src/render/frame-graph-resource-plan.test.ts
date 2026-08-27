@@ -144,14 +144,14 @@ describe("buildFrameGraphResourcePlan", () => {
         });
     });
 
-    it("does not allocate resources for the retired ocean pass", () => {
+    it("allocates geometry resources for the hybrid ocean media pass", () => {
         const plan = buildFrameGraphResourcePlan(createSettings({
             oceanEnabled: true,
         }), ["ocean"]);
 
-        expect(plan.activeEffects).toEqual([]);
-        expect(plan.requirementKeys).toEqual([]);
-        expect(plan.needsGeometryRenderer).toBe(false);
+        expect(plan.activeEffects).toEqual(["ocean"]);
+        expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth", "viewNormal"]);
+        expect(plan.needsGeometryRenderer).toBe(true);
     });
 
     it("does not request SSGI resources when the stack entry is disabled", () => {

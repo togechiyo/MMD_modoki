@@ -91,6 +91,8 @@
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="view.contactShadowSettings"><span data-i18n="menu.view.contactShadowSettings">足下影詳細...</span></button>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.toggleMirrorFloor"><span data-i18n="menu.view.toggleMirrorFloor">Mirror床</span></button>
           <button class="app-menu-item" type="button" role="menuitem" data-menu-command="view.mirrorFloorSettings"><span data-i18n="menu.view.mirrorFloorSettings">Mirror床設定...</span></button>
+          <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.toggleWaterSurface" hidden><span data-i18n="menu.view.toggleWaterSurface">水面</span></button>
+          <button class="app-menu-item" type="button" role="menuitem" data-menu-command="view.waterSurfaceSettings" hidden><span data-i18n="menu.view.waterSurfaceSettings">水面設定...</span></button>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.toggleGi" hidden><span data-i18n="menu.view.toggleGi">グローバルイルミネーション</span></button>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.toggleFxPanel" hidden><span data-i18n="menu.view.toggleFxPanel">エフェクト欄</span></button>
           <button class="app-menu-item app-menu-item--check" type="button" role="menuitemcheckbox" aria-checked="false" data-menu-command="view.toggleViewportPhysicsBones"><span data-i18n="menu.view.toggleViewportPhysicsBones">ビューポートに物理ボーンを表示</span></button>
@@ -641,6 +643,7 @@
               <div class="effect-add-list">
                 <button type="button" role="menuitem" data-effect-add-post="ssao" data-i18n="effect.frameGraphPost.effects.ssao">SSAO</button>
                 <button type="button" role="menuitem" data-effect-add-post="ssgi" data-i18n="effect.frameGraphPost.effects.ssgi">SSGI</button>
+                <button type="button" role="menuitem" data-effect-add-post="ocean" data-i18n="effect.frameGraphPost.effects.ocean" hidden>Ocean (WaterMaterial)</button>
                 <button type="button" role="menuitem" data-effect-add-post="dof" data-i18n="effect.frameGraphPost.effects.dof">DoF</button>
                 <button type="button" role="menuitem" data-effect-add-post="luminous" data-i18n="effect.frameGraphPost.effects.luminous">Luminous</button>
                 <button type="button" role="menuitem" data-effect-add-post="bloom" data-i18n="effect.frameGraphPost.effects.bloom">Bloom</button>

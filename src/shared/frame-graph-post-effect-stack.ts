@@ -63,9 +63,7 @@ export type FrameGraphPostEffectActivationSettings = {
 };
 
 const FRAME_GRAPH_POST_EFFECT_ID_SET = new Set<string>(FRAME_GRAPH_POST_EFFECT_IDS);
-const RETIRED_FRAME_GRAPH_POST_EFFECT_ID_SET = new Set<FrameGraphPostEffectId>([
-    "ocean",
-]);
+const RETIRED_FRAME_GRAPH_POST_EFFECT_ID_SET = new Set<FrameGraphPostEffectId>();
 
 export function isRetiredFrameGraphPostEffectId(id: FrameGraphPostEffectId): boolean {
     return RETIRED_FRAME_GRAPH_POST_EFFECT_ID_SET.has(id);
@@ -146,6 +144,9 @@ export function isFrameGraphPostEffectActiveInSettings(
         case "ssao":
             return settings.ssaoEnabled && settings.ssaoStrength > 0.00001;
         case "ocean":
+            // The visible surface is a scene-space Babylon WaterMaterial. The
+            // FrameGraph entry still owns the legacy underwater absorption and
+            // caustics passes.
             return settings.oceanEnabled;
         case "aerialPerspective":
             return settings.aerialPerspectiveEnabled;

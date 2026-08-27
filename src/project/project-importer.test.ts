@@ -96,6 +96,7 @@ function createHost() {
         setBackgroundBlack: vi.fn(),
         setBackgroundDisplayMode: vi.fn((mode) => mode),
         setSkydomeBackgroundStyle: vi.fn(),
+        setWaterSurfaceSettings: vi.fn((settings) => settings),
         clearBackgroundMedia: vi.fn(),
         setBackgroundVideoFromPath: vi.fn(),
         setBackgroundImageFromPath: vi.fn(),
@@ -589,12 +590,18 @@ describe("importProjectState", () => {
 
         await importProjectState(host, project);
 
-        expect(host.postEffectOceanWaterHeight).toBe(40);
+        expect(host.postEffectOceanWaterHeight).toBe(20);
         expect(host.postEffectOceanWaveStrength).toBe(2);
         expect(host.postEffectOceanClarity).toBe(4);
         expect(host.postEffectOceanCausticsStrength).toBe(1.6);
         expect(host.postEffectOceanVolumeStrength).toBe(1.4);
-        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([]);
+        expect(host.setWaterSurfaceSettings).toHaveBeenCalledWith(expect.objectContaining({
+            enabled: true,
+            height: 20,
+        }));
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
+            { id: "ocean", enabled: true },
+        ]);
     });
 
     it("restores and clamps aerial perspective tuning", async () => {
@@ -871,6 +878,52 @@ describe("importProjectState", () => {
         expect(host.mirroringFloorSize).toBe(100);
         expect(host.mirroringFloorHeight).toBe(0);
         expect(host.mirroringFloorResolution).toBe(1024);
+    });
+
+    it("restores Babylon water surface settings", async () => {
+        const host = createHost();
+        const project = createProject({
+            viewport: {
+                ...createProject().viewport,
+                waterSurface: {
+                    enabled: true,
+                    size: 160,
+                    height: 2.5,
+                    resolution: 1024,
+                    windForce: 8,
+                    windDirectionDegrees: 140,
+                    waveHeight: 0.22,
+                    bumpHeight: 0.4,
+                    waveLength: 0.32,
+                    waveSpeed: 1.1,
+                    waveCount: 28,
+                    bumpTextureScale: 12,
+                    waterColor: { r: 0.02, g: 0.2, b: 0.3 },
+                    colorBlendFactor: 0.2,
+                    waterColor2: { r: 0.08, g: 0.4, b: 0.5 },
+                    colorBlendFactor2: 0.1,
+                    fresnelSeparate: true,
+                },
+            },
+        });
+
+        await importProjectState(host, project);
+
+        expect(host.setWaterSurfaceSettings).toHaveBeenCalledWith(project.viewport.waterSurface);
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenCalledWith([
+            { id: "ocean", enabled: true },
+        ]);
+    });
+
+    it("disables the water surface for legacy projects", async () => {
+        const host = createHost();
+
+        await importProjectState(host, createProject());
+
+        expect(host.setWaterSurfaceSettings).toHaveBeenCalledWith(expect.objectContaining({
+            enabled: false,
+            resolution: 512,
+        }));
     });
 
     it("migrates a saved FrameGraph gamma value into the new stack entry", async () => {

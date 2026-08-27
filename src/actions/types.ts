@@ -2,6 +2,7 @@ import type { KeyframeTrack, TrackCategory } from "../types";
 import type { BackgroundDisplayMode } from "../shared/background-display-mode";
 import type { UiScalePercentage } from "../shared/ui-scale";
 import type { KeyframeValueCorrection } from "../editor/keyframe-value-correction";
+import type { WaterSurfaceSettings } from "../scene/water-surface-settings";
 
 export type ActionSource =
     | "button"
@@ -77,6 +78,7 @@ export type ViewportAction =
     | { type: "viewport.toggleEnvironmentBackground"; source: ActionSource }
     | { type: "viewport.toggleSkydome"; source: ActionSource }
     | { type: "viewport.togglePhysicsBones"; source: ActionSource }
+    | { type: "viewport.setWaterSurfaceSettings"; source: ActionSource; settings: Partial<WaterSurfaceSettings> }
     | { type: "timeline.togglePhysicsBones"; source: ActionSource };
 
 export type ProjectAction =

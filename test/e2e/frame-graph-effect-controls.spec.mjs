@@ -18,7 +18,8 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
     await page.locator('[data-effect-tab="post"]').click();
     await page.locator("#btn-effect-add-post").click();
 
-    await expect.poll(async () => page.locator("[data-effect-add-post]").evaluateAll((buttons) => (
+    await expect(page.locator('[data-effect-add-post="ocean"]')).toBeHidden();
+    await expect.poll(async () => page.locator("[data-effect-add-post]:not([hidden])").evaluateAll((buttons) => (
       buttons.map((button) => button.getAttribute("data-effect-add-post"))
     ))).toEqual([
       "ssao", "ssgi", "dof",

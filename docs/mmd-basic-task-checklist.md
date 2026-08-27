@@ -500,6 +500,8 @@
 ## 2026-08-11 海エフェクト
 
 - [x] 2026-08-12 見た目の品質が採用基準へ届かなかったため、通常UIと実行stackから海エフェクトを外し、実装を参考資料として保持する
+- [x] 2026-08-27 旧FrameGraph海の水中吸収・コースティクスを復帰し、旧clipmap水面と曲がった筋に見える水中光芒を退役。Babylon `WaterMaterial` 水面を `海 (WaterMaterial)` としてFrameGraph欄・Viewメニュー・project保存と同期する
+- [x] 2026-08-27 品質調整を継続するため、海エフェクトと水面設定を通常UIから隠し、実装・project保存互換・内部E2Eを保持する
 - [x] FrameGraph海MVP（水面交点、RGB別水中吸収、波同期コースティクス）
 - [x] 0～100詳細UI、初期値、project保存復元、stack順接続
 - [x] 豆腐PMXのPlaywright実描画、PNG出力、WebGPU validation warning 0

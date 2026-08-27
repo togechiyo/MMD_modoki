@@ -160,6 +160,20 @@ describe("canExecuteEditorAction", () => {
         expect(canExecuteEditorAction({ type: "playback.pause", source: "button" }, noSelection)).toBe(true);
     });
 
+    it("allows water surface display settings without a model", () => {
+        expect(canExecuteEditorAction({
+            type: "viewport.setWaterSurfaceSettings",
+            source: "menu",
+            settings: { enabled: true, waveHeight: 0.2 },
+        }, {
+            hasSelectedTimelineTrack: false,
+            hasSelectedFrame: false,
+            selectedTrackKeyframeCount: 0,
+            hasEditableInterpolationChannels: false,
+            hasInterpolationClipboard: false,
+        })).toBe(true);
+    });
+
     it("accepts only supported UI scale actions", () => {
         expect(canExecuteEditorAction(
             { type: "layout.uiScale.set", source: "menu", percentage: 125 },

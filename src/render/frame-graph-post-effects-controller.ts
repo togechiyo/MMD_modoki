@@ -37,6 +37,7 @@ import type { Camera } from "@babylonjs/core/Cameras/camera";
 import type { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import type { Scene } from "@babylonjs/core/scene";
 import type { SsgiBlendMode } from "../types";
+import { WATER_SURFACE_MESH_NAME } from "../scene/water-surface-settings";
 import { createLutAtlasTextureFrom3dlText } from "./lut-atlas-texture";
 import {
     FRAME_GRAPH_POST_EFFECT_IDS,
@@ -68,8 +69,6 @@ import {
     FrameGraphOceanWaveFieldTask,
     OCEAN_WAVE_BAND_CONFIGS,
 } from "./frame-graph-ocean-wave-task";
-import { FrameGraphOceanVolumeTask } from "./frame-graph-ocean-volume-task";
-import { FrameGraphOceanSurfaceTask } from "./frame-graph-ocean-surface-task";
 import {
     ensureFrameGraphOceanShaders,
     FRAME_GRAPH_OCEAN_METHOD_NAME,
@@ -1964,8 +1963,6 @@ export class FrameGraphPostEffectsController {
     private oceanEffect: EffectWrapper | null = null;
     private oceanTask: FrameGraphPostEffectsOceanTask | null = null;
     private readonly oceanWaveTasks: FrameGraphOceanWaveFieldTask[] = [];
-    private oceanVolumeTask: FrameGraphOceanVolumeTask | null = null;
-    private oceanSurfaceTask: FrameGraphOceanSurfaceTask | null = null;
     private aerialPerspectiveEffect: EffectWrapper | null = null;
     private aerialPerspectiveTask: FrameGraphAerialPerspectiveTask | null = null;
     private directionalLightShaftsEffect: EffectWrapper | null = null;
@@ -2171,8 +2168,8 @@ export class FrameGraphPostEffectsController {
                 ssaoToonComposite: this.ssaoToonCompositeTask !== null,
                 ocean: this.oceanTask !== null,
                 oceanWaveField: this.oceanWaveTasks.length === OCEAN_WAVE_BAND_CONFIGS.length,
-                oceanVolume: this.oceanVolumeTask !== null,
-                oceanSurface: this.oceanSurfaceTask !== null,
+                oceanVolume: false,
+                oceanSurface: false,
                 aerialPerspective: this.aerialPerspectiveTask !== null,
                 directionalLightShafts: this.directionalLightShaftsTask !== null,
                 offsetShadow: this.offsetShadowTask !== null,
@@ -2363,7 +2360,14 @@ export class FrameGraphPostEffectsController {
                 { doNotChangeAspectRatio: true },
             );
             const objectList = new FrameGraphObjectList();
-            objectList.meshes = null;
+            const waterSurfaceMesh = scene.getMeshByName(WATER_SURFACE_MESH_NAME);
+            // WaterMaterial does not emit FrameGraph geometry MRT outputs on
+            // WebGPU. Rendering it into this pass invalidates the whole command
+            // buffer, so depth/normal inputs deliberately contain only the
+            // scene geometry below and around the external surface.
+            objectList.meshes = waterSurfaceMesh
+                ? scene.meshes.filter((mesh) => mesh !== waterSurfaceMesh)
+                : null;
             objectList.particleSystems = null;
             geometryRendererTask.objectList = objectList;
             geometryRendererTask.camera = camera;
@@ -2499,7 +2503,6 @@ export class FrameGraphPostEffectsController {
                         waveStrength: settings.oceanWaveStrength,
                         clarity: settings.oceanClarity,
                         causticsStrength: settings.oceanCausticsStrength,
-                        volumeStrength: settings.oceanVolumeStrength,
                         timeSeconds: settings.oceanTimeSeconds,
                         lightDirection: settings.oceanLightDirection
                             ?? { x: 0.3, y: -0.5, z: 0.5 },
@@ -2532,34 +2535,6 @@ export class FrameGraphPostEffectsController {
                 if (!broadWaveTask || !mediumWaveTask || !fineWaveTask) {
                     throw new Error("Ocean wave-field bands could not be initialized.");
                 }
-                const oceanSurfaceTask = new FrameGraphOceanSurfaceTask(
-                    "frameGraphOceanSurface",
-                    frameGraph,
-                    scene,
-                    camera,
-                    getOceanSettings,
-                );
-                oceanSurfaceTask.depthTexture = geometryRendererTask.outputDepthTexture;
-                oceanSurfaceTask.broadWaveTexture = broadWaveTask.outputTexture;
-                oceanSurfaceTask.mediumWaveTexture = mediumWaveTask.outputTexture;
-                oceanSurfaceTask.fineWaveTexture = fineWaveTask.outputTexture;
-                oceanSurfaceTask.disabled = false;
-                this.oceanSurfaceTask = oceanSurfaceTask;
-                const oceanVolumeTask = new FrameGraphOceanVolumeTask(
-                    "frameGraphOceanVolume",
-                    frameGraph,
-                    sourceTextureSize.width,
-                    sourceTextureSize.height,
-                    camera,
-                    getOceanSettings,
-                );
-                oceanVolumeTask.depthTexture = geometryRendererTask.geometryViewDepthTexture;
-                oceanVolumeTask.broadWaveTexture = broadWaveTask.outputTexture;
-                oceanVolumeTask.mediumWaveTexture = mediumWaveTask.outputTexture;
-                oceanVolumeTask.fineWaveTexture = fineWaveTask.outputTexture;
-                oceanVolumeTask.disabled = false;
-                deferEffectTask("ocean", oceanVolumeTask);
-                this.oceanVolumeTask = oceanVolumeTask;
                 this.oceanEffect = new EffectWrapper({
                     engine: frameGraph.engine,
                     fragmentShader: "mmdFrameGraphOcean",
@@ -2585,7 +2560,6 @@ export class FrameGraphPostEffectsController {
                         "broadWaveTexture",
                         "mediumWaveTexture",
                         "fineWaveTexture",
-                        "oceanVolumeTexture",
                     ],
                     name: "mmdFrameGraphOcean",
                     shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
@@ -2603,13 +2577,11 @@ export class FrameGraphPostEffectsController {
                 oceanTask.broadWaveTexture = broadWaveTask.outputTexture;
                 oceanTask.mediumWaveTexture = mediumWaveTask.outputTexture;
                 oceanTask.fineWaveTexture = fineWaveTask.outputTexture;
-                oceanTask.volumeTexture = oceanVolumeTask.outputTexture;
                 oceanTask.disabled = false;
                 deferEffectTask("ocean", oceanTask);
-                // The media pass must not sample an image that already contains the
-                // transparent surface mesh. Otherwise refraction/tint processes the
-                // same water twice and produces a detached oil-film layer.
-                deferEffectTask("ocean", oceanSurfaceTask);
+                // The visible surface is rendered by Babylon WaterMaterial in the
+                // scene. Keep only the old wave field, underwater absorption,
+                // waterline, and caustics passes in FrameGraph.
                 this.oceanTask = oceanTask;
                 dofSourceTexture = oceanTask.outputTexture;
             }
@@ -3359,12 +3331,6 @@ export class FrameGraphPostEffectsController {
                 || this.directionalLightShaftsTask.depthTexture === undefined;
             this.directionalLightShaftsTask.disabled = disabled;
         }
-        if (this.oceanVolumeTask) {
-            this.oceanVolumeTask.disabled = !this.isPostEffectActive(settings, "ocean");
-        }
-        if (this.oceanSurfaceTask) {
-            this.oceanSurfaceTask.disabled = !this.isPostEffectActive(settings, "ocean");
-        }
         for (const waveTask of this.oceanWaveTasks) {
             waveTask.disabled = !this.isPostEffectActive(settings, "ocean");
         }
@@ -3437,16 +3403,15 @@ export class FrameGraphPostEffectsController {
 
     isOceanWaveFieldReady(): boolean {
         return this.oceanTask !== null
-            && this.oceanVolumeTask !== null
             && this.oceanWaveTasks.length === OCEAN_WAVE_BAND_CONFIGS.length;
     }
 
     isOceanVolumeReady(): boolean {
-        return this.oceanVolumeTask !== null;
+        return false;
     }
 
     isOceanSurfaceReady(): boolean {
-        return this.oceanSurfaceTask !== null;
+        return false;
     }
 
     private connectPostEffectOrder(
@@ -3558,11 +3523,9 @@ export class FrameGraphPostEffectsController {
                     }
                     break;
                 case "ocean":
-                    if (this.oceanSurfaceTask && this.oceanTask) {
+                    if (this.oceanTask) {
                         this.oceanTask.sourceTexture = currentTexture;
                         currentTexture = this.oceanTask.outputTexture;
-                        this.oceanSurfaceTask.targetTexture = currentTexture;
-                        currentTexture = this.oceanSurfaceTask.outputTexture;
                         this.connectedOrder.push("ocean");
                     }
                     break;
@@ -3669,10 +3632,6 @@ export class FrameGraphPostEffectsController {
         this.oceanEffect?.dispose();
         this.oceanEffect = null;
         this.oceanTask = null;
-        this.oceanVolumeTask?.dispose();
-        this.oceanVolumeTask = null;
-        this.oceanSurfaceTask?.dispose();
-        this.oceanSurfaceTask = null;
         this.aerialPerspectiveEffect?.dispose();
         this.aerialPerspectiveEffect = null;
         this.aerialPerspectiveTask = null;

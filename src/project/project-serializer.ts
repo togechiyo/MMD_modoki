@@ -101,6 +101,7 @@ type ProjectExportHost = {
     mirroringFloorSize: number;
     mirroringFloorHeight: number;
     mirroringFloorResolution: number;
+    getWaterSurfaceSettings: () => import("../scene/water-surface-settings").WaterSurfaceSettings;
     dofEnabled: boolean;
     dofFocusDistanceMm: number;
     dofAutoFocusNearOffsetMm: number;
@@ -465,6 +466,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             mirroringFloorSize: host.mirroringFloorSize,
             mirroringFloorHeight: host.mirroringFloorHeight,
             mirroringFloorResolution: host.mirroringFloorResolution,
+            waterSurface: host.getWaterSurfaceSettings(),
             backgroundImagePath: host.getBackgroundImagePath(),
             backgroundVideoPath: host.getBackgroundVideoPath(),
         },
@@ -569,7 +571,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             ssgiStrength: host.postEffectSsgiStrength,
             ssgiSampleRadius: host.postEffectSsgiSampleRadius,
             ssgiBlendMode: "softLight",
-            oceanWaterHeight: host.postEffectOceanWaterHeight,
+            oceanWaterHeight: host.getWaterSurfaceSettings().height,
             oceanWaveStrength: host.postEffectOceanWaveStrength,
             oceanClarity: host.postEffectOceanClarity,
             oceanCausticsStrength: host.postEffectOceanCausticsStrength,
@@ -604,8 +606,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
                 colorA: { r: 0, g: 0.8, b: 0.8 },
                 colorB: { r: 1, g: 1, b: 1 },
             },
-            frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.()
-                .filter((entry) => entry.id !== "ocean"),
+            frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.(),
             gammaEncodingVersion: 2,
         },
         accessories,

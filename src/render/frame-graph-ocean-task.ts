@@ -12,7 +12,6 @@ export type FrameGraphOceanRuntimeSettings = {
     waveStrength: number;
     clarity: number;
     causticsStrength: number;
-    volumeStrength: number;
     timeSeconds: number;
     lightDirection: { x: number; y: number; z: number };
     lightColor: { r: number; g: number; b: number };
@@ -25,7 +24,6 @@ export class FrameGraphPostEffectsOceanTask extends FrameGraphPostProcessTask {
     broadWaveTexture?: FrameGraphTextureHandle;
     mediumWaveTexture?: FrameGraphTextureHandle;
     fineWaveTexture?: FrameGraphTextureHandle;
-    volumeTexture?: FrameGraphTextureHandle;
 
     private readonly inverseProjection = Matrix.Identity();
     private readonly inverseView = Matrix.Identity();
@@ -55,16 +53,14 @@ export class FrameGraphPostEffectsOceanTask extends FrameGraphPostProcessTask {
             || this.broadWaveTexture === undefined
             || this.mediumWaveTexture === undefined
             || this.fineWaveTexture === undefined
-            || this.volumeTexture === undefined
         ) {
-            throw new Error(`${this.name}: depth, normal, wave-field, and volume textures are required.`);
+            throw new Error(`${this.name}: depth, normal, and wave-field textures are required.`);
         }
         const depthTexture = this.depthTexture;
         const normalTexture = this.normalTexture;
         const broadWaveTexture = this.broadWaveTexture;
         const mediumWaveTexture = this.mediumWaveTexture;
         const fineWaveTexture = this.fineWaveTexture;
-        const volumeTexture = this.volumeTexture;
         const pass = super.record(
             skipCreationOfDisabledPasses,
             additionalExecute,
@@ -94,13 +90,15 @@ export class FrameGraphPostEffectsOceanTask extends FrameGraphPostProcessTask {
                 effect.setFloat("waveStrength", Math.max(0, Math.min(2, settings.waveStrength)));
                 effect.setFloat("clarity", Math.max(0, Math.min(4, settings.clarity)));
                 effect.setFloat("causticsStrength", Math.max(0, Math.min(2, settings.causticsStrength)));
+                // Babylon WaterMaterial already owns the visible surface. This flag
+                // tells the media shader to keep absorption/caustics but skip its
+                // retired analytical surface composite.
                 effect.setFloat("surfaceMeshEnabled", 1);
                 context.bindTextureHandle(effect, "viewDepthTexture", depthTexture);
                 context.bindTextureHandle(effect, "viewNormalTexture", normalTexture);
                 context.bindTextureHandle(effect, "broadWaveTexture", broadWaveTexture);
                 context.bindTextureHandle(effect, "mediumWaveTexture", mediumWaveTexture);
                 context.bindTextureHandle(effect, "fineWaveTexture", fineWaveTexture);
-                context.bindTextureHandle(effect, "oceanVolumeTexture", volumeTexture);
                 additionalBindings?.(context);
             },
         );
@@ -109,7 +107,6 @@ export class FrameGraphPostEffectsOceanTask extends FrameGraphPostProcessTask {
         pass.addDependencies(this.broadWaveTexture);
         pass.addDependencies(this.mediumWaveTexture);
         pass.addDependencies(this.fineWaveTexture);
-        pass.addDependencies(this.volumeTexture);
         return pass;
     }
 }

@@ -1,6 +1,6 @@
 # Viewport / Edit Actions
 
-更新日: 2026-05-18
+更新日: 2026-08-27
 
 ビューポート表示、ボーンpick、ボーン / カメラ / モーフ編集通知、今後のcamera / gizmo drag設計を扱う。
 
@@ -99,6 +99,28 @@
 - テスト観点:
   - skydome未作成時に壊れない。
   - 表示状態がUIと同期する。
+
+### `viewport.setWaterSurfaceSettings`
+
+- 意図:
+  - Babylon `WaterMaterial` 水面の有効状態と公開パラメーターを更新する。
+- 入力:
+  - `source`: `menu`
+  - `settings`: `WaterSurfaceSettings` の部分更新
+- 出力:
+  - 水面 mesh、material、反射・屈折 RTT と View メニュー表示が同期される。
+- 副作用:
+  - 解像度変更時は `WaterMaterial` と RTT を再生成する。
+  - 無効化時は反射・屈折 RTT も停止する。
+- canExecute:
+  - 常に実行可能。
+- undo:
+  - 対象外。viewport 表示設定として project に保存する。
+- テスト観点:
+  - 有効化で reflection / refraction RTT が生成される。
+  - 部分更新で未指定値を保持する。
+  - project save / load で全設定が往復する。
+  - WebGPU validation error を増やさない。
 
 ### `selection.pickBone`
 

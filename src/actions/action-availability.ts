@@ -153,6 +153,7 @@ export function canExecuteEditorAction(
         case "camera.setExternalParent":
         case "camera.setMirroringFloorEnabled":
         case "camera.setMirroringFloorResolution":
+        case "viewport.setWaterSurfaceSettings":
         case "output.applyPreset":
         case "output.syncDimension":
         case "output.setLockAspect":

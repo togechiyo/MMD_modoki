@@ -185,6 +185,7 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [Babylon WaterMaterial 水面 実装メモ 2026-08-27](./babylon-watermaterial-surface-implementation-2026-08-27.md)
 - [リアルタイム SSS 手法調査と独自プリセット方針 2026-08-26](./realtime-sss-methods-research-2026-08-26.md)
 - [SSS Skin シェーダープリセット実装メモ 2026-08-26](./sss-standard-skin-shader-presets-2026-08-26.md)
 - [シェーダープリセット影側色の統一 2026-08-26](./shader-preset-shadow-color-unification-2026-08-26.md)

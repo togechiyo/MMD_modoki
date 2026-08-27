@@ -11,7 +11,6 @@ uniform sampler2D viewNormalTexture;
 uniform sampler2D broadWaveTexture;
 uniform sampler2D mediumWaveTexture;
 uniform sampler2D fineWaveTexture;
-uniform sampler2D oceanVolumeTexture;
 uniform mat4 inverseProjection;
 uniform mat4 inverseView;
 uniform vec3 cameraPosition;
@@ -270,7 +269,6 @@ void main(void) {
         vec3 absorption = vec3(2.25, 0.72, 0.28) * absorptionScale;
         transmission = exp(-absorption * opticalDistance);
         volumeScattering = vec3(0.025, 0.48, 0.60) * (vec3(1.0) - transmission);
-        volumeScattering += texture2D(oceanVolumeTexture, vUV).rgb * mediaBlend;
         vec3 filteredColor = color * transmission + volumeScattering;
         color = mix(color, filteredColor, mediaBlend);
     }
@@ -307,6 +305,11 @@ void main(void) {
         * waterlineBrightness;
     color = mix(color, waterlineColor, waterline);
 
+    if (surfaceInFront && surfaceMeshEnabled > 0.5) {
+        gl_FragColor = vec4(color, outputAlpha);
+        return;
+    }
+
     if (surfaceInFront) {
         float undersideBoost = cameraBelow ? 1.8 : 1.0;
         vec3 shadingNormal = normalize(vec3(surfaceNormal.x * undersideBoost, surfaceNormal.y, surfaceNormal.z * undersideBoost));
@@ -319,12 +322,6 @@ void main(void) {
         vec3 refractedColor = mix(refractedSource, refractedFiltered, mediaBlend)
             + causticContribution;
         refractedColor = mix(refractedColor, waterlineColor, waterline);
-        if (surfaceMeshEnabled > 0.5) {
-            color = refractedColor;
-            outputAlpha = max(outputAlpha, 0.08);
-            gl_FragColor = vec4(color, outputAlpha);
-            return;
-        }
         float viewFacing = clamp(abs(dot(-ray, shadingNormal)), 0.0, 1.0);
         float fresnel = 0.025 + 0.975 * pow(1.0 - viewFacing, 5.0);
         vec3 toSun = normalize(-lightDirection);
@@ -361,8 +358,6 @@ var mediumWaveTextureSampler: sampler;
 var mediumWaveTexture: texture_2d<f32>;
 var fineWaveTextureSampler: sampler;
 var fineWaveTexture: texture_2d<f32>;
-var oceanVolumeTextureSampler: sampler;
-var oceanVolumeTexture: texture_2d<f32>;
 uniform inverseProjection: mat4x4f;
 uniform inverseView: mat4x4f;
 uniform cameraPosition: vec3f;
@@ -681,12 +676,6 @@ fn main(input: FragmentInputs)->FragmentOutputs {
         let absorption = vec3f(2.25, 0.72, 0.28) * absorptionScale;
         transmission = exp(-absorption * opticalDistance);
         volumeScattering = vec3f(0.025, 0.48, 0.60) * (vec3f(1.0) - transmission);
-        volumeScattering += textureSampleLevel(
-            oceanVolumeTexture,
-            oceanVolumeTextureSampler,
-            input.vUV,
-            0.0
-        ).rgb * mediaBlend;
         let filteredColor = color * transmission + volumeScattering;
         color = mix(color, filteredColor, vec3f(mediaBlend));
     }
@@ -723,6 +712,11 @@ fn main(input: FragmentInputs)->FragmentOutputs {
     ) * waterlineBrightness;
     color = mix(color, waterlineColor, vec3f(waterline));
 
+    if (surfaceInFront && uniforms.surfaceMeshEnabled > 0.5) {
+        fragmentOutputs.color = vec4f(color, outputAlpha);
+        return fragmentOutputs;
+    }
+
     if (surfaceInFront) {
         let undersideBoost = select(1.0, 1.8, cameraBelow);
         let shadingNormal = normalize(vec3f(surfaceNormal.x * undersideBoost, surfaceNormal.y, surfaceNormal.z * undersideBoost));
@@ -737,12 +731,6 @@ fn main(input: FragmentInputs)->FragmentOutputs {
         var refractedColor = mix(refractedSource, refractedFiltered, vec3f(mediaBlend))
             + causticContribution;
         refractedColor = mix(refractedColor, waterlineColor, vec3f(waterline));
-        if (uniforms.surfaceMeshEnabled > 0.5) {
-            color = refractedColor;
-            outputAlpha = max(outputAlpha, 0.08);
-            fragmentOutputs.color = vec4f(color, outputAlpha);
-            return fragmentOutputs;
-        }
         let viewFacing = clamp(abs(dot(-ray, shadingNormal)), 0.0, 1.0);
         let fresnel = 0.025 + 0.975 * pow(1.0 - viewFacing, 5.0);
         let toSun = normalize(-uniforms.lightDirection);

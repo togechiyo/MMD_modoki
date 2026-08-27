@@ -290,6 +290,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("ssao", active); },
     },
     {
+        id: "ocean",
+        labelKey: "effect.frameGraphPost.effects.ocean",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("ocean"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("ocean", active); },
+    },
+    {
         id: "offsetShadow",
         labelKey: "effect.frameGraphPost.effects.offsetShadow",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("offsetShadow"),
@@ -392,6 +398,10 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("distortion", active); },
     },
 ];
+
+// Keep experimental effect definitions for project compatibility while they
+// are intentionally unavailable from the normal UI.
+const HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS = new Set<FrameGraphPostEffectId>(["ocean"]);
 
 const FRAME_GRAPH_STACK_LUT_PRESETS = [
     { id: "anime-soft", label: "Anime Soft" },
@@ -2622,6 +2632,11 @@ export class UIController {
         });
         this.actionDispatcher.register("camera.setMirroringFloorResolution", (action) => {
             this.mmdManager.mirroringFloorResolution = action.resolution;
+            this.sceneEnvironmentUiController?.refresh();
+            this.cameraPanelController?.refresh(true);
+        });
+        this.actionDispatcher.register("viewport.setWaterSurfaceSettings", (action) => {
+            this.mmdManager.setWaterSurfaceSettings(action.settings);
             this.sceneEnvironmentUiController?.refresh();
             this.cameraPanelController?.refresh(true);
         });
@@ -5114,11 +5129,6 @@ export class UIController {
             case "ssgi":
                 break;
             case "ocean":
-                this.mmdManager.postEffectOceanWaterHeight = 8;
-                this.mmdManager.postEffectOceanWaveStrength = 0.7;
-                this.mmdManager.postEffectOceanClarity = 0.85;
-                this.mmdManager.postEffectOceanCausticsStrength = 1.1;
-                this.mmdManager.postEffectOceanVolumeStrength = 0.65;
                 break;
             case "aerialPerspective":
                 this.mmdManager.postEffectAerialPerspectiveStrength = 0.18;
@@ -5319,6 +5329,7 @@ export class UIController {
         this.postEffectAddPanel?.querySelectorAll<HTMLButtonElement>("[data-effect-add-post]").forEach((button) => {
             const effectId = button.dataset.effectAddPost ?? "";
             const known = this.isFrameGraphPostAddEffectId(effectId);
+            button.hidden = known && HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS.has(effectId);
             button.disabled = !frameGraphReady || (known && this.isFrameGraphPostEffectInStack(effectId));
         });
 
@@ -5650,15 +5661,19 @@ export class UIController {
                     range("ssgiSampleRadius", label("radius"), this.mmdManager.postEffectSsgiSampleRadius, `${Math.round(this.mmdManager.postEffectSsgiSampleRadius)}px`),
                 );
                 break;
-            case "ocean":
+            case "ocean": {
+                const settings = this.mmdManager.getWaterSurfaceSettings();
                 rows.push(
-                    range("oceanWaterHeight", label("waterHeight"), this.mmdManager.postEffectOceanWaterHeight, this.mmdManager.postEffectOceanWaterHeight.toFixed(1)),
-                    range("oceanWaveStrength", label("waves"), this.mmdManager.postEffectOceanWaveStrength, this.mmdManager.postEffectOceanWaveStrength.toFixed(2)),
+                    range("oceanWaterHeight", label("waterHeight"), settings.height, settings.height.toFixed(1)),
+                    range("oceanWaveHeight", label("waves"), settings.waveHeight, settings.waveHeight.toFixed(2)),
+                    range("oceanWindForce", label("windForce"), settings.windForce, settings.windForce.toFixed(1)),
+                    range("oceanWaveSpeed", label("waveSpeed"), settings.waveSpeed, settings.waveSpeed.toFixed(2)),
+                    range("oceanBumpHeight", label("bumpHeight"), settings.bumpHeight, settings.bumpHeight.toFixed(2)),
                     range("oceanClarity", label("clarity"), this.mmdManager.postEffectOceanClarity, this.mmdManager.postEffectOceanClarity.toFixed(2)),
                     range("oceanCausticsStrength", label("caustics"), this.mmdManager.postEffectOceanCausticsStrength, this.mmdManager.postEffectOceanCausticsStrength.toFixed(2)),
-                    range("oceanVolumeStrength", label("volumeLight"), this.mmdManager.postEffectOceanVolumeStrength, this.mmdManager.postEffectOceanVolumeStrength.toFixed(2)),
                 );
                 break;
+            }
             case "aerialPerspective": {
                 const aerialColor = this.toEffectStackHexColor(this.mmdManager.getPostEffectAerialPerspectiveColor());
                 rows.push(
@@ -5890,19 +5905,29 @@ export class UIController {
                 this.mmdManager.postEffectSsgiSampleRadius = Number(actualValue);
                 break;
             case "oceanWaterHeight":
-                this.mmdManager.postEffectOceanWaterHeight = Number(actualValue);
+            case "oceanWaveHeight":
+            case "oceanWindForce":
+            case "oceanWaveSpeed":
+            case "oceanBumpHeight": {
+                const settings = this.mmdManager.getWaterSurfaceSettings();
+                const propertyByField = {
+                    oceanWaterHeight: "height",
+                    oceanWaveHeight: "waveHeight",
+                    oceanWindForce: "windForce",
+                    oceanWaveSpeed: "waveSpeed",
+                    oceanBumpHeight: "bumpHeight",
+                } as const;
+                this.mmdManager.setWaterSurfaceSettings({
+                    ...settings,
+                    [propertyByField[field]]: Number(actualValue),
+                });
                 break;
-            case "oceanWaveStrength":
-                this.mmdManager.postEffectOceanWaveStrength = Number(actualValue);
-                break;
+            }
             case "oceanClarity":
                 this.mmdManager.postEffectOceanClarity = Number(actualValue);
                 break;
             case "oceanCausticsStrength":
                 this.mmdManager.postEffectOceanCausticsStrength = Number(actualValue);
-                break;
-            case "oceanVolumeStrength":
-                this.mmdManager.postEffectOceanVolumeStrength = Number(actualValue);
                 break;
             case "aerialPerspectiveStrength":
                 this.mmdManager.postEffectAerialPerspectiveStrength = Number(actualValue);
@@ -6108,10 +6133,12 @@ export class UIController {
             case "ssgiSampleRadius":
                 return "ssgi";
             case "oceanWaterHeight":
-            case "oceanWaveStrength":
+            case "oceanWaveHeight":
+            case "oceanWindForce":
+            case "oceanWaveSpeed":
+            case "oceanBumpHeight":
             case "oceanClarity":
             case "oceanCausticsStrength":
-            case "oceanVolumeStrength":
                 return "ocean";
             case "aerialPerspectiveStrength":
             case "aerialPerspectiveStart":
@@ -6270,19 +6297,26 @@ export class UIController {
                 valueElement.textContent = `${Math.round(this.mmdManager.postEffectSsgiSampleRadius)}px`;
                 break;
             case "oceanWaterHeight":
-                valueElement.textContent = this.mmdManager.postEffectOceanWaterHeight.toFixed(1);
+            case "oceanWaveHeight":
+            case "oceanWindForce":
+            case "oceanWaveSpeed":
+            case "oceanBumpHeight": {
+                const settings = this.mmdManager.getWaterSurfaceSettings();
+                const valueByField = {
+                    oceanWaterHeight: settings.height.toFixed(1),
+                    oceanWaveHeight: settings.waveHeight.toFixed(2),
+                    oceanWindForce: settings.windForce.toFixed(1),
+                    oceanWaveSpeed: settings.waveSpeed.toFixed(2),
+                    oceanBumpHeight: settings.bumpHeight.toFixed(2),
+                } as const;
+                valueElement.textContent = valueByField[field];
                 break;
-            case "oceanWaveStrength":
-                valueElement.textContent = this.mmdManager.postEffectOceanWaveStrength.toFixed(2);
-                break;
+            }
             case "oceanClarity":
                 valueElement.textContent = this.mmdManager.postEffectOceanClarity.toFixed(2);
                 break;
             case "oceanCausticsStrength":
                 valueElement.textContent = this.mmdManager.postEffectOceanCausticsStrength.toFixed(2);
-                break;
-            case "oceanVolumeStrength":
-                valueElement.textContent = this.mmdManager.postEffectOceanVolumeStrength.toFixed(2);
                 break;
             case "aerialPerspectiveStrength":
                 valueElement.textContent = this.mmdManager.postEffectAerialPerspectiveStrength.toFixed(2);
@@ -6427,6 +6461,7 @@ export class UIController {
         const stackEffectIds = [...this.mmdManager.getFrameGraphPostEffectStackIds()];
         const effectById = new Map(FRAME_GRAPH_POST_ADD_EFFECTS.map((effect) => [effect.id, effect]));
         const stackEffects = stackEffectIds
+            .filter((id) => !HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS.has(id))
             .map((id) => effectById.get(id) ?? null)
             .filter((effect): effect is FrameGraphPostAddEffect => effect !== null)
             .reverse();

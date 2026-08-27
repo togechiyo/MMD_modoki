@@ -60,6 +60,7 @@
     "@babylonjs/core": "9.2.0",
     "@babylonjs/gui": "9.2.0",
     "@babylonjs/loaders": "9.2.0",
+    "@babylonjs/materials": "9.2.0",
     "babylon-mmd": "^1.2.0",
     "electron-log": "^5.4.3",
     "electron-squirrel-startup": "^1.0.1",

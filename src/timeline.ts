@@ -976,7 +976,7 @@ export class Timeline {
         ctx.fillRect(0, Math.round(midY), w, 1);
 
         if (this.waveformPeaks && this.waveformPeaks.length > 0) {
-            ctx.strokeStyle = "rgba(59,130,246,0.95)";
+            ctx.strokeStyle = "rgba(57,197,187,0.95)";
             ctx.lineWidth = 1;
             ctx.beginPath();
 
@@ -1423,8 +1423,8 @@ export class Timeline {
         const width = Math.max(1, bounds.right - bounds.left);
         const height = Math.max(1, bounds.bottom - bounds.top);
         ctx.save();
-        ctx.fillStyle = "rgba(96,165,250,0.14)";
-        ctx.strokeStyle = "rgba(147,197,253,0.82)";
+        ctx.fillStyle = "rgba(57,197,187,0.14)";
+        ctx.strokeStyle = "rgba(125,223,216,0.82)";
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 3]);
         ctx.fillRect(bounds.left, bounds.top, width, height);

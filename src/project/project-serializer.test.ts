@@ -71,7 +71,7 @@ function createHost() {
         isGroundVisible: (): boolean => true,
         isSkydomeVisible: (): boolean => true,
         isBackgroundBlack: (): boolean => false,
-        getBackgroundDisplayMode: () => "default" as const,
+        getBackgroundDisplayMode: () => "white" as const,
         getSkydomeBackgroundStyle: () => ({
             mode: "solid" as const,
             topColor: { r: 200 / 255, g: 200 / 255, b: 200 / 255 },

@@ -1,11 +1,11 @@
-export type BackgroundDisplayMode = "default" | "white" | "black" | "checker";
+export type BackgroundDisplayMode = "white" | "black" | "checker";
 
 export const normalizeBackgroundDisplayMode = (
     value: unknown,
     legacyBlack = false,
 ): BackgroundDisplayMode => {
-    if (value === "default" || value === "white" || value === "black" || value === "checker") {
+    if (value === "white" || value === "black" || value === "checker") {
         return value;
     }
-    return legacyBlack ? "black" : "default";
+    return legacyBlack ? "black" : "white";
 };

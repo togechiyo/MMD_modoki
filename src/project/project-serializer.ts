@@ -457,7 +457,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             skydomeVisible: host.isSkydomeVisible(),
             backgroundBlack: host.isBackgroundBlack?.() ?? false,
             backgroundDisplayMode: host.getBackgroundDisplayMode?.()
-                ?? ((host.isBackgroundBlack?.() ?? false) ? "black" : "default"),
+                ?? ((host.isBackgroundBlack?.() ?? false) ? "black" : "white"),
             skydomeBackground: normalizeSkydomeBackgroundStyle(host.getSkydomeBackgroundStyle?.()),
             antialiasEnabled: host.antialiasEnabled,
             mirroringFloorEnabled: host.mirroringFloorEnabled,

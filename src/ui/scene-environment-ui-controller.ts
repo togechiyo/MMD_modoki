@@ -70,22 +70,29 @@ export class SceneEnvironmentUiController {
 
     public toggleBackgroundBlack(): void {
         const enabled = this.mmdManager.toggleBackgroundBlack();
+        this.hideBackgroundOverlays();
         this.showToast(
-            enabled ? t("toast.background.black") : t("toast.background.default"),
+            enabled ? t("toast.background.black") : t("toast.background.white"),
             "info"
         );
     }
 
     public setBackgroundDisplayMode(mode: BackgroundDisplayMode): void {
         const applied = this.mmdManager.setBackgroundDisplayMode(mode);
-        const toastKey = applied === "white"
-            ? "toast.background.white"
-            : applied === "black"
-                ? "toast.background.black"
-                : applied === "checker"
-                    ? "toast.background.checker"
-                    : "toast.background.default";
+        this.hideBackgroundOverlays();
+        const toastKey = applied === "black"
+            ? "toast.background.black"
+            : applied === "checker"
+                ? "toast.background.checker"
+                : "toast.background.white";
         this.showToast(t(toastKey), "info");
+    }
+
+    private hideBackgroundOverlays(): void {
+        this.mmdManager.setSkydomeVisible(false);
+        this.mmdManager.setBackgroundMediaVisible(false);
+        this.updateSkydomeToggleButton(false);
+        this.updateBackgroundToggleButton();
     }
 
     public toggleBackgroundMedia(): void {

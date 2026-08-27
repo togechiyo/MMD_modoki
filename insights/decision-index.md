@@ -12,6 +12,7 @@
 | adopted | [v0.2.3 の主題はタイムラインとシーンキー編集](./decisions/v023-theme-is-timeline-and-scene-key-editing.md) | v0.2.3 の実装範囲や優先順位を決める |
 | adopted | [v0.2.3 はキー機能追加より UI 整理を先行する](./decisions/v023-moves-ui-before-adding-key-functions.md) | タイムライン機能の実装順を決める |
 | adopted | [汎用UIアクセントはブルーグリーンを使う](./decisions/generic-ui-accent-uses-blue-green.md) | focus、選択、primary button、ドラッグ表示の配色を追加・変更する |
+| adopted | [背景色は白・黒・チェックの3種類にする](./decisions/background-colors-are-white-black-checker.md) | viewport背景色、空、背景画像・動画の表示関係を変更する |
 | adopted | [アクセサリ欄はモデルに近い構成にする](./decisions/accessories-use-a-model-like-panel-layout.md) | `.x` の下部パネルを変更する |
 | adopted | [アクセサリはモデル編集モードへ置く](./decisions/accessories-belong-to-model-edit-mode.md) | `.x` の編集モードや操作表示を変更する |
 | adopted | [XとOBJは共通のアクセサリ変形タイムラインを使う](./decisions/x-and-obj-share-accessory-transform-timeline.md) | `.x` / OBJ の変形キー、タイムライン、保存を変更する |

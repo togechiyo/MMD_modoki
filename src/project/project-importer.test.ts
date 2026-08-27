@@ -977,7 +977,7 @@ describe("importProjectState", () => {
         ]);
     });
 
-    it("restores skydome background style and uses the light-gray default for legacy projects", async () => {
+    it("restores skydome background style and uses white for legacy projects", async () => {
         const host = createHost();
         const project = createProject({
             viewport: {
@@ -1006,7 +1006,7 @@ describe("importProjectState", () => {
         const legacyHost = createHost();
         await importProjectState(legacyHost, createProject());
         expect(legacyHost.setSkydomeBackgroundStyle).toHaveBeenCalledWith(DEFAULT_SKYDOME_BACKGROUND_STYLE);
-        expect(legacyHost.setBackgroundDisplayMode).toHaveBeenCalledWith("default");
+        expect(legacyHost.setBackgroundDisplayMode).toHaveBeenCalledWith("white");
 
         const legacyBlackHost = createHost();
         await importProjectState(legacyBlackHost, createProject({

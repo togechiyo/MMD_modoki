@@ -273,7 +273,7 @@ test("PNG image and sequence menu dialogs share the transparent background optio
   }
 });
 
-test("viewport switches between default, white, black, and regular checker backgrounds", async () => {
+test("viewport switches between white, black, and regular checker backgrounds", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -289,8 +289,16 @@ test("viewport switches between default, white, black, and regular checker backg
       await page.waitForTimeout(150);
     };
 
+    const toggleSky = async () => {
+      await backgroundMenu.locator(".app-menu-trigger").click();
+      await backgroundMenu.locator('[data-menu-command="view.toggleSkydome"]').click();
+      await page.waitForTimeout(150);
+    };
+
     await chooseMode("background.setWhite");
-    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).viewport.backgroundDisplayMode).toBe("white");
+    const whiteProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    expect(whiteProject.viewport.backgroundDisplayMode).toBe("white");
+    expect(whiteProject.viewport.skydomeVisible).toBe(false);
     const whiteLuminance = getTopRegionLuminance(decodeScreenshotRgba(await canvas.screenshot()));
     expect(whiteLuminance.reduce((sum, value) => sum + value, 0) / whiteLuminance.length).toBeGreaterThan(245);
 
@@ -312,7 +320,7 @@ test("viewport switches between default, white, black, and regular checker backg
     expect(checkerRange.max).toBeGreaterThan(250);
 
     await backgroundMenu.locator(".app-menu-trigger").click();
-    await expect(backgroundMenu.locator('[role="menuitemradio"]')).toHaveCount(4);
+    await expect(backgroundMenu.locator('[role="menuitemradio"]')).toHaveCount(3);
     await expect(backgroundMenu.locator('[data-menu-command="background.setChecker"]')).toHaveAttribute("aria-checked", "true");
     await expect(backgroundMenu.locator('[data-menu-command="background.setWhite"]')).toHaveAttribute("aria-checked", "false");
     await page.keyboard.press("Escape");
@@ -339,8 +347,11 @@ test("viewport switches between default, white, black, and regular checker backg
     const exported = countPixels(readUnfilteredRgba(pngPath).rgba);
     expect(exported.white).toBeGreaterThan(exported.lightGray);
 
-    await chooseMode("background.setDefault");
-    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).viewport.backgroundDisplayMode).toBe("default");
+    await chooseMode("background.setWhite");
+    await toggleSky();
+    const skyProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    expect(skyProject.viewport.backgroundDisplayMode).toBe("white");
+    expect(skyProject.viewport.skydomeVisible).toBe(true);
   } finally {
     await launched.close();
   }

@@ -333,8 +333,6 @@ export class AppMenuController {
                 return { checked: this.isActiveModelVisible(), disabled: !this.hasActiveModel() };
             case "background.toggleMedia":
                 return { checked: this.mmdManager.isBackgroundMediaVisible(), disabled: !this.mmdManager.hasBackgroundMedia() };
-            case "background.setDefault":
-                return { checked: this.mmdManager.getBackgroundDisplayMode() === "default", disabled: false };
             case "background.setWhite":
                 return { checked: this.mmdManager.getBackgroundDisplayMode() === "white", disabled: false };
             case "background.toggleBlack":
@@ -605,9 +603,6 @@ export class AppMenuController {
                 return;
             case "background.toggleBlack":
                 this.dispatchAction({ type: "viewport.setBackgroundDisplayMode", source: "menu", mode: "black" });
-                return;
-            case "background.setDefault":
-                this.dispatchAction({ type: "viewport.setBackgroundDisplayMode", source: "menu", mode: "default" });
                 return;
             case "background.setWhite":
                 this.dispatchAction({ type: "viewport.setBackgroundDisplayMode", source: "menu", mode: "white" });

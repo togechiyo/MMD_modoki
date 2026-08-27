@@ -1790,7 +1790,7 @@ ${beforeFogAppendBlock}
     private backgroundVideoLastDrawnTime = Number.NaN;
     private readonly blackClearColor = new Color4(0, 0, 0, 1);
     private readonly whiteClearColor = new Color4(1, 1, 1, 1);
-    private backgroundDisplayModeValue: BackgroundDisplayMode = "default";
+    private backgroundDisplayModeValue: BackgroundDisplayMode = "white";
     private checkerBackgroundLayer: Layer | null = null;
     private checkerBackgroundTexture: DynamicTexture | null = null;
     private checkerBackgroundPreviewEnabled = true;
@@ -6065,12 +6065,12 @@ ${beforeFogAppendBlock}
         if (enabled) {
             this.setBackgroundDisplayMode("black");
         } else if (this.backgroundDisplayModeValue === "black") {
-            this.setBackgroundDisplayMode("default");
+            this.setBackgroundDisplayMode("white");
         }
     }
 
     public toggleBackgroundBlack(): boolean {
-        const nextMode = this.backgroundDisplayModeValue === "black" ? "default" : "black";
+        const nextMode = this.backgroundDisplayModeValue === "black" ? "white" : "black";
         this.setBackgroundDisplayMode(nextMode);
         return nextMode === "black";
     }
@@ -6239,7 +6239,6 @@ ${beforeFogAppendBlock}
 
     private syncSkydomeVisibility(): void {
         const backgroundVisible = this.skydomeVisibleValue
-            && this.backgroundDisplayModeValue === "default"
             && !this.exportTransparentBackgroundEnabled;
         this.skydome?.setEnabled(backgroundVisible);
     }
@@ -6247,16 +6246,6 @@ ${beforeFogAppendBlock}
     private applySkydomeBackgroundStyle(): void {
         const style = this.skydomeBackgroundStyleValue;
         const brightness = style.brightness;
-        const clearColor = style.mode === "gradient" ? style.bottomColor : style.topColor;
-        if (this.backgroundDisplayModeValue === "default" && !this.exportTransparentBackgroundEnabled) {
-            this.scene.clearColor = new Color4(
-                clearColor.r * brightness,
-                clearColor.g * brightness,
-                clearColor.b * brightness,
-                1,
-            );
-        }
-
         const material = this.skydomeMaterial;
         if (!material) return;
 
@@ -6316,7 +6305,6 @@ ${beforeFogAppendBlock}
 
     private syncBackgroundMediaVisibility(): void {
         const visible = this.backgroundMediaVisible
-            && this.backgroundDisplayModeValue === "default"
             && !this.exportTransparentBackgroundEnabled;
         if (this.backgroundImageLayer) {
             this.backgroundImageLayer.isEnabled = visible;
@@ -6341,10 +6329,8 @@ ${beforeFogAppendBlock}
             this.scene.clearColor = new Color4(0, 0, 0, 0);
         } else if (this.backgroundDisplayModeValue === "black") {
             this.scene.clearColor = this.blackClearColor.clone();
-        } else if (this.backgroundDisplayModeValue === "white" || this.backgroundDisplayModeValue === "checker") {
-            this.scene.clearColor = this.whiteClearColor.clone();
         } else {
-            this.applySkydomeBackgroundStyle();
+            this.scene.clearColor = this.whiteClearColor.clone();
         }
         this.syncSkydomeVisibility();
         this.syncBackgroundMediaVisibility();
@@ -7254,6 +7240,7 @@ ${beforeFogAppendBlock}
             });
         }
         this.applySkydomeBackgroundStyle();
+        this.syncBackgroundDisplayState();
         this.scene.ambientColor = new Color3(0.5, 0.5, 0.5);
         this.scene.imageProcessingConfiguration.isEnabled = true;
         this.scene.imageProcessingConfiguration.applyByPostProcess = false;

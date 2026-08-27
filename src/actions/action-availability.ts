@@ -113,6 +113,7 @@ export function canExecuteEditorAction(
         case "viewport.toggleEnvironmentBackground":
         case "viewport.toggleSkydome":
         case "viewport.togglePhysicsBones":
+        case "project.newWindow":
         case "project.openFile":
         case "project.openEnvironmentHdr":
         case "project.openModel":

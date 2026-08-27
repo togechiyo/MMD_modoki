@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('dialog:savePngTarget', defaultFileName),
     saveWebmDialog: (defaultFileName?: string) =>
         ipcRenderer.invoke('dialog:saveWebm', defaultFileName),
+    openNewProjectWindow: () =>
+        ipcRenderer.invoke('window:openNewProject'),
     snapMainWindowContentAspect: (aspectRatio: number) =>
         ipcRenderer.invoke('window:snapMainWindowContentAspect', aspectRatio),
     setWindowZoomFactor: (zoomFactor: number) =>

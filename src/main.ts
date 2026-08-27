@@ -890,7 +890,7 @@ const setupSmokeTestLifecycle = (mainWindow: BrowserWindow, loadPromise: Promise
   };
 };
 
-const createWindow = () => {
+const createWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
     height: MAIN_WINDOW_DEFAULT_HEIGHT,
@@ -959,6 +959,8 @@ const createWindow = () => {
       webContentsId: mainWindow.webContents.id,
     });
   });
+
+  return mainWindow;
 };
 
 app.on('ready', () => {
@@ -1116,6 +1118,23 @@ ipcMain.handle('window:setZoomFactor', async (event, zoomFactor: number) => {
   )) ?? 1;
   event.sender.setZoomFactor(safeZoomFactor);
   return event.sender.getZoomFactor();
+});
+
+ipcMain.handle('window:openNewProject', async (event): Promise<number | null> => {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!ownerWindow || ownerWindow.isDestroyed()) return null;
+
+  try {
+    const newWindow = createWindow();
+    writeAppLog('info', 'ipc', 'opened new project window', {
+      ownerWebContentsId: event.sender.id,
+      newWebContentsId: newWindow.webContents.id,
+    });
+    return newWindow.webContents.id;
+  } catch (err: unknown) {
+    writeAppLog('error', 'ipc', 'failed to open new project window', createLogErrorData(err));
+    return null;
+  }
 });
 
 ipcMain.handle('file:readBinary', async (_event, filePath: string) => {

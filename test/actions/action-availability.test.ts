@@ -312,6 +312,7 @@ describe("canExecuteEditorAction", () => {
     });
 
     it("allows project file and export actions", () => {
+        expect(canExecuteEditorAction({ type: "project.newWindow", source: "menu" }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction({ type: "project.openFile", source: "button" }, readySnapshot)).toBe(true);
         expect(canExecuteEditorAction(
             { type: "project.dropFiles", source: "drop", filePaths: ["model.pmx"] },

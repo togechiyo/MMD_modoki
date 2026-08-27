@@ -1,10 +1,31 @@
 # Project Actions
 
-更新日: 2026-08-14
+更新日: 2026-08-27
 
 ファイル読み込み、保存、書き出しのAction仕様。
 
 ## Actions
+
+### `project.newWindow`
+
+- 意図:
+  - 現在のprojectを保持したまま、空の新規projectを別ウィンドウで開始する。
+- 入力:
+  - `source`: `menu` / `shortcut`
+  - `payload`: なし
+- 出力:
+  - main processが独立したrendererを持つ新しい`BrowserWindow`を作成する。
+- 副作用:
+  - 新しいWebGPU engineと物理runtimeが初期化される。元ウィンドウのproject、履歴、保存先は変更しない。
+- canExecute:
+  - 常に実行可能。
+- undo:
+  - 対象外。
+- テスト観点:
+  - ファイルメニューと`Ctrl+N`が同じActionへ到達する。
+  - 新ウィンドウはモデルなし・未保存の空projectで始まる。
+  - 元ウィンドウのモデルとproject stateを保持する。
+  - 一方のウィンドウを閉じても他方が継続する。
 
 ### `project.openFile`
 

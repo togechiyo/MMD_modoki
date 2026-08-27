@@ -383,6 +383,9 @@ export class AppMenuController {
         }
 
         switch (command) {
+            case "file.newProjectWindow":
+                this.dispatchAction({ type: "project.newWindow", source: "menu" });
+                return;
             case "file.openFile":
                 this.dispatchAction({ type: "project.openFile", source: "menu" });
                 return;

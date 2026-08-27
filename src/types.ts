@@ -10,6 +10,7 @@ export interface ElectronAPI {
     openDirectoryDialog: () => Promise<string | null>;
     choosePngSaveTarget: (defaultFileName?: string) => Promise<PngSaveTarget | null>;
     saveWebmDialog: (defaultFileName?: string) => Promise<string | null>;
+    openNewProjectWindow: () => Promise<number | null>;
     snapMainWindowContentAspect: (aspectRatio: number) => Promise<boolean>;
     setWindowZoomFactor: (zoomFactor: number) => Promise<number>;
     getPathForDroppedFile: (file: File) => string | null;

@@ -2132,6 +2132,12 @@ export class UIController {
                 return;
             }
 
+            if (!e.altKey && !e.shiftKey && (e.ctrlKey || e.metaKey) && lowerKey === "n") {
+                e.preventDefault();
+                this.actionDispatcher.dispatch({ type: "project.newWindow", source: "shortcut" });
+                return;
+            }
+
             // Don't handle shortcuts while editing text fields.
             if (this.isTextInputLikeTarget(e.target)) return;
 
@@ -2480,6 +2486,9 @@ export class UIController {
             this.showToast(visible ? "Physics bones shown in timeline" : "Physics bones hidden in timeline", "info");
             this.updateTimelineEditState();
             this.appMenuController?.refresh();
+        });
+        this.actionDispatcher.register("project.newWindow", () => {
+            void this.openNewProjectWindow();
         });
         this.actionDispatcher.register("project.openFile", () => {
             void this.loadFileFromDialog();
@@ -3324,6 +3333,18 @@ export class UIController {
         }
         if (lighting.shadowMode === "standard" || lighting.shadowMode === "cascaded") {
             this.mmdManager.shadowMode = lighting.shadowMode;
+        }
+    }
+
+    private async openNewProjectWindow(): Promise<void> {
+        try {
+            const webContentsId = await window.electronAPI.openNewProjectWindow();
+            if (webContentsId !== null) return;
+            this.showToast(t("menu.toast.newProjectWindowFailed"), "error");
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            window.electronAPI.logError("ui", "Failed to open new project window", { message });
+            this.showToast(t("menu.toast.newProjectWindowFailed"), "error");
         }
     }
 

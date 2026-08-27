@@ -82,6 +82,7 @@ export type ViewportAction =
     | { type: "timeline.togglePhysicsBones"; source: ActionSource };
 
 export type ProjectAction =
+    | { type: "project.newWindow"; source: ActionSource }
     | { type: "project.openFile"; source: ActionSource }
     | { type: "project.openEnvironmentHdr"; source: ActionSource }
     | { type: "project.dropFiles"; source: ActionSource; filePaths: string[] }

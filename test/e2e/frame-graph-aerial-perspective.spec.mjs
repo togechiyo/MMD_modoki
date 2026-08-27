@@ -24,11 +24,28 @@ test("PMXモデルで空気遠近をFrameGraph描画できる", async () => {
     await expect(row.locator('[data-effect-stack-control="aerialPerspectiveStrength"]')).toHaveValue("30");
     await expect(row.locator('[data-effect-stack-value="aerialPerspectiveStart"]')).toHaveText("55");
     await expect(row.locator('[data-effect-stack-value="aerialPerspectiveRange"]')).toHaveText("180");
+    const color = row.locator('[data-effect-stack-control="aerialPerspectiveColor"]');
+    await expect(color).toHaveValue("#b8c9d4");
+    await expect(row.locator('[data-effect-stack-control="aerialPerspectiveColorB"]')).toHaveCount(0);
+    await expect(row.locator('[data-effect-stack-control="aerialPerspectiveColorC"]')).toHaveCount(0);
+    await expect(row.locator('[data-effect-stack-control="aerialPerspectiveColorMidpoint"]')).toHaveCount(0);
+    await color.fill("#6b8fb8");
 
     await page.locator("#btn-effect-reload-framegraph").click();
     await expect(page.getByText("FrameGraphを再読み込みしました", { exact: true })).toBeVisible();
     await expect(row).toBeVisible();
     await expect(row.locator('[data-effect-stack-value="aerialPerspectiveStart"]')).toHaveText("55");
+    await expect(color).toHaveValue("#6b8fb8");
+
+    const project = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    expect(project.effects.aerialPerspectiveColor).toEqual({
+      r: 107 / 255,
+      g: 143 / 255,
+      b: 184 / 255,
+    });
+    expect(project.effects).not.toHaveProperty("aerialPerspectiveColorB");
+    expect(project.effects).not.toHaveProperty("aerialPerspectiveColorC");
+    expect(project.effects).not.toHaveProperty("aerialPerspectiveColorMidpoint");
 
     await page.waitForFunction(() => {
       const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();

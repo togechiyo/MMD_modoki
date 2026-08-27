@@ -39,6 +39,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
+| rejected | [空気遠近の3色グラデーションを採用しない](./decisions/reject-three-color-aerial-perspective.md) | 空気遠近の色UI、距離グラデーション、project保存項目を変更する |
 | rejected | [アセット名に依存する描画補正は入れない](./decisions/reject-asset-name-specific-rendering-fixes.md) | 特定モデルだけの描画崩れへ対応する |
 | rejected | [v0.2.3 で全エフェクトをキー化しない](./decisions/reject-universal-effect-keyframing-in-v023.md) | エフェクトのキー登録範囲を決める |
 | rejected | [PBR を通常 UI に出さない](./decisions/keep-pbr-out-of-normal-ui.md) | PBR 実験の公開導線を変更する |

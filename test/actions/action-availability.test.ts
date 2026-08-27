@@ -156,6 +156,7 @@ describe("canExecuteEditorAction", () => {
         };
 
         expect(canExecuteEditorAction({ type: "playback.toggle", source: "shortcut" }, noSelection)).toBe(true);
+        expect(canExecuteEditorAction({ type: "playback.setLoop", source: "bottomBar", enabled: true }, noSelection)).toBe(true);
         expect(canExecuteEditorAction({ type: "playback.play", source: "button" }, noSelection)).toBe(true);
         expect(canExecuteEditorAction({ type: "playback.pause", source: "button" }, noSelection)).toBe(true);
     });

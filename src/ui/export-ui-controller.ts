@@ -115,7 +115,6 @@ type ExportUiElements = {
     outputStartFrameInput: HTMLInputElement | null;
     outputEndFrameInput: HTMLInputElement | null;
     playbackFrameStartToggleInput: HTMLInputElement | null;
-    playbackFrameStopToggleInput: HTMLInputElement | null;
 };
 
 export type ExportUiControllerDeps = {
@@ -143,10 +142,6 @@ function resolveExportUiElements(): ExportUiElements {
         outputStartFrameInput: document.getElementById("output-start-frame") as HTMLInputElement | null,
         outputEndFrameInput: document.getElementById("output-end-frame") as HTMLInputElement | null,
         playbackFrameStartToggleInput: document.getElementById("playback-frame-start-toggle") as HTMLInputElement | null,
-        playbackFrameStopToggleInput: (
-            document.getElementById("playback-frame-stop-toggle")
-            ?? document.getElementById("viewport-seek-frame-stop-toggle")
-        ) as HTMLInputElement | null,
     };
 }
 
@@ -223,6 +218,7 @@ export class ExportUiController {
         startFrame: 0,
         endFrame: 0,
     };
+    private playbackLoopEnabled = false;
     private outputState: OutputFormState = {
         aspectPreset: "16:9",
         sizePreset: "1920",
@@ -307,13 +303,15 @@ export class ExportUiController {
             startFrame: outputFrameRange.startFrame,
             endFrame: outputFrameRange.endFrame,
             frameStartEnabled: Boolean(this.elements.playbackFrameStartToggleInput?.checked),
-            frameStopEnabled: Boolean(this.elements.playbackFrameStopToggleInput?.checked),
+            frameStopEnabled: true,
+            playbackLoopEnabled: this.playbackLoopEnabled,
         };
     }
 
     public applyProjectState(state: ProjectOutputState | null | undefined): void {
         if (!state) {
             this.outputState.pngTransparentBackground = false;
+            this.playbackLoopEnabled = false;
             return;
         }
 
@@ -357,10 +355,7 @@ export class ExportUiController {
         if (this.elements.playbackFrameStartToggleInput) {
             this.elements.playbackFrameStartToggleInput.checked = Boolean(state.frameStartEnabled);
         }
-        if (this.elements.playbackFrameStopToggleInput) {
-            this.elements.playbackFrameStopToggleInput.checked = Boolean(state.frameStopEnabled);
-        }
-
+        this.playbackLoopEnabled = Boolean(state.playbackLoopEnabled);
         const width = this.outputState.width;
         const height = this.outputState.height;
         this.outputAspectRatio = height > 0
@@ -818,7 +813,15 @@ export class ExportUiController {
     }
 
     public isPlaybackFrameStopEnabled(): boolean {
-        return Boolean(this.elements.playbackFrameStopToggleInput?.checked);
+        return true;
+    }
+
+    public isPlaybackLoopEnabled(): boolean {
+        return this.playbackLoopEnabled;
+    }
+
+    public setPlaybackLoopEnabled(enabled: boolean): void {
+        this.playbackLoopEnabled = enabled;
     }
 
     public setPlaybackFrameRangeBoundary(boundary: "start" | "end", frame: number): void {
@@ -834,9 +837,7 @@ export class ExportUiController {
     }
 
     public setPlaybackFrameToggle(kind: "start" | "stop", enabled: boolean): void {
-        const input = kind === "start"
-            ? this.elements.playbackFrameStartToggleInput
-            : this.elements.playbackFrameStopToggleInput;
+        const input = kind === "start" ? this.elements.playbackFrameStartToggleInput : null;
         if (input) {
             input.checked = enabled;
         }

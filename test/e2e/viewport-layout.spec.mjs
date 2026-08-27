@@ -33,6 +33,10 @@ test("viewport canvas reserves space above the playback bar", async () => {
     const layout = await readLayout();
     expect(layout).not.toBeNull();
     expect(layout.playbackBarBottom).toBeLessThanOrEqual(layout.containerBottom + 0.5);
+
+    await expect(page.locator(
+      ".section-header > svg, #timeline-section > .panel-header > svg, #shader-panel > .panel-header > svg",
+    )).toHaveCount(0);
   } finally {
     await launched.close();
   }

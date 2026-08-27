@@ -103,6 +103,7 @@ export function canExecuteEditorAction(
         case "playback.pause":
         case "playback.stop":
         case "playback.toggle":
+        case "playback.setLoop":
         case "playback.seekStart":
         case "playback.seekEnd":
         case "viewport.toggleGround":

@@ -24,6 +24,7 @@ export type PlaybackAction =
     | { type: "playback.pause"; source: ActionSource }
     | { type: "playback.stop"; source: ActionSource }
     | { type: "playback.toggle"; source: ActionSource }
+    | { type: "playback.setLoop"; source: ActionSource; enabled: boolean }
     | { type: "playback.seekFrame"; source: ActionSource; frame: number }
     | { type: "playback.stepFrame"; source: ActionSource; deltaFrames: number }
     | { type: "playback.seekStart"; source: ActionSource }

@@ -744,6 +744,7 @@ export interface ProjectOutputState {
     endFrame?: number;
     frameStartEnabled?: boolean;
     frameStopEnabled?: boolean;
+    playbackLoopEnabled?: boolean;
 }
 
 export interface ProjectAccessoryState {

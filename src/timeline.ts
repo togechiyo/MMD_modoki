@@ -94,7 +94,7 @@ const CAT = {
     light: { bg: "rgba(224,113,123,0.11)", kf: "#e0717b", text: "#efa2a9", bar: "#e0717b" },
     shadow: { bg: "rgba(111,159,218,0.11)", kf: "#6f9fda", text: "#a9c7ea", bar: "#6f9fda" },
     gravity: { bg: "rgba(217,143,183,0.11)", kf: "#d98fb7", text: "#ebbad4", bar: "#d98fb7" },
-    property: { bg: "rgba(168,132,220,0.11)", kf: "#a884dc", text: "#c9afea", bar: "#a884dc" },
+    property: { bg: "rgba(255,79,163,0.13)", kf: "#ff4fa3", text: "#ff8cc3", bar: "#ff4fa3" },
     "semi-standard": { bg: "rgba(99,102,241,0.08)", kf: "#818cf8", text: "#a5b4fc", bar: "" },
     bone: { bg: "rgba(57,197,187,0.08)", kf: "#39c5bb", text: "#7ddfd8", bar: "" },
     morph: { bg: "rgba(251,191,36,0.07)", kf: "#fbbf24", text: "#fcd34d", bar: "" },

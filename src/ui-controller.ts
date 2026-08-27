@@ -835,6 +835,11 @@ export class UIController {
                 frame,
             }),
             onTogglePlayback: () => this.actionDispatcher.dispatch({ type: "playback.toggle", source: "bottomBar" }),
+            onSetLoopEnabled: (enabled) => this.actionDispatcher.dispatch({
+                type: "playback.setLoop",
+                source: "bottomBar",
+                enabled,
+            }),
             onStepFrame: (deltaFrames) => this.actionDispatcher.dispatch({
                 type: "playback.stepFrame",
                 source: "bottomBar",
@@ -1730,9 +1735,9 @@ export class UIController {
 
             if (this.mmdManager.isPlaying) {
                 this.refreshPlaybackFrameBar();
-                const { endFrame } = this.getPlaybackFrameRange();
+                const { startFrame, endFrame } = this.getPlaybackFrameRange();
                 if (this.isPlaybackFrameStopEnabled() && frame >= endFrame) {
-                    this.stopAtPlaybackEnd(endFrame);
+                    this.handlePlaybackEnd(startFrame, endFrame);
                 }
                 return;
             }
@@ -1778,9 +1783,9 @@ export class UIController {
             this.exportUiController?.syncFrameRangeFromTimeline();
             this.refreshViewportBottomBar();
 
-            const { endFrame } = this.getPlaybackFrameRange();
+            const { startFrame, endFrame } = this.getPlaybackFrameRange();
             if (this.mmdManager.isPlaying && this.isPlaybackFrameStopEnabled() && frame >= endFrame) {
-                this.stopAtPlaybackEnd(endFrame);
+                this.handlePlaybackEnd(startFrame, endFrame);
             }
         };
 
@@ -2355,6 +2360,10 @@ export class UIController {
                 return;
             }
             this.play();
+        });
+        this.actionDispatcher.register("playback.setLoop", (action) => {
+            this.exportUiController?.setPlaybackLoopEnabled(action.enabled);
+            this.refreshViewportBottomBar();
         });
         this.actionDispatcher.register("playback.seekFrame", (action) => {
             this.mmdManager.seekToBoundary(action.frame);
@@ -3300,7 +3309,8 @@ export class UIController {
             startFrame: 0,
             endFrame: 0,
             frameStartEnabled: false,
-            frameStopEnabled: false,
+            frameStopEnabled: true,
+            playbackLoopEnabled: false,
         };
     }
 
@@ -4068,10 +4078,10 @@ export class UIController {
             currentFrame: this.mmdManager.currentFrame,
             totalFrames: this.mmdManager.totalFrames,
             isPlaying: this.mmdManager.isPlaying,
+            loopEnabled: this.isPlaybackLoopEnabled(),
             playbackRange: {
                 ...this.getPlaybackFrameRange(),
                 frameStartEnabled: this.isPlaybackFrameStartEnabled(),
-                frameStopEnabled: this.isPlaybackFrameStopEnabled(),
             },
         });
         const selectedAccessoryIndex = this.accessoryPanelController?.getSelectedAccessoryIndex() ?? null;
@@ -4111,10 +4121,10 @@ export class UIController {
             currentFrame: this.mmdManager.currentFrame,
             totalFrames: this.mmdManager.totalFrames,
             isPlaying: true,
+            loopEnabled: this.isPlaybackLoopEnabled(),
             playbackRange: {
                 ...this.getPlaybackFrameRange(),
                 frameStartEnabled: this.isPlaybackFrameStartEnabled(),
-                frameStopEnabled: this.isPlaybackFrameStopEnabled(),
             },
         });
     }
@@ -11591,6 +11601,10 @@ export class UIController {
         return this.exportUiController?.isPlaybackFrameStopEnabled() ?? false;
     }
 
+    private isPlaybackLoopEnabled(): boolean {
+        return this.exportUiController?.isPlaybackLoopEnabled() ?? false;
+    }
+
     private play(updateStatus = true): void {
         const { startFrame } = this.getPlaybackFrameRange();
         if (this.isPlaybackFrameStartEnabled()) {
@@ -11644,6 +11658,17 @@ export class UIController {
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
         this.setStatus("Stopped", false);
+        this.refreshViewportBottomBar();
+    }
+
+    private handlePlaybackEnd(startFrame: number, endFrame: number): void {
+        if (!this.isPlaybackLoopEnabled() || startFrame >= endFrame) {
+            this.stopAtPlaybackEnd(endFrame);
+            return;
+        }
+
+        this.mmdManager.seekToBoundary(startFrame);
+        this.setStatus("Playing", false);
         this.refreshViewportBottomBar();
     }
 

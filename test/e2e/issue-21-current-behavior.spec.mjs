@@ -115,13 +115,34 @@ test("Issue 21: a customized WebM end frame can return to following the full tim
     await expect(page.locator("#btn-bone-keyframe")).toBeEnabled();
     await page.locator("#btn-bone-keyframe").click();
 
-    const frameStop = page.locator("#viewport-seek-frame-stop-toggle");
-    await expect(frameStop).toBeVisible();
-    await frameStop.check();
+    await expect(page.locator("#viewport-seek-frame-stop-toggle")).toHaveCount(0);
     await setCurrentFrame(page, 499);
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(page.locator("#viewport-seek-current-frame")).toHaveValue("500");
     await expect(page.locator("#viewport-seek-play-toggle")).toHaveAttribute("aria-label", "再生");
+
+    const repeatPlayback = page.locator("#viewport-seek-loop-toggle");
+    await expect(repeatPlayback).toBeVisible();
+    await expect(repeatPlayback).toHaveAttribute("aria-pressed", "false");
+    await expect(repeatPlayback).toHaveCSS("border-top-style", "none");
+    const totalFrameBox = await page.locator("#viewport-seek-total-frame").boundingBox();
+    const repeatPlaybackBox = await repeatPlayback.boundingBox();
+    const muteButtonBox = await page.locator("#viewport-volume-mute").boundingBox();
+    expect(totalFrameBox).not.toBeNull();
+    expect(repeatPlaybackBox).not.toBeNull();
+    expect(muteButtonBox).not.toBeNull();
+    expect(repeatPlaybackBox.x - (totalFrameBox.x + totalFrameBox.width)).toBeGreaterThanOrEqual(8);
+    expect(repeatPlaybackBox.x + repeatPlaybackBox.width).toBeLessThanOrEqual(muteButtonBox.x);
+    await repeatPlayback.click();
+    await expect(repeatPlayback).toHaveAttribute("aria-pressed", "true");
+    await setCurrentFrame(page, 499);
+    await page.locator("#viewport-seek-play-toggle").click();
+    await page.waitForFunction(() => {
+      const frame = Number(document.getElementById("viewport-seek-current-frame")?.value ?? Number.NaN);
+      const playbackLabel = document.getElementById("viewport-seek-play-toggle")?.getAttribute("aria-label");
+      return Number.isFinite(frame) && frame < 100 && playbackLabel === "一時停止";
+    });
+    await page.locator("#viewport-seek-play-toggle").click();
 
     const projectPath = resolve(launched.tempDir, "frame-stop-enabled.mmdproj");
     await launched.app.evaluate(({ dialog }, filePath) => {
@@ -131,6 +152,16 @@ test("Issue 21: a customized WebM end frame can return to following the full tim
     await expect.poll(() => existsSync(projectPath)).toBe(true);
     const saved = JSON.parse(readFileSync(projectPath, "utf8"));
     expect(saved.output.frameStopEnabled).toBe(true);
+    expect(saved.output.playbackLoopEnabled).toBe(true);
+
+    await repeatPlayback.click();
+    await expect(repeatPlayback).toHaveAttribute("aria-pressed", "false");
+    await launched.app.evaluate(({ dialog }, filePath) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] });
+    }, projectPath);
+    await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+    await page.locator('[data-menu-command="file.loadProject"]').click();
+    await expect(repeatPlayback).toHaveAttribute("aria-pressed", "true");
   } finally {
     await launched.close();
   }

@@ -59,7 +59,7 @@
 | `playback.toggle` | play button / `Space` | `togglePlayback()` |
 | `playback.seekFrame` | timeline seek / current frame input / shortcut | `mmdManager.seekAnimation()` + UI 同期 |
 | `playback.stepFrame` | arrow shortcut | current frame から相対 seek |
-| `playback.setLoop` | loop checkbox | `mmdManager.setLoop()` |
+| `playback.setLoop` | seekbar下段のrepeat button | project playback stateを更新し、end到達時にstartへseekして再生継続 |
 
 `timeline.*`:
 

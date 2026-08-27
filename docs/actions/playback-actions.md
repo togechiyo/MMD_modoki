@@ -1,6 +1,6 @@
 # Playback Actions
 
-更新日: 2026-05-18
+更新日: 2026-08-27
 
 再生、停止、フレーム移動のAction仕様。タイムラインキャンバス由来のseekは `timeline.seekFrame` に分け、ここでは汎用再生操作を扱う。
 
@@ -80,6 +80,26 @@
 - テスト観点:
   - 停止中は再生へ進む。
   - 再生中は一時停止へ進む。
+
+### `playback.setLoop`
+
+- 意図:
+  - seekbarで指定したstart / end範囲のリピート再生を切り替える。
+- 入力:
+  - `source`: `bottomBar`
+  - `payload`: `enabled`
+- 出力:
+  - OFFではend handleで停止し、ONではend到達時にstart handleへ戻って再生を継続する。
+- 副作用:
+  - projectの`output.playbackLoopEnabled`へ保存される。
+- canExecute:
+  - 常に実行可能。
+- undo:
+  - 対象外。
+- テスト観点:
+  - ボタンの`aria-pressed`とruntime状態が同期する。
+  - zero-length範囲ではループせず停止する。
+  - project保存 / 読込で状態を復元する。
 
 ### `playback.seekFrame`
 

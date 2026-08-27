@@ -40,10 +40,10 @@ v0.2.0 の MMD 寄せ UI では、ビューポート直下のバーを「現在�
 
 ```text
 #viewport-bottom-bar
-  [先頭] [前キー] [前フレーム] [再生/一時停止] [次フレーム] [次キー] [末尾]
+  [再生/一時停止] [リピート]
   [ current frame input ]
   [ seek track -------------------------------------------------- ]
-  [ start frame ] ~ [ end frame ] [フレ・スタート] [フレ・ストップ]
+  [ playback range start handle ] [ playback range end / stop handle ]
 ```
 
 優先する体験:
@@ -51,7 +51,7 @@ v0.2.0 の MMD 寄せ UI では、ビューポート直下のバーを「現在�
 - 今どのフレームにいるかが、ビューポート直下だけで分かる
 - 横長の seek track をドラッグしてフレーム移動できる
 - 再生 / 一時停止 / 前後移動がタイムライン左上に戻らず操作できる
-- フレーム範囲 start / stop の数値と checkbox を下バーに集約できる
+- フレーム範囲 start / stop をseek track上のhandleで直接調整できる
 
 初回では waveform や key marker の詳細描画は入れない。
 
@@ -176,13 +176,14 @@ type ViewportSeekBarControllerOptions = {
 ### Slice 2: 再生操作の集約
 
 - play / pause / step / boundary ボタンを下バーへ追加
+- repeat buttonは下段の再生button隣へ置き、ON時はstart / end範囲をloopする
 - 左タイムライン上部の再生ボタンを整理候補にする
 - keyboard shortcut と同じ Action 経路へ寄せる
 
 ### Slice 3: 再生範囲 UI
 
-- start / end 数値入力
-- フレ・スタート / フレ・ストップ checkbox
+- start / end handle
+- end handleを常時の自動停止位置として扱う
 - WebM 出力 popup と同じ playback range state を参照
 - 既存の表示欄側 range UI と重複しないよう整理
 
@@ -226,4 +227,6 @@ type ViewportSeekBarControllerOptions = {
 - 既存の下バー数値入力とハンドル drag の結合を外し、右下ハンドルは `ViewportAxisHandleController` に分離した。
 - 下バー seek track の drag は `timeline.seekFrame` の `dragStart / dragMove / dragEnd` に流す。
 - current frame input は `playback.seekFrame`、transport button は既存 playback / keyframe seek Action を使う。
-- 再生範囲 start / end / フレ・スタート / フレ・ストップは `ExportUiController` の既存 state を正とし、新しい保存項目は増やさない。
+- 再生範囲 start / end は `ExportUiController` の既存 state を正とし、新しい保存項目は増やさない。
+- 2026-08-27: 重複した「フレ・ストップ」checkboxを削除し、seekbarのend handleを常時停止位置とした。既存project schemaの`frameStopEnabled`は互換用に`true`で保存する。
+- 2026-08-27: 下段の再生button隣へrepeat toggleを追加した。OFFではend停止、ONではend到達時にstartへ戻って再生を継続し、状態はprojectへ保存する。

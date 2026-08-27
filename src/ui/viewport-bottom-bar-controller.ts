@@ -6,13 +6,13 @@ type PlaybackRangeState = {
     startFrame: number;
     endFrame: number;
     frameStartEnabled: boolean;
-    frameStopEnabled: boolean;
 };
 
 type ViewportSeekBarState = {
     currentFrame: number;
     totalFrames: number;
     isPlaying: boolean;
+    loopEnabled: boolean;
     playbackRange: PlaybackRangeState;
 };
 
@@ -20,6 +20,7 @@ type ViewportSeekBarOptions = {
     onSeekFrame: (frame: number, phase: TimelineSeekPhase) => void;
     onCommitCurrentFrame: (frame: number) => void;
     onTogglePlayback: () => void;
+    onSetLoopEnabled: (enabled: boolean) => void;
     onStepFrame: (deltaFrames: number) => void;
     onSeekBoundary: (boundary: "start" | "end") => void;
     onSeekAdjacentKeyframe: (direction: -1 | 1) => void;
@@ -38,6 +39,7 @@ export class ViewportSeekBarController {
     private readonly btnPrevKey: HTMLButtonElement | null;
     private readonly btnNextKey: HTMLButtonElement | null;
     private readonly btnPlayToggle: HTMLButtonElement | null;
+    private readonly btnLoopToggle: HTMLButtonElement | null;
     private readonly btnExportPng: HTMLButtonElement | null;
     private readonly btnToggleUi: HTMLButtonElement | null;
     private readonly currentFrameInput: HTMLInputElement | null;
@@ -51,10 +53,10 @@ export class ViewportSeekBarController {
     private readonly rangeStartInput: HTMLInputElement | null;
     private readonly rangeEndInput: HTMLInputElement | null;
     private readonly frameStartToggle: HTMLInputElement | null;
-    private readonly frameStopToggle: HTMLInputElement | null;
     private readonly onSeekFrame: ViewportSeekBarOptions["onSeekFrame"];
     private readonly onCommitCurrentFrame: ViewportSeekBarOptions["onCommitCurrentFrame"];
     private readonly onTogglePlayback: ViewportSeekBarOptions["onTogglePlayback"];
+    private readonly onSetLoopEnabled: ViewportSeekBarOptions["onSetLoopEnabled"];
     private readonly onStepFrame: ViewportSeekBarOptions["onStepFrame"];
     private readonly onSeekBoundary: ViewportSeekBarOptions["onSeekBoundary"];
     private readonly onSeekAdjacentKeyframe: ViewportSeekBarOptions["onSeekAdjacentKeyframe"];
@@ -66,11 +68,11 @@ export class ViewportSeekBarController {
         currentFrame: 0,
         totalFrames: 0,
         isPlaying: false,
+        loopEnabled: false,
         playbackRange: {
             startFrame: 0,
             endFrame: 0,
             frameStartEnabled: false,
-            frameStopEnabled: false,
         },
     };
     private seekDragPointerId: number | null = null;
@@ -84,6 +86,7 @@ export class ViewportSeekBarController {
         this.onSeekFrame = options.onSeekFrame;
         this.onCommitCurrentFrame = options.onCommitCurrentFrame;
         this.onTogglePlayback = options.onTogglePlayback;
+        this.onSetLoopEnabled = options.onSetLoopEnabled;
         this.onStepFrame = options.onStepFrame;
         this.onSeekBoundary = options.onSeekBoundary;
         this.onSeekAdjacentKeyframe = options.onSeekAdjacentKeyframe;
@@ -100,6 +103,7 @@ export class ViewportSeekBarController {
         this.btnPrevKey = document.getElementById("viewport-seek-prev-key") as HTMLButtonElement | null;
         this.btnNextKey = document.getElementById("viewport-seek-next-key") as HTMLButtonElement | null;
         this.btnPlayToggle = document.getElementById("viewport-seek-play-toggle") as HTMLButtonElement | null;
+        this.btnLoopToggle = document.getElementById("viewport-seek-loop-toggle") as HTMLButtonElement | null;
         this.btnExportPng = document.getElementById("viewport-seek-export-png") as HTMLButtonElement | null;
         this.btnToggleUi = document.getElementById("viewport-seek-toggle-ui") as HTMLButtonElement | null;
         this.currentFrameInput = document.getElementById("viewport-seek-current-frame") as HTMLInputElement | null;
@@ -113,7 +117,6 @@ export class ViewportSeekBarController {
         this.rangeStartInput = document.getElementById("viewport-seek-range-start") as HTMLInputElement | null;
         this.rangeEndInput = document.getElementById("viewport-seek-range-end") as HTMLInputElement | null;
         this.frameStartToggle = document.getElementById("viewport-seek-frame-start-toggle") as HTMLInputElement | null;
-        this.frameStopToggle = document.getElementById("viewport-seek-frame-stop-toggle") as HTMLInputElement | null;
 
         this.installEventHandlers();
         this.refreshLocale();
@@ -124,11 +127,11 @@ export class ViewportSeekBarController {
             currentFrame: this.normalizeFrame(state.currentFrame),
             totalFrames: Math.max(0, this.normalizeFrame(state.totalFrames)),
             isPlaying: state.isPlaying,
+            loopEnabled: state.loopEnabled,
             playbackRange: {
                 startFrame: this.normalizeFrame(state.playbackRange.startFrame),
                 endFrame: this.normalizeFrame(state.playbackRange.endFrame),
                 frameStartEnabled: state.playbackRange.frameStartEnabled,
-                frameStopEnabled: state.playbackRange.frameStopEnabled,
             },
         };
 
@@ -137,6 +140,9 @@ export class ViewportSeekBarController {
         }
         if (this.totalFrameLabel) {
             this.totalFrameLabel.textContent = String(this.state.totalFrames);
+        }
+        if (this.btnLoopToggle) {
+            this.btnLoopToggle.setAttribute("aria-pressed", String(this.state.loopEnabled));
         }
         if (this.rangeStartInput && document.activeElement !== this.rangeStartInput) {
             this.rangeStartInput.value = String(this.state.playbackRange.startFrame);
@@ -147,10 +153,6 @@ export class ViewportSeekBarController {
         if (this.frameStartToggle) {
             this.frameStartToggle.checked = this.state.playbackRange.frameStartEnabled;
         }
-        if (this.frameStopToggle) {
-            this.frameStopToggle.checked = this.state.playbackRange.frameStopEnabled;
-        }
-
         this.updateTrack();
         this.refreshLocale();
     }
@@ -162,6 +164,11 @@ export class ViewportSeekBarController {
             this.btnPlayToggle.textContent = this.state.isPlaying ? "⏸" : "▶";
             this.btnPlayToggle.title = label;
             this.btnPlayToggle.setAttribute("aria-label", label);
+        }
+        if (this.btnLoopToggle) {
+            const label = t(this.state.loopEnabled ? "viewportSeekBar.repeatOn" : "viewportSeekBar.repeatOff");
+            this.btnLoopToggle.title = label;
+            this.btnLoopToggle.setAttribute("aria-label", label);
         }
         this.setButtonTitle(this.btnSeekStart, "viewportSeekBar.seekStart");
         this.setButtonTitle(this.btnSeekEnd, "viewportSeekBar.seekEnd");
@@ -181,6 +188,7 @@ export class ViewportSeekBarController {
         this.btnPrevKey?.addEventListener("click", () => this.onSeekAdjacentKeyframe(-1));
         this.btnNextKey?.addEventListener("click", () => this.onSeekAdjacentKeyframe(1));
         this.btnPlayToggle?.addEventListener("click", () => this.onTogglePlayback());
+        this.btnLoopToggle?.addEventListener("click", () => this.onSetLoopEnabled(!this.state.loopEnabled));
         this.btnExportPng?.addEventListener("click", () => this.onExportPng());
         this.btnToggleUi?.addEventListener("click", () => this.onToggleUi());
 
@@ -197,10 +205,6 @@ export class ViewportSeekBarController {
         this.frameStartToggle?.addEventListener("change", () => {
             this.onRangeToggle("start", Boolean(this.frameStartToggle?.checked));
         });
-        this.frameStopToggle?.addEventListener("change", () => {
-            this.onRangeToggle("stop", Boolean(this.frameStopToggle?.checked));
-        });
-
         this.rangeStartHandle?.addEventListener("pointerdown", (event) => this.beginRangeDrag(event, "start"));
         this.rangeEndHandle?.addEventListener("pointerdown", (event) => this.beginRangeDrag(event, "end"));
         this.track?.addEventListener("pointerdown", (event) => this.beginSeekDrag(event));

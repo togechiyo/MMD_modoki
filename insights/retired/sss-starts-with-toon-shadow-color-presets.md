@@ -12,7 +12,7 @@ evidence:
 source_docs:
   - ../../docs/sss-standard-skin-shader-presets-2026-08-26.md
   - ../../docs/realtime-sss-methods-research-2026-08-26.md
-superseded_by: ../decisions/sss-skin-uses-screen-space-burley-diffusion.md
+superseded_by: ../decisions/reject-sss-shader-presets-from-normal-ui.md
 ---
 
 # SSSをToon影色ベースの二つの局所プリセットから始める
@@ -41,4 +41,4 @@ pre-integrated局所近似で二つのプリセットを作る方針だった。
 
 ## 再確認条件
 
-なし。現行判断は置換先decisionを参照する。
+なし。最終的な撤退判断は置換先decisionを参照する。

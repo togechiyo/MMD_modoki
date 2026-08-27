@@ -301,10 +301,18 @@ describe("material shader preset restore", () => {
 
         const source = host.constructor.presetWgslToonFragmentByMaterial.get(host.material);
         expect(source).toContain("// @apply-without-toon");
-        expect(source).toContain("let surfaceIrradiance=mix(info.diffuse*shadow,toonNdl*info.diffuse,info.isToon);");
+        expect(source).toContain("let skinSssToonShadowPixel=vec2i(0,0);");
+        expect(source).toContain("textureLoad(toonSampler,skinSssToonShadowPixel,0).rgb");
+        expect(source).toContain("let skinSssShadowBand=mix(skinSssShadowTint,skinSssToonRaw,skinSssToonInfluence);");
+        expect(source).toContain("surfaceIrradiance+skinSssTransmissionIrradiance");
+        expect(source).toContain("max(info.diffuse,vec3f(0.0))");
+        expect(source).toContain("max(1.0-skinSssLitMask,skinSssTransmissionMask)");
+        expect(source).toContain("mmdSkinSssSelfMultiplyMask=max(mmdSkinSssSelfMultiplyMask,skinSssSelfMultiplyMask);");
+        expect(source).not.toContain("toonNdl*info.diffuse");
         expect(source).toContain("let skinSssUniformThicknessMm=1.20;");
         expect(source).toContain("let skinSssScatterDistanceMm=vec3f(2.40,0.90,0.35);");
         expect(source).toContain("let skinSssBackFacing=smoothstep(0.02,0.72,-skinSssRawNdl);");
+        expect(source).toContain("skinSssTransmissionMask*2.40");
         expect(source).toContain("mmdSkinSssIrradiance+=skinSssIrradiance;");
         expect(source).toContain("mmdSkinSssEnabled=1.0;");
         expect(source).toContain("mmdSkinSssProfileIndex=1.0;");

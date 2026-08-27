@@ -41,4 +41,5 @@ MMD 本体機能より優先度は低いものの、再開時の判断や撤退�
 | Status | Insight | Replaced by |
 | --- | --- | --- |
 | retired | [MMD retargetはVMD trackの名前対応bakeから始める](./retired/retarget-vmd-tracks-before-babylon-animation-groups.md) | `vmd-retarget-is-an-isolated-popup-tool` |
-| retired | [SSSをToon影色ベースの二つの局所プリセットから始める](./retired/sss-starts-with-toon-shadow-color-presets.md) | `sss-skin-uses-screen-space-burley-diffusion` |
+| retired | [SSSをToon影色ベースの二つの局所プリセットから始める](./retired/sss-starts-with-toon-shadow-color-presets.md) | `reject-sss-shader-presets-from-normal-ui` |
+| retired | [SSS Skinは画面空間Burley拡散を使いSSS Standardは保留する](./retired/sss-skin-uses-screen-space-burley-diffusion.md) | `reject-sss-shader-presets-from-normal-ui` |

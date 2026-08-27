@@ -8,8 +8,12 @@ describe("StandardMaterial SSS pre-pass compatibility", () => {
     it("marks non-SSS WGSL StandardMaterial pixels as excluded", () => {
         const source =
             "fn main(input: FragmentInputs)->FragmentOutputs {"
+            + "var finalDiffuse: vec3f=vec3f(1.0);"
+            + "#ifdef SPECULARTERM\nvar finalSpecular: vec3f=specularBase*specularColor;"
+            + "#define CUSTOM_FRAGMENT_BEFORE_FOG"
             + "var writeGeometryInfo: f32=select(0.0,1.0,color.a>0.4);var fragData: array<vec4<f32>,SCENE_MRT_COUNT>;"
-            + "fragData[PREPASS_COLOR_INDEX]=color; ";
+            + "fragData[PREPASS_COLOR_INDEX]=color; "
+            + "fragData[PREPASS_ALBEDO_SQRT_INDEX]=vec4f(sqrt(baseColor.rgb),writeGeometryInfo);";
         const patched = injectStandardMaterialSssExclusion(source, "wgsl");
 
         expect(patched).toContain(
@@ -17,12 +21,18 @@ describe("StandardMaterial SSS pre-pass compatibility", () => {
         );
         expect(patched).toContain("var mmdSkinSssEnabled: f32=0.0;");
         expect(patched).toContain(
-            "mmdSkinSssIrradiance*diffuseColor*baseAmbientColor*mmdSkinSssSqrtAlbedo",
+            "diffuseBase-mmdSkinSssIrradiance",
         );
         expect(patched).toContain(
-            "sqrt(max(baseColor.rgb,vec3f(0.0)))*mmdSkinSssPreparedIrradiance",
+            "(finalDiffuse-mmdSkinSssFinalDiffuseWithoutSss)*baseAmbientColor",
         );
-        expect(patched).toContain("color.rgb-mmdSkinSssDiffuseColor");
+        expect(patched).toContain(
+            "mmdSkinSssVisibleDiffuse/max(mmdSkinSssSqrtAlbedo,vec3f(0.0001))",
+        );
+        expect(patched).toContain("color.rgb-mmdSkinSssVisibleDiffuse");
+        expect(patched).toContain("mmdSkinSssSelfMultiplyMask*0.20");
+        expect(patched).toContain("sqrt(max(baseColor.rgb,vec3f(0.0)))*mmdSkinSssSelfMultiplyFactor");
+        expect(patched).toContain("fragData[PREPASS_COLOR_INDEX]=color; ");
         expect(injectStandardMaterialSssExclusion(patched, "wgsl")).toBe(patched);
     });
 

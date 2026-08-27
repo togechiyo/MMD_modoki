@@ -4,11 +4,34 @@
 // StandardMaterial pre-pass patch removes this contribution from scene color,
 // and Babylon's Burley SSS pass returns its depth-aware diffused result.
 #ifdef TOON_TEXTURE
-let surfaceIrradiance=mix(info.diffuse*shadow,toonNdl*info.diffuse,info.isToon);
+#ifdef TOON_TEXTURE_COLOR
+let skinSssShadowTint=clamp(uniforms.toonTextureAdditiveColor.rgb,vec3f(0.0),vec3f(1.0));
+let skinSssToonInfluence=clamp(uniforms.toonTextureAdditiveColor.a,0.0,1.0);
+let skinSssToonShadowPixel=vec2i(0,0);
+let skinSssToonRaw=clamp(
+    textureLoad(toonSampler,skinSssToonShadowPixel,0).rgb,
+    vec3f(0.0),
+    vec3f(1.0)
+);
+let skinSssShadowBand=mix(skinSssShadowTint,skinSssToonRaw,skinSssToonInfluence);
+#else
+let skinSssToonShadowPixel=vec2i(0,0);
+let skinSssShadowBand=clamp(
+    textureLoad(toonSampler,skinSssToonShadowPixel,0).rgb,
+    vec3f(0.0),
+    vec3f(1.0)
+);
+#endif
+let skinSssSelfLitMask=smoothstep(0.445,0.555,clamp(info.ndl,0.0,1.0));
+let skinSssOcclusionLitMask=smoothstep(0.425,0.575,clamp(shadow,0.0,1.0));
+let skinSssLitMask=clamp(skinSssSelfLitMask*skinSssOcclusionLitMask,0.0,1.0);
+let surfaceIrradiance=info.diffuse*mix(skinSssShadowBand,vec3f(1.0),skinSssLitMask);
 #elif defined(IGNORE_DIFFUSE_WHEN_TOON_TEXTURE_DISABLED)
 let surfaceIrradiance=info.diffuse;
+let skinSssLitMask=1.0;
 #else
 let surfaceIrradiance=info.diffuse*shadow;
+let skinSssLitMask=clamp(shadow,0.0,1.0);
 #endif
 
 #ifdef LIGHT0
@@ -49,12 +72,23 @@ let skinSssViewFacing=clamp(abs(dot(normalW,viewDirectionW)),0.0,1.0);
 let skinSssSilhouette=mix(0.48,1.0,pow(1.0-skinSssViewFacing,0.65));
 let skinSssTransmissionMask=
     skinSssBackFacing*skinSssBackLightAlignment*skinSssSilhouette;
+let skinSssSelfMultiplyMask=clamp(
+    max(1.0-skinSssLitMask,skinSssTransmissionMask),
+    0.0,
+    1.0
+);
 let skinSssTransmissionIrradiance=
-    info.diffuse*skinSssTransmissionProfile*skinSssTransmissionMask*1.45;
+    info.diffuse*skinSssTransmissionProfile*skinSssTransmissionMask*2.40;
 
-let skinSssIrradiance=surfaceIrradiance+skinSssTransmissionIrradiance;
+// Transmission lifts the back-lit shadow side, but it must not create more
+// diffuse energy than the same light can provide on a fully lit surface.
+let skinSssIrradiance=min(
+    surfaceIrradiance+skinSssTransmissionIrradiance,
+    max(info.diffuse,vec3f(0.0))
+);
 diffuseBase+=skinSssIrradiance;
 mmdSkinSssIrradiance+=skinSssIrradiance;
+mmdSkinSssSelfMultiplyMask=max(mmdSkinSssSelfMultiplyMask,skinSssSelfMultiplyMask);
 mmdSkinSssEnabled=1.0;
 mmdSkinSssProfileIndex=__MMD_SKIN_SSS_PROFILE_INDEX__;
 }

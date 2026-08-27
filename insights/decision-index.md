@@ -28,7 +28,7 @@
 | accepted-with-constraints | [配布アプリはoffline-first、開発作業はfixture中心でGUI確認する](./decisions/keep-agent-work-local-fixture-driven-and-gui-verified.md) | branch、runtime通信、開発時network、local reference配置、model asset、UI検証の安全境界を決める |
 | adopted | [VMD retargetは現在のprojectから独立したpopup toolにする](./decisions/vmd-retarget-is-an-isolated-popup-tool.md) | PMX間のVMD変換、rotation・体格差補正、preview導線を変更する |
 | adopted | [MMDプリセットはfallbackの役割を保ち影側色を共通化する](./decisions/mmd-standard-respects-missing-toon-and-light-shadow-forces-fallback.md) | Toonなし材質、fallback Toon、共通影色、shader presetの役割を変更する |
-| adopted | [SSS Skinは画面空間Burley拡散を使いSSS Standardは保留する](./decisions/sss-skin-uses-screen-space-burley-diffusion.md) | MMD材質の肌SSS、逆光透過、thickness、SSS Standard再設計を変更する |
+| adopted | [次のSSSはプロジェクト所有のWGSL経路で完全自作する](./decisions/future-sss-uses-project-owned-wgsl-pipeline.md) | MMD材質のSSSを再検討・試作する |
 
 ## 却下
 
@@ -39,6 +39,7 @@
 | rejected | [PBR を通常 UI に出さない](./decisions/keep-pbr-out-of-normal-ui.md) | PBR 実験の公開導線を変更する |
 | rejected | [品質が戻るまで海面エフェクトを通常 UI に出さない](./decisions/reject-ocean-effect-from-normal-ui-until-quality-recovers.md) | 海面エフェクトを再利用・再公開する |
 | rejected | [独自 VP8 と無圧縮 AVI は当面採用しない](./decisions/reject-custom-vp8-and-uncompressed-avi-for-now.md) | 動画出力方式を追加する |
+| rejected | [SSS SkinとSSS Standardを通常UIから外す](./decisions/reject-sss-shader-presets-from-normal-ui.md) | MMD材質のSSSプリセットを再公開・再設計する |
 
 ## 保留
 

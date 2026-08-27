@@ -56,6 +56,8 @@ const HIDDEN_SHADER_PRESET_IDS = new Set<WgslMaterialShaderPresetId>([
     "wgsl-obj-mtl",
     "wgsl-white-key-cutout",
     "wgsl-black-key-cutout",
+    "wgsl-sss-standard",
+    "wgsl-sss-skin",
 ]);
 
 function resolveShaderPanelElements(): ShaderPanelElements {
@@ -141,8 +143,9 @@ export class ShaderPanelController {
 
         const isAvailable = this.mmdManager.isWgslMaterialShaderAssignmentAvailable();
         const previousSelectedShaderValue = elements.presetSelect.value;
+        const wgslPresetCatalog = this.mmdManager.getWgslMaterialShaderPresets();
         let presets: Array<{ id: string; label: string; description: string }> =
-            this.mmdManager.getWgslMaterialShaderPresets()
+            wgslPresetCatalog
             .filter((preset) => !HIDDEN_SHADER_PRESET_IDS.has(preset.id)
                 || (selectedAccessory?.kind === "x" && preset.id === "wgsl-accessory-toon")
                 || (selectedAccessory?.kind === "obj" && (
@@ -309,7 +312,10 @@ export class ShaderPanelController {
         }
         elements.presetSelect.value = selectedShaderValue;
 
-        const presetLabelById = new Map(presets.map((preset) => [preset.id, preset.label]));
+        const presetLabelById = new Map<string, string>(
+            (isPbrModel ? presets : wgslPresetCatalog)
+                .map((preset): [string, string] => [preset.id, preset.label]),
+        );
         elements.materialList.innerHTML = "";
 
         for (const material of selectedMaterials) {

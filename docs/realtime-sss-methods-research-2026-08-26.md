@@ -5,23 +5,34 @@
 Babylon.js の `PBR Skin SSS` とは別に、MMD Standard 系の材質へ適用できる独自の
 Subsurface Scattering（SSS）プリセットを検討する。
 
-方式調査から始め、2026-08-26に`SSS Skin`へ採用した実装方式と制約まで記録する。
+方式調査から始め、2026-08-26から27日に`SSS Skin`で試作した実装方式、制約、撤退判断まで記録する。
 
 ## 結論
 
-本来の表面下拡散は、次の二層構成を採用した。
+2026-08-27の最終判断では、試作した`SSS Skin`と`SSS Standard`をどちらも不採用とし、
+通常UIから外した。保存済みprojectの読込互換のためIDと実装は残すが、現在の推奨方式ではない。
+
+調査上の長期候補としては、次の二層構成を試した。
 
 1. 材質プリセット側で SSS 対象、強度、散乱色、散乱半径を指定する。
 2. Babylon.jsのPrePass SSSで、対象材質のdiffuse irradianceだけをBurley normalized diffusion profileにより画面空間拡散する。
 
-初回の局所近似は順光側への赤被りと法線差の強調が残ったため、所有者判断で破棄した。
-`SSS Skin`を先に王道のskin SSSとして作り直し、`SSS Standard`は保留する。
+初回の局所近似は順光側への赤被りと法線差の強調が残ったため破棄した。
+次に`SSS Skin`をskin向け画面空間SSSとして作り直し、`SSS Standard`を保留した。
 `SSS Skin`は固定赤優勢profile、材質単位mask、`0.08 m/unit`、`1.20 mm`の均一厚みtransmissionを使う。
-詳細は[SSS Skinシェーダープリセット実装メモ](./sss-standard-skin-shader-presets-2026-08-26.md)を参照する。
+しかしToon影色、光量分離、transmission gain、自己乗算を調整しても実モデルで白さが残り、
+最終的に両プリセットを撤去した。詳細は
+[SSS Skinシェーダープリセット実装メモ](./sss-standard-skin-shader-presets-2026-08-26.md)を参照する。
+
+次回のSSS試作では、PBR側でも使っていたBabylon.js標準SSSの内部実装を再利用しない。
+散乱signal、必要な中間buffer、WGSL filter、合成をプロジェクト側で所有する完全自作経路として設計する。
+Babylon.jsはWebGPU実行基盤として利用しても、`SubSurfaceConfiguration`、標準SSS PrePass契約、
+`SubSurfaceScatteringPostProcess`はSSSアルゴリズムの実装に使わない。
 
 現行構成で最初から採用しないものは次のとおり。
 
-- PBR材質への変換（BabylonのBurley PostProcess自体はMMD Standardから再利用する）
+- PBR材質への変換
+- Babylon.js標準SSSの`SubSurfaceConfiguration` / PrePass / Burley PostProcess再利用
 - TAA history を前提とする AFIS の初回導入
 - hardware ray tracing を要求する ReSTIR SSS / hybrid path tracing
 - モデルごとの学習を要求する Neural SSS
@@ -83,9 +94,9 @@ PS4 では 21 sample に制限している。
 現在の Unity HDRP も Diffusion Profile に scattering color、radius、world scale を持たせ、
 投影半径が 1 pixel 未満なら SSS を適用しない。albedo を blur 前後のどちらで掛けるかも選べる。
 
-`MMD_modoki`ではこれを`SSS Skin`へ採用した。Babylon.js 9.2の実装は最大40sampleのdisk sampling、
+`MMD_modoki`ではこれを`SSS Skin`の試作へ採用した。Babylon.js 9.2の実装は最大40sampleのdisk sampling、
 depth bilateral weight、weight正規化をすでに持つため、独自compute filterを増やさず利用する。
-採用理由は次のとおり。
+試作時の選定理由は次のとおり。
 
 - WebGPU / Classic / Frame Graphで同じPrePass compositionを使える。
 - hardware ray tracing を要求しない。
@@ -154,21 +165,21 @@ denoiser を前提とする。1080p / RTX 5090 の例でも SSS vertex あたり
 Penner方式では散乱済みdiffuse BRDFを`N dot L × 曲率`の2D LUTへ事前積分する。
 初回の`SSS Standard` / `SSS Skin`で解析式を試したが、隣接点から光を集めないため
 順光側の色付きliftと法線差の強調を解消できなかった。`SSS Skin`からは撤去し、
-保留中の`SSS Standard`にだけ旧実験として残す。
+`SSS Standard`の互換実装にだけ旧実験として残る。
 
 ## 方式比較
 
 | 方式 | 本来の周辺拡散 | 薄部透過 | 主な追加資源 | 現行構成との相性 | 判断 |
 | --- | --- | --- | --- | --- | --- |
 | Separable SSS | 近似 | なし | diffuse RT、depth、2 pass | 高い | 低負荷 fallback |
-| Burley screen-space | あり | 別処理 | irradiance、mask、depth、composite | 高い | `SSS Skin`で採用 |
+| Burley screen-space | あり | 別処理 | irradiance、mask、depth、composite | 高い | `SSS Skin`で試作後、不採用 |
 | AFIS | あり | 別処理 | 上記 + history、variance、TAA | 中 | 第二段階 |
 | ReSTIR SSS 2024 | path based | あり得る | RT pipeline、reservoir、denoiser | 低い | 見送り |
 | Hybrid RT + diffusion 2025 | 高精度 | 強い | RT pipeline、複数 ray、denoiser | 低い | 将来候補 |
 | Neural SSS 2024 | object-specific | あり | training、MLP、surface sampling | 低い | 見送り |
 | Pre-integrated局所近似 | なし | 近似 | 材質shaderのみ | 非常に高い | `SSS Skin`では不採用 |
 
-## MMD_modokiで採用したアーキテクチャ
+## MMD_modokiで試作したアーキテクチャ
 
 ### 1. 材質 preset は対象指定と parameter を担当する
 
@@ -180,7 +191,7 @@ Penner方式では散乱済みdiffuse BRDFを`N dot L × 曲率`の2D LUTへ事�
 | `scatterDistance` | RGB ごとの散乱距離 | `[2.4, 0.9, 0.35]` |
 | `worldScale` | MMD world unit と散乱距離の対応 | `0.08 m/unit` |
 | `mask` | SSS 適用率 | 最初は材質単位で 0 / 1 |
-| `transmissionStrength` | 薄部逆光 | 固定厚み`1.20 mm`、gain `1.45` |
+| `transmissionStrength` | 薄部逆光 | 固定厚み`1.20 mm`、gain `2.40`（2026-08-27強調調整） |
 
 材質ごとに profile を自由作成する前に、まず skin profile 一種類だけで成立させる。
 
@@ -265,7 +276,7 @@ Frame Graph / RTTの接続が重なった。`SSS Skin`ではMMD Standardのdirec
 - `SSS Standard` / `SSS Skin`で曲率駆動pre-integrated解析近似を試した。
 - 順光側の色付きliftと法線差の強調が残ったため、`SSS Skin`では不採用とした。
 
-### Phase 1: `SSS Skin` Burley diffusion（実装済み）
+### Phase 1: `SSS Skin` Burley diffusion（試作完了・不採用）
 
 - MMD direct diffuse / albedo / profile maskをStandardMaterial PrePassへ出す。
 - Babylonのdepth bilateral Burley filterへ接続する。
@@ -273,14 +284,12 @@ Frame Graph / RTTの接続が重なった。`SSS Skin`ではMMD Standardのdirec
 - Classic / Frame Graphの両経路で同じSSS configurationを使う。
 - 固定赤優勢profileと均一厚みtransmissionを使う。
 
-### Phase 2: profile / thickness調整
+### Phase 2: profile / thickness調整（中止）
 
-- skin profile の RGB distance と world scale を調整可能にする。
-- optional mask / thickness texture を追加する。
-- 必要なら部位別thickness textureを追加する。
-- `SSS Standard`を再設計し、Toon左下1pxの扱いを決める。
+- profile、Toon影色、transmission gain、自己乗算を試したが、実モデルの白さが残った。
+- `SSS Standard`を含め、追加調整と通常UIでの提供を中止した。
 
-### Phase 3: adaptive / temporal
+### Phase 3: adaptive / temporal（未着手・現行計画外）
 
 - 固定 sample の負荷が問題になった場合だけ AFIS 系を検討する。
 - TAA、history、velocity、camera cut、export determinism を同時に設計する。

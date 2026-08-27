@@ -330,9 +330,8 @@
 
 - [ ] シェーダープリセットの拡充
 - [x] 新しいリアルタイム SSS 方式を調査し、Burley screen-space diffusion を本来の表面下拡散の長期候補へ選定（[調査メモ](./realtime-sss-methods-research-2026-08-26.md)）
-- [x] `SSS Skin`をMMD Standardのdiffuse irradianceだけに適用するBabylon Burley screen-space diffusionへ作り直し、固定赤優勢profileと均一厚みtransmissionを追加（[実装メモ](./sss-standard-skin-shader-presets-2026-08-26.md)）
-- [ ] `SSS Standard`は局所近似を作り直し、Toon左下1pxを使う方式を含めて再設計する
-- [ ] `SSS Skin`の見た目を実モデルで比較し、散乱距離、均一厚み、haloを調整する
+- [x] `SSS Skin`をBabylon Burley screen-space diffusionへ作り直して実モデル比較まで行ったが、白さが残るため`SSS Standard`とともに不採用とし通常UIから撤去（保存IDは旧project互換用に維持、[実装・撤退記録](./sss-standard-skin-shader-presets-2026-08-26.md)）
+- [ ] SSSを再開するときはBabylon.js標準SSSを再利用せず、中間buffer、散乱filter、合成を含むプロジェクト所有のWGSL経路として試作する
 - [ ] 疑似メタリック表現（ハイライト / sphere / toon 応答の調整）
 - [ ] 材質タイプ別プリセット整理（肌 / 髪 / 布 / 金属）
 - [x] PBR IBLの実寄与をモデルなしPBR MMD Like合成球の画素輝度差で確認

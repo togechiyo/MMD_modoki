@@ -124,14 +124,12 @@ export class PngExportDialogController implements PopupContentController {
                 commit: () => this.commitDimensionInput("width"),
                 revert: () => this.syncDimensionsFromOutputState(),
             });
-            this.widthInput.addEventListener("change", () => this.commitDimensionInput("width"));
         }
         if (this.heightInput) {
             installEnterCommitNumberInput(this.heightInput, {
                 commit: () => this.commitDimensionInput("height"),
                 revert: () => this.syncDimensionsFromOutputState(),
             });
-            this.heightInput.addEventListener("change", () => this.commitDimensionInput("height"));
         }
         this.transparentBackgroundInput?.addEventListener("change", () => {
             this.output.setPngTransparentBackground(this.transparentBackgroundInput?.checked ?? false);

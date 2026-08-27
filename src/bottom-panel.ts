@@ -372,7 +372,7 @@ export class BottomPanel {
         if (isCameraControl) {
             const externalParentActive = Boolean(this.mmdManager?.getCameraExternalParent());
             controlDefs.push(
-                { key: "camDistance", label: t("slider.distance"), min: CAMERA_DISTANCE_MIN, max: CAMERA_DISTANCE_MAX, step: 0.1, value: cameraPose?.distance ?? 45, disabled: externalParentActive || this.cameraPlaybackLocked },
+                { key: "camDistance", label: t("slider.distance"), min: externalParentActive ? 0 : CAMERA_DISTANCE_MIN, max: CAMERA_DISTANCE_MAX, step: 0.1, value: cameraPose?.distance ?? 45, disabled: externalParentActive || this.cameraPlaybackLocked },
                 { key: "camFov", label: t("slider.fov"), min: CAMERA_FOV_MIN_DEG, max: CAMERA_FOV_MAX_DEG, step: 0.1, value: cameraPose?.fov ?? 30, disabled: this.cameraPlaybackLocked },
             );
         }
@@ -513,8 +513,8 @@ export class BottomPanel {
 
         if (this.currentBoneName === BottomPanel.CAMERA_CONTROL_NAME) {
             const pose = this.mmdManager.getCameraKeyframePose();
-            this.syncSelectedBoneSlidersFromSnapshot(pose, force);
             this.syncCameraControlAvailability();
+            this.syncSelectedBoneSlidersFromSnapshot(pose, force);
             return;
         }
 
@@ -580,6 +580,9 @@ export class BottomPanel {
         const externalParentActive = Boolean(this.mmdManager?.getCameraExternalParent());
         for (const [key, input] of this.boneSliders) {
             const disabled = this.cameraPlaybackLocked || (key === "camDistance" && externalParentActive);
+            if (key === "camDistance") {
+                input.min = String(externalParentActive ? 0 : CAMERA_DISTANCE_MIN);
+            }
             input.disabled = disabled;
             input.classList.toggle("is-channel-unavailable", disabled);
             input.setAttribute("aria-disabled", disabled ? "true" : "false");
@@ -598,10 +601,12 @@ export class BottomPanel {
             const rz = this.getBoneSliderNumber("rz");
             const distance = this.getBoneSliderNumber("camDistance");
             const fov = this.getBoneSliderNumber("camFov");
-            this.mmdManager.setCameraTarget(tx, ty, tz);
-            this.mmdManager.setCameraRotation(rx, ry, rz);
-            this.mmdManager.setCameraDistance(distance);
-            this.mmdManager.setCameraFov(fov);
+            this.mmdManager.applyCameraTrackPose(
+                { x: tx, y: ty, z: tz },
+                { x: rx, y: ry, z: rz },
+                distance,
+                fov,
+            );
             return;
         }
 

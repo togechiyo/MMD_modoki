@@ -1235,7 +1235,11 @@ export class UIController {
             this.beginBoneTransformCommand(boneName);
         };
         this.bottomPanel.onBoneTransformEdited = (boneName) => {
-            this.actionDispatcher.dispatch({ type: "edit.boneTransformChanged", source: "panel", boneName });
+            if (boneName === "Camera") {
+                this.actionDispatcher.dispatch({ type: "edit.cameraTransformChanged", source: "panel" });
+            } else {
+                this.actionDispatcher.dispatch({ type: "edit.boneTransformChanged", source: "panel", boneName });
+            }
             this.refreshViewportBottomBar();
         };
         this.bottomPanel.onBoneTransformEditCommitted = (boneName) => {
@@ -9555,7 +9559,7 @@ export class UIController {
         this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentLightKeyframePayload();
-        const decision = this.getKeyframeRegistrationDecision(before, after, "button", `Frame ${frame} の照明キー`);
+        const decision = this.getKeyframeRegistrationDecision(before, after);
         if (decision !== "proceed") {
             if (decision === "unchanged") this.showToast(`Frame ${frame}: light keyframe unchanged`, "info");
             return;
@@ -9587,7 +9591,7 @@ export class UIController {
         this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentShadowKeyframePayload();
-        const decision = this.getKeyframeRegistrationDecision(before, after, "button", `Frame ${frame} の影キー`);
+        const decision = this.getKeyframeRegistrationDecision(before, after);
         if (decision !== "proceed") {
             if (decision === "unchanged") this.showToast(`Frame ${frame}: shadow keyframe unchanged`, "info");
             return;
@@ -9619,7 +9623,7 @@ export class UIController {
         this.timeline.selectTrackByNameAndCategory(track.name, [track.category]);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentGravityKeyframePayload();
-        const decision = this.getKeyframeRegistrationDecision(before, after, "button", `Frame ${frame} の重力キー`);
+        const decision = this.getKeyframeRegistrationDecision(before, after);
         if (decision !== "proceed") {
             if (decision === "unchanged") this.showToast(`Frame ${frame}: gravity keyframe unchanged`, "info");
             return;
@@ -9781,7 +9785,6 @@ export class UIController {
             this.showToast(`Frame ${frame}: info keyframe unchanged`, "info");
             return;
         }
-        if (before && !window.confirm(`Frame ${frame} の表示・IKキーを上書きしますか？`)) return;
         const command = this.createKeyframePasteCommand(
             track,
             frame,
@@ -9907,9 +9910,6 @@ export class UIController {
             this.showToast(`Frame ${frame}: selected bone keyframes unchanged`, "info");
             return;
         }
-        if (changedItems.some((item) => item.before)
-            && !window.confirm(`Frame ${frame} の${changedItems.length}件のボーンキーを上書きしますか？`)) return;
-
         const nowMs = Date.now();
         const command: BuiltCommand = {
             id: `keyframe.boneBatch:${changedItems.length}:${frame}:${nowMs}`,
@@ -9958,7 +9958,7 @@ export class UIController {
             interpolationSnapshot,
             externalParentOverride,
         );
-        const decision = this.getKeyframeRegistrationDecision(before, after, source, `Frame ${frame} のカメラキー`);
+        const decision = this.getKeyframeRegistrationDecision(before, after);
         if (decision !== "proceed") {
             if (decision === "unchanged" && source !== "system") {
                 this.showToast(`Frame ${frame}: camera keyframe unchanged`, "info");
@@ -10088,7 +10088,7 @@ export class UIController {
         const interpolationSnapshot = this.captureInterpolationCurveSnapshot(track, frame);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.createBoneKeyframePayload(track, poseSnapshot, interpolationSnapshot, this.physicsKeyframeInputMode);
-        const decision = this.getKeyframeRegistrationDecision(before, after, source, `Frame ${frame} の${track.name}キー`);
+        const decision = this.getKeyframeRegistrationDecision(before, after);
         if (decision !== "proceed") {
             if (decision === "unchanged" && source !== "system") {
                 this.showToast(`Frame ${frame}: ${track.name} keyframe unchanged`, "info");
@@ -10181,8 +10181,6 @@ export class UIController {
                 this.showToast(`Frame ${frame}: morph keyframes unchanged`, "info");
                 return;
             }
-            if (changedItems.some((item) => item.before)
-                && !window.confirm(`Frame ${frame} の${changedItems.length}件のモーフキーを上書きしますか？`)) return;
             const nowMs = Date.now();
             const command: BuiltCommand = {
                 id: `keyframe.morphBatch:${changedItems.length}:${frame}:${nowMs}`,
@@ -10228,7 +10226,6 @@ export class UIController {
             if (options.toast) this.showToast(`Frame ${frame}: ${morph.name} morph keyframe unchanged`, "info");
             return;
         }
-        if (before && options.toast && !window.confirm(`Frame ${frame} の${morph.name}モーフキーを上書きしますか？`)) return;
         const command = this.createKeyframePasteCommand(
             track,
             frame,
@@ -10286,8 +10283,7 @@ export class UIController {
         };
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after: TimelineKeyframePayload = { kind: "accessory", ...value };
-        const decision = this.getKeyframeRegistrationDecision(before, after, "panel", `Frame ${frame} のアクセサリキー`);
-        if (decision === "cancel") return;
+        const decision = this.getKeyframeRegistrationDecision(before, after);
         if (decision === "unchanged") {
             this.showToast(`Frame ${frame}: accessory keyframe unchanged`, "info");
             return;
@@ -11177,11 +11173,8 @@ export class UIController {
     private getKeyframeRegistrationDecision(
         before: TimelineKeyframePayload | null,
         after: TimelineKeyframePayload,
-        source: ActionSource,
-        label: string,
-    ): "proceed" | "unchanged" | "cancel" {
+    ): "proceed" | "unchanged" {
         if (before && this.areKeyframePayloadsEqual(before, after)) return "unchanged";
-        if (before && source !== "system" && !window.confirm(`${label}を上書きしますか？`)) return "cancel";
         return "proceed";
     }
 

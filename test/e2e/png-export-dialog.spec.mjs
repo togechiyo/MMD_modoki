@@ -33,6 +33,17 @@ test("メニューのPNG出力で解像度詳細を設定して再表示でき�
     await expect(height).toHaveValue("1080");
     await expect(sizePreset.locator('option[value="7680"]')).toHaveText("8K");
 
+    await width.fill("1111");
+    await height.focus();
+    await expect(width).toHaveValue("1920");
+    await expect(height).toHaveValue("1080");
+
+    await width.fill("1280");
+    await width.press("Enter");
+    await height.focus();
+    await expect(width).toHaveValue("1280");
+    await expect(height).toHaveValue("1080");
+
     await aspect.selectOption("9:16");
     await sizePreset.selectOption("7680");
     await expect(width).toHaveValue("4320");
@@ -49,7 +60,9 @@ test("メニューのPNG出力で解像度詳細を設定して再表示でき�
     await expect(reopenedDialog.locator("#png-output-height")).toHaveValue("7680");
 
     await reopenedDialog.locator("#png-output-width").fill("640");
+    await reopenedDialog.locator("#png-output-width").press("Enter");
     await reopenedDialog.locator("#png-output-height").fill("360");
+    await reopenedDialog.locator("#png-output-height").press("Enter");
     await reopenedDialog.getByRole("button", { name: "PNG出力" }).click();
 
     const userDataPath = resolve(launched.tempDir, "user-data");

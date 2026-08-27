@@ -130,21 +130,23 @@ test("Propertyキー、フレーム列編集、主要プロジェクト状態を
     expect(unpackBytes(property.ikStates[ikIndex])).toEqual([0, 1]);
 
     let dialogCount = 0;
-    page.once("dialog", async (dialog) => {
+    page.on("dialog", async (dialog) => {
       dialogCount += 1;
-      await dialog.dismiss();
+      await dialog.accept();
     });
     await page.locator("#btn-info-keyframe").click();
     expect(dialogCount).toBe(0);
     expect(await page.evaluate(() => window.mmdModokiE2e.getCommandHistoryState().undoCount)).toBe(2);
     await visibility.uncheck();
     await page.locator("#btn-info-keyframe").click();
-    expect(dialogCount).toBe(1);
+    expect(dialogCount).toBe(0);
+    expect(await page.evaluate(() => window.mmdModokiE2e.getCommandHistoryState().undoCount)).toBe(3);
+    expect(unpackBytes((await readPropertyTrack(page)).visibles)).toEqual([0, 0]);
+    await clickHistoryCommand(page, "undo");
     expect(unpackBytes((await readPropertyTrack(page)).visibles)).toEqual([0, 1]);
-    await visibility.check();
     await clickHistoryCommand(page, "undo");
     expect(await page.evaluate(() => window.mmdModokiE2e.getCommandHistoryState()))
-      .toEqual({ undoCount: 1, redoCount: 1 });
+      .toEqual({ undoCount: 1, redoCount: 2 });
     expect(unpackFrames((await readPropertyTrack(page)).frameNumbers)).toEqual([0]);
     await clickHistoryCommand(page, "redo");
 

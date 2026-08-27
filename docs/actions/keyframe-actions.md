@@ -86,7 +86,7 @@
   - 対象なしで実行されない。
   - 登録後にtimelineへ反映される。
   - モデル表示と全IK状態を同じキーへ保存する。
-  - 未変更時は履歴へ積まず、異なる既存キーは上書き確認する。
+  - 未変更時は履歴へ積まず、異なる既存キーは確認なしで上書きしてUndo可能にする。
 
 ### `keyframe.insertEmptyFrame` / `keyframe.deleteFrameColumn`
 

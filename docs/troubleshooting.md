@@ -69,6 +69,23 @@ Linux の zip 配布では `chrome-sandbox` の所有者や `4755` 属性をそ�
 
 形式別の標準loaderとfallbackについては [MMD モデルテクスチャ読み込み 現行仕様](./mmd-texture-loading-current-spec-2026-08-24.md) を参照する。
 
+## 開発版で PMX / PMD モデルの一部または全体が白くなる
+
+### 症状
+
+- `npm start` で起動した開発版で、BMP の toon / sphere texture を使うモデルが白く表示される
+- DevTools Console に `dxBmpTextureLoader-....js` の `504 (Outdated Optimize Dep)` や `Failed to fetch dynamically imported module` が繰り返し出る
+
+### 原因
+
+`babylon-mmd` の DirectX BMP loader は、最初に対象textureを処理するときに動的importされる。Viteがその時点で依存関係を再最適化すると、すでに表示中のrendererが古いchunk URLを参照し続け、材質のtexture初期化が失敗することがある。
+
+### 対処
+
+renderer用Vite設定では `babylon-mmd/esm/Loader/dxBmpTextureLoader` を `optimizeDeps.include` に指定し、起動時から事前最適化する。設定反映後も古い開発サーバーが残っている場合は、アプリと開発サーバーを終了してから再起動する。
+
+なお、`ERR_FILE_NOT_FOUND` の場合は別原因なので、前項のtexture配置確認を行う。
+
 ## Xアクセサリーが白黒/市松になる
 
 ### 症状

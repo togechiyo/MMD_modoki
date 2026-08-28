@@ -38,6 +38,8 @@ FrameGraph、SSR、custom WGSL、SQLite WASM などの実験項目は残して�
 - 設定画面の `Experimental` group
 - feature flag または明示的な debug / diagnostics 導線
 
+2026-08-28 判断: PBR、外部 WGSL 読込などをまとめる独立した「開発者」メニューの追加はいったん保留する。実験機能は既存の隔離された導線を維持し、通常UIへ再公開する機能と利用条件が固まってから、設定画面または明示的な Experimental 導線として再検討する。
+
 ### 3. Model Mode / Camera Mode の差分を明確にする
 
 Model Mode:

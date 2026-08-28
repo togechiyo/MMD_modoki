@@ -2307,12 +2307,12 @@ body.file-drag-active #viewport-container {
 
 .viewport-seek-track-thumb {
   position: absolute;
-  top: 2px;
+  top: 3px;
   left: 0;
-  width: 10px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 3px;
+  border-radius: 50%;
   background: var(--accent-pink);
   transform: translateX(-50%);
   box-shadow: 0 0 8px rgba(236, 72, 153, 0.35);

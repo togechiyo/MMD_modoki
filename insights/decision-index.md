@@ -35,6 +35,7 @@
 | adopted | [新規プロジェクトは別ウィンドウで開く](./decisions/new-project-opens-in-separate-window.md) | 新規project、ウィンドウ管理、Ctrl+N、project初期化導線を変更する |
 | adopted | [Seekbarのend handleを停止・リピート境界にする](./decisions/seekbar-end-handle-is-always-stop-boundary.md) | viewport seekbar、再生範囲、終端停止、repeat、frameStopEnabledを変更する |
 | adopted | [物理ボーンは標準でtimelineに残しviewportから隠す](./decisions/physics-bones-stay-on-timeline-but-hide-in-viewport.md) | 物理ボーンの表示メニュー、PMX表示フラグ、timeline行、viewport overlayを変更する |
+| adopted | [実体のないヘルプ項目は表示しない](./decisions/omit-empty-help-menu-items.md) | 上位メニュー、ショートカット、ログ、Aboutの導線を変更する |
 | adopted | [キー登録の上書き確認は出さない](./decisions/key-registration-overwrites-without-confirmation.md) | キー登録、同一フレーム上書き、Auto Key、Undo導線を変更する |
 
 ## 却下
@@ -54,6 +55,7 @@
 | --- | --- | --- |
 | deferred | [汎用オブジェクト形式の拡張は v0.2.3 より後へ送る](./decisions/defer-generic-object-format-expansion-beyond-v023.md) | OBJ、PLY、glTF 等の対応を提案する |
 | deferred | [IBL Shadows は保留する](./decisions/defer-ibl-shadows.md) | IBL Shadows の調査・再実装を検討する |
+| deferred | [独立した開発者メニューの追加はいったん保留する](./decisions/defer-developer-menu-for-now.md) | PBR、外部WGSL、試験機能の公開導線をまとめ直す |
 | deferred | [海エフェクトは品質改善まで通常UIから隠す](./decisions/defer-ocean-effect-ui-until-quality-improves.md) | 海エフェクト、水面設定、FrameGraph追加候補、Release公開範囲を変更する |
 | deferred | [VMDU は VMD 出力要件が固まるまで保留する](./decisions/defer-vmdu-until-vmd-export-proves-requirements.md) | VMDU や VMD 差分形式を検討する |
 | deferred | [自前の高度VMD retarget補正は構想に留める](./decisions/defer-custom-advanced-vmd-retarget-corrections.md) | 肩・腕basis、捩り分配、足接地bakeを提案する |

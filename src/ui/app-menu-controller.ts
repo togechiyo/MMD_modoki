@@ -51,7 +51,7 @@ type AppMenuControllerDeps = {
     previewBodyMotionCorrection: (sourceModelIndex: number) => ModelBodyMotionCorrectionPreview;
 };
 
-type DialogKind = "about" | "shortcuts" | "preferences";
+type DialogKind = "preferences";
 
 type AppMenuElements = {
     root: HTMLElement | null;
@@ -652,19 +652,13 @@ export class AppMenuController {
             case "physics.gravitySettings":
                 this.openGravitySettingsDialog(invoker ?? null);
                 return;
-            case "dialog.shortcuts":
-                this.openDialog("shortcuts", invoker ?? null);
-                return;
-            case "dialog.about":
-                this.openDialog("about", invoker ?? null);
-                return;
             case "runtime.classic":
                 this.setRuntimeMode("classic");
                 return;
             case "runtime.wasm":
                 this.setRuntimeMode("wasm");
                 return;
-            case "help.openLogFolder":
+            case "tools.openLogFolder":
                 void this.openLogFolder();
                 return;
             default:
@@ -678,7 +672,7 @@ export class AppMenuController {
             id: kind,
             surface: "modal",
             title: content.title,
-            size: kind === "shortcuts" ? "lg" : "md",
+            size: "md",
             restoreFocusTo: invoker,
             content: (container) => {
                 container.innerHTML = content.body;
@@ -688,24 +682,6 @@ export class AppMenuController {
 
     private createDialogContent(kind: DialogKind): { title: string; body: string } {
         switch (kind) {
-            case "about":
-                return {
-                    title: t("dialog.about.title"),
-                    body: `<p>${t("dialog.about.body")}</p>`,
-                };
-            case "shortcuts":
-                return {
-                    title: t("dialog.shortcuts.title"),
-                    body: `
-                        <dl>
-                            <dt>Space / P</dt><dd>${t("dialog.shortcuts.playback")}</dd>
-                            <dt>Ctrl+Z</dt><dd>${t("dialog.shortcuts.undo")}</dd>
-                            <dt>Ctrl+Y</dt><dd>${t("dialog.shortcuts.redo")}</dd>
-                            <dt>Home / End</dt><dd>${t("dialog.shortcuts.range")}</dd>
-                            <dt>Esc</dt><dd>${t("dialog.shortcuts.escape")}</dd>
-                        </dl>
-                    `,
-                };
             case "preferences":
                 return {
                     title: t("dialog.preferences.title"),

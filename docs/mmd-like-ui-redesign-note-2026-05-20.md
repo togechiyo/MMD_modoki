@@ -920,7 +920,7 @@ v0.2.0 UI は、全面的な本家 MMD 再現ではなく、領域ごとに判�
 - Effect 欄は model / camera target 連動ではなく、Shader / Material と Post Effect のカテゴリを分けた構成へ寄せる。
 - Model Mode では Shader / Material、Camera Mode では Post Effect を優先表示する。
 - メニューバーは HTML / CSS 製の renderer 内 UI を主候補にし、既存 i18n 方式を使う。
-- メニュー構成は本家 MMD の `ファイル / 編集 / 表示 / 背景 / 表情 / 物理演算 / モーションキャプチャ / ヘルプ` を基本にする。
+- 現行メニュー構成は `ファイル / 編集 / 表示 / 背景 / 表情 / 物理演算 / ウィンドウ / ツール` とする。実体のあるヘルプコンテンツがない間は独立した `ヘルプ` を置かず、内容の薄いショートカット一覧とAboutも表示しない。開発・診断導線のログフォルダだけは `ツール` に置く。
 - `モーションキャプチャ` は v0.2.0 では Coming soon / disabled でもよい。
 - メニューバーは詳細 UI の入口であり、Export Settings / Preferences / Diagnostics は popup / dialog / drawer として開く。
 - Electron native menu は OS 作法と標準 role の補助に留める。

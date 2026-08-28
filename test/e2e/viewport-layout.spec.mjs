@@ -37,6 +37,18 @@ test("viewport canvas reserves space above the playback bar", async () => {
     await expect(page.locator(
       ".section-header > svg, #timeline-section > .panel-header > svg, #shader-panel > .panel-header > svg",
     )).toHaveCount(0);
+
+    const currentFrameMarker = await page.locator("#viewport-seek-track-thumb").evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        width: bounds.width,
+        height: bounds.height,
+        borderRadius: style.borderRadius,
+      };
+    });
+    expect(currentFrameMarker.width).toBe(currentFrameMarker.height);
+    expect(currentFrameMarker.borderRadius).toBe("50%");
   } finally {
     await launched.close();
   }

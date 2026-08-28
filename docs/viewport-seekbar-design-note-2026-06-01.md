@@ -230,3 +230,4 @@ type ViewportSeekBarControllerOptions = {
 - 再生範囲 start / end は `ExportUiController` の既存 state を正とし、新しい保存項目は増やさない。
 - 2026-08-27: 重複した「フレ・ストップ」checkboxを削除し、seekbarのend handleを常時停止位置とした。既存project schemaの`frameStopEnabled`は互換用に`true`で保存する。
 - 2026-08-27: 下段の再生button隣へrepeat toggleを追加した。OFFではend停止、ONではend到達時にstartへ戻って再生を継続し、状態はprojectへ保存する。
+- 2026-08-28: 現在フレームのmarkerを縦長の角丸矩形から円形へ変更した。start / end handleとは輪郭を分け、再生位置を点として読み取れる形にする。

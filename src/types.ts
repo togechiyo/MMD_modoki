@@ -622,6 +622,7 @@ export interface ProjectEffectState {
     dofLensDistortion?: number;
     dofLensDistortionInfluence: number;
     modelEdgeWidth: number;
+    modelEdgeUniformWidthEnabled?: boolean;
     modelEdgeColorOverrideEnabled?: boolean;
     modelEdgeColor?: { r: number; g: number; b: number };
     contrast?: number;

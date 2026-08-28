@@ -859,6 +859,7 @@
     "dialog.hdri.cleared": "Restored bundled HDRI",
     "dialog.hdri.placeholder": "The bundled or an external HDRI can be used for environment lighting and background display.",
     "dialog.edge.title": "Edge Settings",
+    "dialog.edge.uniformWidth": "Use uniform edge width",
     "dialog.edge.width": "Edge width",
     "dialog.edge.colorOverride": "Override edge color",
     "dialog.edge.color": "Edge color",

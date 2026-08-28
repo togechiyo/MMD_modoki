@@ -468,6 +468,10 @@ describe("canExecuteEditorAction", () => {
             readySnapshot,
         )).toBe(true);
         expect(canExecuteEditorAction(
+            { type: "effect.setModelEdgeUniformWidth", source: "menu", enabled: true },
+            readySnapshot,
+        )).toBe(true);
+        expect(canExecuteEditorAction(
             { type: "effect.setContrastOffset", source: "panel", offsetPercent: 10 },
             readySnapshot,
         )).toBe(true);

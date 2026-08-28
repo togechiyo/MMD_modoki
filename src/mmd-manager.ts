@@ -160,6 +160,7 @@ import {
     buildSubSurfaceCompositionDefines,
     resolveSubSurfaceFrameGraphPolicy,
 } from "./render/subsurface-frame-graph-policy";
+import { resolveModelEdgeWidth } from "./render/model-edge-settings";
 import {
     applyImportedMaterialShaderStates as applyImportedMaterialShaderStatesImpl,
     getExternalWgslToonShaderPath as getExternalWgslToonShaderPathImpl,
@@ -2073,6 +2074,7 @@ ${beforeFogAppendBlock}
     private readonly farDofEnabled = false;
     private readonly farDofFocusSharpRadiusMm = 1000;
     private modelEdgeWidthValue = 0;
+    private modelEdgeUniformWidthEnabledValue = false;
     private modelEdgeColorOverrideEnabledValue = false;
     private modelEdgeColorValue = { r: 0, g: 0, b: 0 };
     private readonly modelEdgeMaterialDefaults = new WeakMap<object, { enabled: boolean; width: number; alpha: number; colorR: number; colorG: number; colorB: number }>();
@@ -3873,7 +3875,13 @@ ${beforeFogAppendBlock}
         } else if (outlineDefaults && "renderOutline" in material && "outlineWidth" in material) {
             const enabled = outlineDefaults.enabled && this.modelEdgeWidthValue > 0;
             material.renderOutline = enabled;
-            material.outlineWidth = enabled ? outlineDefaults.width * this.modelEdgeWidthValue : 0;
+            material.outlineWidth = enabled
+                ? resolveModelEdgeWidth(
+                    outlineDefaults.width,
+                    this.modelEdgeWidthValue,
+                    this.modelEdgeUniformWidthEnabledValue,
+                )
+                : 0;
             if ("outlineAlpha" in material) {
                 material.outlineAlpha = outlineDefaults.alpha;
             }
@@ -7472,6 +7480,7 @@ ${beforeFogAppendBlock}
                 this.handleBoneGizmoBeforeRender();
             }
             this.resyncCameraAfterModelExternalParents();
+            this.enforceUniformModelEdgeWidthsBeforeRender();
         });
 
         this.scene.onBeforeRenderObservable.add(() => {
@@ -8845,6 +8854,24 @@ ${beforeFogAppendBlock}
         }
     }
 
+    private enforceUniformModelEdgeWidthsBeforeRender(): void {
+        if (!this.modelEdgeUniformWidthEnabledValue || this.modelEdgeWidthValue <= 0) return;
+
+        for (const sceneModel of this.sceneModels) {
+            for (const { material } of sceneModel.materials) {
+                if (!("renderOutline" in material) || !("outlineWidth" in material)) continue;
+                const defaults = this.modelEdgeMaterialDefaults.get(material as object);
+                if (!defaults) continue;
+
+                const enabled = defaults.enabled && this.isMaterialVisible(material);
+                material.renderOutline = enabled;
+                material.outlineWidth = enabled
+                    ? resolveModelEdgeWidth(defaults.width, this.modelEdgeWidthValue, true)
+                    : 0;
+            }
+        }
+    }
+
     private collectSceneModelMaterials(meshes: Mesh[]): SceneModelMaterialEntry[] {
         const materialMap = new Map<object, SceneModelMaterialEntry>();
         let materialIndex = 0;
@@ -8938,7 +8965,9 @@ ${beforeFogAppendBlock}
 
             const enabled = defaults.enabled && scale > 0;
             mat.renderOutline = enabled;
-            mat.outlineWidth = enabled ? defaults.width * scale : 0;
+            mat.outlineWidth = enabled
+                ? resolveModelEdgeWidth(defaults.width, scale, this.modelEdgeUniformWidthEnabledValue)
+                : 0;
             if ("outlineAlpha" in mat) {
                 mat.outlineAlpha = defaults.alpha;
             }
@@ -12477,6 +12506,14 @@ ${beforeFogAppendBlock}
             this.frameGraphPostEffectStackEnabledValue.set("ssao", false);
             this.refreshFrameGraphPostEffectsBackendForStackStateChange();
         }
+        this.applyModelEdgeToAllModels();
+    }
+
+    get modelEdgeUniformWidthEnabled(): boolean {
+        return this.modelEdgeUniformWidthEnabledValue;
+    }
+    set modelEdgeUniformWidthEnabled(enabled: boolean) {
+        this.modelEdgeUniformWidthEnabledValue = Boolean(enabled);
         this.applyModelEdgeToAllModels();
     }
 

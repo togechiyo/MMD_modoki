@@ -129,6 +129,7 @@ function createHost() {
         setDofFocusTargetByPath: vi.fn(),
         setDofFocusMode: vi.fn(),
         setModelEdgeColor: vi.fn(),
+        modelEdgeUniformWidthEnabled: false,
         modelEdgeColorOverrideEnabled: false,
         updateEditorDofFocusAndFStop: vi.fn(),
         applyEditorDofSettings: vi.fn(),
@@ -718,11 +719,12 @@ describe("importProjectState", () => {
         expect(host.postEffectSsaoDebugView).toBe(true);
     });
 
-    it("restores model edge color settings", async () => {
+    it("restores model edge override settings", async () => {
         const host = createHost();
         const project = createProject({
             effects: {
                 ...createProject().effects,
+                modelEdgeUniformWidthEnabled: true,
                 modelEdgeColorOverrideEnabled: true,
                 modelEdgeColor: { r: 0.2, g: 0.3, b: 0.4 },
             },
@@ -730,8 +732,16 @@ describe("importProjectState", () => {
 
         await importProjectState(host, project);
 
+        expect(host.modelEdgeUniformWidthEnabled).toBe(true);
         expect(host.modelEdgeColorOverrideEnabled).toBe(true);
         expect(host.setModelEdgeColor).toHaveBeenCalledWith(0.2, 0.3, 0.4);
+    });
+
+    it("keeps model-relative edge widths for legacy projects", async () => {
+        const host = createHost();
+        await importProjectState(host, createProject());
+
+        expect(host.modelEdgeUniformWidthEnabled).toBe(false);
     });
 
     it("restores physics floor collision setting with a legacy-on default", async () => {

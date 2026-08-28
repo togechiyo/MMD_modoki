@@ -135,6 +135,7 @@ function createHost() {
         dofLensDistortion: 0,
         dofLensDistortionInfluence: 0,
         modelEdgeWidth: 0,
+        modelEdgeUniformWidthEnabled: false,
         modelEdgeColorOverrideEnabled: false,
         getModelEdgeColor: () => ({ r: 0, g: 0, b: 0 }),
         postEffectContrast: 1,
@@ -639,13 +640,15 @@ describe("exportProjectState", () => {
         expect(project.keyframes?.modelExternalParents).toEqual(modelExternalParents);
     });
 
-    it("writes model edge color settings", () => {
+    it("writes model edge override settings", () => {
         const project = exportProjectState({
             ...createHost(),
+            modelEdgeUniformWidthEnabled: true,
             modelEdgeColorOverrideEnabled: true,
             getModelEdgeColor: () => ({ r: 0.1, g: 0.2, b: 0.3 }),
         });
 
+        expect(project.effects.modelEdgeUniformWidthEnabled).toBe(true);
         expect(project.effects.modelEdgeColorOverrideEnabled).toBe(true);
         expect(project.effects.modelEdgeColor).toEqual({ r: 0.1, g: 0.2, b: 0.3 });
     });

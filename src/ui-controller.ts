@@ -2705,6 +2705,10 @@ export class UIController {
             this.modelEdgeController?.setModelEdgeWidthPercent(action.percent);
             this.refreshFrameGraphPostAddUi();
         });
+        this.actionDispatcher.register("effect.setModelEdgeUniformWidth", (action) => {
+            this.mmdManager.modelEdgeUniformWidthEnabled = action.enabled;
+            this.modelEdgeController?.refresh();
+        });
         this.actionDispatcher.register("effect.setModelEdgeColorOverride", (action) => {
             this.mmdManager.modelEdgeColorOverrideEnabled = action.enabled;
             this.modelEdgeController?.refresh();

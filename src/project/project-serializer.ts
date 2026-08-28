@@ -116,6 +116,7 @@ type ProjectExportHost = {
     dofLensDistortion: number;
     dofLensDistortionInfluence: number;
     modelEdgeWidth: number;
+    modelEdgeUniformWidthEnabled: boolean;
     modelEdgeColorOverrideEnabled: boolean;
     getModelEdgeColor: () => { r: number; g: number; b: number };
     postEffectContrast: number;
@@ -496,6 +497,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             dofLensDistortion: host.dofLensDistortion,
             dofLensDistortionInfluence: host.dofLensDistortionInfluence,
             modelEdgeWidth: host.modelEdgeWidth,
+            modelEdgeUniformWidthEnabled: host.modelEdgeUniformWidthEnabled,
             modelEdgeColorOverrideEnabled: host.modelEdgeColorOverrideEnabled,
             modelEdgeColor: host.getModelEdgeColor(),
             contrast: host.postEffectContrast,

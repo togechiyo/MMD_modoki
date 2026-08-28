@@ -859,6 +859,7 @@
     "dialog.hdri.cleared": "内蔵HDRIに戻しました",
     "dialog.hdri.placeholder": "内蔵または外部HDRIを環境ライティングと背景表示に使用できます。",
     "dialog.edge.title": "エッジ設定",
+    "dialog.edge.uniformWidth": "エッジ幅を均一化",
     "dialog.edge.width": "エッジ幅",
     "dialog.edge.colorOverride": "エッジ色を上書き",
     "dialog.edge.color": "エッジ色",

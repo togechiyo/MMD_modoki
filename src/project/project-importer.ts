@@ -202,6 +202,7 @@ type ProjectImportHost = {
     dofLensDistortion: number;
     dofLensDistortionInfluence: number;
     modelEdgeWidth: number;
+    modelEdgeUniformWidthEnabled: boolean;
     modelEdgeColorOverrideEnabled: boolean;
     setModelEdgeColor: (r: number, g: number, b: number) => void;
     postEffectContrast: number;
@@ -1116,6 +1117,9 @@ export async function importProjectState(
     host.dofLensDistortion = readFiniteNumber(data.effects.dofLensDistortion, 0);
     host.dofLensDistortionInfluence = readFiniteNumber(data.effects.dofLensDistortionInfluence, 0);
     host.modelEdgeWidth = readFiniteNumber(data.effects.modelEdgeWidth, 1);
+    host.modelEdgeUniformWidthEnabled = typeof data.effects.modelEdgeUniformWidthEnabled === "boolean"
+        ? data.effects.modelEdgeUniformWidthEnabled
+        : false;
     host.modelEdgeColorOverrideEnabled = typeof data.effects.modelEdgeColorOverrideEnabled === "boolean"
         ? data.effects.modelEdgeColorOverrideEnabled
         : false;

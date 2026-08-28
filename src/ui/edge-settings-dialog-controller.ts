@@ -32,6 +32,22 @@ export class EdgeSettingsDialogController implements PopupContentController {
         grid.className = "popup-form-grid";
         form.appendChild(grid);
 
+        const uniformWidth = document.createElement("input");
+        uniformWidth.type = "checkbox";
+        uniformWidth.className = "popup-form-checkbox";
+        uniformWidth.dataset.edgeUniformWidth = "true";
+        uniformWidth.checked = this.mmdManager.modelEdgeUniformWidthEnabled;
+        uniformWidth.addEventListener("change", () => {
+            this.dispatchAction({
+                type: "effect.setModelEdgeUniformWidth",
+                source: "menu",
+                enabled: uniformWidth.checked,
+            });
+            uniformWidth.checked = this.mmdManager.modelEdgeUniformWidthEnabled;
+            this.refreshUi();
+        });
+        grid.appendChild(createPopupFormField(t("dialog.edge.uniformWidth"), uniformWidth));
+
         const width = document.createElement("input");
         width.type = "range";
         width.className = "popup-form-control popup-form-range";

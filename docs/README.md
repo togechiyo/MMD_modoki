@@ -20,6 +20,8 @@
 ## どこに書くか
 
 - 利用者向けのよくある質問: [faq.md](./faq.md)
+- 現行リリースノート: [v0.2.3-release-note.md](./v0.2.3-release-note.md)
+- 現行の既知課題: [known-issues.md](./known-issues.md)
 - 作業一覧や優先度: [mmd-basic-task-checklist.md](./mmd-basic-task-checklist.md)
 - ドキュメント索引: [docs-index.md](./docs-index.md)
 - プロジェクトの位置づけ: [mmd-project-positioning-note.md](./mmd-project-positioning-note.md)

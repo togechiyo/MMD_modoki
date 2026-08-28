@@ -10,11 +10,12 @@ MMD modoki は、Babylon.js と `babylon-mmd` をベースにした、MMD 風の
 - 初めて使う方: [よくある質問](./docs/faq.md)
 - 問題が起きた場合: [トラブルシュート](./docs/troubleshooting.md)
 
-配布物は OS ごとの zip です。
+配布物は OS ごとの zip と、Apple Silicon向けmacOS DMGです。`<version>`にはReleaseのversionが入ります。
 
-- `mmd-modoki-windows-x64-zip.zip`
-- `mmd-modoki-macos-x64-zip.zip`
-- `mmd-modoki-linux-x64-zip.zip`
+- `MMD.modoki-windows-x64-<version>.zip`
+- `MMD.modoki-mac-<version>.zip`
+- `MMD.modoki-mac-arm64-<version>.dmg`
+- `MMD.modoki-linux-x64-<version>.zip`
 
 ## 対応UI言語
 
@@ -54,7 +55,7 @@ Linux:
 ## できること
 
 - PMX / PMD モデルの読み込み
-- `.x` アクセサリーの読み込み
+- `.x` / OBJ アクセサリーの読み込み
 - VMD モーション / カメラ VMD / VPD ポーズの読み込み
 - MP3 / WAV 音声の読み込み
 - ボーン、モーフ、カメラ、照明、ポストエフェクト、アクセサリー変形のタイムライン編集
@@ -63,6 +64,7 @@ Linux:
 - DoF、Bloom、LUT、SSR、fog、レンズ歪みなどのポストエフェクト調整
 - `AlphaCutOff` や `Luminous` を含む材質シェーダープリセットの切り替え
 - PNG 画像、連番 PNG、WebM 動画の書き出し
+- モデル / カメラVMD（β）と選択ボーンVPDの書き出し
 
 補足:
 
@@ -76,7 +78,7 @@ Linux:
 通常の読込やドラッグ&ドロップで扱えるもの:
 
 - モデル: `.pmx` `.pmd`
-- アクセサリー: `.x`
+- アクセサリー: `.x` `.obj`
 - モーション / ポーズ: `.vmd` `.vpd`
 - カメラモーション: `.vmd`
 - 音声: `.mp3` `.wav`

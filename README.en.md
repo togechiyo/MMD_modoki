@@ -8,11 +8,12 @@ It is being developed as a practical alternative for environments where the orig
 
 - Releases: https://github.com/togechiyo/MMD_modoki/releases
 
-Distributed builds are provided as zip archives for each OS.
+Distributed builds are provided as OS-specific zip archives and an Apple Silicon macOS DMG. `<version>` is replaced with the release version.
 
-- `mmd-modoki-windows-x64-zip.zip`
-- `mmd-modoki-macos-x64-zip.zip`
-- `mmd-modoki-linux-x64-zip.zip`
+- `MMD.modoki-windows-x64-<version>.zip`
+- `MMD.modoki-mac-<version>.zip`
+- `MMD.modoki-mac-arm64-<version>.dmg`
+- `MMD.modoki-linux-x64-<version>.zip`
 
 ## Supported UI Languages
 
@@ -52,7 +53,7 @@ Linux:
 ## Features
 
 - Load PMX/PMD models
-- Load `.x` accessories
+- Load `.x` / OBJ accessories
 - Load VMD motions, camera VMD data, and VPD poses
 - Load MP3/WAV audio for timeline preview
 - Edit bones, morphs, camera, lighting, post effects, and accessory transforms on a timeline
@@ -61,6 +62,7 @@ Linux:
 - Adjust post effects such as DoF, Bloom, LUT, SSR, fog, and lens distortion
 - Use material shader presets including `AlphaCutOff` and `Luminous`
 - Export PNG images, numbered PNG sequences, and WebM videos
+- Export model/camera VMD files (beta) and selected-bone VPD poses
 
 Notes:
 
@@ -74,7 +76,7 @@ Notes:
 Available through normal open operations or drag and drop:
 
 - Models: `.pmx` `.pmd`
-- Accessories: `.x`
+- Accessories: `.x` `.obj`
 - Motion / pose: `.vmd` `.vpd`
 - Camera motion: `.vmd`
 - Audio: `.mp3` `.wav`

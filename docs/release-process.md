@@ -1,6 +1,6 @@
 # リリース手順メモ
 
-更新日: 2026-08-14
+更新日: 2026-08-28
 
 ## 目的
 
@@ -22,8 +22,8 @@
 7. 事前ビルド成功後、tag を作成して push する。
 
 ```bash
-git tag v0.2.2
-git push origin v0.2.2
+git tag v0.2.3
+git push origin v0.2.3
 ```
 
 8. tag起点の GitHub Actions `Build Release Packages` が成功することを確認する。

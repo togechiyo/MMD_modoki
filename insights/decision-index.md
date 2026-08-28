@@ -34,7 +34,7 @@
 | adopted | [海はWaterMaterial水面と旧水中パスを使い白い直接光ハイライトを足さない](./decisions/ocean-uses-watermaterial-surface-without-direct-specular.md) | 海の水面、水中合成、specular、通常UI導線を変更する |
 | adopted | [新規プロジェクトは別ウィンドウで開く](./decisions/new-project-opens-in-separate-window.md) | 新規project、ウィンドウ管理、Ctrl+N、project初期化導線を変更する |
 | adopted | [Seekbarのend handleを停止・リピート境界にする](./decisions/seekbar-end-handle-is-always-stop-boundary.md) | viewport seekbar、再生範囲、終端停止、repeat、frameStopEnabledを変更する |
-| adopted | [物理ボーン表示はviewportとtimelineで共有する](./decisions/physics-bone-display-is-one-shared-filter.md) | 物理ボーンの表示メニュー、PMX表示フラグ、timeline行、viewport overlayを変更する |
+| adopted | [物理ボーンは標準でtimelineに残しviewportから隠す](./decisions/physics-bones-stay-on-timeline-but-hide-in-viewport.md) | 物理ボーンの表示メニュー、PMX表示フラグ、timeline行、viewport overlayを変更する |
 | adopted | [キー登録の上書き確認は出さない](./decisions/key-registration-overwrites-without-confirmation.md) | キー登録、同一フレーム上書き、Auto Key、Undo導線を変更する |
 
 ## 却下

@@ -4,9 +4,12 @@ export function resolveVisibleBoneNames(
     showPhysicsBones: boolean,
 ): Set<string> {
     const visibleBoneNames = new Set(pmxVisibleBoneNames);
-    if (!showPhysicsBones) return visibleBoneNames;
     for (const boneName of physicsBoneNames ?? []) {
-        visibleBoneNames.add(boneName);
+        if (showPhysicsBones) {
+            visibleBoneNames.add(boneName);
+        } else {
+            visibleBoneNames.delete(boneName);
+        }
     }
     return visibleBoneNames;
 }

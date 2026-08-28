@@ -27,6 +27,7 @@ type BoneGizmoHost = {
     _isPlaying: boolean;
     physicsEnabledBeforeBoneGizmoDrag: boolean | null;
     getActiveModelVisibility: () => boolean;
+    getBoneVisualizerVisibleBoneNames?: () => ReadonlySet<string> | null;
     getRuntimeBoneByName: (boneName: string) => IMmdRuntimeBone | null;
     getExternalParentWorldMatrixForBoneToRef: (runtimeBone: IMmdRuntimeBone, target: Matrix) => boolean;
     invalidateBoneVisualizerPose: (runtimeBone: IMmdRuntimeBone, updateTransform?: boolean) => void;
@@ -219,6 +220,12 @@ export function updateBoneGizmoTarget(host: BoneGizmoHost): void {
 
     const boneName = host.boneVisualizerSelectedBoneName;
     if (!boneName) {
+        disableBoneGizmo(host);
+        return;
+    }
+
+    const visibleBoneNameSet = host.getBoneVisualizerVisibleBoneNames?.() ?? null;
+    if (visibleBoneNameSet && !visibleBoneNameSet.has(boneName)) {
         disableBoneGizmo(host);
         return;
     }

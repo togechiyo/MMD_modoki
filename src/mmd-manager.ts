@@ -5967,6 +5967,7 @@ ${beforeFogAppendBlock}
         this.showPhysicsBones = next;
         emitMergedKeyframeTracksImpl(this);
         this.updateBoneVisualizer();
+        this.updateBoneGizmoTarget();
         return next;
     }
 

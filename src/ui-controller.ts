@@ -2491,7 +2491,7 @@ export class UIController {
         });
         this.actionDispatcher.register("model.togglePhysicsBones", () => {
             const visible = this.mmdManager.toggleShowPhysicsBones();
-            this.showToast(visible ? "Physics bones shown" : "Physics bones follow PMX visibility", "info");
+            this.showToast(visible ? "Physics bones shown" : "Physics bones hidden in viewport", "info");
             this.updateTimelineEditState();
             this.appMenuController?.refresh();
         });

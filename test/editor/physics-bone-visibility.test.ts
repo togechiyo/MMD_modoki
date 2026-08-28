@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { resolveVisibleBoneNames } from "../../src/editor/physics-bone-visibility";
 
 describe("physics bone viewport visibility", () => {
-    it("follows PMX editor visibility while physics bone display is OFF", () => {
+    it("hides physics bones from the viewport while physics bone display is OFF", () => {
         expect([...resolveVisibleBoneNames(
             ["センター", "visible-physics"],
             ["visible-physics", "hidden-physics"],
             false,
-        )]).toEqual(["センター", "visible-physics"]);
+        )]).toEqual(["センター"]);
     });
 
     it("adds every physics bone while physics bone display is ON", () => {

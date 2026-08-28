@@ -68,4 +68,5 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 
 | Status | Insight | Replaced by |
 | --- | --- | --- |
+| retired | [物理ボーン表示はviewportとtimelineで共有する](./retired/physics-bone-display-is-one-shared-filter.md) | `physics-bones-stay-on-timeline-but-hide-in-viewport` |
 | retired | [海effectは品質回復まで通常UIへ戻さない](./retired/reject-ocean-effect-from-normal-ui-until-quality-recovers.md) | `ocean-uses-watermaterial-surface-without-direct-specular` |

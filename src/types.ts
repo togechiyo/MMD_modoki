@@ -216,6 +216,7 @@ declare global {
                 name: string;
                 frames: number[];
             }>;
+            getViewportVisibleBoneNames: () => string[];
             getAccessoryTransform: (index: number) => ProjectAccessoryState["transform"] | null;
             getAccessoryTransformKeyframe: (index: number, frame: number) => ProjectAccessoryState["transform"] | null;
             getCommandHistoryState: () => { undoCount: number; redoCount: number };

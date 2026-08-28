@@ -353,6 +353,7 @@ async function initializeApp(): Promise<void> {
           name: track.name,
           frames: Array.from(track.frames),
         })),
+        getViewportVisibleBoneNames: () => Array.from(mmdManager.getBoneVisualizerVisibleBoneNames() ?? []),
         getAccessoryTransform: (index) => mmdManager.getAccessoryTransform(index),
         getAccessoryTransformKeyframe: (index, frame) => mmdManager.readAccessoryTransformKeyframeValue(index, frame),
         getCommandHistoryState: () => uiController.getCommandHistoryStateForE2e(),

@@ -12,21 +12,50 @@
 
 1. `package.json` と `package-lock.json` の version を更新する。
 2. 必要なら `README.md` と `docs/README.md` の公開向けリンクや説明を更新する。
-3. 動作確認を行う。
-4. 変更を commit して `main` へ push する。
-5. 対象tagがlocalとGitHub remoteのどちらにも存在しないことを確認する。
-6. tagを作成してpushする。
+3. 各言語モードの翻訳と表示を確認する。対象と合格条件は「各言語モードの確認」を参照する。
+4. 動作確認を行う。
+5. 変更を commit して `main` へ push する。
+6. 対象tagがlocalとGitHub remoteのどちらにも存在しないことを確認する。
+7. tagを作成してpushする。
 
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-7. tag pushで自動起動したGitHub Actions `Build Release Packages`を確認する。
-8. Windows ZIP / macOS ZIP / macOS DMG / Linux ZIPの4 build jobと、`Publish GitHub Release Assets` jobが成功することを確認する。
-9. GitHub Releasesで生成されたprereleaseと4つのrelease assetを確認する。
+8. tag pushで自動起動したGitHub Actions `Build Release Packages`を確認する。
+9. Windows ZIP / macOS ZIP / macOS DMG / Linux ZIPの4 build jobと、`Publish GitHub Release Assets` jobが成功することを確認する。
+10. GitHub Releasesで生成されたprereleaseと4つのrelease assetを確認する。
 
 tag pushが通常のリリース開始操作である。Gitへのpush認証が利用できる場合、通常リリースの起動だけを目的としてGitHub CLIの追加ログインや`workflow_dispatch`を必須にしない。
+
+## 各言語モードの確認
+
+tagを作る前に、対応する5言語すべてを確認する。
+
+- 日本語（`ja`）
+- English（`en`）
+- 繁體中文（`zh-Hant`）
+- 简体中文（`zh-Hans`）
+- 한국어（`ko`）
+
+辞書の機械確認では、`language/*.json`について次を確認する。
+
+- すべてUTF-8 JSONとして読み込める
+- 5辞書のキー集合が一致し、欠落キーと余分なキーがない
+- 空文字の翻訳がない
+- `zh-Hant / zh-Hans / ko`で英語辞書と同じ値になっている人間向け文言を抽出し、技術用語・固有名詞として意図したもの以外に未翻訳が残っていない
+
+GUI確認では、ツールバーの言語選択から5モードへ実際に切り替え、少なくともメニューバー、ツールバー、タイムライン、下部パネルを確認する。UI文言やdialogを変更したreleaseでは、変更したdialog、設定画面、出力画面、toast / error表示も対象に含める。
+
+次の状態を残したままtagを作らない。
+
+- 翻訳キーがそのまま表示される
+- 英語fallbackによって、対象言語の翻訳漏れが隠れている
+- 文字化け、空欄、明らかな誤訳がある
+- 文言が切れる、重なる、操作対象を隠すなど、利用を妨げるlayout崩れがある
+
+自然さの改善などreleaseを止めない課題は、確認した言語と画面を添えてknown issueまたはfeedback ledgerへ残す。release preflightには、機械確認とGUI確認を分けて、確認済み・未確認・既知課題を記録する。
 
 ## 任意の事前ビルド
 

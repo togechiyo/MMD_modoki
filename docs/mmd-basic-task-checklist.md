@@ -258,11 +258,14 @@
 - [ ] クリーン環境でのインストール / 起動確認
 - [x] WebGPU 必須のローカル起動スモークテスト追加（`npm.cmd run smoke:launch`）
 - [x] 配布用ドキュメント整備（v0.2.3リリースノート、FAQ、技術概要、エフェクト一覧、既知課題を整合）
+- [ ] 各release前に5言語（ja / en / zh-Hant / zh-Hans / ko）の辞書整合とGUI表示を確認する
+- [ ] 次versionで非日本語UIの混在文言・locale切替漏れ・過度なlabel省略を修正する（V022-055）
 
 補足:
 - v0.2.0 の release workflow は zip のみを標準配布物にする。
 - macOS は Apple Silicon 向けの `darwin arm64` を優先し、Intel Mac / universal build は後続検討に回す。
 - ビルド前確認は [v0.2.0 ビルド前確認メモ](./release-build-preflight-2026-07-06.md) を参照。
+- 言語別の合格条件と確認記録は [リリース手順メモ](./release-process.md#各言語モードの確認) を参照。
 
 ## 8. 拡張候補
 

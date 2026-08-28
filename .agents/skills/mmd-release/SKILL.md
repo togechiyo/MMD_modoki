@@ -25,7 +25,8 @@ Treat the current files as authoritative over remembered commands. Confirm the r
 3. Compare `package.json` and `package-lock.json` versions.
 4. Check the target feedback ledger for fixed, open, deferred, and unconfirmed reports.
 5. Check whether release notes exist and whether their claims are supported by the diff, ledger, tests, or explicit owner decisions.
-6. Confirm that the intended release tag does not already exist locally or remotely before creating it.
+6. Identify all supported UI locales from `src/i18n.ts` and the locale resources. Parse every locale JSON, compare their complete key sets, and report missing, extra, or blank translations. For non-English resources, also review values identical to English and distinguish deliberate technical terms or proper names from untranslated user-facing copy. Do not rely on key parity or the English fallback as evidence that a locale is complete.
+7. Confirm that the intended release tag does not already exist locally or remotely before creating it.
 
 Report blockers before mutating files or external state.
 
@@ -47,6 +48,15 @@ Only when requested, update the version files, release notes, ledger, public doc
 Choose verification using the repository `AGENTS.md` and the `mmd-test` skill when available.
 
 At minimum, reconcile the release scope with the checks required by the current workflow. The release workflow currently runs lint, unit tests, critical typecheck, and platform package builds. Local verification does not replace CI platform builds.
+
+Before publication, switch the running UI through every supported language mode. Check the common shell (menu bar, toolbar, timeline, and bottom panel) and every dialog, settings screen, export screen, toast, or error path whose text changed in the release. Record separately:
+
+- locale resource parsing, key parity, and blank-value results;
+- locales and screens visually checked;
+- raw translation keys, unintended fallback text, mojibake, obvious mistranslations, clipping, overlap, or other blocking layout defects;
+- any lower-severity wording issue deliberately carried as a known issue.
+
+Treat missing translations and interaction-blocking locale layout defects as release blockers unless the project owner makes a different informed decision. A successful dictionary check does not replace the UI pass.
 
 If required checks fail, stop before tag publication unless the user explicitly makes a different, informed decision. Distinguish known non-blocking typecheck baseline errors from critical failures.
 
@@ -89,6 +99,7 @@ State:
 - released version and tag;
 - commit and branch used;
 - verification results;
+- locale dictionary audit and per-language UI verification results;
 - workflow run result;
 - expected and observed assets;
 - prerelease status;

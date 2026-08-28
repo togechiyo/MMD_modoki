@@ -301,6 +301,7 @@ declare global {
             } | null;
             getCameraTarget: () => { x: number; y: number; z: number };
             getCameraPosition: () => { x: number; y: number; z: number };
+            getAutoRenderEnabled: () => boolean;
             setFullyDampedPhysicsCompatibilityCorrection: (
                 enabled: boolean,
                 gravityAmount: number,

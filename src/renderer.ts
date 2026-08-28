@@ -425,6 +425,7 @@ async function initializeApp(): Promise<void> {
         getCameraExternalParent: () => mmdManager.getCameraExternalParent(),
         getCameraTarget: () => mmdManager.getCameraTarget(),
         getCameraPosition: () => mmdManager.getCameraPosition(),
+        getAutoRenderEnabled: () => mmdManager.isAutoRenderEnabled(),
         setFullyDampedPhysicsCompatibilityCorrection: (enabled, gravityAmount) => {
           mmdManager.setFullyDampedRigidBodyGravityCorrectionAmount(gravityAmount);
           return mmdManager.setFullyDampedRigidBodyCorrectionEnabled(enabled);

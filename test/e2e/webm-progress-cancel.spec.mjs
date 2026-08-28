@@ -38,6 +38,9 @@ test("V022-051: WebM progress shows rate and ETA, cancels safely, and permits re
     expect(launch?.jobId).toBeTruthy();
 
     await expect(page.locator("#app")).toHaveClass(/ui-export-lock/);
+    await expect.poll(
+      () => page.evaluate(() => window.mmdModokiE2e.getAutoRenderEnabled()),
+    ).toBe(false);
     await expect(page.locator("#ui-busy-progress")).toBeVisible();
     await expect(page.locator("#ui-busy-cancel")).toBeVisible();
     await expect(page.locator("#ui-busy-metrics")).toHaveText(/\d+\.\d fps .* (ETA|残り) /, { timeout: 45_000 });
@@ -47,6 +50,9 @@ test("V022-051: WebM progress shows rate and ETA, cancels safely, and permits re
 
     await page.locator("#ui-busy-cancel").click();
     await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 30_000 });
+    await expect.poll(
+      () => page.evaluate(() => window.mmdModokiE2e.getAutoRenderEnabled()),
+    ).toBe(true);
     await expect(page.locator("#ui-busy-overlay")).toHaveClass(/hidden/);
     await expect.poll(() => existsSync(canceledPath), { timeout: 10_000 }).toBe(false);
 

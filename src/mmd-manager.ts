@@ -14884,6 +14884,10 @@ ${beforeFogAppendBlock}
         this.nextRenderDueTimestampMs = now;
     }
 
+    public isAutoRenderEnabled(): boolean {
+        return this.autoRenderEnabled;
+    }
+
     public isPostEffectBackendReadyForCapture(): boolean {
         if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) {
             return true;

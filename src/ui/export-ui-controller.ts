@@ -209,6 +209,7 @@ export class ExportUiController {
     private webmEtaSeconds: number | null = null;
     private webmCancelPending = false;
     private backgroundExportMonitorIntervalId: number | null = null;
+    private backgroundExportAutoRenderRestoreValue: boolean | null = null;
     private outputAspectRatio = 16 / 9;
     private isSyncingOutputSettings = false;
     private isSyncingFrameRange = false;
@@ -270,6 +271,7 @@ export class ExportUiController {
             window.clearInterval(this.backgroundExportMonitorIntervalId);
             this.backgroundExportMonitorIntervalId = null;
         }
+        this.restoreOwnerAutoRenderAfterBackgroundExport();
     }
 
     public hasBackgroundExportActive(): boolean {
@@ -1155,6 +1157,7 @@ export class ExportUiController {
 
     private refreshBackgroundExportLock(): void {
         const active = this.hasBackgroundExportActive();
+        this.syncOwnerAutoRenderForBackgroundExport(active);
         this.elements.appRoot.classList.toggle("ui-export-lock", active);
         this.elements.busyOverlay?.classList.toggle("hidden", !active);
         this.elements.busyOverlay?.setAttribute("aria-hidden", active ? "false" : "true");
@@ -1171,6 +1174,32 @@ export class ExportUiController {
             this.onPausePlayback();
         }
         this.updateBackgroundExportBusyMessage();
+    }
+
+    private syncOwnerAutoRenderForBackgroundExport(active: boolean): void {
+        if (!active) {
+            this.restoreOwnerAutoRenderAfterBackgroundExport();
+            return;
+        }
+        if (this.backgroundExportAutoRenderRestoreValue !== null) return;
+
+        const restoreValue = this.mmdManager.isAutoRenderEnabled();
+        this.backgroundExportAutoRenderRestoreValue = restoreValue;
+        this.mmdManager.setAutoRenderEnabled(false);
+        logInfo("render", "owner auto-render suspended for background export", {
+            restoreValue,
+        });
+    }
+
+    private restoreOwnerAutoRenderAfterBackgroundExport(): void {
+        const restoreValue = this.backgroundExportAutoRenderRestoreValue;
+        if (restoreValue === null) return;
+
+        this.backgroundExportAutoRenderRestoreValue = null;
+        this.mmdManager.setAutoRenderEnabled(restoreValue);
+        logInfo("render", "owner auto-render restored after background export", {
+            restored: restoreValue,
+        });
     }
 
     private updateBackgroundExportBusyMessage(): void {

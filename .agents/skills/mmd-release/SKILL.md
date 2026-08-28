@@ -54,13 +54,15 @@ If required checks fail, stop before tag publication unless the user explicitly 
 
 Stop after local verification and any authorized CI preflight have produced enough evidence for a publication decision. Summarize passed, failed, skipped, and manually unverified checks; release-note status; expected artifacts; and remaining known issues. Ask whether to proceed to commit/tag/publication operations. Do not infer approval from successful tests or builds.
 
-## Stage 4: Build and CI preflight
+## Stage 4: Build and publish
 
 - Local `package` or `make` commands are supplemental checks for the current OS only.
 - The canonical cross-platform artifacts come from `.github/workflows/build-zips.yml`.
-- A `workflow_dispatch` run is an external action and requires authorization in the current request.
-- Confirm all expected Windows ZIP, macOS ZIP, macOS arm64 DMG, and Linux ZIP jobs and artifacts before proceeding to the release tag.
-- Do not treat a successful build as permission to commit, push, or tag.
+- The normal release path is to create and push the requested `vX.Y.Z` tag after local verification and publication approval. The tag push triggers the four platform builds and GitHub prerelease publication.
+- Do not require a separate GitHub CLI login or `workflow_dispatch` merely to start a normal release when authenticated `git push` is available.
+- `workflow_dispatch` is an optional preflight for workflow, dependency, or packaging-risk changes. It is not a mandatory step for every release, creates workflow artifacts only, and requires explicit authorization when used.
+- After tag push, confirm the Windows ZIP, macOS ZIP, macOS arm64 DMG, Linux ZIP, and `Publish GitHub Release Assets` jobs before reporting completion.
+- Do not treat a successful local or optional preflight build as permission to commit, push, or tag.
 
 ## Stage 5: Commit and publish gates
 
@@ -68,14 +70,17 @@ After checkpoint B is approved, confirm each external or repository-history muta
 
 1. commit release preparation;
 2. push the branch or `main`;
-3. dispatch the preflight workflow;
+3. optionally dispatch a preflight workflow when explicitly requested or warranted by packaging-risk changes;
 4. create the version tag;
-5. push the tag;
-6. inspect or edit the generated GitHub prerelease.
+5. push the tag, which starts the canonical build and prerelease publication;
+6. inspect the workflow jobs, generated assets, and GitHub prerelease;
+7. edit the generated prerelease body only when separately authorized and needed.
 
 Checkpoint approval covers only the stages and mutations described in the checkpoint summary. When the owner explicitly authorizes the complete remaining release sequence, proceed through the listed mutation gates without repeatedly asking. Stop and ask again on new blockers, failed checks, changed release scope, target ambiguity, or unexpected external state.
 
 The tag must use `vX.Y.Z`. Tag push triggers the canonical package workflow and GitHub prerelease asset publication. Do not run `npm publish`.
+
+An explicit owner request such as “タグとビルド” covers tag creation, tag push, the triggered build, and release-result inspection. Proceed through those operations without adding an unrelated GitHub CLI authentication requirement. It does not by itself authorize changing an existing tag, deleting a release, or editing release text.
 
 ## Completion report
 

@@ -30,7 +30,7 @@
 - [外部公式情報の確認](./external-official-info-verification-policy.md)
 - [ログ / エラーハンドリング運用](./logging-error-handling-policy.md)
 - [E2E / UI 動作確認方針](./e2e-ui-verification-policy.md)
-- [v0.2.3 ビルド前確認メモ 2026-08-28](./v0.2.3-release-preflight-2026-08-28.md)
+- [v0.2.3 ビルド・リリース確認メモ 2026-08-28](./v0.2.3-release-preflight-2026-08-28.md)
 - [v0.2.0 ビルド前確認メモ 2026-07-06](./release-build-preflight-2026-07-06.md)
 - [macOS ZIP / DMG 配布メモ 2026-07-15](./macos-zip-dmg-distribution-note-2026-07-15.md)
 - [文字コード運用メモ](./dev-notes-encoding.md)

@@ -19,6 +19,7 @@
 
 ## どこに書くか
 
+- 利用者向けのよくある質問: [faq.md](./faq.md)
 - 作業一覧や優先度: [mmd-basic-task-checklist.md](./mmd-basic-task-checklist.md)
 - ドキュメント索引: [docs-index.md](./docs-index.md)
 - プロジェクトの位置づけ: [mmd-project-positioning-note.md](./mmd-project-positioning-note.md)

@@ -7,6 +7,8 @@ MMD modoki は、Babylon.js と `babylon-mmd` をベースにした、MMD 風の
 ## ダウンロード
 
 - Release 一覧: https://github.com/togechiyo/MMD_modoki/releases
+- 初めて使う方: [よくある質問](./docs/faq.md)
+- 問題が起きた場合: [トラブルシュート](./docs/troubleshooting.md)
 
 配布物は OS ごとの zip です。
 
@@ -144,6 +146,7 @@ npm run make:zip
 
 ## ドキュメント
 
+- よくある質問: [docs/faq.md](./docs/faq.md)
 - ドキュメント入口: [docs/README.md](./docs/README.md)
 - アーキテクチャ: [docs/architecture.md](./docs/architecture.md)
 - MmdManager 解説: [docs/mmd-manager.md](./docs/mmd-manager.md)

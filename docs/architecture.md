@@ -2,7 +2,61 @@
 
 この文書は、v0.2 開発時点の大まかな構成を説明するためのメモです。MMD_modoki は実験機として継続的に変化しているため、完全な仕様書ではなく、現在の責務境界と読む入口を示すものとして扱います。
 
-## 全体構成
+## 最初に読む技術概要
+
+MMD_modoki は、TypeScript で実装された Electron デスクトップアプリです。アプリの外枠と OS 連携を Electron、3D シーンと描画を Babylon.js、MMD のモデル・モーション・再生・物理を `babylon-mmd` が担当します。編集 UI は React や Vue などの UI フレームワークを使わず、HTML / CSS と TypeScript の controller を直接接続する構成です。
+
+主要な処理は Electron の Renderer Process 内で動きます。ここに UI、タイムライン、編集状態、Babylon.js scene、MMD runtime があり、ファイル選択や保存など OS 権限が必要な処理だけを Preload と IPC を通して Main Process へ依頼します。
+
+### 主な技術と担当範囲
+
+| 技術・ライブラリ | このプロジェクトでの用途 |
+| --- | --- |
+| Electron | デスクトップアプリの実行基盤。ウィンドウ、OS メニュー、ダイアログ、ファイル IO、IPC を担当する。 |
+| TypeScript | Main、Preload、Renderer、編集ロジック、出力処理の主要実装言語。 |
+| Electron Forge + Vite | 開発時の起動、Main / Preload / Renderer のビルド、配布パッケージ作成を担当する。 |
+| Babylon.js | 3D engine、scene、camera、mesh、material、texture、shadow、post effect、WebGPU / WebGL backend を担当する。 |
+| `babylon-mmd` | PMX / PMD / VMD の読み込み、MMD animation runtime、ボーン・モーフ評価、MMD 物理を担当する。 |
+| WebGPU / WGSL | 通常利用で優先する描画 backend と shader 言語。独自 shader、compute、Frame Graph、画像・動画出力の主要な開発対象でもある。 |
+| HTML / CSS + Tailwind CSS | アプリ UI。Tailwind はスタイル生成に使い、画面状態とイベント処理は TypeScript controller が管理する。 |
+| i18next | 日本語、英語、中国語、韓国語など UI 文言のローカライズ。 |
+| MediaBunny | Chromium の media API と組み合わせた WebM のエンコード・コンテナ出力。 |
+| electron-log | Main / Renderer のアプリログと診断情報の記録。 |
+| Vitest / Playwright | pure logic の単体テストと、実 Electron 上の UI / runtime E2E。WebGPU 起動は専用 smoke test でも確認する。 |
+
+依存ライブラリの正確なバージョンは [`package.json`](../package.json) を正本とします。
+
+### 実行時の大きな流れ
+
+```text
+Electron Main Process
+  ウィンドウ / ファイル IO / OS ダイアログ / ログ / 出力ジョブ管理
+          ↕ IPC
+Preload
+  許可した API だけを window.electronAPI として公開
+          ↕
+Renderer Process
+  HTML / CSS / TypeScript UI
+          ↓
+  Action / Command / controller / project state
+          ↓
+  MmdManager
+    ├─ Babylon.js     : scene と描画
+    ├─ babylon-mmd    : MMD model / motion / runtime / physics
+    └─ export pipeline: PNG 連番 / WebM / VMD / VPD / project
+```
+
+大まかには、`src/main.ts` が OS 側、`src/preload.ts` が安全な橋渡し、`src/renderer.ts` が Renderer の組み立て、`src/mmd-manager.ts` が 3D / MMD runtime の中核です。UI 操作は `src/ui/`、編集コマンドは `src/actions/` と `src/editor/`、描画の追加機能は `src/render/` と `src/scene/` へ分割しています。
+
+### WebGPU の位置づけ
+
+描画 backend は WebGPU-first です。通常起動の `auto` モードでは、Babylon.js の `WebGPUEngine` を最初に初期化し、利用できない環境または初期化に失敗した環境だけ WebGL2 へ fallback します。開発・比較調査では `MMD_MODOKI_RENDERER=webgpu` または `webgl2` で backend を固定できます。
+
+WebGPU 経路は WGSL-first で、reverse depth、compute shader、Frame Graph、出力用 readback など WebGPU 固有の処理を含みます。WebGL2 は互換・調査用の fallback であり、すべての実験機能が WebGPU と同じ品質・実装経路を持つとは限りません。描画や shader を変更するときは、共通処理なのか WebGPU / WebGL 固有処理なのかを先に切り分けます。
+
+配布後の通常実行は offline-first です。shader、WASM、既定 texture、環境 lighting など実行に必要な asset はアプリへ同梱し、通常機能を CDN や外部 API に依存させません。
+
+## Electron プロセス構成
 
 MMD_modoki は Electron の 3 層構成です。
 
@@ -105,6 +159,8 @@ v0.2 では、操作を直接状態変更へつなぐだけでなく、Action / 
 ## 描画・材質・ポストエフェクト
 
 描画系は `src/render/` と `src/scene/` に分かれています。
+
+現在実装されている材質シェーダープリセットと FrameGraph エフェクトの短い一覧は、[シェーダープリセット / FrameGraph エフェクト一覧](./shader-framegraph-effect-catalog.md) を参照してください。
 
 - `src/render/post-process-controller.ts`
   - Classic PostProcess 経路の DoF、Bloom、色調整、LUT など。

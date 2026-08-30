@@ -160,6 +160,7 @@ import {
     buildSubSurfaceCompositionDefines,
     resolveSubSurfaceFrameGraphPolicy,
 } from "./render/subsurface-frame-graph-policy";
+import { resolveFrameGraphBackendRebuildAction } from "./render/frame-graph-backend-rebuild-state";
 import { resolveModelEdgeWidth } from "./render/model-edge-settings";
 import {
     applyImportedMaterialShaderStates as applyImportedMaterialShaderStatesImpl,
@@ -7533,7 +7534,7 @@ ${beforeFogAppendBlock}
         this.engine.runRenderLoop(() => {
             const frameStartMs = this.framePerformanceLogEnabled ? performance.now() : 0;
             const nowMs = performance.now();
-            if (this.suspendSceneRenderCount > 0) {
+            if (this.suspendSceneRenderCount > 0 || this.frameGraphPostEffectsRebuildScheduled) {
                 this.lastRenderTimestampMs = nowMs;
                 this.nextRenderDueTimestampMs = nowMs;
                 return;
@@ -10350,6 +10351,16 @@ ${beforeFogAppendBlock}
             return;
         }
 
+        if (!this.shouldExecuteFrameGraphPostEffects()) {
+            this.disposeDofDepthRenderer();
+            this.disposeFrameGraphPostEffectsSceneColorTarget();
+            this.disposeFrameGraphPostEffectsLuminousMaskTarget();
+            this.postEffectBackend = "frameGraph";
+            this.applyImageProcessingSettings();
+            this.syncExportRenderSurfaceTarget();
+            return;
+        }
+
         const ssgiRequested = this.isFrameGraphPostEffectActive("ssgi");
         const ssgiSupported = this.isWebGpuEngine() && this.engine.getCaps().supportComputeShaders;
         if (
@@ -11224,7 +11235,17 @@ ${beforeFogAppendBlock}
     }
 
     private refreshFrameGraphPostEffectsBackendForOrderChange(): void {
-        if (this.postEffectBackend !== "frameGraph" || !this.frameGraphPostEffectsController) {
+        if (this.postEffectBackend !== "frameGraph") {
+            return;
+        }
+        if (!this.shouldExecuteFrameGraphPostEffects()) {
+            this.frameGraphPostEffectsRebuildPending = false;
+            this.syncFrameGraphRenderTargetState();
+            this.syncExportRenderSurfaceTarget();
+            return;
+        }
+        if (!this.frameGraphPostEffectsController) {
+            this.initializePostEffectBackend();
             return;
         }
         this.frameGraphPostEffectsRebuildPending = true;
@@ -11237,26 +11258,65 @@ ${beforeFogAppendBlock}
         }
         this.frameGraphPostEffectsRebuildScheduled = true;
         requestAnimationFrame(() => {
-            this.frameGraphPostEffectsRebuildScheduled = false;
-            if (!this.frameGraphPostEffectsRebuildPending) {
-                return;
-            }
-            const controller = this.frameGraphPostEffectsController;
-            if (this.postEffectBackend !== "frameGraph" || !controller) {
-                this.frameGraphPostEffectsRebuildPending = false;
-                return;
-            }
-            if (!controller.isReady()) {
-                return;
-            }
-
-            // FrameGraph texture dependencies are immutable after build.
-            // Coalesce rapid order/state changes and rebuild once from the
-            // latest stack after the current asynchronous build is ready.
-            this.frameGraphPostEffectsRebuildPending = false;
-            this.disposeFrameGraphPostEffectsController();
-            this.initializePostEffectBackend();
+            void this.runScheduledFrameGraphPostEffectsBackendRebuild();
         });
+    }
+
+    private async runScheduledFrameGraphPostEffectsBackendRebuild(): Promise<void> {
+        const resolveAction = (): ReturnType<typeof resolveFrameGraphBackendRebuildAction> => {
+            const controller = this.frameGraphPostEffectsController;
+            return resolveFrameGraphBackendRebuildAction({
+                pending: this.frameGraphPostEffectsRebuildPending,
+                backendActive: this.postEffectBackend === "frameGraph" && controller !== null,
+                controllerReady: controller?.isReady() === true,
+            });
+        };
+        let action = resolveAction();
+        if (action === "idle") {
+            this.frameGraphPostEffectsRebuildScheduled = false;
+            return;
+        }
+        if (action === "cancel") {
+            this.frameGraphPostEffectsRebuildScheduled = false;
+            this.frameGraphPostEffectsRebuildPending = false;
+            return;
+        }
+        if (action === "wait") {
+            this.frameGraphPostEffectsRebuildScheduled = false;
+            return;
+        }
+
+        if (this.isWebGpuEngine()) {
+            try {
+                const webGpuEngine = this.engine as WebGPUEngine;
+                webGpuEngine.flushFramebuffer();
+                await webGpuEngine._device.queue.onSubmittedWorkDone();
+            } catch (err: unknown) {
+                logWarn("render", "failed to drain WebGPU work before Frame Graph rebuild", {
+                    reason: err instanceof Error ? err.message : String(err),
+                });
+            }
+        }
+
+        action = resolveAction();
+        this.frameGraphPostEffectsRebuildScheduled = false;
+        if (action === "idle") {
+            return;
+        }
+        if (action === "cancel") {
+            this.frameGraphPostEffectsRebuildPending = false;
+            return;
+        }
+        if (action === "wait") {
+            return;
+        }
+
+        // FrameGraph texture dependencies are immutable after build. Coalesce
+        // rapid changes, then release the old depth/scene textures only after
+        // submitted WebGPU work has stopped referencing them.
+        this.frameGraphPostEffectsRebuildPending = false;
+        this.disposeFrameGraphPostEffectsController();
+        this.initializePostEffectBackend();
     }
 
     public refreshFrameGraphPostEffectsBackendForStackStateChange(): void {
@@ -11267,20 +11327,31 @@ ${beforeFogAppendBlock}
         if (this.requestedPostEffectBackend !== "frameGraph") {
             return false;
         }
+        if (!this.shouldExecuteFrameGraphPostEffects()) {
+            this.frameGraphPostEffectsRebuildPending = false;
+            this.syncFrameGraphRenderTargetState();
+            this.syncExportRenderSurfaceTarget();
+            return true;
+        }
         this.frameGraphPostEffectsRebuildPending = false;
         this.shutdownPostEffectBackend();
         this.initializePostEffectBackend();
         return this.postEffectBackend === "frameGraph"
-            && this.frameGraphPostEffectsController !== null;
+            && (!this.shouldExecuteFrameGraphPostEffects()
+                || this.frameGraphPostEffectsController !== null);
     }
 
     private refreshFrameGraphPostEffectsBackendForResourcePlanChange(): boolean {
-        if (this.postEffectBackend !== "frameGraph" || !this.frameGraphPostEffectsController) {
+        if (this.postEffectBackend !== "frameGraph") {
             return false;
         }
-        this.disposeFrameGraphPostEffectsController();
-        this.initializePostEffectBackend();
-        return this.postEffectBackend === "frameGraph";
+        if (!this.frameGraphPostEffectsController) {
+            this.initializePostEffectBackend();
+            return true;
+        }
+        this.frameGraphPostEffectsRebuildPending = true;
+        this.scheduleFrameGraphPostEffectsBackendRebuild();
+        return true;
     }
 
     private getPostProcessShaderLanguage(): ShaderLanguage {
@@ -14928,9 +14999,12 @@ ${beforeFogAppendBlock}
 
     public isPostEffectBackendReadyForCapture(): boolean {
         if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) {
-            return true;
+            return !this.frameGraphPostEffectsRebuildPending
+                && !this.frameGraphPostEffectsRebuildScheduled;
         }
-        return this.frameGraphPostEffectsController?.isReady() === true;
+        return this.frameGraphPostEffectsController?.isReady() === true
+            && !this.frameGraphPostEffectsRebuildPending
+            && !this.frameGraphPostEffectsRebuildScheduled;
     }
 
     public async waitForPostEffectBackendReadyForCapture(timeoutMs = 8_000): Promise<boolean> {
@@ -14967,7 +15041,8 @@ ${beforeFogAppendBlock}
             return currentSurface.getDiagnostics();
         }
 
-        const rebuildFrameGraph = this.frameGraphPostEffectsController !== null;
+        const rebuildFrameGraph = this.frameGraphPostEffectsController !== null
+            && this.shouldExecuteFrameGraphPostEffects();
         if (rebuildFrameGraph) {
             this.disposeFrameGraphPostEffectsController();
         }
@@ -15009,7 +15084,8 @@ ${beforeFogAppendBlock}
             return;
         }
 
-        const rebuildFrameGraph = this.frameGraphPostEffectsController !== null;
+        const rebuildFrameGraph = this.frameGraphPostEffectsController !== null
+            && this.shouldExecuteFrameGraphPostEffects();
         if (rebuildFrameGraph) {
             this.disposeFrameGraphPostEffectsController();
         }

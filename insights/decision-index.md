@@ -29,6 +29,7 @@
 | adopted | [タイムラインの行高は選択状態で変えない](./decisions/timeline-rows-stay-uniform-height.md) | timelineの行レイアウトやGraph表示を変更する |
 | adopted | [タイムラインの行・列見出し選択は片方の軸だけを保持する](./decisions/timeline-header-selection-is-axis-exclusive.md) | timelineの見出し選択や修飾キー操作を変更する |
 | adopted | [報告された要望をそのままロードマップ確約にしない](./decisions/reported-requests-are-not-roadmap-commitments.md) | Issue や外部報告を実装計画へ昇格するか判断する |
+| adopted | [v0.2.3のモデル読込暗転・終了を早期修正する](./decisions/prioritize-v023-model-load-blackout-fix.md) | v0.2.3でmodel読込が暗転・終了する回帰の優先順位を決める |
 | accepted-with-constraints | [配布アプリはoffline-first、開発作業はfixture中心でGUI確認する](./decisions/keep-agent-work-local-fixture-driven-and-gui-verified.md) | branch、runtime通信、開発時network、local reference配置、model asset、UI検証の安全境界を決める |
 | adopted | [VMD retargetは現在のprojectから独立したpopup toolにする](./decisions/vmd-retarget-is-an-isolated-popup-tool.md) | PMX間のVMD変換、rotation・体格差補正、preview導線を変更する |
 | adopted | [MMDプリセットはfallbackの役割を保ち影側色を共通化する](./decisions/mmd-standard-respects-missing-toon-and-light-shadow-forces-fallback.md) | Toonなし材質、fallback Toon、共通影色、shader presetの役割を変更する |

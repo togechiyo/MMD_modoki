@@ -25,6 +25,8 @@ v0.2.4 の候補として挙がった BPMX / BVMD 読み込みについて、形
   旧2.xは同梱のLegacy loaderで読めるが、BPMXは新旧ローダーが同じ `.bpmx` 拡張子を登録するため、
   両方を無条件に登録すると安全に振り分けられない。
 - BVMDは既存のVMDと同じ `MmdAnimation` を返すため、接続難易度は比較的低い。
+  加えて、track名を可変長UTF-8で保持でき、Shift_JIS固定長のVMDでは表現できない
+  漢字・異体字・中国語・韓国語などを失わずに扱える点が、MMD_modokiにとって大きな利点になる。
   BPMXも既存のMMDモデルランタイムへ接続できるが、モデルコメント確認、材質診断、
   project round-trip、埋め込みテクスチャを含むGUI実機確認まで必要なので、単なる拡張子追加ではない。
 - BPMXは単一ファイルにテクスチャを内包するため、相対パスや大文字小文字差による欠落を避けやすい。
@@ -41,7 +43,7 @@ v0.2.4 の候補として挙がった BPMX / BVMD 読み込みについて、形
 | 正式な位置づけ | Babylon PMX | Babylon VMD |
 | 用途 | MMDモデルの単一バイナリ化と読込最適化 | MMDモーションのトラック指向バイナリ化と読込最適化 |
 | 元になる主な形式 | PMX / PMDから変換 | VMDまたは`MmdAnimation`から変換 |
-| 主な利点 | 画像・テクスチャを含む単一ファイル、パス解決失敗の回避、事前最適化 | 名前の重複を減らしたトラック構造、小容量・高速parse |
+| 主な利点 | 画像・テクスチャを含む単一ファイル、パス解決失敗の回避、事前最適化 | 可変長UTF-8のtrack名、名前の重複を減らしたトラック構造、小容量・高速parse |
 | 互換性 | Blender、Unity、一般MMDツールとの互換性なし | 一般MMDツールとの互換性なし |
 | 現行形式 | 3.0系 | 3.0系 |
 | MMD_modoki現状 | 未登録・UI未対応 | 未生成・UI未対応 |
@@ -99,6 +101,44 @@ BPMX対応を追加してもPMX 2.1機能対応にはならない。
 実装時はWeb上の例をそのまま移植せず、導入済み1.2.0の `.d.ts` と実装を正とする。
 
 ## BVMDの内容と特徴
+
+### Unicode対応とVMDの名前制約
+
+BVMD 3.0のconverterはJavaScriptの`TextEncoder`で文字列をUTF-8に変換し、
+loaderは`TextDecoder("utf-8")`で復元する。track名の前に`uint32`のbyte長を持つため、
+VMDのような固定長文字列ではない。
+
+一方、VMDはShift_JISで次の固定長制約を持つ。
+
+| VMDの名前 | 上限 |
+| --- | --- |
+| model名 | 20byte |
+| bone名 | 15byte |
+| morph名 | 15byte |
+| property key内のIK bone名 | 20byte |
+
+日本語の一般的な漢字でも15byte上限による切り詰めが起き得るほか、Shift_JISにない漢字、
+異体字、中国語、韓国語などはそもそも正しく符号化できない。異なるUnicode名が変換後に
+同じShift_JIS byte列になり、trackの対応先を区別できなくなる可能性もある。
+MMD_modokiのVMD書き出しvalidatorも、現在この「符号化不能」「byte超過」「変換後の名前衝突」を
+検出対象にしている。
+
+BVMDではbone、movable bone、morph、IK boneの各名称をUTF-8の可変長文字列として保持するため、
+この制約を避けられる。MMD_modoki内部のtimeline、motion document、project JSONもJavaScript文字列を
+そのまま扱っているので、PMX側のUnicode bone / morph名と完全一致するBVMD trackであれば、
+途中でShift_JISへ落とさずbindingできる構造である。
+
+ただし次の限界は残る。
+
+- 既存VMDをBVMDへ変換しても、VMD作成時に欠落・置換・切り詰められた元のUnicode名は復元できない。
+- VMD loaderで読んだanimationをBVMDへ変換した場合、保存されるのはVMDからdecodeできた名前までである。
+- Unicode対応の実益を得るには、MMD_modoki上で作ったanimation、Unicode名を保持する別データ、
+  または最初から正しいtrack名を持つ`MmdAnimation`からBVMDを生成する必要がある。
+- BVMDを読めない一般MMDツールへ渡す場合は、従来どおりVMD互換の名前制約を受ける。
+
+このため、BVMDは単なる高速読込形式ではなく、**MMD_modoki内部でUnicode名を保持したまま
+motionを保存・交換する候補**として評価する価値がある。初回は読込だけでも導入できるが、
+将来的なBVMD書き出しは、現在VMD出力できないUnicode trackを保存する退避経路にもなり得る。
 
 ### トラック指向の保存
 
@@ -258,6 +298,9 @@ schemaを増やさず往復できる可能性が高い。ただし既存importer
 - signature不一致
 - 未対応の1.x / 2.x / 3.1.0を明示的に拒否
 - BVMDのbone、movable bone、morph、property、IK、camera、physics toggle
+- Shift_JISにない漢字・異体字・中国語・韓国語を含むUTF-8 track名の無損失round-trip
+- VMDの15byte上限を超えるbone / morph名の無損失round-trip
+- Unicode名がPMX側のbone / morphへ正確にbindingされること
 - BVMDにmodel trackのみ、camera trackのみ、両方、どちらも空のケース
 - project serialize / importでBPMX pathとBVMD import typeを維持
 

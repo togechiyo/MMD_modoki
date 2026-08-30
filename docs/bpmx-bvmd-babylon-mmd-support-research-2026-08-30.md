@@ -5,9 +5,11 @@
 v0.2.4 の候補として挙がった BPMX / BVMD 読み込みについて、形式の目的、
 `babylon-mmd` の実装状況、現在の MMD_modoki に接続するときの変更点とリスクを整理する。
 
-これは採用決定や実装完了を示す文書ではない。BPMX / BVMD は一般的な交換形式ではなく、
-`babylon-mmd` 内での配布・キャッシュ・読み込み最適化を主目的にした独自形式であるため、
-まず読み込み対応の価値と保守範囲を判断するための調査記録として扱う。
+BPMX / BVMD は一般的な交換形式ではなく、`babylon-mmd` 内での配布・キャッシュ・
+読み込み最適化を主目的にした独自形式である。2026-08-30にproject ownerは、
+多言語翻訳強化と合わせて、中国語系の漢字を含むUnicode名をそのまま読み込み・保存できる
+toolへ進める方針を明示した。BVMDはそのmotion入出力候補として採用方向になった。
+BPMXの採否と個別の実装完了は、この文書だけでは確定扱いにしない。
 
 調査対象は 2026-08-30 時点の次の組み合わせとする。
 
@@ -21,7 +23,7 @@ v0.2.4 の候補として挙がった BPMX / BVMD 読み込みについて、形
   この2形式のためだけに依存を更新する必要はない。
 - `babylon-mmd` 1.3.0へ上げる場合は Babylon.js 9.15.0以上への同時更新が必要になる。
   影響範囲が広いため、形式対応とは別作業に分離した方がよい。
-- 初回対応は **BPMX 3.0.x / BVMD 3.0.x の読み込み専用**を推奨する。
+- 初回対応は **BPMX 3.0.xの読み込み**と、**BVMD 3.0.xの読み込み・保存**を推奨する。
   旧2.xは同梱のLegacy loaderで読めるが、BPMXは新旧ローダーが同じ `.bpmx` 拡張子を登録するため、
   両方を無条件に登録すると安全に振り分けられない。
 - BVMDは既存のVMDと同じ `MmdAnimation` を返すため、接続難易度は比較的低い。
@@ -137,8 +139,9 @@ BVMDではbone、movable bone、morph、IK boneの各名称をUTF-8の可変長�
 - BVMDを読めない一般MMDツールへ渡す場合は、従来どおりVMD互換の名前制約を受ける。
 
 このため、BVMDは単なる高速読込形式ではなく、**MMD_modoki内部でUnicode名を保持したまま
-motionを保存・交換する候補**として評価する価値がある。初回は読込だけでも導入できるが、
-将来的なBVMD書き出しは、現在VMD出力できないUnicode trackを保存する退避経路にもなり得る。
+motionを保存・交換する形式**として扱う。VMD出力できないUnicode trackを保持するため、
+読込とBVMD書き出しを一組で設計する。従来VMDの書き出しは互換出力として残し、
+Shift_JISへ符号化できない名前を黙って置換・切り詰めない。
 
 ### トラック指向の保存
 
@@ -261,17 +264,18 @@ schemaを増やさず往復できる可能性が高い。ただし既存importer
 
 1. BPMX 3.0.xの読込
 2. BVMD 3.0.xのmodel motion / camera motion読込
-3. signature / version検査と、旧版・破損file向けの具体的なエラー
-4. model、motion、cameraのproject保存・再読込
-5. file dialog、drag/drop、最近使ったpath相当の全導線を同じ対応表へ統一
-6. 配布可能な最小fixtureによるunit / E2E確認
+3. 編集中の`MmdAnimation`からBVMD 3.0.xを保存する導線
+4. signature / version検査と、旧版・破損file向けの具体的なエラー
+5. model、motion、cameraのproject保存・再読込
+6. file dialog、drag/drop、最近使ったpath相当の全導線を同じ対応表へ統一
+7. 配布可能な最小fixtureによるunit / E2E確認
 
 ### 初回スコープから外す候補
 
 - BPMX / BVMD 2.xの自動読込
 - 1.xのmigration
 - PMX / PMDからBPMXへのアプリ内変換
-- VMDからBVMDへのアプリ内変換・BVMD書き出し
+- BPMXへのアプリ内変換・BPMX書き出し
 - 一つのBVMDからmodelとcameraへ同時適用する特殊UI
 
 読込と変換を同時に入れると、形式対応だけでなくasset同梱、透過評価、保存先、

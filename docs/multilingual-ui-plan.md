@@ -126,6 +126,24 @@ V022-055は固定文言と未翻訳だけの問題ではなく、次の2軸を�
 
 機械確認はJSON構文、キー集合、空文字、英語同値候補の抽出までとし、訳語の採否は各言語の文脈レビューで確認する。GUI確認は5言語へ実際に切り替え、共通shell、timeline、下部panel、Effect panel、dialog、動的messageを対象にする。
 
+## 2026-08-30 多言語データの入出力方針
+
+project ownerは、多言語翻訳強化を画面文言だけに限定せず、中国語系の漢字を含む
+Unicodeのモデル名、ボーン名、モーフ名、モーショントラック名をそのまま読み込み・保存できる
+toolへ進める方針を明示した。
+
+この方針では、表示言語とアセット内文字列を別の責務として扱いながら、どちらも途中で
+Shift_JISへ縮退させない。
+
+- UI: `ja / en / zh-Hant / zh-Hans / ko`の訳語とCJK layoutを正しく表示する。
+- model / project: PMXとproject JSONのUnicode名を保持する。
+- motion: UTF-8可変長track名を持つBVMDを、Unicodeを保てる読込・保存形式として扱う。
+- VMD: 従来toolとの互換出力として残すが、Shift_JIS符号化不能、固定長超過、名前衝突を
+  黙って置換・切り詰めず、現在のvalidatorで利用者へ伝える。
+
+BVMDの形式・`babylon-mmd`対応状況・既存VMDからは失われた文字を復元できない制約は、
+[BPMX / BVMD調査メモ](./bpmx-bvmd-babylon-mmd-support-research-2026-08-30.md)を参照する。
+
 ## 今後の作業候補
 
 1. 画面内の残りの直書き文言を辞書へ寄せる
@@ -133,3 +151,4 @@ V022-055は固定文言と未翻訳だけの問題ではなく、次の2軸を�
 3. labelの自動幅、折返し、最小幅、ellipsis方針を画面ごとに整理する
 4. 必要なら辞書キーの命名規則を固める
 5. 5言語の実画面で共通shellと主要dialogを確認する
+6. Unicode名を含むPMX / BVMD / projectの読込・編集・保存round-tripを確認する

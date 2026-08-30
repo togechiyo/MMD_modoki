@@ -11,6 +11,7 @@
 | adopted | [AI 向け知見層の名前は `insights` とする](./decisions/ai-knowledge-layer-is-named-insights.md) | AI が再利用する判断記録の配置を決める |
 | adopted | [通常リリースはversion tag pushから開始する](./decisions/release-builds-start-from-version-tag-push.md) | version tag、GitHub Actions、prereleaseの公開手順を進める |
 | adopted | [リリース前に全言語モードを確認する](./decisions/release-preflight-checks-all-supported-locales.md) | release前の翻訳辞書と各言語GUIを確認する |
+| adopted | [多言語アセット名をUnicodeのままBVMDへ保存する](./decisions/preserve-multilingual-asset-names-with-bvmd.md) | 多言語UI、motion入出力、VMD / BVMD、project保存を変更する |
 | adopted | [v0.2.3 の主題はタイムラインとシーンキー編集](./decisions/v023-theme-is-timeline-and-scene-key-editing.md) | v0.2.3 の実装範囲や優先順位を決める |
 | adopted | [v0.2.3 はキー機能追加より UI 整理を先行する](./decisions/v023-moves-ui-before-adding-key-functions.md) | タイムライン機能の実装順を決める |
 | adopted | [汎用UIアクセントはブルーグリーンを使う](./decisions/generic-ui-accent-uses-blue-green.md) | focus、選択、primary button、ドラッグ表示の配色を追加・変更する |

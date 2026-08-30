@@ -326,13 +326,13 @@
             <div class="timeline-nav-row">
               <div class="timeline-nav-main timeline-nav-main--mmd">
                 <div class="timeline-nav-group timeline-nav-group--left">
-                  <button id="btn-frame-range-start" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="開始フレームへ">
+                  <button id="btn-frame-range-start" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="開始フレームへ" data-i18n-title="timeline.nav.rangeStart">
                     <span aria-hidden="true">|&lt;</span>
                   </button>
-                  <button id="btn-kf-nudge-left" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="前のキーへ">
+                  <button id="btn-kf-nudge-left" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="前のキーへ" data-i18n-title="timeline.nav.prevKey">
                     <span aria-hidden="true">.&lt;</span>
                   </button>
-                  <button id="btn-frame-step-left" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="1フレーム戻る">
+                  <button id="btn-frame-step-left" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="1フレーム戻る" data-i18n-title="viewportSeekBar.prevFrame">
                     <span aria-hidden="true">&lt;</span>
                   </button>
                 </div>
@@ -346,17 +346,18 @@
                     value="0"
                     inputmode="numeric"
                     aria-label="Current frame"
+                    data-i18n-aria-label="viewportSeekBar.currentFrame"
                   >
                   <span id="total-frames" hidden>0</span>
                 </div>
                 <div class="timeline-nav-group timeline-nav-group--right">
-                  <button id="btn-frame-step-right" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="1フレーム進む">
+                  <button id="btn-frame-step-right" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="1フレーム進む" data-i18n-title="viewportSeekBar.nextFrame">
                     <span aria-hidden="true">&gt;</span>
                   </button>
-                  <button id="btn-kf-nudge-right" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="次のキーへ">
+                  <button id="btn-kf-nudge-right" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="次のキーへ" data-i18n-title="timeline.nav.nextKey">
                     <span aria-hidden="true">&gt;.</span>
                   </button>
-                  <button id="btn-frame-range-end" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="終了フレームへ">
+                  <button id="btn-frame-range-end" class="timeline-nav-btn timeline-nav-btn--mmd" type="button" title="終了フレームへ" data-i18n-title="timeline.nav.rangeEnd">
                     <span aria-hidden="true">&gt;|</span>
                   </button>
                 </div>
@@ -600,10 +601,10 @@
           <span data-i18n="section.effect">エフェクト</span>
         </div>
         <div class="shader-panel-body effect-panel-root">
-          <div class="effect-panel-tabs" role="tablist" aria-label="Effect categories">
-            <button class="effect-panel-tab effect-panel-tab--active" type="button" role="tab" data-effect-tab="post" aria-selected="true" title="Post Effects">効果</button>
-            <button class="effect-panel-tab" type="button" role="tab" data-effect-tab="materials" aria-selected="false" title="Materials / Shaders">材質</button>
-            <button class="effect-panel-tab" type="button" role="tab" data-effect-tab="lighting" aria-selected="false" title="Lighting" hidden>光源</button>
+          <div class="effect-panel-tabs" role="tablist" aria-label="Effect categories" data-i18n-aria-label="effect.tabs.ariaLabel">
+            <button class="effect-panel-tab effect-panel-tab--active" type="button" role="tab" data-effect-tab="post" aria-selected="true" title="Post Effects" data-i18n="effect.tabs.post" data-i18n-title="effect.tabs.postTitle">効果</button>
+            <button class="effect-panel-tab" type="button" role="tab" data-effect-tab="materials" aria-selected="false" title="Materials / Shaders" data-i18n="effect.tabs.materials" data-i18n-title="effect.tabs.materialsTitle">材質</button>
+            <button class="effect-panel-tab" type="button" role="tab" data-effect-tab="lighting" aria-selected="false" title="Lighting" data-i18n="effect.tabs.lighting" data-i18n-title="effect.tabs.lightingTitle" hidden>光源</button>
           </div>
 
           <section class="effect-panel-view" data-effect-tab-view="post">
@@ -806,9 +807,9 @@
                   </select>
                 </div>
                 <div class="interp-placeholder-actions">
-                  <button id="btn-interp-copy" class="info-action-btn interp-placeholder-btn" type="button">コピー</button>
-                  <button id="btn-interp-paste" class="info-action-btn interp-placeholder-btn" type="button">ペースト</button>
-                  <button id="btn-interp-linear" class="info-action-btn interp-placeholder-btn" type="button">線形</button>
+                  <button id="btn-interp-copy" class="info-action-btn interp-placeholder-btn" type="button" data-i18n="button.copy">コピー</button>
+                  <button id="btn-interp-paste" class="info-action-btn interp-placeholder-btn" type="button" data-i18n="button.paste">ペースト</button>
+                  <button id="btn-interp-linear" class="info-action-btn interp-placeholder-btn" type="button" data-i18n="button.linear">線形</button>
                 </div>
               </div>
             </div>
@@ -929,17 +930,17 @@
           </div>
           <div class="lighting-controls">
             <div class="light-row light-row--light">
-              <span class="light-label" data-i18n="label.lightDirectionX">方向X</span>
+              <span class="light-label" data-i18n="bottom.light.directionX" data-i18n-title="label.lightDirectionX">方向X</span>
               <input type="range" id="light-direction-x" class="light-slider" min="-1" max="1" value="0.22" step="0.01">
               <span id="light-direction-x-val" class="light-value">0.22</span>
             </div>
             <div class="light-row light-row--light">
-              <span class="light-label" data-i18n="label.lightDirectionY">方向Y</span>
+              <span class="light-label" data-i18n="bottom.light.directionY" data-i18n-title="label.lightDirectionY">方向Y</span>
               <input type="range" id="light-direction-y" class="light-slider" min="-1" max="1" value="-0.77" step="0.01">
               <span id="light-direction-y-val" class="light-value">-0.77</span>
             </div>
             <div class="light-row light-row--light">
-              <span class="light-label" data-i18n="label.lightDirectionZ">方向Z</span>
+              <span class="light-label" data-i18n="bottom.light.directionZ" data-i18n-title="label.lightDirectionZ">方向Z</span>
               <input type="range" id="light-direction-z" class="light-slider" min="-1" max="1" value="0.60" step="0.01">
               <span id="light-direction-z-val" class="light-value">0.60</span>
             </div>
@@ -949,17 +950,17 @@
               <span id="light-ambient-val" class="light-value">0.0</span>
             </div>
             <div class="light-row light-row--light">
-              <span class="light-label" data-i18n="label.lightColorR">光色R</span>
+              <span class="light-label" data-i18n="bottom.light.colorR" data-i18n-title="label.lightColorR">照明R</span>
               <input type="range" id="light-color-r" class="light-slider" min="0" max="255" value="128" step="1">
               <span id="light-color-r-val" class="light-value">100%</span>
             </div>
             <div class="light-row light-row--light">
-              <span class="light-label" data-i18n="label.lightColorG">光色G</span>
+              <span class="light-label" data-i18n="bottom.light.colorG" data-i18n-title="label.lightColorG">照明G</span>
               <input type="range" id="light-color-g" class="light-slider" min="0" max="255" value="128" step="1">
               <span id="light-color-g-val" class="light-value">100%</span>
             </div>
             <div class="light-row light-row--light">
-              <span class="light-label" data-i18n="label.lightColorB">光色B</span>
+              <span class="light-label" data-i18n="bottom.light.colorB" data-i18n-title="label.lightColorB">照明B</span>
               <input type="range" id="light-color-b" class="light-slider" min="0" max="255" value="128" step="1">
               <span id="light-color-b-val" class="light-value">100%</span>
             </div>
@@ -984,27 +985,27 @@
           </div>
           <div class="lighting-controls shadow-controls">
             <div class="light-row light-row--shadow">
-              <span class="light-label" data-i18n="label.shadowColorR">影色R</span>
+              <span class="light-label" data-i18n="bottom.shadow.colorR" data-i18n-title="label.shadowColorR">影R</span>
               <input type="range" id="light-shadow-color-r" class="light-slider" min="0" max="255" value="128" step="1">
               <span id="light-shadow-color-r-val" class="light-value">128</span>
             </div>
             <div class="light-row light-row--shadow">
-              <span class="light-label" data-i18n="label.shadowColorG">影色G</span>
+              <span class="light-label" data-i18n="bottom.shadow.colorG" data-i18n-title="label.shadowColorG">影G</span>
               <input type="range" id="light-shadow-color-g" class="light-slider" min="0" max="255" value="128" step="1">
               <span id="light-shadow-color-g-val" class="light-value">128</span>
             </div>
             <div class="light-row light-row--shadow">
-              <span class="light-label" data-i18n="label.shadowColorB">影色B</span>
+              <span class="light-label" data-i18n="bottom.shadow.colorB" data-i18n-title="label.shadowColorB">影B</span>
               <input type="range" id="light-shadow-color-b" class="light-slider" min="0" max="255" value="128" step="1">
               <span id="light-shadow-color-b-val" class="light-value">128</span>
             </div>
             <div class="light-row light-row--shadow">
-              <span class="light-label" data-i18n="label.toonInfluence">Toon色</span>
+              <span class="light-label" data-i18n="bottom.shadow.toon" data-i18n-title="label.toonInfluence">Toon</span>
               <input type="range" id="light-toon-shadow-influence" class="light-slider" min="0" max="100" value="100" step="1">
               <span id="light-toon-shadow-influence-val" class="light-value">100%</span>
             </div>
             <div class="light-row light-row--shadow">
-              <span class="light-label" data-i18n="label.shadowMaxZ">影描画範囲</span>
+              <span class="light-label" data-i18n="bottom.shadow.range" data-i18n-title="label.shadowMaxZ">範囲</span>
               <input type="range" id="light-shadow-max-z" class="light-slider" min="500" max="10000" value="1000" step="500">
               <span id="light-shadow-max-z-val" class="light-value">1000</span>
             </div>
@@ -1070,7 +1071,7 @@
               <span id="light-occlusion-shadow-softness-val" class="light-value">0.100</span>
             </div>
             <div class="light-row light-row--shadow">
-              <span class="light-label" data-i18n="label.shadowStrength">照度</span>
+              <span class="light-label" data-i18n="bottom.shadow.strength" data-i18n-title="label.shadowStrength">強度</span>
               <input type="range" id="light-intensity" class="light-slider" min="0" max="200" value="100" step="1">
               <span id="light-intensity-val" class="light-value">1.0</span>
             </div>
@@ -1095,22 +1096,22 @@
           </div>
           <div id="gravity-controls" class="gravity-controls">
             <div class="light-row gravity-row">
-              <span class="light-label" data-i18n="label.gravityAcceleration">加速度</span>
+              <span class="light-label" data-i18n="bottom.gravity.acceleration" data-i18n-title="label.gravityAcceleration">加速度</span>
               <input type="range" id="physics-gravity-accel" class="light-slider" min="0" max="200" value="98" step="1">
               <span id="physics-gravity-accel-val" class="light-value">98</span>
             </div>
             <div class="light-row gravity-row">
-              <span class="light-label" data-i18n="label.gravityX">重力X</span>
+              <span class="light-label" data-i18n="bottom.gravity.x" data-i18n-title="label.gravityX">重力X</span>
               <input type="range" id="physics-gravity-dir-x" class="light-slider" min="-100" max="100" value="0" step="1">
               <span id="physics-gravity-dir-x-val" class="light-value">0</span>
             </div>
             <div class="light-row gravity-row">
-              <span class="light-label" data-i18n="label.gravityY">重力Y</span>
+              <span class="light-label" data-i18n="bottom.gravity.y" data-i18n-title="label.gravityY">重力Y</span>
               <input type="range" id="physics-gravity-dir-y" class="light-slider" min="-100" max="100" value="-100" step="1">
               <span id="physics-gravity-dir-y-val" class="light-value">-100</span>
             </div>
             <div class="light-row gravity-row">
-              <span class="light-label" data-i18n="label.gravityZ">重力Z</span>
+              <span class="light-label" data-i18n="bottom.gravity.z" data-i18n-title="label.gravityZ">重力Z</span>
               <input type="range" id="physics-gravity-dir-z" class="light-slider" min="-100" max="100" value="0" step="1">
               <span id="physics-gravity-dir-z-val" class="light-value">0</span>
             </div>

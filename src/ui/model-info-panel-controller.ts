@@ -101,7 +101,8 @@ export class ModelInfoPanelController {
 
         const cameraOption = document.createElement("option");
         cameraOption.value = MODEL_INFO_CAMERA_SELECT_VALUE;
-        cameraOption.textContent = "0: Camera";
+        cameraOption.dataset.i18n = "option.cameraTarget";
+        cameraOption.textContent = t("option.cameraTarget");
         select.appendChild(cameraOption);
 
         let selected = selectedAccessoryIndex !== null;
@@ -170,7 +171,8 @@ export class ModelInfoPanelController {
         const select = document.createElement("select");
         const cameraOption = document.createElement("option");
         cameraOption.value = MODEL_INFO_CAMERA_SELECT_VALUE;
-        cameraOption.textContent = "0: Camera";
+        cameraOption.dataset.i18n = "option.cameraTarget";
+        cameraOption.textContent = t("option.cameraTarget");
         select.appendChild(cameraOption);
         for (const model of models) {
             const option = document.createElement("option");

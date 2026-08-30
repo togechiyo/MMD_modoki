@@ -575,6 +575,7 @@ export class UIController {
         this.viewportTopBarController?.refreshLocale();
         this.modelCommentNoticeController.refreshLocale();
         this.dofPanelController?.refreshFocusTargetControls();
+        this.updateTimelineEditState();
         this.refreshFrameGraphPostAddUi();
         this.refreshShaderPanel();
     };
@@ -9129,7 +9130,8 @@ export class UIController {
         if (!preview || preview.channels.length === 0) {
             const empty = document.createElement("div");
             empty.className = "interp-curve-empty";
-            empty.textContent = "No keyframes with interpolation data";
+            empty.dataset.i18n = "empty.noKeyframesWithInterpolationData";
+            empty.textContent = t("empty.noKeyframesWithInterpolationData");
             this.interpolationCurveList.appendChild(empty);
             return;
         }
@@ -9138,7 +9140,8 @@ export class UIController {
         if (renderChannels.length === 0) {
             const empty = document.createElement("div");
             empty.className = "interp-curve-empty";
-            empty.textContent = "No channels available for the selected type";
+            empty.dataset.i18n = "empty.noChannelsForSelectedType";
+            empty.textContent = t("empty.noChannelsForSelectedType");
             this.interpolationCurveList.appendChild(empty);
             return;
         }
@@ -9284,7 +9287,7 @@ export class UIController {
         this.interpolationTypeSelect.textContent = "";
         const option = document.createElement("option");
         option.value = "__all__";
-        option.textContent = "All";
+        option.textContent = t("option.all");
         this.interpolationTypeSelect.appendChild(option);
         this.interpolationTypeSelect.value = "__all__";
         this.interpolationTypeSelect.disabled = true;
@@ -9298,7 +9301,7 @@ export class UIController {
 
         const allOption = document.createElement("option");
         allOption.value = "__all__";
-        allOption.textContent = `All (${selectableChannels.length}ch)`;
+        allOption.textContent = `${t("option.all")} (${selectableChannels.length}ch)`;
         this.interpolationTypeSelect.appendChild(allOption);
 
         for (const channel of selectableChannels) {

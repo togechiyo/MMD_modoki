@@ -346,6 +346,8 @@ body.png-capture-mode #viewport-axis-handle {
   z-index: 420;
   display: none;
   min-width: 224px;
+  width: max-content;
+  max-width: min(380px, calc(100vw - 16px));
   padding: 5px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-md);
@@ -1572,7 +1574,7 @@ body.shader-resizing #shader-resizer::before {
 }
 
 .timeline-key-dock-command-row {
-  grid-template-columns: repeat(3, 58px);
+  grid-template-columns: repeat(3, 72px);
   justify-content: center;
 }
 

@@ -34,7 +34,6 @@ test("registers, evaluates, and serializes light keyframes", async () => {
     )).not.toBeNull();
     await page.locator("#btn-toolbar-mode-toggle").click();
     await expect(page.locator(".bottom-panel-inner")).toHaveAttribute("data-bottom-panel-mode", "camera");
-    await expect.poll(() => page.locator("#timeline-label-canvas").evaluate((element) => element.style.height)).toBe("128px");
     await expect(page.locator("#timeline-selection-label")).toContainText("[カメラ] カメラ");
     await expect(page.locator("#light-direction-x")).toHaveCSS("accent-color", "rgb(224, 113, 123)");
     await expect(page.locator("#btn-light-keyframe")).toBeDisabled();

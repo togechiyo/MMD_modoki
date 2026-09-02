@@ -15116,9 +15116,9 @@ ${beforeFogAppendBlock}
             return currentSurface.getDiagnostics();
         }
 
-        const rebuildFrameGraph = this.frameGraphPostEffectsController !== null
+        const buildFrameGraph = this.postEffectBackend === "frameGraph"
             && this.shouldExecuteFrameGraphPostEffects();
-        if (rebuildFrameGraph) {
+        if (this.frameGraphPostEffectsController) {
             this.disposeFrameGraphPostEffectsController();
         }
         if (this.camera.outputRenderTarget === currentSurface?.renderTarget) {
@@ -15132,7 +15132,7 @@ ${beforeFogAppendBlock}
             normalizedWidth,
             normalizedHeight,
         );
-        if (rebuildFrameGraph) {
+        if (buildFrameGraph) {
             this.initializePostEffectBackend();
         }
         this.syncExportRenderSurfaceTarget();

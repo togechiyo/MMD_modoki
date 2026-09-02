@@ -1318,10 +1318,10 @@ export async function importProjectState(
         : false;
     host.postEffectMotionBlurStrength = typeof data.effects.motionBlurStrength === "number" && Number.isFinite(data.effects.motionBlurStrength)
         ? data.effects.motionBlurStrength
-        : 0.35;
+        : 10;
     host.postEffectMotionBlurSamples = typeof data.effects.motionBlurSamples === "number" && Number.isFinite(data.effects.motionBlurSamples)
         ? data.effects.motionBlurSamples
-        : 8;
+        : 32;
     host.postEffectSsrEnabled = typeof data.effects.ssrEnabled === "boolean"
         ? data.effects.ssrEnabled
         : false;

@@ -5213,6 +5213,11 @@ export class UIController {
             case "gamma":
                 this.mmdManager.postEffectGamma = 1;
                 break;
+            case "motionBlur":
+                this.mmdManager.postEffectMotionBlurStrength = this.mmdManager.postEffectMotionBlurStrength > 0.00001
+                    ? this.mmdManager.postEffectMotionBlurStrength
+                    : 10;
+                break;
             case "ssao":
                 this.mmdManager.postEffectSsaoStrength = this.mmdManager.postEffectSsaoStrength > 0.00001
                     ? this.mmdManager.postEffectSsaoStrength

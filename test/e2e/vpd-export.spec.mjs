@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { launchMmdModoki } from "./electron-app.mjs";
+import { launchMmdModoki, selectCenterBone } from "./electron-app.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const modelPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
@@ -23,6 +23,7 @@ test("選択ボーンの現在ポーズをShift-JIS VPDとして書き出す", a
 
     await page.evaluate((filePath) => window.mmdModokiE2e.loadModel(filePath), modelPath);
     await page.locator("#info-model-select").selectOption("0");
+    await selectCenterBone(page);
     const modelXInput = page.locator("#bone-controls input[data-control-key='tx']");
     await modelXInput.fill("1.5");
     await modelXInput.press("Enter");

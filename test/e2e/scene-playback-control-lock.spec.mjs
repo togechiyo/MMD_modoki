@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { launchMmdModoki } from "./electron-app.mjs";
+import { launchMmdModoki, selectCenterBone } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const modelPath = resolve(repoRoot, "test", "fixtures", "external-parent", "tofu.pmx");
@@ -35,6 +35,7 @@ test("playback locks only scene categories that have keyframes", async () => {
 
     // Keep playback alive without giving any scene category ownership.
     await page.locator("#info-model-select").selectOption("0");
+    await selectCenterBone(page);
     await seek(page, 60);
     const modelX = page.locator("#bone-controls input[data-control-key='tx']");
     await modelX.fill("1");
@@ -68,6 +69,8 @@ test("playback locks only scene categories that have keyframes", async () => {
     await playbackToggle.click();
 
     // A light key owns only the light controls.
+    await setRange(page, "#light-color-r", 200);
+    await expect(page.locator("#btn-light-keyframe")).toBeEnabled();
     await page.locator("#btn-light-keyframe").click();
     await playbackToggle.click();
     await expect(page.locator("#light-color-r")).toBeDisabled();
@@ -82,6 +85,10 @@ test("playback locks only scene categories that have keyframes", async () => {
     await cameraFov.press("Enter");
     await expect(page.locator("#btn-bone-keyframe")).toBeEnabled();
     await page.locator("#btn-bone-keyframe").click();
+    await setRange(page, "#light-shadow-color-r", 200);
+    await setRange(page, "#physics-gravity-accel", 70);
+    await expect(page.locator("#btn-shadow-keyframe")).toBeEnabled();
+    await expect(page.locator("#btn-gravity-keyframe")).toBeEnabled();
     await page.locator("#btn-shadow-keyframe").click();
     await page.locator("#btn-gravity-keyframe").click();
     await playbackToggle.click();

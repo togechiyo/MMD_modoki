@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { launchMmdModoki } from "./electron-app.mjs";
+import { launchMmdModoki, selectCenterBone, selectTimelineTrack } from "./electron-app.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const tofuPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
@@ -23,6 +23,7 @@ test("豆腐モデルの外部親をフレーム単位で登録・解除でき�
     await expect(modelSelect.locator("option")).toHaveCount(3);
 
     await modelSelect.selectOption("0");
+    await selectCenterBone(page);
     const childXInput = page.locator("#bone-controls input[data-control-key='tx']");
     const childYInput = page.locator("#bone-controls input[data-control-key='ty']");
     await childXInput.fill("2");
@@ -47,6 +48,7 @@ test("豆腐モデルの外部親をフレーム単位で登録・解除でき�
     await expect(childYInput).toHaveValue("0.00");
 
     await modelSelect.selectOption("1");
+    await selectCenterBone(page);
     const parentYInput = page.locator("#bone-controls input[data-control-key='ty']");
     await parentYInput.fill("5");
     await parentYInput.press("Enter");
@@ -85,6 +87,7 @@ test("豆腐モデルの外部親をフレーム単位で登録・解除でき�
     ))).toBe(true);
 
     await modelSelect.selectOption("0");
+    await selectCenterBone(page);
     await page.waitForFunction(() => {
       const child = window.mmdModokiE2e.getModelBoneRenderedPosition(0, "センター");
       const gizmo = window.mmdModokiE2e.getBoneGizmoPosition();
@@ -157,6 +160,7 @@ test("camera follows a bone on a model that has its own external parent", async 
 
     const modelSelect = page.locator("#info-model-select");
     await modelSelect.selectOption("0");
+    await selectCenterBone(page);
     const modelParentSelect = page.locator("#info-external-parent-select");
     await modelParentSelect.selectOption("1");
     await page.locator("[data-testid='model-external-parent-register']").click();
@@ -178,6 +182,7 @@ test("camera follows a bone on a model that has its own external parent", async 
     expect(before.child).not.toBeNull();
 
     await modelSelect.selectOption("1");
+    await selectCenterBone(page);
     const parentYInput = page.locator("#bone-controls input[data-control-key='ty']");
     await parentYInput.fill("6");
     await parentYInput.press("Enter");
@@ -212,6 +217,7 @@ test("camera follows the delayed dynamic bone after model external parent input"
 
     const modelSelect = page.locator("#info-model-select");
     await modelSelect.selectOption("1");
+    await selectTimelineTrack(page, "bone", "External Parent Root");
     await page.locator("#info-external-parent-select").selectOption("0");
     await expect(page.locator("#info-parent-bone-select")).toHaveValue("センター");
     await page.locator("[data-testid='model-external-parent-register']").click();
@@ -248,6 +254,7 @@ test("camera follows the delayed dynamic bone after model external parent input"
     });
 
     await modelSelect.selectOption("0");
+    await selectCenterBone(page);
     const parentXInput = page.locator("#bone-controls input[data-control-key='tx']");
     await parentXInput.fill("10");
     await parentXInput.press("Enter");

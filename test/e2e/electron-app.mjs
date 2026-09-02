@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron } from "@playwright/test";
+import { expect, _electron as electron } from "@playwright/test";
 
 const require = createRequire(import.meta.url);
 const vite = require("vite");
@@ -58,4 +58,35 @@ export async function launchMmdModoki(repoRoot) {
     rmSync(tempDir, { recursive: true, force: true });
     throw error;
   }
+}
+
+export async function selectTimelineTrack(page, category, name) {
+  await expect.poll(() => page.evaluate(
+    ({ targetCategory, targetName }) => window.mmdModokiE2e.getTimelineTracks().some(
+      (track) => track.category === targetCategory && track.name === targetName,
+    ),
+    { targetCategory: category, targetName: name },
+  )).toBe(true);
+
+  const rowIndex = await page.evaluate(
+    ({ targetCategory, targetName }) => window.mmdModokiE2e.getTimelineTracks().findIndex(
+      (track) => track.category === targetCategory && track.name === targetName,
+    ),
+    { targetCategory: category, targetName: name },
+  );
+  expect(rowIndex).toBeGreaterThanOrEqual(0);
+
+  await page.locator("#timeline-labels").evaluate((element, index) => {
+    element.scrollTop = Math.max(0, index * 18 - 36);
+  }, rowIndex);
+  const scrollTop = await page.locator("#timeline-labels").evaluate((element) => element.scrollTop);
+  const y = 20 + rowIndex * 18 + 9 - scrollTop;
+  await page.locator("#timeline-label-canvas").click({ position: { x: 40, y } });
+  await expect.poll(() => page.evaluate(
+    () => window.mmdModokiE2e.getTimelineSelection().activeTrack,
+  )).toEqual({ category, name });
+}
+
+export async function selectCenterBone(page) {
+  await selectTimelineTrack(page, "root", "センター");
 }

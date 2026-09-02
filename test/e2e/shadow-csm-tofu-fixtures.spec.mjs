@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { launchMmdModoki } from "./electron-app.mjs";
+import { launchMmdModoki, selectCenterBone } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const pmxPath = resolve(repoRoot, "test", "fixtures", "external-parent", "tofu.pmx");
@@ -173,6 +173,7 @@ test("keeps PMX meshes registered as cascaded-shadow casters and receivers", asy
     }, { plate: platePmxPath, tofu: pmxPath });
 
     await page.locator("#info-model-select").selectOption("1");
+    await selectCenterBone(page);
     const modelYInput = page.locator("#bone-controls input[data-control-key='ty']");
     await modelYInput.fill("4");
     await modelYInput.press("Enter");
@@ -232,6 +233,7 @@ test("keeps PMX occlusion shadows after selecting standard shadows from the menu
     }, { plate: platePmxPath, tofu: pmxPath });
 
     await page.locator("#info-model-select").selectOption("1");
+    await selectCenterBone(page);
     const modelYInput = page.locator("#bone-controls input[data-control-key='ty']");
     await modelYInput.fill("4");
     await modelYInput.press("Enter");

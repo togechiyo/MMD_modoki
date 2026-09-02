@@ -644,6 +644,15 @@ describe("importProjectState", () => {
         expect(host.postEffectSsgiBlendMode).toBe("softLight");
     });
 
+    it("uses the documented Motion Blur defaults when legacy projects omit them", async () => {
+        const host = createHost();
+
+        await importProjectState(host, createProject());
+
+        expect(host.postEffectMotionBlurStrength).toBe(10);
+        expect(host.postEffectMotionBlurSamples).toBe(32);
+    });
+
     it("restores and clamps ocean tuning", async () => {
         const host = createHost();
         const project = createProject({

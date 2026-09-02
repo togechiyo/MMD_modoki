@@ -4,9 +4,9 @@
 
 2026-09-02時点の`main`作業ツリーに対し、BPMX / BVMD対応、同一モデル複数読込、編集・保存・出力、FrameGraph、ローカル実データ読込を含む総合確認を実施した。
 
-結論は**部分合格**である。Unit、Lint、critical typecheck、WebGPU起動、および今回重視したBPMX / BVMDとローカル実データ経路は通過した。一方、全Electron E2Eでは11件が失敗し、対象specの単独再実行でも同じ不一致を確認した。
+結論は**合格**である。初回の全Electron E2Eで失敗した11件を切り分けて修正し、最終的にUnit、Lint、critical typecheck、WebGPU起動、BPMX / BVMDとローカル実データ経路、および全Electron E2Eが通過した。
 
-今回の失敗は、BPMX / BVMD変換・読込そのものの回帰ではなく、主に次の4系統へ整理できる。
+初回の失敗は、BPMX / BVMD変換・読込そのものの回帰ではなく、次の4系統だった。
 
 1. 旧E2Eがモデル読込後のボーン自動選択を前提としている。
 2. タイムラインの固定高さ期待値が現在のレイアウトと一致しない。
@@ -31,13 +31,13 @@
 
 | 確認 | 結果 | 詳細 |
 | --- | --- | --- |
-| `npm.cmd run test:unit` | PASS | 101 files / 594 tests passed |
+| `npm.cmd run test:unit` | PASS | 101 files / 595 tests passed |
 | `npm.cmd run lint` | PASS | ESLint errorなし |
 | `npm.cmd run typecheck` | KNOWN FAIL | 既知の非critical型errorが残る現行baseline |
 | `npm.cmd run typecheck:critical` | PASS | TS2304 / TS2552なし。exit 0 |
 | `npm.cmd run smoke:launch` | PASS | WebGPU / Bullet MPRで初期化後3秒間安定。environment lighting probeもpass |
-| `npm.cmd run test:e2e` | PARTIAL | 83 tests中66 passed / 11 failed / 6 skipped、18.9分 |
-| 失敗specのfocused rerun | FAIL再現 | 11件すべて対象spec単位の再実行でも同じ不一致を確認 |
+| `npm.cmd run test:e2e` | PASS | 83 tests中77 passed / 0 failed / 6 skipped、14.4分 |
+| 修正対象のfocused rerun | PASS | ボーン・layout・Motion Blur・FrameGraph関連を段階的に再実行し、すべて通過 |
 
 ## 主要な合格項目
 
@@ -79,11 +79,11 @@
 - 物理ボーンのtimeline表示とviewport非表示既定値が通る。
 - 対応localeの翻訳labelと基本layout確認が通る。
 
-## 再現した失敗
+## 初回失敗の原因と修正結果
 
 ### 1. ボーン未選択を考慮していない旧E2E
 
-次の8件は、モデル読込またはモデルselect変更後にセンターボーンを明示選択せず、`#bone-controls`または外部親UIを操作してtimeoutした。
+次の8件は、モデル読込またはモデルselect変更後にセンターボーンを明示選択せず、`#bone-controls`または外部親UIを操作してtimeoutしていた。
 
 - `model-external-parent.spec.mjs`: 3件
 - `scene-playback-control-lock.spec.mjs`: 1件
@@ -93,25 +93,29 @@
 
 失敗時画面ではモデル`tofu`とtimelineの`センター`行は存在するが、ボーン欄は`ボーン未選択`である。Aliciaの新しい複数instance E2Eはtimeline上のセンター行を明示選択してから操作するため通過する。
 
-現時点の第一判断は、製品のボーン編集回帰ではなく、旧E2Eの操作手順が現在の「明示選択」仕様へ追従していないことである。修正時は、DOMを直接書き換えず、timeline labelのセンター行を実UI操作で選択する共通helperへ寄せる。
+製品のボーン編集回帰ではなく、旧E2Eの操作手順が現在の「明示選択」仕様へ追従していなかった。timeline label上の対象行を実UI操作で選択する共有helperを追加し、各specでモデル切替後に利用するよう修正した。動的外部親fixtureは`センター`を持たないため、仕様メモどおり`External Parent Root`を選択する。
+
+再生ロックtestは、再生停止時にscene値が現在frameの登録値へ再評価されるため、停止後に照明・影・重力へ編集意図を作ってからキー登録する手順へ修正した。対象8件は全体E2Eで合格した。
 
 ### 2. 照明キーテストのtimeline高さ固定値
 
-`scene-light-keyframe.spec.mjs`はcamera mode切替後の`#timeline-label-canvas`を`128px`と期待するが、実値は`110px`で安定して再現した。
+`scene-light-keyframe.spec.mjs`はcamera mode切替後の`#timeline-label-canvas`を`128px`と期待していたが、実値は現在のtrack構成に応じて`110px`だった。
 
-キー登録処理へ到達する前のlayout assertionで停止している。現在のtrack構成から導出される高さを確認するか、照明キーの本来の成功条件と無関係な固定pixel assertionを別のlayout testへ分離する必要がある。
+照明キーの成功条件と無関係な固定pixel assertionを削除した。viewport layout自体は専用specで確認し、照明キーtestはcamera mode、選択表示、キー登録・補間・project round-tripを検証する。全体E2Eで合格した。
 
 ### 3. FrameGraph export surfaceのready判定
 
-`export-render-surface.spec.mjs`の最初のtestは、64x36のRGBA frame、9216 bytes、`rgba8unorm`、readback 1回を取得できる一方、戻り値の`ready`だけが`false`になる。
+`export-render-surface.spec.mjs`の最初のtestは、64x36のRGBA frame、9216 bytes、`rgba8unorm`、readback 1回を取得できる一方、戻り値の`ready`だけが`false`になっていた。
 
-同じspec内のPNG連番 / WebM出力と単発PNGは通る。frame取得自体の失敗ではなく、`waitForPostEffectBackendReadyForCapture()`の判定条件または初期化順の不一致として調査する。
+原因は、FrameGraph backendでeffect stackが空の状態からcapture probeが露出を有効化した場合、`prepareExportRenderSurface()`が「既存controllerなし」を理由に新controllerの初期化も省略していたことだった。capture時点でFrameGraph実行が必要なら、既存controllerの有無にかかわらずexport surfaceを接続したcontrollerを構築するよう修正した。
+
+待機中にscene描画を強制する案はWebGPUの破棄済みswap textureへsubmitするvalidation errorを生んだため採用せず、初期化順だけを修正した。共通RGBA surface、PNG連番、WebM、単発PNG、および関連FrameGraph effectのfocused / 全体E2Eが合格し、validation errorも0だった。
 
 ### 4. Motion Blur追加時のUI初期値
 
-`frame-graph-motion-blur.spec.mjs`はeffect stackへMotion Blurを追加した直後、内部既定値10に対応するslider値`100`と表示`10.00`を期待する。実際のslider値は`0`のままで単独再実行でも再現した。
+`frame-graph-motion-blur.spec.mjs`はeffect stackへMotion Blurを追加した直後、内部既定値10に対応するslider値`100`と表示`10.00`を期待するが、初回はslider値`0`のままだった。
 
-`MmdManager`の`postEffectMotionBlurStrengthValue`既定値は10なので、stack row生成時のUI同期、追加時state、enabled状態のいずれかが不一致になっている可能性がある。これはE2E期待値だけでなく、UIとruntimeの初期値ライフサイクルを確認する。
+Motion Blur追加時に、保存済みの非0値は維持しつつ、0の場合だけ強度10を適用するdefault lifecycleを追加した。また、旧projectで値が欠ける場合のimport fallbackを実装メモとruntime既定値に合わせて、強度10・samples 32へ統一した。slider `100`、表示`10.00`、FrameGraph ready、RGBA capture、WebGPU validation error 0をfocused / 全体E2Eで確認した。
 
 ## 既知baselineとして扱う失敗
 
@@ -130,17 +134,18 @@
 
 描画品質、物理の自然さ、AliciaのTGA / sphere map / toon / alphaの目視同等性は自動testだけでは合格判定していない。必要なら別途、代表frameの手動比較または画像artifactを残すvisual testとして実施する。
 
-## 次の対応順
+## 修正後の再確認
 
-1. 旧E2Eへ明示的なセンターボーン選択helperを適用し、8件を再確認する。
-2. 照明キーtestから固定pixel依存を分離し、キー登録・補間・project round-trip本体を再確認する。
-3. Motion Blur追加時のUI / runtime初期値同期を修正する。
-4. FrameGraph captureのready判定を調査する。
-5. 修正後にfocused E2Eを先に通し、最後に全E2Eを再実行する。
+- `npm.cmd run test:unit`: 101 files / 595 tests passed。
+- `npm.cmd run lint`: pass。
+- `npm.cmd run typecheck:critical`: TS2304 / TS2552なし、exit 0。
+- `npm.cmd run smoke:launch`: WebGPU / Bullet MPRでpass。
+- 修正対象focused E2E: pass。
+- `npm.cmd run test:e2e`: 77 passed / 6 skipped / 0 failed。
 
 ## 作業ツリーについて
 
-今回の総合test実行では製品コードを変更していない。実行前から存在した次の差分・untracked fileはそのまま保持した。
+初回総合testで発見した不一致に対し、製品コード、E2E、本文書を修正した。実行前から存在した次の無関係な差分・untracked fileはそのまま保持した。
 
 - `src/renderer.ts`
 - `.vscode/`

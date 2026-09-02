@@ -93,6 +93,21 @@ export interface ElectronAPI {
 export type UiLocale = "ja" | "en" | "zh-Hant" | "zh-Hans" | "ko";
 export type SsgiBlendMode = "additive" | "softLight" | "overlay";
 
+export type ModelLoadStage =
+    | "waiting-runtime"
+    | "reading"
+    | "materials"
+    | "physics"
+    | "scene"
+    | "complete"
+    | "failed";
+
+export type ModelLoadStageEvent = {
+    stage: ModelLoadStage;
+    fileName: string;
+    message?: string;
+};
+
 export type AppLogLevel = "debug" | "info" | "warn" | "error";
 
 export type AppLogScope =

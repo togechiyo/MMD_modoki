@@ -4,7 +4,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { Material } from "@babylonjs/core/Materials/material";
 import { ImportMeshAsync } from "@babylonjs/core/Loading/sceneLoader";
-import type { ModelInfo } from "../types";
+import type { ModelInfo, ModelLoadStage, ModelLoadStageEvent } from "../types";
 import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { PBRMaterialBuilder } from "babylon-mmd/esm/Loader/pbrMaterialBuilder";
@@ -607,8 +607,28 @@ type ModelAssetHost = {
     onModelLoaded?: (modelInfo: ModelInfo) => void;
     emitMergedKeyframeTracks(): void;
     onSceneModelLoaded?: (modelInfo: ModelInfo, modelCount: number, activateAsCurrent: boolean) => void;
+    onModelLoadStage?: (event: ModelLoadStageEvent) => void;
     onError?: (message: string) => void;
 };
+
+function reportModelLoadStage(
+    host: ModelAssetHost,
+    stage: ModelLoadStage,
+    fileName: string,
+    message?: string,
+): void {
+    const event: ModelLoadStageEvent = { stage, fileName, ...(message ? { message } : {}) };
+    logInfo("asset", "model load stage", event);
+    try {
+        host.onModelLoadStage?.(event);
+    } catch (err: unknown) {
+        logWarn("asset", "model load stage observer failed", {
+            stage,
+            fileName,
+            ...toLogErrorData(err),
+        });
+    }
+}
 
 function createMmdModelWithPhysicsDiagnostics(
     host: ModelAssetHost,
@@ -1196,7 +1216,9 @@ export async function loadPMX(
     requestedInstanceId?: string,
 ): Promise<ModelInfo | null> {
     let renderingSuspended = false;
+    const fallbackFileName = filePath.replace(/^.*[\\/]/, "") || "model";
     try {
+        reportModelLoadStage(host, "waiting-runtime", fallbackFileName);
         await host.physicsInitializationPromise;
 
         const { dir, fileName } = splitFilePath(filePath);
@@ -1216,6 +1238,7 @@ export async function loadPMX(
             renderOrderMode,
             renderOrder,
         });
+        reportModelLoadStage(host, "reading", fileName);
         const materialBuilder = ensureSharedMmdMaterialBuilder(fileName, materialPipeline, renderOrderMode);
         host.configureMmdTextureLoaderForWebGpuForBuilder?.(materialBuilder);
         if (materialBuilder instanceof MmdStandardMaterialBuilder) {
@@ -1247,6 +1270,8 @@ export async function loadPMX(
                 mmdmodel: loaderOptions,
             },
         });
+
+        reportModelLoadStage(host, "materials", fileName);
 
         logDebugIfEnabled("modelLoad", "asset", "model import result", {
             filePath,
@@ -1384,6 +1409,7 @@ export async function loadPMX(
         logAlphaTextureKeptOpaqueCandidates(fileName, result.meshes as Mesh[], "after-material-setup");
         const sceneMaterials = collectSceneModelMaterials(host, result.meshes as Mesh[], materialPipeline);
 
+        reportModelLoadStage(host, "physics", fileName);
         const mmdModel = createMmdModelWithPhysicsDiagnostics(host, mmdMesh, {
             materialProxyConstructor: isPbrMaterialPipelinePreset(materialPipeline)
                 ? PbrMaterialProxy
@@ -1567,6 +1593,7 @@ export async function loadPMX(
             externalParent: null,
             externalParentKeyframes: [],
         });
+        reportModelLoadStage(host, "scene", fileName);
         host.refreshMmdCoplanarMaterialDepthBiasCorrection?.();
         host.normalizeRuntimeBoneEvaluationOrder?.(mmdModel);
         host.applyPhysicsStateToModel(mmdModel);
@@ -1606,6 +1633,7 @@ export async function loadPMX(
             sceneModelCount: host.sceneModels.length,
             activateAsCurrent,
         });
+        reportModelLoadStage(host, "complete", fileName);
         host.resumeSceneRendering();
         renderingSuspended = false;
         schedulePostRenderMaterialDiagnostics(fileName, host.scene, result.meshes as Mesh[]);
@@ -1619,6 +1647,7 @@ export async function loadPMX(
             filePath,
             ...toLogErrorData(err),
         });
+        reportModelLoadStage(host, "failed", fallbackFileName, message);
         const formatLabel = /\.bpmx$/i.test(filePath) ? "BPMX" : "PMX/PMD";
         host.onError?.(`${formatLabel} load error: ${message}`);
         return null;

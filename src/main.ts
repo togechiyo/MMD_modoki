@@ -892,6 +892,89 @@ const setupSmokeTestLifecycle = (mainWindow: BrowserWindow, loadPromise: Promise
   };
 };
 
+type RendererFailureDialogText = {
+  title: string;
+  message: string;
+  detail: string;
+  openLog: string;
+  close: string;
+};
+
+const getRendererFailureDialogText = (reason: string, exitCode: number): RendererFailureDialogText => {
+  const locale = app.getLocale().toLowerCase();
+  const technicalDetail = `reason=${reason}, exitCode=${exitCode}`;
+  if (locale.startsWith('ja')) {
+    return {
+      title: 'MMD modoki 描画エラー',
+      message: '描画プロセスが停止しました。',
+      detail: `モデルデータが壊れているとは限りません。調査情報をログへ保存しました。\n${technicalDetail}`,
+      openLog: 'ログを開く',
+      close: '閉じる',
+    };
+  }
+  if (locale.startsWith('ko')) {
+    return {
+      title: 'MMD modoki 렌더링 오류',
+      message: '렌더링 프로세스가 중지되었습니다.',
+      detail: `모델 데이터가 손상되었다는 의미는 아닙니다. 진단 정보를 로그에 저장했습니다.\n${technicalDetail}`,
+      openLog: '로그 열기',
+      close: '닫기',
+    };
+  }
+  if (locale.startsWith('zh-tw') || locale.startsWith('zh-hant')) {
+    return {
+      title: 'MMD modoki 描繪錯誤',
+      message: '描繪處理程序已停止。',
+      detail: `這不一定表示模型資料已損壞。診斷資訊已儲存至記錄檔。\n${technicalDetail}`,
+      openLog: '開啟記錄檔',
+      close: '關閉',
+    };
+  }
+  if (locale.startsWith('zh')) {
+    return {
+      title: 'MMD modoki 渲染错误',
+      message: '渲染进程已停止。',
+      detail: `这并不一定表示模型数据已损坏。诊断信息已保存到日志。\n${technicalDetail}`,
+      openLog: '打开日志',
+      close: '关闭',
+    };
+  }
+  return {
+    title: 'MMD modoki rendering error',
+    message: 'The rendering process stopped.',
+    detail: `The model data is not necessarily damaged. Diagnostic information was saved to the log.\n${technicalDetail}`,
+    openLog: 'Open log',
+    close: 'Close',
+  };
+};
+
+const showRendererFailureDialog = async (
+  mainWindow: BrowserWindow,
+  reason: string,
+  exitCode: number,
+): Promise<void> => {
+  const text = getRendererFailureDialogText(reason, exitCode);
+  const options = {
+    type: 'error' as const,
+    buttons: [text.openLog, text.close],
+    defaultId: 0,
+    cancelId: 1,
+    title: text.title,
+    message: text.message,
+    detail: text.detail,
+    noLink: true,
+  };
+  const result = mainWindow.isDestroyed()
+    ? await dialog.showMessageBox(options)
+    : await dialog.showMessageBox(mainWindow, options);
+  if (result.response !== 0) return;
+  const logDirectory = path.dirname(log.transports.file.getFile().path);
+  const openError = await shell.openPath(logDirectory);
+  if (openError) {
+    writeAppLog('warn', 'main', 'failed to open log folder after renderer failure', { message: openError });
+  }
+};
+
 const createWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
@@ -915,6 +998,24 @@ const createWindow = (): BrowserWindow => {
     webContentsId: mainWindow.webContents.id,
     width: MAIN_WINDOW_DEFAULT_WIDTH,
     height: MAIN_WINDOW_DEFAULT_HEIGHT,
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    writeAppLog('error', 'main', 'renderer process gone', {
+      reason: details.reason,
+      exitCode: details.exitCode,
+      webContentsId: mainWindow.webContents.id,
+    });
+    if (isSmokeMode || isE2eMode || details.reason === 'clean-exit') return;
+    void showRendererFailureDialog(mainWindow, details.reason, details.exitCode).catch((err: unknown) => {
+      writeAppLog('error', 'main', 'failed to show renderer failure dialog', createLogErrorData(err));
+    });
+  });
+
+  mainWindow.on('unresponsive', () => {
+    writeAppLog('warn', 'main', 'main window became unresponsive', {
+      webContentsId: mainWindow.webContents.id,
+    });
   });
 
   // Load the app
@@ -964,6 +1065,16 @@ const createWindow = (): BrowserWindow => {
 
   return mainWindow;
 };
+
+app.on('child-process-gone', (_event, details) => {
+  writeAppLog(details.reason === 'clean-exit' ? 'info' : 'error', 'main', 'child process gone', {
+    type: details.type,
+    reason: details.reason,
+    exitCode: details.exitCode,
+    serviceName: details.serviceName,
+    name: details.name,
+  });
+});
 
 app.on('ready', () => {
   writeAppLog('info', 'main', 'app ready', {

@@ -11,6 +11,7 @@ import type {
     MmdOptimizedFileSaveResult,
     MmdModokiProjectFileV1,
     ModelInfo,
+    ModelLoadStageEvent,
     MotionInfo,
     ProjectLightingState,
     ProjectOutputState,
@@ -59,6 +60,7 @@ import { ShaderPanelController } from "./ui/shader-panel-controller";
 import { ViewportSeekBarController } from "./ui/viewport-bottom-bar-controller";
 import { ViewportAxisHandleController } from "./ui/viewport-axis-handle-controller";
 import { ViewportTopBarController, type ViewportTopBarCameraTransform } from "./ui/viewport-top-bar-controller";
+import { ViewportRuntimeStatusController } from "./ui/viewport-runtime-status-controller";
 import { ActionDispatcher } from "./actions/action-dispatcher";
 import type { ActionSource, AutoKeyScope } from "./actions/types";
 import { executeCommand, type CommandExecutionContext, type CommandSelectedKeyRef } from "./actions/command-executor";
@@ -474,6 +476,7 @@ export class UIController {
     private statusText: HTMLElement;
     private statusDot: HTMLElement;
     private viewportOverlay: HTMLElement;
+    private readonly viewportRuntimeStatusController: ViewportRuntimeStatusController;
     private readonly modelCommentNoticeController: ModelCommentNoticeController;
     private btnKeyframeAdd: HTMLButtonElement;
     private btnKeyframeCopy: HTMLButtonElement;
@@ -572,11 +575,13 @@ export class UIController {
     private postFxWgslToonText: string | null = null;
     private currentProjectFilePath: string | null = null;
     private lastModelSideTargetValue: string | null = null;
+    private suppressNextModelLoadErrorToast = false;
     private readonly onLocaleChanged = (): void => {
         this.applyLocalizedUiState();
         this.viewportSeekBarController?.refreshLocale();
         this.viewportTopBarController?.refreshLocale();
         this.modelCommentNoticeController.refreshLocale();
+        this.viewportRuntimeStatusController.refreshLocale();
         this.dofPanelController?.refreshFocusTargetControls();
         this.updateTimelineEditState();
         this.refreshFrameGraphPostAddUi();
@@ -618,6 +623,10 @@ export class UIController {
         this.statusText = getRequiredElement("status-text");
         this.statusDot = queryRequiredElement(".status-dot");
         this.viewportOverlay = getRequiredElement("viewport-overlay");
+        this.viewportRuntimeStatusController = new ViewportRuntimeStatusController({
+            host: getRequiredElement("viewport-runtime-status-host"),
+            openLogFolder: () => window.electronAPI.openLogFolder(),
+        });
         this.modelCommentNoticeController = new ModelCommentNoticeController();
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
         this.btnKeyframeCopy = document.getElementById("btn-kf-copy") as HTMLButtonElement;
@@ -1830,6 +1839,10 @@ export class UIController {
             this.showToast(`Loaded model: ${info.name} (${totalCount})${activeLabel}`, "success");
         };
 
+        this.mmdManager.onModelLoadStage = (event: ModelLoadStageEvent) => {
+            this.handleModelLoadStage(event);
+        };
+
         this.mmdManager.onDofFocusTargetChanged = () => {
             this.dofPanelController?.refreshFocusTargetControls();
             this.dofPanelController?.refreshAutoFocusReadout();
@@ -1889,12 +1902,30 @@ export class UIController {
 
         // Error
         this.mmdManager.onError = (message: string) => {
-            this.setStatus("Error", false);
+            if (this.suppressNextModelLoadErrorToast) {
+                this.suppressNextModelLoadErrorToast = false;
+                return;
+            }
+            this.setStatus(t("viewport.status.errorTitle"), false);
+            this.viewportRuntimeStatusController.show({
+                level: "error",
+                titleKey: "viewport.status.errorTitle",
+                detailText: message,
+                dismissible: true,
+                showLogAction: true,
+            });
             this.showToast(message, "error");
         };
 
         this.mmdManager.onWarning = (message: string) => {
-            this.setStatus("Warning", false);
+            this.setStatus(t("viewport.status.warningTitle"), false);
+            this.viewportRuntimeStatusController.show({
+                level: "warning",
+                titleKey: "viewport.status.warningTitle",
+                detailText: message,
+                dismissible: true,
+                showLogAction: true,
+            });
             this.showToast(message, "info");
         };
 
@@ -3969,6 +4000,7 @@ export class UIController {
         const header = await window.electronAPI.readMmdModelHeader(filePath);
         if (!header) {
             this.setStatus(t("viewport.modelComment.readFailed"), false);
+            this.showModelLoadFailure(this.getBaseNameForRenderer(filePath));
             this.showToast(t("viewport.modelComment.readFailed"), "error");
             return null;
         }
@@ -3976,6 +4008,7 @@ export class UIController {
         const confirmed = await this.modelCommentNoticeController.confirm(header);
         if (!confirmed) {
             this.setStatus(t("viewport.modelComment.canceled"), false);
+            this.viewportRuntimeStatusController.clear();
             this.showToast(t("viewport.modelComment.canceled"), "info");
             return null;
         }
@@ -11941,6 +11974,54 @@ export class UIController {
     private syncMorphPanelFromRuntimeIfPlaybackIdle(): void {
         if (this.mmdManager.isPlaying) return;
         this.bottomPanel.syncSelectedMorphFrameSlidersFromRuntime(true);
+    }
+
+    private handleModelLoadStage(event: ModelLoadStageEvent): void {
+        if (event.stage === "failed") {
+            this.suppressNextModelLoadErrorToast = true;
+            this.setStatus(t("viewport.status.modelLoadFailed"), false);
+            this.showModelLoadFailure(event.fileName);
+            return;
+        }
+
+        if (event.stage === "complete") {
+            this.setStatus(t("viewport.status.modelReady"), false);
+            this.viewportRuntimeStatusController.show({
+                level: "success",
+                titleKey: "viewport.status.modelReady",
+                detailKey: "viewport.status.modelFile",
+                detailParams: { name: event.fileName },
+                autoDismissMs: 2800,
+            });
+            return;
+        }
+
+        const titleKeyByStage: Record<Exclude<ModelLoadStageEvent["stage"], "complete" | "failed">, string> = {
+            "waiting-runtime": "viewport.status.modelLoadPreparing",
+            reading: "viewport.status.modelLoadReading",
+            materials: "viewport.status.modelLoadMaterials",
+            physics: "viewport.status.modelLoadPhysics",
+            scene: "viewport.status.modelLoadScene",
+        };
+        const titleKey = titleKeyByStage[event.stage];
+        this.setStatus(t(titleKey), true);
+        this.viewportRuntimeStatusController.show({
+            level: "loading",
+            titleKey,
+            detailKey: "viewport.status.modelFile",
+            detailParams: { name: event.fileName },
+        });
+    }
+
+    private showModelLoadFailure(fileName: string): void {
+        this.viewportRuntimeStatusController.show({
+            level: "error",
+            titleKey: "viewport.status.modelLoadFailed",
+            detailKey: "viewport.status.modelLoadFailedDetail",
+            detailParams: { name: fileName },
+            dismissible: true,
+            showLogAction: true,
+        });
     }
 
     private setStatus(text: string, loading: boolean): void {

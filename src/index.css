@@ -181,6 +181,7 @@ body.exporter-mode #shader-panel,
 body.exporter-mode #bottom-panel-resizer,
 body.exporter-mode #bottom-panel,
 body.exporter-mode #viewport-overlay,
+body.exporter-mode #viewport-runtime-status-host,
 body.exporter-mode #viewport-top-bar,
 body.exporter-mode #viewport-bottom-bar,
 body.exporter-mode #viewport-axis-handle {
@@ -205,6 +206,7 @@ body.exporter-mode #bone-overlay-canvas {
 }
 
 body.png-capture-mode #viewport-overlay,
+body.png-capture-mode #viewport-runtime-status-host,
 body.png-capture-mode #viewport-axis-handle {
   display: none !important;
 }
@@ -222,6 +224,7 @@ body.png-capture-mode #viewport-axis-handle {
 #app.ui-presentation-mode #bottom-panel-resizer,
 #app.ui-presentation-mode #bottom-panel,
 #app.ui-presentation-mode #viewport-overlay,
+#app.ui-presentation-mode #viewport-runtime-status-host,
 #app.ui-presentation-mode #viewport-top-bar,
 #app.ui-presentation-mode #viewport-bottom-bar,
 #app.ui-presentation-mode #viewport-axis-handle {
@@ -1775,6 +1778,129 @@ body.shader-resizing #shader-resizer::before {
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
   pointer-events: auto;
   z-index: 12;
+}
+
+.viewport-runtime-status-host {
+  position: absolute;
+  top: 40px;
+  right: 10px;
+  width: min(360px, calc(100% - 20px));
+  z-index: 28;
+  pointer-events: none;
+}
+
+.viewport-runtime-status-host[hidden] {
+  display: none;
+}
+
+.viewport-runtime-status {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  color: #e5e7eb;
+  background: rgba(20, 20, 24, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.viewport-runtime-status--loading {
+  border-color: rgba(245, 158, 11, 0.52);
+}
+
+.viewport-runtime-status--success {
+  border-color: rgba(34, 197, 94, 0.48);
+}
+
+.viewport-runtime-status--warning {
+  border-color: rgba(251, 191, 36, 0.52);
+}
+
+.viewport-runtime-status--error {
+  border-color: rgba(239, 68, 68, 0.62);
+  background: rgba(35, 18, 21, 0.96);
+}
+
+.viewport-runtime-status__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.viewport-runtime-status__indicator {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.viewport-runtime-status--loading .viewport-runtime-status__indicator {
+  background: #f59e0b;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.viewport-runtime-status--success .viewport-runtime-status__indicator {
+  background: #22c55e;
+}
+
+.viewport-runtime-status--warning .viewport-runtime-status__indicator {
+  background: #fbbf24;
+}
+
+.viewport-runtime-status--error .viewport-runtime-status__indicator {
+  background: #ef4444;
+}
+
+.viewport-runtime-status__title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewport-runtime-status__detail {
+  margin: 0 0 0 16px;
+  color: #b8bbc4;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.viewport-runtime-status__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 1px;
+}
+
+.viewport-runtime-status__action {
+  min-height: 26px;
+  padding: 4px 9px;
+  color: #f3f4f6;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.viewport-runtime-status__action:hover,
+.viewport-runtime-status__action:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.viewport-runtime-status__action--quiet {
+  color: #c7cad1;
+  background: transparent;
 }
 
 .viewport-top-left,

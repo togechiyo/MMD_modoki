@@ -29,6 +29,7 @@
 - [TypeScript 型検査 再発防止メモ](./typescript-baseline-policy.md)
 - [外部公式情報の確認](./external-official-info-verification-policy.md)
 - [ログ / エラーハンドリング運用](./logging-error-handling-policy.md)
+- [ビューポート状態・異常メッセージ参照 2026-09-02](./viewport-runtime-status-error-message-reference-2026-09-02.md)
 - [E2E / UI 動作確認方針](./e2e-ui-verification-policy.md)
 - [総合テスト結果 2026-09-02](./comprehensive-test-report-2026-09-02.md)
 - [v0.2.3 ビルド・リリース確認メモ 2026-08-28](./v0.2.3-release-preflight-2026-08-28.md)

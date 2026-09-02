@@ -57,6 +57,7 @@ import type {
     BoneControlInfo,
     MmdModokiProjectFileV1,
     ModelInfo,
+    ModelLoadStageEvent,
     MotionInfo,
     ProjectMotionImport,
     ProjectNumberArray,
@@ -2503,6 +2504,7 @@ ${beforeFogAppendBlock}
     public onFrameUpdate: ((frame: number, total: number) => void) | null = null;
     public onModelLoaded: ((info: ModelInfo) => void) | null = null;
     public onSceneModelLoaded: ((info: ModelInfo, totalCount: number, active: boolean) => void) | null = null;
+    public onModelLoadStage: ((event: ModelLoadStageEvent) => void) | null = null;
     public onMotionLoaded: ((info: MotionInfo) => void) | null = null;
     public onCameraMotionLoaded: ((info: MotionInfo) => void) | null = null;
     public onKeyframesLoaded: ((tracks: KeyframeTrack[]) => void) | null = null;

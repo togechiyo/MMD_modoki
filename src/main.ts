@@ -10,6 +10,8 @@ import type {
   AppLogFileInfo,
   AppLogLevel,
   AppLogScope,
+  MmdOptimizedFileSaveResult,
+  MmdOptimizedFormat,
   PngSequenceExportLaunchResult,
   PngSequenceExportProgress,
   PngSequenceExportRequest,
@@ -1586,6 +1588,71 @@ ipcMain.handle(
       };
     } catch (err) {
       writeAppLog('error', 'vpd-export', 'VPD export failed', createLogErrorData(err));
+      return { status: 'failed', message: err instanceof Error ? err.message : String(err) };
+    }
+  },
+);
+
+ipcMain.handle(
+  'file:saveMmdOptimized',
+  async (
+    _event,
+    bytes: Uint8Array,
+    defaultFileName: string,
+    format: MmdOptimizedFormat,
+  ): Promise<MmdOptimizedFileSaveResult> => {
+    try {
+      if (format !== 'bpmx' && format !== 'bvmd') {
+        return { status: 'failed', message: 'Unsupported optimized MMD format' };
+      }
+      const expectedSignature = format.toUpperCase();
+      const hasExpectedSignature = bytes instanceof Uint8Array
+        && bytes.byteLength >= 8
+        && String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) === expectedSignature;
+      if (!hasExpectedSignature) {
+        return { status: 'failed', message: `Invalid ${expectedSignature} data` };
+      }
+
+      const requestedName = typeof defaultFileName === 'string' ? path.basename(defaultFileName.trim()) : '';
+      const sanitizedName = (requestedName || `converted.${format}`)
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .split('')
+        .map((character) => character.charCodeAt(0) < 0x20 ? '_' : character)
+        .join('');
+      const safeName = sanitizedName.toLowerCase().endsWith(`.${format}`)
+        ? sanitizedName
+        : `${sanitizedName}.${format}`;
+      let filePath: string;
+      if (isE2eMode) {
+        filePath = path.join(app.getPath('userData'), safeName);
+      } else {
+        const result = await dialog.showSaveDialog({
+          title: `Save ${expectedSignature}`,
+          defaultPath: path.join(app.getPath('documents'), safeName),
+          filters: [
+            { name: expectedSignature, extensions: [format] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+        });
+        if (result.canceled || !result.filePath) return { status: 'cancelled' };
+        filePath = result.filePath.toLowerCase().endsWith(`.${format}`)
+          ? result.filePath
+          : `${result.filePath}.${format}`;
+      }
+
+      await ensureDirectoryExists(path.dirname(filePath));
+      await fs.promises.writeFile(filePath, bytes);
+      writeAppLog('info', 'asset', `${expectedSignature} conversion saved`, {
+        filePath,
+        byteLength: bytes.byteLength,
+        version: [bytes[4], bytes[5], bytes[6]],
+      });
+      return { status: 'saved', filePath, byteLength: bytes.byteLength };
+    } catch (err) {
+      writeAppLog('error', 'asset', 'optimized MMD conversion save failed', {
+        format,
+        ...createLogErrorData(err),
+      });
       return { status: 'failed', message: err instanceof Error ? err.message : String(err) };
     }
   },

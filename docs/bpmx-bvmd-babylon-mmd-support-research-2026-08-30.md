@@ -38,6 +38,30 @@ BPMXの採否と個別の実装完了は、この文書だけでは確定扱い�
   配布最適化として扱うことを想定している。MMD_modokiで公開読込形式にする場合は、
   `babylon-mmd` 系ツールで生成されたファイル向けの追加対応と明記するのが妥当である。
 
+## 2026-09-02 変換ツール実装更新
+
+project ownerの依頼を受け、読込対応より先にツールメニューへ独立した
+`BPMX / BVMD変換` popupを追加した。現在のproject、scene model一覧、timeline、再生状態、
+undo / redoは変更せず、変換用に選択したfileだけを一時的に処理して別fileへ保存する。
+
+- PMX / PMD → BPMX 3.0.0
+  - 導入済み`babylon-mmd` 1.2.0の`BpmxConverter`を利用する。
+  - `preserveSerializationData`を有効にし、texture bufferを変換完了まで保持する。
+  - skinningとmorphを含め、公式変換ツールと同じ`TextureAlphaChecker`で材質透過を自動評価する。
+  - 一時`AssetContainer`は変換後に破棄し、編集中sceneへ追加しない。
+- VMD → BVMD 3.0.0
+  - `VmdLoader.loadFromBufferAsync`と`BvmdConverter.Convert`を利用する。
+  - VMDからdecodeできたbone / morph / IK等のtrack名をそのままBVMDへ保存する。
+- main processの保存IPCはsignatureとformatを検査し、`.bpmx` / `.bvmd`以外を受け付けない。
+
+配布可能な最小PMX / VMDによるElectron E2Eと、許可済みlocal referenceの
+`Alicia_solid.pmx`および日本語file名の実VMDで変換・保存を確認した。いずれも
+signature / versionが`BPMX 3.0.0` / `BVMD 3.0.0`で、変換前後のproject stateは一致した。
+BVMDのunit testでは日本語bone / morph track名のround-tripも確認した。
+
+この更新で実装したのは変換と保存だけであり、BPMX / BVMDをMMD_modokiへ読み込む導線、
+project round-trip、旧2.x migrationは引き続き未実装である。
+
 ## 形式の概要
 
 | 項目 | BPMX | BVMD |
@@ -48,7 +72,7 @@ BPMXの採否と個別の実装完了は、この文書だけでは確定扱い�
 | 主な利点 | 画像・テクスチャを含む単一ファイル、パス解決失敗の回避、事前最適化 | 可変長UTF-8のtrack名、名前の重複を減らしたトラック構造、小容量・高速parse |
 | 互換性 | Blender、Unity、一般MMDツールとの互換性なし | 一般MMDツールとの互換性なし |
 | 現行形式 | 3.0系 | 3.0系 |
-| MMD_modoki現状 | 未登録・UI未対応 | 未生成・UI未対応 |
+| MMD_modoki現状 | 3.0変換・保存tool実装済み、読込未対応 | VMDから3.0への変換・保存tool実装済み、読込未対応 |
 
 BVMDについて、公式はVMDに比べて約3分の1のサイズと大幅に短いparse時間を説明している。
 これは `babylon-mmd` 側の説明であり、MMD_modokiの代表モーションでの実測値ではない。

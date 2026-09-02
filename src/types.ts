@@ -5,6 +5,13 @@ import type { MmdModelHeaderPreview } from "./shared/mmd-model-header";
 import type { VmdExportDocument, VmdSaveResult } from "./export/vmd-export-document";
 import type { VpdExportDocument, VpdSaveResult } from "./export/vpd-export-document";
 
+export type MmdOptimizedFormat = "bpmx" | "bvmd";
+
+export type MmdOptimizedFileSaveResult =
+    | { status: "saved"; filePath: string; byteLength: number }
+    | { status: "cancelled" }
+    | { status: "failed"; message: string };
+
 export interface ElectronAPI {
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
     openDirectoryDialog: () => Promise<string | null>;
@@ -33,6 +40,11 @@ export interface ElectronAPI {
     ) => Promise<string | null>;
     saveVmdFile: (document: VmdExportDocument, defaultFileName: string) => Promise<VmdSaveResult>;
     saveVpdFile: (document: VpdExportDocument, defaultFileName: string) => Promise<VpdSaveResult>;
+    saveMmdOptimizedFile: (
+        bytes: Uint8Array,
+        defaultFileName: string,
+        format: MmdOptimizedFormat,
+    ) => Promise<MmdOptimizedFileSaveResult>;
     savePngRgbaFileToPath: (
         rgbaData: Uint8Array,
         width: number,

@@ -139,6 +139,10 @@ import {
 import { isDebugLogEnabled, logDebugIfEnabled, logInfo, logWarn, toLogErrorData } from "./app-logger";
 import { loadPMX as loadPMXImpl } from "./assets/model-asset-service";
 import {
+    convertPmxFileToBpmx as convertPmxFileToBpmxImpl,
+    convertVmdBytesToBvmd as convertVmdBytesToBvmdImpl,
+} from "./tools/mmd-optimized-format-converter";
+import {
     applyPbrMaterialShaderPreset,
     getPbrSkinSssRelativeRadius,
     PBR_SKIN_SSS_DEBUG_VISUALIZATION,
@@ -8840,6 +8844,18 @@ ${beforeFogAppendBlock}
             renderOrder,
             instanceId,
         );
+    }
+
+    public async convertPmxFileToBpmx(filePath: string): Promise<Uint8Array> {
+        return await convertPmxFileToBpmxImpl(
+            this.scene,
+            filePath,
+            (builder) => this.configureMmdTextureLoaderForWebGpuForBuilder(builder),
+        );
+    }
+
+    public async convertVmdBytesToBvmd(name: string, bytes: Uint8Array): Promise<Uint8Array> {
+        return await convertVmdBytesToBvmdImpl(this.scene, name, bytes);
     }
 
     private shouldActivateAsCurrent(info: ModelInfo): boolean {

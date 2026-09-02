@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('file:saveVmd', document, defaultFileName),
     saveVpdFile: (document, defaultFileName: string) =>
         ipcRenderer.invoke('file:saveVpd', document, defaultFileName),
+    saveMmdOptimizedFile: (bytes, defaultFileName, format) =>
+        ipcRenderer.invoke('file:saveMmdOptimized', bytes, defaultFileName, format),
     listBundledWgslFiles: () =>
         ipcRenderer.invoke('file:listBundledWgslFiles'),
     writeTextFileToPath: (filePath: string, content: string) =>

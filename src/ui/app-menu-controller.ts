@@ -25,6 +25,7 @@ import {
 } from "../editor/keyframe-value-correction";
 import { KeyframeValueCorrectionDialogController } from "./keyframe-value-correction-dialog-controller";
 import { ModelBodyMotionCorrectionDialogController } from "./model-body-motion-correction-dialog-controller";
+import { MmdOptimizedFormatDialogController } from "./mmd-optimized-format-dialog-controller";
 import { VmdRetargetDialogController } from "./vmd-retarget-dialog-controller";
 import type { ModelBodyMotionCorrectionPreview } from "../editor/model-body-motion-correction";
 import type { TrackCategory } from "../types";
@@ -637,6 +638,9 @@ export class AppMenuController {
             case "physics.settings":
                 this.openPhysicsSettingsDialog(invoker ?? null);
                 return;
+            case "tools.mmdOptimizedFormat":
+                this.openMmdOptimizedFormatDialog(invoker ?? null);
+                return;
             case "tools.vmdRetarget":
                 this.openVmdRetargetDialog(invoker ?? null);
                 return;
@@ -922,6 +926,23 @@ export class AppMenuController {
             size: "lg",
             restoreFocusTo: invoker,
             content: new VmdRetargetDialogController({
+                fileApi: window.electronAPI,
+                setStatus: this.setStatus,
+                showToast: this.showToast,
+                close: () => this.popupDialogController.close(),
+            }),
+        });
+    }
+
+    private openMmdOptimizedFormatDialog(invoker: HTMLElement | null): void {
+        this.popupDialogController.open({
+            id: "mmd-optimized-format",
+            surface: "modal",
+            title: t("dialog.mmdOptimizedFormat.title"),
+            size: "lg",
+            restoreFocusTo: invoker,
+            content: new MmdOptimizedFormatDialogController({
+                converter: this.mmdManager,
                 fileApi: window.electronAPI,
                 setStatus: this.setStatus,
                 showToast: this.showToast,

@@ -1600,6 +1600,22 @@ body.shader-resizing #shader-resizer::before {
   min-width: 0;
 }
 
+.popup-form-conversion-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.popup-form-conversion-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .popup-form-file-value {
   padding: 6px 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);

@@ -23,6 +23,7 @@ test("omits empty help entries and ends with Physics, Window, Tools", async () =
     expect(await toolsGroup.locator("[data-menu-command]").evaluateAll(
       (elements) => elements.map((element) => element.dataset.menuCommand),
     )).toEqual([
+      "tools.mmdOptimizedFormat",
       "tools.vmdRetarget",
       "tools.openLogFolder",
     ]);

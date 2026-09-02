@@ -1200,6 +1200,8 @@ export async function loadPMX(
         await host.physicsInitializationPromise;
 
         const { dir, fileName } = splitFilePath(filePath);
+        const isBpmx = /\.bpmx$/i.test(fileName);
+        const formatLabel = isBpmx ? "BPMX" : "PMX/PMD";
         const fileUrl = localPathToFileUrl(dir);
         const materialPipeline = normalizeMmdMaterialPipelinePreset(requestedMaterialPipeline);
         const renderOrderMode = normalizeMmdRenderOrderMode(requestedRenderOrderMode);
@@ -1221,21 +1223,28 @@ export async function loadPMX(
         }
         host.suspendSceneRendering();
         renderingSuspended = true;
+        const loaderOptions = isBpmx
+            ? {
+                materialBuilder,
+                useSingleMeshForSingleGeometryModel: true,
+                preserveSerializationData: true,
+            }
+            : {
+                materialBuilder,
+                useSdef: true,
+                // Large, thin stage/background PMX meshes can be split into many
+                // submeshes whose per-material bounds are too fragile at shallow
+                // camera angles. Keep culling at the mesh bounds level for v0.2.
+                alwaysSetSubMeshesBoundingInfo: false,
+                optimizeSubmeshes: true,
+                optimizeSingleMaterialModel: true,
+                preserveSerializationData: true,
+            };
 
         const result = await ImportMeshAsync(fileName, host.scene, {
             rootUrl: fileUrl,
             pluginOptions: {
-                mmdmodel: {
-                    materialBuilder,
-                    useSdef: true,
-                    // Large, thin stage/background PMX meshes can be split into many
-                    // submeshes whose per-material bounds are too fragile at shallow
-                    // camera angles. Keep culling at the mesh bounds level for v0.2.
-                    alwaysSetSubMeshesBoundingInfo: false,
-                    optimizeSubmeshes: true,
-                    optimizeSingleMaterialModel: true,
-                    preserveSerializationData: true,
-                },
+                mmdmodel: loaderOptions,
             },
         });
 
@@ -1249,7 +1258,7 @@ export async function loadPMX(
 
         if (result.meshes.length === 0) {
             logWarn("asset", "model import returned no meshes", { filePath, fileName });
-            throw new Error("No mesh data found in PMX/PMD file");
+            throw new Error(`No mesh data found in ${formatLabel} file`);
         }
 
         const mmdMesh = result.meshes[0] as MmdMesh;
@@ -1259,7 +1268,7 @@ export async function loadPMX(
                 fileName,
                 meshCount: result.meshes.length,
             });
-            throw new Error("Imported PMX/PMD mesh is unavailable");
+            throw new Error(`Imported ${formatLabel} mesh is unavailable`);
         }
 
         const skeletonPool: Skeleton[] = [];
@@ -1525,7 +1534,7 @@ export async function loadPMX(
         }
         const modelInfo: ModelInfo = {
             instanceId,
-            name: fileName.replace(/\.(pmx|pmd)$/i, ""),
+            name: fileName.replace(/\.(pmx|pmd|bpmx)$/i, ""),
             path: filePath,
             vertexCount,
             boneCount,
@@ -1610,7 +1619,8 @@ export async function loadPMX(
             filePath,
             ...toLogErrorData(err),
         });
-        host.onError?.(`PMX/PMD load error: ${message}`);
+        const formatLabel = /\.bpmx$/i.test(filePath) ? "BPMX" : "PMX/PMD";
+        host.onError?.(`${formatLabel} load error: ${message}`);
         return null;
     }
 }

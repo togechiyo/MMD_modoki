@@ -201,6 +201,47 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores external BVMD model and camera motion paths", async () => {
+        const host = createHost();
+        const runtimeModel = {
+            createRuntimeAnimation: vi.fn(),
+            setRuntimeAnimation: vi.fn(),
+        };
+        host.loadPMX.mockImplementation(async (path: string) => {
+            host.sceneModels.push({
+                info: { instanceId: "bpmx-model", name: "Alicia", path },
+                mesh: {},
+                model: runtimeModel,
+                materials: [],
+            });
+            return { instanceId: "bpmx-model", name: "Alicia", path };
+        });
+        host.loadVMD.mockResolvedValue({ name: "dance" });
+        host.loadCameraVMD.mockResolvedValue(true);
+        const base = createProject();
+        const project = createProject({
+            scene: {
+                ...base.scene,
+                models: [{
+                    path: "C:/models/Alicia.bpmx",
+                    visible: true,
+                    motionImports: [{ type: "bvmd", path: "C:/motions/dance.bvmd" }],
+                }],
+            },
+            assets: {
+                ...base.assets,
+                cameraVmdPath: "C:/motions/camera.bvmd",
+            },
+        });
+
+        const result = await importProjectState(host, project);
+
+        expect(result.warnings).toEqual([]);
+        expect(host.loadPMX).toHaveBeenCalledWith("C:/models/Alicia.bpmx", expect.any(String));
+        expect(host.loadVMD).toHaveBeenCalledWith("C:/motions/dance.bvmd");
+        expect(host.loadCameraVMD).toHaveBeenCalledWith("C:/motions/camera.bvmd");
+    });
+
     it("旧2色パーティクルは第3色へ第2色を補完する", async () => {
         const host = createHost();
         const project = createProject({

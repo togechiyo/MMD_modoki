@@ -2072,11 +2072,11 @@ export class UIController {
                         const ext = this.getFileExtension(filePath);
                         const priority = ext === "3dl" || ext === "cube"
                             ? 0
-                            : ext === "pmx" || ext === "pmd"
+                            : ext === "pmx" || ext === "pmd" || ext === "bpmx"
                                 ? 1
                                 : ext === "x"
                                     ? 1
-                                    : ext === "vmd" || ext === "vpd"
+                                    : ext === "vmd" || ext === "bvmd" || ext === "vpd"
                                         ? 2
                                         : ext === "mp3" || ext === "wav" || ext === "ogg"
                                             ? 3
@@ -2323,13 +2323,13 @@ export class UIController {
                 this.actionDispatcher.dispatch({ type: "project.save", source: "shortcut", forceChoosePath: true });
             }
 
-            // Ctrl+O = open PMX/PMD
+            // Ctrl+O = open PMX/PMD/BPMX
             if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "O" || e.key === "o")) {
                 e.preventDefault();
                 this.actionDispatcher.dispatch({ type: "project.openModel", source: "shortcut" });
             }
 
-            // Ctrl+M = open VMD/VPD
+            // Ctrl+M = open VMD/BVMD/VPD
             if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "M" || e.key === "m")) {
                 e.preventDefault();
                 this.actionDispatcher.dispatch({ type: "project.openMotion", source: "shortcut" });
@@ -3568,7 +3568,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: ["pmx", "pmd", "x", "obj", "vmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr"] },
+            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3627,6 +3627,7 @@ export class UIController {
                 return;
             case "pmx":
             case "pmd":
+            case "bpmx":
                 await this.loadModelInteractively(filePath);
                 return;
             case "x": {
@@ -3650,10 +3651,12 @@ export class UIController {
                 this.setStatus("Loading motion/pose...", true);
                 await this.mmdManager.loadVMD(filePath);
                 return;
-            case "vmd": {
+            case "vmd":
+            case "bvmd": {
+                const formatLabel = ext.toUpperCase();
                 const preferCamera = this.isLikelyCameraVmdPath(filePath);
                 if (preferCamera) {
-                    this.setStatus("Loading camera VMD...", true);
+                    this.setStatus(`Loading camera ${formatLabel}...`, true);
                     const cameraInfo = await this.mmdManager.loadCameraVMD(filePath);
                     if (cameraInfo) return;
                     this.setStatus("Loading motion/pose...", true);
@@ -3664,7 +3667,7 @@ export class UIController {
                 this.setStatus("Loading motion/pose...", true);
                 const motionInfo = await this.mmdManager.loadVMD(filePath);
                 if (motionInfo) return;
-                this.setStatus("Loading camera VMD...", true);
+                this.setStatus(`Loading camera ${formatLabel}...`, true);
                 await this.mmdManager.loadCameraVMD(filePath);
                 return;
             }
@@ -3701,7 +3704,7 @@ export class UIController {
 
     private async loadPMX(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "PMX/PMD model", extensions: ["pmx", "pmd"] },
+            { name: "PMX/PMD/BPMX model", extensions: ["pmx", "pmd", "bpmx"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3889,7 +3892,7 @@ export class UIController {
             return null;
         }
 
-        this.setStatus("Loading PMX/PMD...", true);
+        this.setStatus(`Loading ${this.getFileExtension(filePath).toUpperCase()}...`, true);
         return await this.mmdManager.loadPMX(filePath);
     }
 
@@ -3932,7 +3935,7 @@ export class UIController {
 
     private async loadVMD(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "VMD/VPD motion or pose", extensions: ["vmd", "vpd"] },
+            { name: "VMD/BVMD/VPD motion or pose", extensions: ["vmd", "bvmd", "vpd"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3944,13 +3947,13 @@ export class UIController {
 
     private async loadCameraVMD(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "VMD camera motion", extensions: ["vmd"] },
+            { name: "VMD/BVMD camera motion", extensions: ["vmd", "bvmd"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
         if (!filePath) return;
 
-        this.setStatus("Loading camera VMD...", true);
+        this.setStatus(`Loading camera ${this.getFileExtension(filePath).toUpperCase()}...`, true);
         await this.mmdManager.loadCameraVMD(filePath);
     }
 

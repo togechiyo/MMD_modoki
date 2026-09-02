@@ -28,13 +28,16 @@ type MotionAssetHost = {
     vpdLoader: {
         loadFromBuffer(name: string, buffer: ArrayBuffer): MotionAssetAnimation;
     };
+    bvmdLoader: {
+        loadFromBuffer(name: string, buffer: ArrayBuffer): MotionAssetAnimation;
+    };
     modelSourceAnimationsByModel: WeakMap<MotionAssetRuntimeModel, MotionAssetAnimation>;
     modelKeyframeTracksByModel: WeakMap<MotionAssetRuntimeModel, Map<string, Uint32Array>>;
     mergeModelAnimations(baseAnimation: MotionAssetAnimation, animation: MotionAssetAnimation): MotionAssetAnimation;
     createOffsetModelAnimation(animation: MotionAssetAnimation, frameOffset: number): MotionAssetAnimation;
     appendModelMotionImport(
         model: MotionAssetRuntimeModel,
-        motionImport: { type: "vmd" | "vpd"; path: string; frame?: number },
+        motionImport: { type: "vmd" | "bvmd" | "vpd"; path: string; frame?: number },
     ): void;
     createModelRuntimeAnimation(model: MotionAssetRuntimeModel, animation: MotionAssetAnimation): unknown;
     buildModelTrackFrameMapFromAnimation(animation: MotionAssetAnimation): Map<string, Uint32Array>;
@@ -62,6 +65,11 @@ type MotionAssetHost = {
     refreshTotalFramesFromContent?: () => void;
 };
 
+function toExactArrayBuffer(value: ArrayBufferView): ArrayBuffer {
+    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    return bytes.slice().buffer;
+}
+
 function getAudioMimeType(fileName: string): string {
     const ext = fileName.split(".").pop()?.toLowerCase();
     switch (ext) {
@@ -87,13 +95,15 @@ export async function loadVMD(host: MotionAssetHost, filePath: string): Promise<
         return await loadVPD(host, filePath);
     }
 
+    const motionType = extension === "bvmd" ? "bvmd" : "vmd";
+
     try {
-        logInfo("asset", "motion load started", { filePath, type: "vmd" });
+        logInfo("asset", "motion load started", { filePath, type: motionType });
         const targetModel = host.currentModel;
         if (!targetModel) {
             logWarn("asset", "motion load skipped because no model is active", {
                 filePath,
-                type: "vmd",
+                type: motionType,
             });
             host.onError?.("Load a PMX model first");
             return null;
@@ -104,20 +114,27 @@ export async function loadVMD(host: MotionAssetHost, filePath: string): Promise<
         if (!buffer) {
             logError("asset", "motion file read failed", {
                 filePath,
-                type: "vmd",
+                type: motionType,
             });
-            host.onError?.("Failed to read VMD file");
+            host.onError?.(`Failed to read ${motionType.toUpperCase()} file`);
             return null;
         }
 
-        const uint8 = new Uint8Array(buffer as unknown as ArrayBuffer);
-        const blob = new Blob([uint8]);
-        const blobUrl = URL.createObjectURL(blob);
         let animation: MotionAssetAnimation;
-        try {
-            animation = await host.vmdLoader.loadAsync("modelMotion", blobUrl);
-        } finally {
-            URL.revokeObjectURL(blobUrl);
+        if (motionType === "bvmd") {
+            animation = host.bvmdLoader.loadFromBuffer(
+                "modelMotion",
+                toExactArrayBuffer(buffer),
+            );
+        } else {
+            const uint8 = new Uint8Array(buffer as unknown as ArrayBuffer);
+            const blob = new Blob([uint8]);
+            const blobUrl = URL.createObjectURL(blob);
+            try {
+                animation = await host.vmdLoader.loadAsync("modelMotion", blobUrl);
+            } finally {
+                URL.revokeObjectURL(blobUrl);
+            }
         }
 
         const baseAnimation = host.modelSourceAnimationsByModel.get(targetModel);
@@ -126,7 +143,7 @@ export async function loadVMD(host: MotionAssetHost, filePath: string): Promise<
             : animation;
 
         host.modelSourceAnimationsByModel.set(targetModel, mergedAnimation);
-        host.appendModelMotionImport(targetModel, { type: "vmd", path: filePath });
+        host.appendModelMotionImport(targetModel, { type: motionType, path: filePath });
         const animHandle = host.createModelRuntimeAnimation(targetModel, mergedAnimation);
         targetModel.setRuntimeAnimation(animHandle);
 
@@ -144,7 +161,7 @@ export async function loadVMD(host: MotionAssetHost, filePath: string): Promise<
         host.emitMergedKeyframeTracks();
 
         const motionInfo: MotionInfo = {
-            name: fileName.replace(/\.vmd$/i, ""),
+            name: fileName.replace(/\.(vmd|bvmd)$/i, ""),
             path: filePath,
             frameCount: host._totalFrames,
         };
@@ -153,7 +170,7 @@ export async function loadVMD(host: MotionAssetHost, filePath: string): Promise<
         logInfo("asset", "motion load completed", {
             filePath,
             fileName,
-            type: "vmd",
+            type: motionType,
             frameCount: motionInfo.frameCount,
         });
         return motionInfo;
@@ -161,10 +178,10 @@ export async function loadVMD(host: MotionAssetHost, filePath: string): Promise<
         const message = err instanceof Error ? err.message : String(err);
         logError("asset", "motion load failed", {
             filePath,
-            type: "vmd",
+            type: motionType,
             ...toLogErrorData(err),
         });
-        host.onError?.(`VMD load error: ${message}`);
+        host.onError?.(`${motionType.toUpperCase()} load error: ${message}`);
         return null;
     }
 }
@@ -260,30 +277,36 @@ export async function loadCameraVMD(host: MotionAssetHost, filePath: string): Pr
         const pathParts = filePath.replace(/\\/g, "/");
         const lastSlash = pathParts.lastIndexOf("/");
         const fileName = pathParts.substring(lastSlash + 1);
-        logInfo("camera-vmd", "load started", { filePath });
+        const motionType = /\.bvmd$/i.test(fileName) ? "bvmd" : "vmd";
+        logInfo("camera-vmd", "load started", { filePath, type: motionType });
 
         const buffer = await window.electronAPI.readBinaryFile(filePath);
         if (!buffer) {
-            logError("camera-vmd", "file read failed", { filePath });
-            host.onError?.("Failed to read camera VMD file");
+            logError("camera-vmd", "file read failed", { filePath, type: motionType });
+            host.onError?.(`Failed to read camera ${motionType.toUpperCase()} file`);
             return null;
         }
 
-        const uint8 = new Uint8Array(buffer as unknown as ArrayBuffer);
-        const blob = new Blob([uint8]);
-        const blobUrl = URL.createObjectURL(blob);
-
-        const animationPromise = host.vmdLoader.loadAsync("cameraMotion", blobUrl);
-        let animation: Awaited<typeof animationPromise>;
-        try {
-            animation = await animationPromise as CameraMotionAnimation;
-        } finally {
-            URL.revokeObjectURL(blobUrl);
+        let animation: CameraMotionAnimation;
+        if (motionType === "bvmd") {
+            animation = host.bvmdLoader.loadFromBuffer(
+                "cameraMotion",
+                toExactArrayBuffer(buffer),
+            ) as CameraMotionAnimation;
+        } else {
+            const uint8 = new Uint8Array(buffer as unknown as ArrayBuffer);
+            const blob = new Blob([uint8]);
+            const blobUrl = URL.createObjectURL(blob);
+            try {
+                animation = await host.vmdLoader.loadAsync("cameraMotion", blobUrl) as CameraMotionAnimation;
+            } finally {
+                URL.revokeObjectURL(blobUrl);
+            }
         }
 
         if (animation.cameraTrack.frameNumbers.length === 0) {
-            logWarn("camera-vmd", "camera track is empty", { filePath });
-            host.onError?.("This VMD has no camera track");
+            logWarn("camera-vmd", "camera track is empty", { filePath, type: motionType });
+            host.onError?.(`This ${motionType.toUpperCase()} has no camera track`);
             return null;
         }
 
@@ -305,7 +328,7 @@ export async function loadCameraVMD(host: MotionAssetHost, filePath: string): Pr
         host.seekTo(0);
 
         const motionInfo: MotionInfo = {
-            name: fileName.replace(/\.vmd$/i, ""),
+            name: fileName.replace(/\.(vmd|bvmd)$/i, ""),
             path: filePath,
             frameCount: host._totalFrames,
         };
@@ -314,6 +337,7 @@ export async function loadCameraVMD(host: MotionAssetHost, filePath: string): Pr
             : null;
         logInfo("camera-vmd", "load completed", {
             filePath,
+            type: motionType,
             cameraFrameCount: animation.cameraTrack.frameNumbers.length,
             lastCameraFrame,
             totalFrames: host._totalFrames,
@@ -324,11 +348,13 @@ export async function loadCameraVMD(host: MotionAssetHost, filePath: string): Pr
         return motionInfo;
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
+        const motionType = /\.bvmd$/i.test(filePath) ? "bvmd" : "vmd";
         logError("camera-vmd", "load failed", {
             filePath,
+            type: motionType,
             ...toLogErrorData(err),
         });
-        host.onError?.(`Camera VMD load error: ${message}`);
+        host.onError?.(`Camera ${motionType.toUpperCase()} load error: ${message}`);
         return null;
     }
 }

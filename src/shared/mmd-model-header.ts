@@ -1,5 +1,5 @@
 export type MmdModelHeaderPreview = {
-    format: "pmx" | "pmd";
+    format: "pmx" | "pmd" | "bpmx";
     version: string;
     modelName: string;
     englishModelName: string;
@@ -9,6 +9,7 @@ export type MmdModelHeaderPreview = {
 
 const PMX_MAGIC = "PMX ";
 const PMD_MAGIC = "Pmd";
+const BPMX_MAGIC = "BPMX";
 const MAX_TEXT_BYTES = 16 * 1024 * 1024;
 
 function decodeAscii(bytes: Uint8Array, offset: number, length: number): string {
@@ -70,6 +71,46 @@ function parsePmdHeader(bytes: Uint8Array): MmdModelHeaderPreview | null {
     };
 }
 
+function parseBpmxHeader(bytes: Uint8Array): MmdModelHeaderPreview | null {
+    if (bytes.byteLength < 16 || decodeAscii(bytes, 0, 4) !== BPMX_MAGIC) return null;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const major = view.getUint8(4);
+    const minor = view.getUint8(5);
+    const patch = view.getUint8(6);
+    if (major !== 3 || minor !== 0) return null;
+
+    const headerSize = view.getUint32(8, true);
+    if (headerSize < 4 || headerSize > bytes.byteLength - 12) return null;
+    const modelInfoOffset = view.getUint32(12, true);
+    if (modelInfoOffset === 0 || modelInfoOffset > bytes.byteLength - 4) return null;
+
+    let offset = modelInfoOffset;
+    const readText = (): string | null => {
+        if (offset + 4 > bytes.byteLength) return null;
+        const length = view.getUint32(offset, true);
+        offset += 4;
+        if (length > MAX_TEXT_BYTES || offset + length > bytes.byteLength) return null;
+        const value = decodeText(bytes.subarray(offset, offset + length), "utf-8");
+        offset += length + ((4 - (length % 4)) % 4);
+        if (offset > bytes.byteLength) return null;
+        return value;
+    };
+
+    const modelName = readText();
+    const englishModelName = readText();
+    const comment = readText();
+    const englishComment = readText();
+    if (modelName === null || englishModelName === null || comment === null || englishComment === null) return null;
+    return {
+        format: "bpmx",
+        version: `${major}.${minor}.${patch}`,
+        modelName,
+        englishModelName,
+        comment,
+        englishComment,
+    };
+}
+
 export function parseMmdModelHeader(bytes: Uint8Array): MmdModelHeaderPreview | null {
-    return parsePmxHeader(bytes) ?? parsePmdHeader(bytes);
+    return parsePmxHeader(bytes) ?? parsePmdHeader(bytes) ?? parseBpmxHeader(bytes);
 }

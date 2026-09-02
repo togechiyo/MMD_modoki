@@ -59,8 +59,37 @@ undo / redoは変更せず、変換用に選択したfileだけを一時的に�
 signature / versionが`BPMX 3.0.0` / `BVMD 3.0.0`で、変換前後のproject stateは一致した。
 BVMDのunit testでは日本語bone / morph track名のround-tripも確認した。
 
-この更新で実装したのは変換と保存だけであり、BPMX / BVMDをMMD_modokiへ読み込む導線、
-project round-trip、旧2.x migrationは引き続き未実装である。
+## 2026-09-02 アプリ本体の読込対応更新
+
+変換ツールに続いて、アプリ本体へBPMX / BVMD 3.0.xの読込経路を追加した。
+既存projectとの後方互換を優先し、runtime APIの`loadPMX` / `loadVMD`とproject keyの
+`cameraVmdPath`は改名せず、file extensionによりloaderを振り分けている。
+
+- BPMX
+  - 標準3.0 loaderだけをSceneLoaderへ登録し、Legacy 2.x loaderは登録しない。
+  - model dialog、汎用file dialog、drag/drop、path dispatchから`.bpmx`を選択できる。
+  - BPMX header内のUTF-8モデル名・英名・コメント・英語コメントを最小parseし、
+    PMX / PMDと同じ利用条件確認popupを表示する。
+  - BPMX固有loader optionをPMX / PMD optionから分離し、既存のMMD runtime、材質、
+    morph、physics metadata、project model path経路へ接続する。
+- BVMD
+  - `BvmdLoader.loadFromBuffer`を使い、model motionとcamera motionの双方へ接続する。
+  - model motion importには`type: "bvmd"`を記録し、project raw fallbackで再読込する。
+  - camera pathは互換性のため既存`cameraVmdPath` keyへBVMD pathも保存する。
+  - model / cameraの選択規則はVMDと共通で、個別dialogから明示指定することもできる。
+
+unit testではBPMX headerのUnicode保持、BVMD buffer境界、model / camera loader分岐、
+project importを確認した。Electron E2Eでは配布可能な最小fixtureに加え、利用許可済みの
+local reference `Alicia_solid.pmx`でもPMX→BPMX変換、利用条件表示、BPMX model読込、
+model / camera BVMD読込を確認した。旧2.x migrationと、編集結果からBVMDを直接書き出す導線は
+引き続き未実装である。
+
+追加の相互E2Eでは、同じAlicia modelと`2分ループステップ20.vmd`を使い、
+`BPMX model + VMD motion`と`PMX model + BVMD motion`をそれぞれfile menuから読み込んだ。
+両経路でmodel motion import typeが正しく記録され、root / semi-standard / bone / morph /
+propertyのUnicode track名と全frame番号が完全一致することを確認した。この結果から、
+model形式とmotion形式は独立に組み合わせられ、BVMD変換によるtimeline track差分は
+このreferenceでは発生していない。
 
 ## 形式の概要
 
@@ -72,7 +101,7 @@ project round-trip、旧2.x migrationは引き続き未実装である。
 | 主な利点 | 画像・テクスチャを含む単一ファイル、パス解決失敗の回避、事前最適化 | 可変長UTF-8のtrack名、名前の重複を減らしたトラック構造、小容量・高速parse |
 | 互換性 | Blender、Unity、一般MMDツールとの互換性なし | 一般MMDツールとの互換性なし |
 | 現行形式 | 3.0系 | 3.0系 |
-| MMD_modoki現状 | 3.0変換・保存tool実装済み、読込未対応 | VMDから3.0への変換・保存tool実装済み、読込未対応 |
+| MMD_modoki現状 | 3.0変換・保存toolと3.0.x読込を実装済み | VMDから3.0への変換・保存toolと3.0.x model / camera読込を実装済み |
 
 BVMDについて、公式はVMDに比べて約3分の1のサイズと大幅に短いparse時間を説明している。
 これは `babylon-mmd` 側の説明であり、MMD_modokiの代表モーションでの実測値ではない。
@@ -248,36 +277,37 @@ BPMX / BVMD読込は1.2.0で可能なので、v0.2.4で形式対応を行う場�
 
 ### モデル読込
 
-現在はPMX / PMD loaderのみを登録し、モデル選択、drag/drop、path dispatch、
-エラー文言、モデルコメント確認がPMX / PMD前提になっている。
+2026-09-02現在はPMX / PMDに加えて標準BPMX 3.0 loaderを登録し、モデル選択、
+drag/drop、path dispatch、モデルコメント確認をBPMXへ拡張済みである。
 
-BPMX loaderを登録すると、Babylon SceneLoaderの`ImportMeshAsync`を使う中心経路は再利用できる。
-ただし次の対応が必要になる。
+BPMX loaderでもBabylon SceneLoaderの`ImportMeshAsync`を使う中心経路を再利用している。
+対応状況は次のとおり。
 
-- `.bpmx`をfile dialog、drag/drop、path dispatchへ追加
-- `loadPMX`というPMX固有名を内部的に一般化するか、extension別wrapperを追加
-- `readMmdModelHeader`がPMX / PMDのみを解析するため、BPMXのモデル名・コメントを読む経路を追加
-- BPMXでは不要・非適用のPMX最適化optionをextension別に切り替え
-- 埋め込みtextureが現在のcustom material / texture診断経路で正しく扱われるか確認
-- render order、透過判定、SDEF、morph、physics metadata、モデル複数読込を確認
-- project保存後に`.bpmx` pathから再読込できることを確認
+- [x] `.bpmx`をfile dialog、drag/drop、path dispatchへ追加
+- [x] 既存`loadPMX`をextension対応にし、project importerからも同じ経路を使う
+- [x] BPMXのモデル名・コメントを読むheader previewを追加
+- [x] BPMXとPMX / PMDのloader optionをextension別に切り替え
+- [x] 埋め込みtextureを含むAlicia BPMXをcustom material経路でGUI読込
+- [ ] render order、透過判定、SDEF、morph、physics、複数モデルの個別詳細検証
+- [x] project model pathに`.bpmx`を保持し、importerから再読込できることをunit testで確認
 
 projectのモデル状態は既に汎用的な`path`を保存しているため、読込メソッドをextension対応にすれば
-schemaを増やさず往復できる可能性が高い。ただし既存importerは常に`loadPMX`を呼ぶため、
-実装時にBPMXの再読込testを追加する。
+schemaを増やさずBPMX pathを保持する。既存importerはextension対応済みの`loadPMX`を呼ぶため、
+BPMXの再読込も同じ経路になる。
 
 ### モーション読込
 
-現在は`VmdLoader` / `VpdLoader`のみを保持し、`ProjectMotionImport.type`も
-`"vmd" | "vpd"`に限定されている。BVMD対応には次が必要になる。
+2026-09-02現在は`VmdLoader` / `VpdLoader`に加えて`BvmdLoader`を保持し、
+`ProjectMotionImport.type`も`"vmd" | "bvmd" | "vpd"`へ拡張済みである。
+互換性のため`cameraVmdPath`のkey名だけは維持している。
 
-- `BvmdLoader`の生成と、extension別loader選択
-- `.bvmd`をmodel motion / camera motionのdialogとdrag/dropへ追加
-- `ProjectMotionImport.type`へ`"bvmd"`を追加
-- project importerのraw motion fallbackへBVMD分岐を追加
-- `cameraVmdPath`というVMD固有名を、後方互換を保ちながら一般化するか判断
-- model用に開いた場合とcamera用に開いた場合のtrack採用規則を明示
-- 空のmodel track / camera trackを開いたときの警告を追加
+- [x] `BvmdLoader`の生成と、extension別loader選択
+- [x] `.bvmd`をmodel motion / camera motionのdialogとdrag/dropへ追加
+- [x] `ProjectMotionImport.type`へ`"bvmd"`を追加
+- [x] project importerのraw motion fallbackへBVMD分岐を追加
+- [x] `cameraVmdPath`は後方互換のため名称を維持し、BVMD pathも格納
+- [x] model用とcamera用のtrack採用規則を既存VMD経路と共通化
+- [x] camera trackが空の場合は形式名を含む警告を表示
 
 既存の`readBinaryFile` IPCをそのまま使い、Blob URLへ変換せず
 `loadFromBuffer`へ渡せるため、新しい権限やIPCは不要である。

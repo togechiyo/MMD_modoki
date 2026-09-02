@@ -13,7 +13,7 @@ const referenceMotionPath = process.env.MMD_MODOKI_E2E_CONVERTER_MOTION_PATH
   : null;
 
 function createCenterMotion() {
-  const bytes = Buffer.alloc(50 + 4 + 111 + 20);
+  const bytes = Buffer.alloc(50 + 4 + 111 + 4 + 4 + 61 + 4 + 4 + 4);
   bytes.write("Vocaloid Motion Data 0002", 0, "ascii");
   bytes.write("Source", 30, "ascii");
   bytes.writeUInt32LE(1, 50);
@@ -24,6 +24,20 @@ function createCenterMotion() {
   bytes.writeFloatLE(2, keyOffset + 23);
   bytes.writeFloatLE(3, keyOffset + 27);
   bytes.writeFloatLE(1, keyOffset + 43);
+  const morphCountOffset = keyOffset + 111;
+  bytes.writeUInt32LE(0, morphCountOffset);
+  bytes.writeUInt32LE(1, morphCountOffset + 4);
+  const cameraOffset = morphCountOffset + 8;
+  bytes.writeUInt32LE(42, cameraOffset);
+  bytes.writeFloatLE(-30, cameraOffset + 4);
+  bytes.writeFloatLE(0, cameraOffset + 8);
+  bytes.writeFloatLE(10, cameraOffset + 12);
+  bytes.writeFloatLE(0, cameraOffset + 16);
+  for (let index = 0; index < 24; index += 4) {
+    bytes.set([20, 107, 20, 107], cameraOffset + 32 + index);
+  }
+  bytes.writeUInt32LE(30, cameraOffset + 56);
+  bytes.writeUInt8(0, cameraOffset + 60);
   return bytes;
 }
 
@@ -78,6 +92,35 @@ test("独立ポップアップでPMXとVMDを最適化形式へ変換し、現�
     delete before.savedAt;
     delete after.savedAt;
     expect(after).toEqual(before);
+
+    await dialog.locator(".app-menu-dialog-close").click();
+    await page.evaluate((path) => {
+      void window.mmdModokiE2e.loadModelInteractively(path);
+    }, bpmxPath);
+    const notice = page.locator("#model-comment-notice");
+    await expect(notice).toBeVisible();
+    await expect(page.locator("#model-comment-notice-meta")).toHaveText("BPMX ver3.0.0");
+    await page.locator("#model-comment-notice-ok").click();
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getLoadedModelCount()), {
+      timeout: 45_000,
+    }).toBe(1);
+
+    await launched.app.evaluate(({ dialog: electronDialog }, path) => {
+      electronDialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, bvmdPath);
+    await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+    await page.locator('[data-menu-command="file.openMotion"]').click();
+    await expect.poll(async () => {
+      const project = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+      return project.scene.models[0]?.motionImports ?? [];
+    }).toContainEqual({ type: "bvmd", path: bvmdPath });
+
+    await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+    await page.locator('[data-menu-command="file.openCameraMotion"]').click();
+    await expect.poll(async () => {
+      const project = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+      return project.assets.cameraVmdPath;
+    }).toBe(bvmdPath);
     expect(pageErrors).toEqual([]);
   } finally {
     await launched.close();

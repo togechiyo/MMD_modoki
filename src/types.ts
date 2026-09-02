@@ -497,7 +497,7 @@ export interface AppState {
 }
 
 export interface ProjectMotionImport {
-    type: "vmd" | "vpd";
+    type: "vmd" | "bvmd" | "vpd";
     path: string;
     frame?: number;
 }

@@ -733,6 +733,7 @@ async function loadBundledMprWasmInstance(): Promise<IMmdWasmInstance> {
 // Side effects - register loaders
 import "babylon-mmd/esm/Loader/pmxLoader";
 import "babylon-mmd/esm/Loader/pmdLoader";
+import "babylon-mmd/esm/Loader/Optimized/bpmxLoader";
 import "babylon-mmd/esm/Loader/mmdOutlineRenderer";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
 import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
@@ -801,6 +802,7 @@ import { MmdWasmAnimation } from "babylon-mmd/esm/Runtime/Optimized/Animation/mm
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
 import { VpdLoader } from "babylon-mmd/esm/Loader/vpdLoader";
+import { BvmdLoader } from "babylon-mmd/esm/Loader/Optimized/bvmdLoader";
 import { MmdAnimation } from "babylon-mmd/esm/Loader/Animation/mmdAnimation";
 import { MmdBoneAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack, MmdPropertyAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
@@ -1727,6 +1729,7 @@ ${beforeFogAppendBlock}
     private mmdWasmInstance: IMmdWasmInstance | null = null;
     private vmdLoader: VmdLoader;
     private vpdLoader: VpdLoader;
+    private bvmdLoader: BvmdLoader;
     private currentMesh: MmdMesh | null = null;
     private currentModel: RuntimeModel | null = null;
     private activeModelInfo: ModelInfo | null = null;
@@ -7460,9 +7463,10 @@ ${beforeFogAppendBlock}
         this.physicsInitializationPromise = this.initializeRuntimeModeAndPhysics();
         this.installScenePerformancePhaseObservers();
 
-        // VMD Loader
+        // MMD animation loaders
         this.vmdLoader = new VmdLoader(this.scene);
         this.vpdLoader = new VpdLoader(this.scene);
+        this.bvmdLoader = new BvmdLoader(this.scene);
         this.globalIlluminationController = new GlobalIlluminationController(
             this.scene,
             this.renderingCanvas,
@@ -8860,7 +8864,7 @@ ${beforeFogAppendBlock}
 
     private shouldActivateAsCurrent(info: ModelInfo): boolean {
         void info;
-        // Prefer the most recently loaded PMX/PMD as the active model so
+        // Prefer the most recently loaded MMD model as the active model so
         // the info panel and editing target follow the user's latest import.
         return true;
     }

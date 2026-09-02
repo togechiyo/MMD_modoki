@@ -514,10 +514,10 @@ export async function importProjectState(
         if (!restoredEmbeddedAnimation) {
             host.setModelMotionImports(targetModel, []);
             for (const motionImport of modelState.motionImports ?? []) {
-                if (motionImport.type === "vmd") {
+                if (motionImport.type === "vmd" || motionImport.type === "bvmd") {
                     const motion = await host.loadVMD(motionImport.path);
                     if (!motion) {
-                        warnings.push(`Model VMD load failed: ${motionImport.path}`);
+                        warnings.push(`Model ${motionImport.type.toUpperCase()} load failed: ${motionImport.path}`);
                     }
                     continue;
                 }
@@ -657,7 +657,7 @@ export async function importProjectState(
 
     if (!restoredEmbeddedCamera && data.assets.cameraVmdPath) {
         const loaded = await host.loadCameraVMD(data.assets.cameraVmdPath);
-        if (!loaded) warnings.push(`Camera VMD load failed: ${data.assets.cameraVmdPath}`);
+        if (!loaded) warnings.push(`Camera motion load failed: ${data.assets.cameraVmdPath}`);
     }
 
     if (

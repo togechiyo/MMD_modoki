@@ -27,6 +27,30 @@ function createPmxHeader(fields: readonly string[], utf16 = false): Uint8Array {
     return result;
 }
 
+function createBpmxHeader(fields: readonly string[], version: readonly [number, number, number] = [3, 0, 0]): Uint8Array {
+    const encoder = new TextEncoder();
+    const encodedFields = fields.map((value) => encoder.encode(value));
+    const headerLength = 12 + 40;
+    const fieldLength = encodedFields.reduce(
+        (sum, field) => sum + 4 + field.byteLength + ((4 - (field.byteLength % 4)) % 4),
+        0,
+    );
+    const result = new Uint8Array(headerLength + fieldLength);
+    result.set([0x42, 0x50, 0x4d, 0x58], 0);
+    result.set(version, 4);
+    const view = new DataView(result.buffer);
+    view.setUint32(8, 40, true);
+    view.setUint32(12, headerLength, true);
+    let offset = headerLength;
+    for (const field of encodedFields) {
+        view.setUint32(offset, field.byteLength, true);
+        offset += 4;
+        result.set(field, offset);
+        offset += field.byteLength + ((4 - (field.byteLength % 4)) % 4);
+    }
+    return result;
+}
+
 describe("parseMmdModelHeader", () => {
     it("parses UTF-8 PMX names and comments", () => {
         expect(parseMmdModelHeader(createPmxHeader(["モデル", "Model", "注記", "Notice"]))).toEqual({
@@ -41,6 +65,22 @@ describe("parseMmdModelHeader", () => {
 
     it("parses UTF-16LE PMX names and comments", () => {
         expect(parseMmdModelHeader(createPmxHeader(["豆腐", "Tofu", "確認用", "Test"], true))?.comment).toBe("確認用");
+    });
+
+    it("parses BPMX 3.0 model information without losing Unicode text", () => {
+        expect(parseMmdModelHeader(createBpmxHeader(["アリシア", "Alicia", "利用条件を確認", "Read me"]))).toEqual({
+            format: "bpmx",
+            version: "3.0.0",
+            modelName: "アリシア",
+            englishModelName: "Alicia",
+            comment: "利用条件を確認",
+            englishComment: "Read me",
+        });
+    });
+
+    it("rejects unsupported or truncated BPMX data", () => {
+        expect(parseMmdModelHeader(createBpmxHeader(["A", "B", "C", "D"], [2, 0, 0]))).toBeNull();
+        expect(parseMmdModelHeader(createBpmxHeader(["A", "B", "C", "D"]).subarray(0, 60))).toBeNull();
     });
 
     it("rejects truncated or unrelated data", () => {

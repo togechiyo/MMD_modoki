@@ -180,6 +180,7 @@
 
 ## モデル / アセット読み込み
 
+- [BPMX / BVMD 実装ガイド 2026-09-02](./bpmx-bvmd-implementation-guide-2026-09-02.md)
 - [BPMX / BVMD と babylon-mmd 対応状況 調査メモ 2026-08-30](./bpmx-bvmd-babylon-mmd-support-research-2026-08-30.md)
 - [Babylon.js 静的3D形式 対応候補一覧 2026-08-20](./babylon-static-3d-format-candidates-2026-08-20.md)
 - [重いモデルの読み込みメモ](./heavy-model-loading.md)

@@ -102,6 +102,7 @@ export type AppLogScope =
     | "asset"
     | "camera-vmd"
     | "vmd-export"
+    | "bvmd-export"
     | "vpd-export"
     | "timeline"
     | "webm"

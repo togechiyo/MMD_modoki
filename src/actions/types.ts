@@ -93,6 +93,8 @@ export type ProjectAction =
     | { type: "project.load"; source: ActionSource }
     | { type: "project.exportModelVmd"; source: ActionSource }
     | { type: "project.exportCameraVmd"; source: ActionSource }
+    | { type: "project.exportModelBvmd"; source: ActionSource }
+    | { type: "project.exportCameraBvmd"; source: ActionSource }
     | { type: "project.exportModelVpd"; source: ActionSource }
     | { type: "project.exportPng"; source: ActionSource; renderMode?: "viewport" | "detached" }
     | { type: "project.exportPngSequence"; source: ActionSource }

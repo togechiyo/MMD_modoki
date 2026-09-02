@@ -8,6 +8,7 @@ import type {
     InterpolationChannelPreview,
     InterpolationCurve,
     KeyframeTrack,
+    MmdOptimizedFileSaveResult,
     MmdModokiProjectFileV1,
     ModelInfo,
     MotionInfo,
@@ -113,6 +114,7 @@ import {
     createModelVmdExportDocument,
 } from "./export/vmd-export-adapter";
 import type { VmdSaveResult } from "./export/vmd-export-document";
+import { serializeCameraBvmd, serializeModelBvmd } from "./export/bvmd-exporter";
 import type { VpdExportDocument, VpdSaveResult } from "./export/vpd-export-document";
 import {
     decodeRuntimeReloadProjectState,
@@ -2522,6 +2524,12 @@ export class UIController {
         this.actionDispatcher.register("project.exportCameraVmd", () => {
             void this.exportCameraVmd();
         });
+        this.actionDispatcher.register("project.exportModelBvmd", () => {
+            void this.exportModelBvmd();
+        });
+        this.actionDispatcher.register("project.exportCameraBvmd", () => {
+            void this.exportCameraBvmd();
+        });
         this.actionDispatcher.register("project.exportModelVpd", () => {
             void this.exportModelVpd();
         });
@@ -3718,6 +3726,11 @@ export class UIController {
         return `${baseName}_motion.vmd`;
     }
 
+    private buildModelBvmdDefaultFileName(modelPath: string, fallbackName: string): string {
+        const baseName = this.getBaseNameForRenderer(modelPath).replace(/\.[^.]+$/, "") || fallbackName || "model";
+        return `${baseName}_motion.bvmd`;
+    }
+
     private buildModelVpdDefaultFileName(modelPath: string, fallbackName: string): string {
         const baseName = this.getBaseNameForRenderer(modelPath).replace(/\.[^.]+$/, "") || fallbackName || "model";
         return `${baseName}_pose.vpd`;
@@ -3808,6 +3821,80 @@ export class UIController {
             this.setStatus(t("toast.vmdExportFailed"), false);
             this.showToast(`${t("toast.vmdExportFailed")}: ${message}`, "error");
             window.electronAPI.logError("vmd-export", "Failed to prepare camera VMD export", { message });
+        }
+    }
+
+    private handleBvmdSaveResult(result: MmdOptimizedFileSaveResult, externalParentKeyCount = 0): void {
+        switch (result.status) {
+            case "saved": {
+                const warning = externalParentKeyCount > 0
+                    ? ` (${t("toast.bvmdExportExternalParentUnsupported")})`
+                    : "";
+                this.setStatus(t("toast.bvmdExportSaved"), false);
+                this.showToast(`${t("toast.bvmdExportSaved")}: ${this.getBaseNameForRenderer(result.filePath)}${warning}`, "success");
+                return;
+            }
+            case "cancelled":
+                this.setStatus("Ready", false);
+                return;
+            case "failed":
+                this.setStatus(t("toast.bvmdExportFailed"), false);
+                this.showToast(`${t("toast.bvmdExportFailed")}: ${result.message}`, "error");
+        }
+    }
+
+    private async exportModelBvmd(): Promise<void> {
+        const source = this.mmdManager.getActiveModelVmdExportSource();
+        if (!source || !this.mmdManager.hasActiveModelVmdExportKeys()) {
+            this.showToast(t("toast.bvmdExportNoModelKeys"), "error");
+            return;
+        }
+
+        this.setStatus(t("status.bvmdExportPreparing"), true);
+        try {
+            const bytes = serializeModelBvmd(source.animation);
+            const result = await window.electronAPI.saveMmdOptimizedFile(
+                bytes,
+                this.buildModelBvmdDefaultFileName(source.modelInfo.path, source.modelInfo.name),
+                "bvmd",
+            );
+            if (result.status === "saved" && source.externalParentKeyCount > 0) {
+                window.electronAPI.logWarn("bvmd-export", "External-parent keys are not part of BVMD 3.0 and were omitted", {
+                    keyCount: source.externalParentKeyCount,
+                    modelPath: source.modelInfo.path,
+                });
+            }
+            this.handleBvmdSaveResult(result, source.externalParentKeyCount);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus(t("toast.bvmdExportFailed"), false);
+            this.showToast(`${t("toast.bvmdExportFailed")}: ${message}`, "error");
+            window.electronAPI.logError("bvmd-export", "Failed to prepare model BVMD export", { message });
+        }
+    }
+
+    private async exportCameraBvmd(): Promise<void> {
+        const source = this.mmdManager.getCameraVmdExportSource();
+        if (!source || !this.mmdManager.hasCameraVmdExportKeys()) {
+            this.showToast(t("toast.bvmdExportNoCameraKeys"), "error");
+            return;
+        }
+
+        this.setStatus(t("status.bvmdExportPreparing"), true);
+        try {
+            const bytes = serializeCameraBvmd(source.animation);
+            const result = await window.electronAPI.saveMmdOptimizedFile(bytes, "camera_motion.bvmd", "bvmd");
+            if (result.status === "saved" && source.externalParentKeyCount > 0) {
+                window.electronAPI.logWarn("bvmd-export", "External-parent keys are not part of BVMD 3.0 and were omitted", {
+                    keyCount: source.externalParentKeyCount,
+                });
+            }
+            this.handleBvmdSaveResult(result, source.externalParentKeyCount);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.setStatus(t("toast.bvmdExportFailed"), false);
+            this.showToast(`${t("toast.bvmdExportFailed")}: ${message}`, "error");
+            window.electronAPI.logError("bvmd-export", "Failed to prepare camera BVMD export", { message });
         }
     }
 

@@ -349,6 +349,22 @@ describe("canExecuteEditorAction", () => {
             { ...readySnapshot, hasCameraVmdExportKeys: true },
         )).toBe(true);
         expect(canExecuteEditorAction(
+            { type: "project.exportModelBvmd", source: "menu" },
+            { ...readySnapshot, hasModelVmdExportKeys: true },
+        )).toBe(true);
+        expect(canExecuteEditorAction(
+            { type: "project.exportModelBvmd", source: "menu" },
+            { ...readySnapshot, hasModelVmdExportKeys: false },
+        )).toBe(false);
+        expect(canExecuteEditorAction(
+            { type: "project.exportCameraBvmd", source: "menu" },
+            { ...readySnapshot, hasCameraVmdExportKeys: true },
+        )).toBe(true);
+        expect(canExecuteEditorAction(
+            { type: "project.exportCameraBvmd", source: "menu" },
+            { ...readySnapshot, hasCameraVmdExportKeys: false },
+        )).toBe(false);
+        expect(canExecuteEditorAction(
             { type: "project.exportModelVpd", source: "menu" },
             { ...readySnapshot, hasModelVpdExportBones: true },
         )).toBe(true);

@@ -1,5 +1,9 @@
 # BPMX / BVMD と babylon-mmd 対応状況 調査メモ 2026-08-30
 
+現行の利用方法、実装経路、対応表、検証入口は
+[BPMX / BVMD 実装ガイド 2026-09-02](./bpmx-bvmd-implementation-guide-2026-09-02.md)
+へ集約した。この文書は形式・外部ライブラリ調査と導入経緯の記録として残す。
+
 ## このメモの位置づけ
 
 v0.2.4 の候補として挙がった BPMX / BVMD 読み込みについて、形式の目的、
@@ -81,8 +85,7 @@ BVMDのunit testでは日本語bone / morph track名のround-tripも確認した
 unit testではBPMX headerのUnicode保持、BVMD buffer境界、model / camera loader分岐、
 project importを確認した。Electron E2Eでは配布可能な最小fixtureに加え、利用許可済みの
 local reference `Alicia_solid.pmx`でもPMX→BPMX変換、利用条件表示、BPMX model読込、
-model / camera BVMD読込を確認した。旧2.x migrationと、編集結果からBVMDを直接書き出す導線は
-引き続き未実装である。
+model / camera BVMD読込を確認した。旧2.x migrationは引き続き未実装である。
 
 追加の相互E2Eでは、同じAlicia modelと`2分ループステップ20.vmd`を使い、
 `BPMX model + VMD motion`と`PMX model + BVMD motion`をそれぞれfile menuから読み込んだ。
@@ -90,6 +93,24 @@ model / camera BVMD読込を確認した。旧2.x migrationと、編集結果か
 propertyのUnicode track名と全frame番号が完全一致することを確認した。この結果から、
 model形式とmotion形式は独立に組み合わせられ、BVMD変換によるtimeline track差分は
 このreferenceでは発生していない。
+
+## 2026-09-02 編集モーションのBVMD書き出し更新
+
+ファイルメニューへ、VMD書き出しと並ぶモデル用 / カメラ用BVMD 3.0書き出しを追加した。
+編集結果の正本である`MmdAnimation`を`BvmdConverter.Convert`へ直接渡し、VMD documentや
+Shift_JISへの変換は挟まない。このため、BVMD読込またはPMX由来の正しいUnicode bone / morph /
+IK名を、編集・project保存・BVMD再保存まで可変長UTF-8のまま維持できる。
+
+- モデル用BVMDはbone、movable bone、morph、property、IK trackだけを保存し、camera trackを空にする。
+- カメラ用BVMDはcamera trackだけを保存し、model / morph / property trackを空にする。
+- frame順序を変換前に検証し、空の対象track群は書き出さない。
+- MMD_modoki独自の外部親keyはBVMD 3.0に保存領域がないため、警告を表示して除外する。
+- 既存のoptimized MMD file保存IPCを再利用し、main processで`BVMD` signatureと拡張子を検査する。
+
+unit testではShift_JISにない簡体字・繁体字・絵文字と長いbone / morph / IK名の
+BVMD round-trip完全一致、model / camera track分離、空・未sort dataの拒否を確認した。
+Electron E2Eでは配布可能な豆腐fixtureを使い、GUIでのモデル / カメラkey登録、メニュー有効化、
+BVMD 3.0保存、および各fileのtrack count分離を確認した。
 
 ## 形式の概要
 
@@ -101,7 +122,7 @@ model形式とmotion形式は独立に組み合わせられ、BVMD変換によ�
 | 主な利点 | 画像・テクスチャを含む単一ファイル、パス解決失敗の回避、事前最適化 | 可変長UTF-8のtrack名、名前の重複を減らしたトラック構造、小容量・高速parse |
 | 互換性 | Blender、Unity、一般MMDツールとの互換性なし | 一般MMDツールとの互換性なし |
 | 現行形式 | 3.0系 | 3.0系 |
-| MMD_modoki現状 | 3.0変換・保存toolと3.0.x読込を実装済み | VMDから3.0への変換・保存toolと3.0.x model / camera読込を実装済み |
+| MMD_modoki現状 | 3.0変換・保存toolと3.0.x読込を実装済み | VMD変換tool、3.0.x model / camera読込、編集motionの3.0書き出しを実装済み |
 
 BVMDについて、公式はVMDに比べて約3分の1のサイズと大幅に短いparse時間を説明している。
 これは `babylon-mmd` 側の説明であり、MMD_modokiの代表モーションでの実測値ではない。

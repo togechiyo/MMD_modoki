@@ -73,8 +73,10 @@ export function canExecuteEditorAction(
         case "history.redo":
             return snapshot.canRedo ?? true;
         case "project.exportModelVmd":
+        case "project.exportModelBvmd":
             return snapshot.hasModelVmdExportKeys ?? false;
         case "project.exportCameraVmd":
+        case "project.exportCameraBvmd":
             return snapshot.hasCameraVmdExportKeys ?? false;
         case "project.exportModelVpd":
             return snapshot.hasModelVpdExportBones ?? false;

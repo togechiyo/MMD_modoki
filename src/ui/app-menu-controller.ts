@@ -272,8 +272,10 @@ export class AppMenuController {
                     || !this.mmdManager.hasActiveModelVmdExportKeys()
                     || this.mmdManager.getModelBodyCorrectionModels().filter((model) => !model.active).length === 0;
             case "file.exportModelVmd":
+            case "file.exportModelBvmd":
                 return !this.mmdManager.hasActiveModelVmdExportKeys();
             case "file.exportCameraVmd":
+            case "file.exportCameraBvmd":
                 return !this.mmdManager.hasCameraVmdExportKeys();
             case "file.exportModelVpd":
                 return !this.mmdManager.hasSelectedModelVpdExportBones();
@@ -406,6 +408,12 @@ export class AppMenuController {
                 return;
             case "file.exportCameraVmd":
                 this.dispatchAction({ type: "project.exportCameraVmd", source: "menu" });
+                return;
+            case "file.exportModelBvmd":
+                this.dispatchAction({ type: "project.exportModelBvmd", source: "menu" });
+                return;
+            case "file.exportCameraBvmd":
+                this.dispatchAction({ type: "project.exportCameraBvmd", source: "menu" });
                 return;
             case "file.exportModelVpd":
                 this.dispatchAction({ type: "project.exportModelVpd", source: "menu" });

@@ -231,6 +231,47 @@
   - camera raw track valueを再変換せず保存する。
   - headerが `カメラ・照明`、projection byteが `0x00` になる。
 
+### `project.exportModelBvmd`
+
+- 意図:
+  - 選択中モデルの編集元animationを、UTF-8 track名を保持するBVMD 3.0として保存する。
+- 入力:
+  - `source`: `menu`
+  - `payload`: なし
+- 出力:
+  - Bone、Movable Bone、Morph、Property、IKを含むモデル用 `.bvmd` が生成される。
+- 副作用:
+  - rendererでのBVMD変換、save dialog、ファイルIOが発生する。
+- canExecute:
+  - active modelと対応するsource animationが存在し、Bone、Morph、Propertyのいずれかにkeyがある。
+- undo:
+  - 対象外。exportはproject編集履歴を変更しない。
+- テスト観点:
+  - VMD documentやShift_JISを経由せず、編集元animationから直接変換する。
+  - 多言語・VMD固定長を超えるtrack名がUTF-8で完全一致する。
+  - camera trackはモデル用fileへ混入しない。
+  - BVMD 3.0に領域がない外部親keyは警告して除外する。
+
+### `project.exportCameraBvmd`
+
+- 意図:
+  - 現在のカメラ編集元animationをBVMD 3.0として保存する。
+- 入力:
+  - `source`: `menu`
+  - `payload`: なし
+- 出力:
+  - 位置、回転、距離、FoV、補間を含むカメラ用 `.bvmd` が生成される。
+- 副作用:
+  - rendererでのBVMD変換、save dialog、ファイルIOが発生する。
+- canExecute:
+  - camera source animationが存在し、Camera keyが1つ以上ある。
+- undo:
+  - 対象外。exportはproject編集履歴を変更しない。
+- テスト観点:
+  - camera raw track valueを再変換せず保存する。
+  - model / morph / property trackはカメラ用fileへ混入しない。
+  - BVMD 3.0に領域がない外部親keyは警告して除外する。
+
 ### `project.exportModelVpd`
 
 - 意図:

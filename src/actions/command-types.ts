@@ -116,6 +116,7 @@ export type CameraTransformCommandSnapshot = {
 export type EditCommandDiff =
     | {
         type: "edit.boneTransform";
+        modelInstanceId: string;
         boneName: string;
         frame: number;
         before: BoneTransformCommandSnapshot;

@@ -3,6 +3,7 @@ import type { BuiltCommand, BoneTransformCommandSnapshot, EditCommandDiff } from
 const SNAPSHOT_EPSILON = 0.0001;
 
 export type BoneTransformCommandInput = {
+    modelInstanceId: string | null;
     boneName: string | null;
     frame: number;
     before: BoneTransformCommandSnapshot | null;
@@ -13,8 +14,9 @@ export function buildBoneTransformCommand(
     input: BoneTransformCommandInput,
     nowMs = Date.now(),
 ): BuiltCommand | null {
+    const modelInstanceId = input.modelInstanceId?.trim();
     const boneName = input.boneName?.trim();
-    if (!boneName) return null;
+    if (!modelInstanceId || !boneName) return null;
 
     const frame = normalizeFrame(input.frame);
     if (frame === null) return null;
@@ -23,6 +25,7 @@ export function buildBoneTransformCommand(
 
     const diff: EditCommandDiff = {
         type: "edit.boneTransform",
+        modelInstanceId,
         boneName,
         frame,
         before: cloneSnapshot(input.before),
@@ -30,11 +33,11 @@ export function buildBoneTransformCommand(
     };
 
     return {
-        id: `edit.boneTransform:${boneName}:${frame}:${nowMs}`,
+        id: `edit.boneTransform:${modelInstanceId}:${boneName}:${frame}:${nowMs}`,
         label: `Edit bone transform: ${boneName}`,
         scope: "edit",
         diff,
-        mergeKey: `edit.boneTransform:${boneName}`,
+        mergeKey: `edit.boneTransform:${modelInstanceId}:${boneName}`,
         createdAtMs: nowMs,
     };
 }

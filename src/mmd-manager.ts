@@ -13773,6 +13773,24 @@ ${beforeFogAppendBlock}
         const runtimeBone = this.getRuntimeBoneByName(boneName);
         if (!runtimeBone) return null;
 
+        return this.getBoneTransformFromRuntimeBone(runtimeBone);
+    }
+
+    public getBoneTransformForModelInstance(
+        modelInstanceId: string,
+        boneName: string,
+    ): { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number } } | null {
+        const entry = this.sceneModels.find((candidate) => candidate.info.instanceId === modelInstanceId);
+        if (!entry) return null;
+        const runtimeBone = this.getRuntimeBoneByNameFromModel(entry.model, boneName);
+        if (!runtimeBone) return null;
+        return this.getBoneTransformFromRuntimeBone(runtimeBone);
+    }
+
+    private getBoneTransformFromRuntimeBone(
+        runtimeBone: EditorRuntimeBone,
+    ): { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number } } {
+
         const linkedBone = runtimeBone.linkedBone as
             | (TransformNode & {
                 getRestMatrix?: () => Matrix;
@@ -13900,22 +13918,59 @@ ${beforeFogAppendBlock}
         this.invalidateBoneVisualizerPose(runtimeBone, notifyEdited);
     }
 
-    private recomputeCurrentModelPoseAfterManualEdit(): void {
-        const currentModel = this.currentModel;
-        if (!currentModel) return;
-        PhysicsModelController.beforeAndAfterPhysics(currentModel);
+    public setBoneTransformForModelInstance(
+        modelInstanceId: string,
+        boneName: string,
+        snapshot: {
+            position: { x: number; y: number; z: number };
+            rotation: { x: number; y: number; z: number };
+        },
+    ): boolean {
+        const entry = this.sceneModels.find((candidate) => candidate.info.instanceId === modelInstanceId);
+        if (!entry) return false;
+        const runtimeBone = this.getRuntimeBoneByNameFromModel(entry.model, boneName);
+        if (!runtimeBone) return false;
+
+        const restMatrix = runtimeBone.linkedBone.getRestMatrix();
+        runtimeBone.linkedBone.position = new Vector3(
+            restMatrix.m[12] + snapshot.position.x,
+            restMatrix.m[13] + snapshot.position.y,
+            restMatrix.m[14] + snapshot.position.z,
+        );
+        const degToRad = Math.PI / 180;
+        runtimeBone.linkedBone.setRotationQuaternion(
+            Quaternion.RotationYawPitchRoll(
+                snapshot.rotation.y * degToRad,
+                snapshot.rotation.x * degToRad,
+                snapshot.rotation.z * degToRad,
+            ),
+            Space.LOCAL,
+        );
+        this.invalidateBoneVisualizerPose(runtimeBone, false, entry.model);
+        return true;
     }
 
-    private invalidateBoneVisualizerPose(runtimeBone: EditorRuntimeBone, notifyEdited = true): void {
+    private recomputeCurrentModelPoseAfterManualEdit(model: RuntimeModel | null = this.currentModel): void {
+        if (!model) return;
+        PhysicsModelController.beforeAndAfterPhysics(model);
+    }
+
+    private invalidateBoneVisualizerPose(
+        runtimeBone: EditorRuntimeBone,
+        notifyEdited = true,
+        model: RuntimeModel | null = this.currentModel,
+    ): void {
         const linkedBone = runtimeBone.linkedBone;
         const linkedBoneInternal = linkedBone as unknown as {
             markAsDirty?: () => void;
             getSkeleton?: () => Skeleton;
         };
         linkedBoneInternal.markAsDirty?.();
-        this.recomputeCurrentModelPoseAfterManualEdit();
+        this.recomputeCurrentModelPoseAfterManualEdit(model);
         linkedBoneInternal.getSkeleton?.()?.computeAbsoluteMatrices(true);
-        this.boneVisualizerTarget?.skeleton?.computeAbsoluteMatrices(true);
+        if (model === this.currentModel) {
+            this.boneVisualizerTarget?.skeleton?.computeAbsoluteMatrices(true);
+        }
         if (notifyEdited) {
             this.onBoneTransformEdited?.(runtimeBone.name);
         }

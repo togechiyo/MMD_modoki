@@ -57,6 +57,16 @@ instance ID がない version 1 ファイルも読み込める。
 - モデル削除時は、削除した instance ID を参照するモデル外部親、カメラ外部親キーフレーム、DoF 対象だけを解除する。
 - 同じパスを持つ別個体の参照は維持する。
 
+## 編集状態と履歴（2026-09-02 追記）
+
+同一モデルの同名ボーンを同じフレームで編集した場合、保留中のボーン姿勢とキーフレーム dirty state がボーン名だけで共有され、別個体のキー登録へ混入する不具合があった。また、ボーン変形 Command が編集元の個体 ID を保持していなかったため、モデル切替後の undo / redo が対象個体を特定できなかった。
+
+- 保留中ボーン姿勢は `modelInstanceId + boneName + frame` の組み合わせで分離する。
+- ボーン欄の dirty state も `modelInstanceId` を含む context key で分離する。
+- `edit.boneTransform` Command は `modelInstanceId` を保持する。
+- undo / redo は現在のアクティブモデルではなく、Command が保持する個体へ直接適用する。
+- 非アクティブ個体への履歴適用では、UI のアクティブモデルを一時的に切り替えない。
+
 ## テスト
 
 追加した主な回帰確認:

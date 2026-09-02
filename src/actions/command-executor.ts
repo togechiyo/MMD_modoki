@@ -22,7 +22,11 @@ export type CommandExecutionContext = {
     removeTimelineKeyframePayloads?(track: CommandTrackRef, frames: readonly number[]): boolean;
     moveTimelineKeyframe(track: CommandTrackRef, fromFrame: number, toFrame: number): boolean;
     applyTimelineKeyframePayload?(track: CommandTrackRef, frame: number, payload: TimelineKeyframePayload | null): boolean;
-    applyBoneTransform?(boneName: string, snapshot: BoneTransformCommandSnapshot): boolean;
+    applyBoneTransform?(
+        modelInstanceId: string,
+        boneName: string,
+        snapshot: BoneTransformCommandSnapshot,
+    ): boolean;
     applyCameraTransform?(snapshot: CameraTransformCommandSnapshot): boolean;
     setSelectedFrame(frame: number | null): void;
     setSelectedKeys?(keys: readonly CommandSelectedKeyRef[]): void;
@@ -300,7 +304,7 @@ function executeBoneTransform(
 ): boolean {
     if (!context.applyBoneTransform) return false;
     const snapshot = direction === "apply" ? diff.after : diff.before;
-    return context.applyBoneTransform(diff.boneName, snapshot);
+    return context.applyBoneTransform(diff.modelInstanceId, diff.boneName, snapshot);
 }
 
 function executeCameraTransform(

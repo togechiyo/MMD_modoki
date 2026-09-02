@@ -3,7 +3,7 @@ id: keep-agent-work-local-fixture-driven-and-gui-verified
 status: decision
 scope: project/agent-operation
 confidence: high
-last_verified: 2026-08-23
+last_verified: 2026-09-02
 decision_owner: project-owner
 decision: accepted-with-constraints
 decided_on: 2026-08-23
@@ -26,7 +26,7 @@ agentがbranch、配布アプリの通信、開発時の情報検索・asset取�
 明示依頼なしにbranchを作成・切替しない。配布・ビルド後のアプリの通常経路は外部ネットワークへ接続しない。
 開発時の公式情報検索、依存取得、licenseを確認したtest/reference assetの取得にはnetworkを利用してよい。取得したassetはlocalへ固定し、自動testや配布アプリからremote URLへ依存させない。
 共有する小型fixtureは `test/fixtures/`、GitHubへ載せない第三者asset・大型asset・比較資料はtop-levelの `local-references/` へ集約する。ignoredなreference directoryを `test/` や機能別directoryへ増やさない。
-ユーザー所有modelは明示的な許可がある場合だけ読み込み、自動確認には配布可能な最小fixtureを使う。
+ユーザー所有modelは明示的な許可がある場合だけ読み込み、自動確認には配布可能な最小fixtureを使う。project ownerは、top-levelの `local-references/` に置かれたAlicia modelを今後のlocal test・不具合診断へ継続利用してよいと明示した。ただしrepositoryへcommit・配布せず、未配置環境ではそのmodelに依存する確認をskip可能にする。
 UI導線とfile読込は下位テストだけで完了扱いにせず、local Playwright Electron E2EでGUI操作と最終状態も確認する。Electron / WebGPU E2EはCodexの実行sandbox内で試さず、GPUを利用できるlocal環境でrepository導入済みPlaywrightをGUI実行権限付きで起動する。
 
 ## 避けること
@@ -46,4 +46,4 @@ project ownerが、offline-firstはビルド後アプリのsecurity方針であ�
 
 ## 再確認条件
 
-online機能を明示採用するとき、remote assetが必須になるとき、またはGUI E2E基盤を変更するとき。
+online機能を明示採用するとき、remote assetが必須になるとき、Alicia modelの配置・利用許可・配布条件が変わるとき、またはGUI E2E基盤を変更するとき。

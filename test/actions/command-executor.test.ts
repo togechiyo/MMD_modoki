@@ -11,7 +11,7 @@ type Call =
     | ["batchRemove", CommandTrackRef, number[]]
     | ["move", CommandTrackRef, number, number]
     | ["paste", CommandTrackRef, number, "payload" | null]
-    | ["boneTransform", string, BoneTransformCommandSnapshot]
+    | ["boneTransform", string, string, BoneTransformCommandSnapshot]
     | ["select", number | null]
     | ["selectKeys", number[]]
     | ["seek", number]
@@ -44,8 +44,8 @@ function createContext(result = true, options: { batchRemove?: boolean } = {}): 
                 calls.push(["paste", targetTrack, frame, payload ? "payload" : null]);
                 return result;
             },
-            applyBoneTransform: (boneName, snapshot) => {
-                calls.push(["boneTransform", boneName, snapshot]);
+            applyBoneTransform: (modelInstanceId, boneName, snapshot) => {
+                calls.push(["boneTransform", modelInstanceId, boneName, snapshot]);
                 return result;
             },
             setSelectedFrame: (frame) => {
@@ -469,25 +469,27 @@ describe("executeCommand", () => {
         const applyContext = createContext();
         expect(executeCommand(createCommand({
             type: "edit.boneTransform",
+            modelInstanceId: "alicia-2",
             boneName: "センター",
             frame: 12,
             before,
             after,
         }), "apply", applyContext.context)).toBe(true);
         expect(applyContext.calls).toEqual([
-            ["boneTransform", "センター", after],
+            ["boneTransform", "alicia-2", "センター", after],
         ]);
 
         const revertContext = createContext();
         expect(executeCommand(createCommand({
             type: "edit.boneTransform",
+            modelInstanceId: "alicia-2",
             boneName: "センター",
             frame: 12,
             before,
             after,
         }), "revert", revertContext.context)).toBe(true);
         expect(revertContext.calls).toEqual([
-            ["boneTransform", "センター", before],
+            ["boneTransform", "alicia-2", "センター", before],
         ]);
     });
 });

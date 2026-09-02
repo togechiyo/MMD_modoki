@@ -136,6 +136,7 @@ type SelectedBonePoseSnapshot = {
 };
 
 type PendingBoneTransformCommand = {
+    modelInstanceId: string;
     boneName: string;
     frame: number;
     before: BoneTransformCommandSnapshot;
@@ -7249,12 +7250,18 @@ export class UIController {
 
     private beginBoneTransformCommand(boneName: string | null): void {
         if (!boneName || boneName === "Camera") return;
-        if (this.pendingBoneTransformCommand?.boneName === boneName) return;
+        const modelInstanceId = this.getActiveModelInstanceId();
+        if (!modelInstanceId) return;
+        if (
+            this.pendingBoneTransformCommand?.modelInstanceId === modelInstanceId
+            && this.pendingBoneTransformCommand.boneName === boneName
+        ) return;
 
-        const snapshot = this.captureBoneTransformCommandSnapshot(boneName);
+        const snapshot = this.captureBoneTransformCommandSnapshot(boneName, modelInstanceId);
         if (!snapshot) return;
 
         this.pendingBoneTransformCommand = {
+            modelInstanceId,
             boneName,
             frame: this.mmdManager.currentFrame,
             before: snapshot,
@@ -7267,8 +7274,9 @@ export class UIController {
         if (!pending) return;
         if (!boneName || pending.boneName !== boneName) return;
 
-        const after = this.captureBoneTransformCommandSnapshot(boneName);
+        const after = this.captureBoneTransformCommandSnapshot(boneName, pending.modelInstanceId);
         const command = buildBoneTransformCommand({
+            modelInstanceId: pending.modelInstanceId,
             boneName,
             frame: pending.frame,
             before: pending.before,
@@ -7390,12 +7398,18 @@ export class UIController {
             return;
         }
 
-        const before = beforeOverride ?? this.captureBoneTransformCommandSnapshot(boneName);
+        const modelInstanceId = this.getActiveModelInstanceId();
+        if (!modelInstanceId) {
+            this.refreshViewportBottomBar();
+            return;
+        }
+        const before = beforeOverride ?? this.captureBoneTransformCommandSnapshot(boneName, modelInstanceId);
         const after: BoneTransformCommandSnapshot = {
             position: { ...position },
             rotation: { ...rotation },
         };
         const command = buildBoneTransformCommand({
+            modelInstanceId,
             boneName,
             frame: this.mmdManager.currentFrame,
             before,
@@ -7425,7 +7439,9 @@ export class UIController {
             this.refreshViewportBottomBar();
             return false;
         }
-        return this.applyBoneTransformSnapshotFromCommand(boneName, { position, rotation });
+        const modelInstanceId = this.getActiveModelInstanceId();
+        if (!modelInstanceId) return false;
+        return this.applyBoneTransformSnapshotFromCommand(modelInstanceId, boneName, { position, rotation });
     }
 
     private applyBottomBarCameraTransform(
@@ -7550,8 +7566,12 @@ export class UIController {
         return this.captureCameraTransformCommandSnapshot();
     }
 
-    private captureBoneTransformCommandSnapshot(boneName: string): BoneTransformCommandSnapshot | null {
-        const snapshot = this.captureCurrentBonePoseSnapshot(boneName);
+    private captureBoneTransformCommandSnapshot(
+        boneName: string,
+        modelInstanceId: string = this.getActiveModelInstanceId() ?? "",
+    ): BoneTransformCommandSnapshot | null {
+        if (!modelInstanceId) return null;
+        const snapshot = this.captureCurrentBonePoseSnapshot(boneName, modelInstanceId);
         if (!snapshot) return null;
         return {
             position: { ...snapshot.position },
@@ -7570,29 +7590,18 @@ export class UIController {
     }
 
     private applyBoneTransformSnapshotFromCommand(
+        modelInstanceId: string,
         boneName: string,
         snapshot: BoneTransformCommandSnapshot,
     ): boolean {
         if (!boneName || boneName === "Camera") return false;
-        if (!this.mmdManager.getBoneTransform(boneName)) return false;
+        if (!this.mmdManager.setBoneTransformForModelInstance(modelInstanceId, boneName, snapshot)) return false;
 
-        this.mmdManager.setBoneTranslation(
-            boneName,
-            snapshot.position.x,
-            snapshot.position.y,
-            snapshot.position.z,
-            false,
-        );
-        this.mmdManager.setBoneRotation(
-            boneName,
-            snapshot.rotation.x,
-            snapshot.rotation.y,
-            snapshot.rotation.z,
-            false,
-        );
-        this.rememberEditedBonePoseSnapshot(boneName, snapshot);
-        this.markSectionKeyframeDirty("bone", this.getBoneKeyframeContextKey(boneName));
-        this.syncBottomPanelBoneFromEditedPose(boneName);
+        this.rememberEditedBonePoseSnapshot(boneName, snapshot, modelInstanceId);
+        this.markSectionKeyframeDirty("bone", this.getBoneKeyframeContextKey(boneName, modelInstanceId));
+        if (modelInstanceId === this.getActiveModelInstanceId()) {
+            this.syncBottomPanelBoneFromEditedPose(boneName);
+        }
         this.refreshSelectedTrackRotationOverlay();
         this.refreshViewportBottomBar();
         this.updateSectionKeyframeButtons();
@@ -7750,7 +7759,9 @@ export class UIController {
                 }
                 return applied;
             },
-            applyBoneTransform: (boneName, snapshot) => this.applyBoneTransformSnapshotFromCommand(boneName, snapshot),
+            applyBoneTransform: (modelInstanceId, boneName, snapshot) => (
+                this.applyBoneTransformSnapshotFromCommand(modelInstanceId, boneName, snapshot)
+            ),
             applyCameraTransform: (snapshot) => this.applyCameraTransformSnapshotFromCommand(snapshot),
             setSelectedFrame: (frame) => {
                 if (timelineEditBatchDepth > 0) {
@@ -8162,23 +8173,30 @@ export class UIController {
     private rememberEditedBonePoseSnapshot(
         boneName: string | null,
         snapshotOverride: SelectedBonePoseSnapshot | null = null,
+        modelInstanceId: string | null = this.getActiveModelInstanceId(),
     ): void {
         if (!boneName) return;
-        const snapshot = snapshotOverride ?? this.captureCurrentBonePoseSnapshot(boneName);
+        const key = this.getPendingBonePoseKey(boneName, modelInstanceId);
+        if (!key) return;
+        const snapshot = snapshotOverride ?? this.captureCurrentBonePoseSnapshot(boneName, modelInstanceId);
         if (!snapshot) return;
-        this.pendingBonePoseSnapshots.set(boneName, {
+        this.pendingBonePoseSnapshots.set(key, {
             frame: this.mmdManager.currentFrame,
             snapshot,
         });
         this.debugKeyframeFlow("remember edited bone pose", {
             boneName,
+            modelInstanceId,
             frame: this.mmdManager.currentFrame,
             snapshot,
             snapshotText: this.formatPoseSnapshotText(snapshot),
         });
     }
 
-    private captureCurrentBonePoseSnapshot(boneName: string): SelectedBonePoseSnapshot | null {
+    private captureCurrentBonePoseSnapshot(
+        boneName: string,
+        modelInstanceId: string | null = this.getActiveModelInstanceId(),
+    ): SelectedBonePoseSnapshot | null {
         if (boneName === "Camera") {
             const snapshot = this.mmdManager.getCameraKeyframePose();
             this.debugKeyframeFlow("capture camera pose snapshot", {
@@ -8188,7 +8206,12 @@ export class UIController {
             return snapshot;
         }
 
-        const pendingSnapshot = this.getPendingBonePoseSnapshot(boneName);
+        if (!modelInstanceId) return null;
+        const pendingSnapshot = this.getPendingBonePoseSnapshot(
+            boneName,
+            this.mmdManager.currentFrame,
+            modelInstanceId,
+        );
         if (pendingSnapshot) {
             this.debugKeyframeFlow("capture bone pose snapshot from pending", {
                 boneName,
@@ -8197,7 +8220,9 @@ export class UIController {
             return pendingSnapshot;
         }
 
-        const panelSnapshot = this.bottomPanel.getSelectedBoneTransformSnapshot();
+        const panelSnapshot = modelInstanceId === this.getActiveModelInstanceId()
+            ? this.bottomPanel.getSelectedBoneTransformSnapshot()
+            : null;
         if (panelSnapshot && this.bottomPanel.getSelectedBone() === boneName) {
             this.debugKeyframeFlow("capture bone pose snapshot from panel", {
                 boneName,
@@ -8206,7 +8231,7 @@ export class UIController {
             return panelSnapshot;
         }
 
-        const managerSnapshot = this.mmdManager.getBoneTransform(boneName);
+        const managerSnapshot = this.mmdManager.getBoneTransformForModelInstance(modelInstanceId, boneName);
         if (managerSnapshot) {
             this.debugKeyframeFlow("capture bone pose snapshot from manager", {
                 boneName,
@@ -8218,17 +8243,39 @@ export class UIController {
         return null;
     }
 
-    private getPendingBonePoseSnapshot(boneName: string | null, frame = this.mmdManager.currentFrame): SelectedBonePoseSnapshot | null {
+    private getPendingBonePoseSnapshot(
+        boneName: string | null,
+        frame = this.mmdManager.currentFrame,
+        modelInstanceId: string | null = this.getActiveModelInstanceId(),
+    ): SelectedBonePoseSnapshot | null {
         if (!boneName) return null;
-        const entry = this.pendingBonePoseSnapshots.get(boneName);
+        const key = this.getPendingBonePoseKey(boneName, modelInstanceId);
+        if (!key) return null;
+        const entry = this.pendingBonePoseSnapshots.get(key);
         if (!entry) return null;
         const normalizedFrame = Math.max(0, Math.floor(frame));
         if (entry.frame !== normalizedFrame) {
-            this.debugKeyframeFlow("pending bone pose miss by frame", { boneName, frame: normalizedFrame, pendingFrame: entry.frame });
+            this.debugKeyframeFlow("pending bone pose miss by frame", {
+                boneName,
+                modelInstanceId,
+                frame: normalizedFrame,
+                pendingFrame: entry.frame,
+            });
             return null;
         }
-        this.debugKeyframeFlow("pending bone pose hit", { boneName, frame: normalizedFrame, snapshot: entry.snapshot });
+        this.debugKeyframeFlow("pending bone pose hit", {
+            boneName,
+            modelInstanceId,
+            frame: normalizedFrame,
+            snapshot: entry.snapshot,
+        });
         return entry.snapshot;
+    }
+
+    private getPendingBonePoseKey(boneName: string, modelInstanceId: string | null): string | null {
+        if (boneName === "Camera") return "camera:Camera";
+        if (!modelInstanceId) return null;
+        return `model:${modelInstanceId}:bone:${boneName}`;
     }
 
     private syncBottomPanelBoneFromEditedPose(boneName: string | null, force = true): void {
@@ -8360,12 +8407,16 @@ export class UIController {
         return section;
     }
 
+    private getActiveModelInstanceId(): string | null {
+        if (this.mmdManager.getTimelineTarget() !== "model") return null;
+        return this.mmdManager.getActiveModelInfo()?.instanceId ?? null;
+    }
+
     private getInfoKeyframeContextKey(): string | null {
         if (this.mmdManager.getTimelineTarget() !== "model") return null;
         const model = this.mmdManager.getLoadedModels().find((item) => item.active) ?? null;
         if (!model) return null;
-        const modelKey = model.path || model.name || String(model.index);
-        return `${this.getSectionKeyframeContextPrefix("info")}:${modelKey}:frame:${this.mmdManager.currentFrame}`;
+        return `${this.getSectionKeyframeContextPrefix("info")}:${model.instanceId}:frame:${this.mmdManager.currentFrame}`;
     }
 
     private getInterpolationKeyframeContextKey(track: Pick<KeyframeTrack, "name" | "category"> | null = null): string | null {
@@ -8375,9 +8426,14 @@ export class UIController {
         return `${this.getSectionKeyframeContextPrefix("interpolation")}:${selectedTrack.category}:${selectedTrack.name}:frame:${this.mmdManager.currentFrame}`;
     }
 
-    private getBoneKeyframeContextKey(boneName: string | null = this.bottomPanel.getSelectedBone()): string | null {
+    private getBoneKeyframeContextKey(
+        boneName: string | null = this.bottomPanel.getSelectedBone(),
+        modelInstanceId: string | null = this.getActiveModelInstanceId(),
+    ): string | null {
         if (!boneName) return null;
-        return `${this.getSectionKeyframeContextPrefix("bone")}:${boneName}:frame:${this.mmdManager.currentFrame}`;
+        const targetKey = boneName === "Camera" ? "camera" : modelInstanceId ? `model:${modelInstanceId}` : null;
+        if (!targetKey) return null;
+        return `${this.getSectionKeyframeContextPrefix("bone")}:${targetKey}:${boneName}:frame:${this.mmdManager.currentFrame}`;
     }
 
     private getMorphKeyframeContextKey(frameIndex: number | null = this.bottomPanel.getSelectedMorphFrameIndex()): string | null {

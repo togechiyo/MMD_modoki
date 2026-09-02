@@ -16,6 +16,7 @@ const after: BoneTransformCommandSnapshot = {
 describe("buildBoneTransformCommand", () => {
     it("builds a command from before and after snapshots", () => {
         const command = buildBoneTransformCommand({
+            modelInstanceId: "alicia-2",
             boneName: "センター",
             frame: 12.8,
             before,
@@ -23,23 +24,25 @@ describe("buildBoneTransformCommand", () => {
         }, 100);
 
         expect(command).toEqual({
-            id: "edit.boneTransform:センター:12:100",
+            id: "edit.boneTransform:alicia-2:センター:12:100",
             label: "Edit bone transform: センター",
             scope: "edit",
             diff: {
                 type: "edit.boneTransform",
+                modelInstanceId: "alicia-2",
                 boneName: "センター",
                 frame: 12,
                 before,
                 after,
             },
-            mergeKey: "edit.boneTransform:センター",
+            mergeKey: "edit.boneTransform:alicia-2:センター",
             createdAtMs: 100,
         });
     });
 
     it("returns null for missing bone or unchanged snapshots", () => {
         expect(buildBoneTransformCommand({
+            modelInstanceId: "alicia-2",
             boneName: null,
             frame: 0,
             before,
@@ -47,10 +50,19 @@ describe("buildBoneTransformCommand", () => {
         }, 100)).toBeNull();
 
         expect(buildBoneTransformCommand({
+            modelInstanceId: "alicia-2",
             boneName: "センター",
             frame: 0,
             before,
             after: before,
+        }, 100)).toBeNull();
+
+        expect(buildBoneTransformCommand({
+            modelInstanceId: null,
+            boneName: "センター",
+            frame: 0,
+            before,
+            after,
         }, 100)).toBeNull();
     });
 });

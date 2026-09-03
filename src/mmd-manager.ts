@@ -6868,6 +6868,16 @@ ${beforeFogAppendBlock}
         return this.externalPlaybackSimulationEnabled;
     }
 
+    public setExternalPlaybackFrame(frame: number): number {
+        if (!this.externalPlaybackSimulationEnabled) return this._currentFrame;
+        const targetFrame = Math.max(0, Math.floor(frame));
+        if (targetFrame > this._totalFrames) {
+            this._totalFrames = targetFrame;
+        }
+        this._currentFrame = targetFrame;
+        return this._currentFrame;
+    }
+
     public setPhysicsEnabled(enabled: boolean): boolean {
         const wasEnabled = this.getPhysicsEnabled();
         const isResumingPhysics = enabled && !wasEnabled;

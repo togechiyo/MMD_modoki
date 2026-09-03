@@ -1036,6 +1036,7 @@ export async function runWebmExportJob(
                         endFrame,
                         startFrame + Math.round((outputFrameIndex * TIMELINE_FPS) / fps),
                     );
+                    mmdManager.setExternalPlaybackFrame(frame);
                     const renderStartedAt = performance.now();
                     if (!playbackStarted) {
                         if (captureMode === "readpixels") {

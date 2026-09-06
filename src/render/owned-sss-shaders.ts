@@ -1,10 +1,14 @@
 // Project-owned diffusion and transmission. No Babylon SSS/prepass dependencies.
+const SKIN_TINT = "vec3f(1.0, 0.78, 0.72)";
 export const OWNED_SSS_LIGHTING = `// @apply-without-toon
 #ifdef TOON_TEXTURE
 {
     // The UI stores the shadow/Toon mix in the MMD color uniforms.
     // Keep the continuous diffuse lobe; only its unlit color comes from Toon.
     var shadowTint = textureLoad(toonSampler, vec2i(0, 0), 0).rgb;
+    #ifdef OWNED_SSS
+    if (uniforms.ownedSssProfile.z > 0.5) { shadowTint = ${SKIN_TINT}; }
+    #endif
     #ifdef TOON_TEXTURE_COLOR
     shadowTint = mix(clamp(uniforms.toonTextureAdditiveColor.rgb, vec3f(0.0), vec3f(1.0)),
         shadowTint, clamp(uniforms.toonTextureAdditiveColor.a, 0.0, 1.0));
@@ -14,16 +18,7 @@ export const OWNED_SSS_LIGHTING = `// @apply-without-toon
     // Dark Toon colors retain their brightness; a white Toon texel must not
     // flatten the whole surface into full illumination. Preserve its hue.
     let shadowPeak = max(shadowTint.r, max(shadowTint.g, shadowTint.b));
-    var shadowBand = shadowTint * min(1.0, 0.65 / max(shadowPeak, 0.0001));
-    #ifdef OWNED_SSS
-    var fallbackWeight = uniforms.ownedSssProfile.z;
-    #ifdef TOON_TEXTURE_COLOR
-    fallbackWeight *= clamp(uniforms.toonTextureAdditiveColor.a, 0.0, 1.0);
-    #endif
-    // Warm only the synthetic Skin shadow: keep green/blue energy and respect
-    // the user's shadow color at Toon=0. Fully lit surfaces still converge to 1.
-    shadowBand.r += 0.06 * fallbackWeight;
-    #endif
+    let shadowBand = shadowTint * min(1.0, 0.65 / max(shadowPeak, 0.0001));
     // Ease middle tones without boosting the fully illuminated endpoint.
     let softLit = lit * (1.35 - 0.35 * lit);
     let surface = mix(shadowBand, vec3f(1.0), softLit);
@@ -38,8 +33,6 @@ export const OWNED_SSS_DEFINITIONS = `
 #ifdef OWNED_SSS
 var ownedSssSignalSampler: sampler;
 var ownedSssSignal: texture_2d<f32>;
-var ownedSssSurfaceSampler: sampler;
-var ownedSssSurface: texture_2d<f32>;
 var ownedSssPositionSampler: sampler;
 var ownedSssPosition: texture_2d<f32>;
 var ownedSssEntrySampler: sampler;
@@ -78,9 +71,10 @@ fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     let toonHue = select(vec3f(1.0), toon / max(peak, 0.0001), peak > 0.0001);
     transmissionTint = mix(vec3f(1.0), toLinearSpaceVec3(toonHue), wax);
     #endif
+    if (uniforms.ownedSssProfile.z > 0.5) { transmissionTint = toLinearSpaceVec3(${SKIN_TINT}); }
     return uniforms.ownedSssLightColor.rgb * transmissionTint * transmission / max(entryWeight, 0.0001) * back * valid * 0.75;
 }
-fn ownedSssDiffuse(p: vec3f, localSignal: vec3f, surface: bool) -> vec3f {
+fn ownedSssDiffuse(p: vec3f, localSignal: vec3f) -> vec3f {
     let clip = uniforms.ownedSssViewMatrix * vec4f(p, 1.0);
     let uv = clip.xy / clip.w * 0.5 + 0.5;
     let size = vec2i(textureDimensions(ownedSssPosition));
@@ -95,11 +89,7 @@ fn ownedSssDiffuse(p: vec3f, localSignal: vec3f, surface: bool) -> vec3f {
             let position = textureLoad(ownedSssPosition, coord, 0);
             let accept = abs(position.a - uniforms.ownedSssParams.w) < 0.1 && length(position.xyz - p) < uniforms.ownedSssParams.y * 2.5;
             let weight = select(1.0 - fraction.x, fraction.x, x == 1) * select(1.0 - fraction.y, fraction.y, y == 1) * select(0.0, 1.0, accept);
-            if (surface) {
-                total += textureLoad(ownedSssSurface, coord, 0).rgb * weight;
-            } else {
-                total += textureLoad(ownedSssSignal, coord, 0).rgb * weight;
-            }
+            total += textureLoad(ownedSssSignal, coord, 0).rgb * weight;
             weights += weight;
         }
     }
@@ -116,16 +106,8 @@ if (uniforms.ownedSssParams.x > 0.5 && uniforms.ownedSssParams.x < 1.5) {
     ownedSssIrradiance += ownedSssTransmission(fragmentInputs.vPositionW, normalW);
 }
 if (uniforms.ownedSssParams.x < 0.5) {
-    let scattered = ownedSssDiffuse(fragmentInputs.vPositionW, ownedSssIrradiance, false);
-    var illumination = scattered;
-    if (uniforms.ownedSssProfile.y < 0.5) {
-        let surface = ownedSssDiffuse(fragmentInputs.vPositionW, ownedSssIrradiance, true);
-        // Blend energy before albedo, without desaturating the light or lifting
-        // it with a gamma-like curve. Surface smoothing is narrow and achromatic.
-        illumination = mix(surface, scattered, uniforms.ownedSssProfile.x);
-        // Skin's received illumination gain; zero light remains zero.
-        illumination *= 1.5;
-    }
+    // Shared received-light gain for Skin and Wax, applied once in linear space.
+    let illumination = ownedSssDiffuse(fragmentInputs.vPositionW, ownedSssIrradiance) * 1.2;
     diffuseBase = toGammaSpaceVec3(max(illumination, vec3f(0.0)));
 }
 }
@@ -134,9 +116,7 @@ if (uniforms.ownedSssParams.x < 0.5) {
 
 export const OWNED_SSS_CAPTURE = `
 #ifdef OWNED_SSS
-if (uniforms.ownedSssParams.x > 3.5) {
-    color = vec4f(ownedSssIrradiance, -0.025);
-} else if (uniforms.ownedSssParams.x > 2.5) {
+if (uniforms.ownedSssParams.x > 2.5) {
     // An exit surface viewed through an open mesh must not masquerade as an entry.
     #ifdef NORMAL
     if (dot(normalize(fragmentInputs.vNormalW), uniforms.ownedSssLight.xyz) >= 0.0) { discard; }

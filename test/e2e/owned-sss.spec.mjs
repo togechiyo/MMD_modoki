@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { existsSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, readFileSync } from "node:fs";
+import { PNG } from "playwright-core/lib/utilsBundle";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -121,12 +122,23 @@ test("owned SSS renders, restores, and detaches without the legacy SSS pipeline"
         await frames(page);
         if (preset !== "wgsl-mmd-standard") {
           const passes = await page.evaluate(async () => (await import("/src/render/owned-sss.ts")).inspectOwnedSss());
-          expect(passes.surfacePassCount).toBe(preset === "wgsl-owned-sss-skin" ? 2 : 0);
-          expect(passes.targetCount).toBe(preset === "wgsl-owned-sss-skin" ? 4 : 3);
+          expect(passes.blurPassCount).toBe(2);
+          expect(passes.targetCount).toBe(3);
         }
         await page.locator("#render-canvas").screenshot({ path: resolve(output, `${name}-${preset}.png`) });
         const png = await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 1152, 648), output);
         copyFileSync(png.path, resolve(output, `${name}-${preset}-export.png`));
+        if (useBlueToon && name === "front" && preset === "wgsl-owned-sss-skin") {
+          // Change only the model's Toon image: Skin must not inherit its hue.
+          const changed = await page.evaluate(async dir => {
+            const { withNeutralToon } = await import("/test/e2e/helpers/owned-sss-toon-probe.mjs");
+            return withNeutralToon(() => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 1152, 648));
+          }, output);
+          const before = PNG.sync.read(readFileSync(resolve(output, `${name}-${preset}-export.png`))).data;
+          const after = PNG.sync.read(readFileSync(changed.path)).data;
+          expect(Buffer.compare(before, after)).toBe(0);
+          await frames(page);
+        }
         if (useBlueToon && name === "back" && preset === "wgsl-owned-sss-wax") {
           const restore = await isolateTransmission(page);
           const isolated = await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 1152, 648), output);

@@ -30,7 +30,6 @@ class OwnedSssRuntime {
     public readonly entry: RenderTargetTexture;
     public readonly position: RenderTargetTexture;
     public readonly signal: RenderTargetTexture;
-    public readonly surface: RenderTargetTexture;
     public readonly lightCamera: FreeCamera;
     public viewMatrix = Matrix.Identity();
     public lightMatrix = Matrix.Identity();
@@ -39,12 +38,9 @@ class OwnedSssRuntime {
     public projection = [1, 1];
 
     public get attachedTargetCount(): number {
-        return [this.entry, this.position, this.signal, this.surface].filter(target => this.scene.customRenderTargets.includes(target)).length;
+        return [this.entry, this.position, this.signal].filter(target => this.scene.customRenderTargets.includes(target)).length;
     }
-    public get surfacePassCount(): number {
-        return this.scene.customRenderTargets.includes(this.surface) ? this.surface.postProcesses.length : 0;
-    }
-    public get ready(): boolean { return this.scene.isReady() && [this.signal, this.surface].every(target => !this.scene.customRenderTargets.includes(target) || target.postProcesses.every(pass => pass.isReady())); }
+    public get ready(): boolean { return this.scene.isReady() && this.signal.postProcesses.every(pass => pass.isReady()); }
 
     public constructor(private readonly scene: Scene) {
         liveRuntimes.add(this);
@@ -56,9 +52,9 @@ class OwnedSssRuntime {
         this.entry.resize(2048);
         this.position = this.target("position", 2, Constants.TEXTURETYPE_FLOAT);
         this.signal = this.target("signal", 1, Constants.TEXTURETYPE_HALF_FLOAT);
-        this.surface = this.target("surface", 4, Constants.TEXTURETYPE_HALF_FLOAT);
         ShaderStore.ShadersStoreWGSL.ownedSssBlurPixelShader = OWNED_SSS_BLUR;
-        for (const target of [this.signal, this.surface]) for (const axis of [[1, 0], [0, 1]]) {
+        const target = this.signal;
+        for (const axis of [[1, 0], [0, 1]]) {
             const blur = new PostProcess(`${target.name}-blur-${axis[0]}`, "ownedSssBlur", {
                 uniforms: ["axis", "viewProjection", "projection"], samplers: ["positionTexture"],
                 size: 1, engine: scene.getEngine(), shaderLanguage: ShaderLanguage.WGSL,
@@ -75,7 +71,7 @@ class OwnedSssRuntime {
         scene.onBeforeRenderObservable.add(() => this.update());
         scene.onDisposeObservable.addOnce(() => {
             liveRuntimes.delete(this);
-            this.entry.dispose(); this.position.dispose(); this.signal.dispose(); this.surface.dispose();
+            this.entry.dispose(); this.position.dispose(); this.signal.dispose();
             this.fallback.dispose(); this.lightCamera.dispose();
         });
     }
@@ -107,13 +103,12 @@ class OwnedSssRuntime {
         // Model reload may retain material objects for compatibility; only live meshes own work.
         const referenced = new Set(this.scene.meshes.flatMap(mesh => (mesh.subMeshes ?? []).map(sub => sub.getMaterial())));
         for (const material of this.materials.keys()) if (!referenced.has(material)) this.materials.delete(material);
-        const targets = [this.entry, this.position, this.signal, this.surface];
+        const targets = [this.entry, this.position, this.signal];
         const active = this.materials.size > 0;
-        const skinActive = Array.from(this.materials.values()).some(plugin => plugin.profile === "skin");
         if (!active) for (const material of this.scene.materials) plugins.get(material)?.setCaptureEnabled(false);
         for (const target of targets) {
             const index = this.scene.customRenderTargets.indexOf(target);
-            const needed = active && (target !== this.surface || skinActive);
+            const needed = active;
             if (needed && index < 0) this.scene.customRenderTargets.push(target);
             if (!needed && index >= 0) this.scene.customRenderTargets.splice(index, 1);
         }
@@ -136,7 +131,7 @@ class OwnedSssRuntime {
         this.entry.renderList = occluders;
         const width = this.scene.getEngine().getRenderWidth();
         const height = this.scene.getEngine().getRenderHeight();
-        for (const target of [this.position, this.signal, this.surface]) {
+        for (const target of [this.position, this.signal]) {
             if (target.getSize().width !== width || target.getSize().height !== height) target.resize({ width, height });
             target.activeCamera = camera;
         }
@@ -217,21 +212,18 @@ class OwnedSssPlugin extends MaterialPluginBase {
             { name: "ownedSssLightMatrix", size: 16, type: "mat4" },
         ] };
     }
-    public getSamplers(samplers: string[]): void { samplers.push("ownedSssSignal", "ownedSssSurface", "ownedSssPosition", "ownedSssEntry"); }
+    public getSamplers(samplers: string[]): void { samplers.push("ownedSssSignal", "ownedSssPosition", "ownedSssEntry"); }
     public hardBindForSubMesh(buffer: UniformBuffer): void {
         const r = this.runtime;
-        buffer.updateFloat4("ownedSssParams", r.mode, this.profile === "skin" ? 0.08 : 0.6, this.profile === "skin" ? 0.12 : 0.5, this.enabled ? this.materialId : 0);
-        const toon = (this._material as Material & { toonTexture?: Texture | null }).toonTexture;
-        // This is the application's fallback resource name, never a model/material name.
-        const warmFallback = this.enabled && this.profile === "skin" && toon?.name === "preset:fallback_shadow_toon";
-        buffer.updateFloat4("ownedSssProfile", this.profile === "skin" ? 0.3 : 1, this.profile === "wax" ? 1 : 0, warmFallback ? 1 : 0, 0);
+        buffer.updateFloat4("ownedSssParams", r.mode, 0.6, 0.5, this.enabled ? this.materialId : 0);
+        // Both profiles use Wax transport; only the source tint differs.
+        buffer.updateFloat4("ownedSssProfile", 1, 1, this.enabled && this.profile === "skin" ? 1 : 0, 0);
         buffer.updateFloat4("ownedSssLight", r.lightDirection.x, r.lightDirection.y, r.lightDirection.z, 0);
         buffer.updateFloat4("ownedSssLightColor", r.lightColor.x, r.lightColor.y, r.lightColor.z, 0);
         buffer.updateFloat4("ownedSssProjection", r.projection[0], r.projection[1], 0, 0);
         buffer.updateMatrix("ownedSssViewMatrix", r.viewMatrix);
         buffer.updateMatrix("ownedSssLightMatrix", r.lightMatrix);
         buffer.setTexture("ownedSssSignal", r.mode === 0 ? r.signal : r.fallback);
-        buffer.setTexture("ownedSssSurface", r.mode === 0 && this.profile === "skin" ? r.surface : r.fallback);
         buffer.setTexture("ownedSssPosition", r.mode === 0 ? r.position : r.fallback);
         buffer.setTexture("ownedSssEntry", r.mode === 3 ? r.fallback : r.entry);
     }
@@ -278,7 +270,7 @@ export async function inspectOwnedSss(): Promise<object> {
     }
     return { materialCount: runtime.materials.size, ready: runtime.ready, targetCount, mode: runtime.mode,
         blurPassCount: runtime.signal.postProcesses.length,
-        surfacePassCount: runtime.surfacePassCount, size, probes };
+        size, probes };
 }
 
 export function isOwnedSssReady(): boolean {

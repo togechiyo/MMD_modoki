@@ -27,8 +27,8 @@ assetやそのtextureはGitへ追加しない。通常testは配布fixture、Ali
 
 エフェクトパネルの「材質」で対象materialを選び、`SSS Diffusion Skin (Experimental)`または`SSS Diffusion Wax (Experimental)`を「選択に適用」する。元へ戻す場合は`MMD Standard`を適用する。旧SSSのID・shader・PrePassを新経路から呼ばない。新IDは`wgsl-owned-sss-skin` / `wgsl-owned-sss-wax`で、既存の材質保存機構を通す。
 
-- Skin: 表面照度70%・散乱照度30%、拡散radius 0.08 MMD unit、表面平滑化radius 0.025 unit、赤の透過距離0.12 unit。無彩色化・平方根補正は撤去。Wax: radius 0.6 / 透過距離0.5 unit、RGB同幅と材質Toon由来の透過色。
-- 拡散は照度RTTに付属する独自WGSLの縦横2段ブラー、RGB幅比はSkinで1 / 0.45 / 0.23、Waxで1 / 1 / 1。各軸を1 pixel間隔で読み、world distanceとmaterial IDで近傍を制限してchannelごとに正規化する。初版の64点固定螺旋は下記の平滑化対応で撤去した。
+- Skin / Wax: radius 0.6 / 透過距離0.5 unit、RGB同幅。SkinはモデルToon色を固定の赤み(1.0, 0.78, 0.72)へ置換し、Waxは材質Toonを使う。以前のSkin専用の表面配合・受光1.5倍は撤去済み。
+- 拡散は照度RTTに付属する独自WGSLの縦横2段ブラー、RGB幅比は両profileとも1 / 1 / 1。各軸を1 pixel間隔で読み、world distanceとmaterial IDで近傍を制限してchannelごとに正規化する。初版の64点固定螺旋は下記の平滑化対応で撤去した。
 - 光方向の入射画像は2048角float32。4点ごとに厚みから透過率を計算して補間し、異なる入射面の深度を混ぜない。出射面を入射面として採用せず、同じ骨格の不透明・alpha test材質（髪や服）も遮光へ含め、散乱は選択materialだけに適用する。
 - cameraのposition / material ID画像はfloat32、irradiance画像はfloat16。sceneのcustom RTTとして実行し、Classic / FrameGraphのimage processing前に材質内で合成する。
 - 最後の対象materialを解除すると専用passを停止する。project再読込時に残る未参照materialを処理対象から除外する。RTTは再適用用に保持しscene終了時に破棄する。
@@ -145,3 +145,20 @@ AliciaのPlaywright E2E（照度0/100/200、PNG、保存復元・解除を含む
 ## 保存時点の所有者評価
 
 所有者の狙いは「血色を足す感じ」。Skinは調整を重ねても黒ずみが気になり、狙いから外れたという評価で、完成・採用扱いにはしない。01:18のWax画像は「悪くない」との評価（照明強度131 / 101の比較）。今回のコミットはここまでの試行を保存するもの。Waxを基準にSkinの差を絞る案は会話で提案した段階で、まだ実装していない。
+
+## Waxを基準にSkinのToon参照色だけを置換
+
+上記保存後、所有者が「SkinをWaxベースでToon色だけ赤みに置換、モデルのToon影色は無視」と明示したため実装した。
+
+- Skin / Waxの拡散半径0.6、透過距離0.5、RGB同一の拡散・厚み減衰・最終合成を共通化。Skinの表面70%配合、小半径surface RTTと2 blur pass、受光1.5倍、fallback限定の赤加算を撤去。両方とも3 RTT・2 blur pass。
+- SkinのモデルToon参照色を(1.0, 0.78, 0.72)に置換する。陰色と透過色の両方で同じ色を使い、モデルにToonがある場合も無い場合も同じ。UI影RGBとの比率は既存Toonスライダーで調整でき、照明RGB・強度、albedo / textureは引き続き反映する。WaxのモデルToon参照は保持する。
+- 青Toon fixtureのFrameGraph E2E、Alicia E2E、Classicの青Toon E2E成功。ClassicではToon画像だけを青から白へ差し替えたSkinのPNGが全画素RGBA一致することをassertし、モデルToon色を無視する挙動を確認。Waxの青い薄部透過、照明連動、保存復元・解除も成功。
+- Aliciaの近接画像を目視。Waxは変更前と正面・側面・逆光のPNGが全画素RGB一致。比較元は`local-references/sss-before-wax-skin-2026-09-07/`。lint、critical型検査成功、通常型検査は既存539件。所有者によるSkinの見た目の再確認はまだ必要。
+
+## Skin / Wax共通の受光量1.2倍
+
+所有者からWaxベースのSkinは「大体いい感じ」との評価を受け、両profileの受光量だけ1.2倍にする依頼に対応。平滑化済みの線形照度へ最終合成時に一度だけ1.2を掛ける。色の配合、拡散半径、透過距離は維持し、入力照度0は0のまま。明部は既存の材質clampにより飽和する場合がある。
+
+AliciaのSkin / Wax画像を目視し、Playwright E2E（照度0/100/200、PNG、保存復元・解除）とlintが成功。WGSLの係数のみ変更したため型検査は再実行していない。
+
+この配合について所有者から「これでいい」と実機確認を得た。SkinはWaxベースの固定赤み、WaxはモデルToon色、共通受光量1.2倍を今回の調整の到達点として保存する。

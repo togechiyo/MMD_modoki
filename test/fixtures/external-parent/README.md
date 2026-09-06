@@ -5,6 +5,8 @@
 
 ## モデル
 
+- `sss-reference.pmx`: 独自生成のSSS比較fixture。厚い頭部と薄い耳の閉じた楕円体、頭・耳の2材質。外部asset依存なし。形状生成元は同じ再生成script。
+
 - `plate.pmx`: 水色の皿。原点と`センター`ボーンは皿上面の中央
 - `tofu.pmx`: クリーム色の直方体。原点と`センター`ボーンは底面の中央
 - `dynamic-follower.pmx`: `Physics Input`剛体へ外部親入力を渡し、バネ接続した動的な`Camera Output`で水平遅延を再現する最小モデル

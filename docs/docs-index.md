@@ -195,6 +195,8 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [独自WGSL SSSの再設計・比較記録 2026-09-06](./owned-sss-development-2026-09-06.md)
+
 - [Babylon WaterMaterial 水面 実装メモ 2026-08-27](./babylon-watermaterial-surface-implementation-2026-08-27.md)
 - [リアルタイム SSS 手法調査と独自プリセット方針 2026-08-26](./realtime-sss-methods-research-2026-08-26.md)
 - [SSS Skin シェーダープリセット実装メモ 2026-08-26](./sss-standard-skin-shader-presets-2026-08-26.md)

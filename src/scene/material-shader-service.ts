@@ -38,6 +38,8 @@ import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
 import type { ProjectModelMaterialShaderState } from "../types";
+import { setOwnedSssProfile } from "../render/owned-sss";
+import { OWNED_SSS_LIGHTING } from "../render/owned-sss-shaders";
 import {
     DEFAULT_MMD_MATERIAL_PIPELINE_PRESET,
     type MmdMaterialPipelinePreset,
@@ -65,6 +67,8 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-self-shadow"
     | "wgsl-sss-standard"
     | "wgsl-sss-skin"
+    | "wgsl-owned-sss-skin"
+    | "wgsl-owned-sss-wax"
     | "wgsl-light-and-shadow"
     | "wgsl-gloss-highlight"
     | "wgsl-semi-matte-highlight"
@@ -1635,6 +1639,9 @@ function applyWgslShaderPresetToMaterial(host: MaterialShaderHost, material: Mat
     restoreMaterialShaderDefaults(host, material, defaults);
     setPresetWgslToonFragmentForMaterial(host, material, null);
 
+    setOwnedSssProfile(material, presetId === "wgsl-owned-sss-skin" ? "skin"
+        : presetId === "wgsl-owned-sss-wax" ? "wax" : null);
+
     switch (presetId) {
         case "wgsl-unlit": {
             if ("disableLighting" in material) {
@@ -1820,6 +1827,13 @@ function applyWgslShaderPresetToMaterial(host: MaterialShaderHost, material: Mat
             }
             ensurePresetFallbackToonTexture(host, material);
             setPresetWgslToonFragmentForMaterial(host, material, selfShadowWgslText);
+            break;
+        }
+        case "wgsl-owned-sss-skin":
+        case "wgsl-owned-sss-wax": {
+            material.disableLighting = false;
+            ensurePresetFallbackToonTexture(host, material);
+            setPresetWgslToonFragmentForMaterial(host, material, OWNED_SSS_LIGHTING);
             break;
         }
         case "wgsl-sss-standard": {

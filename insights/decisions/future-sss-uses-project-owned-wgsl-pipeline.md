@@ -4,11 +4,12 @@ status: decision
 priority: normal
 scope: rendering/material-shader-presets
 confidence: high
-last_verified: 2026-08-27
+last_verified: 2026-09-06
 evidence:
   - project-owner-directive
   - user-device-confirmation
 source_docs:
+  - ../../docs/owned-sss-development-2026-09-06.md
   - ../../docs/sss-standard-skin-shader-presets-2026-08-26.md
   - ../../docs/realtime-sss-methods-research-2026-08-26.md
 superseded_by: null
@@ -37,6 +38,8 @@ Babylon.jsのSSSアルゴリズムへ処理を委ねることは区別する。
 - 実モデル評価前に通常UIへ公開する。
 
 ## 根拠
+
+2026-09-06に所有者が再開を依頼し、旧実装とBabylon標準SSSを再利用しないこと、ローカルPlaywrightで見た目を確認しながら進めることを再確認した。新しい試作の見た目を採用したという判断はまだない。
 
 PBR側のBabylon.js SSSで期待する結果を得られなかった後、Standard Shader側の試作でも
 同じBabylon.js PrePass / Burley合成経路を再利用した。実モデルでは白さが残り、所有者は

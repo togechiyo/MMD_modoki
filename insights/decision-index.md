@@ -34,7 +34,7 @@
 | accepted-with-constraints | [配布アプリはoffline-first、開発作業はfixture中心でGUI確認する](./decisions/keep-agent-work-local-fixture-driven-and-gui-verified.md) | branch、runtime通信、開発時network、local reference配置、model asset、UI検証の安全境界を決める |
 | adopted | [VMD retargetは現在のprojectから独立したpopup toolにする](./decisions/vmd-retarget-is-an-isolated-popup-tool.md) | PMX間のVMD変換、rotation・体格差補正、preview導線を変更する |
 | adopted | [MMDプリセットはfallbackの役割を保ち影側色を共通化する](./decisions/mmd-standard-respects-missing-toon-and-light-shadow-forces-fallback.md) | Toonなし材質、fallback Toon、共通影色、shader presetの役割を変更する |
-| adopted | [次のSSSはプロジェクト所有のWGSL経路で完全自作する](./decisions/future-sss-uses-project-owned-wgsl-pipeline.md) | MMD材質のSSSを再検討・試作する |
+| adopted | [次のSSSはプロジェクト所有のWGSL経路で完全自作する](./decisions/future-sss-uses-project-owned-wgsl-pipeline.md) | 2026-09-06再確認。旧SSSを使わず実描画比較しながら試作する |
 | adopted | [海はWaterMaterial水面と旧水中パスを使い白い直接光ハイライトを足さない](./decisions/ocean-uses-watermaterial-surface-without-direct-specular.md) | 海の水面、水中合成、specular、通常UI導線を変更する |
 | adopted | [新規プロジェクトは別ウィンドウで開く](./decisions/new-project-opens-in-separate-window.md) | 新規project、ウィンドウ管理、Ctrl+N、project初期化導線を変更する |
 | adopted | [Seekbarのend handleを停止・リピート境界にする](./decisions/seekbar-end-handle-is-always-stop-boundary.md) | viewport seekbar、再生範囲、終端停止、repeat、frameStopEnabledを変更する |

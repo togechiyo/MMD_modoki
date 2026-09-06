@@ -876,6 +876,8 @@ export type WgslMaterialShaderPresetId =
     | "wgsl-self-shadow"
     | "wgsl-sss-standard"
     | "wgsl-sss-skin"
+    | "wgsl-owned-sss-skin"
+    | "wgsl-owned-sss-wax"
     | "wgsl-light-and-shadow"
     | "wgsl-gloss-highlight"
     | "wgsl-semi-matte-highlight"
@@ -1128,6 +1130,16 @@ export class MmdManager {
             id: "wgsl-full-light-add",
             label: "Full Light Add",
             description: "Read light sliders directly and add a dedicated light boost regardless of PMX toon flags",
+        },
+        {
+            id: "wgsl-owned-sss-skin",
+            label: "SSS Diffusion Skin (Experimental)",
+            description: "Independent WGSL diffusion with light-space thickness transmission",
+        },
+        {
+            id: "wgsl-owned-sss-wax",
+            label: "SSS Diffusion Wax (Experimental)",
+            description: "Wider RGB diffusion and deeper transmission for wax-like materials",
         },
         {
             id: "wgsl-sss-standard",

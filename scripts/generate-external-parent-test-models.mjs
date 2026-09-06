@@ -166,6 +166,39 @@ function createTofuModel() {
     };
 }
 
+function createSssReferenceModel() {
+    const vertices = [];
+    const indices = [];
+    // Closed ellipsoids: thick head and thin ears, with analytic outward normals.
+    for (const [cx, cy, cz, rx, ry, rz] of [[0, 1.5, 0, 0.95, 1.05, 0.8], [-1.1, 1.6, 0, 0.4, 0.62, 0.06], [1.1, 1.6, 0, 0.4, 0.62, 0.06]]) {
+        const offset = vertices.length;
+        const rows = 32, columns = 64;
+        for (let row = 0; row <= rows; row++) {
+            const theta = row * Math.PI / rows;
+            for (let col = 0; col <= columns; col++) {
+                const phi = col * Math.PI * 2 / columns;
+                const direction = [Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi)];
+                const normal = [direction[0] / rx, direction[1] / ry, direction[2] / rz];
+                const length = Math.hypot(...normal);
+                vertices.push({ position: [cx + rx * direction[0], cy + ry * direction[1], cz + rz * direction[2]], normal: normal.map(v => v / length), uv: [col / columns, row / rows] });
+            }
+        }
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < columns; col++) {
+                const a = offset + row * (columns + 1) + col;
+                const b = a + columns + 1;
+                if (row > 0) indices.push(a, a + 1, b);
+                if (row < rows - 1) indices.push(a + 1, b + 1, b);
+            }
+        }
+    }
+    return { modelName: "SSS厚み比較", englishModelName: "SSS thickness reference", comment: "独自生成の閉じた楕円体。厚い頭部と厚さ0.12の耳。",
+        vertices, materialGroups: [
+            { name: "頭", englishName: "Head", diffuse: [0.8, 0.65, 0.5, 1], ambient: [0, 0, 0], indices: indices.slice(0, indices.length / 3), edge: false },
+            { name: "耳", englishName: "Ears", diffuse: [0.8, 0.65, 0.5, 1], ambient: [0, 0, 0], indices: indices.slice(indices.length / 3), edge: false },
+        ] };
+}
+
 function createPlateModel(segmentCount = 16) {
     const vertices = [];
     const bodyIndices = [];
@@ -524,6 +557,7 @@ async function main() {
     await mkdir(outputDirectory, { recursive: true });
     const models = [
         ["tofu.pmx", createTofuModel()],
+        ["sss-reference.pmx", createSssReferenceModel()],
         ["plate.pmx", createPlateModel()],
         ["dynamic-follower.pmx", createDynamicFollowerModel()],
         ["body-source.pmx", createBodyCorrectionModel(1, "Source")],

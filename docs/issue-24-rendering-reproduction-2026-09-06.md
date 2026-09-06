@@ -96,3 +96,33 @@ X=40、D=12のruntime値と`renderStability`ログ:
 - 次の修正検討は、modelのスキニングとbounds管理、AA単独時のpipeline実行を別々に扱う。人体assetで部位ごとに欠ける報告まで同一原因と断定しない。
 - E2E観測用コードとdocsのみの追加のため、型検査・unit全件・独立smokeは今回の対象外。ローカルElectronの起動・GUI操作・WebGPU描画は本試験で実行した。
 - 最終確認: opt-in E2E全3シナリオが成功（約1.2分）。`npm.cmd run lint`、E2E scriptの`node --check`、insights validator、`git diff --check`も成功した。モデル消失・AA欠落はこの成功した採取処理の中で観測した不具合であり、greenを修正済みの意味に使わない。
+
+## 同日後続の修正
+
+所有者から修正依頼を受け、上記の調査コミット`185a6f8`を基準に次の局所修正を行った。
+
+- PMX / PMD / BPMX共通loaderで、skeletonと頂点を持つgeometryだけ`alwaysSelectAsActiveMesh=true`とする。ボーン移動後の古いmesh / submesh boundsによる誤った描画除外を防ぐ。空rootや骨格を持たないmeshは対象外。画面外の骨格付きmodelも描画候補になるため、多数model時の負荷との交換条件がある。
+- AA単独をFrameGraphの実行条件に含め、AA切替時に既存のstack変更用再構築処理へ同期する。既存のGPU queue待ちと出力surface同期を利用する。AA ONの空stackでもpipeline実行コストが発生する。
+
+### 修正後の実測
+
+同じWindows / WebGPU・tofu fixtureで確認した。原点、X=40、Z=40のD=12の明るい画素数はすべて197,116で一致し、以前消えていたX=40、Z=40 / camera Z=35でも表示された。近距離でcameraがgeometryを横切る構図は正常なclippingと区別し、全距離の全面表示を保証するassertionにはしていない。
+
+AAの中央ROI中間画素数は次のとおり。動画は圧縮後の参考値で、完全一致を要求しない。
+
+| 出力 | AA ON | AA OFF | 再ON・project復元後 |
+| --- | ---: | ---: | ---: |
+| 単発PNG | 2,441 | 0 | 2,441 |
+| PNG連番 | 2,098 | 0 | 2,098 |
+| WebM 30fps decode | 2,247 | 3 | 採取対象外 |
+| WebM 60fps decode | 2,247 | 0 | 採取対象外 |
+
+単発と連番でAA後の画素は完全一致しなかった。比較testは一度その完全一致assertionで停止したが、両画像の構図・輪郭を確認し、各出力でAA ON時に中間画素が増え、OFFで消えることと、明るい画素数の差が1%未満であることを判定するよう変更した。sampling差の詳細原因は今回確定していない。
+
+### 検証結果と残る範囲
+
+- opt-in再現testを画素判定付き回帰testへ拡張し、3件成功。GUIのボーン移動・camera操作、AA ON→OFF→ON、project復元、単発・連番PNG、30 / 60 fps WebMを実行した。有効Gamma stackのAA ON / OFFも成功。
+- 既存`frame-graph-effect-controls.spec.mjs`と`export-render-surface.spec.mjs`の計4件成功。
+- 単体test 101ファイル・595件、lint、WebGPU起動smoke成功。再現3シナリオのpageerrorとWebGPU validationはともに0。
+- `typecheck:critical`成功。通常型検査は539件の既存エラーで失敗。TypeScript compiler hostへ変更3ファイルのHEAD内容を供給した比較でも539件で、新規diagnosticは0だった。
+- 元報告のM4 Mac / 人体model、複数materialでの部位別消失、従来の床消失、Classic / Experimental、透過出力は未確認。AAは台帳を`needs retest`へ、より広いV022-040は`investigating`を維持する。

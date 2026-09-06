@@ -21,7 +21,7 @@ FrameGraph選択時、AAのON / OFFがPNG・動画へ反映されない場合。
 
 ## 判断
 
-AA保存値だけでなく、空effect stackと実際に動くFrameGraphを比較する。2026-09-06の現行実装はAA単独を実行条件に含めず、空stackではON / OFFのPNGが同一だった。Gamma有効時の対照ではFXAAのON / OFF差が出た。
+AA保存値だけでなく、空effect stackと実際に動くFrameGraphを比較する。2026-09-06の修正前はAA単独を実行条件に含めず、空stackではON / OFFのPNGが同一だった。同日の修正ではAAを実行条件へ含め、切替時も既存の安全な再構築経路へ同期した。空stackのPNG・WebMでAAの適用を確認した。
 
 ## 避けること
 

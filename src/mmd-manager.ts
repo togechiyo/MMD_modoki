@@ -10895,7 +10895,8 @@ ${beforeFogAppendBlock}
 
     private shouldExecuteFrameGraphPostEffects(): boolean {
         return this.getActiveFrameGraphPostEffectIds().length > 0
-            || this.isFrameGraphImageProcessingTaskNeeded();
+            || this.isFrameGraphImageProcessingTaskNeeded()
+            || this.antialiasEnabledValue;
     }
 
     private syncFrameGraphRenderTargetState(): void {

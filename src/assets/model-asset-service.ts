@@ -1373,6 +1373,11 @@ export async function loadPMX(
         for (const mesh of result.meshes) {
             mesh.setEnabled(true);
             mesh.isVisible = true;
+            // Bone deformation moves vertices beyond the loader's static bounds.
+            // Keep skinned geometry (including its submeshes) eligible for rendering.
+            if (mesh.skeleton && (mesh.getTotalVertices?.() ?? 0) > 0) {
+                mesh.alwaysSelectAsActiveMesh = true;
+            }
             const shadowFlags = host.resolvePmxShadowFlagsForMaterial(
                 mesh.material,
                 materialFlagMap,

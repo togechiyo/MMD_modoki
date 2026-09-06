@@ -21,6 +21,8 @@ modelとcameraを平行移動しただけで、同じ構図のPMXが消える場
 
 ## 判断
 
+2026-09-06の修正ではmodel loaderの骨格付きgeometryに限り`alwaysSelectAsActiveMesh`を設定し、mesh / submeshの古いboundsによる除外を避けた。原点とX / Z=40の同一構図で表示画素数が一致した。画面外の骨格付きmodelも描画候補になる負荷との交換条件を持つ。
+
 ボーンの描画位置、mesh bounds中心、active mesh採用を同時に確認する。Windows / WebGPUのtofu fixtureでは、センターボーンX=40に対してbody boundsが原点側に残り、visibleかつmaterialReadyでもactive=falseになった。スキニングとboundsの不一致を優先調査する。
 
 ## 避けること

@@ -30,6 +30,7 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | policy | [描画リソースは意味を保ったまま共有する](./policies/preserve-render-resource-semantics-before-sharing.md) | depth、normal、mask、RTを統合・最適化する |
 | policy | [WebGPU の影変更は独立した高危険作業として隔離・横断検証する](./policies/webgpu-shadow-changes-require-isolated-cross-path-validation.md) | generator、CSM、filter、caster / receiver、shadow resourceを変更する |
 | verified | [大半径 blur は multi-scale で作る](./verified/wide-blur-needs-multiscale-sampling.md) | Bloom、Glow、DoFなど広いぼかしを作る |
+| verified | [AA出力差はFrameGraphの実行まで確認する](./verified/framegraph-aa-requires-pipeline-execution.md) | AA ON / OFFがPNG・動画へ反映されない |
 
 ## Rendering / materials and depth
 
@@ -40,6 +41,7 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | verified | [`.x` の逆向き重複 polygon](./verified/x-reversed-duplicate-polygons.md) | 影を切っても両面材質の面がちらつく |
 | observation | [shadow caster が空になった後の残留 map](./observations/shadow-caster-empty-list.md) | 最後の caster を外しても直前の影が残る |
 | verified | [広域表示では WebGPU reverse depth を使う](./verified/webgpu-wide-area-reverse-depth.md) | 大きな near/far 範囲で遠景の面が競合・欠落する |
+| verified | [ボーン移動後のPMX消失では描画位置とboundsを比較する](./verified/pmx-bone-motion-can-outgrow-static-bounds.md) | 原点付近では表示されるmodelが移動・接近で消える |
 
 ## Output / performance
 

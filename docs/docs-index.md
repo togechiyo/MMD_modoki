@@ -32,6 +32,7 @@
 - [ビューポート状態・異常メッセージ参照 2026-09-02](./viewport-runtime-status-error-message-reference-2026-09-02.md)
 - [E2E / UI 動作確認方針](./e2e-ui-verification-policy.md)
 - [総合テスト結果 2026-09-02](./comprehensive-test-report-2026-09-02.md)
+- [Issue #24 描画不具合のローカル再現試験 2026-09-06](./issue-24-rendering-reproduction-2026-09-06.md)
 - [v0.2.3 ビルド・リリース確認メモ 2026-08-28](./v0.2.3-release-preflight-2026-08-28.md)
 - [v0.2.0 ビルド前確認メモ 2026-07-06](./release-build-preflight-2026-07-06.md)
 - [macOS ZIP / DMG 配布メモ 2026-07-15](./macos-zip-dmg-distribution-note-2026-07-15.md)

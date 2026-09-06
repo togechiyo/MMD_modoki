@@ -6,6 +6,8 @@
 ## モデル
 
 - `sss-reference.pmx`: 独自生成のSSS比較fixture。厚い頭部と薄い耳の閉じた楕円体、頭・耳の2材質。外部asset依存なし。形状生成元は同じ再生成script。
+- `sss-blue-toon.pmx` / `sss-blue-toon.bmp`: 同じ形状に白い拡散色と独自生成の青Toonを設定したWax透過色の比較fixture。2×2のBMPも再生成scriptが作る。
+- `sss-no-toon.pmx`: SSS比較形状のToon参照を未設定（非共有・index -1）にしたfixture。`MMD_MODOKI_SSS_NO_TOON=1`でSkinの代替Toonを検証する。
 
 - `plate.pmx`: 水色の皿。原点と`センター`ボーンは皿上面の中央
 - `tofu.pmx`: クリーム色の直方体。原点と`センター`ボーンは底面の中央
@@ -15,7 +17,7 @@
 - `plate.pmx`と`tofu.pmx`のボーンは移動・回転可能な`センター`1本で、剛体とジョイントはなし
 - `dynamic-follower.pmx`は3ボーン、2剛体、1ジョイント
 - `body-source.pmx` / `body-target.pmx` は左右の足IKを含む体格差・Propertyキー確認用モデル
-- モーフとテクスチャはなし
+- モーフはなし。独自textureは`sss-blue-toon.pmx`の青Toonだけ
 - 文字列エンコードはUTF-16LE
 
 ## 既知の互換性

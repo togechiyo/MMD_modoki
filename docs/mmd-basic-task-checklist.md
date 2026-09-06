@@ -347,6 +347,7 @@
 - [x] 新しいリアルタイム SSS 方式を調査し、Burley screen-space diffusion を本来の表面下拡散の長期候補へ選定（[調査メモ](./realtime-sss-methods-research-2026-08-26.md)）
 - [x] `SSS Skin`をBabylon Burley screen-space diffusionへ作り直して実モデル比較まで行ったが、白さが残るため`SSS Standard`とともに不採用とし通常UIから撤去（保存IDは旧project互換用に維持、[実装・撤退記録](./sss-standard-skin-shader-presets-2026-08-26.md)）
 - [x] Babylon.js標準SSSと旧SSSを再利用せず、独自buffer・拡散・厚み透過・合成を持つWGSL SSSを試作し、許可された実モデルと配布fixtureで比較（[実装・比較記録](./owned-sss-development-2026-09-06.md)）
+- [x] 独自SSSの実機報告を受け、照度の縦横ブラー・透過率補間・Toon陰色 / 影RGB連動・既存材質合成の保持を実装し比較
 - [ ] 独自SSSの見た目を所有者が評価し、薄部の筋・材質境界・性能を含めて採否を決める
 - [ ] 疑似メタリック表現（ハイライト / sphere / toon 応答の調整）
 - [ ] 材質タイプ別プリセット整理（肌 / 髪 / 布 / 金属）

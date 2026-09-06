@@ -395,7 +395,8 @@ function writePmx(model) {
         else writer.uint16(index);
     }
 
-    writer.int32(0); // textures
+    writer.int32(model.toonTexture ? 1 : 0);
+    if (model.toonTexture) writer.text(model.toonTexture);
     writer.int32(model.materialGroups.length);
     for (const material of model.materialGroups) {
         writer.text(material.name);
@@ -413,8 +414,8 @@ function writePmx(model) {
         writer.int8(-1); // texture
         writer.int8(-1); // sphere texture
         writer.uint8(0); // sphere mode off
-        writer.uint8(1); // shared toon
-        writer.uint8(0); // toon01.bmp
+        writer.uint8(model.toonTexture || model.noToon ? 0 : 1); // custom or shared toon
+        writer.int8(model.noToon ? -1 : 0); // absent, texture 0 or toon01.bmp
         writer.text("Generated test material");
         writer.int32(material.indices.length);
     }
@@ -555,9 +556,25 @@ async function validateModel(PmxReader, filePath, model) {
 
 async function main() {
     await mkdir(outputDirectory, { recursive: true });
+    // Small, independently generated color swatch; no third-party texture.
+    const toon = Buffer.alloc(70);
+    toon.write("BM"); toon.writeUInt32LE(70, 2); toon.writeUInt32LE(54, 10);
+    toon.writeUInt32LE(40, 14); toon.writeInt32LE(2, 18); toon.writeInt32LE(2, 22);
+    toon.writeUInt16LE(1, 26); toon.writeUInt16LE(24, 28); toon.writeUInt32LE(16, 34);
+    for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) toon.set([255, 100, 32], 54 + y * 8 + x * 3);
+    await writeFile(path.join(outputDirectory, "sss-blue-toon.bmp"), toon);
+    const waxToon = createSssReferenceModel();
+    waxToon.toonTexture = "sss-blue-toon.bmp";
+    waxToon.modelName = "SSS青Toon比較";
+    for (const material of waxToon.materialGroups) {
+        material.diffuse = [1, 1, 1, 1];
+        material.ambient = [0, 0, 0];
+    }
     const models = [
         ["tofu.pmx", createTofuModel()],
         ["sss-reference.pmx", createSssReferenceModel()],
+        ["sss-blue-toon.pmx", waxToon],
+        ["sss-no-toon.pmx", { ...createSssReferenceModel(), noToon: true }],
         ["plate.pmx", createPlateModel()],
         ["dynamic-follower.pmx", createDynamicFollowerModel()],
         ["body-source.pmx", createBodyCorrectionModel(1, "Source")],

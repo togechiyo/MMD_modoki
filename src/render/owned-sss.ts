@@ -114,7 +114,17 @@ class OwnedSssRuntime {
                 for (let i = 0; i < list.length; i++) {
                     const subMesh = list.data[i];
                     const material = subMesh.getMaterial();
-                    if (material && (this.mode === 3 ? plugins.has(material) : this.materials.has(material))) subMesh.render(false);
+                    if (!material || !(this.mode === 3 ? plugins.has(material) : this.materials.has(material))) continue;
+                    // MMD outlines run in the mesh after-render stage, including RTT captures.
+                    // They neither represent SSS surface data nor support the float target's blending.
+                    const outlined = material as Material & { renderOutline?: boolean };
+                    const renderOutline = outlined.renderOutline;
+                    try {
+                        if (renderOutline) outlined.renderOutline = false;
+                        subMesh.render(false);
+                    } finally {
+                        if (renderOutline) outlined.renderOutline = renderOutline;
+                    }
                 }
             }
         };

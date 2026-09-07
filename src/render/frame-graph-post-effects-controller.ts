@@ -15,6 +15,7 @@ import { FrameGraphSharpenTask } from "@babylonjs/core/FrameGraph/Tasks/PostProc
 import { FrameGraphSSAO2RenderingPipelineTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/ssao2RenderingPipelineTask";
 import { FrameGraphSSRRenderingPipelineTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/ssrRenderingPipelineTask";
 import { FrameGraphGeometryRendererTask } from "@babylonjs/core/FrameGraph/Tasks/Rendering/geometryRendererTask";
+import { withoutMmdOutlines } from "./mmd-outline-capture-guard";
 import { FrameGraphClearTextureTask } from "@babylonjs/core/FrameGraph/Tasks/Texture/clearTextureTask";
 import { FrameGraphCopyToBackbufferColorTask } from "@babylonjs/core/FrameGraph/Tasks/Texture/copyToBackbufferColorTask";
 import { FrameGraphCopyToTextureTask } from "@babylonjs/core/FrameGraph/Tasks/Texture/copyToTextureTask";
@@ -2360,6 +2361,18 @@ export class FrameGraphPostEffectsController {
                 { doNotChangeAspectRatio: true },
             );
             const objectList = new FrameGraphObjectList();
+            if (resourcePlan.activeEffects.some(id => id === "ssgi" || id === "ssr")) {
+                // Babylon's enableOutlineRendering controls its own mesh outlines,
+                // not babylon-mmd's material-based after-mesh stage. Guard this
+                // task instance only, preserving its rendering order and cleanup.
+                geometryRendererTask.enableOutlineRendering = false;
+                const renderer = geometryRendererTask.objectRenderer;
+                const render = renderer.render.bind(renderer);
+                renderer.render = (passIndex, skipOnAfterRenderObservable) => withoutMmdOutlines(
+                    scene.materials,
+                    () => render(passIndex, skipOnAfterRenderObservable),
+                );
+            }
             const waterSurfaceMesh = scene.getMeshByName(WATER_SURFACE_MESH_NAME);
             // WaterMaterial does not emit FrameGraph geometry MRT outputs on
             // WebGPU. Rendering it into this pass invalidates the whole command

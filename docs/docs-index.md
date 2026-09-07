@@ -11,6 +11,7 @@
 - [よくある質問](./faq.md)
 - [アーキテクチャ概要](./architecture.md)
 - [シェーダープリセット / FrameGraph エフェクト一覧](./shader-framegraph-effect-catalog.md)
+- [Stage Standard 背景材質プリセット](./stage-standard-material-2026-09-07.md)
 - [MmdManager 解説](./mmd-manager.md)
 - [UI と操作フロー](./ui-flow.md)
 - [MMD_modoki の位置づけ](./mmd-project-positioning-note.md)

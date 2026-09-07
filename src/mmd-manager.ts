@@ -861,6 +861,7 @@ const IBL_SHADOWS_EXPERIMENT_ENABLED = false;
 
 export type WgslMaterialShaderPresetId =
     | "wgsl-mmd-standard"
+    | "wgsl-stage-standard"
     | "wgsl-unlit"
     | "wgsl-soft-lit"
     | "wgsl-autoluminous"
@@ -1060,6 +1061,11 @@ export class MmdManager {
             id: "wgsl-mmd-standard",
             label: "MMD Standard",
             description: "Default MMD shading",
+        },
+        {
+            id: "wgsl-stage-standard",
+            label: "Stage Standard",
+            description: "Matte stage shading with smooth form lighting, restrained highlights and existing cast shadows",
         },
         {
             id: "wgsl-cel-shadow-sharp",
@@ -1478,6 +1484,14 @@ toonContactAo=0.0;
                 for (const key of Object.keys(codeMap)) {
                     const value = codeMap[key];
                     if (typeof value !== "string") continue;
+
+                    // Stage's secondary gradient needs the back-facing angle.
+                    // Babylon-mmd's direct/spot diffuse replacement has both
+                    // vNormal and lightVectorW in scope; other lighting stays intact.
+                    if (isWgsl && replacementLine?.includes("// @signed-light-ndl")
+                        && value.includes("result.diffuse=diffuseColor*attenuation;result.ndl=ndl;")) {
+                        codeMap[key] = value.replace("result.ndl=ndl;", "result.ndl=dot(vNormal,lightVectorW);");
+                    }
 
                     if (!value.includes(target)) continue;
                     codeMap[key] = applyWithoutToonTexture

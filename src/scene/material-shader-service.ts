@@ -19,6 +19,8 @@ import sssStandardWgslText from "../../wgsl/sss_standard.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
 import matteHighlightWgslText from "../../wgsl/matte_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
+import stageStandardWgslText from "../../wgsl/stage_standard.wgsl?raw";
+// eslint-disable-next-line import/no-unresolved
 import semiMatteHighlightWgslText from "../../wgsl/semi_matte_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
 import toonHardShadowWgslText from "../../wgsl/toon_hard_shadow.wgsl?raw";
@@ -26,6 +28,8 @@ import toonHardShadowWgslText from "../../wgsl/toon_hard_shadow.wgsl?raw";
 import fallbackAccessoryToonTextureUrl from "../assets/textures/toon/fallback_accessory_toon.bmp?url";
 // eslint-disable-next-line import/no-unresolved
 import fallbackShadowToonTextureUrl from "../assets/textures/toon/fallback_shadow_toon.bmp?url";
+// eslint-disable-next-line import/no-unresolved
+import stageFallbackToonTextureUrl from "../assets/textures/toon/toon_30gray.bmp?url";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { Effect } from "@babylonjs/core/Materials/effect";
@@ -36,6 +40,7 @@ import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { GetExponentOfTwo } from "@babylonjs/core/Misc/tools.functions";
 import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { Scene } from "@babylonjs/core/scene";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
 import type { ProjectModelMaterialShaderState } from "../types";
 import { setOwnedSssProfile } from "../render/owned-sss";
@@ -52,6 +57,7 @@ import {
 
 export type WgslMaterialShaderPresetId =
     | "wgsl-mmd-standard"
+    | "wgsl-stage-standard"
     | "wgsl-unlit"
     | "wgsl-soft-lit"
     | "wgsl-autoluminous"
@@ -227,6 +233,7 @@ const LUMINOUS_GLOW_DEPTH_EDGE_THRESHOLD_HIGH = 0.02;
 const LUMINOUS_GLOW_LAYER_ALPHA_CUTOFF = 0.5;
 const presetFallbackAccessoryToonTextureByScene = new WeakMap<object, Texture>();
 const presetFallbackShadowToonTextureByScene = new WeakMap<object, Texture>();
+const presetFallbackStageToonTextureByScene = new WeakMap<object, Texture>();
 
 function ensureLuminousGlowDepthBlurShader(): void {
     const shaderKey = "mmdLuminousGlowDepthBlurFragmentShader";
@@ -1384,13 +1391,26 @@ function getPresetFallbackAccessoryToonTexture(host: MaterialShaderHost): Textur
     return texture;
 }
 
-function setPresetFallbackToonTexture(host: MaterialShaderHost, material: MaterialShaderMaterial, kind: "shadow" | "accessory"): void {
+function getPresetFallbackStageToonTexture(host: MaterialShaderHost): Texture | null {
+    const scene = host?.scene;
+    if (!(scene instanceof Scene)) return null;
+    const cached = presetFallbackStageToonTextureByScene.get(scene as object);
+    if (cached) return cached;
+    const texture = new Texture(stageFallbackToonTextureUrl, scene, false, true, Texture.BILINEAR_SAMPLINGMODE);
+    texture.name = "preset:stage_toon_30gray";
+    texture.wrapU = Texture.CLAMP_ADDRESSMODE;
+    texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+    presetFallbackStageToonTextureByScene.set(scene as object, texture);
+    return texture;
+}
+
+function setPresetFallbackToonTexture(host: MaterialShaderHost, material: MaterialShaderMaterial, kind: "shadow" | "accessory" | "stage"): void {
     if (!material || typeof material !== "object") return;
     if (!("toonTexture" in material)) return;
 
     const fallbackTexture = kind === "accessory"
         ? getPresetFallbackAccessoryToonTexture(host)
-        : getPresetFallbackShadowToonTexture(host);
+        : kind === "stage" ? getPresetFallbackStageToonTexture(host) : getPresetFallbackShadowToonTexture(host);
     if (!fallbackTexture) return;
 
     material.toonTexture = fallbackTexture;
@@ -1399,7 +1419,7 @@ function setPresetFallbackToonTexture(host: MaterialShaderHost, material: Materi
     }
 }
 
-function ensurePresetFallbackToonTexture(host: MaterialShaderHost, material: MaterialShaderMaterial, kind: "shadow" | "accessory" = "shadow"): void {
+function ensurePresetFallbackToonTexture(host: MaterialShaderHost, material: MaterialShaderMaterial, kind: "shadow" | "accessory" | "stage" = "shadow"): void {
     if (!material || typeof material !== "object") return;
     if (!("toonTexture" in material)) return;
     if (material.toonTexture) return;
@@ -1643,6 +1663,15 @@ function applyWgslShaderPresetToMaterial(host: MaterialShaderHost, material: Mat
         : presetId === "wgsl-owned-sss-wax" ? "wax" : null);
 
     switch (presetId) {
+        case "wgsl-stage-standard": {
+            material.disableLighting = false;
+            material.specularPower = 16;
+            const specular = defaults.specularColor ?? Color3.Black();
+            setMaterialColorProperty(material, "specularColor", specular.scale(0.12));
+            ensurePresetFallbackToonTexture(host, material, "stage");
+            setPresetWgslToonFragmentForMaterial(host, material, stageStandardWgslText);
+            break;
+        }
         case "wgsl-unlit": {
             if ("disableLighting" in material) {
                 material.disableLighting = true;

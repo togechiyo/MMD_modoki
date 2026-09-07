@@ -35,6 +35,7 @@
 | ID | UI名 | 一言概要 |
 | --- | --- | --- |
 | `wgsl-mmd-standard` | MMD Standard | PMX の toon、sphere、材質色を使う既定の MMD 描画。 |
+| `wgsl-stage-standard` | Stage Standard | 背景向けの滑らかな面陰影と控えめな艶。Toonなしでは中立グレーの影を補う。[仕様](./stage-standard-material-2026-09-07.md) |
 | `wgsl-cel-shadow-sharp` | Cel Shadow Sharp | セルフ影の境界を硬くし、影帯をくっきり見せる。 |
 | `wgsl-light-and-shadow` | Light and Shadow | 標準の光・影経路を使い、toon 未指定材質には補助 ramp を適用する。 |
 | `wgsl-self-shadow` | Self Shadow | 投影 shadow の遮蔽とは分けて、法線方向から toon ramp 全体を読む。 |

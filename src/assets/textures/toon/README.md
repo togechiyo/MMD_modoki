@@ -1,5 +1,8 @@
 Place custom toon ramp textures for runtime fallback presets here.
 
+- `toon_30gray.bmp`: Stage Standard fallback for materials without a Toon texture.
+  White lit half and RGB 179 shadow half; other presets retain their own fallback.
+
 Suggested first file:
 - `fallback_shadow_toon.bmp`
 

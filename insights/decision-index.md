@@ -8,6 +8,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
+| adopted | [Stage Standardは背景向けの汎用マット材質にする](./decisions/stage-standard-is-a-matte-background-preset.md) | 背景材質の追加・調整。事前計算を導入せずリアルタイム描画に限定する |
 | adopted | [AI 向け知見層の名前は `insights` とする](./decisions/ai-knowledge-layer-is-named-insights.md) | AI が再利用する判断記録の配置を決める |
 | adopted | [通常リリースはversion tag pushから開始する](./decisions/release-builds-start-from-version-tag-push.md) | version tag、GitHub Actions、prereleaseの公開手順を進める |
 | adopted | [リリース前に全言語モードを確認する](./decisions/release-preflight-checks-all-supported-locales.md) | release前の翻訳辞書と各言語GUIを確認する |

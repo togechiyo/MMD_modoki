@@ -43,6 +43,7 @@ function createHost() {
             DEFAULT_WGSL_MATERIAL_SHADER_PRESET: "wgsl-mmd-standard",
             WGSL_MATERIAL_SHADER_PRESETS: [
                 { id: "wgsl-mmd-standard", label: "standard" },
+                { id: "wgsl-stage-standard", label: "Stage Standard" },
                 { id: "wgsl-autoluminous", label: "Luminous" },
                 { id: "wgsl-full-shadow", label: "full_shadow" },
                 { id: "wgsl-self-shadow", label: "Self Shadow" },
@@ -124,6 +125,28 @@ function createHost() {
 }
 
 describe("material shader preset restore", () => {
+    it("round-trips Stage Standard and restores the source material without cumulative dulling", () => {
+        const fixture = createHost();
+        const material = Object.assign(fixture.material, { specularColor: new Color3(0.5, 0.3, 0.1) });
+        const host = fixture as unknown as Parameters<typeof setWgslMaterialShaderPreset>[0];
+        const original = material.specularColor.clone();
+        const diffuse = material.diffuseColor.clone();
+        for (let i = 0; i < 2; i++) {
+            expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-stage-standard")).toBe(true);
+            expect(material.specularColor.equals(original.scale(0.12))).toBe(true);
+            expect(material.diffuseColor.equals(diffuse)).toBe(true);
+        }
+        const states = getSerializedMaterialShaderStates(host, host.sceneModels[0]);
+        expect(states).toEqual([{ materialKey: "0:face", presetId: "wgsl-stage-standard" }]);
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-mmd-standard")).toBe(true);
+        expect(material.specularColor.equals(original)).toBe(true);
+        expect(material.specularPower).toBe(32);
+        const warnings: string[] = [];
+        applyImportedMaterialShaderStates(host, 0, states, warnings, "stage.pmx");
+        expect(warnings).toEqual([]);
+        expect(material.specularPower).toBe(16);
+        expect(getSerializedMaterialShaderStates(host, host.sceneModels[0])).toEqual(states);
+    });
     it("uses neutral lighting for untextured OBJ and restores MTL material values", () => {
         const host = createHost();
         host.material.specularPower = 96;

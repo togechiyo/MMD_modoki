@@ -136,6 +136,29 @@ if (uniforms.ownedSssParams.x < 0.5) {
 #endif
 `;
 
+// Opaque / early-alpha-tested geometry needs no lighting, shadow sampling,
+// sphere mapping or color processing. Keep the late path for deferred alpha
+// tests and MRT/OIT contracts, whose outputs cannot be returned here.
+export const OWNED_SSS_CAPTURE_EARLY = `
+#if defined(OWNED_SSS) && !defined(PREPASS) && !defined(ORDER_INDEPENDENT_TRANSPARENCY)
+#if !defined(ALPHATEST) || !defined(ALPHATEST_AFTERALLALPHACOMPUTATIONS)
+if (uniforms.ownedSssParams.x > 1.5) {
+    if (uniforms.ownedSssParams.x > 3.5) {
+        fragmentOutputs.color = vec4f(normalW, 1.0);
+    } else if (uniforms.ownedSssParams.x > 2.5) {
+        #ifdef NORMAL
+        if (dot(normalize(fragmentInputs.vNormalW), uniforms.ownedSssLight.xyz) >= 0.0) { discard; }
+        #endif
+        fragmentOutputs.color = vec4f(dot(fragmentInputs.vPositionW, uniforms.ownedSssLight.xyz), 0.0, 0.0, 1.0);
+    } else {
+        fragmentOutputs.color = vec4f(fragmentInputs.vPositionW, uniforms.ownedSssParams.w);
+    }
+    return fragmentOutputs;
+}
+#endif
+#endif
+`;
+
 export const OWNED_SSS_CAPTURE = `
 #ifdef OWNED_SSS
 if (uniforms.ownedSssParams.x > 3.5) {
@@ -188,6 +211,15 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
     let pixelWidth = 2.0 * max(abs(clip.w), 0.01) / max(dot(abs(uniforms.projection) * vec2f(size), uniforms.axis), 1.0);
     var total = vec3f(0.0);
     var weights = vec3f(0.0);
+    // Identical dense Gaussian taps, advanced by multiplication instead of
+    // evaluating exp for each tap. No sparse sampling or resolution reduction.
+    let exponent = vec3f(0.5 * pixelWidth * pixelWidth) / (width * width);
+    // Very distant/subpixel surfaces can underflow the first weight. Preserve
+    // the direct formula there, instead of propagating 0 * infinity into NaN.
+    let useRecurrence = all(exponent * f32(support * support) < vec3f(50.0));
+    var weight = exp(-exponent * f32(support * support));
+    var weightRatio = exp(min(exponent * f32(2 * support - 1), vec3f(50.0)));
+    let ratioStep = exp(-2.0 * exponent);
     // Keep the kernel's energy fixed when another surface occludes a sample.
     // Renormalizing only visible samples changes the lighting of stationary skin.
     for (var i = -support; i <= support; i++) {
@@ -202,10 +234,14 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
         let planeDistance = abs(dot(delta, normal + sampleNormal)) * 0.5;
         let continuity = (1.0 - smoothstep(radius * 0.04, radius * 0.25, planeDistance))
             * smoothstep(-0.25, 0.5, dot(normal, sampleNormal));
-        let offset = f32(i) * pixelWidth;
-        let weight = exp(-0.5 * vec3f(offset * offset) / (width * width));
-        total += mix(source.rgb, textureLoad(textureSampler, pixel, 0).rgb, select(0.0, continuity, accept)) * weight;
-        weights += weight;
+        var tapWeight = weight;
+        if (!useRecurrence) { tapWeight = exp(-exponent * f32(i * i)); }
+        total += mix(source.rgb, textureLoad(textureSampler, pixel, 0).rgb, select(0.0, continuity, accept)) * tapWeight;
+        weights += tapWeight;
+        if (useRecurrence) {
+            weight *= weightRatio;
+            weightRatio *= ratioStep;
+        }
     }
     fragmentOutputs.color = vec4f(total / max(weights, vec3f(0.0001)), source.a);
 }

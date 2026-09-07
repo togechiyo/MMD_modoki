@@ -19,8 +19,9 @@ import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
-import { OWNED_SSS_BLUR, OWNED_SSS_CAPTURE, OWNED_SSS_COMPOSE, OWNED_SSS_DEFINITIONS } from "./owned-sss-shaders";
+import { OWNED_SSS_BLUR, OWNED_SSS_CAPTURE, OWNED_SSS_CAPTURE_EARLY, OWNED_SSS_COMPOSE, OWNED_SSS_DEFINITIONS } from "./owned-sss-shaders";
 import { ownedSssProjectionRadius, snapOwnedSssCoordinate } from "./owned-sss-projection";
+import { getOwnedSssPositions } from "./owned-sss-positions";
 
 type Profile = "skin" | "wax";
 const runtimes = new WeakMap<Scene, OwnedSssRuntime>();
@@ -171,7 +172,7 @@ class OwnedSssRuntime {
         const maximum = new Vector3(-Infinity, -Infinity, -Infinity);
         for (const mesh of meshes) {
             // Loader bounds include a large static margin and do not follow bones.
-            const positions = mesh.getPositionData(true, true);
+            const positions = getOwnedSssPositions(mesh);
             if (!positions) continue;
             const world = mesh.computeWorldMatrix(true);
             const point = Vector3.Zero();
@@ -268,6 +269,7 @@ class OwnedSssPlugin extends MaterialPluginBase {
     public getCustomCode(shaderType: string): Record<string, string> | null {
         if (shaderType !== "fragment") return null;
         return { CUSTOM_FRAGMENT_DEFINITIONS: OWNED_SSS_DEFINITIONS,
+            CUSTOM_FRAGMENT_BEFORE_LIGHTS: OWNED_SSS_CAPTURE_EARLY,
             // The installed Standard WGSL shader declares emissive just after lighting.
             // Inject before finalDiffuse, so the MMD sphere/ambient composition survives.
             "!var emissiveColor: vec3f=uniforms\\.vEmissiveColor;": `$0\n${OWNED_SSS_COMPOSE}`,

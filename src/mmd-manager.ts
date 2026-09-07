@@ -1133,12 +1133,12 @@ export class MmdManager {
         },
         {
             id: "wgsl-owned-sss-skin",
-            label: "SSS Diffusion Skin (Experimental)",
+            label: "SSS Diffusion Skin",
             description: "Independent WGSL diffusion with light-space thickness transmission",
         },
         {
             id: "wgsl-owned-sss-wax",
-            label: "SSS Diffusion Wax (Experimental)",
+            label: "SSS Diffusion Wax",
             description: "Wider RGB diffusion and deeper transmission for wax-like materials",
         },
         {

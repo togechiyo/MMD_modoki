@@ -120,6 +120,17 @@ test("owned SSS renders, restores, and detaches without the legacy SSS pipeline"
         console.log("[owned-sss]", name, preset);
         await applyPreset(page, preset);
         await frames(page);
+        if (process.env.MMD_MODOKI_SSS_PERFORMANCE === "1" && name === "front") {
+          const all = process.env.MMD_MODOKI_SSS_PERFORMANCE_ALL === "1";
+          if (all) { await page.locator("#btn-shader-apply-all").click(); await frames(page); }
+          const metrics = await page.evaluate(async all => {
+            const { probePerformance } = await import("/test/e2e/helpers/owned-sss-performance-probe.mjs");
+            return probePerformance(all);
+          }, all);
+          writeFileSync(resolve(output, `performance-${preset}.json`), JSON.stringify(metrics, null, 2));
+          console.log("[owned-sss performance]", preset, metrics);
+          if (all) { await applyPreset(page, "wgsl-mmd-standard"); await applyPreset(page, preset); await frames(page); }
+        }
         if (process.env.MMD_MODOKI_SSS_CAST_SHADOW === "1" && name === "front" && preset === "wgsl-owned-sss-skin") {
           for (const name of ["cast-on", "cast-off"]) mkdirSync(resolve(output, name), { recursive: true });
           const result = await page.evaluate(async output => {
@@ -149,7 +160,9 @@ test("owned SSS renders, restores, and detaches without the legacy SSS pipeline"
             // Before camera scheduling, moving skin read the previous pose's
             // shadows (mean error up to 0.24, even with diffusion disabled).
             expect(sample.mean).toBeLessThan(0.001);
-            if (!sample.blur) expect(sample.max).toBeLessThan(0.03);
+            // The owner-approved Skin light/angle changes produce a 0.06958
+            // isolated peak even before performance work; mean stays <0.001.
+            if (!sample.blur) expect(sample.max).toBeLessThan(0.08);
           }
           await frames(page);
         }
@@ -163,10 +176,10 @@ test("owned SSS renders, restores, and detaches without the legacy SSS pipeline"
           for (const probe of [result.separate, result.shared]) {
             expect(probe.blur.count).toBeGreaterThan(30000);
             expect(probe.unblurred.max).toBe(0);
-            // Original dense material-only blur produces a >0.21 peak change.
-            // Some visibility dependence remains inherent to screen-space SSS.
-            expect(probe.blur.max).toBeLessThan(0.11);
-            expect(probe.blur.mean).toBeLessThan(0.011);
+            // Accepted Skin illumination before optimization: peak 0.171875,
+            // mean 0.004202. Keep its localized screen-space visibility limit.
+            expect(probe.blur.max).toBeLessThan(0.18);
+            expect(probe.blur.mean).toBeLessThan(0.005);
             expect(probe.orientation.aligned).toBe(0);
           }
           await frames(page);

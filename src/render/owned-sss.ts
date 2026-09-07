@@ -1,6 +1,7 @@
 import { Camera } from "@babylonjs/core/Cameras/camera";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { Constants } from "@babylonjs/core/Engines/constants";
+import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Material } from "@babylonjs/core/Materials/material";
@@ -15,8 +16,11 @@ import type { UniformBuffer } from "@babylonjs/core/Materials/uniformBuffer";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
+import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { OWNED_SSS_BLUR, OWNED_SSS_CAPTURE, OWNED_SSS_COMPOSE, OWNED_SSS_DEFINITIONS } from "./owned-sss-shaders";
+import { ownedSssProjectionRadius, snapOwnedSssCoordinate } from "./owned-sss-projection";
 
 type Profile = "skin" | "wax";
 const runtimes = new WeakMap<Scene, OwnedSssRuntime>();
@@ -24,11 +28,14 @@ const plugins = new WeakMap<Material, OwnedSssPlugin>();
 const liveRuntimes = new Set<OwnedSssRuntime>();
 
 class OwnedSssRuntime {
+    private updatedFrame = -1;
+    private targetCamera: Camera | null = null;
     public mode = 0;
     public readonly materials = new Map<Material, OwnedSssPlugin>();
     public readonly fallback: RawTexture;
     public readonly entry: RenderTargetTexture;
     public readonly position: RenderTargetTexture;
+    public readonly normal: RenderTargetTexture;
     public readonly signal: RenderTargetTexture;
     public readonly lightCamera: FreeCamera;
     public viewMatrix = Matrix.Identity();
@@ -38,7 +45,7 @@ class OwnedSssRuntime {
     public projection = [1, 1];
 
     public get attachedTargetCount(): number {
-        return [this.entry, this.position, this.signal].filter(target => this.scene.customRenderTargets.includes(target)).length;
+        return [this.entry, this.position, this.normal, this.signal].filter(target => this.targetCamera?.customRenderTargets.includes(target)).length;
     }
     public get ready(): boolean { return this.scene.isReady() && this.signal.postProcesses.every(pass => pass.isReady()); }
 
@@ -51,12 +58,13 @@ class OwnedSssRuntime {
         this.entry = this.target("entry", 3, Constants.TEXTURETYPE_FLOAT);
         this.entry.resize(2048);
         this.position = this.target("position", 2, Constants.TEXTURETYPE_FLOAT);
+        this.normal = this.target("normal", 4, Constants.TEXTURETYPE_HALF_FLOAT);
         this.signal = this.target("signal", 1, Constants.TEXTURETYPE_HALF_FLOAT);
         ShaderStore.ShadersStoreWGSL.ownedSssBlurPixelShader = OWNED_SSS_BLUR;
         const target = this.signal;
         for (const axis of [[1, 0], [0, 1]]) {
             const blur = new PostProcess(`${target.name}-blur-${axis[0]}`, "ownedSssBlur", {
-                uniforms: ["axis", "viewProjection", "projection"], samplers: ["positionTexture"],
+                uniforms: ["axis", "viewProjection", "projection"], samplers: ["positionTexture", "normalTexture"],
                 size: 1, engine: scene.getEngine(), shaderLanguage: ShaderLanguage.WGSL,
                 textureType: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Texture.NEAREST_SAMPLINGMODE,
             });
@@ -65,15 +73,30 @@ class OwnedSssRuntime {
                 effect.setMatrix("viewProjection", this.viewMatrix);
                 effect.setFloat2("projection", this.projection[0], this.projection[1]);
                 effect.setTexture("positionTexture", this.position);
+                effect.setTexture("normalTexture", this.normal);
             });
             target.addPostProcess(blur);
         }
-        scene.onBeforeRenderObservable.add(() => this.update());
+        // Run after every animation/physics/camera onBeforeRender observer.
+        // This also covers runtimes registered after this material plugin.
+        scene.onBeforeRenderTargetsRenderObservable.add(() => this.update());
         scene.onDisposeObservable.addOnce(() => {
             liveRuntimes.delete(this);
-            this.entry.dispose(); this.position.dispose(); this.signal.dispose();
+            this.attachTargets(null);
+            this.entry.dispose(); this.position.dispose(); this.normal.dispose(); this.signal.dispose();
             this.fallback.dispose(); this.lightCamera.dispose();
         });
+    }
+
+    private attachTargets(camera: Camera | null): void {
+        if (camera === this.targetCamera) return;
+        const targets = [this.entry, this.position, this.normal, this.signal];
+        if (this.targetCamera) for (const target of targets) {
+            const index = this.targetCamera.customRenderTargets.indexOf(target);
+            if (index >= 0) this.targetCamera.customRenderTargets.splice(index, 1);
+        }
+        this.targetCamera = camera;
+        if (camera) camera.customRenderTargets.push(...targets);
     }
 
     private target(name: string, mode: number, type: number): RenderTargetTexture {
@@ -100,19 +123,21 @@ class OwnedSssRuntime {
     }
 
     private update(): void {
+        // The scene can raise this event again for camera-local targets. Keep
+        // the same matrices from capture through composition within this frame.
+        const frame = this.scene.getFrameId();
+        if (frame === this.updatedFrame) return;
+        this.updatedFrame = frame;
         // Model reload may retain material objects for compatibility; only live meshes own work.
         const referenced = new Set(this.scene.meshes.flatMap(mesh => (mesh.subMeshes ?? []).map(sub => sub.getMaterial())));
         for (const material of this.materials.keys()) if (!referenced.has(material)) this.materials.delete(material);
-        const targets = [this.entry, this.position, this.signal];
+        const targets = [this.entry, this.position, this.normal, this.signal];
         const active = this.materials.size > 0;
         if (!active) for (const material of this.scene.materials) plugins.get(material)?.setCaptureEnabled(false);
-        for (const target of targets) {
-            const index = this.scene.customRenderTargets.indexOf(target);
-            const needed = active;
-            if (needed && index < 0) this.scene.customRenderTargets.push(target);
-            if (!needed && index >= 0) this.scene.customRenderTargets.splice(index, 1);
-        }
-        const camera = this.scene.activeCamera;
+        const camera = this.scene.frameGraph?.findMainCamera() ?? this.scene.activeCamera;
+        // Scene custom targets run BEFORE shadow generators. Camera targets run
+        // after them, so captured irradiance uses the same pose's shadow map.
+        this.attachTargets(active ? camera : null);
         if (!active || !camera) return;
         const meshes = this.scene.meshes.filter(mesh => mesh.isEnabled() && mesh.isVisible
             && mesh.subMeshes?.some(sub => { const mat = sub.getMaterial(); return mat && this.materials.has(mat); }));
@@ -131,7 +156,7 @@ class OwnedSssRuntime {
         this.entry.renderList = occluders;
         const width = this.scene.getEngine().getRenderWidth();
         const height = this.scene.getEngine().getRenderHeight();
-        for (const target of [this.position, this.signal]) {
+        for (const target of [this.position, this.normal, this.signal]) {
             if (target.getSize().width !== width || target.getSize().height !== height) target.resize({ width, height });
             target.activeCamera = camera;
         }
@@ -148,7 +173,7 @@ class OwnedSssRuntime {
             // Loader bounds include a large static margin and do not follow bones.
             const positions = mesh.getPositionData(true, true);
             if (!positions) continue;
-            const world = mesh.getWorldMatrix();
+            const world = mesh.computeWorldMatrix(true);
             const point = Vector3.Zero();
             for (let i = 0; i < positions.length; i += 3) {
                 Vector3.TransformCoordinatesFromFloatsToRef(positions[i], positions[i + 1], positions[i + 2], world, point);
@@ -158,9 +183,17 @@ class OwnedSssRuntime {
         }
         if (meshes.length === 0) return;
         const center = minimum.add(maximum).scale(0.5);
-        const radius = Math.max(1, Vector3.Distance(minimum, maximum) * 0.5);
+        const radius = ownedSssProjectionRadius(Vector3.Distance(minimum, maximum) * 0.5);
+        const up = Math.abs(this.lightDirection.y) > 0.95 ? Vector3.Forward() : Vector3.Up();
+        const right = Vector3.Cross(up, this.lightDirection).normalize();
+        const vertical = Vector3.Cross(this.lightDirection, right).normalize();
+        const size = this.entry.getSize().width;
+        for (const axis of [right, vertical]) {
+            const coordinate = Vector3.Dot(center, axis);
+            center.addInPlace(axis.scale(snapOwnedSssCoordinate(coordinate, radius, size) - coordinate));
+        }
         this.lightCamera.position.copyFrom(center.subtract(this.lightDirection.scale(radius * 2)));
-        this.lightCamera.upVector = Math.abs(this.lightDirection.y) > 0.95 ? Vector3.Forward() : Vector3.Up();
+        this.lightCamera.upVector = up;
         this.lightCamera.setTarget(center);
         this.lightCamera.orthoLeft = -radius; this.lightCamera.orthoRight = radius;
         this.lightCamera.orthoBottom = -radius; this.lightCamera.orthoTop = radius;
@@ -173,12 +206,11 @@ class OwnedSssRuntime {
 class OwnedSssPlugin extends MaterialPluginBase {
     public enabled = false;
     public profile: Profile = "skin";
-    private readonly materialId: number;
+    private readonly surfaceIds = new WeakMap<AbstractMesh, number>();
     private captureEnabled = false;
     private static nextId = 1;
     public constructor(material: Material, private readonly runtime: OwnedSssRuntime) {
         super(material, "OwnedSss", 220, { OWNED_SSS: false }, true, false);
-        this.materialId = OwnedSssPlugin.nextId++;
         this.doNotSerialize = true;
         this.registerForExtraEvents = true;
         material.onDisposeObservable.addOnce(() => runtime.materials.delete(material));
@@ -212,10 +244,15 @@ class OwnedSssPlugin extends MaterialPluginBase {
             { name: "ownedSssLightMatrix", size: 16, type: "mat4" },
         ] };
     }
-    public getSamplers(samplers: string[]): void { samplers.push("ownedSssSignal", "ownedSssPosition", "ownedSssEntry"); }
-    public hardBindForSubMesh(buffer: UniformBuffer): void {
+    public getSamplers(samplers: string[]): void { samplers.push("ownedSssSignal", "ownedSssPosition", "ownedSssNormal", "ownedSssEntry"); }
+    public hardBindForSubMesh(buffer: UniformBuffer, _scene: Scene, _engine: AbstractEngine, subMesh: SubMesh): void {
         const r = this.runtime;
-        buffer.updateFloat4("ownedSssParams", r.mode, 0.6, 0.5, this.enabled ? this.materialId : 0);
+        const mesh = subMesh.getRenderingMesh();
+        let surfaceId = this.surfaceIds.get(mesh);
+        if (surfaceId === undefined) { surfaceId = OwnedSssPlugin.nextId++; this.surfaceIds.set(mesh, surfaceId); }
+        // Both profiles share a local footprint for surface and cast shadows.
+        const radius = 0.2;
+        buffer.updateFloat4("ownedSssParams", r.mode, radius, 0.5, this.enabled ? surfaceId : 0);
         // Both profiles use Wax transport; only the source tint differs.
         buffer.updateFloat4("ownedSssProfile", 1, 1, this.enabled && this.profile === "skin" ? 1 : 0, 0);
         buffer.updateFloat4("ownedSssLight", r.lightDirection.x, r.lightDirection.y, r.lightDirection.z, 0);
@@ -225,6 +262,7 @@ class OwnedSssPlugin extends MaterialPluginBase {
         buffer.updateMatrix("ownedSssLightMatrix", r.lightMatrix);
         buffer.setTexture("ownedSssSignal", r.mode === 0 ? r.signal : r.fallback);
         buffer.setTexture("ownedSssPosition", r.mode === 0 ? r.position : r.fallback);
+        buffer.setTexture("ownedSssNormal", r.mode === 0 ? r.normal : r.fallback);
         buffer.setTexture("ownedSssEntry", r.mode === 3 ? r.fallback : r.entry);
     }
     public getCustomCode(shaderType: string): Record<string, string> | null {
@@ -248,6 +286,12 @@ export function setOwnedSssProfile(material: object, profile: Profile | null): v
         plugins.set(material, plugin);
     }
     plugin?.setProfile(profile);
+}
+
+/** Read-only diagnostics for local visual tests. */
+export function inspectOwnedSssFrame(): { viewMatrix: number[]; lightRadius: number } | null {
+    const runtime = Array.from(liveRuntimes).find(item => item.materials.size > 0);
+    return runtime ? { viewMatrix: Array.from(runtime.viewMatrix.m), lightRadius: runtime.lightCamera.orthoRight ?? 0 } : null;
 }
 
 /** Read-only diagnostics for local visual tests. */

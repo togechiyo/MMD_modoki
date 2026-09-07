@@ -120,10 +120,80 @@ test("owned SSS renders, restores, and detaches without the legacy SSS pipeline"
         console.log("[owned-sss]", name, preset);
         await applyPreset(page, preset);
         await frames(page);
+        if (process.env.MMD_MODOKI_SSS_CAST_SHADOW === "1" && name === "front" && preset === "wgsl-owned-sss-skin") {
+          for (const name of ["cast-on", "cast-off"]) mkdirSync(resolve(output, name), { recursive: true });
+          const result = await page.evaluate(async output => {
+            const { probeCastShadow } = await import("/test/e2e/helpers/owned-sss-cast-shadow-probe.mjs");
+            return probeCastShadow(shadows => window.mmdModokiE2e.captureSinglePngSurfaceToPath(`${output}/cast-${shadows ? "on" : "off"}`, 1152, 648));
+          }, output);
+          expect(result.differingSignalValues).toBeGreaterThan(100);
+          const images = result.captures.map(capture => PNG.sync.read(readFileSync(capture.path)).data);
+          let changed = 0;
+          for (let i = 0; i < images[0].length; i += 4) if (Math.abs(images[0][i] - images[1][i]) > 10) changed++;
+          expect(changed).toBeGreaterThan(100);
+          console.log("[owned-sss cast-shadow]", { differingSignalValues: result.differingSignalValues, changed });
+          await frames(page);
+        }
+        if (process.env.MMD_MODOKI_SSS_JUMP === "1" && name === "front" && preset === "wgsl-owned-sss-skin") {
+          const jump = await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-jump-probe.mjs")).probeJump());
+          console.log("[owned-sss jump]", JSON.stringify(jump));
+          writeFileSync(resolve(output, "jump-metrics.json"), JSON.stringify(jump, null, 2));
+          expect(jump.boneTexture).toBe(true);
+          expect(jump.shadowMaps).toBeGreaterThan(0);
+          for (const sample of jump.samples) {
+            expect(sample.shadowsCurrent).toBe(true);
+            expect(sample.count).toBeGreaterThan(100000);
+            expect(Math.abs(sample.capturedY - sample.requestedY)).toBeLessThan(0.00001);
+            expect(Math.abs(sample.drawnY - sample.requestedY)).toBeLessThan(0.00001);
+            expect(Math.abs(sample.minimumY - jump.samples[0].minimumY - sample.requestedY)).toBeLessThan(0.02);
+            // Before camera scheduling, moving skin read the previous pose's
+            // shadows (mean error up to 0.24, even with diffusion disabled).
+            expect(sample.mean).toBeLessThan(0.001);
+            if (!sample.blur) expect(sample.max).toBeLessThan(0.03);
+          }
+          await frames(page);
+        }
+        if (process.env.MMD_MODOKI_SSS_BLEED === "1" && name === "front" && preset === "wgsl-owned-sss-skin") {
+          const result = await page.evaluate(async () => {
+            const { probeBleed } = await import("/test/e2e/helpers/owned-sss-bleed-probe.mjs");
+            return { separate: await probeBleed(), shared: await probeBleed(true) };
+          });
+          writeFileSync(resolve(output, "bleed-metrics.json"), JSON.stringify(result, null, 2));
+          console.log("[owned-sss bleed]", JSON.stringify(result));
+          for (const probe of [result.separate, result.shared]) {
+            expect(probe.blur.count).toBeGreaterThan(30000);
+            expect(probe.unblurred.max).toBe(0);
+            // Original dense material-only blur produces a >0.21 peak change.
+            // Some visibility dependence remains inherent to screen-space SSS.
+            expect(probe.blur.max).toBeLessThan(0.11);
+            expect(probe.blur.mean).toBeLessThan(0.011);
+            expect(probe.orientation.aligned).toBe(0);
+          }
+          await frames(page);
+        }
+        if (process.env.MMD_MODOKI_SSS_MOTION === "1" && name === "front" && preset === "wgsl-owned-sss-skin") {
+          for (const index of [8, 24, 40]) mkdirSync(resolve(output, `motion-${index}`), { recursive: true });
+          const fixedCamera = process.env.MMD_MODOKI_SSS_FIXED_CAMERA === "1";
+          const jump = process.env.MMD_MODOKI_SSS_BONE_JUMP === "1";
+          const motion = await page.evaluate(async ({ output, useAlicia, fixedCamera, jump }) => {
+            const { probeMotion } = await import("/test/e2e/helpers/owned-sss-motion-probe.mjs");
+            return probeMotion(index => window.mmdModokiE2e.captureSinglePngSurfaceToPath(`${output}/motion-${index}`, 1152, 648), useAlicia, fixedCamera, jump);
+          }, { output, useAlicia, fixedCamera, jump });
+          const { samples } = motion;
+          if (useAlicia) expect(motion.animatedBones.length).toBe(2);
+          if (useAlicia && jump) expect(motion.jumpingBones.length).toBeGreaterThan(0);
+          for (const [index, capture] of motion.captures.entries()) copyFileSync(capture.path, resolve(output, `motion-pose-${index}.png`));
+          writeFileSync(resolve(output, "motion-metrics.json"), JSON.stringify(samples, null, 2));
+          expect(samples.length).toBeGreaterThan(30);
+          expect(Math.max(...samples.map(sample => sample.error))).toBeLessThan(0.00001);
+          expect(new Set(samples.slice(2).map(sample => sample.radius)).size).toBe(1);
+          if (fixedCamera) expect(new Set(samples.map(sample => sample.cameraAlpha)).size).toBe(1);
+          await frames(page);
+        }
         if (preset !== "wgsl-mmd-standard") {
           const passes = await page.evaluate(async () => (await import("/src/render/owned-sss.ts")).inspectOwnedSss());
           expect(passes.blurPassCount).toBe(2);
-          expect(passes.targetCount).toBe(3);
+          expect(passes.targetCount).toBe(4);
         }
         await page.locator("#render-canvas").screenshot({ path: resolve(output, `${name}-${preset}.png`) });
         const png = await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 1152, 648), output);

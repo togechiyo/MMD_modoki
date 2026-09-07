@@ -1,5 +1,6 @@
 // Project-owned diffusion and transmission. No Babylon SSS/prepass dependencies.
-const SKIN_TINT = "vec3f(1.0, 0.78, 0.72)";
+const SKIN_TINT = "vec3f(1.0, 0.72, 0.72)";
+const SKIN_LIGHT_GAIN = "1.2";
 export const OWNED_SSS_LIGHTING = `// @apply-without-toon
 #ifdef TOON_TEXTURE
 {
@@ -13,7 +14,15 @@ export const OWNED_SSS_LIGHTING = `// @apply-without-toon
     shadowTint = mix(clamp(uniforms.toonTextureAdditiveColor.rgb, vec3f(0.0), vec3f(1.0)),
         shadowTint, clamp(uniforms.toonTextureAdditiveColor.a, 0.0, 1.0));
     #endif
-    let lit = clamp(info.ndl * shadow, 0.0, 1.0);
+    var angularLight = clamp(info.ndl, 0.0, 1.0);
+    #ifdef OWNED_SSS
+    if (uniforms.ownedSssProfile.z > 0.5) {
+        // Broaden Skin's lit face without raising the unlit endpoint or
+        // brightening shadow visibility. Apply before the cast-shadow factor.
+        angularLight = angularLight * (2.0 - angularLight);
+    }
+    #endif
+    let lit = clamp(angularLight * shadow, 0.0, 1.0);
     // info.diffuse already includes light RGB, temperature, intensity and attenuation.
     // Dark Toon colors retain their brightness; a white Toon texel must not
     // flatten the whole surface into full illumination. Preserve its hue.
@@ -35,6 +44,8 @@ var ownedSssSignalSampler: sampler;
 var ownedSssSignal: texture_2d<f32>;
 var ownedSssPositionSampler: sampler;
 var ownedSssPosition: texture_2d<f32>;
+var ownedSssNormalSampler: sampler;
+var ownedSssNormal: texture_2d<f32>;
 var ownedSssEntrySampler: sampler;
 var ownedSssEntry: texture_2d<f32>;
 fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
@@ -72,9 +83,10 @@ fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     transmissionTint = mix(vec3f(1.0), toLinearSpaceVec3(toonHue), wax);
     #endif
     if (uniforms.ownedSssProfile.z > 0.5) { transmissionTint = toLinearSpaceVec3(${SKIN_TINT}); }
-    return uniforms.ownedSssLightColor.rgb * transmissionTint * transmission / max(entryWeight, 0.0001) * back * valid * 0.75;
+    let lightGain = select(1.0, ${SKIN_LIGHT_GAIN}, uniforms.ownedSssProfile.z > 0.5);
+    return uniforms.ownedSssLightColor.rgb * lightGain * transmissionTint * transmission / max(entryWeight, 0.0001) * back * valid * 0.75;
 }
-fn ownedSssDiffuse(p: vec3f, localSignal: vec3f) -> vec3f {
+fn ownedSssDiffuse(p: vec3f, n: vec3f, localSignal: vec3f) -> vec3f {
     let clip = uniforms.ownedSssViewMatrix * vec4f(p, 1.0);
     let uv = clip.xy / clip.w * 0.5 + 0.5;
     let size = vec2i(textureDimensions(ownedSssPosition));
@@ -87,7 +99,10 @@ fn ownedSssDiffuse(p: vec3f, localSignal: vec3f) -> vec3f {
         for (var x = 0; x < 2; x++) {
             let coord = clamp(base + vec2i(x, y), vec2i(0), size - 1);
             let position = textureLoad(ownedSssPosition, coord, 0);
-            let accept = abs(position.a - uniforms.ownedSssParams.w) < 0.1 && length(position.xyz - p) < uniforms.ownedSssParams.y * 2.5;
+            let sampleNormal = textureLoad(ownedSssNormal, coord, 0).xyz;
+            let delta = position.xyz - p;
+            let accept = abs(position.a - uniforms.ownedSssParams.w) < 0.1 && length(delta) < uniforms.ownedSssParams.y * 2.5
+                && abs(dot(delta, n + sampleNormal)) * 0.5 < uniforms.ownedSssParams.y * 0.25 && dot(n, sampleNormal) > 0.0;
             let weight = select(1.0 - fraction.x, fraction.x, x == 1) * select(1.0 - fraction.y, fraction.y, y == 1) * select(0.0, 1.0, accept);
             total += textureLoad(ownedSssSignal, coord, 0).rgb * weight;
             weights += weight;
@@ -100,14 +115,21 @@ fn ownedSssDiffuse(p: vec3f, localSignal: vec3f) -> vec3f {
 
 export const OWNED_SSS_COMPOSE = `
 #ifdef OWNED_SSS
-var ownedSssIrradiance = toLinearSpaceVec3(max(diffuseBase, vec3f(0.0)));
+// Scale the incoming lighting before color conversion, as the light intensity
+// control does. The separate received-light gain remains after composition.
+let ownedSssLightGain = select(1.0, ${SKIN_LIGHT_GAIN}, uniforms.ownedSssProfile.z > 0.5);
+var ownedSssIrradiance = toLinearSpaceVec3(max(diffuseBase * ownedSssLightGain, vec3f(0.0)));
 if (uniforms.ownedSssParams.w > 0.0) {
 if (uniforms.ownedSssParams.x > 0.5 && uniforms.ownedSssParams.x < 1.5) {
     ownedSssIrradiance += ownedSssTransmission(fragmentInputs.vPositionW, normalW);
 }
 if (uniforms.ownedSssParams.x < 0.5) {
-    // Shared received-light gain for Skin and Wax, applied once in linear space.
-    let illumination = ownedSssDiffuse(fragmentInputs.vPositionW, ownedSssIrradiance) * 1.2;
+    // Received-light gain is applied once in linear space: Skin 1.0, Wax 1.2.
+    // Surface shading and cast shadows share the same diffusion footprint.
+    let scattered = ownedSssDiffuse(fragmentInputs.vPositionW, normalW, ownedSssIrradiance);
+    // Both profiles use the full diffusion result, including transmission.
+    let receivedLightGain = select(1.2, 1.0, uniforms.ownedSssProfile.z > 0.5);
+    let illumination = scattered * receivedLightGain;
     diffuseBase = toGammaSpaceVec3(max(illumination, vec3f(0.0)));
 }
 }
@@ -116,7 +138,9 @@ if (uniforms.ownedSssParams.x < 0.5) {
 
 export const OWNED_SSS_CAPTURE = `
 #ifdef OWNED_SSS
-if (uniforms.ownedSssParams.x > 2.5) {
+if (uniforms.ownedSssParams.x > 3.5) {
+    color = vec4f(normalW, 1.0);
+} else if (uniforms.ownedSssParams.x > 2.5) {
     // An exit surface viewed through an open mesh must not masquerade as an entry.
     #ifdef NORMAL
     if (dot(normalize(fragmentInputs.vNormalW), uniforms.ownedSssLight.xyz) >= 0.0) { discard; }
@@ -132,13 +156,15 @@ if (uniforms.ownedSssParams.x > 2.5) {
 `;
 
 // Two dense, separable passes. Integer pixel steps avoid repeated offset images;
-// material IDs and world distance prevent blur across silhouettes or distant limbs.
+// Mesh/material IDs, normals and world distance separate overlapping surfaces.
 export const OWNED_SSS_BLUR = `
 varying vUV: vec2f;
 var textureSampler: texture_2d<f32>;
 var textureSamplerSampler: sampler;
 var positionTexture: texture_2d<f32>;
 var positionTextureSampler: sampler;
+var normalTexture: texture_2d<f32>;
+var normalTextureSampler: sampler;
 uniform axis: vec2f;
 uniform viewProjection: mat4x4f;
 uniform projection: vec2f;
@@ -158,15 +184,27 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
     // Saturate close-up support instead of making sparse jumps between texels.
     let support = i32(clamp(ceil(dot(projected, uniforms.axis)), 1.0, 64.0));
     let width = radius * select(vec3f(1.0, 0.45, 0.23), vec3f(1.0), source.a < 0.0);
+    let normal = normalize(textureLoad(normalTexture, centerPixel, 0).xyz);
+    let pixelWidth = 2.0 * max(abs(clip.w), 0.01) / max(dot(abs(uniforms.projection) * vec2f(size), uniforms.axis), 1.0);
     var total = vec3f(0.0);
     var weights = vec3f(0.0);
+    // Keep the kernel's energy fixed when another surface occludes a sample.
+    // Renormalizing only visible samples changes the lighting of stationary skin.
     for (var i = -support; i <= support; i++) {
         let pixel = clamp(centerPixel + vec2i(uniforms.axis) * i, vec2i(0), size - 1);
         let position = textureLoad(positionTexture, pixel, 0);
         let distance = length(position.xyz - center.xyz);
         let accept = abs(position.a - center.a) < 0.1 && distance < radius * 2.5;
-        let weight = exp(-0.5 * vec3f(distance * distance) / (width * width)) * select(0.0, 1.0, accept);
-        total += textureLoad(textureSampler, pixel, 0).rgb * weight;
+        let sampleNormal = textureLoad(normalTexture, pixel, 0).xyz;
+        // Nearby folded limbs can share a mesh and material. Reject separation
+        // from the local tangent plane, allowing the curvature of a smooth face.
+        let delta = position.xyz - center.xyz;
+        let planeDistance = abs(dot(delta, normal + sampleNormal)) * 0.5;
+        let continuity = (1.0 - smoothstep(radius * 0.04, radius * 0.25, planeDistance))
+            * smoothstep(-0.25, 0.5, dot(normal, sampleNormal));
+        let offset = f32(i) * pixelWidth;
+        let weight = exp(-0.5 * vec3f(offset * offset) / (width * width));
+        total += mix(source.rgb, textureLoad(textureSampler, pixel, 0).rgb, select(0.0, continuity, accept)) * weight;
         weights += weight;
     }
     fragmentOutputs.color = vec4f(total / max(weights, vec3f(0.0001)), source.a);

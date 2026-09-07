@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/material-shader-presets
 confidence: high
-last_verified: 2026-09-06
+last_verified: 2026-09-07
 evidence:
   - project-owner-directive
   - user-device-confirmation
@@ -30,6 +30,8 @@ decided_on: 2026-08-27
 プロジェクト所有のWGSL経路として設計する。Babylon.jsをWebGPU実行基盤として使うことと、
 Babylon.jsのSSSアルゴリズムへ処理を委ねることは区別する。
 
+2026-09-07に所有者が独自Skin / Waxの最終ルックを採用した。以後の調整ではこの採用済みの見た目を比較基準にする。Skinは固定赤み・照明120相当・受光1.0、WaxはモデルToon色・受光1.2、共通の拡散半径0.20・SSS合成100%とする。遮蔽影も曲面の陰と同じ拡散に含める。詳細な数値と検証範囲は実装・比較記録を参照する。
+
 ## 避けること
 
 - `SubSurfaceConfiguration`、標準SSS PrePass契約、`SubSurfaceScatteringPostProcess`へ再接続する。
@@ -39,7 +41,7 @@ Babylon.jsのSSSアルゴリズムへ処理を委ねることは区別する。
 
 ## 根拠
 
-2026-09-06に所有者が再開を依頼し、旧実装とBabylon標準SSSを再利用しないこと、ローカルPlaywrightで見た目を確認しながら進めることを再確認した。新しい試作の見た目を採用したという判断はまだない。
+2026-09-06に所有者が再開を依頼し、旧実装とBabylon標準SSSを再利用しないこと、ローカルPlaywrightで見た目を確認しながら進めることを再確認した。2026-09-07に調整後の画像とともに「とてもいいかんじ。これで全部OKです」と採用を明示した。
 
 PBR側のBabylon.js SSSで期待する結果を得られなかった後、Standard Shader側の試作でも
 同じBabylon.js PrePass / Burley合成経路を再利用した。実モデルでは白さが残り、所有者は

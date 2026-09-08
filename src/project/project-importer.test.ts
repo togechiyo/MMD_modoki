@@ -201,6 +201,17 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores master OFF and defaults old projects to ON", async () => {
+        const setFrameGraphPostEffectsEnabled = vi.fn();
+        const host = { ...createHost(), setFrameGraphPostEffectsEnabled } as unknown as Parameters<typeof importProjectState>[0];
+        const project = createProject();
+        project.effects.frameGraphPostEnabled = false;
+        await importProjectState(host, project);
+        expect(setFrameGraphPostEffectsEnabled).toHaveBeenLastCalledWith(false);
+        delete project.effects.frameGraphPostEnabled;
+        await importProjectState(host, project);
+        expect(setFrameGraphPostEffectsEnabled).toHaveBeenLastCalledWith(true);
+    });
     it("restores external BVMD model and camera motion paths", async () => {
         const host = createHost();
         const runtimeModel = {

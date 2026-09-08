@@ -306,6 +306,7 @@ type ProjectImportHost = {
     setPostEffectFogColor(r: number, g: number, b: number): void;
     setFrameGraphPostEffectStackIds?: (ids: readonly FrameGraphPostEffectId[]) => void;
     setFrameGraphPostEffectStackEntries?: (entries: readonly FrameGraphPostEffectStackEntry[]) => void;
+    setFrameGraphPostEffectsEnabled?: (enabled: boolean) => void;
     refreshTotalFramesFromContent(): void;
     setRenderFpsLimit(value: number): void;
     renderFpsLimit: number;
@@ -1499,6 +1500,7 @@ export async function importProjectState(
     }
 
     host.refreshTotalFramesFromContent();
+    host.setFrameGraphPostEffectsEnabled?.(data.effects.frameGraphPostEnabled !== false);
     host.setRenderFpsLimit(host.renderFpsLimit);
     host.seekTo(Math.max(0, Math.floor(data.scene.currentFrame ?? 0)));
     host.setPlaybackSpeed(Math.max(0.01, data.scene.playbackSpeed));

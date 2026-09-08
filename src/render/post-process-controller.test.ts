@@ -3,6 +3,7 @@ import {
     applyImageProcessingSettings,
     enforceFinalPostProcessOrder,
     isImageProcessingEffectsEnabled,
+    setupOriginFogPostProcess,
 } from "./post-process-controller";
 
 function createImageProcessingHost(postEffectBackend: "classic" | "frameGraph") {
@@ -60,6 +61,11 @@ function createImageProcessingHost(postEffectBackend: "classic" | "frameGraph") 
 }
 
 describe("enforceFinalPostProcessOrder", () => {
+    it("does not attach classic fog to a FrameGraph depth renderer", () => {
+        const host = { postEffectBackend: "frameGraph", originFogPostProcess: null, depthRenderer: {} };
+        setupOriginFogPostProcess(host as unknown as Parameters<typeof setupOriginFogPostProcess>[0]);
+        expect(host.originFogPostProcess).toBeNull();
+    });
     it("keeps fog and bloom before volumetric light and final cleanup passes", () => {
         const fog = { name: "fog" };
         const bloomExtract = { name: "bloomExtract" };
@@ -122,6 +128,15 @@ describe("enforceFinalPostProcessOrder", () => {
 });
 
 describe("applyImageProcessingSettings", () => {
+    it("bypasses FrameGraph image processing without disabling Classic settings", () => {
+        const host = {
+            ...createImageProcessingHost("frameGraph"),
+            postEffectExposureValue: 2,
+            getFrameGraphPostEffectsEnabled: () => false,
+        };
+        expect(isImageProcessingEffectsEnabled(host as unknown as Parameters<typeof isImageProcessingEffectsEnabled>[0])).toBe(false);
+        expect(isImageProcessingEffectsEnabled({ ...host, postEffectBackend: "classic" } as unknown as Parameters<typeof isImageProcessingEffectsEnabled>[0])).toBe(true);
+    });
     it("does not enable scene vignette while FrameGraph owns vignette rendering", () => {
         const host = createImageProcessingHost("frameGraph");
 

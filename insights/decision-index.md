@@ -8,6 +8,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
+| adopted | [FrameGraph全体切替は資源解放と再構築にする](./decisions/framegraph-master-toggle-releases-resources.md) | 一括停止・再開と個別切替の役割を決める |
 | adopted | [Stage Standardは背景向けの汎用マット材質にする](./decisions/stage-standard-is-a-matte-background-preset.md) | 背景材質の追加・調整。事前計算を導入せずリアルタイム描画に限定する |
 | adopted | [AI 向け知見層の名前は `insights` とする](./decisions/ai-knowledge-layer-is-named-insights.md) | AI が再利用する判断記録の配置を決める |
 | adopted | [通常リリースはversion tag pushから開始する](./decisions/release-builds-start-from-version-tag-push.md) | version tag、GitHub Actions、prereleaseの公開手順を進める |

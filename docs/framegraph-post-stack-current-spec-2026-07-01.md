@@ -64,7 +64,7 @@ SSGI の UI 表示名は仮の `GI（実験的）` から単純な `SSGI` へ変
 
 UI の stack order が runtime order になる。たとえば `Offset Rim -> Bloom` の順に並べると、Offset Rim の白いリムに Bloom がかかる。これは 2026-07-01 に実機で確認済み。
 
-WebGPU FrameGraph では、task の `sourceTexture` / `outputTexture` の依存関係は build 後に固定される。そのため、順序変更や enabled 状態変更は、既存 task の入力 texture を `execute()` 中に差し替えるのではなく、FrameGraph post backend を再構築する。
+WebGPU FrameGraph では、task の `sourceTexture` / `outputTexture` の依存関係は build 後に固定される。順序変更や未確保resourceを必要とする有効化は、FrameGraph post backendを再構築する。2026-09-08以降、接続済みtask・確保済みresource内の個別ON/OFFは、記録済みdisabled passで切り替える。入力textureのlive reconnectは行わない。見出しの全体ON/OFFは、個別値を保持した資源解放・再構築として使い分ける（[詳細・検証](./framegraph-master-toggle-2026-09-08.md)）。
 
 過去に live reconnect 的に texture を差し替える実装を入れたところ、同一 sync scope 内で `TextureBinding` と `RenderAttachment` が衝突する WebGPU validation warning が出た。再発防止として、stack order / enabled 変更は rebuild に寄せる。
 

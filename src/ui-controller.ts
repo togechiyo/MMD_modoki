@@ -510,7 +510,6 @@ export class UIController {
     private postEffectStackList: HTMLElement | null = null;
     private postEffectAddPanel: HTMLElement | null = null;
     private postEffectAddButton: HTMLButtonElement | null = null;
-    private postEffectReloadFrameGraphButton: HTMLButtonElement | null = null;
     private postEffectEnableFrameGraphButton: HTMLButtonElement | null = null;
     private expandedFrameGraphPostEffectId: FrameGraphPostAddEffectId | null = null;
     private draggingFrameGraphPostEffectId: FrameGraphPostAddEffectId | null = null;
@@ -660,7 +659,6 @@ export class UIController {
         this.postEffectStackList = document.getElementById("effect-post-stack-list");
         this.postEffectAddPanel = document.getElementById("effect-post-add-panel");
         this.postEffectAddButton = document.getElementById("btn-effect-add-post") as HTMLButtonElement | null;
-        this.postEffectReloadFrameGraphButton = document.getElementById("btn-effect-reload-framegraph") as HTMLButtonElement | null;
         this.postEffectEnableFrameGraphButton = document.getElementById("btn-effect-enable-framegraph") as HTMLButtonElement | null;
 
         this.modelEdgeController = new ModelEdgeController({
@@ -1030,6 +1028,9 @@ export class UIController {
             (tab) => {
                 if (tab === "materials") {
                     this.refreshShaderPanel();
+                }
+                if (tab === "post") {
+                    this.refreshFrameGraphPostAddUi();
                 }
             },
         );
@@ -5034,16 +5035,19 @@ export class UIController {
     }
 
     private setupPostEffectAddControls(): void {
+        document.getElementById("btn-effect-toggle-framegraph")?.addEventListener("click", () => {
+            if (this.getConfiguredPostEffectBackend() !== "frameGraph") return;
+            this.mmdManager.setFrameGraphPostEffectsEnabled(
+                !this.mmdManager.getFrameGraphPostEffectsEnabled(),
+            );
+            this.refreshFrameGraphPostAddUi();
+        });
         this.postEffectAddButton?.addEventListener("click", () => {
             this.setPostEffectAddPanelOpen(this.postEffectAddPanel?.hidden ?? true);
         });
 
         this.postEffectEnableFrameGraphButton?.addEventListener("click", () => {
             this.switchPostEffectBackendToFrameGraph();
-        });
-
-        this.postEffectReloadFrameGraphButton?.addEventListener("click", () => {
-            this.reloadFrameGraphPostEffectsBackend();
         });
 
         this.postEffectAddPanel?.querySelectorAll<HTMLButtonElement>("[data-effect-add-post]").forEach((button) => {
@@ -5195,31 +5199,6 @@ export class UIController {
         window.setTimeout(() => {
             window.location.reload();
         }, 120);
-    }
-
-    private reloadFrameGraphPostEffectsBackend(): void {
-        if (this.getConfiguredPostEffectBackend() !== "frameGraph") {
-            this.showToast(t("effect.frameGraphPost.backendRequired"), "info");
-            return;
-        }
-
-        this.setPostEffectAddPanelOpen(false);
-        if (this.postEffectReloadFrameGraphButton) {
-            this.postEffectReloadFrameGraphButton.disabled = true;
-        }
-        try {
-            const reloaded = this.mmdManager.reloadFrameGraphPostEffectsBackend();
-            this.showToast(
-                t(reloaded
-                    ? "effect.frameGraphPost.reloaded"
-                    : "effect.frameGraphPost.reloadFailed"),
-                reloaded ? "success" : "error",
-            );
-        } catch {
-            this.showToast(t("effect.frameGraphPost.reloadFailed"), "error");
-        } finally {
-            this.refreshFrameGraphPostAddUi();
-        }
     }
 
     private applyFrameGraphPostEffectDefaultValues(effectId: FrameGraphPostAddEffectId): void {
@@ -5485,11 +5464,18 @@ export class UIController {
     private refreshFrameGraphPostAddUi(): void {
         const backend = this.getConfiguredPostEffectBackend();
         const frameGraphReady = backend === "frameGraph";
+        const masterButton = document.getElementById("btn-effect-toggle-framegraph") as HTMLButtonElement | null;
+        if (masterButton) {
+            const enabled = this.mmdManager.getFrameGraphPostEffectsEnabled();
+            masterButton.disabled = !frameGraphReady;
+            masterButton.setAttribute("aria-pressed", String(enabled));
+            masterButton.dataset.i18n = enabled ? "effect.frameGraphPost.masterOn" : "effect.frameGraphPost.masterOff";
+            masterButton.dataset.i18nTitle = enabled ? "effect.frameGraphPost.stopAll" : "effect.frameGraphPost.resumeAll";
+            masterButton.textContent = t(masterButton.dataset.i18n);
+            masterButton.title = t(masterButton.dataset.i18nTitle);
+        }
 
         this.postEffectEnableFrameGraphButton?.toggleAttribute("hidden", frameGraphReady);
-        if (this.postEffectReloadFrameGraphButton) {
-            this.postEffectReloadFrameGraphButton.disabled = !frameGraphReady;
-        }
         this.postEffectAddPanel?.querySelectorAll<HTMLButtonElement>("[data-effect-add-post]").forEach((button) => {
             const effectId = button.dataset.effectAddPost ?? "";
             const known = this.isFrameGraphPostAddEffectId(effectId);

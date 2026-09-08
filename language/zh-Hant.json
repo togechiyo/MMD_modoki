@@ -1,4 +1,8 @@
 ﻿{
+    "effect.frameGraphPost.masterOn": "整體開啟",
+    "effect.frameGraphPost.masterOff": "整體關閉",
+    "effect.frameGraphPost.stopAll": "停止全部 FrameGraph 效果以降低負載",
+    "effect.frameGraphPost.resumeAll": "依原設定恢復 FrameGraph 效果",
     "option.off":  "Off",
     "option.on":  "On",
     "toolbar.loadFile.label":  "讀取檔案",

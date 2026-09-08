@@ -1,4 +1,8 @@
 ﻿{
+    "effect.frameGraphPost.masterOn": "整体开启",
+    "effect.frameGraphPost.masterOff": "整体关闭",
+    "effect.frameGraphPost.stopAll": "停止全部 FrameGraph 效果以降低负载",
+    "effect.frameGraphPost.resumeAll": "按原设置恢复 FrameGraph 效果",
     "option.off":  "Off",
     "option.on":  "On",
     "toolbar.loadFile.label":  "读取文件",

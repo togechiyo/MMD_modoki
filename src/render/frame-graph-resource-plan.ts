@@ -41,6 +41,17 @@ export type FrameGraphResourcePlan = {
     };
 };
 
+// Toggle only recorded tasks. Texture connections and allocated formats stay fixed.
+export function canReuseFrameGraphForActivation(
+    allocated: FrameGraphResourcePlan,
+    requested: FrameGraphResourcePlan,
+    connectedEffects: readonly FrameGraphPostEffectId[],
+): boolean {
+    return requested.activeEffects.every(id => connectedEffects.includes(
+        id === "edgeBlur" ? "vignette" : id,
+    )) && requested.requirementKeys.every(key => allocated.requirementKeys.includes(key));
+}
+
 function addConsumer(
     consumersByKey: Map<FrameGraphSharedResourceKey, Set<FrameGraphPostEffectId>>,
     key: FrameGraphSharedResourceKey,

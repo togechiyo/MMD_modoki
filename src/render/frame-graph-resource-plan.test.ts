@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     buildFrameGraphResourcePlan,
+    canReuseFrameGraphForActivation,
     type FrameGraphResourcePlanSettings,
 } from "./frame-graph-resource-plan";
 
@@ -44,6 +45,21 @@ function createSettings(
 }
 
 describe("buildFrameGraphResourcePlan", () => {
+    it("reuses recorded passes for OFF and re-ON but requires missing tasks and resources", () => {
+        const on = buildFrameGraphResourcePlan(createSettings({ ssaoEnabled: true }));
+        const off = buildFrameGraphResourcePlan(createSettings());
+        expect(canReuseFrameGraphForActivation(on, off, ["ssao"])).toBe(true);
+        expect(canReuseFrameGraphForActivation(on, on, ["ssao"])).toBe(true);
+        expect(canReuseFrameGraphForActivation(off, on, ["ssao"])).toBe(false);
+        expect(canReuseFrameGraphForActivation(on, on, [])).toBe(false);
+        const ssr = buildFrameGraphResourcePlan(createSettings({ ssrEnabled: true }));
+        expect(canReuseFrameGraphForActivation(on, ssr, ["ssao", "ssr"])).toBe(false);
+    });
+
+    it("recognizes the shared vignette / edge blur pass", () => {
+        const plan = buildFrameGraphResourcePlan(createSettings({ edgeBlurStrength: 1 }));
+        expect(canReuseFrameGraphForActivation(plan, plan, ["vignette"])).toBe(true);
+    });
     it("keeps color-only effects on scene color without geometry resources", () => {
         const plan = buildFrameGraphResourcePlan(createSettings({
             luminousEnabled: true,

@@ -1,4 +1,8 @@
 ﻿{
+    "effect.frameGraphPost.masterOn": "All ON",
+    "effect.frameGraphPost.masterOff": "All OFF",
+    "effect.frameGraphPost.stopAll": "Stop all FrameGraph effects to reduce load",
+    "effect.frameGraphPost.resumeAll": "Resume FrameGraph effects with saved settings",
     "option.off":  "Off",
     "option.on":  "On",
     "toolbar.loadFile.label":  "Load File",

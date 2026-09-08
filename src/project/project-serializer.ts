@@ -262,6 +262,7 @@ type ProjectExportHost = {
     getPostEffectFogColor: () => { r: number; g: number; b: number };
     getRingParticleSettings?: () => ProjectRingParticleState;
     getFrameGraphPostEffectStackEntries?: () => FrameGraphPostEffectStackEntry[];
+    getFrameGraphPostEffectsEnabled?: () => boolean;
     getMmdRenderOrderMode?: () => MmdRenderOrderMode;
     getMmdCoplanarDepthBiasStrength?: () => number;
     isGroundVisible: () => boolean;
@@ -610,6 +611,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
                 colorC: { r: 1, g: 1, b: 1 },
             },
             frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.(),
+            frameGraphPostEnabled: host.getFrameGraphPostEffectsEnabled?.() ?? true,
             gammaEncodingVersion: 2,
         },
         accessories,

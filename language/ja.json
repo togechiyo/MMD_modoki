@@ -1,4 +1,8 @@
 ﻿{
+    "effect.frameGraphPost.masterOn": "全体ON",
+    "effect.frameGraphPost.masterOff": "全体OFF",
+    "effect.frameGraphPost.stopAll": "FrameGraphエフェクトをすべて停止して軽量化",
+    "effect.frameGraphPost.resumeAll": "FrameGraphエフェクトを元の設定で再開",
     "option.off":  "Off",
     "option.on":  "On",
     "toolbar.loadFile.label":  "ファイル読込",

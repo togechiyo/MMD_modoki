@@ -298,6 +298,12 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("saves the master bypass separately from individual effect settings", () => {
+        const enabled = exportProjectState(createHost());
+        const disabled = exportProjectState({ ...createHost(), getFrameGraphPostEffectsEnabled: () => false });
+        expect(enabled.effects.frameGraphPostEnabled).toBe(true);
+        expect(disabled.effects).toEqual({ ...enabled.effects, frameGraphPostEnabled: false });
+    });
     it("writes the DoF focus mode", () => {
         const project = exportProjectState(createHost());
 

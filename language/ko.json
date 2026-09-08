@@ -1,4 +1,8 @@
 ﻿{
+    "effect.frameGraphPost.masterOn": "전체 켜짐",
+    "effect.frameGraphPost.masterOff": "전체 꺼짐",
+    "effect.frameGraphPost.stopAll": "모든 FrameGraph 효과를 중지하여 부하 줄이기",
+    "effect.frameGraphPost.resumeAll": "기존 설정으로 FrameGraph 효과 재개",
     "option.off":  "Off",
     "option.on":  "On",
     "toolbar.loadFile.label":  "파일 열기",

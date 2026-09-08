@@ -2103,6 +2103,8 @@ ${beforeFogAppendBlock}
     private postEffectFogColorValue = new Color3(0.04, 0.04, 0.06);
     private frameGraphPostEffectStackIdsValue: FrameGraphPostEffectId[] = [];
     private frameGraphPostEffectStackEnabledValue = new Map<FrameGraphPostEffectId, boolean>();
+    private frameGraphPostEffectsBuildGeneration = 0;
+    private frameGraphPostEffectsEnabledValue = true;
     private frameGraphPostEffectStackInitializedValue = false;
     private antialiasEnabledValue = true;
     private postEffectFarDofStrengthValue = 0;
@@ -5401,7 +5403,11 @@ ${beforeFogAppendBlock}
         if (!this.waterSurfaceController) {
             this.waterSurfaceController = new WaterSurfaceController(this.scene, this.waterSurfaceSettingsValue);
         }
-        this.waterSurfaceController.setSettings(this.waterSurfaceSettingsValue);
+        this.waterSurfaceController.setSettings({
+            ...this.waterSurfaceSettingsValue,
+            enabled: this.waterSurfaceSettingsValue.enabled
+                && (this.postEffectBackend !== "frameGraph" || this.frameGraphPostEffectsEnabledValue),
+        });
         this.updateWaterSurfaceRenderList();
     }
 
@@ -10474,6 +10480,7 @@ ${beforeFogAppendBlock}
             }
         }, () => this.getFrameGraphPostEffectsSettings());
         this.frameGraphPostEffectsController = controller;
+        this.frameGraphPostEffectsBuildGeneration += 1;
 
         const settings = this.getFrameGraphPostEffectsSettings();
         const resourcePlan = buildFrameGraphResourcePlan(settings, this.getFrameGraphPostEffectRuntimeOrder());
@@ -10920,9 +10927,9 @@ ${beforeFogAppendBlock}
     }
 
     private shouldExecuteFrameGraphPostEffects(): boolean {
-        return this.getActiveFrameGraphPostEffectIds().length > 0
+        return this.frameGraphPostEffectsEnabledValue && (this.getActiveFrameGraphPostEffectIds().length > 0
             || this.isFrameGraphImageProcessingTaskNeeded()
-            || this.antialiasEnabledValue;
+            || this.antialiasEnabledValue);
     }
 
     private syncFrameGraphRenderTargetState(): void {
@@ -11168,7 +11175,11 @@ ${beforeFogAppendBlock}
         this.frameGraphPostEffectStackEnabledValue = enabledById;
         this.syncRingParticleEnabledFromFrameGraphStack();
         this.syncWaterSurfaceEnabledFromFrameGraphStack();
-        this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        if (idsChanged) {
+            this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        } else {
+            this.refreshFrameGraphPostEffectsBackendForStackStateChange();
+        }
     }
 
     public getFrameGraphPostEffectStackEntries(): FrameGraphPostEffectStackEntry[] {
@@ -11298,6 +11309,11 @@ ${beforeFogAppendBlock}
             return;
         }
         if (!this.shouldExecuteFrameGraphPostEffects()) {
+            if (!this.frameGraphPostEffectsEnabledValue && this.frameGraphPostEffectsController) {
+                this.frameGraphPostEffectsRebuildPending = true;
+                this.scheduleFrameGraphPostEffectsBackendRebuild();
+                return;
+            }
             this.frameGraphPostEffectsRebuildPending = false;
             this.syncFrameGraphRenderTargetState();
             this.syncExportRenderSurfaceTarget();
@@ -11321,13 +11337,38 @@ ${beforeFogAppendBlock}
         });
     }
 
+    public getFrameGraphPostEffectsBuildGeneration(): number {
+        return this.frameGraphPostEffectsBuildGeneration;
+    }
+
+    public getFrameGraphPostEffectsEnabled(): boolean {
+        return this.frameGraphPostEffectsEnabledValue;
+    }
+
+    public hasFrameGraphPostEffectsResources(): boolean {
+        return this.frameGraphPostEffectsController !== null
+            || this.frameGraphPostEffectsSceneColorTarget !== null
+            || this.frameGraphPostEffectsLuminousMaskTarget !== null
+            || (this.postEffectBackend === "frameGraph" && this.depthRenderer !== null);
+    }
+
+    public setFrameGraphPostEffectsEnabled(enabled: boolean): void {
+        if (this.frameGraphPostEffectsEnabledValue === enabled) return;
+        this.frameGraphPostEffectsEnabledValue = enabled;
+        this.syncRingParticleRuntimeSettings();
+        this.syncWaterSurfaceState();
+        if (this.postEffectBackend !== "frameGraph") return;
+        this.frameGraphPostEffectsRebuildPending = true;
+        this.scheduleFrameGraphPostEffectsBackendRebuild();
+    }
+
     private async runScheduledFrameGraphPostEffectsBackendRebuild(): Promise<void> {
         const resolveAction = (): ReturnType<typeof resolveFrameGraphBackendRebuildAction> => {
             const controller = this.frameGraphPostEffectsController;
             return resolveFrameGraphBackendRebuildAction({
                 pending: this.frameGraphPostEffectsRebuildPending,
-                backendActive: this.postEffectBackend === "frameGraph" && controller !== null,
-                controllerReady: controller?.isReady() === true,
+                backendActive: this.postEffectBackend === "frameGraph",
+                controllerReady: controller?.isReady() ?? true,
             });
         };
         let action = resolveAction();
@@ -11379,6 +11420,16 @@ ${beforeFogAppendBlock}
     }
 
     public refreshFrameGraphPostEffectsBackendForStackStateChange(): void {
+        if (this.postEffectBackend === "frameGraph"
+            && this.frameGraphPostEffectsEnabledValue
+            && !this.frameGraphPostEffectsRebuildPending
+            && this.frameGraphPostEffectsController?.canUpdateActivation()) {
+            // Only disabled passes change. Keep recorded texture dependencies,
+            // depth sources and shaders alive for an immediate re-enable.
+            this.syncFrameGraphRenderTargetState();
+            this.syncExportRenderSurfaceTarget();
+            return;
+        }
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
 
@@ -12030,9 +12081,16 @@ ${beforeFogAppendBlock}
     }
 
     setRingParticleSettings(settings: RingParticleSettingsInput): void {
-        this.ringParticleController?.setSettings(settings);
-        this.ringParticleSettingsValue = this.ringParticleController?.getSettings()
-            ?? normalizeRingParticleSettings(settings);
+        this.ringParticleSettingsValue = normalizeRingParticleSettings(settings);
+        this.syncRingParticleRuntimeSettings();
+    }
+
+    private syncRingParticleRuntimeSettings(): void {
+        this.ringParticleController?.setSettings({
+            ...this.ringParticleSettingsValue,
+            enabled: this.ringParticleSettingsValue.enabled
+                && (this.postEffectBackend !== "frameGraph" || this.frameGraphPostEffectsEnabledValue),
+        });
     }
 
     /** LuminousGlow threshold (0..1.5). */

@@ -443,6 +443,9 @@ async function initializeApp(): Promise<void> {
         seekTo: (frame) => mmdManager.seekTo(frame),
         getCameraKeyframePose: () => mmdManager.getCameraKeyframePose(),
         getFrameGraphPostEffectsState: () => ({
+          buildGeneration: mmdManager.getFrameGraphPostEffectsBuildGeneration(),
+          enabled: mmdManager.getFrameGraphPostEffectsEnabled(),
+          resourcesAllocated: mmdManager.hasFrameGraphPostEffectsResources(),
           backend: mmdManager.getPostEffectBackend(),
           ready: mmdManager.isPostEffectBackendReadyForCapture(),
           executedFrameCount: mmdManager.getFrameGraphPostEffectsExecutedFrameCount(),

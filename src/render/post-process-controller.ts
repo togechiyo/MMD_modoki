@@ -87,6 +87,7 @@ type PostProcessHost = {
     };
     dirLight: { position: Vector3 } | null;
     postEffectBackend: PostProcessBackend;
+    getFrameGraphPostEffectsEnabled?(): boolean;
     defaultRenderingPipeline: DefaultRenderingPipeline | null;
     lensRenderingPipeline: { dispose(doNotRebuild?: boolean): void } | null;
     ssrRenderingPipeline: SSRRenderingPipeline | null;
@@ -989,7 +990,9 @@ export function applyFogSettings(host: PostProcessHost): void {
 }
 
 export function setupOriginFogPostProcess(host: PostProcessHost): void {
-    if (host.originFogPostProcess || !host.depthRenderer) {
+    // FrameGraph owns fog and its depth lifetime. A classic camera pass would
+    // outlive the depth texture when the whole graph is stopped or rebuilt.
+    if (host.postEffectBackend === "frameGraph" || host.originFogPostProcess || !host.depthRenderer) {
         return;
     }
 
@@ -1381,6 +1384,7 @@ export function setupEditorDofPipeline(host: PostProcessHost): void {
 }
 
 export function isImageProcessingEffectsEnabled(host: PostProcessHost): boolean {
+    if (host.postEffectBackend === "frameGraph" && host.getFrameGraphPostEffectsEnabled?.() === false) return false;
     const epsilon = 1e-4;
     const useSceneVignette = host.postEffectBackend !== "frameGraph" && host.postEffectVignetteEnabledValue;
     return host.postEffectToneMappingEnabledValue

@@ -97,12 +97,13 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
         && state.stack.join(",") === "luminous,ssgi";
     });
 
-    const reloadFrameGraph = page.locator("#btn-effect-reload-framegraph");
-    await expect(reloadFrameGraph).toBeEnabled();
-    await expect(reloadFrameGraph).toHaveAttribute("title", "FrameGraphを再読み込み");
-    await reloadFrameGraph.click();
-
-    await expect(page.getByText("FrameGraphを再読み込みしました", { exact: true })).toBeVisible();
+    const masterFrameGraph = page.locator("#btn-effect-toggle-framegraph");
+    await expect(masterFrameGraph).toBeEnabled();
+    await masterFrameGraph.click();
+    await page.waitForFunction(() => !window.mmdModokiE2e.getFrameGraphPostEffectsState().resourcesAllocated);
+    await expect(masterFrameGraph).toHaveAttribute("aria-pressed", "false");
+    await masterFrameGraph.click();
+    await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     await expect(page.locator('[data-effect-stack-row="ssgi"]')).toBeVisible();
     await expect(page.locator('[data-effect-stack-row="luminous"]')).toBeVisible();
     await expect(page.locator('[data-effect-stack-value="luminousRadius"]')).toHaveText("65px");

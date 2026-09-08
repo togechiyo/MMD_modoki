@@ -351,6 +351,9 @@ declare global {
                 fov: number;
             };
             getFrameGraphPostEffectsState: () => {
+                buildGeneration: number;
+                enabled: boolean;
+                resourcesAllocated: boolean;
                 backend: string;
                 ready: boolean;
                 executedFrameCount: number;
@@ -754,6 +757,7 @@ export interface ProjectEffectState {
     fogColor?: ProjectRgbColor;
     ringParticles?: ProjectRingParticleState;
     frameGraphPostStack?: FrameGraphPostEffectStackEntry[];
+    frameGraphPostEnabled?: boolean;
     gammaEncodingVersion?: 2;
 }
 

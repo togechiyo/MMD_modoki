@@ -48,6 +48,7 @@ import {
 } from "../shared/frame-graph-post-effect-stack";
 import {
     buildFrameGraphResourcePlan,
+    canReuseFrameGraphForActivation,
     type FrameGraphResourcePlan,
     type FrameGraphSharedResourceKey,
 } from "./frame-graph-resource-plan";
@@ -1954,6 +1955,7 @@ export class FrameGraphPostEffectsController {
     private imageProcessingTask: FrameGraphImageProcessingTask | null = null;
     private geometryRendererTask: FrameGraphGeometryRendererTask | null = null;
     private resourcePlan: FrameGraphResourcePlan | null = null;
+    private allocatedResourcePlan: FrameGraphResourcePlan | null = null;
     private ssgiGatherTask: FrameGraphPostEffectsSsgiGatherTask | null = null;
     private readonly ssgiDenoiseTasks: FrameGraphPostEffectsSsgiDenoiseTask[] = [];
     private ssgiCompositeEffect: EffectWrapper | null = null;
@@ -2121,6 +2123,15 @@ export class FrameGraphPostEffectsController {
 
     isReady(): boolean {
         return this.ready;
+    }
+
+    canUpdateActivation(): boolean {
+        return this.active && this.ready && this.allocatedResourcePlan !== null
+            && canReuseFrameGraphForActivation(
+                this.allocatedResourcePlan,
+                buildFrameGraphResourcePlan(this.getSettings()),
+                this.connectedOrder,
+            );
     }
 
     private isEffectWrapperReady(effectWrapper: EffectWrapper | ThinBlurPostProcess | null): boolean {
@@ -2319,6 +2330,7 @@ export class FrameGraphPostEffectsController {
         const initialSettings = this.getSettings();
         const resourcePlan = buildFrameGraphResourcePlan(initialSettings, effectOrder);
         this.resourcePlan = resourcePlan;
+        this.allocatedResourcePlan = resourcePlan;
         this.updateLutTexture(scene, initialSettings);
         imageProcessingTask.sourceTexture = sourceTextureHandle;
         imageProcessingTask.disabled = !initialSettings.imageProcessingEnabled;
@@ -3374,6 +3386,9 @@ export class FrameGraphPostEffectsController {
         if (this.lutTask) {
             this.lutTask.disabled = !this.isLutEnabled(settings);
         }
+        if (this.gammaCorrectionTask) {
+            this.gammaCorrectionTask.disabled = !settings.gammaEnabled;
+        }
         if (this.sharpenTask) {
             this.sharpenTask.disabled = settings.sharpenEdge <= 0.0001;
             this.applySharpenSettings(this.sharpenTask, settings);
@@ -3626,6 +3641,7 @@ export class FrameGraphPostEffectsController {
         this.imageProcessingTask = null;
         this.geometryRendererTask = null;
         this.resourcePlan = null;
+        this.allocatedResourcePlan = null;
         this.ssgiGatherTask?.dispose();
         this.ssgiGatherTask = null;
         for (const denoiseTask of this.ssgiDenoiseTasks) {
@@ -3745,8 +3761,11 @@ export class FrameGraphPostEffectsController {
     }
 
     private updateLutTexture(scene: Scene, settings: FrameGraphPostEffectsSettings): void {
+        // Keep the uploaded atlas warm across a checkbox toggle. Source changes
+        // are checked when re-enabled; disposal still releases it with the graph.
+        if (!settings.lutEnabled) return;
         const textureKey = settings.lutTextureKey;
-        if (!settings.lutEnabled || !settings.lutRuntimeText || !textureKey) {
+        if (!settings.lutRuntimeText || !textureKey) {
             this.disposeLutTexture();
             return;
         }

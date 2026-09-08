@@ -182,10 +182,10 @@ describe("directional light intensity", () => {
         applyLightColorTemperature(typedHost);
         expect(host.dirLight.diffuse).toEqual(baseline);
 
-        // A saved PBR project overrides the default next-import mode.
+        // The project-wide mode is authoritative even if a stale entry differs.
         typedHost.sceneModels = [{ materialPipeline: "pbr-standard", mesh: { material: null, getChildMeshes: () => [] } }] as unknown as typeof typedHost.sceneModels;
         applyLightColorTemperature(typedHost);
-        expect(host.dirLight.diffuse.r).toBeCloseTo(2);
+        expect(host.dirLight.diffuse).toEqual(baseline);
     });
 });
 

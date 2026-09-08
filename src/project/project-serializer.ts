@@ -24,6 +24,7 @@ import {
     type SkydomeBackgroundStyle,
 } from "../shared/skydome-background-style";
 import { serializeCameraTrack, serializeModelAnimation } from "./project-codec";
+import { captureMaterialBank, type MaterialSettingsByMode } from "./material-mode-state";
 
 type ProjectExportAccessory = {
     index: number;
@@ -33,6 +34,7 @@ type ProjectExportAccessory = {
 };
 
 type ProjectExportSceneModel = {
+    materialSettingsByMode?: MaterialSettingsByMode;
     info: { instanceId: string; path: string };
     mesh: object;
     model: object;
@@ -41,6 +43,7 @@ type ProjectExportSceneModel = {
 };
 
 type ProjectExportHost = {
+    getMmdMaterialPipelinePreset?: () => MmdMaterialPipelinePreset;
     sceneModels: ProjectExportSceneModel[];
     activeModelInfo: { instanceId: string; path: string } | null;
     timelineTarget: TimelineTarget;
@@ -289,7 +292,10 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         path: entry.info.path,
         visible: host.getModelVisibility(entry.mesh),
         castsShadow: host.getModelCastsShadow(entry),
-        materialPipeline: entry.materialPipeline ?? "mmd-standard",
+        materialPipeline: host.getMmdMaterialPipelinePreset?.() ?? entry.materialPipeline ?? "mmd-standard",
+        materialSettingsByMode: captureMaterialBank(entry.materialSettingsByMode,
+            host.getMmdMaterialPipelinePreset?.() ?? entry.materialPipeline ?? "mmd-standard",
+            host.getSerializedMaterialShaderStates(entry)),
         renderOrder: entry.renderOrder ?? modelIndex,
         motionImports: (host.modelMotionImportsByModel.get(entry.model) ?? []).map((item) => ({ ...item })),
         materialShaders: host.getSerializedMaterialShaderStates(entry),
@@ -372,6 +378,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         version: 1,
         savedAt: new Date().toISOString(),
         scene: {
+            materialMode: host.getMmdMaterialPipelinePreset?.() ?? models[0]?.materialPipeline ?? "mmd-standard",
             models,
             renderOrderMode: host.getMmdRenderOrderMode?.() ?? "evaluated",
             coplanarMaterialDepthBiasStrength: host.getMmdCoplanarDepthBiasStrength?.() ?? 0,

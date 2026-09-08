@@ -345,6 +345,7 @@ describe("exportProjectState", () => {
                 mesh: {},
                 model,
                 materialPipeline: "pbr-standard" as const,
+                materialSettingsByMode: { "mmd-standard": { materials: [{ materialKey: "0:skin", presetId: "wgsl-soft-lit" }] } },
                 renderOrder: 3,
             }],
             activeModelInfo: { instanceId: "model-pbr", path: "C:/models/pbr.pmx" },
@@ -358,6 +359,8 @@ describe("exportProjectState", () => {
         });
 
         expect(project.scene.models[0]?.materialPipeline).toBe("pbr-standard");
+        expect(project.scene.materialMode).toBe("pbr-standard");
+        expect(project.scene.models[0]?.materialSettingsByMode?.["mmd-standard"]?.materials).toEqual([{ materialKey: "0:skin", presetId: "wgsl-soft-lit" }]);
         expect(project.scene.models[0]?.instanceId).toBe("model-pbr");
         expect(project.keyframes?.modelAnimations[0]?.modelInstanceId).toBe("model-pbr");
         expect(project.scene.activeModelInstanceId).toBe("model-pbr");

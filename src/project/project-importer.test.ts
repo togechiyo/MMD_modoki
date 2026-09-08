@@ -201,6 +201,30 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("keeps banks separate for duplicate legacy paths and applies the whole-project mode", async () => {
+        const host = { ...createHost(), setMmdMaterialPipelinePreset: vi.fn(value => value) };
+        host.loadPMX.mockImplementation(async (path: string) => {
+            const instanceId = `generated-${host.sceneModels.length}`;
+            host.sceneModels.push({ info: { instanceId, path }, mesh: {},
+                model: { createRuntimeAnimation: vi.fn(), setRuntimeAnimation: vi.fn() } });
+            return { name: path, instanceId };
+        });
+        const project = createProject();
+        project.scene.materialMode = "pbr-standard";
+        project.scene.models = ["pbr-skin", "pbr-no-shadow"].map(presetId => ({
+            path: "fixture.pmx", visible: true, motionImports: [], materialPipeline: "mmd-standard",
+            materialShaders: [{ materialKey: "0:body", presetId: "wgsl-full-light" }],
+            materialSettingsByMode: { "pbr-standard": { materials: [{ materialKey: "0:body", presetId }] } },
+        }));
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(host.setMmdMaterialPipelinePreset).toHaveBeenCalledWith("pbr-standard");
+        expect(host.loadPMX.mock.calls.map(call => call[1])).toEqual(["pbr-standard", "pbr-standard"]);
+        for (const [index, presetId] of ["pbr-skin", "pbr-no-shadow"].entries()) {
+            expect(host.applyImportedMaterialShaderStates).toHaveBeenCalledWith(index,
+                [{ materialKey: "0:body", presetId }], expect.any(Array), "fixture.pmx");
+        }
+        expect(host.sceneModels[0].materialSettingsByMode["mmd-standard"].materials[0].presetId).toBe("wgsl-full-light");
+    });
     it("restores master OFF and defaults old projects to ON", async () => {
         const setFrameGraphPostEffectsEnabled = vi.fn();
         const host = { ...createHost(), setFrameGraphPostEffectsEnabled } as unknown as Parameters<typeof importProjectState>[0];

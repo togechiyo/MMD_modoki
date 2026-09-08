@@ -6,7 +6,7 @@
     "option.off":  "Off",
     "menu.tools.experimentalSettings": "실험 설정…",
     "experiment.pbr": "PBR 모드",
-    "experiment.pbrNote": "현재 프로젝트를 다시 불러와 기존 모델도 전환합니다. 실행 취소 기록과 미등록 포즈 변경은 초기화됩니다. 전환 전에 키를 등록하세요.",
+    "experiment.pbrNote": "포즈, 모션, 물리 상태를 유지하며 프로젝트 전체의 재질을 전환합니다. 일반 및 PBR 재질 설정은 각각 저장됩니다. 첫 전환에는 시간이 걸릴 수 있습니다.",
     "experiment.switching": "재질 모드 전환 중…",
     "experiment.switchFailed": "재질 모드 전환 실패",
     "experiment.pbrDetails": "환경 조명 / IBL 그림자 상세",

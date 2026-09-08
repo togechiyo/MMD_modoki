@@ -9,7 +9,7 @@ import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { PBRMaterialBuilder } from "babylon-mmd/esm/Loader/pbrMaterialBuilder";
 import { MmdMaterialRenderMethod } from "babylon-mmd/esm/Loader/materialBuilderBase";
-import { MmdStandardMaterialProxy } from "babylon-mmd/esm/Runtime/mmdStandardMaterialProxy";
+import { SwitchableMaterialProxy } from "../runtime/switchable-material-proxy";
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
 import { logDebugIfEnabled, logError, logInfo, logWarn, toLogErrorData } from "../app-logger";
 import { ensureMaterialShaderDefaults } from "../scene/material-shader-service";
@@ -26,7 +26,6 @@ import {
     normalizeMmdRenderOrderMode,
     type MmdRenderOrderMode,
 } from "../shared/mmd-render-order";
-import { PbrMaterialProxy } from "../runtime/pbr-material-proxy";
 import { AdaptivePbrMaterialBuilder } from "./adaptive-pbr-material-builder";
 import { collectModelBoneInfo } from "./model-bone-metadata";
 import {
@@ -139,7 +138,7 @@ function getConstructorName(value: unknown): string | null {
 
 type SupportedMmdMaterialBuilder = MmdStandardMaterialBuilder | PBRMaterialBuilder;
 
-function ensureSharedMmdMaterialBuilder(
+export function ensureSharedMmdMaterialBuilder(
     fileName: string,
     materialPipeline: MmdMaterialPipelinePreset,
     renderOrderMode: MmdRenderOrderMode,
@@ -576,6 +575,7 @@ type ModelAssetHost = {
         contactShadowMesh: null;
         castShadow: boolean;
         materialPipeline: MmdMaterialPipelinePreset;
+        standardReceiveShadows?: Map<Mesh, boolean>;
         renderOrder: number;
         externalParent: {
             childBoneName: string;
@@ -1370,6 +1370,7 @@ export async function loadPMX(
         attachMaterialCompileDiagnostics(fileName, result.meshes as Mesh[]);
         let materialOrder = 0;
         const shadowCasterMeshes: Mesh[] = [];
+        const standardReceiveShadows = new Map<Mesh, boolean>();
         for (const mesh of result.meshes) {
             mesh.setEnabled(true);
             mesh.isVisible = true;
@@ -1384,6 +1385,7 @@ export async function loadPMX(
                 isPbrMaterialPipelinePreset(materialPipeline),
             );
             mesh.receiveShadows = shadowFlags.receivesShadow;
+            standardReceiveShadows.set(mesh as Mesh, host.resolvePmxShadowFlagsForMaterial(mesh.material, materialFlagMap, false).receivesShadow);
             if ((mesh.getTotalVertices?.() ?? 0) > 0 && shadowFlags.castsShadow) {
                 host.shadowGenerator.addShadowCaster(mesh, true);
                 shadowCasterMeshes.push(mesh as Mesh);
@@ -1416,9 +1418,7 @@ export async function loadPMX(
 
         reportModelLoadStage(host, "physics", fileName);
         const mmdModel = createMmdModelWithPhysicsDiagnostics(host, mmdMesh, {
-            materialProxyConstructor: isPbrMaterialPipelinePreset(materialPipeline)
-                ? PbrMaterialProxy
-                : MmdStandardMaterialProxy,
+            materialProxyConstructor: SwitchableMaterialProxy,
             buildPhysics: host.isPhysicsAvailable()
                 ? { disableOffsetForConstraintFrame: true }
                 : false,
@@ -1591,6 +1591,7 @@ export async function loadPMX(
             rigidBodies: sceneRigidBodies,
             joints: sceneJoints,
             shadowCasterMeshes,
+            standardReceiveShadows,
             contactShadowMesh: null,
             castShadow: true,
             materialPipeline,

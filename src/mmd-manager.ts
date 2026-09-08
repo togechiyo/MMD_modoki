@@ -139,6 +139,9 @@ import {
 } from "./assets/motion-asset-service";
 import { isDebugLogEnabled, logDebugIfEnabled, logInfo, logWarn, toLogErrorData } from "./app-logger";
 import { loadPMX as loadPMXImpl } from "./assets/model-asset-service";
+import { prepareModelMaterialSwitch, type PreparedMaterialSwitch } from "./assets/model-material-switch";
+import { SwitchableMaterialProxy } from "./runtime/switchable-material-proxy";
+import { captureMaterialBank, type MaterialSettingsByMode } from "./project/material-mode-state";
 import {
     convertPmxFileToBpmx as convertPmxFileToBpmxImpl,
     convertVmdBytesToBvmd as convertVmdBytesToBvmdImpl,
@@ -963,6 +966,8 @@ type SceneModelRigidBodyEntry = {
 type SceneModelJointEntry = PhysicsJointDiagnosticEntry;
 
 type SceneModelEntry = {
+    standardReceiveShadows?: Map<Mesh, boolean>;
+    materialSettingsByMode?: MaterialSettingsByMode;
     mesh: MmdMesh;
     renderMeshes: Mesh[];
     model: RuntimeModel;
@@ -3202,6 +3207,126 @@ ${beforeFogAppendBlock}
     public setExperimentalPbrEnabled(enabled: boolean): void {
         MmdManager.writeStringLocalStorage("mmd_modoki.experimentalPbr", String(enabled));
         this.setMmdMaterialPipelinePreset(enabled ? "pbr-standard" : "mmd-standard");
+    }
+
+    private materialModeSwitching = false;
+    public isMaterialModeSwitching(): boolean { return this.materialModeSwitching; }
+
+    private readonly materialModeRuntimeIds = new WeakMap<object, number>();
+    private materialModeRuntimeIdCounter = 0;
+    public getMaterialModeRuntimeState() {
+        const id = (object: object): number => {
+            let value = this.materialModeRuntimeIds.get(object);
+            if (value === undefined) {
+                value = ++this.materialModeRuntimeIdCounter;
+                this.materialModeRuntimeIds.set(object, value);
+            }
+            return value;
+        };
+        return {
+            frame: this._currentFrame,
+            playing: this._isPlaying,
+            models: this.sceneModels.map((entry, index) => ({
+                instanceId: entry.info.instanceId,
+                runtimeId: id(entry.model),
+                morphId: id(entry.model.morph),
+                meshId: entry.mesh.uniqueId,
+                worldMatrices: Array.from(entry.model.worldTransformMatrices),
+                morphs: Array.from(entry.model.morph.getMorphWeights()),
+                physics: PhysicsModelController.captureWebmPhysicsModelSnapshot(entry.model, index, entry.info.name),
+                materials: entry.materials.map(item => ({ key: item.key, alpha: Number(item.material.alpha) })),
+            })),
+        };
+    }
+
+    public async switchMaterialMode(enabled: boolean): Promise<void> {
+        if (this.materialModeSwitching) throw new Error("Material mode switch is already running");
+        const next = enabled ? "pbr-standard" : "mmd-standard";
+        const previous = this.getMmdMaterialPipelinePreset();
+        if (next === previous) return;
+        const previousEnvironmentLighting = this.isEnvironmentLightingEnabled();
+        this.materialModeSwitching = true;
+        const wasPlaying = this._isPlaying;
+        this.suspendSceneRendering();
+        this.mmdRuntime.pauseAnimation();
+        const prepared: PreparedMaterialSwitch[] = [];
+        const snapshots = this.sceneModels.map(entry => ({ entry, materials: entry.materials,
+            mode: entry.materialPipeline, banks: entry.materialSettingsByMode,
+            metadataMaterials: entry.mesh.metadata.materials,
+            receivers: entry.renderMeshes.map(mesh => mesh.receiveShadows),
+            nextBanks: captureMaterialBank(entry.materialSettingsByMode, entry.materialPipeline,
+                this.getSerializedMaterialShaderStates(entry)),
+            visibility: entry.materials.map(material => this.isMaterialVisible(material.material)),
+        }));
+        try {
+            for (const { entry, mode } of snapshots) {
+                prepared.push(await prepareModelMaterialSwitch(this.scene, entry.mesh, entry.info.path,
+                    mode, next, this.mmdRenderOrderModeValue,
+                    builder => this.configureMmdTextureLoaderForWebGpuForBuilder(builder)));
+            }
+            prepared.forEach(change => change.commit());
+            snapshots.forEach(({ entry, nextBanks, visibility, metadataMaterials }, index) => {
+                entry.materialPipeline = next;
+                entry.materials = entry.materials.map(item => ({ ...item,
+                    material: entry.mesh.metadata.materials[metadataMaterials.indexOf(item.material as unknown as Material)] as unknown as MmdManagerMaterialLike,
+                }));
+                entry.materialSettingsByMode = nextBanks;
+                const warnings: string[] = [];
+                // An empty bank means an explicit default, including when a
+                // cached material previously carried a non-default preset.
+                if (next === "pbr-standard") this.setPbrMaterialShaderPreset(index, null, "pbr-base");
+                else this.setWgslMaterialShaderPreset(index, null, "wgsl-mmd-standard");
+                this.applyImportedMaterialShaderStates(index, nextBanks[next]?.materials, warnings, entry.info.path);
+                if (warnings.length) throw new Error(warnings.join("\n"));
+                entry.mesh.metadata.materials.forEach(material => SwitchableMaterialProxy.rebase(material));
+                entry.materials.forEach((material, i) => this.setMaterialHiddenState(material.material, !visibility[i]));
+                for (const material of entry.materials) this.applyMmdMaterialCompatibilityFixes(material.material);
+                this.applyModelEdgeToMeshes(entry.renderMeshes);
+                this.applyCelShadingToMeshes(entry.renderMeshes);
+                this.applyAnisotropicFilteringToMeshes(entry.renderMeshes);
+                for (const mesh of entry.renderMeshes) mesh.receiveShadows = next === "pbr-standard"
+                    || (entry.standardReceiveShadows?.get(mesh) ?? mesh.receiveShadows);
+            });
+            this.setMmdMaterialPipelinePreset(next);
+            if (enabled) this.setEnvironmentLightingEnabled(true);
+            for (const { entry } of snapshots) {
+                for (const mesh of entry.renderMeshes) {
+                    if (!mesh.material || mesh.getTotalVertices() === 0) continue;
+                    await mesh.material.forceCompilationAsync(mesh);
+                }
+            }
+            this.syncLuminousGlowLayer();
+            syncSkinSssPrePassImpl(this as unknown as Parameters<typeof syncSkinSssPrePassImpl>[0]);
+            this.refreshMmdCoplanarMaterialDepthBiasCorrection();
+            this.refreshFrameGraphPostEffectsBackendForStackStateChange();
+            this.setExperimentalPbrEnabled(enabled);
+            this.onMaterialShaderStateChanged?.();
+        } catch (error) {
+            prepared.slice().reverse().forEach(change => change.rollback());
+            for (const snapshot of snapshots) {
+                snapshot.entry.materialPipeline = snapshot.mode;
+                snapshot.entry.materials = snapshot.materials;
+                snapshot.entry.materialSettingsByMode = snapshot.banks;
+                snapshot.entry.renderMeshes.forEach((mesh, i) => { mesh.receiveShadows = snapshot.receivers[i]; });
+            }
+            this.setMmdMaterialPipelinePreset(previous);
+            if (this.isEnvironmentLightingEnabled() !== previousEnvironmentLighting) {
+                this.setEnvironmentLightingEnabled(previousEnvironmentLighting);
+            }
+            this.syncLuminousGlowLayer();
+            this.refreshFrameGraphPostEffectsBackendForStackStateChange();
+            throw error;
+        } finally {
+            prepared.forEach(change => change.dispose());
+            this.materialModeSwitching = false;
+            this.resumeSceneRendering();
+            if (wasPlaying) {
+                const autoInitialize = this.mmdRuntime.autoPhysicsInitialization;
+                this.mmdRuntime.autoPhysicsInitialization = false;
+                try { await this.mmdRuntime.playAnimation(); }
+                finally { this.mmdRuntime.autoPhysicsInitialization = autoInitialize; }
+            }
+        }
     }
 
     public setMmdMaterialPipelinePreset(value: unknown): MmdMaterialPipelinePreset {
@@ -8897,6 +9022,7 @@ ${beforeFogAppendBlock}
         renderOrder: number = getNextMmdModelRenderOrder(this.sceneModels.map((entry) => entry.renderOrder)),
         instanceId?: string,
     ): Promise<ModelInfo | null> {
+        if (this.materialModeSwitching) throw new Error("Wait for the material mode switch before loading models");
         const result = await loadPMXImpl(
             this,
             filePath,
@@ -9833,6 +9959,7 @@ ${beforeFogAppendBlock}
         return maybeProject.format === "mmd_modoki_project" && maybeProject.version === 1;
     }
     public exportProjectState(): MmdModokiProjectFileV1 {
+        if (this.materialModeSwitching) throw new Error("Wait for the material mode switch before saving or exporting");
         return exportProjectStateImpl(this);
     }
 
@@ -9840,6 +9967,7 @@ ${beforeFogAppendBlock}
         data: unknown,
         options: { forExport?: boolean } = {},
     ): Promise<{ loadedModels: number; warnings: string[] }> {
+        if (this.materialModeSwitching) throw new Error("Wait for the material mode switch before loading a project");
         return importProjectStateImpl(this, data, options);
     }
 

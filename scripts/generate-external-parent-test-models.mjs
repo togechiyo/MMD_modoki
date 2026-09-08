@@ -449,7 +449,16 @@ function writePmx(model) {
         }
     }
 
-    writer.int32(0); // morphs
+    writer.int32(model.materialSwitchMorph ? 1 : 0);
+    if (model.materialSwitchMorph) {
+        writer.text("材質テスト"); writer.text("Material Test");
+        writer.uint8(4); writer.uint8(8); writer.int32(1);
+        writer.int8(0); writer.uint8(1); // first material, additive
+        writer.vector([0.1, 0, 0, -0.4]);
+        writer.vector([0, 0, 0]); writer.float32(0);
+        writer.vector([0, 0, 0]); writer.vector([0, 0, 0, 0]); writer.float32(0);
+        writer.vector([0, 0, 0, 0]); writer.vector([0, 0, 0, 0]); writer.vector([0, 0, 0, 0]);
+    }
     writer.int32(1); // display frames
     writer.text("Root");
     writer.text("Root");
@@ -577,6 +586,7 @@ async function main() {
         ["sss-no-toon.pmx", { ...createSssReferenceModel(), noToon: true }],
         ["plate.pmx", createPlateModel()],
         ["dynamic-follower.pmx", createDynamicFollowerModel()],
+        ["material-switch.pmx", { ...createDynamicFollowerModel(), materialSwitchMorph: true }],
         ["body-source.pmx", createBodyCorrectionModel(1, "Source")],
         ["body-target.pmx", createBodyCorrectionModel(2, "Target")],
     ];

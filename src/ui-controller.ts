@@ -2150,6 +2150,10 @@ export class UIController {
 
     private setupKeyboard(): void {
         document.addEventListener("keydown", (e) => {
+            if (this.mmdManager.isMaterialModeSwitching()) {
+                e.preventDefault();
+                return;
+            }
             if (e.key === "Escape" && this.layoutUiController?.isUiFullscreenModeActive()) {
                 e.preventDefault();
                 this.actionDispatcher.dispatch({ type: "layout.fullscreen.exit", source: "shortcut" });
@@ -3206,48 +3210,13 @@ export class UIController {
         this.showToast(summary, "info");
     }
 
-    private readonly experimentalMaterialStates = new Map<string, NonNullable<MmdModokiProjectFileV1["scene"]["models"][number]["materialShaders"]>>();
-
     private async switchExperimentalPbr(enabled: boolean): Promise<void> {
-        const previous = this.mmdManager.isExperimentalPbrEnabled();
-        const project = this.buildProjectStateForPersistence();
-        const next = structuredClone(project);
-        const externalLut = this.lutPanelController?.getRuntimeReloadExternalAsset();
-        const pipeline = enabled ? "pbr-standard" : "mmd-standard";
-        for (const model of next.scene.models) {
-            const key = model.instanceId ?? model.path;
-            const oldMode = model.materialPipeline ?? "mmd-standard";
-            this.experimentalMaterialStates.set(`${key}:${oldMode}`, model.materialShaders ?? []);
-            model.materialPipeline = pipeline;
-            model.materialShaders = this.experimentalMaterialStates.get(`${key}:${pipeline}`) ?? [];
-        }
-        if (!next.scene.models.length) {
-            this.mmdManager.setExperimentalPbrEnabled(enabled);
-            return;
-        }
-        // Check model sources before touching the live project. Runtime/material
-        // proxies differ between modes, so keep the existing project import path.
-        for (const model of next.scene.models) {
-            if (!await window.electronAPI.getFileInfo(model.path)) throw new Error("Model source unavailable");
-        }
         this.setStatus(t("experiment.switching"), true);
         try {
-            this.mmdManager.setExperimentalPbrEnabled(enabled);
-            const result = await this.mmdManager.importProjectState(next);
-            if (result.loadedModels !== next.scene.models.length) throw new Error("Material mode reload failed");
-            this.commandHistory.clear("material-mode-switch");
-            this.refreshUiAfterProjectImport(next.lighting);
-            if (result.warnings.length) this.showToast(result.warnings.join("\n"), "info");
-        } catch (error) {
-            this.mmdManager.setExperimentalPbrEnabled(previous);
-            const restored = await this.mmdManager.importProjectState(project);
-            this.commandHistory.clear("material-mode-rollback");
-            this.refreshUiAfterProjectImport(project.lighting);
-            if (restored.warnings.length) this.showToast(restored.warnings.join("\n"), "error");
-            throw error;
+            await this.mmdManager.switchMaterialMode(enabled);
+            this.shaderPanelController?.refresh();
+            this.sceneEnvironmentUiController?.refresh();
         } finally {
-            this.lutPanelController?.restoreProjectExternalAsset(externalLut?.path ?? null, externalLut?.text ?? null);
-            this.mmdManager.setExternalWgslToonShader(this.postFxWgslToonPath, this.postFxWgslToonText);
             this.setStatus("", false);
         }
     }

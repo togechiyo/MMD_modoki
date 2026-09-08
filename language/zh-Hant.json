@@ -6,7 +6,7 @@
     "option.off":  "Off",
     "menu.tools.experimentalSettings": "實驗設定…",
     "experiment.pbr": "PBR模式",
-    "experiment.pbrNote": "透過內部重新載入切換已載入模型。復原記錄與未登錄的姿勢修改會重設，請先登錄關鍵影格。",
+    "experiment.pbrNote": "切換整個專案的材質，同時保留姿勢、動作與物理狀態。一般與PBR材質設定分別儲存。首次切換可能需要一些時間。",
     "experiment.switching": "正在切換材質模式…",
     "experiment.switchFailed": "材質模式切換失敗",
     "experiment.pbrDetails": "環境光 / IBL陰影詳細設定",

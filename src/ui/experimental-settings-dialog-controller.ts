@@ -16,8 +16,7 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         pbr.type = "checkbox";
         pbr.className = "popup-form-checkbox";
         const isPbr = (): boolean => {
-            const model = this.deps.mmdManager.getWgslModelShaderStates()[0];
-            return model ? model.materialPipeline === "pbr-standard" : this.deps.mmdManager.isExperimentalPbrEnabled();
+            return this.deps.mmdManager.getMmdMaterialPipelinePreset() === "pbr-standard";
         };
         pbr.checked = isPbr();
         form.append(createPopupFormField(t("experiment.pbr"), pbr));
@@ -30,7 +29,8 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         const summary = document.createElement("h3");
         summary.textContent = t("experiment.pbrDetails");
         details.append(summary);
-        new HdriSettingsDialogController(this.deps).mount(details);
+        const hdri = new HdriSettingsDialogController(this.deps);
+        hdri.mount(details);
         const ibl = document.createElement("p");
         ibl.className = "popup-form-note";
         ibl.textContent = t("experiment.iblUnavailable");
@@ -50,6 +50,7 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
                 pbr.disabled = false;
                 details.inert = false;
                 pbr.checked = isPbr();
+                hdri.refresh();
                 this.deps.refreshUi();
             });
         });

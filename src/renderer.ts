@@ -357,6 +357,7 @@ async function initializeApp(): Promise<void> {
         getAccessoryTransform: (index) => mmdManager.getAccessoryTransform(index),
         getAccessoryTransformKeyframe: (index, frame) => mmdManager.readAccessoryTransformKeyframeValue(index, frame),
         getCommandHistoryState: () => uiController.getCommandHistoryStateForE2e(),
+        getMaterialModeRuntimeState: () => mmdManager.getMaterialModeRuntimeState(),
         nudgeTimelineSelection: (deltaFrames) => uiController.nudgeTimelineSelectionForE2e(deltaFrames),
         getShadowRuntimeDiagnostics: () => ({
           ...mmdManager.getShadowRuntimeDiagnostics(),
@@ -427,6 +428,7 @@ async function initializeApp(): Promise<void> {
         getCameraTarget: () => mmdManager.getCameraTarget(),
         getCameraPosition: () => mmdManager.getCameraPosition(),
         getAutoRenderEnabled: () => mmdManager.isAutoRenderEnabled(),
+        setAutoRenderEnabled: (enabled) => mmdManager.setAutoRenderEnabled(enabled),
         setFullyDampedPhysicsCompatibilityCorrection: (enabled, gravityAmount) => {
           mmdManager.setFullyDampedRigidBodyGravityCorrectionAmount(gravityAmount);
           return mmdManager.setFullyDampedRigidBodyCorrectionEnabled(enabled);

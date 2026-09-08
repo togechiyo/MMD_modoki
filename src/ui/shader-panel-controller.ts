@@ -190,7 +190,7 @@ export class ShaderPanelController {
         const isPbrModel = selectedModel?.materialPipeline === "pbr-standard";
         elements.modelSelect.value = selectedTargetValue;
         elements.modelSelect.disabled = false;
-        if (isPbrModel && !PBR_MATERIAL_UI_ENABLED && !this.mmdManager.isExperimentalPbrEnabled()) {
+        if (isPbrModel && !PBR_MATERIAL_UI_ENABLED && this.mmdManager.getMmdMaterialPipelinePreset() !== "pbr-standard") {
             elements.presetSelect.innerHTML = '<option value="">-</option>';
             elements.presetSelect.disabled = true;
             elements.applySelectedButton.disabled = true;

@@ -800,7 +800,7 @@ export function applyLightColorTemperature(host: LightShadowHost): void {
     const color = kelvinToColor(host.lightColorTemperatureKelvin);
     // One lighting mode per scene. Loaded project mode takes precedence over
     // the next-import preference; mixed material pipelines are not handled here.
-    const pipeline = host.sceneModels[0]?.materialPipeline ?? host.getMmdMaterialPipelinePreset?.();
+    const pipeline = host.getMmdMaterialPipelinePreset?.() ?? host.sceneModels[0]?.materialPipeline;
     const maximum = pipeline === "pbr-standard" ? 2 : 1;
     const lightScale = new Color3(
         Math.min(maximum, clampLightColorScale(host.lightColorScaleValue.r)),

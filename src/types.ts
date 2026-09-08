@@ -250,6 +250,7 @@ declare global {
             getAccessoryTransform: (index: number) => ProjectAccessoryState["transform"] | null;
             getAccessoryTransformKeyframe: (index: number, frame: number) => ProjectAccessoryState["transform"] | null;
             getCommandHistoryState: () => { undoCount: number; redoCount: number };
+            getMaterialModeRuntimeState: () => unknown;
             nudgeTimelineSelection: (deltaFrames: -1 | 1) => void;
             getShadowRuntimeDiagnostics: () => {
                 requestedMode: "cascaded" | "standard";
@@ -333,6 +334,7 @@ declare global {
             getCameraTarget: () => { x: number; y: number; z: number };
             getCameraPosition: () => { x: number; y: number; z: number };
             getAutoRenderEnabled: () => boolean;
+            setAutoRenderEnabled: (enabled: boolean) => void;
             setFullyDampedPhysicsCompatibilityCorrection: (
                 enabled: boolean,
                 gravityAmount: number,
@@ -529,6 +531,7 @@ export interface ProjectModelMaterialShaderState {
 }
 
 export interface ProjectModelState {
+    materialSettingsByMode?: import("./project/material-mode-state").MaterialSettingsByMode;
     instanceId?: string;
     path: string;
     visible: boolean;
@@ -932,6 +935,7 @@ export interface MmdModokiProjectFileV1 {
     version: 1;
     savedAt: string;
     scene: {
+        materialMode?: MmdMaterialPipelinePreset;
         models: ProjectModelState[];
         renderOrderMode?: MmdRenderOrderMode;
         coplanarMaterialDepthBiasStrength?: number;

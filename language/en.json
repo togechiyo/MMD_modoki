@@ -6,7 +6,7 @@
     "option.off":  "Off",
     "menu.tools.experimentalSettings": "Experimental settings…",
     "experiment.pbr": "PBR mode",
-    "experiment.pbrNote": "Also switches loaded models by reloading the current project. Undo history and unregistered pose changes are reset. Register pose keys before switching.",
+    "experiment.pbrNote": "Switches materials across the project while preserving poses, motion and physics. MMD and PBR material settings are saved separately. The first switch may take some time.",
     "experiment.switching": "Switching material mode…",
     "experiment.switchFailed": "Material mode switch failed",
     "experiment.pbrDetails": "Environment lighting / IBL shadow details",

@@ -6,7 +6,7 @@
     "option.off":  "Off",
     "menu.tools.experimentalSettings": "実験設定…",
     "experiment.pbr": "PBRモード",
-    "experiment.pbrNote": "読込済みモデルも切り替えます。内部再読込のため少し時間がかかり、Undo履歴と未登録のポーズ変更はリセットされます。キー登録後に切り替えてください。",
+    "experiment.pbrNote": "プロジェクト全体の材質を切り替えます。ポーズ・モーション・物理状態を維持し、通常用とPBR用の材質設定をそれぞれ保存します。初回の切替には時間がかかる場合があります。",
     "experiment.switching": "材質モードを切り替えています…",
     "experiment.switchFailed": "材質モードの切替に失敗しました",
     "experiment.pbrDetails": "環境ライト・IBL影の詳細",

@@ -24,6 +24,9 @@ function getBaseName(filePath: string): string {
 }
 
 export class HdriSettingsDialogController implements PopupContentController {
+    private refreshState: (() => void) | null = null;
+
+    public refresh(): void { this.refreshState?.(); }
     private readonly mmdManager: MmdManager;
     private readonly setStatus: (text: string, loading?: boolean) => void;
     private readonly showToast: (message: string, type?: ToastType) => void;
@@ -120,6 +123,14 @@ export class HdriSettingsDialogController implements PopupContentController {
             backgroundVisible.checked = this.mmdManager.isEnvironmentBackgroundVisible();
             backgroundIntensity.disabled = !this.mmdManager.canShowEnvironmentBackground()
                 || !backgroundVisible.checked;
+        };
+
+        this.refreshState = () => {
+            refreshSource();
+            lightingEnabled.checked = this.mmdManager.isEnvironmentLightingEnabled();
+            intensity.disabled = !lightingEnabled.checked;
+            intensity.value = String(Math.round(this.mmdManager.getEnvironmentLightingIntensity() * 100));
+            intensityValue.textContent = this.mmdManager.getEnvironmentLightingIntensity().toFixed(2);
         };
 
         backgroundVisible.addEventListener("change", () => {

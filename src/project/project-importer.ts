@@ -26,7 +26,6 @@ import {
     type SkydomeBackgroundStyle,
 } from "../shared/skydome-background-style";
 import {
-    normalizeMmdMaterialPipelinePreset,
     type MmdMaterialPipelinePreset,
     type PbrMaterialShaderPreset,
 } from "../shared/mmd-material-pipeline";
@@ -40,6 +39,7 @@ import {
     type BackgroundDisplayMode,
 } from "../shared/background-display-mode";
 import { normalizeModelInstanceId } from "../shared/model-instance-id";
+import { migrateMaterialBanks, resolveProjectMaterialMode, type MaterialSettingsByMode } from "./material-mode-state";
 import {
     normalizeWaterSurfaceSettings,
     type WaterSurfaceSettings,
@@ -51,12 +51,14 @@ type ProjectImportRuntimeModel = {
 };
 
 type ProjectImportSceneModel = {
+    materialSettingsByMode?: MaterialSettingsByMode;
     info: { instanceId: string; path: string };
     mesh: object;
     model: ProjectImportRuntimeModel;
 };
 
 type ProjectImportHost = {
+    setMmdMaterialPipelinePreset?: (value: MmdMaterialPipelinePreset) => MmdMaterialPipelinePreset;
     sceneModels: ProjectImportSceneModel[];
     modelSourceAnimationsByModel: WeakMap<ProjectImportRuntimeModel, object>;
     modelKeyframeTracksByModel: WeakMap<ProjectImportRuntimeModel, Map<string, Uint32Array>>;
@@ -352,6 +354,7 @@ function finalizeImportedRenderState(
     host: ProjectImportHost,
     data: MmdModokiProjectFileV1,
     warnings: string[],
+    modelIndices: Map<object, number>,
 ): void {
     const lightDirectionX = readLightingDirectionComponent(data.lighting, "x");
     const lightDirectionY = readLightingDirectionComponent(data.lighting, "y");
@@ -362,7 +365,10 @@ function finalizeImportedRenderState(
         if (legacyPbrPreset === "pbr-mmd-like") {
             host.setPbrMaterialShaderPreset?.(modelIndex, null, "pbr-mmd-like");
         }
-        host.applyImportedMaterialShaderStates(modelIndex, modelState.materialShaders, warnings, modelState.path);
+        const actualIndex = modelIndices.get(modelState);
+        if (actualIndex !== undefined) host.applyImportedMaterialShaderStates(actualIndex,
+            migrateMaterialBanks(modelState)[resolveProjectMaterialMode(data.scene)]?.materials,
+            warnings, modelState.path);
     }
 
     if (
@@ -411,6 +417,12 @@ export async function importProjectState(
     }
 
     const warnings: string[] = [];
+    const projectMaterialMode = resolveProjectMaterialMode(data.scene);
+    if (!data.scene.materialMode && data.scene.models.some(model =>
+        (model.materialPipeline ?? "mmd-standard") !== projectMaterialMode)) {
+        warnings.push("Legacy mixed material modes were unified to MMD; original assignments remain in material banks.");
+    }
+    host.setMmdMaterialPipelinePreset?.(projectMaterialMode);
     const isExportImport = options.forExport === true;
     const lightDirectionX = readLightingDirectionComponent(data.lighting, "x");
     const lightDirectionY = readLightingDirectionComponent(data.lighting, "y");
@@ -440,9 +452,10 @@ export async function importProjectState(
         legacyEmbeddedModelAnimationsByPath.set(normalizedPath, animations);
     }
     const legacyAnimationOffsetsByPath = new Map<string, number>();
+    const modelIndices = new Map<object, number>();
 
     for (const modelState of data.scene.models) {
-        const materialPipeline = normalizeMmdMaterialPipelinePreset(modelState.materialPipeline);
+        const materialPipeline = projectMaterialMode;
         const requestedInstanceId = normalizeModelInstanceId(modelState.instanceId) ?? undefined;
         const modelInfo = typeof modelState.renderOrder === "number"
             ? requestedInstanceId
@@ -478,6 +491,8 @@ export async function importProjectState(
         );
 
         const targetModel = targetEntry.model;
+        modelIndices.set(modelState, modelIndex);
+        targetEntry.materialSettingsByMode = migrateMaterialBanks(modelState);
 
         let restoredEmbeddedAnimation = false;
         const actualInstanceId = normalizeModelInstanceId(targetEntry.info.instanceId);
@@ -1505,7 +1520,7 @@ export async function importProjectState(
     host.seekTo(Math.max(0, Math.floor(data.scene.currentFrame ?? 0)));
     host.setPlaybackSpeed(Math.max(0.01, data.scene.playbackSpeed));
     host.setTimelineTarget(data.scene.timelineTarget === "camera" ? "camera" : "model");
-    finalizeImportedRenderState(host, data, warnings);
+    finalizeImportedRenderState(host, data, warnings, modelIndices);
 
     return { loadedModels, warnings };
 }

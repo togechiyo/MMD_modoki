@@ -31,17 +31,22 @@ test("experimental settings persist PBR imports and expose environment and log o
     const dialog = page.locator('[data-popup-id="experimental-settings"]');
     const pbr = dialog.getByLabel("PBRモード", { exact: true });
     await expect(pbr).not.toBeChecked();
+    const checks = dialog.locator('[data-experimental-lighting] input[type="checkbox"]');
+    const ranges = dialog.locator('[data-experimental-lighting] input[type="range"]');
+    await checks.nth(1).check();
+    await ranges.nth(1).fill("150");
+    await ranges.nth(1).dispatchEvent("input");
+    await checks.nth(1).uncheck();
     await pbr.check();
     await expect(pbr).toBeEnabled();
     expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).scene.models[0].materialPipeline).toBe("pbr-standard");
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().keyframes)).toEqual(keys);
     await expect(dialog).toContainText("IBL影：既知のWebGPU");
-    const checks = dialog.locator('[data-experimental-lighting] input[type="checkbox"]');
-    await checks.nth(1).check();
-    const ranges = dialog.locator('[data-experimental-lighting] input[type="range"]');
-    await ranges.nth(1).fill("150");
-    await ranges.nth(1).dispatchEvent("input");
+    await expect(checks.nth(1)).toBeChecked();
+    await expect(ranges.nth(1)).toBeEnabled();
+    await expect(ranges.nth(1)).toHaveValue("150");
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    expect(saved.lighting.environmentLightingEnabled).toBe(true);
     expect(saved.lighting.environmentLightingIntensity).toBe(1.5);
 
     const logInfo = await page.evaluate(() => window.electronAPI.getLogFileInfo());
@@ -65,6 +70,7 @@ test("experimental settings persist PBR imports and expose environment and log o
     await pbr.uncheck();
     await expect(pbr).toBeEnabled();
     expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).scene.models[0].materialPipeline).toBe("mmd-standard");
+    await expect(checks.nth(1)).toBeChecked();
     await dialog.locator(".app-menu-dialog-close").click();
     await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), saved);
     await open();
@@ -72,7 +78,7 @@ test("experimental settings persist PBR imports and expose environment and log o
     await expect(ranges.nth(1)).toHaveValue("150");
     await dialog.locator(".app-menu-dialog-close").click();
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
-    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).scene.models.at(-1).materialPipeline).toBe("mmd-standard");
+    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).scene.models.at(-1).materialPipeline).toBe("pbr-standard");
     for (const locale of ["en", "ko", "zh-Hans", "zh-Hant", "ja"]) {
       await page.evaluate(locale => window.mmdI18n.setLocale(locale), locale);
       await open();

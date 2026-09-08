@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, screen, session, shell, type IpcMainEvent } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, session, shell, type IpcMainEvent } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1109,6 +1109,28 @@ ipcMain.handle('log:getFileInfo', async (): Promise<AppLogFileInfo> => {
     isDev,
     maxSizeBytes: log.transports.file.maxSize,
   };
+});
+
+ipcMain.handle('log:openCurrent', async (): Promise<boolean> => {
+  try {
+    const result = await shell.openPath(log.transports.file.getFile().path);
+    if (result) writeAppLog('warn', 'ipc', 'failed to open current log', { message: result });
+    return result === '';
+  } catch (err: unknown) {
+    writeAppLog('error', 'ipc', 'failed to open current log', createLogErrorData(err));
+    return false;
+  }
+});
+
+ipcMain.handle('log:copyCurrent', async (): Promise<boolean> => {
+  try {
+    const content = await fs.promises.readFile(log.transports.file.getFile().path, 'utf8');
+    clipboard.writeText(content);
+    return true;
+  } catch (err: unknown) {
+    writeAppLog('error', 'ipc', 'failed to copy current log', createLogErrorData(err));
+    return false;
+  }
 });
 
 ipcMain.handle('log:openFolder', async (): Promise<boolean> => {

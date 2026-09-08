@@ -88,6 +88,8 @@ export interface ElectronAPI {
     reportSmokeRendererFailure: (payload: SmokeRendererFailurePayload) => void;
     getLogFileInfo: () => Promise<AppLogFileInfo>;
     openLogFolder: () => Promise<boolean>;
+    openCurrentLog: () => Promise<boolean>;
+    copyCurrentLog: () => Promise<boolean>;
 }
 
 export type UiLocale = "ja" | "en" | "zh-Hant" | "zh-Hans" | "ko";

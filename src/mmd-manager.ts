@@ -3194,6 +3194,16 @@ ${beforeFogAppendBlock}
         return this.mmdMaterialPipelinePresetValue;
     }
 
+    public isExperimentalPbrEnabled(): boolean {
+        try { return globalThis.localStorage?.getItem("mmd_modoki.experimentalPbr") === "true"; }
+        catch { return false; }
+    }
+
+    public setExperimentalPbrEnabled(enabled: boolean): void {
+        MmdManager.writeStringLocalStorage("mmd_modoki.experimentalPbr", String(enabled));
+        this.setMmdMaterialPipelinePreset(enabled ? "pbr-standard" : "mmd-standard");
+    }
+
     public setMmdMaterialPipelinePreset(value: unknown): MmdMaterialPipelinePreset {
         const next = normalizeMmdMaterialPipelinePreset(value);
         this.mmdMaterialPipelinePresetValue = next;
@@ -7111,6 +7121,7 @@ ${beforeFogAppendBlock}
         try {
             return resolveNextImportMaterialPipelinePreset(
                 globalThis.localStorage?.getItem(MmdManager.MMD_MATERIAL_PIPELINE_STORAGE_KEY),
+                globalThis.localStorage?.getItem("mmd_modoki.experimentalPbr") === "true",
             );
         } catch {
             return DEFAULT_MMD_MATERIAL_PIPELINE_PRESET;

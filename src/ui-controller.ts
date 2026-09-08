@@ -745,6 +745,7 @@ export class UIController {
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
         this.appMenuController = new AppMenuController({
+            switchExperimentalPbr: enabled => this.switchExperimentalPbr(enabled),
             mmdManager: this.mmdManager,
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
             setStatus: (text, loading) => this.setStatus(text, loading ?? false),
@@ -3203,6 +3204,52 @@ export class UIController {
             return;
         }
         this.showToast(summary, "info");
+    }
+
+    private readonly experimentalMaterialStates = new Map<string, NonNullable<MmdModokiProjectFileV1["scene"]["models"][number]["materialShaders"]>>();
+
+    private async switchExperimentalPbr(enabled: boolean): Promise<void> {
+        const previous = this.mmdManager.isExperimentalPbrEnabled();
+        const project = this.buildProjectStateForPersistence();
+        const next = structuredClone(project);
+        const externalLut = this.lutPanelController?.getRuntimeReloadExternalAsset();
+        const pipeline = enabled ? "pbr-standard" : "mmd-standard";
+        for (const model of next.scene.models) {
+            const key = model.instanceId ?? model.path;
+            const oldMode = model.materialPipeline ?? "mmd-standard";
+            this.experimentalMaterialStates.set(`${key}:${oldMode}`, model.materialShaders ?? []);
+            model.materialPipeline = pipeline;
+            model.materialShaders = this.experimentalMaterialStates.get(`${key}:${pipeline}`) ?? [];
+        }
+        if (!next.scene.models.length) {
+            this.mmdManager.setExperimentalPbrEnabled(enabled);
+            return;
+        }
+        // Check model sources before touching the live project. Runtime/material
+        // proxies differ between modes, so keep the existing project import path.
+        for (const model of next.scene.models) {
+            if (!await window.electronAPI.getFileInfo(model.path)) throw new Error("Model source unavailable");
+        }
+        this.setStatus(t("experiment.switching"), true);
+        try {
+            this.mmdManager.setExperimentalPbrEnabled(enabled);
+            const result = await this.mmdManager.importProjectState(next);
+            if (result.loadedModels !== next.scene.models.length) throw new Error("Material mode reload failed");
+            this.commandHistory.clear("material-mode-switch");
+            this.refreshUiAfterProjectImport(next.lighting);
+            if (result.warnings.length) this.showToast(result.warnings.join("\n"), "info");
+        } catch (error) {
+            this.mmdManager.setExperimentalPbrEnabled(previous);
+            const restored = await this.mmdManager.importProjectState(project);
+            this.commandHistory.clear("material-mode-rollback");
+            this.refreshUiAfterProjectImport(project.lighting);
+            if (restored.warnings.length) this.showToast(restored.warnings.join("\n"), "error");
+            throw error;
+        } finally {
+            this.lutPanelController?.restoreProjectExternalAsset(externalLut?.path ?? null, externalLut?.text ?? null);
+            this.mmdManager.setExternalWgslToonShader(this.postFxWgslToonPath, this.postFxWgslToonText);
+            this.setStatus("", false);
+        }
     }
 
     private buildProjectDefaultFileName(): string {

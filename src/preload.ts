@@ -177,4 +177,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('log:getFileInfo'),
     openLogFolder: () =>
         ipcRenderer.invoke('log:openFolder'),
+    openCurrentLog: () => ipcRenderer.invoke('log:openCurrent'),
+    copyCurrentLog: () => ipcRenderer.invoke('log:copyCurrent'),
 } as ElectronAPI);

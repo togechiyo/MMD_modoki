@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { ExperimentalSettingsDialogController } from "./experimental-settings-dialog-controller";
 import type { MmdManager } from "../mmd-manager";
 import type { AutoKeyScope, EditorAction } from "../actions/types";
 import { BackgroundSettingsDialogController } from "./background-settings-dialog-controller";
@@ -33,6 +34,7 @@ import type { TrackCategory } from "../types";
 type ToastType = "success" | "error" | "info";
 
 type AppMenuControllerDeps = {
+    switchExperimentalPbr: (enabled: boolean) => Promise<void>;
     mmdManager: MmdManager;
     dispatchAction: (action: EditorAction) => boolean;
     setStatus: (text: string, loading?: boolean) => void;
@@ -74,6 +76,7 @@ function resolveElements(): AppMenuElements {
 }
 
 export class AppMenuController {
+    private readonly switchExperimentalPbr: (enabled: boolean) => Promise<void>;
     private readonly elements: AppMenuElements;
     private readonly mmdManager: MmdManager;
     private readonly dispatchAction: (action: EditorAction) => boolean;
@@ -96,6 +99,7 @@ export class AppMenuController {
     private openGroup: HTMLElement | null = null;
 
     constructor(deps: AppMenuControllerDeps) {
+        this.switchExperimentalPbr = deps.switchExperimentalPbr;
         this.elements = resolveElements();
         this.mmdManager = deps.mmdManager;
         this.dispatchAction = deps.dispatchAction;
@@ -648,6 +652,19 @@ export class AppMenuController {
                 return;
             case "tools.mmdOptimizedFormat":
                 this.openMmdOptimizedFormatDialog(invoker ?? null);
+                return;
+            case "tools.experimentalSettings":
+                this.popupDialogController.open({
+                    id: "experimental-settings", surface: "modal", size: "md",
+                    title: t("menu.tools.experimentalSettings"), restoreFocusTo: invoker ?? null,
+                    content: new ExperimentalSettingsDialogController({
+                        switchPbr: this.switchExperimentalPbr,
+                        mmdManager: this.mmdManager,
+                        setStatus: this.setStatus,
+                        showToast: this.showToast,
+                        refreshUi: () => { this.refreshMaterialUi(); this.refreshEnvironmentUi(); },
+                    }),
+                });
                 return;
             case "tools.vmdRetarget":
                 this.openVmdRetargetDialog(invoker ?? null);

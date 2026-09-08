@@ -3198,6 +3198,7 @@ ${beforeFogAppendBlock}
         const next = normalizeMmdMaterialPipelinePreset(value);
         this.mmdMaterialPipelinePresetValue = next;
         MmdManager.writeStringLocalStorage(MmdManager.MMD_MATERIAL_PIPELINE_STORAGE_KEY, next);
+        this.applyLightColorTemperature();
         return next;
     }
 
@@ -4386,6 +4387,7 @@ ${beforeFogAppendBlock}
         this.disposeContactShadowForModel(removed);
         removed.mesh.dispose();
         this.sceneModels.splice(removeIndex, 1);
+        this.applyLightColorTemperature();
         if (this.dofFocusTargetModelInstanceIdValue === removed.info.instanceId) {
             this.setDofFocusTargetEntry(null, null);
         }
@@ -8884,7 +8886,7 @@ ${beforeFogAppendBlock}
         renderOrder: number = getNextMmdModelRenderOrder(this.sceneModels.map((entry) => entry.renderOrder)),
         instanceId?: string,
     ): Promise<ModelInfo | null> {
-        return await loadPMXImpl(
+        const result = await loadPMXImpl(
             this,
             filePath,
             materialPipeline,
@@ -8892,6 +8894,8 @@ ${beforeFogAppendBlock}
             renderOrder,
             instanceId,
         );
+        this.applyLightColorTemperature();
+        return result;
     }
 
     public async convertPmxFileToBpmx(filePath: string): Promise<Uint8Array> {

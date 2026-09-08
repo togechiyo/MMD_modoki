@@ -7,6 +7,7 @@ import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascaded
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
+import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
 import {
     applyPbrMmdLikeShadowTintSettings,
     getPbrMmdLikeShadowTintStrength,
@@ -70,7 +71,8 @@ type LightShadowHost = {
     shadowMaxZValue: number;
     shadowDistanceMultiplierValue: number;
     lightDirectionInputValue: Vector3 | null;
-    sceneModels: Array<{ mesh: Mesh }>;
+    sceneModels: Array<{ mesh: Mesh; materialPipeline?: MmdMaterialPipelinePreset }>;
+    getMmdMaterialPipelinePreset?: () => MmdMaterialPipelinePreset;
     getAccessoryMeshes?: () => Mesh[];
     markMaterialShaderDirty(material: LightShadowMaterial): void;
     applyVolumetricLightSettings?: () => void;
@@ -796,10 +798,14 @@ export function applyLightColorTemperature(host: LightShadowHost): void {
     if (!host.dirLight || !host.hemiLight) return;
 
     const color = kelvinToColor(host.lightColorTemperatureKelvin);
+    // One lighting mode per scene. Loaded project mode takes precedence over
+    // the next-import preference; mixed material pipelines are not handled here.
+    const pipeline = host.sceneModels[0]?.materialPipeline ?? host.getMmdMaterialPipelinePreset?.();
+    const maximum = pipeline === "pbr-standard" ? 2 : 1;
     const lightScale = new Color3(
-        clampLightColorScale(host.lightColorScaleValue.r),
-        clampLightColorScale(host.lightColorScaleValue.g),
-        clampLightColorScale(host.lightColorScaleValue.b),
+        Math.min(maximum, clampLightColorScale(host.lightColorScaleValue.r)),
+        Math.min(maximum, clampLightColorScale(host.lightColorScaleValue.g)),
+        Math.min(maximum, clampLightColorScale(host.lightColorScaleValue.b)),
     );
     const scaled = new Color3(
         color.r * lightScale.r,

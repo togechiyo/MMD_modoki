@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+    applyLightColorTemperature,
     getSerializedLightDirection,
     getDirectionalShadowProjectionDepthRange,
     getShadowDistanceMultiplier,
@@ -146,7 +147,8 @@ describe("directional light intensity", () => {
         expect(host.dirLight.intensity).toBe(0);
     });
 
-    it("keeps RGB light color boost above 100 percent", () => {
+    it("clamps standard direct light but preserves authored boost and restores it in PBR", () => {
+        let pipeline: "mmd-standard" | "pbr-standard" = "mmd-standard";
         const host = {
             ...createHost(),
             dirLight: {
@@ -161,13 +163,29 @@ describe("directional light intensity", () => {
             lightColorScaleValue: Color3.White(),
             shadowGroundColorValue: new Color3(0.5, 0.5, 0.5),
             sceneModels: [],
+            getMmdMaterialPipelinePreset: () => pipeline,
         };
+        const typedHost = host as unknown as Parameters<typeof setLightColor>[0];
 
-        setLightColor(host, 2, 1.5, 1);
+        setLightColor(typedHost, 1, 1, 1);
+        const baseline = host.dirLight.diffuse.clone();
+        setLightColor(typedHost, 2, 1.5, 1);
+        expect(host.dirLight.diffuse).toEqual(baseline);
+        expect(host.lightColorScaleValue.asArray()).toEqual([2, 1.5, 1]);
 
+        pipeline = "pbr-standard";
+        applyLightColorTemperature(typedHost);
         expect(host.dirLight.diffuse.r).toBeCloseTo(2);
         expect(host.dirLight.diffuse.g).toBeGreaterThan(1);
         expect(host.dirLight.diffuse.b).toBeLessThanOrEqual(1);
+        pipeline = "mmd-standard";
+        applyLightColorTemperature(typedHost);
+        expect(host.dirLight.diffuse).toEqual(baseline);
+
+        // A saved PBR project overrides the default next-import mode.
+        typedHost.sceneModels = [{ materialPipeline: "pbr-standard", mesh: { material: null, getChildMeshes: () => [] } }] as unknown as typeof typedHost.sceneModels;
+        applyLightColorTemperature(typedHost);
+        expect(host.dirLight.diffuse.r).toBeCloseTo(2);
     });
 });
 

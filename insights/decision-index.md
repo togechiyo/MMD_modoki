@@ -8,7 +8,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
-| adopted | [実験設定はツールメニューにまとめる](./decisions/experimental-settings-live-under-tools.md) | PBR詳細・ログ操作への入口、内蔵TrueHDRI維持と外部ENV / DDS対応、旧PBR Skin SSSの採用取りやめ、PBR内の既定をMMD Likeにする、金属・樹脂・Clay White・衣装用4種の追加 |
+| adopted | [実験設定はツールメニューにまとめる](./decisions/experimental-settings-live-under-tools.md) | PBR詳細・ログ操作への入口、内蔵TrueHDRI維持と外部ENV / DDS対応、旧PBR Skin SSSの採用取りやめ、PBR内の既定をMMD Likeにする、金属・樹脂・Clay White・衣装用4種・特殊プリセット追加、Pearl不採用、Thin Translucent延期 |
 | adopted | [光色の超過分は通常MMDとPBRのモードで分ける](./decisions/light-color-boost-switches-by-scene-mode.md) | 光色100%超過時の影側増幅を避け、小さなモード分岐で直す |
 | adopted | [FrameGraph全体切替は資源解放と再構築にする](./decisions/framegraph-master-toggle-releases-resources.md) | 一括停止・再開と個別切替の役割を決める |
 | adopted | [Stage Standardは背景向けの汎用マット材質にする](./decisions/stage-standard-is-a-matte-background-preset.md) | 背景材質の追加・調整。事前計算を導入せずリアルタイム描画に限定する |

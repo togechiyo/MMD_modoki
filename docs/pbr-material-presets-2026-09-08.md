@@ -18,6 +18,12 @@
 | Satin | Metallic 0、粗さ0.3、異方性0.5、接線方向(1,0)。滑らかで方向性のある艶 |
 | Velvet | Metallic 0、粗さ0.85、鏡面強度0.25、Sheen強度0.8・粗さ0.7。地色を維持して起毛光沢を加える |
 | Leather | Metallic 0、粗さ0.45。適度な光沢の革 |
+| Emissive | 元のalbedo色とtextureで発光、強度1。直接光・環境光・鏡面成分を抑え、にじみはBloom側で調整 |
+| Candy Coat | Metallic 1、粗さ0.25。強度1・粗さ0.08のクリアコート。車・フィギュア塗装向け |
+| Pearl（一覧から除外） | 他プリセットとの差が小さいため所有者が不採用。保存互換用に復元処理は保持 |
+| Aurora | Metallic 0.8、粗さ0.2。薄膜干渉強度1・膜厚400nmで角度による色変化 |
+
+特殊4種も元の色・texture・透明度を維持する。Babylon 9.2.0のClearCoat/Iridescence宣言と[公式PBR資料](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/masterPBR/)を照合。Candy Coatは透明ガラスではなく金属下地＋無色のクリアコートとし、シーンの屈折用再描画は追加しない。Pearlは粒のないパール風表現。Emissiveは周囲を照らすライトではなく、Bloomも自動追加しない。変更した発光・コート・薄膜干渉の設定とtexture参照を退避・復元する。Thin Translucentは所有者指定で後回し。
 
 衣装向け4種は色・透明度・元の法線マップを維持し、Sheen/異方性と競合するClear Coat・Iridescenceを退避する。SatinはUV/接線に依存し、織り目のtextureや毛のgeometryを生成しない。Babylon 9.2.0 installed `pbrSheenConfiguration.d.ts` / `pbrAnisotropicConfiguration.d.ts`を照合。変更した設定とtexture参照はプリセット切替前に復元する。所有者はWoolを今回の対象から外した。
 
@@ -52,6 +58,10 @@ MMD LikeはToonの暗色texelを直接参照する。Toon影響度が高いほ�
 参照: [自前SSS](./owned-sss-development-2026-09-06.md)、[全体材質モード](./project-material-mode-design-2026-09-08.md)、[Babylon Material Plugins](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/materialPlugins/)。
 
 ## 確認結果
+
+- 特殊プリセットの所有者実機確認は全て動作良好。Pearlは見た目の差が小さいため一覧から除外し、Emissive / Candy Coat / Auroraを残す（2026-09-09）。
+
+- 特殊4種追加後（2026-09-09）: unit 108 files / 627 tests、lint、critical型検査が成功。Classic / FrameGraphでGUI適用・PNG・保存復元が成功し、GPU validation / pageerrorなし。4種のPNGを目視確認。Emissiveは強度2で明色が白飛びしたため1へ調整し、再実行した両E2Eと画像で地色保持を確認。コート・薄膜干渉・発光設定の復元をunitで確認。
 
 - Velvet黒化修正後（2026-09-09）: Classic / FrameGraphの画像回帰テストで、頭部中心の明るさがCottonの75%以上であることを確認。両E2E成功、修正後PNGでも地色の復帰を確認。unit 623件、lint、critical型検査も成功。
 

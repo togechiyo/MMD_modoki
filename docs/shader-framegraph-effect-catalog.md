@@ -91,6 +91,10 @@ PBR 経路は「ツール → 実験設定」の全体PBRモードを有効に�
 | `pbr-satin` | Satin | 粗さ0.3、異方性0.5の滑らかな布。反射方向はUV/接線依存。 |
 | `pbr-velvet` | Velvet | 粗さ0.85、Sheen強度0.8の柔らかな起毛光沢。 |
 | `pbr-leather` | Leather | 粗さ0.45の適度な光沢の革。 |
+| `pbr-emissive` | Emissive | 元の色とtextureで発光。にじみはBloomで調整。 |
+| `pbr-candy-coat` | Candy Coat | 金属下地＋艶の強い無色クリアコート。 |
+| `pbr-pearl` | Pearl（保存互換のみ） | 他プリセットとの差が小さいため選択一覧から除外。 |
+| `pbr-aurora` | Aurora | 角度で色が移る鮮やかな薄膜干渉。 |
 
 旧`pbr-skin-sss`は採用取りやめにより選択肢から削除し、保存値をSkinへ移行します。PBR経路は引き続き実験機能です。
 

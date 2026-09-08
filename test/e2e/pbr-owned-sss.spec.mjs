@@ -46,7 +46,8 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
       await page.evaluate(async () => { for (let i=0;i<12;i++) await new Promise(r => requestAnimationFrame(r)); });
     };
     const inspect = () => page.evaluate(async () => (await import("/src/render/owned-sss.ts")).inspectOwnedSss());
-    for (const preset of ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather"]) {
+    await expect(page.locator('#shader-preset-select option[value="pbr-pearl"]')).toHaveCount(0);
+    for (const preset of ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather", "pbr-emissive", "pbr-candy-coat", "pbr-aurora"]) {
       await page.locator("#shader-preset-select").selectOption(preset);
       await page.locator("#btn-shader-apply-all").click();
       await settle();

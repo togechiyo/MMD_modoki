@@ -13,6 +13,10 @@ export const PBR_SURFACE_PRESETS = {
     "pbr-satin": { label: "Satin", metallic: 0, roughness: 0.3 },
     "pbr-velvet": { label: "Velvet", metallic: 0, roughness: 0.85 },
     "pbr-leather": { label: "Leather", metallic: 0, roughness: 0.45 },
+    "pbr-emissive": { label: "Emissive", metallic: 0, roughness: 1 },
+    "pbr-candy-coat": { label: "Candy Coat", metallic: 1, roughness: 0.25 },
+    "pbr-pearl": { label: "Pearl", metallic: 0.15, roughness: 0.35 },
+    "pbr-aurora": { label: "Aurora", metallic: 0.8, roughness: 0.2 },
 } as const;
 
 class ClayWhitePlugin extends MaterialPluginBase {
@@ -49,6 +53,7 @@ function capture(material: PBRMaterial) {
         bumpTexture: material.bumpTexture, ambientTexture: material.ambientTexture,
         emissiveTexture: material.emissiveTexture, emissiveColor: material.emissiveColor.clone(),
         directIntensity: material.directIntensity,
+        emissiveIntensity: material.emissiveIntensity,
     };
 }
 const snapshots = new WeakMap<PBRMaterial, ReturnType<typeof capture>>();
@@ -72,6 +77,19 @@ function captureFabric(material: PBRMaterial) {
     };
 }
 const fabrics = new WeakMap<PBRMaterial, ReturnType<typeof captureFabric>>();
+function captureCoating(material: PBRMaterial) {
+    const coat = material.clearCoat;
+    const film = material.iridescence;
+    return {
+        coat: { isEnabled: coat.isEnabled, intensity: coat.intensity, roughness: coat.roughness,
+            indexOfRefraction: coat.indexOfRefraction, isTintEnabled: coat.isTintEnabled,
+            texture: coat.texture, textureRoughness: coat.textureRoughness, bumpTexture: coat.bumpTexture },
+        film: { isEnabled: film.isEnabled, intensity: film.intensity, indexOfRefraction: film.indexOfRefraction,
+            minimumThickness: film.minimumThickness, maximumThickness: film.maximumThickness,
+            texture: film.texture, thicknessTexture: film.thicknessTexture },
+    };
+}
+const coatings = new WeakMap<PBRMaterial, ReturnType<typeof captureCoating>>();
 
 export function restorePbrSurfacePreset(material: unknown): void {
     if (!(material instanceof PBRMaterial)) return;
@@ -91,6 +109,12 @@ export function restorePbrSurfacePreset(material: unknown): void {
             material.iridescence.isEnabled = fabric.iridescenceEnabled;
             fabrics.delete(material);
         }
+        const coating = coatings.get(material);
+        if (coating) {
+            Object.assign(material.clearCoat, coating.coat);
+            Object.assign(material.iridescence, coating.film);
+            coatings.delete(material);
+        }
     }
     plugins.get(material)?.setActive(false);
 }
@@ -105,6 +129,39 @@ export function applyPbrSurfacePreset(material: unknown, preset: string): void {
     material.reflectivityTexture = null;
     material.microSurfaceTexture = null;
     material.specularIntensity = preset === "pbr-clay-white" ? 0 : 1;
+    if (["pbr-emissive", "pbr-candy-coat", "pbr-pearl", "pbr-aurora"].includes(preset)) {
+        fabrics.set(material, captureFabric(material));
+        coatings.set(material, captureCoating(material));
+        material.sheen.isEnabled = false;
+        material.anisotropy.isEnabled = false;
+        material.clearCoat.isEnabled = preset === "pbr-candy-coat" || preset === "pbr-pearl";
+        material.iridescence.isEnabled = preset === "pbr-pearl" || preset === "pbr-aurora";
+        if (preset === "pbr-emissive") {
+            material.emissiveColor = material.albedoColor.clone();
+            material.emissiveTexture = material.albedoTexture;
+            material.emissiveIntensity = 1;
+            material.directIntensity = 0;
+            material.environmentIntensity = 0;
+            material.specularIntensity = 0;
+        }
+        if (material.clearCoat.isEnabled) {
+            material.clearCoat.intensity = 1;
+            material.clearCoat.roughness = preset === "pbr-pearl" ? 0.2 : 0.08;
+            material.clearCoat.indexOfRefraction = 1.5;
+            material.clearCoat.isTintEnabled = false;
+            material.clearCoat.texture = null;
+            material.clearCoat.textureRoughness = null;
+            material.clearCoat.bumpTexture = null;
+        }
+        if (material.iridescence.isEnabled) {
+            material.iridescence.intensity = preset === "pbr-pearl" ? 0.3 : 1;
+            material.iridescence.indexOfRefraction = 1.3;
+            material.iridescence.minimumThickness = 100;
+            material.iridescence.maximumThickness = preset === "pbr-pearl" ? 300 : 400;
+            material.iridescence.texture = null;
+            material.iridescence.thicknessTexture = null;
+        }
+    }
     if (["pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather"].includes(preset)) {
         fabrics.set(material, captureFabric(material));
         material.clearCoat.isEnabled = false;

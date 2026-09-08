@@ -250,6 +250,10 @@ export class ShaderPanelController {
                 ["pbr-metal-satin", "Metal Satin"],
                 ["pbr-plastic-glossy", "Plastic Glossy"],
                 ["pbr-clay-white", "Clay White"],
+                ["pbr-cotton", "Cotton"],
+                ["pbr-satin", "Satin"],
+                ["pbr-velvet", "Velvet"],
+                ["pbr-leather", "Leather"],
             ].map(([id, label]) => ({ id, label, description: t(`shader.pbrMaterial.${id}Description`) })));
             elements.presetSelect.innerHTML = "";
             for (const preset of presets) {
@@ -618,7 +622,7 @@ export class ShaderPanelController {
                 selectedValue === "pbr-base"
                     ? t("shader.toast.pbrBaseApplied")
                     : t("shader.toast.pbrMaterialApplied", {
-                        name: ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white"].includes(selectedValue)
+                        name: ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather"].includes(selectedValue)
                             ? this.elements.presetSelect.selectedOptions[0]?.textContent ?? selectedValue
                             : selectedValue === "pbr-mmd-like"
                             ? t("shader.pbrPreset.mmdLike")

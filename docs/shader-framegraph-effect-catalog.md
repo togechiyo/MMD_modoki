@@ -87,6 +87,10 @@ PBR 経路は「ツール → 実験設定」の全体PBRモードを有効に�
 | `pbr-metal-satin` | Metal Satin | 元の色を使う落ち着いた金属。Metallic 1、粗さ0.45。 |
 | `pbr-plastic-glossy` | Plastic Glossy | 元の色を使う艶のある樹脂。Metallic 0、粗さ0.25。 |
 | `pbr-clay-white` | Clay White | 色や模様を無視する造形確認用のマットな白。切り抜き透明度を維持。 |
+| `pbr-cotton` | Cotton | 粗さ0.9、鏡面強度0.35のマットな綿。 |
+| `pbr-satin` | Satin | 粗さ0.3、異方性0.5の滑らかな布。反射方向はUV/接線依存。 |
+| `pbr-velvet` | Velvet | 粗さ0.85、Sheen強度0.8の柔らかな起毛光沢。 |
+| `pbr-leather` | Leather | 粗さ0.45の適度な光沢の革。 |
 
 旧`pbr-skin-sss`は採用取りやめにより選択肢から削除し、保存値をSkinへ移行します。PBR経路は引き続き実験機能です。
 

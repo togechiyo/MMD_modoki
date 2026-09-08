@@ -14,6 +14,14 @@
 | Metal Satin | 元の色・テクスチャを使う落ち着いた金属。Metallic 1、粗さ0.45 |
 | Plastic Glossy | 元の色・テクスチャを使う艶のある樹脂。Metallic 0、粗さ0.25 |
 | Clay White | 造形確認用。Metallic 0、粗さ1、鏡面強度0。表面色を白へ置換し、発光・法線/AOマップ・追加表面レイヤー・SSS・Toon補正を無効化。透明度は維持 |
+| Cotton | Metallic 0、粗さ0.9、鏡面強度0.35。柔らかなマット布 |
+| Satin | Metallic 0、粗さ0.3、異方性0.5、接線方向(1,0)。滑らかで方向性のある艶 |
+| Velvet | Metallic 0、粗さ0.85、鏡面強度0.25、Sheen強度0.8・粗さ0.7。地色を維持して起毛光沢を加える |
+| Leather | Metallic 0、粗さ0.45。適度な光沢の革 |
+
+衣装向け4種は色・透明度・元の法線マップを維持し、Sheen/異方性と競合するClear Coat・Iridescenceを退避する。SatinはUV/接線に依存し、織り目のtextureや毛のgeometryを生成しない。Babylon 9.2.0 installed `pbrSheenConfiguration.d.ts` / `pbrAnisotropicConfiguration.d.ts`を照合。変更した設定とtexture参照はプリセット切替前に復元する。所有者はWoolを今回の対象から外した。
+
+Velvetの黒化報告を受け`pbrBlockSheen.js`を照合したところ、`linkSheenWithAlbedo=true`は拡散色を`(1-intensity)^5`倍することが原因だった。強度0.8では0.00032倍になり、正面がほぼ黒くなる。以前の「材質roughnessを使う」という説明も誤りで、この経路はSheen強度をroughnessとして使う。現在はlinkとalbedoScalingを無効化し、地色を保持して独立したSheenを加える。修正前の暗いfixture画像を起毛表現として誤認したため、今後はCottonとVelvetの頭部中心の明るさ比較をE2Eに含める。
 
 4種の表面プリセットは`pbr-surface-presets.ts`へ局所化する。金属・粗さマップはプリセットの数値を優先するため退避し、切替時に復元する。Clay WhiteはBabylon 9.2.0 installed WGSL/GLSLの`pbrBlockAlbedoOpacity`にある`CUSTOM_FRAGMENT_UPDATE_ALBEDO`でRGBのみ白へ置換する。albedo textureを外さないため、元のalpha test/blendを維持できる。照明・環境光による色味と明暗は残る。退避はtextureを共有参照し、破棄や加工をしない。
 
@@ -44,6 +52,10 @@ MMD LikeはToonの暗色texelを直接参照する。Toon影響度が高いほ�
 参照: [自前SSS](./owned-sss-development-2026-09-06.md)、[全体材質モード](./project-material-mode-design-2026-09-08.md)、[Babylon Material Plugins](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/materialPlugins/)。
 
 ## 確認結果
+
+- Velvet黒化修正後（2026-09-09）: Classic / FrameGraphの画像回帰テストで、頭部中心の明るさがCottonの75%以上であることを確認。両E2E成功、修正後PNGでも地色の復帰を確認。unit 623件、lint、critical型検査も成功。
+
+- Cotton / Satin / Velvet / Leather追加後: unit 108 files / 623 tests、lint、critical型検査が成功。Classic / FrameGraph両方でGUI適用・PNG・保存復元が成功、GPU validation / pageerrorなし。4種のPNGを目視確認。元のSheen/異方性パラメーター・texture参照と方向ベクトルの復元をunitで確認。通常typecheckの既存非criticalエラーは残る。
 
 - Metal Polished / Metal Satin / Plastic Glossy / Clay White追加後: unit 108 files / 619 tests、lint、critical型検査が成功。Classic / FrameGraphのE2Eで4種のGUI適用・PNG描画・保存復元を確認し、GPU validation / pageerrorなし。Clay Whiteと磨いた金属の出力PNGも目視確認。透明度とtexture参照の保持、切替後の復元は実PBRMaterialを使うunitで確認。
 

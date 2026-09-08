@@ -9,6 +9,10 @@ export const PBR_SURFACE_PRESETS = {
     "pbr-metal-satin": { label: "Metal Satin", metallic: 1, roughness: 0.45 },
     "pbr-plastic-glossy": { label: "Plastic Glossy", metallic: 0, roughness: 0.25 },
     "pbr-clay-white": { label: "Clay White", metallic: 0, roughness: 1 },
+    "pbr-cotton": { label: "Cotton", metallic: 0, roughness: 0.9 },
+    "pbr-satin": { label: "Satin", metallic: 0, roughness: 0.3 },
+    "pbr-velvet": { label: "Velvet", metallic: 0, roughness: 0.85 },
+    "pbr-leather": { label: "Leather", metallic: 0, roughness: 0.45 },
 } as const;
 
 class ClayWhitePlugin extends MaterialPluginBase {
@@ -50,6 +54,24 @@ function capture(material: PBRMaterial) {
 const snapshots = new WeakMap<PBRMaterial, ReturnType<typeof capture>>();
 const plugins = new WeakMap<PBRMaterial, ClayWhitePlugin>();
 const layers = new WeakMap<PBRMaterial, boolean[]>();
+function captureFabric(material: PBRMaterial) {
+    return {
+        sheen: {
+            isEnabled: material.sheen.isEnabled, intensity: material.sheen.intensity,
+            color: material.sheen.color.clone(), roughness: material.sheen.roughness,
+            linkSheenWithAlbedo: material.sheen.linkSheenWithAlbedo,
+            albedoScaling: material.sheen.albedoScaling,
+            texture: material.sheen.texture, textureRoughness: material.sheen.textureRoughness,
+        },
+        anisotropy: {
+            isEnabled: material.anisotropy.isEnabled, intensity: material.anisotropy.intensity,
+            direction: material.anisotropy.direction.clone(), texture: material.anisotropy.texture,
+        },
+        clearCoatEnabled: material.clearCoat.isEnabled,
+        iridescenceEnabled: material.iridescence.isEnabled,
+    };
+}
+const fabrics = new WeakMap<PBRMaterial, ReturnType<typeof captureFabric>>();
 
 export function restorePbrSurfacePreset(material: unknown): void {
     if (!(material instanceof PBRMaterial)) return;
@@ -61,6 +83,14 @@ export function restorePbrSurfacePreset(material: unknown): void {
             .forEach((layer, index) => { layer.isEnabled = enabled[index]; });
         snapshots.delete(material);
         layers.delete(material);
+        const fabric = fabrics.get(material);
+        if (fabric) {
+            Object.assign(material.sheen, fabric.sheen);
+            Object.assign(material.anisotropy, fabric.anisotropy);
+            material.clearCoat.isEnabled = fabric.clearCoatEnabled;
+            material.iridescence.isEnabled = fabric.iridescenceEnabled;
+            fabrics.delete(material);
+        }
     }
     plugins.get(material)?.setActive(false);
 }
@@ -75,6 +105,31 @@ export function applyPbrSurfacePreset(material: unknown, preset: string): void {
     material.reflectivityTexture = null;
     material.microSurfaceTexture = null;
     material.specularIntensity = preset === "pbr-clay-white" ? 0 : 1;
+    if (["pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather"].includes(preset)) {
+        fabrics.set(material, captureFabric(material));
+        material.clearCoat.isEnabled = false;
+        material.iridescence.isEnabled = false;
+        material.sheen.isEnabled = preset === "pbr-velvet";
+        material.anisotropy.isEnabled = preset === "pbr-satin";
+        if (preset === "pbr-velvet") {
+            material.sheen.intensity = 0.8;
+            material.sheen.color = Color3.White();
+            material.sheen.roughness = 0.7;
+            // Linked sheen multiplies diffuse albedo by (1-intensity)^5.
+            // Preserve the original fabric color and add the grazing highlight.
+            material.sheen.linkSheenWithAlbedo = false;
+            material.sheen.albedoScaling = false;
+            material.sheen.texture = null;
+            material.sheen.textureRoughness = null;
+        }
+        if (preset === "pbr-satin") {
+            material.anisotropy.intensity = 0.5;
+            material.anisotropy.direction.set(1, 0);
+            material.anisotropy.texture = null;
+        }
+        if (preset === "pbr-cotton") material.specularIntensity = 0.35;
+        if (preset === "pbr-velvet") material.specularIntensity = 0.25;
+    }
     if (preset !== "pbr-clay-white") return;
     layers.set(material, [material.clearCoat, material.sheen, material.anisotropy, material.iridescence, material.detailMap]
         .map(layer => layer.isEnabled));

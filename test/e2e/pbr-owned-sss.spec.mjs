@@ -46,7 +46,7 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
       await page.evaluate(async () => { for (let i=0;i<12;i++) await new Promise(r => requestAnimationFrame(r)); });
     };
     const inspect = () => page.evaluate(async () => (await import("/src/render/owned-sss.ts")).inspectOwnedSss());
-    for (const preset of ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white"]) {
+    for (const preset of ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather"]) {
       await page.locator("#shader-preset-select").selectOption(preset);
       await page.locator("#btn-shader-apply-all").click();
       await settle();
@@ -57,6 +57,18 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
       await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), savedSurface);
       await expect(page.locator("#shader-preset-select")).toHaveValue(preset);
     }
+    // The linked-sheen regression nearly removed the fixture's diffuse color.
+    // Compare only the head center so the bright background cannot hide it.
+    const headBrightness = preset => {
+      const png = PNG.sync.read(readFileSync(testInfo.outputPath(preset, "single_rgba_surface_e2e.png")));
+      let sum = 0;
+      for (let y = 280; y < 380; y++) for (let x = 530; x < 620; x++) {
+        const i = (y * png.width + x) * 4;
+        sum += png.data[i] + png.data[i + 1] + png.data[i + 2];
+      }
+      return sum;
+    };
+    expect(headBrightness("pbr-velvet")).toBeGreaterThan(headBrightness("pbr-cotton") * 0.75);
     for (const preset of ["pbr-base", "pbr-mmd-like", "pbr-skin", "pbr-skin-face", "pbr-sss-wax"]) {
       await page.locator("#shader-preset-select").selectOption(preset);
       await page.locator("#btn-shader-apply-all").click();

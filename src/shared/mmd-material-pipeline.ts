@@ -23,6 +23,10 @@ export const PBR_MATERIAL_SHADER_PRESETS = [
     "pbr-metal-satin",
     "pbr-plastic-glossy",
     "pbr-clay-white",
+    "pbr-cotton",
+    "pbr-satin",
+    "pbr-velvet",
+    "pbr-leather",
 ] as const;
 
 export type PbrMaterialShaderPreset = typeof PBR_MATERIAL_SHADER_PRESETS[number];
@@ -58,6 +62,10 @@ export function normalizePbrMaterialShaderPreset(value: unknown): PbrMaterialSha
         case "pbr-metal-satin":
         case "pbr-plastic-glossy":
         case "pbr-clay-white":
+        case "pbr-cotton":
+        case "pbr-satin":
+        case "pbr-velvet":
+        case "pbr-leather":
             return value;
         case "pbr-base":
             return value;

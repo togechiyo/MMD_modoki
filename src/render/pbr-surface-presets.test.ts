@@ -10,6 +10,8 @@ describe("PBR surface presets", () => {
     it.each([
         ["pbr-metal-polished", 1, 0.2], ["pbr-metal-satin", 1, 0.45],
         ["pbr-plastic-glossy", 0, 0.25], ["pbr-clay-white", 0, 1],
+        ["pbr-cotton", 0, 0.9], ["pbr-satin", 0, 0.3],
+        ["pbr-velvet", 0, 0.85], ["pbr-leather", 0, 0.45],
     ] as const)("%s preserves cutouts and restores source settings", (preset, metallic, roughness) => {
         const engine = new NullEngine();
         const scene = new Scene(engine);
@@ -28,6 +30,13 @@ describe("PBR surface presets", () => {
             material.metallic = 0.3;
             material.roughness = 0.6;
             material.clearCoat.isEnabled = true;
+            material.sheen.intensity = 0.17;
+            material.sheen.linkSheenWithAlbedo = true;
+            material.sheen.albedoScaling = true;
+            material.sheen.texture = texture;
+            material.anisotropy.intensity = 0.23;
+            material.anisotropy.direction.set(0, 1);
+            material.anisotropy.texture = texture;
             applyPbrMaterialShaderPreset(material, preset);
             expect(material.metallic).toBe(metallic);
             expect(material.roughness).toBe(roughness);
@@ -35,6 +44,18 @@ describe("PBR surface presets", () => {
             expect(material.alpha).toBe(0.7);
             expect(material.useAlphaFromAlbedoTexture).toBe(true);
             expect(material.metallicTexture).toBeNull();
+            if (preset === "pbr-satin") {
+                expect(material.anisotropy.isEnabled).toBe(true);
+                expect(material.anisotropy.intensity).toBe(0.5);
+                expect(material.anisotropy.texture).toBeNull();
+            }
+            if (preset === "pbr-velvet") {
+                expect(material.sheen.isEnabled).toBe(true);
+                expect(material.sheen.intensity).toBe(0.8);
+                expect(material.sheen.linkSheenWithAlbedo).toBe(false);
+                expect(material.sheen.albedoScaling).toBe(false);
+                expect(material.sheen.texture).toBeNull();
+            }
             if (preset === "pbr-clay-white") {
                 expect(material.bumpTexture).toBeNull();
                 expect(material.emissiveTexture).toBeNull();
@@ -50,6 +71,15 @@ describe("PBR surface presets", () => {
             expect(material.emissiveColor.asArray()).toEqual([0.3, 0.2, 0.1]);
             expect(material.albedoColor.asArray()).toEqual([0.2, 0.5, 0.8]);
             expect(material.clearCoat.isEnabled).toBe(true);
+            expect(material.sheen.isEnabled).toBe(false);
+            expect(material.sheen.intensity).toBe(0.17);
+            expect(material.sheen.linkSheenWithAlbedo).toBe(true);
+            expect(material.sheen.albedoScaling).toBe(true);
+            expect(material.sheen.texture).toBe(texture);
+            expect(material.anisotropy.isEnabled).toBe(false);
+            expect(material.anisotropy.intensity).toBe(0.23);
+            expect(material.anisotropy.direction.asArray()).toEqual([0, 1]);
+            expect(material.anisotropy.texture).toBe(texture);
         } finally { scene.dispose(); engine.dispose(); }
     });
 });

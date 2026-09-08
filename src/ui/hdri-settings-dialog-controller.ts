@@ -158,7 +158,7 @@ export class HdriSettingsDialogController implements PopupContentController {
         loadButton.addEventListener("click", () => {
             void (async () => {
                 const filePath = await window.electronAPI.openFileDialog([
-                    { name: t("dialog.hdri.hdrFiles"), extensions: ["hdr"] },
+                    { name: t("dialog.hdri.hdrFiles"), extensions: ["hdr", "env", "dds"] },
                     { name: t("option.allFiles"), extensions: ["*"] },
                 ]);
                 if (!filePath) return;

@@ -3625,7 +3625,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr"] },
+            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3635,7 +3635,7 @@ export class UIController {
 
     private async loadEnvironmentHdrFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: t("dialog.hdri.hdrFiles"), extensions: ["hdr"] },
+            { name: t("dialog.hdri.hdrFiles"), extensions: ["hdr", "env", "dds"] },
             { name: t("option.allFiles"), extensions: ["*"] },
         ]);
         if (!filePath) return;
@@ -3680,6 +3680,8 @@ export class UIController {
         const ext = this.getFileExtension(filePath);
         switch (ext) {
             case "hdr":
+            case "env":
+            case "dds":
                 await this.loadEnvironmentHdrByPath(filePath);
                 return;
             case "pmx":

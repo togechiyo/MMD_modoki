@@ -1,8 +1,35 @@
 # IBL / 外部 HDRI 現行仕様・調査記録 2026-07-21
 
+## 2026-09-08 ENV / DDS追加
+
+- 内蔵環境ライトはCC0のTrueHDRIを維持する。BabylonのStudio素材への置換は行わない。
+- 実験設定のHDRI読込、ファイル読込、ドラッグ＆ドロップで `.hdr` / `.env` / `.dds` を受け付ける。
+- ENV / DDSはBabylon.js 9.2.0の`CubeTexture`を`prefiltered: true`、`createPolynomials: true`で生成する。HDRの既存経路は維持する。
+- DDSは6面揃った正方形・mipmap付きの事前フィルタ済みキューブマップ用。通常の2D DDSは拒否する。mipmapの存在だけで事前フィルタの品質までは判定できず、任意のDDS codecすべての互換を保証するものではない。
+- ENV manifestを事前解析し、壊れたJSON等を通知可能な失敗として扱う。読み込み失敗時は直前の環境を維持する。
+- 背景・強度・ON/OFF・保存は従来の環境ライト設定を共用する。プロジェクトには外部pathを保存し、素材本体を埋め込まない。
+
+公式情報は[Texture Library](https://doc.babylonjs.com/toolsAndResources/assetLibraries/availableTextures/)と、installed Babylon.js 9.2.0の`cubeTexture.js`、`ddsTextureLoader.js`、`environmentTextureTools.js`を照合した。
+
+### 開発用比較素材
+
+`local-references/babylonjs/environment/`へ以下を無改変で配置。Git・配布アプリには同梱せず、未配置時は該当E2Eをskipする。自動テスト中のネットワーク取得はない。
+
+- 配布元: [BabylonJS/Assets](https://github.com/BabylonJS/Assets/tree/8be9384c7f8728cb45d27975ac92a412f97a98dd/ibl)
+- revision: `8be9384c7f8728cb45d27975ac92a412f97a98dd`、取得日: 2026-09-08
+- 素材: `Studio_Softbox_2Umbrellas_cube_specular.env` / `.dds`
+- 制作: Patrick Ryan / Babylon.js。ライセンス: CC BY 4.0。原文LICENSEも同じdirectoryへ保存。
+- [当該ENVを指定したライセンス案内](https://forum.babylonjs.com/t/sandbox-studio-environment-texture-file/36190)、[元HDR追加履歴](https://github.com/BabylonJS/Assets/commit/4c1be170dcf953bd8542676e2f3021f93a09cc28)、[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- ENV SHA-256: `98853def8541d38df7eb8e15eb58afe0faa42426b0e11d0bf895d230ee08b88d`
+- DDS SHA-256: `1ab0b33fad7fcde3fe6edfec0cdb3fa9ebf6eb51300aef8a34c9e462472086f5`
+
+検証: `environment-cube-source.spec.mjs`でENV/DDSのGUI読込、背景ready、球面調和係数、PBR offscreen probeの明暗差、project復元、欠損ファイル・破損ENV時の保持、内蔵HDRへの復帰を確認。`experimental-settings.spec.mjs`も通過。描画品質全般の保証ではない。
+
+最終確認: lint成功、unit 107 files / 620 tests成功、関連E2E 2件成功、WebGPU / Bullet MPR smoke成功。typecheckは従来と同じ538件の非criticalエラー、critical gate (TS2304 / TS2552) は成功。
+
 ## 結論
 
-Radiance HDR (`.hdr`) をBabylon.jsの`HDRCubeTexture`として読み込み、次の2用途へ独立して利用できる。
+Radiance HDR (`.hdr`) はBabylon.jsの`HDRCubeTexture`、事前処理済み環境マップ (`.env` / `.dds`) は`CubeTexture`として読み込み、次の2用途へ独立して利用できる。
 
 1. PBR材質を照らすIBL（Image-Based Lighting）
 2. ビューポートへ表示するHDRI背景

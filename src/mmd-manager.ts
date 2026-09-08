@@ -30,6 +30,8 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { RawCubeTexture } from "@babylonjs/core/Materials/Textures/rawCubeTexture";
 import { HDRCubeTexture } from "@babylonjs/core/Materials/Textures/hdrCubeTexture";
+import type { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
+import { loadEnvironmentCube } from "./render/environment-cube-source";
 import { ColorGradingTexture } from "@babylonjs/core/Materials/Textures/colorGradingTexture";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
@@ -1847,7 +1849,7 @@ ${beforeFogAppendBlock}
     private iblFallbackEnvironmentTexture: RawCubeTexture | null = null;
     private environmentLightingSuppressedTexture: BaseTexture | null = null;
     private bundledEnvironmentTexture: HDRCubeTexture | null = null;
-    private externalEnvironmentTexture: HDRCubeTexture | null = null;
+    private externalEnvironmentTexture: HDRCubeTexture | CubeTexture | null = null;
     private environmentLightingSourcePathValue: string | null = null;
     private environmentLightingLoadGeneration = 0;
     private iblWebGpuCdfFallbackTexture: RawTexture | null = null;
@@ -3579,7 +3581,8 @@ ${beforeFogAppendBlock}
             this.clearExternalEnvironmentLightingSource();
             return true;
         }
-        if (!normalizedPath.toLowerCase().endsWith(".hdr")) {
+        const extension = normalizedPath.slice(normalizedPath.lastIndexOf(".")).toLowerCase();
+        if (![".hdr", ".env", ".dds"].includes(extension)) {
             logWarn("render", "external environment texture rejected", {
                 reason: "unsupported extension",
                 path: normalizedPath,
@@ -3588,9 +3591,11 @@ ${beforeFogAppendBlock}
         }
 
         const loadGeneration = ++this.environmentLightingLoadGeneration;
-        let nextTexture: HDRCubeTexture;
+        let nextTexture: HDRCubeTexture | CubeTexture;
         try {
-            nextTexture = await new Promise<HDRCubeTexture>((resolve, reject) => {
+            nextTexture = extension === ".env" || extension === ".dds"
+                ? await loadEnvironmentCube(localPathToFileUrl(normalizedPath), extension, this.scene)
+                : await new Promise<HDRCubeTexture>((resolve, reject) => {
                 let settled = false;
                 const texture = new HDRCubeTexture(
                     localPathToFileUrl(normalizedPath),
@@ -5023,7 +5028,7 @@ ${beforeFogAppendBlock}
         );
     }
 
-    private getEnvironmentBackgroundSourceTexture(): HDRCubeTexture | null {
+    private getEnvironmentBackgroundSourceTexture(): HDRCubeTexture | CubeTexture | null {
         return this.externalEnvironmentTexture ?? this.bundledEnvironmentTexture;
     }
 

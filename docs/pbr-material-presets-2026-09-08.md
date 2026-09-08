@@ -10,6 +10,12 @@
 | PBR Skin Face | Skinに既存の法線30%補正を追加 |
 | SSS Wax | `pbr-sss-wax`。最初にPBRへ接続した自前SSSの見た目を保持。Skin専用の陰影補正は加えない。粗さ最低0.68 |
 | PBR No Shadow | Standardに受影無効化を追加 |
+| Metal Polished | 元の色・テクスチャを使う磨いた金属。Metallic 1、粗さ0.2 |
+| Metal Satin | 元の色・テクスチャを使う落ち着いた金属。Metallic 1、粗さ0.45 |
+| Plastic Glossy | 元の色・テクスチャを使う艶のある樹脂。Metallic 0、粗さ0.25 |
+| Clay White | 造形確認用。Metallic 0、粗さ1、鏡面強度0。表面色を白へ置換し、発光・法線/AOマップ・追加表面レイヤー・SSS・Toon補正を無効化。透明度は維持 |
+
+4種の表面プリセットは`pbr-surface-presets.ts`へ局所化する。金属・粗さマップはプリセットの数値を優先するため退避し、切替時に復元する。Clay WhiteはBabylon 9.2.0 installed WGSL/GLSLの`pbrBlockAlbedoOpacity`にある`CUSTOM_FRAGMENT_UPDATE_ALBEDO`でRGBのみ白へ置換する。albedo textureを外さないため、元のalpha test/blendを維持できる。照明・環境光による色味と明暗は残る。退避はtextureを共有参照し、破棄や加工をしない。
 
 旧`pbr-skin-sss`はUIから削除し、読込時に`pbr-skin`へ移行する。新規保存はSkinのIDとする。旧SSSの見た目を保存互換として再現することはしない。通常MMDの自前Skin/Wax自体の調整値は変更しない。
 
@@ -38,6 +44,8 @@ MMD LikeはToonの暗色texelを直接参照する。Toon影響度が高いほ�
 参照: [自前SSS](./owned-sss-development-2026-09-06.md)、[全体材質モード](./project-material-mode-design-2026-09-08.md)、[Babylon Material Plugins](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/materialPlugins/)。
 
 ## 確認結果
+
+- Metal Polished / Metal Satin / Plastic Glossy / Clay White追加後: unit 108 files / 619 tests、lint、critical型検査が成功。Classic / FrameGraphのE2Eで4種のGUI適用・PNG描画・保存復元を確認し、GPU validation / pageerrorなし。Clay Whiteと磨いた金属の出力PNGも目視確認。透明度とtexture参照の保持、切替後の復元は実PBRMaterialを使うunitで確認。
 
 - lint: error / warningなし。unit: 107 files / 615 tests成功（廃止したBabylon SSSの期待値を新しい責務・復元・移行テストへ置換し、Waxの復元と正規化も確認）。
 - PBR用E2E: Classic / FrameGraphの2件成功。逆光で薄い耳の透過と厚い頭部の暗さをPNGでも目視確認。旧IDからSkinへの再保存、全体モード往復でのRTT停止・再開を確認。

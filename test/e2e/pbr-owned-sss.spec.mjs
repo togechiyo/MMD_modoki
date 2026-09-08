@@ -46,6 +46,17 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
       await page.evaluate(async () => { for (let i=0;i<12;i++) await new Promise(r => requestAnimationFrame(r)); });
     };
     const inspect = () => page.evaluate(async () => (await import("/src/render/owned-sss.ts")).inspectOwnedSss());
+    for (const preset of ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white"]) {
+      await page.locator("#shader-preset-select").selectOption(preset);
+      await page.locator("#btn-shader-apply-all").click();
+      await settle();
+      const output = testInfo.outputPath(preset); mkdirSync(output, {recursive:true});
+      await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output,1152,648), output);
+      const savedSurface = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+      expect(savedSurface.scene.models[0].materialShaders.every(entry => entry.presetId === preset)).toBe(true);
+      await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), savedSurface);
+      await expect(page.locator("#shader-preset-select")).toHaveValue(preset);
+    }
     for (const preset of ["pbr-base", "pbr-mmd-like", "pbr-skin", "pbr-skin-face", "pbr-sss-wax"]) {
       await page.locator("#shader-preset-select").selectOption(preset);
       await page.locator("#btn-shader-apply-all").click();

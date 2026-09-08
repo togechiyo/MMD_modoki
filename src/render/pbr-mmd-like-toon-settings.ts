@@ -1,5 +1,6 @@
 import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { setOwnedSssProfile } from "./owned-sss";
+import { applyPbrSurfacePreset, restorePbrSurfacePreset, PBR_SURFACE_PRESETS } from "./pbr-surface-presets";
 import { Material } from "@babylonjs/core/Materials/material";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -368,11 +369,12 @@ export function applyPbrMaterialShaderPreset(
     if (!isPbrPresetMaterialTarget(material)) return false;
     const state = getOrCreatePbrPresetRuntimeState(material);
     const nextPreset = normalizePbrMaterialShaderPreset(materialPreset);
+    restorePbrSurfacePreset(material);
     restorePbrStandardSettings(material, state);
 
     const skin = nextPreset === "pbr-skin" || nextPreset === "pbr-skin-face";
     const wax = nextPreset === "pbr-sss-wax";
-    if (skin || wax || nextPreset === "pbr-mmd-like") {
+    if (skin || wax || nextPreset === "pbr-mmd-like" || nextPreset in PBR_SURFACE_PRESETS) {
         material.subSurface.isRefractionEnabled = false;
         material.subSurface.isTranslucencyEnabled = false;
         material.subSurface.isScatteringEnabled = false;
@@ -382,6 +384,7 @@ export function applyPbrMaterialShaderPreset(
     if (skin || wax) material.roughness = Math.max(material.roughness ?? 0, PBR_SKIN_MINIMUM_ROUGHNESS);
     if (nextPreset === "pbr-mmd-like") material.roughness = Math.max(material.roughness ?? 0, PBR_MMD_LIKE_MINIMUM_ROUGHNESS);
     setOwnedSssProfile(material, skin ? "skin" : wax ? "pbr-wax" : null);
+    applyPbrSurfacePreset(material, nextPreset);
 
     state.materialShaderPreset = nextPreset;
     syncPbrMmdLikeShadowTint(material, state);

@@ -83,6 +83,10 @@ PBR 経路は「ツール → 実験設定」の全体PBRモードを有効に�
 | `pbr-sss-wax` | SSS Wax | 最初のPBR自前SSSの見た目を保持し、肌専用の陰影補正は加えない。 |
 | `pbr-skin-face` | PBR Skin Face | 法線をモデル正面・上方向へ寄せ、顔の陰影を穏やかにする。 |
 | `pbr-no-shadow` | PBR No Shadow | direct light や IBL は残し、投影 shadow の遮蔽だけを無視する。 |
+| `pbr-metal-polished` | Metal Polished | 元の色を使う磨いた金属。Metallic 1、粗さ0.2。 |
+| `pbr-metal-satin` | Metal Satin | 元の色を使う落ち着いた金属。Metallic 1、粗さ0.45。 |
+| `pbr-plastic-glossy` | Plastic Glossy | 元の色を使う艶のある樹脂。Metallic 0、粗さ0.25。 |
+| `pbr-clay-white` | Clay White | 色や模様を無視する造形確認用のマットな白。切り抜き透明度を維持。 |
 
 旧`pbr-skin-sss`は採用取りやめにより選択肢から削除し、保存値をSkinへ移行します。PBR経路は引き続き実験機能です。
 

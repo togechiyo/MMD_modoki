@@ -473,6 +473,7 @@
 ## 2026-07-21 外部 HDRI
 
 - [x] PBRプリセットの役割を整理し、Skin/Faceへ自前SSSを接続、旧Skin SSSを移行（[現仕様](./pbr-material-presets-2026-09-08.md)、2026-09-08）
+- [x] PBRのMetal Polished / Metal Satin / Plastic Glossy / Clay Whiteを追加し、保存復元を確認（2026-09-08）
 
 - [x] 外部ENV / DDSキューブマップの環境ライト読込、GUI操作とプロジェクト復元を追加（2026-09-08、内蔵TrueHDRIは維持）
 

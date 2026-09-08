@@ -40,6 +40,8 @@ PBRを既定モードへ変更すること。UIの採用を、凍結機能の技
 
 ## 根拠
 
+所有者はMetal Polished / Metal Satin / Plastic Glossyと、色・模様を無視する造形確認用Clay Whiteの追加を採用した。Clay Whiteでは切り抜き透明度を残し、元の設定へ戻せる構成で実装する。
+
 後続指示「MMD Likeの方をPBRでのデフォルト設定」「PBR Standardはリストの下の方」により、PBR内の初期プリセットはMMD Like、Standardは一覧末尾とする。アプリ全体の既定モードをPBRへ変える指示ではない。
 
 PBRプリセット更新後、所有者はMMD Likeのマット化、Skin/Faceへの通常側の肌用SSS表面処理の移植、従来のPBR自前SSSを「SSS Wax」として保持することを指定した。SkinとWaxを同じ見た目の別名にしない。

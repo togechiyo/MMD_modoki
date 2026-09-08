@@ -2336,6 +2336,10 @@ export function applyImportedMaterialShaderStates(
             if (
                 state.presetId !== "pbr-mmd-like"
                 && state.presetId !== "pbr-base"
+                && state.presetId !== "pbr-metal-polished"
+                && state.presetId !== "pbr-metal-satin"
+                && state.presetId !== "pbr-plastic-glossy"
+                && state.presetId !== "pbr-clay-white"
                 && state.presetId !== "pbr-skin"
                 && state.presetId !== "pbr-sss-wax"
                 && state.presetId !== "pbr-skin-sss"

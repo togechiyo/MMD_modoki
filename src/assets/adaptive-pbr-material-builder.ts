@@ -12,6 +12,7 @@ import type { ILogger } from "babylon-mmd/esm/Loader/Parser/ILogger";
 import { PBRMaterialBuilder } from "babylon-mmd/esm/Loader/pbrMaterialBuilder";
 import type { ReferenceFileResolver } from "babylon-mmd/esm/Loader/referenceFileResolver";
 import type { TextureAlphaChecker } from "babylon-mmd/esm/Loader/textureAlphaChecker";
+import { DEFAULT_PBR_MATERIAL_SHADER_PRESET } from "../shared/mmd-material-pipeline";
 import {
     applyPbrMaterialShaderPreset,
     registerPbrPresetMaterial,
@@ -41,7 +42,7 @@ export class AdaptivePbrMaterialBuilder extends PBRMaterialBuilder {
     ): void {
         super.loadGeneralScalarProperties(material, materialInfo, meshes);
         registerPbrPresetMaterial(material, materialInfo.ambient);
-        applyPbrMaterialShaderPreset(material, "pbr-base");
+        applyPbrMaterialShaderPreset(material, DEFAULT_PBR_MATERIAL_SHADER_PRESET);
     }
 
     public override async setAlphaBlendMode(
@@ -59,7 +60,7 @@ export class AdaptivePbrMaterialBuilder extends PBRMaterialBuilder {
             getTextureAlphaChecker,
         );
         registerPbrPresetTransparencyBaseline(material);
-        applyPbrMaterialShaderPreset(material, "pbr-base");
+        applyPbrMaterialShaderPreset(material, DEFAULT_PBR_MATERIAL_SHADER_PRESET);
     }
 
     public override loadToonTexture(...args: unknown[]): void {

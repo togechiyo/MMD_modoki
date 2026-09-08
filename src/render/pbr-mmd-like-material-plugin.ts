@@ -5,15 +5,18 @@ import type { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import type { UniformBuffer } from "@babylonjs/core/Materials/uniformBuffer";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 
 type MmdLikePbrShadowTintDefines = MaterialDefines & {
     MMD_LIKE_SHADOW_TINT: boolean;
+    MMD_LIKE_TOON_TINT: boolean;
 };
 
 export type MmdLikePbrShadowTintSettings = {
     enabled: boolean;
     color: Color3;
     strength: number;
+    toonTexture?: BaseTexture | null;
 };
 
 export const PBR_MMD_LIKE_NORMAL_SHADOW_START = 0.12;
@@ -60,13 +63,14 @@ class MmdLikePbrShadowTintPlugin extends MaterialPluginBase {
     private enabledValue = false;
     private readonly colorValue = Color3.Black();
     private strengthValue = 0;
+    private toonTexture: BaseTexture | null = null;
 
     public constructor(material: PBRMaterial) {
         super(
             material,
             "MmdLikePbrShadowTint",
             210,
-            { MMD_LIKE_SHADOW_TINT: false },
+            { MMD_LIKE_SHADOW_TINT: false, MMD_LIKE_TOON_TINT: false },
             true,
             false,
         );
@@ -83,7 +87,8 @@ class MmdLikePbrShadowTintPlugin extends MaterialPluginBase {
 
     public applySettings(settings: MmdLikePbrShadowTintSettings): void {
         const nextEnabled = settings.enabled;
-        const enabledChanged = this.enabledValue !== nextEnabled;
+        const enabledChanged = this.enabledValue !== nextEnabled || this.toonTexture !== (settings.toonTexture ?? null);
+        this.toonTexture = settings.toonTexture ?? null;
         this.enabledValue = nextEnabled;
         this.colorValue.set(
             clamp01(settings.color.r),
@@ -101,9 +106,11 @@ class MmdLikePbrShadowTintPlugin extends MaterialPluginBase {
 
     public prepareDefines(defines: MaterialDefines): void {
         (defines as MmdLikePbrShadowTintDefines).MMD_LIKE_SHADOW_TINT = this.enabledValue;
+        (defines as MmdLikePbrShadowTintDefines).MMD_LIKE_TOON_TINT = this.enabledValue && this.toonTexture !== null;
     }
 
     public bindForSubMesh(uniformBuffer: UniformBuffer): void {
+        if (this.toonTexture) uniformBuffer.setTexture("mmdLikeToon", this.toonTexture);
         if (!this.enabledValue) return;
         uniformBuffer.updateFloat4(
             "mmdLikeShadowTint",
@@ -124,6 +131,8 @@ class MmdLikePbrShadowTintPlugin extends MaterialPluginBase {
         };
     }
 
+    public getSamplers(samplers: string[]): void { samplers.push("mmdLikeToon"); }
+
     public getCustomCode(
         shaderType: string,
         shaderLanguage: ShaderLanguage = ShaderLanguage.GLSL,
@@ -132,6 +141,12 @@ class MmdLikePbrShadowTintPlugin extends MaterialPluginBase {
 
         if (shaderLanguage === ShaderLanguage.WGSL) {
             return {
+                CUSTOM_FRAGMENT_DEFINITIONS: `
+#ifdef MMD_LIKE_TOON_TINT
+var mmdLikeToon: texture_2d<f32>;
+var mmdLikeToonSampler: sampler;
+#endif
+`,
                 CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: `
 #if defined(MMD_LIKE_SHADOW_TINT) && !defined(UNLIT)
 let mmdLikeOcclusionWeight = clamp(1.0 - aggShadow, 0.0, 1.0);
@@ -141,11 +156,17 @@ let mmdLikeNormalWeight = 1.0 - smoothstep(
     ${PBR_MMD_LIKE_NORMAL_SHADOW_END},
     mmdLikeDirectLight
 );
-let mmdLikeShadowWeight = max(mmdLikeOcclusionWeight, mmdLikeNormalWeight)
-    * uniforms.mmdLikeShadowTint.a;
+var mmdLikeTint = clamp(uniforms.mmdLikeShadowTint.rgb, vec3f(0.0), vec3f(1.0));
+var mmdLikeStrength = uniforms.mmdLikeShadowTint.a;
+#ifdef MMD_LIKE_TOON_TINT
+let mmdLikeToonColor = toLinearSpaceVec3(textureLoad(mmdLikeToon, vec2i(0, 0), 0).rgb);
+mmdLikeTint = mix(mmdLikeToonColor, mmdLikeTint, mmdLikeStrength);
+mmdLikeStrength = 1.0;
+#endif
+let mmdLikeShadowWeight = max(mmdLikeOcclusionWeight, mmdLikeNormalWeight) * mmdLikeStrength;
 let mmdLikeShadowMultiplier = mix(
     vec3f(1.0),
-    clamp(uniforms.mmdLikeShadowTint.rgb, vec3f(0.0), vec3f(1.0)),
+    mmdLikeTint,
     clamp(mmdLikeShadowWeight, 0.0, 1.0)
 );
 finalDiffuse *= mmdLikeShadowMultiplier;
@@ -158,6 +179,11 @@ finalIrradiance *= mmdLikeShadowMultiplier;
         }
 
         return {
+            CUSTOM_FRAGMENT_DEFINITIONS: `
+#ifdef MMD_LIKE_TOON_TINT
+uniform sampler2D mmdLikeToon;
+#endif
+`,
             CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: `
 #if defined(MMD_LIKE_SHADOW_TINT) && !defined(UNLIT)
 float mmdLikeOcclusionWeight = clamp(1.0 - aggShadow, 0.0, 1.0);
@@ -167,11 +193,18 @@ float mmdLikeNormalWeight = 1.0 - smoothstep(
     ${PBR_MMD_LIKE_NORMAL_SHADOW_END},
     mmdLikeDirectLight
 );
-float mmdLikeShadowWeight = max(mmdLikeOcclusionWeight, mmdLikeNormalWeight)
-    * mmdLikeShadowTint.a;
+vec3 mmdLikeTint = clamp(mmdLikeShadowTint.rgb, vec3(0.0), vec3(1.0));
+float mmdLikeStrength = mmdLikeShadowTint.a;
+#ifdef MMD_LIKE_TOON_TINT
+vec2 mmdLikeSize = vec2(textureSize(mmdLikeToon, 0));
+vec3 mmdLikeToonColor = toLinearSpace(texture2D(mmdLikeToon, vec2(0.5) / mmdLikeSize).rgb);
+mmdLikeTint = mix(mmdLikeToonColor, mmdLikeTint, mmdLikeStrength);
+mmdLikeStrength = 1.0;
+#endif
+float mmdLikeShadowWeight = max(mmdLikeOcclusionWeight, mmdLikeNormalWeight) * mmdLikeStrength;
 vec3 mmdLikeShadowMultiplier = mix(
     vec3(1.0),
-    clamp(mmdLikeShadowTint.rgb, vec3(0.0), vec3(1.0)),
+    mmdLikeTint,
     clamp(mmdLikeShadowWeight, 0.0, 1.0)
 );
 finalDiffuse *= mmdLikeShadowMultiplier;

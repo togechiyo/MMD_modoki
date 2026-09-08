@@ -15,6 +15,7 @@ export const PBR_MATERIAL_SHADER_PRESETS = [
     "pbr-base",
     "pbr-mmd-like",
     "pbr-skin",
+    "pbr-sss-wax",
     "pbr-skin-sss",
     "pbr-skin-face",
     "pbr-no-shadow",
@@ -22,7 +23,7 @@ export const PBR_MATERIAL_SHADER_PRESETS = [
 
 export type PbrMaterialShaderPreset = typeof PBR_MATERIAL_SHADER_PRESETS[number];
 
-export const DEFAULT_PBR_MATERIAL_SHADER_PRESET: PbrMaterialShaderPreset = "pbr-base";
+export const DEFAULT_PBR_MATERIAL_SHADER_PRESET: PbrMaterialShaderPreset = "pbr-mmd-like";
 
 export function normalizeMmdMaterialPipelinePreset(value: unknown): MmdMaterialPipelinePreset {
     return value === "pbr-standard" ? value : DEFAULT_MMD_MATERIAL_PIPELINE_PRESET;
@@ -42,13 +43,16 @@ export function isPbrMaterialPipelinePreset(value: unknown): boolean {
 
 export function normalizePbrMaterialShaderPreset(value: unknown): PbrMaterialShaderPreset {
     switch (value) {
+        case "pbr-skin-sss":
+            return "pbr-skin";
         case "pbr-mmd-like":
         case "pbr-skin":
-        case "pbr-skin-sss":
+        case "pbr-sss-wax":
         case "pbr-skin-face":
         case "pbr-no-shadow":
             return value;
         case "pbr-base":
+            return value;
         default:
             return DEFAULT_PBR_MATERIAL_SHADER_PRESET;
     }

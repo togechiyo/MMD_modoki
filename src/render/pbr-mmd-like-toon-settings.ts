@@ -1,4 +1,5 @@
 import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
+import { setOwnedSssProfile } from "./owned-sss";
 import { Material } from "@babylonjs/core/Materials/material";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -15,20 +16,12 @@ import {
     type PbrMaterialShaderPreset,
 } from "../shared/mmd-material-pipeline";
 
-export const PBR_MMD_LIKE_ENVIRONMENT_INTENSITY = 0.8;
-export const PBR_MMD_LIKE_TRANSLUCENCY_INTENSITY = 0.02;
-export const PBR_MMD_LIKE_MINIMUM_ROUGHNESS = 0.72;
-export const PBR_SKIN_ENVIRONMENT_INTENSITY = 0.8;
-export const PBR_SKIN_TRANSLUCENCY_INTENSITY = 0.02;
-export const PBR_SKIN_TRANSLUCENCY_COLOR_RGB = [1, 0.68, 0.58] as const;
 export const PBR_SKIN_MINIMUM_ROUGHNESS = 0.68;
-export const PBR_SKIN_MINIMUM_THICKNESS = 0;
-export const PBR_SKIN_MAXIMUM_THICKNESS = 0.3;
-export const PBR_SKIN_SSS_ENVIRONMENT_INTENSITY = 1;
+export const PBR_MMD_LIKE_MINIMUM_ROUGHNESS = 0.8;
+// Retained only for legacy diagnostic tooling, not applied by current presets.
 export const PBR_SKIN_SSS_DEBUG_VISUALIZATION = "off" as const;
 export const PBR_SKIN_SSS_METERS_PER_UNIT = 0.08;
-// 最終切り分け用の純赤プロファイル。これでも Standard との差が見えなければ、
-// 現在の描画経路では独立した SSS プリセットとして採用しない。
+// 旧Babylon SSS診断値。現在のSkinは自前SSSを使う。
 export const PBR_SKIN_SSS_DIFFUSION_PROFILE_RGB = [1, 0, 0] as const;
 
 export function getPbrSkinSssRelativeRadius(
@@ -282,166 +275,6 @@ function restorePbrStandardSettings(
     }
 }
 
-function createPbrSkinTranslucencyColor(): Color3 {
-    return new Color3(...PBR_SKIN_TRANSLUCENCY_COLOR_RGB);
-}
-
-function createPbrSkinSssDiffusionProfile(): Color3 {
-    return new Color3(...PBR_SKIN_SSS_DIFFUSION_PROFILE_RGB);
-}
-
-function createMmdLikeToonTranslucencyTexture(
-    state: PbrPresetRuntimeState,
-): (MmdLikeToonTextureTarget & BaseTexture) | null {
-    if (state.toonTranslucencyTexture) {
-        return state.toonTranslucencyTexture;
-    }
-    const source = state.toonTexture;
-    if (!source) return null;
-
-    const clone = source.clone();
-    if (
-        !clone
-        || !("uOffset" in clone)
-        || !("vOffset" in clone)
-        || !("uScale" in clone)
-        || !("vScale" in clone)
-        || !("wrapU" in clone)
-        || !("wrapV" in clone)
-    ) {
-        clone?.dispose();
-        return null;
-    }
-
-    const sampleTexture = clone as MmdLikeToonTextureTarget & BaseTexture;
-    const size = source.getSize();
-    // MMD's deepest toon/shadow color is the left-bottom texel. Freeze the
-    // cloned texture matrix at its texel center so Babylon's standard
-    // translucency path receives one constant PMX shadow color for all UVs.
-    sampleTexture.uScale = 0;
-    sampleTexture.vScale = 0;
-    sampleTexture.uOffset = 0.5 / Math.max(1, size.width);
-    sampleTexture.vOffset = 0.5 / Math.max(1, size.height);
-    state.toonTranslucencyTexture = sampleTexture;
-    return sampleTexture;
-}
-
-function hasScreenSpaceScattering(value: unknown): boolean {
-    if (!value || typeof value !== "object") return false;
-    const subSurface = (value as { subSurface?: { isScatteringEnabled?: boolean } }).subSurface;
-    return subSurface?.isScatteringEnabled === true;
-}
-
-function syncPbrSkinSceneConfiguration(material: PbrPresetMaterialTarget): void {
-    const scene = material.getScene?.();
-    const configuration = scene?.subSurfaceConfiguration;
-    if (!configuration || !scene.materials) return;
-    configuration.enabled = scene.materials.some(hasScreenSpaceScattering);
-}
-
-function applyPbrSkinBaseSurfaceSettings(material: PbrPresetMaterialTarget): void {
-    material.subSurface.isRefractionEnabled = false;
-    material.subSurface.refractionIntensity = 0;
-    material.subSurface.linkRefractionWithTransparency = false;
-    if (material.environmentIntensity !== undefined) {
-        material.environmentIntensity = PBR_SKIN_ENVIRONMENT_INTENSITY;
-    }
-    material.roughness = Math.max(
-        material.roughness ?? 0,
-        PBR_SKIN_MINIMUM_ROUGHNESS,
-    );
-}
-
-function applyPbrSkinSubSurfaceSettings(material: PbrPresetMaterialTarget): boolean {
-    // The stable Skin preset uses Babylon's opaque diffuse-transmission path
-    // without the screen-space scattering pass.
-    applyPbrSkinBaseSurfaceSettings(material);
-    material.subSurface.isTranslucencyEnabled = true;
-    material.subSurface.translucencyIntensity = PBR_SKIN_TRANSLUCENCY_INTENSITY;
-    material.subSurface.translucencyColor = createPbrSkinTranslucencyColor();
-    material.subSurface.translucencyColorTexture = null;
-    material.subSurface.useAlbedoToTintTranslucency = true;
-    material.subSurface.minimumThickness = PBR_SKIN_MINIMUM_THICKNESS;
-    material.subSurface.maximumThickness = PBR_SKIN_MAXIMUM_THICKNESS;
-    material.subSurface.legacyTranslucency = false;
-    material.subSurface.isScatteringEnabled = false;
-    return true;
-}
-
-function applyPbrSkinSssSettings(material: PbrPresetMaterialTarget): boolean {
-    const scene = material.getScene?.();
-    const configuration = scene?.enableSubSurfaceForPrePass?.();
-    if (!configuration) return false;
-
-    // Follow Babylon.js' documented screen-space skin scattering setup. MMD
-    // models are commonly around 20 units tall, so use roughly 8 cm per unit.
-    // The profile channels are scattering distances, not an additive tint.
-    // Keep the relative radius bounded while deliberately separating the RGB
-    // distances so the experimental preset has an unmistakable red SSS response.
-    applyPbrSkinBaseSurfaceSettings(material);
-    // Match PBR Standard while diagnosing the scattering-only preset. The
-    // stable Skin preset intentionally stays at its lower IBL response.
-    if (material.environmentIntensity !== undefined) {
-        material.environmentIntensity = PBR_SKIN_SSS_ENVIRONMENT_INTENSITY;
-    }
-    // babylon-mmd maps PMX diffuse RGB to albedoColor. That multiplier is
-    // authored for MMD's diffuse + ambient lighting model and is not reliably
-    // usable as a physical base-color multiplier. For textured skin, keep the
-    // texture's authored color intact and restore the PMX value when leaving
-    // this preset. Textureless materials still need their PMX diffuse color.
-    if (material.albedoTexture && material.albedoColor) {
-        material.albedoColor = Color3.White();
-    }
-    // Keep this diagnostic preset scattering-only. Translucency uses a
-    // separate tint/attenuation path and previously compounded the warm
-    // diffusion profile into red highlights and dark non-red channels.
-    material.subSurface.isTranslucencyEnabled = false;
-    material.subSurface.translucencyIntensity = 0;
-    material.subSurface.translucencyColor = null;
-    material.subSurface.translucencyColorTexture = null;
-    material.subSurface.useAlbedoToTintTranslucency = false;
-    material.subSurface.minimumThickness = 0;
-    material.subSurface.maximumThickness = 0;
-    material.subSurface.legacyTranslucency = false;
-    configuration.metersPerUnit = PBR_SKIN_SSS_METERS_PER_UNIT;
-    // Final image processing is owned by the editor's selected output path.
-    // Babylon's default `true` adds a full-screen composition pass after SSS
-    // even when scene image processing is disabled, lifting the whole viewport.
-    configuration.needsImageProcessing = false;
-    material.subSurface.scatteringDiffusionProfile =
-        createPbrSkinSssDiffusionProfile();
-    material.subSurface.isScatteringEnabled = true;
-    configuration.enabled = true;
-    return true;
-}
-
-function applyPbrMmdLikeSubSurfaceSettings(
-    material: PbrPresetMaterialTarget,
-    state: PbrPresetRuntimeState,
-): void {
-    const toonColorTexture = createMmdLikeToonTranslucencyTexture(state);
-
-    material.subSurface.isRefractionEnabled = false;
-    material.subSurface.refractionIntensity = 0;
-    material.subSurface.linkRefractionWithTransparency = false;
-    material.subSurface.isTranslucencyEnabled = true;
-    material.subSurface.translucencyIntensity = PBR_MMD_LIKE_TRANSLUCENCY_INTENSITY;
-    material.subSurface.translucencyColor = Color3.White();
-    material.subSurface.translucencyColorTexture = toonColorTexture;
-    material.subSurface.useAlbedoToTintTranslucency = true;
-    material.subSurface.minimumThickness = PBR_SKIN_MINIMUM_THICKNESS;
-    material.subSurface.maximumThickness = PBR_SKIN_MAXIMUM_THICKNESS;
-    material.subSurface.legacyTranslucency = false;
-    material.subSurface.isScatteringEnabled = false;
-    if (material.environmentIntensity !== undefined) {
-        material.environmentIntensity = PBR_MMD_LIKE_ENVIRONMENT_INTENSITY;
-    }
-    material.roughness = Math.max(
-        material.roughness ?? 0,
-        PBR_MMD_LIKE_MINIMUM_ROUGHNESS,
-    );
-}
-
 function syncPbrMmdLikeShadowTint(
     material: PbrPresetMaterialTarget,
     state: PbrPresetRuntimeState,
@@ -451,16 +284,14 @@ function syncPbrMmdLikeShadowTint(
         enabled: isPbrShadowTintPreset(state.materialShaderPreset),
         color: state.shadowTintColor,
         strength: state.shadowTintStrength,
+        toonTexture: state.toonTexture,
     });
 }
 
 export function isPbrShadowTintPreset(
     preset: PbrMaterialShaderPreset,
 ): boolean {
-    return preset === "pbr-mmd-like"
-        || preset === "pbr-skin"
-        || preset === "pbr-skin-sss"
-        || preset === "pbr-skin-face";
+    return preset === "pbr-mmd-like";
 }
 
 function syncPbrSkinFaceNormal(
@@ -500,6 +331,7 @@ export function registerPbrPresetToonTexture(
     state.toonTranslucencyTexture?.dispose();
     state.toonTranslucencyTexture = null;
     state.toonTexture = toonTexture;
+    syncPbrMmdLikeShadowTint(material, state);
 }
 
 export function registerPbrPresetTransparencyBaseline(
@@ -538,36 +370,20 @@ export function applyPbrMaterialShaderPreset(
     const nextPreset = normalizePbrMaterialShaderPreset(materialPreset);
     restorePbrStandardSettings(material, state);
 
-    if (nextPreset === "pbr-mmd-like") {
-        applyPbrMmdLikeSubSurfaceSettings(material, state);
+    const skin = nextPreset === "pbr-skin" || nextPreset === "pbr-skin-face";
+    const wax = nextPreset === "pbr-sss-wax";
+    if (skin || wax || nextPreset === "pbr-mmd-like") {
+        material.subSurface.isRefractionEnabled = false;
+        material.subSurface.isTranslucencyEnabled = false;
+        material.subSurface.isScatteringEnabled = false;
+        material.subSurface.refractionIntensity = 0;
+        material.subSurface.translucencyIntensity = 0;
     }
-
-    if (
-        (nextPreset === "pbr-skin" || nextPreset === "pbr-skin-face")
-        && !applyPbrSkinSubSurfaceSettings(material)
-    ) {
-        state.materialShaderPreset = "pbr-base";
-        syncPbrSkinSceneConfiguration(material);
-        material.markAsDirty?.(Material.AllDirtyFlag);
-        return false;
-    }
-
-    if (
-        nextPreset === "pbr-skin-sss"
-        && !applyPbrSkinSssSettings(material)
-    ) {
-        restorePbrStandardSettings(material, state);
-        state.materialShaderPreset = "pbr-base";
-        syncPbrSkinSceneConfiguration(material);
-        syncPbrMmdLikeShadowTint(material, state);
-        syncPbrSkinFaceNormal(material, state);
-        syncPbrNoShadow(material, state);
-        material.markAsDirty?.(Material.AllDirtyFlag);
-        return false;
-    }
+    if (skin || wax) material.roughness = Math.max(material.roughness ?? 0, PBR_SKIN_MINIMUM_ROUGHNESS);
+    if (nextPreset === "pbr-mmd-like") material.roughness = Math.max(material.roughness ?? 0, PBR_MMD_LIKE_MINIMUM_ROUGHNESS);
+    setOwnedSssProfile(material, skin ? "skin" : wax ? "pbr-wax" : null);
 
     state.materialShaderPreset = nextPreset;
-    syncPbrSkinSceneConfiguration(material);
     syncPbrMmdLikeShadowTint(material, state);
     syncPbrSkinFaceNormal(material, state);
     syncPbrNoShadow(material, state);

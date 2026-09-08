@@ -48,6 +48,13 @@ var ownedSssNormalSampler: sampler;
 var ownedSssNormal: texture_2d<f32>;
 var ownedSssEntrySampler: sampler;
 var ownedSssEntry: texture_2d<f32>;
+// Same warm endpoint and angular easing as normal-mode Skin above.
+fn ownedSssSkinSurface(ndl: f32, shadow: f32) -> vec3f {
+    let angular = clamp(ndl, 0.0, 1.0);
+    let lit = clamp(angular * (2.0 - angular) * shadow, 0.0, 1.0);
+    let softLit = lit * (1.35 - 0.35 * lit);
+    return mix(${SKIN_TINT} * 0.65, vec3f(1.0), softLit);
+}
 fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     let clip = uniforms.ownedSssLightMatrix * vec4f(p, 1.0);
     // Babylon's offscreen WebGPU render targets use positive projected Y.
@@ -133,6 +140,25 @@ if (uniforms.ownedSssParams.x < 0.5) {
     diffuseBase = toGammaSpaceVec3(max(illumination, vec3f(0.0)));
 }
 }
+#endif
+`;
+
+// PBR lighting is already linear. Scatter only direct diffuse irradiance;
+// leave IBL and specular on their existing paths and apply albedo once.
+export const OWNED_SSS_PBR_COMPOSE = `
+#if defined(OWNED_SSS) && !defined(UNLIT)
+var ownedSssIrradiance = max(diffuseBase * uniforms.vLightingIntensity.x * ${SKIN_LIGHT_GAIN}, vec3f(0.0));
+if (uniforms.ownedSssParams.w > 0.0) {
+    if (uniforms.ownedSssParams.x > 0.5 && uniforms.ownedSssParams.x < 1.5) {
+        ownedSssIrradiance += ownedSssTransmission(fragmentInputs.vPositionW, normalW);
+    }
+    if (uniforms.ownedSssParams.x < 0.5) {
+        let scattered = ownedSssDiffuse(fragmentInputs.vPositionW, normalW, ownedSssIrradiance);
+        finalDiffuse = max(scattered, vec3f(0.0)) * surfaceAlbedo * ambientOcclusionForDirectDiffuse;
+    }
+}
+#else
+var ownedSssIrradiance = vec3f(0.0);
 #endif
 `;
 

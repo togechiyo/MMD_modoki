@@ -12,6 +12,7 @@
 - [アーキテクチャ概要](./architecture.md)
 - [シェーダープリセット / FrameGraph エフェクト一覧](./shader-framegraph-effect-catalog.md)
 - [実験設定ポップアップ 2026-09-08](./experimental-settings-popup-2026-09-08.md)
+- [PBR材質プリセットの役割整理 2026-09-08](./pbr-material-presets-2026-09-08.md)
 - [プロジェクト全体の材質モードと設定退避 2026-09-08](./project-material-mode-design-2026-09-08.md)
 - [FrameGraph 個別切替と全体ON/OFF 2026-09-08](./framegraph-master-toggle-2026-09-08.md)
 - [光色100%超過時のv0.2.0比較 2026-09-08](./light-color-above-default-history-2026-09-08.md)

@@ -2296,9 +2296,7 @@ export function getSerializedMaterialShaderStates(host: MaterialShaderHost, entr
     if (entry.materialPipeline === "pbr-standard") {
         return entry.materials.flatMap((material) => {
             const presetId = getPbrMaterialShaderPreset(material.material);
-            return presetId === "pbr-base"
-                ? []
-                : [{ materialKey: material.key, presetId }];
+            return [{ materialKey: material.key, presetId }];
         });
     }
     const states: ProjectModelMaterialShaderState[] = [];
@@ -2319,22 +2317,27 @@ export function applyImportedMaterialShaderStates(
     states: ProjectModelMaterialShaderState[] | undefined,
     warnings: string[],
     modelPath: string,
+    pbrBaseline: "pbr-base" | "pbr-mmd-like" = "pbr-base",
 ): void {
-    if (!Array.isArray(states) || states.length === 0) return;
     if (!isWgslMaterialShaderAssignmentAvailable(host)) return;
 
     const entry = host.sceneModels[modelIndex];
     if (!entry) return;
 
     if (entry.materialPipeline === "pbr-standard") {
-        for (const state of states) {
+        // Older projects omitted Standard assignments. Preserve that baseline;
+        // new saves include every PBR material, including the new default.
+        for (const material of entry.materials) applyPbrMaterialShaderPreset(material.material, pbrBaseline);
+        for (const state of Array.isArray(states) ? states : []) {
             if (!state || typeof state.materialKey !== "string" || typeof state.presetId !== "string") {
                 warnings.push("Invalid PBR material shader assignment: " + modelPath);
                 continue;
             }
             if (
                 state.presetId !== "pbr-mmd-like"
+                && state.presetId !== "pbr-base"
                 && state.presetId !== "pbr-skin"
+                && state.presetId !== "pbr-sss-wax"
                 && state.presetId !== "pbr-skin-sss"
                 && state.presetId !== "pbr-skin-face"
                 && state.presetId !== "pbr-no-shadow"
@@ -2354,6 +2357,7 @@ export function applyImportedMaterialShaderStates(
         return;
     }
 
+    if (!Array.isArray(states) || states.length === 0) return;
     for (const state of states) {
         if (!state || typeof state.materialKey !== "string" || typeof state.presetId !== "string") {
             warnings.push("Invalid material shader assignment: " + modelPath);

@@ -18,6 +18,16 @@ assetやそのtextureはGitへ追加しない。通常testは配布fixture、Ali
 順光でのtexture保持、側光の色別拡散、逆光の薄部と厚部、解除、保存復元、PNG、GPU validation、原モデルとの比較を確認する。
 画面空間拡散は画面外の入射光を参照できず、光方向の最前面との差は複数surfaceを跨ぐ場合に実厚みと異なる。物理的な多重散乱の完全解とは説明しない。
 
+## 2026-09-08 PBRへの流用
+
+後続の所有者承認でPBR Skin/Faceへ接続した。以下は初期調査の記録で、現仕様は[PBR材質プリセット整理](./pbr-material-presets-2026-09-08.md)を参照する。
+
+所有者は旧PBR Skin SSS（Babylon画面空間SSS）の採用取りやめを指定し、自前SSSのPBR流用可否を質問した。旧プリセットのUI削除・保存互換処理はこの調査では変更していない。
+
+現コードからは、位置・法線・material ID・光方向の入射深度、2段の散乱処理、cameraへのRTT接続を共有できる見込みがある。ただし現pluginの合成位置と`diffuseBase`等はStandard WGSL専用で、遮光用materialの収集も`StandardMaterial`に限定されるため、そのままPBRへ適用はできない。
+
+PBR用のcapture / composeを分離し、拡散光だけを散乱対象としてspecularと環境反射を保つ構成を候補とする。初期検証では直接光の拡散・薄部透過に限定し、環境IBLは既存応答を維持すると切り分けやすい。既存Skinのtranslucencyや影色処理との二重適用、非SSSのPBR髪・服の遮光、モード切替時のpass停止、Classic / FrameGraph / PNG出力を確認する必要がある。工数・描画品質・性能は未検証で、全体材質方式の再設計を要するとは現時点では判断していない。
+
 ## 一次情報
 
 - [Separable Subsurface Scattering — 著者ページ](https://www.iryoku.com/separable-sss/): irradianceの空間拡散と色別profileの考え方を参照。今回は既存コードやkernelをコピーせず独自の距離積分を実装する。

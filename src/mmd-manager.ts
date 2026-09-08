@@ -99,6 +99,7 @@ import {
 } from "./shared/dof-person-autofocus";
 import {
     DEFAULT_MMD_MATERIAL_PIPELINE_PRESET,
+    DEFAULT_PBR_MATERIAL_SHADER_PRESET,
     normalizeMmdMaterialPipelinePreset,
     normalizePbrMaterialShaderPreset,
     resolveNextImportMaterialPipelinePreset,
@@ -3276,9 +3277,9 @@ ${beforeFogAppendBlock}
                 const warnings: string[] = [];
                 // An empty bank means an explicit default, including when a
                 // cached material previously carried a non-default preset.
-                if (next === "pbr-standard") this.setPbrMaterialShaderPreset(index, null, "pbr-base");
+                if (next === "pbr-standard") this.setPbrMaterialShaderPreset(index, null, DEFAULT_PBR_MATERIAL_SHADER_PRESET);
                 else this.setWgslMaterialShaderPreset(index, null, "wgsl-mmd-standard");
-                this.applyImportedMaterialShaderStates(index, nextBanks[next]?.materials, warnings, entry.info.path);
+                if (nextBanks[next]) this.applyImportedMaterialShaderStates(index, nextBanks[next]?.materials, warnings, entry.info.path);
                 if (warnings.length) throw new Error(warnings.join("\n"));
                 entry.mesh.metadata.materials.forEach(material => SwitchableMaterialProxy.rebase(material));
                 entry.materials.forEach((material, i) => this.setMaterialHiddenState(material.material, !visibility[i]));
@@ -4106,8 +4107,9 @@ ${beforeFogAppendBlock}
         states: ProjectModelMaterialShaderState[] | undefined,
         warnings: string[],
         modelPath: string,
+        pbrBaseline?: "pbr-base" | "pbr-mmd-like",
     ): void {
-        applyImportedMaterialShaderStatesImpl(this, modelIndex, states, warnings, modelPath);
+        applyImportedMaterialShaderStatesImpl(this, modelIndex, states, warnings, modelPath, pbrBaseline);
         this.syncFrameGraphRenderTargetState();
     }
 

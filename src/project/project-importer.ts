@@ -80,6 +80,7 @@ type ProjectImportHost = {
         states: ProjectModelMaterialShaderState[] | undefined,
         warnings: string[],
         modelPath: string,
+        pbrBaseline?: "pbr-base" | "pbr-mmd-like",
     ): void;
     setPbrMaterialShaderPreset?(
         modelIndex: number,
@@ -368,7 +369,7 @@ function finalizeImportedRenderState(
         const actualIndex = modelIndices.get(modelState);
         if (actualIndex !== undefined) host.applyImportedMaterialShaderStates(actualIndex,
             migrateMaterialBanks(modelState)[resolveProjectMaterialMode(data.scene)]?.materials,
-            warnings, modelState.path);
+            warnings, modelState.path, legacyPbrPreset === "pbr-mmd-like" ? "pbr-mmd-like" : "pbr-base");
     }
 
     if (

@@ -27,13 +27,14 @@ describe("mmd material pipeline", () => {
     });
 
     it("normalizes per-material PBR shader presets independently", () => {
-        expect(normalizePbrMaterialShaderPreset(undefined)).toBe("pbr-base");
+        expect(normalizePbrMaterialShaderPreset(undefined)).toBe("pbr-mmd-like");
         expect(normalizePbrMaterialShaderPreset("pbr-base")).toBe("pbr-base");
         expect(normalizePbrMaterialShaderPreset("pbr-mmd-like")).toBe("pbr-mmd-like");
         expect(normalizePbrMaterialShaderPreset("pbr-skin")).toBe("pbr-skin");
-        expect(normalizePbrMaterialShaderPreset("pbr-skin-sss")).toBe("pbr-skin-sss");
+        expect(normalizePbrMaterialShaderPreset("pbr-sss-wax")).toBe("pbr-sss-wax");
+        expect(normalizePbrMaterialShaderPreset("pbr-skin-sss")).toBe("pbr-skin");
         expect(normalizePbrMaterialShaderPreset("pbr-skin-face")).toBe("pbr-skin-face");
         expect(normalizePbrMaterialShaderPreset("pbr-no-shadow")).toBe("pbr-no-shadow");
-        expect(normalizePbrMaterialShaderPreset("unknown")).toBe("pbr-base");
+        expect(normalizePbrMaterialShaderPreset("unknown")).toBe("pbr-mmd-like");
     });
 });

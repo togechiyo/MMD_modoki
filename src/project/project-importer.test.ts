@@ -221,7 +221,7 @@ describe("importProjectState", () => {
         expect(host.loadPMX.mock.calls.map(call => call[1])).toEqual(["pbr-standard", "pbr-standard"]);
         for (const [index, presetId] of ["pbr-skin", "pbr-no-shadow"].entries()) {
             expect(host.applyImportedMaterialShaderStates).toHaveBeenCalledWith(index,
-                [{ materialKey: "0:body", presetId }], expect.any(Array), "fixture.pmx");
+                [{ materialKey: "0:body", presetId }], expect.any(Array), "fixture.pmx", "pbr-base");
         }
         expect(host.sceneModels[0].materialSettingsByMode["mmd-standard"].materials[0].presetId).toBe("wgsl-full-light");
     });
@@ -1247,6 +1247,7 @@ describe("importProjectState", () => {
             project.scene.models[0].materialShaders,
             expect.any(Array),
             "C:/models/test.pmx",
+            "pbr-base",
         );
         expect(host.setDofFocusTargetByPath).toHaveBeenLastCalledWith("C:/models/test.pmx", "頭");
         expect(host.setDofFocusMode).toHaveBeenLastCalledWith("model-target");

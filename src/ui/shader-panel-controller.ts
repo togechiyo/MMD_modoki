@@ -3,6 +3,7 @@ import type { MmdManager, WgslMaterialShaderPresetId } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
 import {
     PBR_MATERIAL_UI_ENABLED,
+    DEFAULT_PBR_MATERIAL_SHADER_PRESET,
     type PbrMaterialShaderPreset,
 } from "../shared/mmd-material-pipeline";
 import {
@@ -214,11 +215,6 @@ export class ShaderPanelController {
         if (isPbrModel) {
             presets = [
                 {
-                    id: "pbr-base",
-                    label: t("shader.pbrPreset.standard"),
-                    description: t("shader.pbrMaterial.baseDescription"),
-                },
-                {
                     id: "pbr-mmd-like",
                     label: t("shader.pbrPreset.mmdLike"),
                     description: t("shader.pbrMaterial.mmdLikeDescription"),
@@ -229,19 +225,24 @@ export class ShaderPanelController {
                     description: t("shader.pbrMaterial.skinDescription"),
                 },
                 {
-                    id: "pbr-skin-sss",
-                    label: t("shader.pbrPreset.skinSss"),
-                    description: t("shader.pbrMaterial.skinSssDescription"),
-                },
-                {
                     id: "pbr-skin-face",
                     label: t("shader.pbrPreset.skinFace"),
                     description: t("shader.pbrMaterial.skinFaceDescription"),
                 },
                 {
+                    id: "pbr-sss-wax",
+                    label: t("shader.pbrPreset.wax"),
+                    description: t("shader.pbrMaterial.waxDescription"),
+                },
+                {
                     id: "pbr-no-shadow",
                     label: t("shader.pbrPreset.noShadow"),
                     description: t("shader.pbrMaterial.noShadowDescription"),
+                },
+                {
+                    id: "pbr-base",
+                    label: t("shader.pbrPreset.standard"),
+                    description: t("shader.pbrMaterial.baseDescription"),
                 },
             ];
             elements.presetSelect.innerHTML = "";
@@ -588,7 +589,7 @@ export class ShaderPanelController {
         }
         const selectedValue = resetToDefault
             ? (isPbrModel
-                ? "pbr-base"
+                ? DEFAULT_PBR_MATERIAL_SHADER_PRESET
                 : selectedAccessory?.defaultPresetId ?? "wgsl-mmd-standard")
             : this.elements.presetSelect.value;
         if (!selectedValue) {
@@ -613,8 +614,8 @@ export class ShaderPanelController {
                     : t("shader.toast.pbrMaterialApplied", {
                         name: selectedValue === "pbr-mmd-like"
                             ? t("shader.pbrPreset.mmdLike")
-                            : selectedValue === "pbr-skin-sss"
-                                ? t("shader.pbrPreset.skinSss")
+                            : selectedValue === "pbr-sss-wax"
+                                ? t("shader.pbrPreset.wax")
                             : selectedValue === "pbr-skin-face"
                                 ? t("shader.pbrPreset.skinFace")
                                 : selectedValue === "pbr-no-shadow"

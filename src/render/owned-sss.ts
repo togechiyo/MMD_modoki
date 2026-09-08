@@ -9,6 +9,7 @@ import type { MaterialDefines } from "@babylonjs/core/Materials/materialDefines"
 import { MaterialPluginBase } from "@babylonjs/core/Materials/materialPluginBase";
 import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { RenderTargetTexture } from "@babylonjs/core/Materials/Textures/renderTargetTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
@@ -19,11 +20,11 @@ import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
-import { OWNED_SSS_BLUR, OWNED_SSS_CAPTURE, OWNED_SSS_CAPTURE_EARLY, OWNED_SSS_COMPOSE, OWNED_SSS_DEFINITIONS } from "./owned-sss-shaders";
+import { OWNED_SSS_BLUR, OWNED_SSS_CAPTURE, OWNED_SSS_CAPTURE_EARLY, OWNED_SSS_COMPOSE, OWNED_SSS_DEFINITIONS, OWNED_SSS_PBR_COMPOSE } from "./owned-sss-shaders";
 import { ownedSssProjectionRadius, snapOwnedSssCoordinate } from "./owned-sss-projection";
 import { getOwnedSssPositions } from "./owned-sss-positions";
 
-type Profile = "skin" | "wax";
+type Profile = "skin" | "wax" | "pbr-wax";
 const runtimes = new WeakMap<Scene, OwnedSssRuntime>();
 const plugins = new WeakMap<Material, OwnedSssPlugin>();
 const liveRuntimes = new Set<OwnedSssRuntime>();
@@ -158,7 +159,7 @@ class OwnedSssRuntime {
         // Capture other surfaces on the same character, never editor helper meshes.
         for (const mesh of occluders) for (const sub of mesh.subMeshes ?? []) {
             const material = sub.getMaterial();
-            if (!(material instanceof StandardMaterial)) continue;
+            if (!(material instanceof StandardMaterial) && !(material instanceof PBRMaterial)) continue;
             let plugin = plugins.get(material);
             if (!plugin) { plugin = new OwnedSssPlugin(material, this); plugins.set(material, plugin); }
             plugin.setCaptureEnabled(true);
@@ -265,7 +266,11 @@ class OwnedSssPlugin extends MaterialPluginBase {
         const radius = 0.2;
         buffer.updateFloat4("ownedSssParams", r.mode, radius, 0.5, this.enabled ? surfaceId : 0);
         // Both profiles use Wax transport; only the source tint differs.
-        buffer.updateFloat4("ownedSssProfile", 1, 1, this.enabled && this.profile === "skin" ? 1 : 0, 0);
+        // pbr-wax preserves the first PBR SSS implementation; Skin also uses
+        // the normal-mode warm shadow band and broadened directional lobe.
+        buffer.updateFloat4("ownedSssProfile", 1, 1,
+            this.enabled && this.profile !== "wax" ? 1 : 0,
+            this.enabled && this.profile === "skin" ? 1 : 0);
         buffer.updateFloat4("ownedSssLight", r.lightDirection.x, r.lightDirection.y, r.lightDirection.z, 0);
         buffer.updateFloat4("ownedSssLightColor", r.lightColor.x, r.lightColor.y, r.lightColor.z, 0);
         buffer.updateFloat4("ownedSssProjection", r.projection[0], r.projection[1], 0, 0);
@@ -278,6 +283,41 @@ class OwnedSssPlugin extends MaterialPluginBase {
     }
     public getCustomCode(shaderType: string): Record<string, string> | null {
         if (shaderType !== "fragment") return null;
+        if (this._material instanceof PBRMaterial) {
+            return {
+                CUSTOM_FRAGMENT_DEFINITIONS: OWNED_SSS_DEFINITIONS,
+                CUSTOM_FRAGMENT_MAIN_BEGIN: `
+#ifdef OWNED_SSS
+var ownedSssDirectional = false;
+#endif
+`,
+                ...Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`CUSTOM_LIGHT${i}_COLOR`, `
+#ifdef OWNED_SSS
+#ifdef DIRLIGHT${i}
+ownedSssDirectional = true;
+#else
+ownedSssDirectional = false;
+#endif
+#endif
+`])),
+                // Keep fallback formatting different from the match: Babylon
+                // replaces identical light expressions sequentially, so copying
+                // the match back would repeatedly patch only the first light.
+                "!diffuseBase\\+=info\\.diffuse\\*shadow;": `
+#ifdef OWNED_SSS
+if (uniforms.ownedSssProfile.w > 0.5 && ownedSssDirectional) {
+    let skinSurface = ownedSssSkinSurface(preInfo.NdotLUnclamped, shadow);
+    diffuseBase += info.diffuse / max(preInfo.NdotL, 0.0000001) * toLinearSpaceVec3(skinSurface);
+} else { diffuseBase += info.diffuse * shadow; }
+#else
+diffuseBase += info.diffuse * shadow;
+#endif
+`,
+                CUSTOM_FRAGMENT_BEFORE_LIGHTS: OWNED_SSS_CAPTURE_EARLY,
+                CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: OWNED_SSS_PBR_COMPOSE,
+                CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: OWNED_SSS_CAPTURE.replace(/\bcolor\b/g, "finalColor"),
+            };
+        }
         return { CUSTOM_FRAGMENT_DEFINITIONS: OWNED_SSS_DEFINITIONS,
             CUSTOM_FRAGMENT_BEFORE_LIGHTS: OWNED_SSS_CAPTURE_EARLY,
             // The installed Standard WGSL shader declares emissive just after lighting.

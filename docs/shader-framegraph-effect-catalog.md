@@ -73,18 +73,18 @@
 
 ## PBR 材質プリセット（実験・通常UI非公開）
 
-PBR 経路は `src/shared/mmd-material-pipeline.ts` と `src/render/pbr-mmd-like-toon-settings.ts` に残しています。ただし `PBR_MATERIAL_UI_ENABLED = false` のため、現在の通常 UI では選択できません。
+PBR 経路は「ツール → 実験設定」の全体PBRモードを有効にすると材質パネルから選択できます。詳細は[PBRプリセットの役割整理](./pbr-material-presets-2026-09-08.md)を参照してください。
 
 | ID | 名称 | 一言概要 |
 | --- | --- | --- |
 | `pbr-base` | PBR Standard | Babylon.js PBRMaterial の基準状態。 |
 | `pbr-mmd-like` | PBR MMD Like | PMX toon 色と影色を PBR の拡散陰影へ反映する。 |
-| `pbr-skin` | PBR Skin | 肌向けの弱い暖色透過とマットな質感を加える。 |
-| `pbr-skin-sss` | PBR Skin SSS | PrePass と画面空間 SSS を組み合わせる実験プリセット。 |
+| `pbr-skin` | PBR Skin | 通常モードと共通の自前SSSで拡散・薄部透過を表現する。 |
+| `pbr-sss-wax` | SSS Wax | 最初のPBR自前SSSの見た目を保持し、肌専用の陰影補正は加えない。 |
 | `pbr-skin-face` | PBR Skin Face | 法線をモデル正面・上方向へ寄せ、顔の陰影を穏やかにする。 |
 | `pbr-no-shadow` | PBR No Shadow | direct light や IBL は残し、投影 shadow の遮蔽だけを無視する。 |
 
-PBR 経路は通常の MMD 編集導線より優先度が低く、再公開するときは material import、project save/load、shadow、FrameGraph、出力を横断して再確認します。
+旧`pbr-skin-sss`は採用取りやめにより選択肢から削除し、保存値をSkinへ移行します。PBR経路は引き続き実験機能です。
 
 ## FrameGraph エフェクトスタック
 

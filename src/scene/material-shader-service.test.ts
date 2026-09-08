@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import {
-    PBR_MMD_LIKE_TRANSLUCENCY_INTENSITY,
-} from "../render/pbr-mmd-like-toon-settings";
-import {
     applyImportedMaterialShaderStates,
     getFrameGraphLuminousMaskMaterialState,
     getSerializedMaterialShaderStates,
@@ -201,12 +198,12 @@ describe("material shader preset restore", () => {
 
         expect(warnings).toEqual([]);
         expect(pbrMaterial.subSurface.isScatteringEnabled).toBe(false);
-        expect(pbrMaterial.subSurface.isTranslucencyEnabled).toBe(true);
+        expect(pbrMaterial.subSurface.isTranslucencyEnabled).toBe(false);
         expect(pbrMaterial.subSurface.translucencyIntensity).toBe(
-            PBR_MMD_LIKE_TRANSLUCENCY_INTENSITY,
+            0,
         );
-        expect(pbrMaterial.subSurface.translucencyColor?.equals(Color3.White())).toBe(true);
-        expect(pbrMaterial.roughness).toBeGreaterThan(0.4);
+        expect(pbrMaterial.subSurface.translucencyColor).toBeNull();
+        expect(pbrMaterial.roughness).toBe(0.8);
         expect(pbrMaterial.subSurface.scatteringDiffusionProfile).toBeNull();
         expect(getSerializedMaterialShaderStates(host, host.sceneModels[0])).toEqual([{
             materialKey: "0:face",
@@ -226,6 +223,15 @@ describe("material shader preset restore", () => {
             materialKey: "0:face",
             presetId: "pbr-no-shadow",
         }]);
+        applyImportedMaterialShaderStates(host, 0, [], warnings, "fixture.pmx");
+        expect(getSerializedMaterialShaderStates(host, host.sceneModels[0])).toEqual([{
+            materialKey: "0:face", presetId: "pbr-base",
+        }]);
+        applyImportedMaterialShaderStates(host, 0, [{ materialKey: "0:face", presetId: "pbr-base" }], warnings, "fixture.pmx");
+        expect(warnings).toEqual([]);
+        expect(pbrMaterial.roughness).toBe(0.4);
+        applyImportedMaterialShaderStates(host, 0, undefined, warnings, "fixture.pmx", "pbr-mmd-like");
+        expect(pbrMaterial.roughness).toBe(0.8);
     });
 
     it("keeps preset fragment override when clearing global external wgsl override", () => {

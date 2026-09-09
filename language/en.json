@@ -207,6 +207,7 @@
     "shader.pbrMaterial.skinSssDescription":  "Experimental preset that adds Babylon.js screen-space SSS to PBR Skin using the pre-pass and post-process.",
     "shader.pbrMaterial.skinFaceDescription": "Skin SSS plus a 30% normal blend toward model front and slightly upward.",
     "shader.pbrPreset.wax": "SSS Wax",
+    "shader.pbrMaterial.pbr-thin-translucentDescription": "Soft backlight transmission for thin fabric. Preserves base color and opacity without adding see-through transparency or refraction.",
     "shader.pbrMaterial.pbr-emissiveDescription": "Emits the original color and texture. Use Bloom for the halo.",
     "shader.pbrMaterial.pbr-candy-coatDescription": "Metallic paint beneath a glossy clear coat.",
     "shader.pbrMaterial.pbr-pearlDescription": "Subtle iridescence and a soft glossy coat preserving the base color.",

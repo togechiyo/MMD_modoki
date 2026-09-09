@@ -4,6 +4,7 @@ import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
+import { configureThinTranslucencyShadow } from "../render/thin-translucency-shadow";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
@@ -231,6 +232,7 @@ function createShadowGenerator(host: LightShadowHost, dirLight: DirectionalLight
     const shadowGenerator = CascadedShadowGenerator.IsSupported
         ? new CascadedShadowGenerator(shadowMapSize, dirLight, undefined, camera)
         : new ShadowGenerator(shadowMapSize, dirLight);
+    configureThinTranslucencyShadow(shadowGenerator);
     if (shadowGenerator instanceof CascadedShadowGenerator) {
         shadowGenerator.numCascades = DEFAULT_CSM_CASCADE_COUNT;
         shadowGenerator.stabilizeCascades = true;

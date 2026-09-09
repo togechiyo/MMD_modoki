@@ -3,6 +3,7 @@ import { MaterialPluginBase } from "@babylonjs/core/Materials/materialPluginBase
 import type { MaterialDefines } from "@babylonjs/core/Materials/materialDefines";
 import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { setThinTranslucency } from "./pbr-thin-translucency-plugin";
 
 export const PBR_SURFACE_PRESETS = {
     "pbr-metal-polished": { label: "Metal Polished", metallic: 1, roughness: 0.2 },
@@ -17,6 +18,7 @@ export const PBR_SURFACE_PRESETS = {
     "pbr-candy-coat": { label: "Candy Coat", metallic: 1, roughness: 0.25 },
     "pbr-pearl": { label: "Pearl", metallic: 0.15, roughness: 0.35 },
     "pbr-aurora": { label: "Aurora", metallic: 0.8, roughness: 0.2 },
+    "pbr-thin-translucent": { label: "Thin Translucent", metallic: 0, roughness: 0.85 },
 } as const;
 
 class ClayWhitePlugin extends MaterialPluginBase {
@@ -90,12 +92,18 @@ function captureCoating(material: PBRMaterial) {
     };
 }
 const coatings = new WeakMap<PBRMaterial, ReturnType<typeof captureCoating>>();
+const thinMaps = new WeakMap<PBRMaterial, {
+    thicknessTexture: PBRMaterial["subSurface"]["thicknessTexture"];
+    translucencyIntensityTexture: PBRMaterial["subSurface"]["translucencyIntensityTexture"];
+}>();
 
 export function restorePbrSurfacePreset(material: unknown): void {
     if (!(material instanceof PBRMaterial)) return;
     const snapshot = snapshots.get(material);
     if (snapshot) {
         Object.assign(material, snapshot);
+        const maps = thinMaps.get(material);
+        if (maps) { Object.assign(material.subSurface, maps); thinMaps.delete(material); }
         const enabled = layers.get(material);
         if (enabled) [material.clearCoat, material.sheen, material.anisotropy, material.iridescence, material.detailMap]
             .forEach((layer, index) => { layer.isEnabled = enabled[index]; });
@@ -117,6 +125,7 @@ export function restorePbrSurfacePreset(material: unknown): void {
         }
     }
     plugins.get(material)?.setActive(false);
+    setThinTranslucency(material, false);
 }
 
 export function applyPbrSurfacePreset(material: unknown, preset: string): void {
@@ -162,7 +171,7 @@ export function applyPbrSurfacePreset(material: unknown, preset: string): void {
             material.iridescence.thicknessTexture = null;
         }
     }
-    if (["pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather"].includes(preset)) {
+    if (["pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather", "pbr-thin-translucent"].includes(preset)) {
         fabrics.set(material, captureFabric(material));
         material.clearCoat.isEnabled = false;
         material.iridescence.isEnabled = false;
@@ -185,6 +194,23 @@ export function applyPbrSurfacePreset(material: unknown, preset: string): void {
             material.anisotropy.texture = null;
         }
         if (preset === "pbr-cotton") material.specularIntensity = 0.35;
+        if (preset === "pbr-thin-translucent") {
+            const ss = material.subSurface;
+            thinMaps.set(material, { thicknessTexture: ss.thicknessTexture, translucencyIntensityTexture: ss.translucencyIntensityTexture });
+            ss.isTranslucencyEnabled = true;
+            setThinTranslucency(material, true);
+            ss.translucencyIntensity = 0.35;
+            ss.legacyTranslucency = false;
+            ss.minimumThickness = 0;
+            ss.maximumThickness = 0.05;
+            ss.tintColor = Color3.White();
+            ss.translucencyColor = Color3.White();
+            ss.useAlbedoToTintTranslucency = true;
+            ss.thicknessTexture = null;
+            ss.translucencyIntensityTexture = null;
+            ss.translucencyColorTexture = null;
+            material.specularIntensity = 0.35;
+        }
         if (preset === "pbr-velvet") material.specularIntensity = 0.25;
     }
     if (preset !== "pbr-clay-white") return;

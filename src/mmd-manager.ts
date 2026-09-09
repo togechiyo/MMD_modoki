@@ -1,4 +1,5 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { WebGPUTintWASM } from "@babylonjs/core/Engines/WebGPU/webgpuTintWASM";
 import { Scene } from "@babylonjs/core/scene";
@@ -4219,6 +4220,7 @@ ${beforeFogAppendBlock}
         const shadowGenerator = useCascaded
             ? new CascadedShadowGenerator(shadowMapSize, dirLight, undefined, this.camera)
             : new ShadowGenerator(shadowMapSize, dirLight);
+        configureThinTranslucencyShadow(shadowGenerator);
 
         if (shadowGenerator instanceof CascadedShadowGenerator) {
             shadowGenerator.numCascades = DEFAULT_CSM_CASCADE_COUNT;

@@ -476,6 +476,8 @@
 - [x] PBRのMetal Polished / Metal Satin / Plastic Glossy / Clay Whiteを追加し、保存復元を確認（2026-09-08）
 - [x] PBRのCotton / Satin / Velvet / Leatherを追加し、描画・保存復元を確認（2026-09-08）
 - [x] PBRのEmissive / Candy Coat / Pearl / Auroraを追加し、描画・保存復元を確認（2026-09-09）。Thin Translucentは後回し。
+- [x] Thin Translucentを再開・実装し、通常光・逆光・環境光白飛びの画像比較と保存復元を確認（2026-09-09）。
+- [x] Thin Translucentの逆光縞を解消。低深度biasのMultiMaterial波面で再現し、光線方向＋shadow texel幅に応じたThin限定補正を追加。8条件E2E成功、所有者実機で「きれい。OK」と確認（2026-09-09）。
 
 - [x] 外部ENV / DDSキューブマップの環境ライト読込、GUI操作とプロジェクト復元を追加（2026-09-08、内蔵TrueHDRIは維持）
 

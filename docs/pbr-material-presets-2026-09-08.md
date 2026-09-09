@@ -22,6 +22,9 @@
 | Candy Coat | Metallic 1、粗さ0.25。強度1・粗さ0.08のクリアコート。車・フィギュア塗装向け |
 | Pearl（一覧から除外） | 他プリセットとの差が小さいため所有者が不採用。保存互換用に復元処理は保持 |
 | Aurora | Metallic 0.8、粗さ0.2。薄膜干渉強度1・膜厚400nmで角度による色変化 |
+| Thin Translucent | 薄布用。Metallic 0、粗さ0.85、鏡面強度0.35、標準透過光強度0.35。元の色・texture・透明度を維持 |
+
+2026-09-09、所有者の再開指示でThin Translucentを追加。Babylon 9.2.0 installed `pbrBlockSubSurface.js` / `pbrDirectLightingFunctions.js`を照合し、非legacyの標準translucencyを使用。直接拡散光は透過強度に応じて減り、背面の透過光へ配分されるため、初期強度は0.35に抑える。一定厚み0.05の薄い素材として扱い、厚みmapと透過強度mapは一時退避する。実際の衣服や体の厚みを計測する処理ではなく、厚い物体へ割り当てても薄材として扱われる。屈折・画面空間SSS・専用RTTは追加せず、元の切り抜きとalphaは変更しない。背景が見えるシースルー表現を自動追加する機能ではない。
 
 特殊4種も元の色・texture・透明度を維持する。Babylon 9.2.0のClearCoat/Iridescence宣言と[公式PBR資料](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/masterPBR/)を照合。Candy Coatは透明ガラスではなく金属下地＋無色のクリアコートとし、シーンの屈折用再描画は追加しない。Pearlは粒のないパール風表現。Emissiveは周囲を照らすライトではなく、Bloomも自動追加しない。変更した発光・コート・薄膜干渉の設定とtexture参照を退避・復元する。Thin Translucentは所有者指定で後回し。
 
@@ -58,6 +61,18 @@ MMD LikeはToonの暗色texelを直接参照する。Toon影響度が高いほ�
 参照: [自前SSS](./owned-sss-development-2026-09-06.md)、[全体材質モード](./project-material-mode-design-2026-09-08.md)、[Babylon Material Plugins](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/materialPlugins/)。
 
 ## 確認結果
+
+- 最終修正の所有者実機確認OK（2026-09-09 18:41の画像）: 影ONの花びらで縞が消え、「きれい。OK」と確認された。以下の最初の修正に対するNGは調査履歴として残す。
+- 所有者再確認NG（2026-09-09 10:37の画像）: 最初の修正後も花びらに強い縞が残る。以下のfixture成功を実モデルの解決と扱わない。追加のClassic/CSM試行では、4分割の粗い波面、Y回転1.2 rad、逆向きの近接裏面、normalBias=0、遠方box casterの条件でも残存縞を再現できなかった（各試行後に診断fixtureを元へ戻した）。16:48の所有者比較で、モデル影OFFにすると縞が消えることを確認。
+- 追加修正（2026-09-09）: MultiMaterialの波面で深度biasを0にすると、最初のnormal offset方向反転後にも44,279画素の暗い差分と縞が再現した。法線補正は正対時に小さくなり、曲面を横方向にも変形させるため、Thinのcasterを光線方向へずらす方式へ変更。さらに標準影のbias=0で残った5,274画素の差分を、現在のshadow projectionから求めたworld texel幅と面の傾きによる局所補正で抑えた。normalBiasの絶対値に、2 texel × sin(theta) / max(abs(cos(theta)), 0.2)を加える。通常材質の式・全体のbias/filter/CSM設定・描画pass数は維持。粗い影mapや接線方向ではThinが落とす影の位置ずれが増えうるため、実モデルで再確認する。実機のbias値は未取得であり、所有者画像と同一原因と断定しない。
+- Thin Translucent逆光縞の追加調査（2026-09-09）: 所有者の実機ではNo Shadow/MMD Likeでは出ず、Thinのみで発生。独自生成した波打つ単一薄面でも再現し、その面だけshadow casterから除くと消える。Classic/FrameGraph両方の診断E2Eで確認。textureや重複面を持たないfixtureなので、この再現の原因は自己影。Babylonの影生成は`worldPos -= normal * normalBias * sin(theta)`であり、裏からの照明では光源側へずれる。透過光にも通常shadowを掛けるため暗い縞が顕在化する。
+- 実装はBabylon 9.2.0のstock shadow shaderを別名で登録し、`customAllowRendering`で各submeshの材質を判定、`onBeforeShadowMapRenderObservable`で専用uniformを設定する。MultiMaterialでもmesh全体をThin扱いせず、他presetへ戻すと補正が無効になる。既存のskinning/morph/alpha test/depth encodingと透過光へのshadow乗算を維持し、全体のnormalBias/CSM/filterは変更しない。
+- `thin-translucency-shadow.spec.mjs`は最終修正後、Classic/FrameGraph × 標準影/CSM × 既定/ゼロ深度biasの8条件すべて成功。ThinとCottonを同一メッシュの別submeshへ割り当て、自己casterの有無による暗い差分が1000画素未満、別boxによる遮蔽が1000画素超となることを検査する。出力PNGでも縞の解消と外部遮蔽を目視確認。実モデルの複雑な重なりは所有者の再確認待ち。
+- 修正後はPBR既存E2E 2件、PMX/OBJのCSM・標準影と広域影の既存E2E 5件も成功。unit 628件、lint成功、critical型検査成功（通常typecheckの既存非criticalエラーは残る）。GLSL版も同じ局所式を用意したが、実描画の検証対象はWebGPU/WGSL。
+- Babylon更新時は`shadowMapVertexNormalBias`の式、`customAllowRendering → isReady → onBeforeShadowMapRenderObservable`の呼出順、WGSL/GLSL双方のshader名を再照合する。公式配布の9.2.0の`shadowGenerator.js`と両言語のshader sourceを根拠に実装。stock shaderの共有登録内容は書き換えない。
+
+- Thin Translucent（2026-09-09）: unit 628件、lint、critical型検査成功。Classic / FrameGraphのE2Eで通常光の頭部輝度がCottonの75〜125%に収まり、逆光で100画素以上に8階調超の増加があること、保存復元、専用SSS passが増えないことを確認。PNGでも通常光の地色保持を確認。
+- 初回Thin Translucentは環境光で白飛びした。Babylon 9.2の`pbrBlockReflection`は環境texture.level（vReflectionInfos.x）を掛けるが、`pbrBlockSubSurface`の透過irradianceには掛けていなかった。Thin専用pluginで不足分の倍率を適用し、再実行で白飛び解消を確認。Babylon更新時はこの局所補正が二重適用にならないか再照合する。
 
 - 特殊プリセットの所有者実機確認は全て動作良好。Pearlは見た目の差が小さいため一覧から除外し、Emissive / Candy Coat / Auroraを残す（2026-09-09）。
 

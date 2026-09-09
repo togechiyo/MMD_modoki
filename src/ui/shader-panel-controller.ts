@@ -254,6 +254,7 @@ export class ShaderPanelController {
                 ["pbr-satin", "Satin"],
                 ["pbr-velvet", "Velvet"],
                 ["pbr-leather", "Leather"],
+                ["pbr-thin-translucent", "Thin Translucent"],
                 ["pbr-emissive", "Emissive"],
                 ["pbr-candy-coat", "Candy Coat"],
                 ["pbr-aurora", "Aurora"],
@@ -625,7 +626,7 @@ export class ShaderPanelController {
                 selectedValue === "pbr-base"
                     ? t("shader.toast.pbrBaseApplied")
                     : t("shader.toast.pbrMaterialApplied", {
-                        name: ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather", "pbr-emissive", "pbr-candy-coat", "pbr-pearl", "pbr-aurora"].includes(selectedValue)
+                        name: ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather", "pbr-emissive", "pbr-candy-coat", "pbr-pearl", "pbr-aurora", "pbr-thin-translucent"].includes(selectedValue)
                             ? this.elements.presetSelect.selectedOptions[0]?.textContent ?? selectedValue
                             : selectedValue === "pbr-mmd-like"
                             ? t("shader.pbrPreset.mmdLike")

@@ -47,7 +47,7 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
     };
     const inspect = () => page.evaluate(async () => (await import("/src/render/owned-sss.ts")).inspectOwnedSss());
     await expect(page.locator('#shader-preset-select option[value="pbr-pearl"]')).toHaveCount(0);
-    for (const preset of ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-satin", "pbr-velvet", "pbr-leather", "pbr-emissive", "pbr-candy-coat", "pbr-aurora"]) {
+    for (const preset of ["pbr-metal-polished", "pbr-metal-satin", "pbr-plastic-glossy", "pbr-clay-white", "pbr-cotton", "pbr-thin-translucent", "pbr-satin", "pbr-velvet", "pbr-leather", "pbr-emissive", "pbr-candy-coat", "pbr-aurora"]) {
       await page.locator("#shader-preset-select").selectOption(preset);
       await page.locator("#btn-shader-apply-all").click();
       await settle();
@@ -70,6 +70,8 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
       return sum;
     };
     expect(headBrightness("pbr-velvet")).toBeGreaterThan(headBrightness("pbr-cotton") * 0.75);
+    expect(headBrightness("pbr-thin-translucent")).toBeGreaterThan(headBrightness("pbr-cotton") * 0.75);
+    expect(headBrightness("pbr-thin-translucent")).toBeLessThan(headBrightness("pbr-cotton") * 1.25);
     for (const preset of ["pbr-base", "pbr-mmd-like", "pbr-skin", "pbr-skin-face", "pbr-sss-wax"]) {
       await page.locator("#shader-preset-select").selectOption(preset);
       await page.locator("#btn-shader-apply-all").click();
@@ -95,6 +97,18 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
     await page.locator("#info-model-select").selectOption("0");
     const captures = [];
     await page.locator('[data-effect-tab="materials"]').click();
+    const thinCaptures = [];
+    for (const preset of ["pbr-cotton", "pbr-thin-translucent"]) {
+      await page.locator("#shader-preset-select").selectOption(preset);
+      await page.locator("#btn-shader-apply-all").click(); await settle();
+      expect((await inspect()).materialCount).toBe(0);
+      const output = testInfo.outputPath(`back-${preset}`); mkdirSync(output, {recursive:true});
+      const result = await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output,1152,648),output);
+      thinCaptures.push(PNG.sync.read(readFileSync(result.path)).data);
+    }
+    let transmittedPixels = 0;
+    for (let i=0;i<thinCaptures[0].length;i+=4) if (thinCaptures[1][i] > thinCaptures[0][i]+8) transmittedPixels++;
+    expect(transmittedPixels).toBeGreaterThan(100);
     for (const preset of ["pbr-base", "pbr-skin", "pbr-sss-wax"]) {
       await page.locator("#shader-preset-select").selectOption(preset);
       await page.locator("#btn-shader-apply-all").click(); await settle();

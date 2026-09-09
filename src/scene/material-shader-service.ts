@@ -2348,6 +2348,7 @@ export function applyImportedMaterialShaderStates(
                 && state.presetId !== "pbr-candy-coat"
                 && state.presetId !== "pbr-pearl"
                 && state.presetId !== "pbr-aurora"
+                && state.presetId !== "pbr-thin-translucent"
                 && state.presetId !== "pbr-skin"
                 && state.presetId !== "pbr-sss-wax"
                 && state.presetId !== "pbr-skin-sss"

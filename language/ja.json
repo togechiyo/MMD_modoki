@@ -207,6 +207,7 @@
     "shader.pbrMaterial.skinSssDescription":  "PBR SkinにBabylon.jsの画面空間SSSを追加する実験プリセットです。PrePassと後処理を使用します。",
     "shader.pbrMaterial.skinFaceDescription": "肌用SSSに加え、法線をモデル正面＋少し上向きへ30%寄せます。",
     "shader.pbrPreset.wax": "SSS Wax",
+    "shader.pbrMaterial.pbr-thin-translucentDescription": "薄布向けの透過光。地色と透明度を維持し、逆光で柔らかく光を通します。背景を透かす透明化や屈折は追加しません。",
     "shader.pbrMaterial.pbr-emissiveDescription": "元の色とテクスチャで発光します。にじみはBloomで調整します。",
     "shader.pbrMaterial.pbr-candy-coatDescription": "金属下地に艶の強いクリアコートを重ねる塗装仕上げです。",
     "shader.pbrMaterial.pbr-pearlDescription": "地色を活かし、淡い干渉色と柔らかなコートの艶を重ねます。",

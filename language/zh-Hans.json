@@ -207,6 +207,7 @@
     "shader.pbrMaterial.skinSssDescription":  "在PBR Skin上添加Babylon.js屏幕空间SSS的实验预设。使用PrePass和后处理。",
     "shader.pbrMaterial.skinFaceDescription": "皮肤SSS，加上向模型正前方略朝上偏移30%的法线调整。",
     "shader.pbrPreset.wax": "SSS Wax",
+    "shader.pbrMaterial.pbr-thin-translucentDescription": "薄布的柔和逆光透射。保留原色与透明度，不添加透明化或折射。",
     "shader.pbrMaterial.pbr-emissiveDescription": "以原色和纹理自发光，光晕通过Bloom调整。",
     "shader.pbrMaterial.pbr-candy-coatDescription": "金属底色加高光泽透明涂层的涂装效果。",
     "shader.pbrMaterial.pbr-pearlDescription": "保留底色，叠加淡雅干涉色和柔和涂层光泽。",

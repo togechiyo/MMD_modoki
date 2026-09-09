@@ -14,6 +14,7 @@ describe("PBR surface presets", () => {
         ["pbr-velvet", 0, 0.85], ["pbr-leather", 0, 0.45],
         ["pbr-emissive", 0, 1], ["pbr-candy-coat", 1, 0.25],
         ["pbr-pearl", 0.15, 0.35], ["pbr-aurora", 0.8, 0.2],
+        ["pbr-thin-translucent", 0, 0.85],
     ] as const)("%s preserves cutouts and restores source settings", (preset, metallic, roughness) => {
         const engine = new NullEngine();
         const scene = new Scene(engine);
@@ -39,6 +40,8 @@ describe("PBR surface presets", () => {
             material.iridescence.maximumThickness = 700;
             material.iridescence.texture = texture;
             material.emissiveIntensity = 0.6;
+            material.subSurface.thicknessTexture = texture;
+            material.subSurface.translucencyIntensityTexture = texture;
             material.sheen.intensity = 0.17;
             material.sheen.linkSheenWithAlbedo = true;
             material.sheen.albedoScaling = true;
@@ -53,6 +56,14 @@ describe("PBR surface presets", () => {
             expect(material.alpha).toBe(0.7);
             expect(material.useAlphaFromAlbedoTexture).toBe(true);
             expect(material.metallicTexture).toBeNull();
+            if (preset === "pbr-thin-translucent") {
+                expect(material.subSurface.isTranslucencyEnabled).toBe(true);
+                expect(material.subSurface.isScatteringEnabled).toBe(false);
+                expect(material.subSurface.isRefractionEnabled).toBe(false);
+                expect(material.subSurface.thicknessTexture).toBeNull();
+                expect(material.subSurface.translucencyIntensityTexture).toBeNull();
+                expect(material.subSurface.translucencyIntensity).toBe(0.35);
+            }
             if (preset === "pbr-emissive") {
                 expect(material.emissiveTexture).toBe(texture);
                 expect(material.emissiveColor.asArray()).toEqual([0.2, 0.5, 0.8]);
@@ -105,6 +116,9 @@ describe("PBR surface presets", () => {
             expect(material.iridescence.maximumThickness).toBe(700);
             expect(material.iridescence.texture).toBe(texture);
             expect(material.emissiveIntensity).toBe(0.6);
+            expect(material.subSurface.isTranslucencyEnabled).toBe(false);
+            expect(material.subSurface.thicknessTexture).toBe(texture);
+            expect(material.subSurface.translucencyIntensityTexture).toBe(texture);
             expect(material.directIntensity).toBe(1);
             expect(material.environmentIntensity).toBe(1);
             expect(material.sheen.isEnabled).toBe(false);

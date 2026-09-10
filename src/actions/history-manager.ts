@@ -8,12 +8,19 @@ export class HistoryManager {
     private readonly maxEntries: number;
     private readonly past: BuiltCommand[] = [];
     private readonly future: BuiltCommand[] = [];
+    private revision = 0;
+    private generation = 0;
+
+    public getRevision(): number { return this.revision; }
+    public getGeneration(): number { return this.generation; }
+    public peekUndo(): BuiltCommand | null { return this.past[this.past.length - 1] ?? null; }
 
     public constructor(options: HistoryManagerOptions = {}) {
         this.maxEntries = normalizeMaxEntries(options.maxEntries);
     }
 
     public push(command: BuiltCommand): void {
+        this.revision++;
         this.past.push(command);
         if (this.past.length > this.maxEntries) {
             this.past.splice(0, this.past.length - this.maxEntries);
@@ -24,6 +31,7 @@ export class HistoryManager {
     public undo(): BuiltCommand | null {
         const command = this.past.pop();
         if (!command) return null;
+        this.revision++;
         this.future.push(command);
         return command;
     }
@@ -31,11 +39,14 @@ export class HistoryManager {
     public redo(): BuiltCommand | null {
         const command = this.future.pop();
         if (!command) return null;
+        this.revision++;
         this.past.push(command);
         return command;
     }
 
     public clear(reason: string): void {
+        this.revision++;
+        this.generation++;
         void reason;
         this.past.length = 0;
         this.future.length = 0;

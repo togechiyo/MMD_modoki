@@ -30,6 +30,7 @@ import type { VmdExportDocument, VmdSaveResult } from './export/vmd-export-docum
 import { serializeVmd } from './export/vmd-serializer';
 import type { VpdExportDocument, VpdSaveResult } from './export/vpd-export-document';
 import { serializeVpd } from './export/vpd-serializer';
+import { installAutomationAppBridge } from './main/automation/app-bridge';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -975,6 +976,7 @@ const showRendererFailureDialog = async (
   }
 };
 
+const automationBridge = installAutomationAppBridge(code => writeAppLog('warn', 'main', code));
 const createWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
@@ -993,6 +995,7 @@ const createWindow = (): BrowserWindow => {
     },
   });
   mainWindow.setMenuBarVisibility(false);
+  automationBridge.register(mainWindow);
   snapWindowContentAspect(mainWindow, MAIN_WINDOW_ASPECT_RATIO);
   writeAppLog('info', 'main', 'main window created', {
     webContentsId: mainWindow.webContents.id,

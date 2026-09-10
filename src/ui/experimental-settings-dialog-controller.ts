@@ -1,10 +1,13 @@
 import { t } from "../i18n";
+import { mountAutomationSettings } from "./automation-settings-panel";
 import type { PopupContentController } from "./popup-dialog-controller";
 import { HdriSettingsDialogController, type HdriSettingsDialogControllerDeps } from "./hdri-settings-dialog-controller";
 import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField } from "./popup-form-helpers";
 
 export class ExperimentalSettingsDialogController implements PopupContentController {
     private busy = false;
+    private disposeAutomation: (() => void) | undefined;
+    public unmount(): void { this.disposeAutomation?.(); this.disposeAutomation = undefined; }
     constructor(private readonly deps: HdriSettingsDialogControllerDeps & { switchPbr: (enabled: boolean) => Promise<void> }) {}
 
     public canClose(): boolean { return !this.busy; }
@@ -12,6 +15,7 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
     public mount(container: HTMLElement): void {
         const form = document.createElement("div");
         form.className = "popup-form";
+        this.disposeAutomation = mountAutomationSettings(form);
         const pbr = document.createElement("input");
         pbr.type = "checkbox";
         pbr.className = "popup-form-checkbox";

@@ -3047,6 +3047,11 @@ ${beforeFogAppendBlock}
         return this.activeModelInfo;
     }
 
+    public getAutomationBoneControls(modelInstanceId: string, boneName: string): { movable: boolean; rotatable: boolean } {
+        const info = this.sceneModels.find(entry => entry.info.instanceId === modelInstanceId)?.info.boneControlInfos?.find(bone => bone.name === boneName);
+        return { movable: info?.movable ?? true, rotatable: info?.rotatable ?? true };
+    }
+
     public getActiveModelVmdExportSource(): {
         animation: MmdAnimation;
         modelInfo: ModelInfo;
@@ -3209,6 +3214,28 @@ ${beforeFogAppendBlock}
         catch { return false; }
     }
 
+    /** Reference metadata only. Never serialize meshes, textures or source animation arrays for MCP. */
+    public getAutomationAssetReferences(): import("./automation/contracts").AutomationAsset[] {
+        const rows: import("./automation/contracts").AutomationAsset[] = [];
+        const add = (assetId: string, kind: string, recordedPath: string | null, modelInstanceId: string | null = null, frame: number | null = null): void => {
+            if (recordedPath) rows.push({ assetId, kind, recordedPath, modelInstanceId, frame, usageRole: "unknown", availability: "unchecked" });
+        };
+        for (const entry of this.sceneModels) {
+            add(entry.info.instanceId, "model", entry.info.path, entry.info.instanceId);
+            (this.modelMotionImportsByModel.get(entry.model) ?? []).forEach((item, index) => {
+                add(`${entry.info.instanceId}:motion:${index}`, item.type, item.path, entry.info.instanceId, "frame" in item ? item.frame ?? null : null);
+            });
+        }
+        this.getLoadedAccessories().forEach(entry => add(`accessory:${entry.index}`, "accessory", entry.path));
+        add("camera-motion", "camera-motion", this.cameraMotionPath);
+        add("audio", "audio", this.audioSourcePath);
+        add("background-image", "background-image", this.getBackgroundImagePath());
+        add("background-video", "background-video", this.getBackgroundVideoPath());
+        add("environment", "environment", this.environmentLightingSourcePathValue);
+        add("lut", "lut", this.postEffectLutExternalPathValue);
+        return rows;
+    }
+
     public setExperimentalPbrEnabled(enabled: boolean): void {
         MmdManager.writeStringLocalStorage("mmd_modoki.experimentalPbr", String(enabled));
         this.setMmdMaterialPipelinePreset(enabled ? "pbr-standard" : "mmd-standard");
@@ -3216,6 +3243,22 @@ ${beforeFogAppendBlock}
 
     private materialModeSwitching = false;
     public isMaterialModeSwitching(): boolean { return this.materialModeSwitching; }
+
+    public waitForAutomationRender(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            let frames = 0;
+            const observer = this.engine.onEndFrameObservable.add(() => {
+                if (++frames < 2) return;
+                clearTimeout(timer);
+                this.engine.onEndFrameObservable.remove(observer);
+                resolve();
+            });
+            const timer = setTimeout(() => {
+                this.engine.onEndFrameObservable.remove(observer);
+                reject(new Error("Render unavailable"));
+            }, 2500);
+        });
+    }
 
     private readonly materialModeRuntimeIds = new WeakMap<object, number>();
     private materialModeRuntimeIdCounter = 0;

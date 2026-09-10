@@ -15,6 +15,7 @@ export type CommandSelectedKeyRef = {
 };
 
 export type CommandExecutionContext = {
+    applyKeyframeTransaction?(diff: Extract<KeyframeCommandDiff, { type: "keyframe.transaction" }>, direction: CommandDirection): boolean;
     beginTimelineEditBatch?(): void;
     endTimelineEditBatch?(): void;
     addTimelineKeyframe(track: CommandTrackRef, frame: number): boolean;
@@ -40,6 +41,8 @@ export function executeCommand(
     context: CommandExecutionContext,
 ): boolean {
     switch (command.diff.type) {
+        case "keyframe.transaction":
+            return context.applyKeyframeTransaction?.(command.diff, direction) ?? false;
         case "keyframe.add":
             return executeKeyframeAdd(command.diff, direction, context);
         case "keyframe.delete":

@@ -73,6 +73,8 @@ import {
 import { buildBoneTransformCommand } from "./actions/bone-transform-command-builder";
 import { buildCameraTransformCommand } from "./actions/camera-transform-command-builder";
 import type { BoneTransformCommandSnapshot, BuiltCommand, CameraTransformCommandSnapshot, CommandTrackRef } from "./actions/command-types";
+import { executeKeyframeTransaction, keyframeValuesEqual, type KeyframeScope, type KeyframeTransaction } from "./actions/keyframe-transaction";
+import { applyAutomationSetting, getAutomationSettings, type AutomationSetting } from "./automation/settings";
 import type {
     BoneKeyframePayload,
     CameraExternalParentKeyframePayload,
@@ -7770,6 +7772,24 @@ export class UIController {
             this.refreshRuntimeAnimationForTrack();
         };
         return {
+            applyKeyframeTransaction: (diff, direction) => {
+                let attempted = false;
+                const applied = executeKeyframeTransaction(diff, direction, {
+                    scope: () => this.getAutomationTimelineScope(),
+                    read: (track, frame) => this.mmdManager.readTimelineKeyframePayload(track, frame),
+                    write: (track, frame, payload) => {
+                        if (payload?.kind === "property" && !this.mmdManager.ensureModelAnimationForEditing(track)) return false;
+                        return this.mmdManager.applyTimelineKeyframePayload(track, frame, payload);
+                    },
+                    begin: () => { attempted = true; this.mmdManager.beginTimelineEditBatch(); },
+                    end: () => this.mmdManager.endTimelineEditBatch(),
+                });
+                if (attempted) {
+                    this.refreshRuntimeAnimationForTrack();
+                    this.updateTimelineEditState();
+                }
+                return applied;
+            },
             beginTimelineEditBatch: () => {
                 timelineEditBatchDepth += 1;
                 this.mmdManager.beginTimelineEditBatch();
@@ -8312,6 +8332,92 @@ export class UIController {
             snapshot: entry.snapshot,
         });
         return entry.snapshot;
+    }
+
+    public getAutomationHistoryState(): { revision: number; generation: number; undoId: string | null } {
+        return { revision: this.commandHistory.getRevision(), generation: this.commandHistory.getGeneration(), undoId: this.commandHistory.peekUndo()?.id ?? null };
+    }
+
+    public getAutomationTimelineScope(): KeyframeScope | null {
+        const kind = this.mmdManager.getTimelineTarget();
+        if (kind === "camera") return { kind };
+        if (kind === "accessory") {
+            const accessoryIndex = this.mmdManager.getActiveTimelineAccessoryIndex();
+            return accessoryIndex === null ? null : { kind, accessoryIndex };
+        }
+        const model = this.mmdManager.getLoadedModels().find(item => item.active);
+        return model ? { kind, modelInstanceId: model.instanceId } : null;
+    }
+
+    public selectAutomationTimeline(scope: KeyframeScope): boolean {
+        let value = MODEL_INFO_CAMERA_SELECT_VALUE;
+        if (scope.kind === "model") {
+            const model = this.mmdManager.getLoadedModels().find(item => item.instanceId === scope.modelInstanceId);
+            if (!model) return false;
+            value = String(model.index);
+        } else if (scope.kind === "accessory") {
+            if (!this.mmdManager.getLoadedAccessories().some(item => item.index === scope.accessoryIndex)) return false;
+            value = createModelInfoAccessorySelectValue(scope.accessoryIndex);
+        }
+        this.handleModelTargetSelection(value, false);
+        return keyframeValuesEqual(scope, this.getAutomationTimelineScope());
+    }
+
+    public applyAutomationKeyframes(diff: KeyframeTransaction, editId: string): boolean {
+        if (!diff.items.length) return false;
+        const command: BuiltCommand = { id: editId, label: `AI: キーフレーム編集 (${diff.items.length})`, scope: "keyframe", createdAtMs: Date.now(), diff };
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) throw new Error("Keyframe transaction failed");
+        this.commandHistory.push(command);
+        return true;
+    }
+
+    public setAutomationSetting(setting: AutomationSetting): boolean {
+        const current = getAutomationSettings(this.mmdManager)[setting.id];
+        if (!current.available || !this.sceneEnvironmentUiController || !this.runtimeFeatureUiController || !this.colorPostFxController) throw new Error("Setting unavailable");
+        if (keyframeValuesEqual(current.value, setting.value)) return false;
+        applyAutomationSetting(setting, { scene: this.sceneEnvironmentUiController, runtime: this.runtimeFeatureUiController, color: this.colorPostFxController });
+        if (!keyframeValuesEqual(getAutomationSettings(this.mmdManager)[setting.id].value, setting.value)) throw new Error("Setting was not applied");
+        return true;
+    }
+
+    public isAutomationBusy(): boolean {
+        return this.statusDot.classList.contains("loading") || Boolean(this.exportUiController?.hasBackgroundExportActive());
+    }
+
+    public applyAutomationCamera(camera: CameraTransformCommandSnapshot, editId: string): boolean {
+        const command = buildCameraTransformCommand({ frame: this.mmdManager.currentFrame, before: this.captureCameraTransformCommandSnapshot(), after: camera });
+        if (!command) return false;
+        command.id = editId;
+        command.label = "AI: カメラ編集";
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) throw new Error("Camera command failed");
+        this.commandHistory.push(command);
+        return true;
+    }
+
+    public applyAutomationBone(modelInstanceId: string, boneName: string, snapshot: BoneTransformCommandSnapshot, editId: string): boolean {
+        const before = this.captureBoneTransformCommandSnapshot(boneName, modelInstanceId);
+        if (!before) throw new Error("Bone unavailable");
+        if (JSON.stringify(before) === JSON.stringify(snapshot)) return false;
+        const command: BuiltCommand = { id: editId, label: "AI: ボーン編集", scope: "edit", createdAtMs: Date.now(),
+            diff: { type: "edit.boneTransform", modelInstanceId, boneName, frame: this.mmdManager.currentFrame, before, after: snapshot } };
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) throw new Error("Bone command failed");
+        this.commandHistory.push(command);
+        return true;
+    }
+
+    public undoAutomationEdit(editId: string): boolean {
+        const command = this.commandHistory.peekUndo();
+        if (!command || command.id !== editId || !editId.startsWith("ai:")) return false;
+        const diff = command.diff;
+        if (diff.type === "edit.cameraTransform") {
+            if (diff.frame !== this.mmdManager.currentFrame || buildCameraTransformCommand({ frame: diff.frame, before: diff.after, after: this.captureCameraTransformCommandSnapshot() })) return false;
+        } else if (diff.type === "edit.boneTransform") {
+            const current = this.captureBoneTransformCommandSnapshot(diff.boneName, diff.modelInstanceId);
+            if (!current || diff.frame !== this.mmdManager.currentFrame || buildBoneTransformCommand({ modelInstanceId: diff.modelInstanceId, boneName: diff.boneName, frame: diff.frame, before: diff.after, after: current })) return false;
+        } else if (diff.type !== "keyframe.transaction") return false;
+        if (!executeCommand(command, "revert", this.createCommandExecutionContext({ seekToFrame: false }))) return false;
+        this.commandHistory.undo();
+        return true;
     }
 
     private getPendingBonePoseKey(boneName: string, modelInstanceId: string | null): string | null {

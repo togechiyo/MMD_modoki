@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { AutomationApi } from './automation/contracts';
 import type {
     AppLogData,
     AppLogScope,
@@ -13,7 +14,24 @@ import type {
     WebmExportState
 } from './types';
 
+const automation: AutomationApi = {
+    getState: () => ipcRenderer.invoke('automation:getState'),
+    configure: (enabled, editable) => ipcRenderer.invoke('automation:configure', enabled, editable),
+    getConnection: () => ipcRenderer.invoke('automation:getConnection'),
+    onState: callback => {
+        const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]): void => callback(state);
+        ipcRenderer.on('automation:state', handler);
+        return () => { ipcRenderer.removeListener('automation:state', handler); };
+    },
+    onRequest: callback => {
+        const handler = (_event: Electron.IpcRendererEvent, request: Parameters<typeof callback>[0]): void => callback(request);
+        ipcRenderer.on('automation:request', handler);
+        return () => { ipcRenderer.removeListener('automation:request', handler); };
+    },
+    reply: reply => { ipcRenderer.send('automation:reply', reply); },
+};
 contextBridge.exposeInMainWorld('electronAPI', {
+    automation,
     openFileDialog: (filters: { name: string; extensions: string[] }[]) =>
         ipcRenderer.invoke('dialog:openFile', filters),
     openDirectoryDialog: () =>

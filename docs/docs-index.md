@@ -14,6 +14,7 @@
 - [実験設定ポップアップ 2026-09-08](./experimental-settings-popup-2026-09-08.md)
 - [MCP連携方式の検討 2026-09-10](./mcp-integration-design-investigation-2026-09-10.md)
 - [MMD_modoki MCP操作・情報取得・ヘルプ設計](./mcp-editor-integration-design-2026-09-10.md)
+- [MCPアプリ操作の実装状況・使い方](./mcp-implementation-progress-2026-09-10.md)
 - [MCPの2026年最新動向とMMD_modokiへの影響](./mcp-2026-latest-findings-2026-09-10.md)
 - [PBR材質プリセットの役割整理 2026-09-08](./pbr-material-presets-2026-09-08.md)
 - [プロジェクト全体の材質モードと設定退避 2026-09-08](./project-material-mode-design-2026-09-08.md)

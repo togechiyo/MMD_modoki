@@ -13,6 +13,7 @@ export type MmdOptimizedFileSaveResult =
     | { status: "failed"; message: string };
 
 export interface ElectronAPI {
+    automation: import("./automation/contracts").AutomationApi;
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
     openDirectoryDialog: () => Promise<string | null>;
     choosePngSaveTarget: (defaultFileName?: string) => Promise<PngSaveTarget | null>;

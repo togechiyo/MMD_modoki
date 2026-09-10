@@ -1,5 +1,6 @@
 import type { TrackCategory } from "../types";
 import type { TimelineKeyframePayload } from "../editor/timeline-edit-service";
+import type { KeyframeTransaction } from "./keyframe-transaction";
 
 export type CommandScope =
     | "keyframe"
@@ -16,6 +17,7 @@ export type CommandTrackRef = {
 };
 
 export type KeyframeCommandDiff =
+    | KeyframeTransaction
     | {
         type: "keyframe.add";
         track: CommandTrackRef;

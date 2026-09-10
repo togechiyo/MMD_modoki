@@ -3,11 +3,13 @@ id: experimental-settings-live-under-tools
 status: decision
 scope: ui/experimental-settings
 confidence: high
-last_verified: 2026-09-08
+last_verified: 2026-09-10
 evidence:
   - project-owner-directive
 source_docs:
   - ../../docs/experimental-settings-popup-2026-09-08.md
+  - ../../docs/mcp-integration-design-investigation-2026-09-10.md
+  - ../../docs/mcp-editor-integration-design-2026-09-10.md
 superseded_by: null
 decision_owner: project-owner
 decision: adopted
@@ -24,6 +26,12 @@ decided_on: 2026-09-08
 
 「ツール → 実験設定…」を入口とし、PBRモードに環境ライト・IBL影の詳細をまとめ、ログの場所・コピー操作を置く。当面は外部WGSLなど他機能まで広げない。
 
+2026-09-10、所有者はMCPによるAI連携の追加を希望し、そのON/OFFを実験設定へ置くよう指定した。MCPは上記の範囲へ追加する対象とする。当初は通信方式を未決定として[MCP連携方式の検討](../../docs/mcp-integration-design-investigation-2026-09-10.md)を行った。
+
+続けて所有者は、できるだけ最新仕様へ沿うこと、viewportの見た目、読込済みモデル・ステージ・モーション等の元path一覧、AIが機能を探すヘルプを含めて設計するよう指定した。[操作・情報取得・ヘルプ設計](../../docs/mcp-editor-integration-design-2026-09-10.md)へ具体化する。接続登録の保持、公開scope、画像サイズ等は設計提案であり、個別の採用決定とは扱わない。
+
+同日の具体設計提示後、所有者は「うんいいんじゃないかな。コミットとプッシュよろしく」と了承した。標準MCPのローカルStreamable HTTPを中心に、画像・元path一覧・検索help・既存編集とUndoの共有を進める設計方針として記録する。API詳細や数値上限の確定、実装完了を意味しない。
+
 後続指示により詳細項目は常時表示する。PBR切替は次回読込だけでなく読込済みモデルへ適用する。所有者への確認で即時切替の対象はIBL影ではなく通常MMD/PBRと確定した。当初の内部再読込やUndoリセットは実装上の制約であり、所有者が制約を承認したとは扱わない。後続実装ではruntimeを維持した材質交換へ変更している。
 
 さらに所有者は、全体モードの往復時に材質設定を退避し、未登録分を含むポーズをそのまま引き継ぐよう指定した。ポーズ・モーション・現在フレーム・物理状態はモード共通の保持対象とし、未登録変更の破棄や事前キー登録を切替仕様にしない。詳細は[全体モード設計](../../docs/project-material-mode-design-2026-09-08.md)を参照する。
@@ -39,6 +47,8 @@ decided_on: 2026-09-08
 PBRを既定モードへ変更すること。UIの採用を、凍結機能の技術的問題が解消した証拠として扱うこと。
 
 ## 根拠
+
+2026-09-10の所有者指定「MMD_modokiにも欲しい」「実験機能メニューもつけたしその辺にオンオフ」「実装方法について検討してほしいWebMCP使うか他の方法か」と、その後の具体設計への了承。採用範囲は設計方針までとする。
 
 2026-09-09、所有者は延期していたThin Translucentの実装再開を指定した。薄布・衣装向けの用途を優先する。
 

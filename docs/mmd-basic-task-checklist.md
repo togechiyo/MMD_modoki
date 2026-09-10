@@ -402,6 +402,7 @@
 
 ## 実験基盤メモ
 
+- [ ] MCPによるAI連携と実験設定内のON/OFFを追加する。最新仕様と体験を重視し、viewport画像・読込元path一覧・検索help・カメラ/ポーズ編集・Undoを縦断検証する（[操作・情報取得・ヘルプ設計](./mcp-editor-integration-design-2026-09-10.md)、[方式比較](./mcp-integration-design-investigation-2026-09-10.md)）
 - [ ] `SQLite WASM` の実験導入（本筋ではなく研究用）
 - [ ] `in-memory RDB` としてのイベント記録基盤の試作
 - [ ] ログ / 入力イベント / 設定変更履歴の一元管理が実際に楽になるかの検証

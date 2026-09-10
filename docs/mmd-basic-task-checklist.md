@@ -446,7 +446,7 @@
 
 - [ ] タイムライン対象項目の拡張方針整理（照明 / scene object / 非 Babylon-mmd 項目）
 
-- [ ] 材質非表示を選べるようにする
+- [x] 材質非表示を選べるようにする（2026-09-10: Opaque材質の非表示、保存復元、通常/PBR切替を修正。AliciaでFrameGraph/ClassicのGUI E2E確認。[原因・修正・検証](./material-visibility-toggle-investigation-2026-09-10.md)）
 
 ## 2026-06-01 UI 要望メモ
 

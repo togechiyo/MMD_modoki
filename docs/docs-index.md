@@ -203,6 +203,8 @@
 
 ## レンダリング / 材質 / テクスチャ
 
+- [材質オン／オフの非表示不具合: 原因・修正・E2E検証 2026-09-10](./material-visibility-toggle-investigation-2026-09-10.md)
+
 - [独自WGSL SSSの再設計・比較記録 2026-09-06](./owned-sss-development-2026-09-06.md)
 
 - [Babylon WaterMaterial 水面 実装メモ 2026-08-27](./babylon-watermaterial-surface-implementation-2026-08-27.md)

@@ -122,6 +122,25 @@ function createHost() {
 }
 
 describe("material shader preset restore", () => {
+    it("saves hidden default materials and restores visibility with legacy ON fallback", () => {
+        const fixture = createHost();
+        let visible = false;
+        const setModelMaterialVisibility = vi.fn((_model: number, _key: string | null, value: boolean) => {
+            visible = value;
+            return true;
+        });
+        const host = { ...fixture, isMaterialVisible: () => visible, setModelMaterialVisibility
+        } as unknown as Parameters<typeof getSerializedMaterialShaderStates>[0];
+        const states = getSerializedMaterialShaderStates(host, host.sceneModels[0]);
+        expect(states).toEqual([{ materialKey: "0:face", presetId: "wgsl-mmd-standard", visible: false }]);
+        visible = true;
+        applyImportedMaterialShaderStates(host, 0, states, [], "fixture.pmx");
+        expect(visible).toBe(false);
+        applyImportedMaterialShaderStates(host, 0, undefined, [], "fixture.pmx");
+        expect(visible).toBe(true);
+        expect(getSerializedMaterialShaderStates(host, host.sceneModels[0])).toEqual([]);
+    });
+
     it("round-trips Stage Standard and restores the source material without cumulative dulling", () => {
         const fixture = createHost();
         const material = Object.assign(fixture.material, { specularColor: new Color3(0.5, 0.3, 0.1) });

@@ -145,6 +145,7 @@ import { isDebugLogEnabled, logDebugIfEnabled, logInfo, logWarn, toLogErrorData 
 import { loadPMX as loadPMXImpl } from "./assets/model-asset-service";
 import { prepareModelMaterialSwitch, type PreparedMaterialSwitch } from "./assets/model-material-switch";
 import { SwitchableMaterialProxy } from "./runtime/switchable-material-proxy";
+import { MaterialVisibilityController } from "./scene/material-visibility-controller";
 import { captureMaterialBank, type MaterialSettingsByMode } from "./project/material-mode-state";
 import {
     convertPmxFileToBpmx as convertPmxFileToBpmxImpl,
@@ -2124,7 +2125,7 @@ ${beforeFogAppendBlock}
     private modelEdgeColorOverrideEnabledValue = false;
     private modelEdgeColorValue = { r: 0, g: 0, b: 0 };
     private readonly modelEdgeMaterialDefaults = new WeakMap<object, { enabled: boolean; width: number; alpha: number; colorR: number; colorG: number; colorB: number }>();
-    private readonly materialBaseAlphaByMaterial = new WeakMap<object, number>();
+    private readonly materialVisibilityController = new MaterialVisibilityController();
     private readonly materialShaderDefaultsByMaterial = new WeakMap<object, MaterialShaderDefaults>();
     private readonly materialShaderPresetByMaterial = new WeakMap<object, WgslMaterialShaderPresetId>();
     private readonly externalWgslToonShaderPathByMaterial = new WeakMap<object, string>();
@@ -3313,6 +3314,7 @@ ${beforeFogAppendBlock}
                 snapshot.entry.materialSettingsByMode = snapshot.banks;
                 snapshot.entry.renderMeshes.forEach((mesh, i) => { mesh.receiveShadows = snapshot.receivers[i]; });
             }
+            this.materialVisibilityController.sync(this.scene.meshes, material => this.isMaterialVisible(material));
             this.setMmdMaterialPipelinePreset(previous);
             if (this.isEnvironmentLightingEnabled() !== previousEnvironmentLighting) {
                 this.setEnvironmentLightingEnabled(previousEnvironmentLighting);
@@ -3754,7 +3756,7 @@ ${beforeFogAppendBlock}
         return getWgslModelShaderStatesImpl(this);
     }
 
-    public isMaterialVisible(material: MmdManagerMaterialLike | null | undefined): boolean {
+    public isMaterialVisible(material: object | null | undefined): boolean {
         if (!material || typeof material !== "object") return true;
         return this.materialHiddenByMaterial.get(material as object) !== true;
     }
@@ -4007,30 +4009,12 @@ ${beforeFogAppendBlock}
         return entry.materials.filter((materialEntry) => materialEntry.key === materialKey);
     }
 
-    private getMaterialBaseAlpha(material: MmdManagerMaterialLike | null | undefined): number {
-        if (!material || typeof material !== "object") {
-            return 1;
-        }
-
-        const key = material as object;
-        const cached = this.materialBaseAlphaByMaterial.get(key);
-        if (cached !== undefined) {
-            return cached;
-        }
-
-        const alpha = Number(material.alpha);
-        const resolved = Number.isFinite(alpha) ? alpha : 1;
-        this.materialBaseAlphaByMaterial.set(key, resolved);
-        return resolved;
-    }
-
     private setMaterialHiddenState(material: MmdManagerMaterialLike | null | undefined, hidden: boolean): void {
         if (!material || typeof material !== "object") {
             return;
         }
 
         const key = material as object;
-        this.getMaterialBaseAlpha(material);
 
         if (hidden) {
             this.materialHiddenByMaterial.set(key, true);
@@ -4038,9 +4022,8 @@ ${beforeFogAppendBlock}
             this.materialHiddenByMaterial.delete(key);
         }
 
-        if ("alpha" in material) {
-            material.alpha = hidden ? 0 : this.getMaterialBaseAlpha(material);
-        }
+        this.materialVisibilityController.sync(this.scene.meshes,
+            target => this.isMaterialVisible(target));
 
         const outlineDefaults = this.modelEdgeMaterialDefaults.get(key);
         if (hidden) {

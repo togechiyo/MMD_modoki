@@ -2004,9 +2004,10 @@ if (!mmdManagerProto.getSerializedAccessoryMaterialShaderStates) {
                 host,
                 materialEntry.material as unknown as Parameters<typeof getWgslMaterialShaderPresetForMaterial>[1],
             );
-            return presetId === defaultPreset
+            const hidden = !(this as unknown as MmdManager).isMaterialVisible(materialEntry.material);
+            return presetId === defaultPreset && !hidden
                 ? []
-                : [{ materialKey: materialEntry.key, presetId }];
+                : [{ materialKey: materialEntry.key, presetId, ...(hidden ? { visible: false } : {}) }];
         });
     };
 }
@@ -2038,6 +2039,7 @@ if (!mmdManagerProto.applyAccessoryMaterialShaderStates) {
             if (!ok) {
                 warnings.push(`Unknown accessory shader preset '${state.presetId}' for ${entry.path}`);
             }
+            (this as unknown as MmdManager).setAccessoryMaterialVisibility(index, state.materialKey, state.visible !== false);
         }
     };
 }

@@ -530,6 +530,8 @@ export interface ProjectMotionImport {
 export interface ProjectModelMaterialShaderState {
     materialKey: string;
     presetId: string;
+    /** Omitted in older projects; defaults to visible. */
+    visible?: boolean;
 }
 
 export interface ProjectModelState {

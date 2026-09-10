@@ -166,6 +166,7 @@ type MaterialShaderHost = Record<string, unknown> & {
     engine: { releaseEffects?: () => void };
     isWebGpuEngine?: () => boolean;
     isMaterialVisible?: (material: MaterialShaderMaterial) => boolean;
+    setModelMaterialVisibility?: (modelIndex: number, materialKey: string | null, visible: boolean) => boolean;
     onMaterialShaderStateChanged?: () => void;
     onSkinSssPrePassStateChanged?: () => void;
 };
@@ -2296,16 +2297,19 @@ export function getSerializedMaterialShaderStates(host: MaterialShaderHost, entr
     if (entry.materialPipeline === "pbr-standard") {
         return entry.materials.flatMap((material) => {
             const presetId = getPbrMaterialShaderPreset(material.material);
-            return [{ materialKey: material.key, presetId }];
+            return [{ materialKey: material.key, presetId,
+                ...(host.isMaterialVisible?.(material.material) === false ? { visible: false } : {}) }];
         });
     }
     const states: ProjectModelMaterialShaderState[] = [];
     for (const material of entry.materials) {
         const presetId = getWgslMaterialShaderPresetForMaterial(host, material.material);
-        if (presetId === getDefaultPreset(host)) continue;
+        const hidden = host.isMaterialVisible?.(material.material) === false;
+        if (presetId === getDefaultPreset(host) && !hidden) continue;
         states.push({
             materialKey: material.key,
             presetId,
+            ...(hidden ? { visible: false } : {}),
         });
     }
     return states;
@@ -2323,6 +2327,12 @@ export function applyImportedMaterialShaderStates(
 
     const entry = host.sceneModels[modelIndex];
     if (!entry) return;
+
+    // Visibility is independent of the shader preset and older saves default to ON.
+    for (const material of entry.materials) {
+        const state = Array.isArray(states) ? states.find(item => item?.materialKey === material.key) : undefined;
+        host.setModelMaterialVisibility?.(modelIndex, material.key, state?.visible !== false);
+    }
 
     if (entry.materialPipeline === "pbr-standard") {
         // Older projects omitted Standard assignments. Preserve that baseline;

@@ -1,4 +1,5 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
 import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { WebGPUTintWASM } from "@babylonjs/core/Engines/WebGPU/webgpuTintWASM";
@@ -971,6 +972,7 @@ type SceneModelRigidBodyEntry = {
 type SceneModelJointEntry = PhysicsJointDiagnosticEntry;
 
 type SceneModelEntry = {
+    diagnosticMetadata?: ModelDiagnosticMetadata;
     standardReceiveShadows?: Map<Mesh, boolean>;
     materialSettingsByMode?: MaterialSettingsByMode;
     mesh: MmdMesh;
@@ -2708,6 +2710,69 @@ ${beforeFogAppendBlock}
 
     public getModelBoneNames(modelIndex: number): string[] {
         return [...(this.sceneModels[modelIndex]?.info.boneNames ?? [])];
+    }
+
+    public getModelMorphNames(modelIndex: number): string[] {
+        return [...(this.sceneModels[modelIndex]?.info.morphNames ?? [])];
+    }
+
+    private getDiagnosticModelSources(entry: SceneModelEntry, kind: DiagnosticKind): readonly unknown[] {
+        if (kind === "bone") return entry.diagnosticMetadata?.bones ?? [];
+        if (kind === "morph") return entry.diagnosticMetadata?.morphs ?? [];
+        if (kind === "rigidBody") return entry.rigidBodies;
+        if (kind === "joint") return entry.joints;
+        return entry.materials.map(item => item.material);
+    }
+
+    public getDiagnosticModelTargets(modelInstanceId: string, kind: DiagnosticKind, offset: number, limit: number): Record<string, unknown> | null {
+        const entry = this.sceneModels.find(item => item.info.instanceId === modelInstanceId);
+        if (!entry) return null;
+        const sources = this.getDiagnosticModelSources(entry, kind);
+        return { kind, totalCount: sources.length, items: sources.slice(offset, offset + limit).map((source, index) => ({ index: offset + index, name: diagnosticTargetName(source) })),
+            nextOffset: offset + limit < sources.length ? offset + limit : null };
+    }
+
+    public getDiagnosticModelDetail(modelInstanceId: string, subject: DiagnosticSelector): Record<string, unknown> | null {
+        const entry = this.sceneModels.find(item => item.info.instanceId === modelInstanceId);
+        if (!entry) return null;
+        const source = this.getDiagnosticModelSources(entry, subject.kind)[subject.index];
+        if (!source) return null;
+        const detail = subject.kind === "bone" || subject.kind === "morph"
+            ? structuredClone(source as Record<string, unknown>)
+            : projectModelDiagnosticDetail(subject.kind, source);
+        if (subject.kind === "bone") {
+            const bone = (entry.model.runtimeBones as readonly EditorRuntimeBone[] | undefined)?.[subject.index];
+            const rest = bone?.linkedBone?.getAbsoluteInverseBindMatrix().clone().invert().getTranslation();
+            detail.bindPosition = rest && [rest.x, rest.y, rest.z].every(Number.isFinite) ? [rest.x, rest.y, rest.z] : null;
+            detail.bindPositionSpace = "model";
+            detail.bindPositionSource = "inverse_bind_matrix";
+            detail.lengthUnit = "MMD";
+            const related = entry.rigidBodies.flatMap((body, index) => body.boneIndex === subject.index ? [index] : []);
+            detail.rigidBodyIndices = related.slice(0, 32);
+            detail.rigidBodyCount = related.length;
+            detail.rigidBodyIndicesTruncated = related.length > 32;
+        } else if (subject.kind === "morph") {
+            const weight = entry.model.morph.getMorphWeightFromIndex(subject.index);
+            detail.weight = Number.isFinite(weight) ? weight : null;
+        } else if (subject.kind === "rigidBody") {
+            const related = entry.joints.flatMap((joint, index) => joint.rigidbodyIndexA === subject.index || joint.rigidbodyIndexB === subject.index ? [index] : []);
+            detail.jointIndices = related.slice(0, 32);
+            detail.jointCount = related.length;
+            detail.jointIndicesTruncated = related.length > 32;
+        }
+        return { modelName: entry.info.name.slice(0, 200), subject, detail };
+    }
+
+    public getAutomationModelMorphWeight(modelInstanceId: string, morphName: string): number | null {
+        const entry = this.sceneModels.find(candidate => candidate.info.instanceId === modelInstanceId);
+        if (!entry || entry.info.morphNames.filter(name => name === morphName).length !== 1) return null;
+        try {
+            const weight = entry.model.morph.getMorphWeight(morphName);
+            return Number.isFinite(weight) ? weight : null;
+        } catch {
+            // Runtime morph state can be unavailable during loading; metadata queries do not change the model.
+            return null;
+        }
     }
 
     public getModelExternalParent(modelIndex: number): (ModelExternalParentState & { parentModelIndex: number }) | null {

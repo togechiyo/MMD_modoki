@@ -117,6 +117,14 @@ export type CameraTransformCommandSnapshot = {
 
 export type EditCommandDiff =
     | {
+        type: "edit.morphWeight";
+        modelInstanceId: string;
+        morphName: string;
+        frame: number;
+        before: number;
+        after: number;
+    }
+    | {
         type: "edit.boneTransform";
         modelInstanceId: string;
         boneName: string;

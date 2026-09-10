@@ -15,8 +15,11 @@ import type {
 } from './types';
 
 const automation: AutomationApi = {
+    saveMotion: (input, permission) => ipcRenderer.invoke('automation:saveMotion', input, permission),
+    writeOutput: (input, permission) => ipcRenderer.invoke('automation:writeOutput', input, permission),
     getState: () => ipcRenderer.invoke('automation:getState'),
-    configure: (enabled, editable) => ipcRenderer.invoke('automation:configure', enabled, editable),
+    configure: (enabled, editable, detailedDiagnostics = false) => ipcRenderer.invoke('automation:configure', enabled, editable, detailedDiagnostics),
+    getDetailAccessHistory: () => ipcRenderer.invoke('automation:getDetailAccessHistory'),
     getConnection: () => ipcRenderer.invoke('automation:getConnection'),
     onState: callback => {
         const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]): void => callback(state);

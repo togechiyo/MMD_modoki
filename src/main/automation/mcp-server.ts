@@ -5,6 +5,7 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { z } from "zod";
 import { automationHelpTopics, searchAutomationHelp } from "../../automation/help/catalog";
 import { automationTools, type AutomationToolName, type AutomationResult, AutomationError } from "../../automation/contracts";
+import { describeAutomationFailure, toAutomationFailure } from "../../automation/diagnostics";
 
 export const helpInputSchema = z.object({
     query: z.string().trim().min(1).max(200).optional(),
@@ -53,8 +54,8 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
                     ...(result.image ? [{ type: "image" as const, ...result.image }] : []),
                 ] };
             } catch (error) {
-                const code = error instanceof AutomationError ? error.code : "OPERATION_FAILED";
-                return { isError: true, content: [{ type: "text" as const, text: `${code}: contextを再取得するかmmd_helpを参照してください。` }] };
+                const diagnostic = error instanceof AutomationError && error.diagnostic ? error.diagnostic : describeAutomationFailure(toAutomationFailure(error));
+                return { isError: true, structuredContent: diagnostic, content: [{ type: "text" as const, text: JSON.stringify(diagnostic) }] };
             }
         });
     }

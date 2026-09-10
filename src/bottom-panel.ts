@@ -258,7 +258,9 @@ export class BottomPanel {
         for (const [key, button] of this.morphKeyframeButtons) {
             const morphName = button.dataset.morphName;
             if (!morphName) continue;
-            const registered = this.mmdManager.hasTimelineKeyframe({ name: morphName, category: "morph" }, frame);
+            const payload = this.mmdManager.readTimelineKeyframePayload({ name: morphName, category: "morph" }, frame);
+            const registered = payload?.kind === "morph"
+                && Math.abs((payload.weights[0] ?? 0) - this.mmdManager.getMorphWeight(morphName)) < 0.0001;
             this.setMorphKeyframeButtonState(button, registered ? "registered" : "dirty");
             this.morphKeyframeButtons.set(key, button);
         }

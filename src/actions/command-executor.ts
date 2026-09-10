@@ -15,6 +15,7 @@ export type CommandSelectedKeyRef = {
 };
 
 export type CommandExecutionContext = {
+    applyMorphWeight?(diff: Extract<EditCommandDiff, { type: "edit.morphWeight" }>, direction: CommandDirection): boolean;
     applyKeyframeTransaction?(diff: Extract<KeyframeCommandDiff, { type: "keyframe.transaction" }>, direction: CommandDirection): boolean;
     beginTimelineEditBatch?(): void;
     endTimelineEditBatch?(): void;
@@ -41,6 +42,8 @@ export function executeCommand(
     context: CommandExecutionContext,
 ): boolean {
     switch (command.diff.type) {
+        case "edit.morphWeight":
+            return context.applyMorphWeight?.(command.diff, direction) ?? false;
         case "keyframe.transaction":
             return context.applyKeyframeTransaction?.(command.diff, direction) ?? false;
         case "keyframe.add":

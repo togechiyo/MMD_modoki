@@ -11,9 +11,15 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
     const editable = document.createElement("input");
     editable.type = "checkbox"; editable.className = "popup-form-checkbox";
     editable.disabled = true;
+    const detailed = document.createElement("input");
+    detailed.type = "checkbox"; detailed.className = "popup-form-checkbox"; detailed.disabled = true;
+    const detailNote = document.createElement("p");
+    detailNote.className = "popup-form-note"; detailNote.id = "mcp-detail-sharing-note";
+    detailNote.textContent = "許可すると、要求された対象のボーン初期位置・IK・モーフ属性・材質・剛体・ジョイント設定をMCPクライアントへ提供します。接続先によってはクラウドAIへ送信されます。1回につき1対象ですが、繰り返し取得で構造情報が蓄積する可能性があります。モデルファイル・メッシュ・頂点ウェイト・モーフ頂点差分・テクスチャ原本は提供しません。MCPをOFFにすると許可もOFFになります。";
+    detailed.setAttribute("aria-describedby", detailNote.id);
     const note = document.createElement("p");
     note.className = "popup-form-note";
-    note.textContent = "このウィンドウの画像・元パス・キー情報を公開します。モデル本体・テクスチャ・形状データは送信しません。起動時はOFFです。";
+    note.textContent = "このウィンドウの画像・元パス・キー情報とボーン・モーフ・材質の名前一覧を公開します。モデルファイル・メッシュ・テクスチャ原本は提供しません。起動時はOFFです。";
     const status = document.createElement("p");
     status.setAttribute("role", "status");
     status.dataset.mcpStatus = "true";
@@ -23,29 +29,54 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
     config.className = "popup-form-control";
     config.readOnly = true; config.hidden = true; config.rows = 9;
     config.setAttribute("aria-label", "MCP接続設定");
+    const historyButton = createPopupFormButton("詳細情報の提供履歴を更新", "secondary");
+    const history = document.createElement("ol");
+    history.setAttribute("aria-label", "詳細情報の提供履歴");
+    const historyNote = document.createElement("p");
+    historyNote.className = "popup-form-note";
+    historyNote.textContent = "このウィンドウで応答を生成した直近50件。クラウドへの到達は確認できません。OFF後も確認でき、画面の再読み込み・終了で消去します。";
     let mounted = true;
     let configuring = false;
     const render = (state: AutomationState): void => {
         if (!mounted) return;
-        enabled.checked = state.enabled; editable.checked = state.editable;
+        enabled.checked = state.enabled; editable.checked = state.editable; detailed.checked = state.detailedDiagnostics;
         enabled.disabled = configuring; editable.disabled = configuring;
+        detailed.disabled = configuring || !state.enabled;
         connection.disabled = !state.enabled;
         status.textContent = configuring ? "設定変更中…" : state.error ?? (state.enabled ? (state.editable ? "公開中：参照・編集を許可" : "公開中：参照のみ") : "OFF：公開していません");
+        if (state.enabled && !configuring && !state.error) status.textContent += state.detailedDiagnostics ? "／詳細診断：許可" : "／詳細診断：OFF";
         if (!state.enabled) { config.value = ""; config.hidden = true; }
     };
     const unsubscribe = window.electronAPI.automation.onState(render);
     void window.electronAPI.automation.getState().then(render).catch(() => { status.textContent = "MCP状態を取得できませんでした。"; });
     const change = (): void => {
-        configuring = true; enabled.disabled = true; editable.disabled = true;
-        void window.electronAPI.automation.configure(enabled.checked, editable.checked).then(state => {
+        configuring = true; enabled.disabled = true; editable.disabled = true; detailed.disabled = true;
+        void window.electronAPI.automation.configure(enabled.checked, editable.checked, detailed.checked).then(state => {
             configuring = false; render(state);
         }).catch(() => {
-            configuring = false; enabled.disabled = false; editable.disabled = false;
+            configuring = false; enabled.disabled = false; editable.disabled = false; detailed.checked = false; detailed.disabled = !enabled.checked;
             status.textContent = "MCP設定を変更できませんでした。";
         });
     };
     enabled.addEventListener("change", change);
     editable.addEventListener("change", change);
+    detailed.addEventListener("change", change);
+    const refreshHistory = (): void => {
+        historyButton.disabled = true;
+        void window.electronAPI.automation.getDetailAccessHistory().then(entries => {
+            if (!mounted) return;
+            history.replaceChildren();
+            if (!entries.length) { const item = document.createElement("li"); item.textContent = "提供履歴はありません。"; history.append(item); }
+            for (const entry of entries) {
+                const item = document.createElement("li");
+                item.textContent = `${new Date(entry.timestamp).toLocaleTimeString()} — ${entry.modelName} / ${entry.kind}[${entry.index}] ${entry.name ?? "名称なし"}`;
+                history.append(item);
+            }
+        }).catch(() => { if (mounted) history.textContent = "提供履歴を取得できませんでした。"; })
+            .finally(() => { if (mounted) historyButton.disabled = false; });
+    };
+    historyButton.addEventListener("click", refreshHistory);
+    refreshHistory();
     connection.addEventListener("click", () => {
         void window.electronAPI.automation.getConnection().then(value => {
             if (!mounted) return;
@@ -53,7 +84,8 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
             config.value = JSON.stringify({ mcpServers: { mmd_modoki: { type: "http", url: value.endpoint, headers: { Authorization: `Bearer ${value.token}` } } } }, null, 2);
         }).catch(() => { status.textContent = "公開をONにしてから接続設定を表示してください。"; });
     });
-    section.append(title, createPopupFormField("MCPを有効にする", enabled), createPopupFormField("AIからの編集も許可", editable), note, status, connection, config);
+    section.append(title, createPopupFormField("MCPを有効にする", enabled), createPopupFormField("AIからの編集も許可", editable), note,
+        createPopupFormField("構造情報を含む詳細診断を許可", detailed), detailNote, status, connection, config, historyButton, historyNote, history);
     container.append(section);
     return () => { mounted = false; config.value = ""; unsubscribe(); };
 }

@@ -3,7 +3,7 @@ import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { startAutomationListener, type AutomationListener } from "../../src/main/automation/mcp-server";
-import { automationTools } from "../../src/automation/contracts";
+import { automationTools, AutomationError } from "../../src/automation/contracts";
 
 const listeners: AutomationListener[] = [];
 afterEach(async () => { await Promise.all(listeners.splice(0).map(listener => listener.close())); });
@@ -41,6 +41,23 @@ async function rpc(connection: TestConnection, method: string, params: Record<st
 }
 
 describe("MCP HTTP foundation", () => {
+    it.each([true, false])("returns structured recoverable failures without raw exception data (modern=%s)", async modern => {
+        const token = randomBytes(32).toString("base64url");
+        let unexpected = false;
+        const connection = await startAutomationListener({ port: 0, token, appVersion: "test", onError: () => undefined,
+            dispatch: async () => { throw unexpected ? new Error("SECRET_MODEL_BYTES") : new AutomationError("KEY_COLLISION", { operationIndex: 2, frame: 30 }); },
+        });
+        listeners.push(connection);
+        const connected = { ...connection, token };
+        for (unexpected of [false, true]) {
+            const result = await rpc(connected, "tools/call", { name: "mmd_get_context", arguments: {} }, modern);
+            expect(result.json.result.isError).toBe(true);
+            expect(result.json.result.structuredContent.effects.state).toBe(unexpected ? "unknown" : "none");
+            expect(result.json.result.structuredContent.error.code).toBe(unexpected ? "OPERATION_FAILED" : "KEY_COLLISION");
+            expect(JSON.parse(result.json.result.content[0].text)).toEqual(result.json.result.structuredContent);
+            expect(JSON.stringify(result.json)).not.toContain("SECRET_MODEL_BYTES");
+        }
+    });
     it("registers only explicit editor operations and rejects model/file payload requests before dispatch", async () => {
         let calls = 0;
         const token = randomBytes(32).toString("base64url");

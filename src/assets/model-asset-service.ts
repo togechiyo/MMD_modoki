@@ -5,6 +5,7 @@ import type { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGener
 import { Material } from "@babylonjs/core/Materials/material";
 import { ImportMeshAsync } from "@babylonjs/core/Loading/sceneLoader";
 import type { ModelInfo, ModelLoadStage, ModelLoadStageEvent } from "../types";
+import { projectModelDiagnosticDetail, type ModelDiagnosticMetadata } from "../automation/model-detail";
 import { MmdModelLoader } from "babylon-mmd/esm/Loader/mmdModelLoader";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { PBRMaterialBuilder } from "babylon-mmd/esm/Loader/pbrMaterialBuilder";
@@ -540,6 +541,7 @@ type ModelAssetHost = {
         renderMeshes: Mesh[];
         model: ModelAssetRuntimeModel;
         info: ModelInfo;
+        diagnosticMetadata?: ModelDiagnosticMetadata;
         materials: SceneModelMaterialEntry[];
         rigidBodies: Array<{
             name: string;
@@ -1587,6 +1589,11 @@ export async function loadPMX(
             renderMeshes: result.meshes as Mesh[],
             model: mmdModel,
             info: modelInfo,
+            // Runtime creation trims mesh metadata. Keep only the diagnostic allowlist, never morph offsets or raw metadata.
+            diagnosticMetadata: {
+                bones: metadataBones.map(bone => projectModelDiagnosticDetail("bone", bone)),
+                morphs: metadataMorphs.map(morph => projectModelDiagnosticDetail("morph", morph)),
+            },
             materials: sceneMaterials,
             rigidBodies: sceneRigidBodies,
             joints: sceneJoints,

@@ -976,7 +976,7 @@ const showRendererFailureDialog = async (
   }
 };
 
-const automationBridge = installAutomationAppBridge(code => writeAppLog('warn', 'main', code));
+const automationBridge = installAutomationAppBridge((code, data) => writeAppLog('warn', 'main', code, data));
 const createWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,

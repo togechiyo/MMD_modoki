@@ -29,7 +29,8 @@ export const timelineScopeSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("model"), modelInstanceId: name }).strict(),
     z.object({ kind: z.literal("accessory"), accessoryIndex: z.number().int().nonnegative() }).strict(),
 ]);
-const track = z.object({ category: z.enum(["root", "camera", "accessory", "light", "shadow", "gravity", "property", "semi-standard", "bone", "morph"]), name }).strict();
+export const automationTrackSchema = z.object({ category: z.enum(["root", "camera", "accessory", "light", "shadow", "gravity", "property", "semi-standard", "bone", "morph"]), name }).strict();
+const track = automationTrackSchema;
 const frame = z.number().int().min(0).max(1000000);
 export const keyframeOperationSchema = z.discriminatedUnion("action", [
     z.object({ action: z.literal("set"), track, frame, payload: keyframePayloadSchema }).strict(),
@@ -38,3 +39,19 @@ export const keyframeOperationSchema = z.discriminatedUnion("action", [
     z.object({ action: z.literal("copy"), track, frame, toFrame: frame }).strict(),
 ]);
 export type AutomationKeyframeOperation = z.infer<typeof keyframeOperationSchema>;
+
+const scalarCorrection = z.object({ multiply: z.number().min(-1000).max(1000), add: number }).strict();
+const vectorCorrection = z.object({ x: scalarCorrection, y: scalarCorrection, z: scalarCorrection }).strict();
+const correction = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("bone"), position: vectorCorrection, rotation: vectorCorrection }).strict(),
+    z.object({ kind: z.literal("camera"), center: vectorCorrection, rotation: vectorCorrection, distance: scalarCorrection, fov: scalarCorrection }).strict(),
+    z.object({ kind: z.literal("morph"), weight: scalarCorrection }).strict(),
+]);
+const keys = z.array(z.object({ track, frame }).strict()).min(1).max(100);
+export const timelineTransformSchema = z.discriminatedUnion("action", [
+    z.object({ action: z.literal("insertFrames"), frame, count: z.number().int().min(1).max(10000) }).strict(),
+    z.object({ action: z.literal("deleteFrames"), frame, count: z.number().int().min(1).max(10000) }).strict(),
+    z.object({ action: z.literal("mirror"), keys, frameOffset: z.number().int().min(-1000000).max(1000000), collision: z.enum(["reject", "replace"]) }).strict(),
+    z.object({ action: z.literal("correct"), keys, correction }).strict(),
+]);
+export type AutomationTimelineTransform = z.infer<typeof timelineTransformSchema>;

@@ -26,25 +26,25 @@ export function buildAutomationKeyframeEdit(
         const previous = items.get(id);
         items.set(id, { track: { ...track }, frame, before: previous?.before ?? read(track, frame), after });
     };
-    for (const operation of operations) {
+    for (const [operationIndex, operation] of operations.entries()) {
         if (operation.action === "delete" || (operation.action === "move" && operation.toFrame !== operation.frame)) {
             const id = key(operation.track, operation.frame);
-            if (removed.has(id)) throw new AutomationError("DUPLICATE_KEY");
-            if (!read(operation.track, operation.frame)) throw new AutomationError("KEY_NOT_FOUND");
+            if (removed.has(id)) throw new AutomationError("DUPLICATE_KEY", { operationIndex, frame: operation.frame });
+            if (!read(operation.track, operation.frame)) throw new AutomationError("KEY_NOT_FOUND", { operationIndex, frame: operation.frame });
             removed.add(id);
             put(operation.track, operation.frame, null);
         }
     }
-    for (const operation of operations) {
+    for (const [operationIndex, operation] of operations.entries()) {
         if (operation.action === "delete") continue;
         const frame = operation.action === "set" ? operation.frame : operation.toFrame;
         const id = key(operation.track, frame);
-        if (destinations.has(id)) throw new AutomationError("DUPLICATE_KEY");
+        if (destinations.has(id)) throw new AutomationError("DUPLICATE_KEY", { operationIndex, frame });
         destinations.add(id);
         const payload = operation.action === "set" ? normalizeInputPayload(operation.payload) : read(operation.track, operation.frame);
-        if (!payload) throw new AutomationError("KEY_NOT_FOUND");
+        if (!payload) throw new AutomationError("KEY_NOT_FOUND", { operationIndex, frame: operation.frame });
         const existing = read(operation.track, frame);
-        if (collision === "reject" && existing && !removed.has(id) && !keyframeValuesEqual(existing, payload)) throw new AutomationError("KEY_COLLISION");
+        if (collision === "reject" && existing && !removed.has(id) && !keyframeValuesEqual(existing, payload)) throw new AutomationError("KEY_COLLISION", { operationIndex, frame });
         put(operation.track, frame, payload);
     }
     // A delete plus a set/copy of the same slot is ambiguous; moving into a vacated slot is supported.

@@ -1,6 +1,8 @@
 import { t } from "../i18n";
 import type { MmdManager, WgslMaterialShaderPresetId } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
+import type { AutomationMaterialTarget } from "../automation/material-schema";
+import { AutomationError } from "../automation/diagnostics";
 import {
     PBR_MATERIAL_UI_ENABLED,
     DEFAULT_PBR_MATERIAL_SHADER_PRESET,
@@ -74,7 +76,94 @@ function resolveShaderPanelElements(): ShaderPanelElements {
     };
 }
 
+function createPbrPresetCatalog(): Array<{ id: string; label: string; description: string }> {
+    const presets: Array<{ id: string; label: string; description: string }> = [
+        {
+            id: "pbr-mmd-like",
+            label: t("shader.pbrPreset.mmdLike"),
+            description: t("shader.pbrMaterial.mmdLikeDescription"),
+        },
+        {
+            id: "pbr-skin",
+            label: t("shader.pbrPreset.skin"),
+            description: t("shader.pbrMaterial.skinDescription"),
+        },
+        {
+            id: "pbr-skin-face",
+            label: t("shader.pbrPreset.skinFace"),
+            description: t("shader.pbrMaterial.skinFaceDescription"),
+        },
+        {
+            id: "pbr-sss-wax",
+            label: t("shader.pbrPreset.wax"),
+            description: t("shader.pbrMaterial.waxDescription"),
+        },
+        {
+            id: "pbr-no-shadow",
+            label: t("shader.pbrPreset.noShadow"),
+            description: t("shader.pbrMaterial.noShadowDescription"),
+        },
+        {
+            id: "pbr-base",
+            label: t("shader.pbrPreset.standard"),
+            description: t("shader.pbrMaterial.baseDescription"),
+        },
+    ];
+    presets.splice(presets.length - 1, 0, ...[
+        ["pbr-metal-polished", "Metal Polished"],
+        ["pbr-metal-satin", "Metal Satin"],
+        ["pbr-plastic-glossy", "Plastic Glossy"],
+        ["pbr-clay-white", "Clay White"],
+        ["pbr-cotton", "Cotton"],
+        ["pbr-satin", "Satin"],
+        ["pbr-velvet", "Velvet"],
+        ["pbr-leather", "Leather"],
+        ["pbr-thin-translucent", "Thin Translucent"],
+        ["pbr-emissive", "Emissive"],
+        ["pbr-candy-coat", "Candy Coat"],
+        ["pbr-aurora", "Aurora"],
+    ].map(([id, label]) => ({ id, label, description: t(`shader.pbrMaterial.${id}Description`) })));
+    return presets;
+}
+
 export class ShaderPanelController {
+    public getAutomationPresetCatalog(subject: AutomationMaterialTarget) {
+        const model = subject.kind === "model" ? this.mmdManager.getLoadedModels().find(item => item.instanceId === subject.modelInstanceId) : null;
+        const target = subject.kind === "model"
+            ? this.mmdManager.getWgslModelShaderStates().find(item => item.modelIndex === model?.index)
+            : this.mmdManager.getAccessoryMaterialShaderStates().find(item => item.accessoryIndex === subject.accessoryIndex);
+        if (!target) throw new AutomationError("MODEL_NOT_FOUND");
+        const pbr = "materialPipeline" in target && target.materialPipeline === "pbr-standard";
+        const presets = pbr ? createPbrPresetCatalog() : this.mmdManager.getWgslMaterialShaderPresets().filter(preset =>
+            !HIDDEN_SHADER_PRESET_IDS.has(preset.id) || ("kind" in target && ((target.kind === "x" && preset.id === "wgsl-accessory-toon") ||
+                (target.kind === "obj" && ["wgsl-obj-untextured", "wgsl-obj-mtl"].includes(preset.id)))));
+        return { pbr, available: pbr || this.mmdManager.isWgslMaterialShaderAssignmentAvailable(), presets, materials: target.materials.map(item => ({ key: item.key, name: item.name, visible: item.visible,
+            presetId: pbr && "pbrPresetId" in item ? item.pbrPresetId : item.presetId })) };
+    }
+
+    public applyAutomationPreset(subject: AutomationMaterialTarget, materialKey: string | null, presetId: string) {
+        const catalog = this.getAutomationPresetCatalog(subject);
+        if (!catalog.available) throw new AutomationError("SETTING_UNAVAILABLE");
+        if (!catalog.presets.some(preset => preset.id === presetId)) throw new AutomationError("SETTING_UNAVAILABLE");
+        if (materialKey !== null && !catalog.materials.some(material => material.key === materialKey)) throw new AutomationError("MATERIAL_NOT_FOUND");
+        let applied = false;
+        if (subject.kind === "accessory") applied = this.mmdManager.setAccessoryMaterialShaderPreset(subject.accessoryIndex, materialKey, presetId as WgslMaterialShaderPresetId);
+        else {
+            const model = this.mmdManager.getLoadedModels().find(item => item.instanceId === subject.modelInstanceId);
+            if (!model) throw new AutomationError("MODEL_NOT_FOUND");
+            if (catalog.pbr) applied = this.mmdManager.setPbrMaterialShaderPreset(model.index, materialKey, presetId as PbrMaterialShaderPreset);
+            else {
+                this.mmdManager.setExternalWgslToonShaderForModel(model.index, materialKey, null, null);
+                this.setExternalWgslToonAsset(null, null);
+                applied = this.mmdManager.setWgslMaterialShaderPreset(model.index, materialKey, presetId as WgslMaterialShaderPresetId);
+            }
+        }
+        if (!applied) throw new AutomationError("OPERATION_FAILED");
+        this.refresh();
+        const affected = this.getAutomationPresetCatalog(subject).materials.filter(material => materialKey === null || material.key === materialKey);
+        if (affected.some(material => material.presetId !== presetId)) throw new AutomationError("OPERATION_FAILED");
+        return { presetId, materialKey, affectedMaterialCount: affected.length, undoable: false };
+    }
     private readonly elements: ShaderPanelElements;
     private readonly mmdManager: MmdManager;
     private readonly getInfoModelSelectState: () => InfoModelSelectState;
@@ -213,52 +302,7 @@ export class ShaderPanelController {
             return;
         }
         if (isPbrModel) {
-            presets = [
-                {
-                    id: "pbr-mmd-like",
-                    label: t("shader.pbrPreset.mmdLike"),
-                    description: t("shader.pbrMaterial.mmdLikeDescription"),
-                },
-                {
-                    id: "pbr-skin",
-                    label: t("shader.pbrPreset.skin"),
-                    description: t("shader.pbrMaterial.skinDescription"),
-                },
-                {
-                    id: "pbr-skin-face",
-                    label: t("shader.pbrPreset.skinFace"),
-                    description: t("shader.pbrMaterial.skinFaceDescription"),
-                },
-                {
-                    id: "pbr-sss-wax",
-                    label: t("shader.pbrPreset.wax"),
-                    description: t("shader.pbrMaterial.waxDescription"),
-                },
-                {
-                    id: "pbr-no-shadow",
-                    label: t("shader.pbrPreset.noShadow"),
-                    description: t("shader.pbrMaterial.noShadowDescription"),
-                },
-                {
-                    id: "pbr-base",
-                    label: t("shader.pbrPreset.standard"),
-                    description: t("shader.pbrMaterial.baseDescription"),
-                },
-            ];
-            presets.splice(presets.length - 1, 0, ...[
-                ["pbr-metal-polished", "Metal Polished"],
-                ["pbr-metal-satin", "Metal Satin"],
-                ["pbr-plastic-glossy", "Plastic Glossy"],
-                ["pbr-clay-white", "Clay White"],
-                ["pbr-cotton", "Cotton"],
-                ["pbr-satin", "Satin"],
-                ["pbr-velvet", "Velvet"],
-                ["pbr-leather", "Leather"],
-                ["pbr-thin-translucent", "Thin Translucent"],
-                ["pbr-emissive", "Emissive"],
-                ["pbr-candy-coat", "Candy Coat"],
-                ["pbr-aurora", "Aurora"],
-            ].map(([id, label]) => ({ id, label, description: t(`shader.pbrMaterial.${id}Description`) })));
+            presets = createPbrPresetCatalog();
             elements.presetSelect.innerHTML = "";
             for (const preset of presets) {
                 const option = document.createElement("option");

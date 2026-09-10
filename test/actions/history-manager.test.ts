@@ -20,6 +20,20 @@ function createCommand(id: string, createdAtMs = 100): BuiltCommand {
 }
 
 describe("HistoryManager", () => {
+    it("peeks at the next redo without advancing history and invalidates it on a new edit", () => {
+        const history = new HistoryManager();
+        const command = createCommand("ai:one");
+        history.push(command);
+        history.undo();
+        const revision = history.getRevision();
+        expect(history.peekRedo()).toBe(command);
+        expect(history.getRevision()).toBe(revision);
+        expect(history.redo()).toBe(command);
+        expect(history.peekRedo()).toBeNull();
+        history.undo();
+        history.push(createCommand("manual:two"));
+        expect(history.peekRedo()).toBeNull();
+    });
     it("tracks undo availability after pushing a command", () => {
         const history = new HistoryManager();
 

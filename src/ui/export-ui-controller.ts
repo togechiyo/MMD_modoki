@@ -5,6 +5,8 @@
  * Builds PNG / WebM export requests from output UI state.
  */
 import { t } from "../i18n";
+import { saveAutomationBytes } from "../automation/ui-operations";
+import type { AutomationPermission } from "../automation/ui-operation-schema";
 import { logError, logInfo } from "../app-logger";
 import type { MmdManager } from "../mmd-manager";
 import { PngEncoderWebWorkerPool } from "../output/png-encoder-web-worker-pool";
@@ -310,7 +312,7 @@ export class ExportUiController {
         };
     }
 
-    public applyProjectState(state: ProjectOutputState | null | undefined): void {
+    public applyProjectState(state: ProjectOutputState | null | undefined, options: { preservePlaybackRange?: boolean } = {}): void {
         if (!state) {
             this.outputState.pngTransparentBackground = false;
             this.playbackLoopEnabled = false;
@@ -344,20 +346,20 @@ export class ExportUiController {
         }
         this.outputState.captureMode = FIXED_WEBM_CAPTURE_MODE;
         const hasStoredFrameRange = Number.isFinite(state.startFrame) && Number.isFinite(state.endFrame);
-        if (hasStoredFrameRange) {
+        if (!options.preservePlaybackRange && hasStoredFrameRange) {
             this.isPlaybackRangeCustomized = true;
             this.setPlaybackFrameRangeValues(state.startFrame ?? 0, state.endFrame ?? 0);
-        } else {
+        } else if (!options.preservePlaybackRange) {
             this.isPlaybackRangeCustomized = false;
         }
         const outputRange = resolveOutputFrameRangeOnProjectLoad(state, this.getMaxOutputFrame());
         this.isFrameRangeCustomized = outputRange.customized;
         this.outputState.frameRangeMode = outputRange.mode;
         this.setOutputFrameRangeValues(outputRange.startFrame, outputRange.endFrame);
-        if (this.elements.playbackFrameStartToggleInput) {
+        if (!options.preservePlaybackRange && this.elements.playbackFrameStartToggleInput) {
             this.elements.playbackFrameStartToggleInput.checked = Boolean(state.frameStartEnabled);
         }
-        this.playbackLoopEnabled = Boolean(state.playbackLoopEnabled);
+        if (!options.preservePlaybackRange) this.playbackLoopEnabled = Boolean(state.playbackLoopEnabled);
         const width = this.outputState.width;
         const height = this.outputState.height;
         this.outputAspectRatio = height > 0
@@ -437,7 +439,7 @@ export class ExportUiController {
         };
     }
 
-    public async exportPNG(): Promise<void> {
+    public async exportPNG(automationTarget?: { filePath: string; overwrite: boolean; permission: AutomationPermission }): Promise<Record<string, unknown> | void> {
         this.setStatus("Exporting PNG...", true);
 
         const outputSettings = this.getOutputSettings();
@@ -464,14 +466,15 @@ export class ExportUiController {
                 capturedFrame.width,
                 capturedFrame.height,
             );
-            savedPath = await window.electronAPI.savePngBytesFile(
-                encoded.pngBuffer,
-                fileName,
-            );
+            if (automationTarget) {
+                await saveAutomationBytes({ ...automationTarget, format: "png", bytes: new Uint8Array(encoded.pngBuffer) }, automationTarget.permission);
+                savedPath = automationTarget.filePath;
+            } else savedPath = await window.electronAPI.savePngBytesFile(encoded.pngBuffer, fileName);
         } catch (error: unknown) {
             logError("ui", "PNG snapshot encode or save failed", { error: error instanceof Error ? error.message : String(error) });
             this.setStatus("PNG export failed", false);
             this.showToast("PNG export failed", "error");
+            if (automationTarget) throw error;
             return;
         } finally {
             encoderPool.terminate();
@@ -487,6 +490,7 @@ export class ExportUiController {
         const basename = savedPath.replace(/^.*[\\/]/, "");
         this.setStatus("PNG saved", false);
         this.showToast(`Saved PNG: ${basename}`, "success");
+        return { filePath: savedPath, width: captureWidth, height: captureHeight };
     }
 
     public async exportPNGDetached(): Promise<void> {

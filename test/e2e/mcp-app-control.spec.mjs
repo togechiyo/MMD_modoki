@@ -4,37 +4,10 @@ import { randomUUID, createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { settings, closeSettings, client } from "./mcp-client.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const modelPath = resolve(root, "test/fixtures/external-parent/tofu.pmx");
-async function settings(page) {
-    await page.locator('[data-i18n="menu.tools"]').click();
-    await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
-    return page.locator('[data-popup-id="experimental-settings"]');
-}
-async function closeSettings(dialog) { await dialog.locator(".app-menu-dialog-close").click(); }
-function client(connection) {
-    return async (name, args = {}, method = "tools/call") => {
-        const params = method === "tools/call" ? { name, arguments: args } : args;
-        const response = await fetch(connection.url, {
-            method: "POST", headers: { ...connection.headers, "Content-Type": "application/json", Accept: "application/json, text/event-stream",
-                "Mcp-Method": method, "MCP-Protocol-Version": "2026-07-28", ...(method === "tools/call" ? { "Mcp-Name": name } : {}),
-                ...(method === "resources/read" ? { "Mcp-Name": args.uri } : {}),
-            },
-            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: {
-                "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {},
-                "io.modelcontextprotocol/clientInfo": { name: "mmd-e2e", version: "1" },
-            } } }),
-        });
-        const result = await response.json();
-        if (method === "resources/read" && args.uri?.startsWith("file:")) {
-            expect(result.error).toBeTruthy();
-            return result;
-        }
-        expect(result.error, JSON.stringify(result)).toBeUndefined();
-        return result.result;
-    };
-}
 
 for (const backend of ["frameGraph", "classic"]) test(`MCP app operations preserve model content boundary (${backend})`, async ({}, testInfo) => {
     test.setTimeout(180_000);
@@ -83,6 +56,11 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP app operations preser
         const denied = await rpc("mmd_set_camera", { target: ctx.target, expectedEditRevision: ctx.editRevision, operationId: randomUUID(), mode: "preview", playbackPolicy: "reject", camera: ctx.camera });
         expect(denied.isError).toBe(true);
         expect(denied.content[0].text).toContain("READ_ONLY");
+        expect(denied.structuredContent).toMatchObject({ error: { code: "READ_ONLY" }, effects: { state: "none" }, recovery: { strategy: "user_action" } });
+        const readOnlyDiagnostic = (await rpc("mmd_get_diagnostics", { target: ctx.target })).structuredContent;
+        expect(readOnlyDiagnostic.status.editPermission).toBe(false);
+        expect(readOnlyDiagnostic.status.editBlockers).toContain("read_only");
+        expect(readOnlyDiagnostic.recentFailures.items[0].diagnosticId).toBe(denied.structuredContent.diagnosticId);
         dialog = await settings(page);
         await dialog.getByLabel("AIからの編集も許可", { exact: true }).click();
         await expect(dialog.locator("[data-mcp-status]")).toContainText("参照・編集");

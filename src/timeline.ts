@@ -658,7 +658,6 @@ export class Timeline {
         const track = this.tracks[targetIndex];
         this.selectedFrame = null;
         this.selectedKeySet.clear();
-        this.selectedBoneTrackSet.clear();
         this.selectionAnchor = null;
         this.clearHeaderSelectionState();
 

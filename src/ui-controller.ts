@@ -72,9 +72,15 @@ import {
 } from "./actions/keyframe-command-builder";
 import { buildBoneTransformCommand } from "./actions/bone-transform-command-builder";
 import { buildCameraTransformCommand } from "./actions/camera-transform-command-builder";
-import type { BoneTransformCommandSnapshot, BuiltCommand, CameraTransformCommandSnapshot, CommandTrackRef } from "./actions/command-types";
+import type { BoneTransformCommandSnapshot, BuiltCommand, CameraTransformCommandSnapshot, CommandDirection, CommandTrackRef } from "./actions/command-types";
 import { executeKeyframeTransaction, keyframeValuesEqual, type KeyframeScope, type KeyframeTransaction } from "./actions/keyframe-transaction";
 import { applyAutomationSetting, getAutomationSettings, type AutomationSetting } from "./automation/settings";
+import { applyAutomationControl, type AutomationControl } from "./automation/controls";
+import { runAutomationUiOperation, saveAutomationBytes, assertAutomationPermission } from "./automation/ui-operations";
+import type { AutomationUiOperation, AutomationPermission } from "./automation/ui-operation-schema";
+import { AutomationError } from "./automation/diagnostics";
+import type { AutomationEditorOptions } from "./automation/editor-options";
+import type { AutomationMaterialTarget } from "./automation/material-schema";
 import type {
     BoneKeyframePayload,
     CameraExternalParentKeyframePayload,
@@ -3421,7 +3427,7 @@ export class UIController {
         }
     }
 
-    private async saveProject(forceChoosePath = false): Promise<void> {
+    private async saveProject(forceChoosePath = false, automationTarget?: { filePath: string; overwrite: boolean; permission: AutomationPermission }): Promise<Record<string, unknown> | void> {
         this.setStatus("Saving project...", true);
         try {
             const project = this.buildProjectStateForPersistence();
@@ -3447,8 +3453,10 @@ export class UIController {
             }
 
             const json = JSON.stringify(project, null, 2);
-            let savedPath = this.currentProjectFilePath;
-            if (forceChoosePath || !savedPath) {
+            let savedPath = automationTarget?.filePath ?? this.currentProjectFilePath;
+            if (automationTarget) {
+                await saveAutomationBytes({ ...automationTarget, format: "project", bytes: new TextEncoder().encode(json) }, automationTarget.permission);
+            } else if (forceChoosePath || !savedPath) {
                 const defaultFileName = savedPath
                     ? this.getBaseNameForRenderer(savedPath) || this.buildProjectDefaultFileName()
                     : this.buildProjectDefaultFileName();
@@ -3474,7 +3482,9 @@ export class UIController {
                 const projectDir = this.getDirectoryPathForRenderer(savedPath);
                 const lutDir = this.joinPathForRenderer(projectDir, "luts");
                 const lutPath = this.joinPathForRenderer(lutDir, relativeLutFileName);
-                const wrote = await window.electronAPI.writeTextFileToPath(lutPath, relativeLutText);
+                const wrote = automationTarget
+                    ? await saveAutomationBytes({ filePath: lutPath, overwrite: automationTarget.overwrite, format: "lut", bytes: new TextEncoder().encode(relativeLutText) }, automationTarget.permission)
+                    : await window.electronAPI.writeTextFileToPath(lutPath, relativeLutText);
                 if (!wrote) {
                     this.showToast("Failed to save project-relative LUT file", "error");
                 }
@@ -3483,7 +3493,9 @@ export class UIController {
                 const projectDir = this.getDirectoryPathForRenderer(savedPath);
                 const wgslDir = this.joinPathForRenderer(projectDir, "wgsl");
                 const wgslPath = this.joinPathForRenderer(wgslDir, relativeWgslFileName);
-                const wrote = await window.electronAPI.writeTextFileToPath(wgslPath, this.postFxWgslToonText);
+                const wrote = automationTarget
+                    ? await saveAutomationBytes({ filePath: wgslPath, overwrite: automationTarget.overwrite, format: "wgsl", bytes: new TextEncoder().encode(this.postFxWgslToonText) }, automationTarget.permission)
+                    : await window.electronAPI.writeTextFileToPath(wgslPath, this.postFxWgslToonText);
                 if (!wrote) {
                     this.showToast("Failed to save project-relative WGSL file", "error");
                 }
@@ -3493,15 +3505,17 @@ export class UIController {
             const basename = savedPath.replace(/^.*[\\/]/, "");
             this.setStatus("Project saved", false);
             this.showToast(`Saved project: ${basename}`, "success");
+            return { filePath: savedPath };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             this.setStatus("Project save failed", false);
             this.showToast(`Project save error: ${message}`, "error");
+            if (automationTarget) throw err;
         }
     }
 
-    private async loadProject(): Promise<void> {
-        const filePath = await window.electronAPI.openFileDialog([
+    private async loadProject(automationPath?: string, permission?: AutomationPermission): Promise<Record<string, unknown> | void> {
+        const filePath = automationPath ?? await window.electronAPI.openFileDialog([
             { name: "MMD Modoki Project", extensions: ["mmdproj", "json"] },
             { name: "All files", extensions: ["*"] },
         ]);
@@ -3513,6 +3527,7 @@ export class UIController {
             if (!text) {
                 this.setStatus("Project load failed", false);
                 this.showToast("Failed to read project file", "error");
+                if (automationPath) throw new AutomationError("ASSET_LOAD_FAILED");
                 return;
             }
 
@@ -3522,10 +3537,13 @@ export class UIController {
             } catch {
                 this.setStatus("Project load failed", false);
                 this.showToast("Project JSON parse failed", "error");
+                if (automationPath) throw new AutomationError("INVALID_PROJECT");
                 return;
             }
 
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new AutomationError("INVALID_PROJECT");
             const parsedProject = parsed as Partial<MmdModokiProjectFileV1>;
+            if (permission) await assertAutomationPermission(permission);
             const requestedLutMode = parsedProject.effects?.lutSourceMode;
             const requestedLutPath = parsedProject.effects?.lutExternalPath;
             const requestedWgslToonPath = parsedProject.effects?.wgslToonShaderPath;
@@ -3586,6 +3604,7 @@ export class UIController {
                 }
             }
 
+            if (permission) await assertAutomationPermission(permission);
             const result = await this.mmdManager.importProjectState(parsed);
             this.commandHistory.clear("project-load");
             this.currentProjectFilePath = filePath;
@@ -3618,10 +3637,12 @@ export class UIController {
                 this.setStatus("Project loaded", false);
                 this.showToast(`Project loaded (${result.loadedModels} models)`, "success");
             }
+            return { filePath, loadedModels: result.loadedModels, warningCount: result.warnings.length };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             this.setStatus("Project load failed", false);
             this.showToast(`Project load error: ${message}`, "error");
+            if (automationPath) throw err;
         }
     }
 
@@ -4016,7 +4037,7 @@ export class UIController {
         }
     }
 
-    public async loadModelInteractively(filePath: string): Promise<ModelInfo | null> {
+    public async loadModelInteractively(filePath: string, permission?: AutomationPermission): Promise<ModelInfo | null> {
         this.setStatus(t("viewport.modelComment.waiting"), false);
         const header = await window.electronAPI.readMmdModelHeader(filePath);
         if (!header) {
@@ -4026,6 +4047,7 @@ export class UIController {
             return null;
         }
 
+        if (permission) await assertAutomationPermission(permission);
         const confirmed = await this.modelCommentNoticeController.confirm(header);
         if (!confirmed) {
             this.setStatus(t("viewport.modelComment.canceled"), false);
@@ -4034,6 +4056,7 @@ export class UIController {
             return null;
         }
 
+        if (permission) await assertAutomationPermission(permission);
         this.setStatus(`Loading ${this.getFileExtension(filePath).toUpperCase()}...`, true);
         return await this.mmdManager.loadPMX(filePath);
     }
@@ -7772,6 +7795,22 @@ export class UIController {
             this.refreshRuntimeAnimationForTrack();
         };
         return {
+            applyMorphWeight: (diff, direction) => {
+                const scope = this.getAutomationTimelineScope();
+                if (scope?.kind !== "model" || scope.modelInstanceId !== diff.modelInstanceId || this.mmdManager.currentFrame !== diff.frame) return false;
+                if (this.mmdManager.getActiveModelInfo()?.morphNames.filter(name => name === diff.morphName).length !== 1) return false;
+                const before = direction === "apply" ? diff.before : diff.after;
+                const after = direction === "apply" ? diff.after : diff.before;
+                if (!keyframeValuesEqual(this.mmdManager.getMorphWeight(diff.morphName), before)) return false;
+                this.mmdManager.setMorphWeight(diff.morphName, after);
+                if (!keyframeValuesEqual(this.mmdManager.getMorphWeight(diff.morphName), after)) {
+                    this.mmdManager.setMorphWeight(diff.morphName, before);
+                    return false;
+                }
+                this.bottomPanel.syncSelectedMorphFrameSlidersFromRuntime(true);
+                this.updateSectionKeyframeButtons();
+                return true;
+            },
             applyKeyframeTransaction: (diff, direction) => {
                 let attempted = false;
                 const applied = executeKeyframeTransaction(diff, direction, {
@@ -8334,8 +8373,8 @@ export class UIController {
         return entry.snapshot;
     }
 
-    public getAutomationHistoryState(): { revision: number; generation: number; undoId: string | null } {
-        return { revision: this.commandHistory.getRevision(), generation: this.commandHistory.getGeneration(), undoId: this.commandHistory.peekUndo()?.id ?? null };
+    public getAutomationHistoryState(): { revision: number; generation: number; undoId: string | null; redoId: string | null } {
+        return { revision: this.commandHistory.getRevision(), generation: this.commandHistory.getGeneration(), undoId: this.commandHistory.peekUndo()?.id ?? null, redoId: this.commandHistory.peekRedo()?.id ?? null };
     }
 
     public getAutomationTimelineScope(): KeyframeScope | null {
@@ -8371,6 +8410,56 @@ export class UIController {
         return true;
     }
 
+    public captureAutomationKeyframe(reference: CommandTrackRef): TimelineKeyframePayload | null {
+        const matches = this.timeline.getKeyframeTracks().filter(track => track.category === reference.category && track.name === reference.name);
+        if (matches.length !== 1) return null;
+        const track = matches[0];
+        if (track.category === "morph") return this.createMorphKeyframePayload({ value: this.mmdManager.getMorphWeight(track.name) });
+        if (track.category === "property") return { kind: "property", visible: this.mmdManager.getActiveModelVisibility(), ikStates: this.mmdManager.getActiveModelIkStates() };
+        if (track.category === "light") return this.mmdManager.captureCurrentLightKeyframePayload();
+        if (track.category === "shadow") return this.mmdManager.captureCurrentShadowKeyframePayload();
+        if (track.category === "gravity") return this.mmdManager.captureCurrentGravityKeyframePayload();
+        if (track.category === "accessory") {
+            const index = this.mmdManager.getActiveTimelineAccessoryIndex();
+            const value = index === null ? null : this.mmdManager.captureAccessoryTransformKeyframeValue(index);
+            return value ? { kind: "accessory", ...value } : null;
+        }
+        // The existing curve reader also binds the interpolation panel. Restore its current bindings
+        // so that capturing another track (including a subsequently rejected request) does not retarget it.
+        const bindings = new Map(this.interpolationChannelBindings);
+        try {
+            const curves = this.captureInterpolationCurveSnapshot(track, this.mmdManager.currentFrame);
+            const pose = this.captureCurrentBonePoseSnapshot(track.name);
+            if (track.category === "camera") return this.createCameraKeyframePayload(pose, curves);
+            return pose ? this.createBoneKeyframePayload(track, pose, curves, this.physicsKeyframeInputMode) : null;
+        } finally {
+            this.interpolationChannelBindings.clear();
+            for (const [key, value] of bindings) this.interpolationChannelBindings.set(key, value);
+        }
+    }
+
+    public finishAutomationKeyframeRegistration(tracks: readonly CommandTrackRef[]): void {
+        for (const track of tracks) {
+            if (["camera", "root", "semi-standard", "bone"].includes(track.category)) {
+                this.clearSectionKeyframeDirty("bone", this.getBoneKeyframeContextKey(track.name));
+                this.clearSectionKeyframeDirty("interpolation", this.getInterpolationKeyframeContextKey(track));
+            } else if (track.category === "morph") {
+                this.mmdManager.getActiveModelInfo()?.morphDisplayFrames.forEach((frame, index) => {
+                    if (frame.morphs.some(morph => morph.name === track.name)) this.clearSectionKeyframeDirty("morph", this.getMorphKeyframeContextKey(index));
+                });
+            } else if (track.category === "property") {
+                this.clearSectionKeyframeDirty("info", this.getInfoKeyframeContextKey());
+            } else if (track.category === "light" || track.category === "shadow" || track.category === "gravity") {
+                this.clearSectionKeyframeDirty(track.category, this.getSceneKeyframeContextKey(track.category));
+            } else if (track.category === "accessory") {
+                const index = this.mmdManager.getActiveTimelineAccessoryIndex();
+                if (index !== null) this.clearSectionKeyframeDirty("accessory", this.getAccessoryKeyframeContextKey(index));
+            }
+        }
+        this.bottomPanel.syncSelectedMorphFrameSlidersFromRuntime(true);
+        this.updateSectionKeyframeButtons();
+    }
+
     public setAutomationSetting(setting: AutomationSetting): boolean {
         const current = getAutomationSettings(this.mmdManager)[setting.id];
         if (!current.available || !this.sceneEnvironmentUiController || !this.runtimeFeatureUiController || !this.colorPostFxController) throw new Error("Setting unavailable");
@@ -8380,8 +8469,92 @@ export class UIController {
         return true;
     }
 
+    public setAutomationControl(control: AutomationControl) {
+        const result = applyAutomationControl(this.mmdManager, control);
+        this.applyLocalizedUiState();
+        this.refreshLightingUiFromRuntime();
+        this.refreshCameraUiFromRuntime();
+        this.refreshShaderPanel();
+        return result;
+    }
+
+    public selectAutomationBones(modelInstanceId: string, boneNames: readonly string[]): void {
+        const scope = this.getAutomationTimelineScope();
+        if (scope?.kind !== "model" || scope.modelInstanceId !== modelInstanceId) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+        const names = this.mmdManager.getActiveModelInfo()?.boneNames ?? [];
+        if (boneNames.some(name => names.filter(candidate => candidate === name).length !== 1)) throw new AutomationError("BONE_NOT_UNIQUE");
+        boneNames.forEach((boneName, index) => this.actionDispatcher.dispatch({ type: "selection.pickBone", source: "system", boneName, additive: index > 0 }));
+        const selected = this.timeline.getSelectedBoneTracks().map(track => track.trackName);
+        if (selected.length !== boneNames.length || boneNames.some(name => !selected.includes(name))) throw new AutomationError("OPERATION_FAILED");
+    }
+
+    public getAutomationMaterialPresets(subject: AutomationMaterialTarget) {
+        if (!this.shaderPanelController) throw new AutomationError("SETTING_UNAVAILABLE");
+        return this.shaderPanelController.getAutomationPresetCatalog(subject);
+    }
+
+    public setAutomationMaterialPreset(subject: AutomationMaterialTarget, materialKey: string | null, presetId: string) {
+        if (!this.shaderPanelController) throw new AutomationError("SETTING_UNAVAILABLE");
+        return this.shaderPanelController.applyAutomationPreset(subject, materialKey, presetId);
+    }
+
+    public getAutomationEditorOptions() {
+        const selected = this.timeline.getSelectedBoneTracks();
+        return { autoKey: { enabled: this.autoKeyEnabled, scope: this.autoKeyScope }, output: this.exportOutputProjectState(),
+            playbackRange: { ...this.getPlaybackFrameRange(), startEnabled: this.isPlaybackFrameStartEnabled(), loop: this.isPlaybackLoopEnabled() },
+            locale: getLocale(), uiScale: this.layoutUiController?.getUiScalePercentage() ?? 100,
+            fullscreen: this.layoutUiController?.isUiFullscreenModeActive() ?? false,
+            selectedBones: selected.slice(0, 200).map(track => track.trackName), selectedBoneCount: selected.length };
+    }
+
+    public setAutomationEditorOptions(options: AutomationEditorOptions) {
+        switch (options.kind) {
+            case "autoKey": this.setAutoKeyEnabled(options.enabled, { persist: true, toast: false }); this.setAutoKeyScope(options.scope, { persist: true, toast: false }); break;
+            case "playbackRange":
+                if (!this.exportUiController) throw new AutomationError("SETTING_UNAVAILABLE");
+                this.exportUiController.setPlaybackFrameRangeBoundary("end", options.endFrame);
+                this.exportUiController.setPlaybackFrameRangeBoundary("start", options.startFrame);
+                this.exportUiController.setPlaybackFrameToggle("start", options.startEnabled);
+                this.exportUiController.setPlaybackLoopEnabled(options.loop); break;
+            case "output":
+                if (!this.exportUiController) throw new AutomationError("SETTING_UNAVAILABLE");
+                this.exportUiController.applyProjectState({ ...this.exportOutputProjectState(), width: options.width, height: options.height,
+                    qualityScale: options.qualityScale, fps: options.fps, pngTransparentBackground: options.transparent, includeAudio: options.includeAudio,
+                    webmCodec: options.webmCodec, startFrame: options.startFrame, endFrame: options.endFrame, frameRangeMode: "custom", usePlaybackRange: options.usePlaybackRange }, { preservePlaybackRange: true }); break;
+            case "locale": setLocale(options.value); break;
+            case "uiScale": this.layoutUiController?.setUiScalePercentage(options.value); break;
+            case "fullscreen": if (this.layoutUiController?.isUiFullscreenModeActive() !== options.enabled) this.layoutUiController?.toggleUiFullscreenMode(); break;
+        }
+        this.applyLocalizedUiState();
+        return this.getAutomationEditorOptions();
+    }
+
+    public async runAutomationUiOperation(operation: AutomationUiOperation, permission: AutomationPermission): Promise<Record<string, unknown>> {
+        if (operation.kind === "loadProject" && !/\.(json|mmdproj)$/i.test(operation.filePath)) throw new AutomationError("INVALID_PROJECT");
+        return runAutomationUiOperation({
+            permission,
+            manager: this.mmdManager,
+            scope: () => this.getAutomationTimelineScope(),
+            materialMode: pbr => this.switchExperimentalPbr(pbr),
+            saveProject: async target => { const result = await this.saveProject(false, { ...target, permission }); if (!result) throw new AutomationError("OUTPUT_WRITE_FAILED"); return result; },
+            exportPng: async target => { const result = await this.exportUiController?.exportPNG({ ...target, permission }); if (!result) throw new AutomationError("OUTPUT_WRITE_FAILED"); return result; },
+            loadProject: async filePath => { const result = await this.loadProject(filePath, permission); if (!result) throw new AutomationError("ASSET_LOAD_FAILED"); return result; },
+            loadModel: filePath => this.loadModelInteractively(filePath, permission),
+            loadAccessory: filePath => this.loadAccessoryFromPath(filePath),
+            loadLut: async filePath => await this.lutPanelController?.importExternalLutFile(filePath, "dialog") ?? false,
+            refresh: () => { this.applyLocalizedUiState(); this.refreshShaderPanel(); this.refreshModelSelector(); },
+        }, operation);
+    }
+
     public isAutomationBusy(): boolean {
-        return this.statusDot.classList.contains("loading") || Boolean(this.exportUiController?.hasBackgroundExportActive());
+        return this.getAutomationBusyReasons().length > 0;
+    }
+
+    public getAutomationBusyReasons(): ("loading" | "exporting")[] {
+        const reasons: ("loading" | "exporting")[] = [];
+        if (this.statusDot.classList.contains("loading")) reasons.push("loading");
+        if (this.exportUiController?.hasBackgroundExportActive()) reasons.push("exporting");
+        return reasons;
     }
 
     public applyAutomationCamera(camera: CameraTransformCommandSnapshot, editId: string): boolean {
@@ -8406,17 +8579,35 @@ export class UIController {
     }
 
     public undoAutomationEdit(editId: string): boolean {
-        const command = this.commandHistory.peekUndo();
+        return this.moveAutomationHistory(editId, "revert");
+    }
+
+    public redoAutomationEdit(editId: string): boolean {
+        return this.moveAutomationHistory(editId, "apply");
+    }
+
+    public applyAutomationMorph(modelInstanceId: string, morphName: string, weight: number, editId: string): boolean {
+        const before = this.mmdManager.getMorphWeight(morphName);
+        if (keyframeValuesEqual(before, weight)) return false;
+        const command: BuiltCommand = { id: editId, label: "AI: モーフ編集", scope: "edit", createdAtMs: Date.now(),
+            diff: { type: "edit.morphWeight", modelInstanceId, morphName, frame: this.mmdManager.currentFrame, before, after: weight } };
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) throw new Error("Morph command failed");
+        this.commandHistory.push(command);
+        return true;
+    }
+
+    private moveAutomationHistory(editId: string, direction: CommandDirection): boolean {
+        const command = direction === "revert" ? this.commandHistory.peekUndo() : this.commandHistory.peekRedo();
         if (!command || command.id !== editId || !editId.startsWith("ai:")) return false;
         const diff = command.diff;
         if (diff.type === "edit.cameraTransform") {
-            if (diff.frame !== this.mmdManager.currentFrame || buildCameraTransformCommand({ frame: diff.frame, before: diff.after, after: this.captureCameraTransformCommandSnapshot() })) return false;
+            if (diff.frame !== this.mmdManager.currentFrame || buildCameraTransformCommand({ frame: diff.frame, before: direction === "revert" ? diff.after : diff.before, after: this.captureCameraTransformCommandSnapshot() })) return false;
         } else if (diff.type === "edit.boneTransform") {
             const current = this.captureBoneTransformCommandSnapshot(diff.boneName, diff.modelInstanceId);
-            if (!current || diff.frame !== this.mmdManager.currentFrame || buildBoneTransformCommand({ modelInstanceId: diff.modelInstanceId, boneName: diff.boneName, frame: diff.frame, before: diff.after, after: current })) return false;
-        } else if (diff.type !== "keyframe.transaction") return false;
-        if (!executeCommand(command, "revert", this.createCommandExecutionContext({ seekToFrame: false }))) return false;
-        this.commandHistory.undo();
+            if (!current || diff.frame !== this.mmdManager.currentFrame || buildBoneTransformCommand({ modelInstanceId: diff.modelInstanceId, boneName: diff.boneName, frame: diff.frame, before: direction === "revert" ? diff.after : diff.before, after: current })) return false;
+        } else if (diff.type !== "keyframe.transaction" && diff.type !== "edit.morphWeight") return false;
+        if (!executeCommand(command, direction, this.createCommandExecutionContext({ seekToFrame: false }))) return false;
+        if (direction === "revert") this.commandHistory.undo(); else this.commandHistory.redo();
         return true;
     }
 

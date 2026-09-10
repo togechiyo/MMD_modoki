@@ -10,9 +10,34 @@ export type AutomationHelpTopic = {
 // Only bundled, trusted documentation belongs here. Asset names and paths are data.
 export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
+        id: "ui-operations", title: "素材読込・保存・出力・通常/PBR切替", aliases: ["file", "load", "save", "export", "operation", "読込", "保存", "出力", "PBR", "PNG"],
+        status: "partial", summary: "mmd_start_ui_operationでローカル作業を開始し、mmd_get_operationで完了を確認します。",
+        body: "target/expectedEditRevision/operationId(UUID)/operationを指定。返却status:runningは受付のみ。mmd_get_operationへ受付時のtargetとoperationIdを渡しrunning/completed/failedを確認。runningのphase:waiting_for_userはモデルコメント等のGUI確認待ち。ロードによるscene変更後も同じ許可中なら結果を照会でき、完了outputには新target/editRevisionを含みます。同じ要求の再送は同じjobを返し、異なる入力でID再利用は拒否。処理中は他のMCP編集を拒否。permission変更/reloadで履歴を破棄し、新規file書込は旧許可で続行しません。開始済みロードやOS書込を完全に取消/rollbackする保証はありません。最大100結果。operationは{kind:materialMode,pbr:boolean}、{kind:loadAsset,assetKind,filePath,modelInstanceId?}、{kind:saveProject,filePath,overwrite}、{kind:loadProject,filePath}、{kind:exportMotion,format:vmd|vpd|bvmd,scope,filePath,overwrite}、{kind:exportPng,filePath,overwrite}。assetKindはmodel/accessory/motion/cameraMotion/pose/audio/backgroundImage/backgroundVideo/environment/lut。motion/poseは選択中モデルIDを必須指定。VPDはモデルscopeとmmd_select_bonesで選んだボーンが必要。VMD/BVMDは選択scopeのモーションを出力。外部親など非対応要素はwarningCodes/omittedExternalParentKeyCountを確認。PNGは現在の出力設定を使うviewport経路で、画像bytesは返しません。保存先はローカル絶対pathと形式に合う拡張子。overwrite:falseは既存fileを拒否。project相対LUT/WGSLの付随保存に失敗すると部分保存があり得ます。モデル読込はGUIと同じモデルコメント確認を表示し、AIから確認を自動承認するtoolはありません。モデル本体・textureをMCPへ返すことはありません。連番/動画出力と削除・差替えは後続です。",
+    },
+    {
+        id: "control-catalog", title: "描画・物理・編集UIの設定カタログ", aliases: ["controls", "settings", "bloom", "ssao", "dof", "fog", "設定", "材質", "照明", "自動キー", "再生範囲", "プリセット"],
+        status: "partial", summary: "設定IDとschemaを検索し、UIと共通のsetterで変更して適用値を確認します。",
+        body: "mmd_list_controls(target,query?,offset?,limit?,expectedEditRevision?)のitemsからid/value/valueSchema/unit/availableを確認し、mmd_set_controlへcontrol:{id,value}を指定。既存15設定はmmd_get_settings/mmd_set_settingにも残ります。53の個別設定とrender.stackに対応。IDはbloom、ssao、ssr、fog、dof、lens、light、shadow、edge、contactShadow、iblShadow、environment、physics各接頭辞で検索。値はUIの%表示へ変換する前のscalar等でunitを参照。反映後control.requested/appliedを返し、正規化の差はappliedを採用。available:falseはbackend等の条件が合いません。値は保持設定で描画完了ではありません。Frame Graphではrender.stackの順序/有効状態と効果の値の両方を確認。stackのvalueは[{id,enabled}]で重複不可、削除や並替も全配列で指定。mmd_get_editor_options/mmd_set_editor_optionsは自動キー、再生範囲、出力サイズ/品質/FPS/透過/音声/codec/範囲、言語、UI倍率、全画面を扱います。options.kindごとのschemaに従い、変更後のcontrolを確認。自動キーはGUI編集へ適用し、MCP previewは従来どおり明示キー登録。mmd_select_bonesは選択モデルIDと一意なboneNamesを最大200件指定してGUI/VPD対象を同期。材質はmmd_list_material_presets(subject:{kind:model,modelInstanceId}|{kind:accessory,accessoryIndex})で内蔵presetとページ化された材質を取得、mmd_set_material_presetへsubject/materialKey/presetIdを指定。nullキーは全材質。通常/PBRで候補が変わり、外部shader文字列は受け付けません。これら設定操作はUndo対象外で、編集許可・revision・operationIdを必要とします。全UI対応はまだ進行中です。",
+    },
+    {
+        id: "detailed-diagnostics", title: "対象指定による構造情報の詳細診断", aliases: ["inspect detail", "rigid body", "joint", "bind pose", "IK", "詳細診断", "初期位置", "剛体", "ジョイント"],
+        status: "implemented", summary: "ユーザーの説明付き許可後に、ボーン・モーフ・材質・剛体・ジョイントを1対象ずつ参照します。",
+        body: "実験設定→AI連携→構造情報を含む詳細診断を許可。編集許可とは独立し、MCP OFF・reload・起動でOFF。MCPから自分で許可できません。mmd_get_context.status.detailedDiagnosticsで確認。mmd_list_diagnostic_targetsへtarget/modelInstanceId/kind:bone|morph|material|rigidBody|jointを指定しindex/nameをページ取得。続きはoffset:nextOffsetとexpectedEditRevision。mmd_inspect_detailへ同じtarget/modelInstanceId、subject:{kind,index}、expectedEditRevisionを渡し1対象を取得。従来mmd_inspectのindexとは混同しないこと。ボーンはbindPosition(model座標、MMD単位)、親/IK/付与、モーフは属性/現在weightのみ、材質は通常/PBRの現在値、剛体/ジョイントはアプリ保持設定を返します。物理solver実効値はnot_observed。角度はradians。未保持値はnull。IKリンク・関連参照は最大32件、件数と省略フラグ付き。関連indexの詳細は再帰取得しません。材質に存在しない値はnull。roughnessは通常材質にもあり反射のぼけを表すため、PBRの表面粗さと同一視せずmaterialModeと合わせて読む。参照で選択やUndoは変えません。詳細値は接続先のクラウドAIへ送信され得て、繰り返し取得すれば構造情報は蓄積します。モデル本体、頂点/頂点ウェイト、モーフ頂点・UV差分、テクスチャ原本は返しません。ユーザーUIの提供履歴は応答を生成した直近50対象のみで、詳細値は記録せずクラウド到達の証明ではありません。",
+    },
+    {
+        id: "model-inventory", title: "モデルのボーン・モーフ・材質一覧", aliases: ["inventory", "list bones", "list morphs", "list materials", "名前", "一覧", "ボーン", "モーフ", "材質"],
+        status: "implemented", summary: "mmd_inspectで指定モデルの編集対象を一覧取得。モデル本体の非公開とは区別します。",
+        body: "mmd_get_context.modelsのinstanceIdを使い、mmd_inspectへtarget、modelInstanceId、kind:bones|morphs|materialsを指定。モデルが未選択でも参照のみの権限で取得でき、GUIの選択を変更しません。totalCount、各項目のindex/name、nextOffset、editRevisionを返します。続きはoffset:nextOffsetとexpectedEditRevisionを指定。bonesは移動/回転可否と現在transform、morphsは現在weightと名前の一意性・編集不可理由、materialsはkey・visible・プリセットIDを取得。indexは一覧内の0始まり番号で、編集toolのID引数ではありません。編集はboneName/morphName/materialKeyを使用。同名のボーン/モーフは編集不可。モーフの編集には対象選択が必要で、未選択ではeditBlockedReason:model_not_selected。取得不能weightはnull。editableはMCP編集許可を与えません。名前・編集値を返しても、頂点・モーフ形状差分・テクスチャ原本・モデルバイナリは返しません。",
+    },
+    {
+        id: "diagnostics", title: "診断・エラー・操作できない理由", aliases: ["diagnostic", "error", "status", "busy", "診断", "エラー", "失敗", "待機"],
+        status: "implemented", summary: "mmd_get_diagnosticsで現在の状態と直近MCP失敗を取得します。",
+        body: "target、limit(1..50、既定10)、任意operationIdを指定。参照専用。status.busyReasonsはui_operation/user_interaction/modal/loading/exporting/switching_material_mode。editBlockersは権限とbusyの共通条件であり、個々のtoolの成功を保証しません。playingも別途確認。renderCompletion:not_observedは描画完了未確認で、物理の安定や描画品質の保証ではありません。runtimeはengine/backend/materialMode/physicsとWebGPU検証エラー累計数だけを返し、生メッセージは返しません。recentFailuresは同じ公開権限・sceneの直近失敗、最大50件のメモリ保持、limit件を新しい順に返し、省略はtruncated。OFF/権限変更/reloadで消去。失敗応答のerror.code/details、effects.state(none|unknown)、recovery、diagnosticIdを利用。operationIndexは0始まり、fieldは値または要求内の項目。noneはこの失敗要求が未適用、unknownは未変更と断定不可。同じIDの過去の成功はmmd_get_operationを優先。結果照会はapplied/no-changeに加えfailed/uncertain/unknownを返し得ます。再試行前に原因と現在状態を再評価。MCP SDKが入口で拒否するschema不正・未認証HTTP要求はこの履歴の対象外。モーション品質解析・全アプリログ取得は未実装です。",
+    },
+    {
         id: "getting-started", title: "AI連携の開始", aliases: ["start", "help", "使い方"],
         status: "implemented", summary: "実験設定からMCPを有効にし、必要なら編集も許可します。",
-        body: "ツール→実験設定→AI連携。mmd_get_contextでtargetとeditRevisionを取得し、各toolへ渡します。書込はoperationId(UUID)とexpectedEditRevisionが必要。再生・停止・seek、カメラ・単一ボーンpreview、キーフレームの一括編集、対象切替、設定、材質表示、AI編集Undoに対応。モデル本体・テクスチャ・頂点等の形状データは返しません。UI全項目の対応は進行中。ui-coverageで対応状況、keyframesで値の単位を確認してください。手動入力やフレーム移動後はcontextを再取得してください。",
+        body: "ツール→実験設定→AI連携。mmd_get_contextでtargetとeditRevisionを取得し、各toolへ渡します。書込はoperationId(UUID)とexpectedEditRevisionが必要。再生・停止・seek、カメラ・単一ボーン・モーフpreview、現在値のキー登録、一括キー編集、対象切替、設定、材質表示、AI編集Undo/Redoに対応。モデル本体・テクスチャ・頂点等の形状データは返しません。UI全項目の対応は進行中。ui-coverageで対応状況、keyframesで値の単位、timeline-transformsでミラー・補正・列編集を確認してください。手動入力やフレーム移動後はcontextを再取得してください。",
     },
     {
         id: "assets-and-paths", title: "素材と読込元パス", aliases: ["assets", "path", "モデル", "ステージ", "モーション", "元パス"],
@@ -27,42 +52,47 @@ export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
         id: "camera", title: "カメラ編集", aliases: ["camera", "構図", "視点"],
         status: "implemented", summary: "mmd_set_cameraで既存CommandとUndoを共有する未登録編集を行います。",
-        body: "camera:{target:{x,y,z},rotation:{x,y,z},distance,fov}。targetは注視点、rotationとfovは度。fovは10〜120。mode:preview、playbackPolicy:pauseまたはrejectを必須指定。キーは登録しません。mmd_capture_viewportで確認し、返されたeditIdをmmd_undoへ渡せます。",
+        body: "camera:{target:{x,y,z},rotation:{x,y,z},distance,fov}。targetは注視点、rotationとfovは度。fovは10〜120。mode:preview、playbackPolicy:pauseまたはrejectを必須指定。キーは登録しません。mmd_capture_viewportで確認し、返されたeditIdをmmd_undoへ渡せます。現在値を残すにはカメラ対象でmmd_register_keyframesを呼びます。source単位への変換はGUIと同じ処理に任せられます。",
     },
     {
         id: "pose", title: "ポーズ・表情", aliases: ["pose", "bone", "morph", "ボーン", "モーフ"],
-        status: "implemented", summary: "mmd_set_boneによる単一ボーンの未登録編集に対応します。",
-        body: "mmd_inspectのkind:bonesとmodelInstanceIdで名前と編集値を参照。mmd_set_boneへmodelInstanceId、boneName、position、rotation、mode:preview、playbackPolicy:pauseまたはrejectを渡します。rotationは度。同名ボーンは拒否します。ボーン・モーフのキー値はmmd_edit_keyframesで一括登録できます。キーのbone rotationsはquaternionなのでpreviewの度と混同しないこと。複数ボーンやモーフの未登録previewは後続です。",
+        status: "partial", summary: "単一ボーンとモーフの未登録編集・キー登録に対応します。",
+        body: "mmd_inspectのkind:bonesまたはmorphsとmodelInstanceIdで名前と現在値を参照。mmd_set_boneへmodelInstanceId、boneName、position、rotationを渡します。rotationは度。mmd_set_morphは選択中モデルのmodelInstanceId、morphName、weight(0..1)を指定。同名の対象は拒否します。両toolでmode:preview、playbackPolicy:pauseまたはrejectが必要。キーは自動登録せず、mmd_register_keyframesで現在値を登録できます。rawキーのbone rotationsはquaternionなのでpreviewの度と混同しないこと。一括ポーズpreviewは後続です。",
     },
     {
         id: "materials", title: "材質の表示と設定", aliases: ["material visibility", "材質を消す", "表示切替", "PBR"],
-        status: "partial", summary: "モデルの材質表示切替に対応。プリセット・詳細値・アクセサリ材質は後続です。",
-        body: "mmd_inspect(kind:materials,modelInstanceId)でkey/name/visibleとプリセットIDを参照。mmd_set_material_visibilityへmodelInstanceId,materialKey,visibleを指定。通常/PBR共通。非表示はalpha=0と区別します。Undo対象外。モデルやテクスチャ本体は返しません。",
+        status: "partial", summary: "モデル材質の表示と、モデル/アクセサリの内蔵プリセット適用に対応します。",
+        body: "mmd_inspect(kind:materials,modelInstanceId)でkey/name/visibleとプリセットIDを参照。mmd_set_material_visibilityへmodelInstanceId,materialKey,visibleを指定。通常/PBR共通。非表示はalpha=0と区別します。mmd_list_material_presets/mmd_set_material_presetはモデル/アクセサリの内蔵presetを扱います。使い方はcontrol-catalog、通常/PBR切替はui-operationsを参照。詳細値の参照は追加許可付きdetailed-diagnostics。これら材質設定はUndo対象外。モデルやテクスチャ本体は返しません。",
     },
     {
         id: "keyframes", title: "キーフレームと補間の一括編集", aliases: ["keyframe", "timeline", "キーフレーム", "補間", "登録", "移動", "コピー", "削除"],
         status: "partial", summary: "set/delete/move/copyを100操作までまとめて1つのUndoにします。",
-        body: "mmd_select_timeline(scope:{kind:camera}|{kind:model,modelInstanceId}|{kind:accessory,accessoryIndex})でUIの対象を選び、contextを再取得。mmd_inspect(kind:tracks)は空トラックも返し、kind:keyframesはキーのpayloadを返します。mmd_edit_keyframesには同じscope、collision:reject|replace、operations:[{action:set,track:{category,name},frame,payload}|{action:delete,track,frame}|{action:move|copy,track,frame,toFrame}]を指定。再生中は停止してから操作。コピー/移動は変更前の値から作成するため重なる一括移動も可能。衝突は既定で自動上書きせずcollisionの指定に従います。値はsource形式: camera positions=注視点xyz、rotations=Euler radians xyz、distances=[負のMMD距離]、fovs=[度]。bone/movableBone rotations=単位quaternion xyzw、movableBone positions=ローカル移動xyz、morph weights=[0..1]。補間は各軸4値[x1,x2,y1,y2] (0..127整数)、positionInterpolationsはxyz各4値で計12値。線形例[20,107,20,107]。physicsTogglesは[0|1]。light/shadow/gravity/accessory/propertyのキー値にも対応。新規propertyは現在のIK名と順序が必要。external-parent付きキーの編集は未対応として拒否し、リンクを失わないようにします。共有GUI Undo/Redoも利用できますが、同じ編集対象を選択してください。frame列挿入・ミラー・専用補正・自動キー設定は後続。",
+        body: "mmd_select_timeline(scope:{kind:camera}|{kind:model,modelInstanceId}|{kind:accessory,accessoryIndex})でUIの対象を選び、contextを再取得。mmd_inspect(kind:tracks)は空トラックも返し、kind:keyframesはキーのpayloadを返します。mmd_edit_keyframesには同じscope、collision:reject|replace、operations:[{action:set,track:{category,name},frame,payload}|{action:delete,track,frame}|{action:move|copy,track,frame,toFrame}]を指定。再生中は停止してから操作。コピー/移動は変更前の値から作成するため重なる一括移動も可能。現在UI値の登録はmmd_register_keyframesへscope、tracks:[{category,name}]、collisionを渡します。現在frameの整数部分へ最大100トラックを1履歴で登録し、GUIと同じ補間・物理キー入力モードを使います。raw値はsource形式: camera positions=注視点xyz、rotations=Euler radians xyz、distances=[負のMMD距離]、fovs=[度]。bone/movableBone rotations=単位quaternion xyzw、movableBone positions=ローカル移動xyz、morph weights=[0..1]。補間は各軸4値[x1,x2,y1,y2] (0..127整数)、positionInterpolationsはxyz各4値で計12値。線形例[20,107,20,107]。physicsTogglesは[0|1]。light/shadow/gravity/accessory/propertyにも対応。新規propertyは現在のIK名と順序が必要。external-parent付きキーの編集は拒否します。共有GUI/MCP Undo/Redoには同じ編集対象を選択してください。列挿入・ミラー・補正はtimeline-transformsを参照。自動キー設定はmmd_set_editor_optionsを参照。MCP previewは明示キー登録を維持します。",
+    },
+    {
+        id: "timeline-transforms", title: "フレーム列・ミラー・値補正", aliases: ["insert", "delete frames", "mirror", "correct", "ミラー", "反転", "列挿入", "列削除", "補正"],
+        status: "implemented", summary: "mmd_transform_keyframesで選択対象のsourceキーをまとめて編集します。",
+        body: "scopeとoperationを指定。列操作は{action:insertFrames|deleteFrames,frame,count}で、その対象の全トラックに適用します。挿入はframe以降を後ろへ、削除は[frame,frame+count)を除去して後続を前へ移動。影響する既存キーは最大1000、countは1..10000、frameは0..1000000。ミラーは{action:mirror,keys:[{track:{category,name},frame}],frameOffset,collision:reject|replace}。モデルのボーンを既存GUIの左右名解決・反転計算でコピーします。補正は{action:correct,keys,correction}。correctionはkind:boneのposition/rotation、kind:cameraのcenter/rotation/distance/fov、kind:morphのweightを指定。各スカラーは{multiply,add}、ベクトルは{x,y,z}各スカラー。計算は値*multiply+add、角度補正は度、カメラdistanceは負のsource値へ適用。変更しない成分はmultiply:1,add:0。ミラー/補正は最大100キー。型違い・範囲外・外部親リンク・同名トラックは編集前に拒否し、値を黙って丸めません。全体を1回でUndo/Redo可能。GUI範囲選択やクリップボードは変更しません。",
     },
     {
         id: "ui-settings", title: "表示・実行・色調整の設定", aliases: ["settings", "設定", "物理", "AA", "背景", "色調整", "コントラスト", "ガンマ", "彩度"],
-        status: "partial", summary: "mmd_get_settingsとmmd_set_settingで対応済み15項目を操作します。",
+        status: "partial", summary: "基本15設定に加えて、control-catalogから描画・物理・編集UI設定を操作します。",
         body: "mmd_get_settingsはid別のvalue/availableを返します。mmd_set_settingにはsetting:{id,value}と通常の編集revisionを渡します。地面、空、背景メディア、AA、物理、影、剛体表示と、コントラスト%、ガンマ%、露出、ディザ、ビネット、粒子、シャープ%、彩度に対応。範囲はtool schemaを参照。UIと同じsetter・表示同期・project保存値を使います。設定はUndo対象外。背景メディア未読込などavailable:falseの項目は操作不可。再生中は変更不可。未対応のUI項目はui-coverageを参照。",
     },
     {
         id: "ui-coverage", title: "UI全項目への対応状況", aliases: ["capabilities", "coverage", "UI", "対応一覧", "全機能", "操作一覧"],
         status: "implemented", summary: "UI全項目への接続を目標とする対応表。未対応項目も検索できます。",
-        body: "対応済み: 接続ON/OFF(ユーザーUI)、context/素材元path/viewport画像、再生・停止・seek、カメラ・単一ボーンpreview、タイムライン対象切替、キーの値/補間取得とset/delete/move/copy、AI Undo、設定15項目、モデル材質表示。部分対応: ポーズ・表情、キー編集、材質、表示・物理・色調整。後続: 複数ボーン/モーフpreview、キー範囲選択・ミラー・フレーム列挿入/削除・補正・自動キー、IKと外部親の専用編集、モデル/ステージ/モーション/音声/背景の読込と削除、project保存/読込、PNG/動画/VMD/VPD出力、通常/PBRと描画backend切替、材質プリセット/詳細、ライト/影/物理の詳細、Bloom/DOF/SSAO/SSR等、出力条件、UIレイアウト・言語・入力機器設定。UIに存在するだけではMCP実行可能とは扱いません。MCP自身の権限拡張・認証情報取得やモデル本体の送信は公開対象にしません。",
+        body: "対応済み: 接続ON/OFF(ユーザーUI)、context/素材元path/viewport画像、対象指定診断、再生・停止・seek、カメラ・単一ボーン・モーフpreview、タイムライン対象切替、キーの値/補間取得とset/delete/move/copy、現在値登録、ミラー、列挿入/削除、値補正、AI Undo/Redo、基本15設定、モデル材質表示、複数ボーン選択、自動キー/再生範囲/loop/出力設定/言語/UI倍率/全画面。ui-operationsは素材読込、project保存/復元、PNG/VMD/VPD/BVMD出力、通常/PBR切替。control-catalogはBloom/DOF/SSAO/SSR/Fog/照明/影/物理等とFrame Graph効果順序、モデル/アクセサリ材質プリセット。後続: 一括ポーズpreview、GUIキー範囲選択・クリップボード、IKと外部親の専用編集、素材削除/差替え、PNG連番/動画/別プロセス出力、描画/物理backend切替、高度な効果の全パラメータ、アクセサリpreview/親、レイアウト詳細・入力機器設定。UIに存在するだけではMCP実行可能とは扱いません。MCP自身の権限拡張・認証情報取得やモデル本体の送信は公開対象にしません。",
     },
     {
         id: "files-and-output", title: "読込・保存・出力", aliases: ["file", "load", "save", "export", "読込", "保存", "出力", "動画", "VMD", "VPD", "PNG"],
-        status: "planned", summary: "明示pathによるローカル読込・保存・出力は後続です。",
-        body: "OSダイアログを遠隔クリックするのではなく、path、形式、対象と上書き条件を指定し、完了結果を照会できる入口を追加する計画です。返却は結果とpathに限定し、モデル本体を送信しない条件を維持します。現時点でmmd_list_assetsは元pathの参照のみ。未実装toolを呼ばないでください。",
+        status: "partial", summary: "明示pathで素材読込、project保存/復元、PNGとモーション出力を実行できます。",
+        body: "mmd_start_ui_operationを使用し、詳細はui-operationsを参照。path、形式、対象と上書き条件を指定し、mmd_get_operationで完了を確認します。返却は結果とpathに限定し、モデル本体を送信しない条件を維持します。mmd_list_assetsは元pathの参照。PNG連番/動画/別プロセス出力、素材削除/差替えは後続です。",
     },
     {
         id: "undo-and-conflicts", title: "Undoと競合", aliases: ["undo", "redo", "競合", "取り消し"],
-        status: "implemented", summary: "mmd_undoは指定AI編集が共有履歴末尾にある場合だけ取り消します。",
-        body: "再生中・手動操作中・モーダル中は編集を拒否します。操作履歴はscene世代内で最大100件。タイムアウト時はmmd_get_operationで確認。unknownでは自動再実行せずcontextから再評価します。同じoperationIdの異なる入力は拒否します。手動編集を巻き戻しません。UIで変更後にcontextを再取得してください。",
+        status: "implemented", summary: "mmd_undo/mmd_redoは指定AI編集が共有履歴の次の対象の場合だけ実行します。",
+        body: "contextのundoId/redoIdと元のeditIdを使用し、Undo/Redo自体には新しいoperationIdを付けます。previewは同じframe・対象で値が一致する必要があり、キー編集は同じ対象とsource値を照合します。手動編集を飛び越えません。再生中・手動操作中・モーダル中は拒否します。操作結果はscene世代内で最大100件。タイムアウト時はmmd_get_operationで確認。unknownでは自動再実行せずcontextから再評価します。同じoperationIdの異なる入力は拒否します。UIで変更後にcontextを再取得してください。",
     },
 ];
 

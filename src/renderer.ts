@@ -16,6 +16,7 @@ import { enhanceBottomPanelControls } from "./ui/panel-control-helpers";
 import { runPngSequenceExportJob } from "./png-sequence-exporter";
 import { PngEncoderWebWorkerPool } from "./output/png-encoder-web-worker-pool";
 import { isWebmExportCanceledError, runWebmExportJob } from "./webm-exporter";
+import { describeWebmExportFailure } from "./shared/webm-export-failure";
 import { applyI18nToDom, getLocale, initializeI18n, setLocale, t } from "./i18n";
 import { isDebugLogEnabled, logDebug, logError, logInfo, toLogErrorData } from "./app-logger";
 import type {
@@ -772,6 +773,7 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
   let capturedFrames = 0;
   let currentFrame = 0;
   let totalOutputFrames = 0;
+  let lastPhase = "initializing";
 
   try {
     cancelUnsubscribe = window.electronAPI.onWebmExportCancelRequested((requestedJobId) => {
@@ -794,7 +796,6 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
     canvas.height = request.outputHeight;
 
     let lastProgressReportAt = 0;
-    let lastPhase = "initializing";
     let lastMessage = "";
     logInfo("webm", "exporter job accepted", {
       jobId,
@@ -911,13 +912,14 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
     window.electronAPI.reportWebmExportProgress({
       jobId,
       phase: "failed",
-      encoded: 0,
-      total: 0,
-      frame: 0,
+      encoded: encodedFrames,
+      total: totalOutputFrames,
+      frame: currentFrame,
       startFrame: request?.startFrame ?? 0,
       endFrame: request?.endFrame ?? 0,
-      captured: 0,
+      captured: capturedFrames,
       message,
+      failure: describeWebmExportFailure(err, lastPhase, window.isSecureContext, typeof VideoEncoder !== "undefined"),
       timestampMs: Date.now(),
     });
     const finished = await window.electronAPI.finishWebmExportJob(jobId);

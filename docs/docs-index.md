@@ -24,6 +24,8 @@
 - [MCPのPNG連番出力](./mcp-png-sequence-2026-09-11.md)
 - [MCPの公開ツール・エフェクト・材質一括操作](./mcp-public-ui-tools-effects-2026-09-11.md)
 - [MCPのキー検索・一括表情・描画待機と画像比較](./mcp-search-expression-comparison-2026-09-11.md)
+- [パッケージ版MCPの実用操作テスト・判明した不具合](./mcp-packaged-practical-test-2026-09-11.md)
+- [MCP実用テスト後の修正とパッケージ再検証](./mcp-practical-fixes-2026-09-11.md)
 - [MCPのAI向け操作・診断機能の候補](./mcp-ai-ergonomics-proposals-2026-09-10.md)
 - [MCPの対象指定による詳細診断と提供許可](./mcp-detailed-diagnostics-2026-09-10.md)
 - [MCPの2026年最新動向とMMD_modokiへの影響](./mcp-2026-latest-findings-2026-09-10.md)

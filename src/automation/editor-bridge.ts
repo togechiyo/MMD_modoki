@@ -20,6 +20,7 @@ import { selectObjectStateFields } from "../editor/object-state-edit";
 import { buildClipboardOperations, buildSelectionOperations } from "./keyframe-selection";
 import type { AutomationKeyframeOperation } from "./keyframe-schema";
 import { searchKeyframes } from "./keyframe-search";
+import { automationUserAction } from "./user-action";
 
 export function connectAutomationEditor(manager: MmdManager, ui: UIController, timeline: Timeline): void {
     let state: AutomationState | null = null;
@@ -84,7 +85,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         const reasons = busyReasons();
         return { target: { editorSessionId: state?.sessionId, sceneGeneration }, editRevision: revision, assetRevision,
             frame: manager.currentFrame, playing: manager.isPlaying, camera, busy: busy(),
-            status: { busy: reasons.length > 0, busyReasons: reasons, editPermission: Boolean(state?.editable),
+            status: { busy: reasons.length > 0, busyReasons: reasons, userAction: automationUserAction(reasons), editPermission: Boolean(state?.editable),
                 detailedDiagnostics: Boolean(state?.detailedDiagnostics),
                 editBlockers: [...(!state?.editable ? ["read_only"] : []), ...reasons], playing: manager.isPlaying,
                 playbackPolicyRequired: manager.isPlaying, observedAt: new Date().toISOString(), renderCompletion: "not_observed" },
@@ -104,7 +105,11 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         if (request.tool === "mmd_get_operation") {
             const input = automationTools.mmd_get_operation.schema.parse(args);
             const job = uiJobs.get(input.operationId);
-            if (job) return { data: { ...job, ...(job.status === "running" ? { phase: busyReasons().includes("modal") ? "waiting_for_user" : "working", busyReasons: busyReasons() } : {}) } };
+            if (job) {
+                const reasons = busyReasons();
+                const userAction = automationUserAction(reasons);
+                return { data: { ...job, ...(job.status === "running" ? { phase: userAction ? "waiting_for_user" : "working", busyReasons: reasons, userAction } : {}) } };
+            }
         }
         if (definition.edit && state.editable && "operationId" in args && typeof args.operationId === "string") {
             const prior = uiJobs.replay(args.operationId, JSON.stringify([request.tool, args]));
@@ -549,7 +554,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                     // Validate before waiting, then revalidate the grant/scene after actual engine frames.
                     execute(request);
                     try { await manager.waitForAutomationRender(); }
-                    catch { throw new AutomationError(request.tool === "mmd_wait_for_render" ? "RENDER_UNAVAILABLE" : "CAPTURE_UNAVAILABLE"); }
+                    catch { throw new AutomationError("RENDER_UNAVAILABLE"); }
                 }
                 const result = execute(request);
                 if (request.tool === "mmd_wait_for_render") result.data = { ...result.data, status: "observed", engineFrameEnds: 2,

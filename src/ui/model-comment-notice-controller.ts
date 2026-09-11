@@ -65,6 +65,8 @@ export class ModelCommentNoticeController {
         });
     }
 
+    public isAwaitingConfirmation(): boolean { return this.pendingResolve !== null; }
+
     public refreshLocale(): void {
         if (!this.currentHeader || !this.pendingResolve) return;
         this.render();

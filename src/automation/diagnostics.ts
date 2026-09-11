@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { webmFailureStageSchema } from "../shared/webm-export-failure";
 
 const finite = z.number().finite();
 export const diagnosticDetailsSchema = z.object({
+    stage: webmFailureStageSchema.optional(), secureContext: z.boolean().optional(), videoEncoderAvailable: z.boolean().optional(),
     operationIndex: z.number().int().nonnegative().optional(),
     frame: finite.optional(),
     field: z.string().max(200).regex(/^[A-Za-z0-9_.]+$/).optional(),
@@ -46,7 +48,8 @@ group(["PLAYING"], "再生中のため操作できません。停止するか、
 group(["READ_ONLY", "MCP_DISABLED"], "MCP公開または編集が許可されていません。実験設定でユーザーが変更できます。", "user_action", "none", "getting-started");
 group(["DETAILED_DIAGNOSTICS_DISABLED"], "構造情報を含む詳細診断が許可されていません。実験設定の送信内容の説明をユーザーが確認して許可できます。", "user_action", "none", "detailed-diagnostics");
 group(["DETAIL_TARGET_NOT_FOUND"], "指定された詳細診断対象が存在しません。mmd_list_diagnostic_targetsで対象indexを再取得してください。", "refresh_context", "none", "detailed-diagnostics");
-group(["ACCESS_REVOKED", "TARGET_UNAVAILABLE", "EDITOR_TIMEOUT", "INVALID_REPLY", "OPERATION_FAILED"], "操作結果を確定できません。operationIdの結果と現在状態を確認してください。", "inspect_operation", "unknown", "diagnostics");
+group(["ACCESS_REVOKED", "EDITOR_TIMEOUT", "INVALID_REPLY", "OPERATION_FAILED"], "操作結果を確定できません。operationIdの結果と現在状態を確認してください。", "inspect_operation", "unknown", "diagnostics");
+group(["TARGET_UNAVAILABLE"], "指定した公開ウィンドウが存在しません。targetを指定せずmmd_get_contextを呼び、公開中の対象を取得してください。", "refresh_context", "none", "getting-started");
 group(["UNDO_CONFLICT", "REDO_CONFLICT"], "履歴の次の対象、frame、または適用元の値が一致しないか、履歴操作を完了できませんでした。", "refresh_context", "unknown", "undo-and-conflicts");
 group(["OPERATION_ID_REUSED"], "同じoperationIdが異なる入力で使用されています。元の結果を確認し、新しい編集には新しいIDを使ってください。", "inspect_operation", "none", "undo-and-conflicts");
 group(["KEY_COLLISION", "DUPLICATE_KEY"], "キーの書込先が衝突または重複しています。frameと一括操作の内容を確認してください。", "correct_input", "none", "keyframes");
@@ -69,6 +72,8 @@ group(["OPERATION_CANCELED"], "操作を取り消しました。PNG連番・変�
 
 group(["PNG_EXPORT_FAILED"], "PNG連番出力を完了できませんでした。元jobのprogressで保存先と保存済み枚数を確認し、ローカルログを調査してください。途中の画像は自動削除しません。", "inspect_operation", "unknown", "png-sequence");
 group(["VIDEO_EXPORT_FAILED"], "動画出力を完了できませんでした。進捗とローカルログを確認してください。", "inspect_operation", "unknown", "ui-operations");
+group(["VIDEO_ENCODER_UNAVAILABLE"], "出力ウィンドウでWebCodecs VideoEncoderを利用できません。detailsの実行環境とパッケージ版の設定を確認してください。PNG連番出力は別経路です。", "user_action", "none", "video-and-removal");
+group(["VIDEO_CODEC_UNSUPPORTED"], "指定条件に対応するVP8/VP9エンコーダがありません。出力解像度・codecと実行環境を確認してください。", "correct_input", "none", "video-and-removal");
 export function toAutomationFailure(error: unknown): AutomationFailure {
     if (error instanceof AutomationError) {
         const code = Object.hasOwn(rules, error.code) ? error.code : "OPERATION_FAILED";

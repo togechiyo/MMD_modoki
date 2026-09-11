@@ -22,6 +22,7 @@ import type {
     WebmExportRequest,
 } from "./types";
 import { getWebmVideoEncodingQuality } from "./export/webm-video-quality-policy";
+import { WebmCapabilityError } from "./shared/webm-export-failure";
 
 export interface WebmExportCallbacks {
     onStatus?: (message: string, phase: WebmExportPhase) => void;
@@ -696,8 +697,8 @@ export async function runWebmExportJob(
     signal?: AbortSignal,
 ): Promise<WebmExportResult> {
     throwIfWebmExportCanceled(signal);
-    if (!window.isSecureContext) {
-        throw new Error("WebCodecs requires a secure context");
+    if (!window.isSecureContext || typeof VideoEncoder === "undefined") {
+        throw new WebmCapabilityError("VIDEO_ENCODER_UNAVAILABLE");
     }
 
     const jobStartedAt = performance.now();
@@ -802,7 +803,7 @@ export async function runWebmExportJob(
         );
         throwIfWebmExportCanceled(signal);
         if (!selectedVideoEncoding) {
-            throw new Error("No supported WebM codec available (vp9/vp8)");
+            throw new WebmCapabilityError("VIDEO_CODEC_UNSUPPORTED");
         }
         const { codec, hardwareAcceleration } = selectedVideoEncoding;
 

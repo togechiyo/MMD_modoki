@@ -8717,8 +8717,9 @@ export class UIController {
         return this.getAutomationBusyReasons().length > 0;
     }
 
-    public getAutomationBusyReasons(): ("loading" | "exporting")[] {
-        const reasons: ("loading" | "exporting")[] = [];
+    public getAutomationBusyReasons(): ("loading" | "exporting" | "model_comment_confirmation")[] {
+        const reasons: ("loading" | "exporting" | "model_comment_confirmation")[] = [];
+        if (this.modelCommentNoticeController.isAwaitingConfirmation()) reasons.push("model_comment_confirmation");
         if (this.statusDot.classList.contains("loading")) reasons.push("loading");
         if (this.exportUiController?.hasBackgroundExportActive()) reasons.push("exporting");
         return reasons;

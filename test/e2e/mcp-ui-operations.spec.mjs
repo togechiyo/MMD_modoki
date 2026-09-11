@@ -44,6 +44,9 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP controls and local UI
         await expect(page.locator("#model-comment-notice")).toBeVisible();
         const busy = await context();
         expect(busy.status.busyReasons).toContain("ui_operation");
+        expect(busy.status.userAction.kind).toBe("model_comment_confirmation");
+        const waiting = (await rpc("mmd_get_operation", { target: loaded.input.target, operationId: loaded.input.operationId })).structuredContent;
+        expect(waiting).toMatchObject({ status: "running", phase: "waiting_for_user", userAction: { kind: "model_comment_confirmation" } });
         const blocked = await rpc("mmd_set_control", { target: busy.target, expectedEditRevision: busy.editRevision, operationId: randomUUID(), control: { id: "bloom.weight", value: 0.4 } });
         expect(blocked.structuredContent.error.code).toBe("EDITOR_BUSY");
         const replay = await rpc("mmd_start_ui_operation", loaded.input);
@@ -64,6 +67,12 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP controls and local UI
         await expect(page.locator("#btn-auto-key")).toHaveAttribute("aria-pressed", "true");
         await edit("mmd_set_editor_options", { options: { kind: "autoKey", enabled: false, scope: "all" } });
         await edit("mmd_set_editor_options", { options: { kind: "playbackRange", startFrame: 5, endFrame: 25, startEnabled: true, loop: true } });
+        const colorResponse = await rpc("mmd_list_controls", { target: (await context()).target, query: "light.color" });
+        expect(colorResponse.isError, JSON.stringify(colorResponse)).not.toBe(true);
+        const colors = colorResponse.structuredContent;
+        const lightColor = colors.items.find(item => item.id === "light.color");
+        expect(lightColor).toBeTruthy();
+        await edit("mmd_set_control", { control: { id: "light.color", value: lightColor.value } });
         const playbackBefore = (await rpc("mmd_get_editor_options", { target: (await context()).target })).structuredContent.playbackRange;
         await edit("mmd_set_editor_options", { options: { kind: "output", width: 320, height: 180, qualityScale: 1, fps: 30,
             transparent: true, includeAudio: false, webmCodec: "vp9", startFrame: 0, endFrame: 30, usePlaybackRange: false } });

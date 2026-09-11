@@ -107,23 +107,9 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             const w = Math.min(width - x, Math.round(rect.width * zoom));
             const h = Math.min(height - y, Math.round(rect.height * zoom));
             if (![x, y, w, h].every(Number.isFinite) || w < 1 || h < 1) throw new AutomationError("CAPTURE_UNAVAILABLE");
-            await new Promise<void>((resolve, reject) => {
-                const contents = entry.window.webContents;
-                const timer = setTimeout(() => {
-                    if (!contents.isDestroyed()) contents.endFrameSubscription();
-                    reject(new AutomationError("CAPTURE_UNAVAILABLE"));
-                }, 2500);
-                try {
-                    contents.beginFrameSubscription(false, () => {
-                        clearTimeout(timer);
-                        contents.endFrameSubscription();
-                        resolve();
-                    });
-                } catch {
-                    clearTimeout(timer);
-                    reject(new AutomationError("CAPTURE_UNAVAILABLE"));
-                }
-            });
+            // Renderer already observed ready engine frames. A second subscription waits for a
+            // future compositor change, which need not occur in a static viewport. capturePage
+            // requests the current surface directly; the state is revalidated below.
             if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
             let picture = await entry.window.webContents.capturePage({ x, y, width: w, height: h });
             if (picture.isEmpty()) throw new AutomationError("CAPTURE_UNAVAILABLE");

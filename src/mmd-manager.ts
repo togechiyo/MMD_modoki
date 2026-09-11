@@ -1,4 +1,5 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { externalParentOmissionCount } from "./export/external-parent-warning";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
 import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
@@ -3165,7 +3166,7 @@ ${beforeFogAppendBlock}
         return {
             animation,
             modelInfo: this.activeModelInfo,
-            externalParentKeyCount: sceneEntry?.externalParentKeyframes.length ?? 0,
+            externalParentKeyCount: externalParentOmissionCount(sceneEntry?.externalParentKeyframes ?? [], key => Boolean(key.parentModelInstanceId || key.parentModelPath)),
         };
     }
 
@@ -3176,7 +3177,7 @@ ${beforeFogAppendBlock}
         if (!this.cameraSourceAnimation) return null;
         return {
             animation: this.cameraSourceAnimation,
-            externalParentKeyCount: this.cameraExternalParentKeyframes.length,
+            externalParentKeyCount: externalParentOmissionCount(this.cameraExternalParentKeyframes, key => Boolean(key.modelInstanceId || key.modelPath)),
         };
     }
 
@@ -3373,6 +3374,8 @@ ${beforeFogAppendBlock}
         return new Promise((resolve, reject) => {
             let frames = 0;
             const observer = this.engine.onEndFrameObservable.add(() => {
+                // Mode/material changes may still be compiling after their setter returns.
+                if (!this.scene.isReady() || !this.isPostEffectBackendReadyForCapture()) { frames = 0; return; }
                 if (++frames < 2) return;
                 clearTimeout(timer);
                 this.engine.onEndFrameObservable.remove(observer);
@@ -3381,7 +3384,7 @@ ${beforeFogAppendBlock}
             const timer = setTimeout(() => {
                 this.engine.onEndFrameObservable.remove(observer);
                 reject(new Error("Render unavailable"));
-            }, 2500);
+            }, 8000); // Same readiness budget as export; bounded below the editor IPC deadline.
         });
     }
 

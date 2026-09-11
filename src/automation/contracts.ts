@@ -23,7 +23,7 @@ const query = { target };
 const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(100) };
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
-    mmd_wait_for_render: { description: "停止中の指定revisionで実engine frameを2回待機。競合・busyは拒否。物理収束やGPU全処理完了を保証しない。viewport-comparisonヘルプ参照。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative() }).strict() },
+    mmd_wait_for_render: { description: "停止中の指定revisionでscene/効果の準備後の実engine frameを2回待機（最大8秒）。競合・busyは拒否。物理収束やGPU全処理完了を保証しない。viewport-comparisonヘルプ参照。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative() }).strict() },
     mmd_capture_snapshot: { description: "停止中の指定revisionのviewportを撮影し画像IDで一時保持。画像とframe/revisionを返す。最大8枚、古い画像は破棄。シーン・許可変更で失効。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative(), label: z.string().max(100).default("") }).strict() },
     mmd_list_snapshots: { description: "現在の許可・シーンで保持中の比較画像IDと撮影条件を一覧。画像本文は返さない。", edit: false, schema: z.object(query).strict() },
     mmd_compare_snapshots: { description: "撮影済み画像2〜4枚を指定ID順の画像Contentで返す。前後比較や複数フレーム確認用。seek・選択・編集・Undoは変更しない。", edit: false, schema: z.object({ ...query, snapshotIds: z.array(z.string().uuid()).min(2).max(4).refine(ids => new Set(ids).size === ids.length, "Duplicate snapshot") }).strict() },

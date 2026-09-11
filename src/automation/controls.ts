@@ -20,8 +20,9 @@ function flag<K extends BooleanKey>(id: string, key: K, enabled: Control["availa
 const rgb = z.object({ r: z.number().min(0).max(1), g: z.number().min(0).max(1), b: z.number().min(0).max(1) }).strict();
 const stack = z.array(z.object({ id: z.enum(FRAME_GRAPH_POST_EFFECT_IDS), enabled: z.boolean() }).strict()).max(FRAME_GRAPH_POST_EFFECT_IDS.length)
     .refine(value => new Set(value.map(entry => entry.id)).size === value.length, "Duplicate effect ID");
-function color(id: string, read: (m: MmdManager) => { r: number; g: number; b: number }, write: (m: MmdManager, r: number, g: number, b: number) => void): Control {
-    return { id, unit: "RGB 0..1", schema: rgb, read, available, write: (m, value) => { const v = rgb.parse(value); write(m, v.r, v.g, v.b); } };
+function color(id: string, read: (m: MmdManager) => { r: number; g: number; b: number }, write: (m: MmdManager, r: number, g: number, b: number) => void, maximum = 1): Control {
+    const schema = maximum === 1 ? rgb : z.object({ r: z.number().min(0).max(maximum), g: z.number().min(0).max(maximum), b: z.number().min(0).max(maximum) }).strict();
+    return { id, unit: `RGB 0..${maximum}`, schema, read, available, write: (m, value) => { const v = schema.parse(value); write(m, v.r, v.g, v.b); } };
 }
 
 function panelNumber(id: string, field: FrameGraphEffectSliderField, key: NumericKey): Control {
@@ -131,7 +132,7 @@ export const automationControls: readonly Control[] = [
     numeric("light.temperature", "lightColorTemperature", 1000, 20000, "kelvin", true),
     numeric("light.flatStrength", "lightFlatStrength", 0, 0.1),
     numeric("light.flatColorInfluence", "lightFlatColorInfluence", 0, 1),
-    color("light.color", m => m.getLightColor(), (m, r, g, b) => m.setLightColor(r, g, b)),
+    color("light.color", m => m.getLightColor(), (m, r, g, b) => m.setLightColor(r, g, b), 2),
     numeric("shadow.darkness", "shadowDarkness", 0, 1),
     numeric("shadow.distanceMultiplier", "shadowDistanceMultiplier", 1, 10, "multiplier", true),
     numeric("shadow.filteringQuality", "shadowFilteringQuality", 0, 2, "0=high,1=medium,2=low", true),

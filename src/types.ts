@@ -1115,6 +1115,7 @@ export interface WebmExportResult {
     filePath?: string;
     byteLength?: number;
     errorCode?: string;
+    failure?: import("./shared/webm-export-failure").WebmExportFailure;
 }
 
 export interface WebmExportState {
@@ -1164,4 +1165,5 @@ export interface WebmExportProgress {
     message?: string;
     timestampMs: number;
     diagnostics?: WebmExportDiagnostics;
+    failure?: import("./shared/webm-export-failure").WebmExportFailure;
 }

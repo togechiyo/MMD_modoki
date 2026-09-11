@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import log from 'electron-log/main';
+import { webmExportFailureSchema, type WebmExportFailure } from './shared/webm-export-failure';
 import started from 'electron-squirrel-startup';
 import type {
   AppLogData,
@@ -237,6 +238,7 @@ const webmExportOwnerByJobId = new Map<string, number>();
 const webmExportWindowByJobId = new Map<string, BrowserWindow>();
 const webmExportCleanupByJobId = new Map<string, () => Promise<void>>();
 const webmExportTerminalByJobId = new Map<string, WebmExportResult['status']>();
+const webmExportFailureByJobId = new Map<string, WebmExportFailure>();
 const webmExportCancelRequested = new Set<string>();
 const webmSaveSessionMap = new Map<string, { filePath: string; handle: fs.promises.FileHandle }>();
 const ensuredDirectoryPathSet = new Set<string>();
@@ -2151,14 +2153,19 @@ ipcMain.handle(
     let jobId: string | null = null;
     let output: Awaited<ReturnType<typeof prepareAutomationVideoOutput>> | undefined;
     let cleanupPromise: Promise<void> | undefined;
+    let exporterFinished = false;
     const cleanup = (): Promise<void> => cleanupPromise ??= (async () => {
       let finalResult: WebmExportResult | undefined;
       if (jobId) {
         const result: WebmExportResult = { jobId, status: webmExportTerminalByJobId.get(jobId) ?? 'failed' };
+        exporterFinished = webmExportTerminalByJobId.has(jobId);
         try {
           if (result.status === 'completed' && output) Object.assign(result, await output.publish());
           else if (result.status === 'completed') result.filePath = request.outputFilePath;
-          if (result.status === 'failed') result.errorCode = 'VIDEO_EXPORT_FAILED';
+          if (result.status === 'failed') {
+            result.failure = webmExportFailureByJobId.get(jobId);
+            result.errorCode = result.failure?.code ?? 'VIDEO_EXPORT_FAILED';
+          }
         } catch (error) {
           result.status = 'failed'; result.errorCode = toAutomationFailure(error).code;
         }
@@ -2168,6 +2175,7 @@ ipcMain.handle(
         webmExportWindowByJobId.delete(jobId);
         webmExportCleanupByJobId.delete(jobId);
         webmExportTerminalByJobId.delete(jobId);
+        webmExportFailureByJobId.delete(jobId);
         webmExportCancelRequested.delete(jobId);
       }
       if (output) {
@@ -2233,7 +2241,9 @@ ipcMain.handle(
           preload: path.join(__dirname, 'preload.js'),
           contextIsolation: true,
           nodeIntegration: false,
-          webSecurity: false,
+          // Packaged file:// WebCodecs requires the standard origin checks. The dev
+          // HTTP page still needs file:// access for local project/texture loading.
+          webSecurity: !MAIN_WINDOW_VITE_DEV_SERVER_URL,
           backgroundThrottling: false,
         },
       });
@@ -2259,6 +2269,9 @@ ipcMain.handle(
       if (exportWindow && !exportWindow.isDestroyed()) {
         exportWindow.close();
       }
+      // A fast terminal result can close the renderer before loadFile resolves.
+      // Its already-delivered result, not ERR_FAILED from closing, is authoritative.
+      if (exporterFinished && jobId) return { jobId };
       writeAppLog('error', 'webm', 'failed to start WebM export window', createLogErrorData(err));
       return automation ? { jobId: '', errorCode: toAutomationFailure(err).code } : null;
     }
@@ -2306,6 +2319,10 @@ ipcMain.on('export:webmProgress', (event, progress: WebmExportProgress) => {
   if (!webmExportOwnerByJobId.has(progress.jobId)) return;
   if (webmExportWindowByJobId.get(progress.jobId)?.webContents.id !== event.sender.id) return;
   if (progress.phase === 'completed' || progress.phase === 'canceled' || progress.phase === 'failed') webmExportTerminalByJobId.set(progress.jobId, progress.phase);
+  if (progress.phase === 'failed') {
+    const failure = webmExportFailureSchema.safeParse(progress.failure);
+    if (failure.success) webmExportFailureByJobId.set(progress.jobId, failure.data);
+  }
   sendWebmExportProgressToOwner(progress.jobId, progress);
 });
 

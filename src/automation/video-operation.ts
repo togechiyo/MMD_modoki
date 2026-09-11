@@ -9,9 +9,13 @@ export async function runAutomationVideo(api: VideoApi, start: () => Promise<Web
     let settle: (result: WebmExportResult) => void = () => undefined;
     const done = new Promise<WebmExportResult>(resolve => { settle = resolve; });
     const early = new Map<string, WebmExportResult>();
+    const earlyProgress = new Map<string, WebmExportProgress>();
     const report = (p: WebmExportProgress) => context.report({ phase: p.phase, encodedFrames: p.encoded, totalFrames: p.total,
         frame: p.frame, capturedFrames: p.captured ?? null, observedAt: p.timestampMs });
-    const unsubscribeProgress = api.onWebmExportProgress(p => { if (p.jobId === jobId) report(p); });
+    const unsubscribeProgress = api.onWebmExportProgress(p => {
+        if (p.jobId === jobId) report(p);
+        else if (!jobId && (earlyProgress.has(p.jobId) || earlyProgress.size < 16)) earlyProgress.set(p.jobId, p);
+    });
     const unsubscribeResult = api.onWebmExportResult(result => {
         if (result.jobId === jobId) settle(result);
         else if (!jobId && early.size < 16) early.set(result.jobId, result);
@@ -28,11 +32,13 @@ export async function runAutomationVideo(api: VideoApi, start: () => Promise<Web
         if (launched.errorCode) throw new AutomationError(launched.errorCode);
         if (!launched.jobId) throw new AutomationError("VIDEO_EXPORT_FAILED");
         jobId = launched.jobId;
+        const initialProgress = earlyProgress.get(jobId);
+        if (initialProgress) report(initialProgress);
         if (early.has(jobId)) settle(early.get(jobId) as WebmExportResult);
         if (context.signal.aborted) cancel();
         const result = await done;
         if (result.status === "canceled") throw new AutomationError("OPERATION_CANCELED");
-        if (result.status !== "completed") throw new AutomationError(result.errorCode ?? "VIDEO_EXPORT_FAILED");
+        if (result.status !== "completed") throw new AutomationError(result.errorCode ?? "VIDEO_EXPORT_FAILED", result.failure?.details ?? {});
         return { filePath: result.filePath, byteLength: result.byteLength, format: "webm" };
     } finally { unsubscribeProgress(); unsubscribeResult(); context.signal.removeEventListener("abort", cancel); }
 }

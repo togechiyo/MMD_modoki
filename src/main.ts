@@ -21,6 +21,7 @@ import type {
   WebmExportLaunchResult,
   WebmExportProgress,
   WebmExportRequest,
+  WebmExportResult,
   WebmExportState,
   SmokeRendererFailurePayload,
   SmokeRendererReadyPayload,
@@ -31,6 +32,9 @@ import { serializeVmd } from './export/vmd-serializer';
 import type { VpdExportDocument, VpdSaveResult } from './export/vpd-export-document';
 import { serializeVpd } from './export/vpd-serializer';
 import { installAutomationAppBridge } from './main/automation/app-bridge';
+import { prepareAutomationVideoOutput } from './main/automation/video-output';
+import { AutomationError, toAutomationFailure } from './automation/diagnostics';
+import type { AutomationVideoOptions } from './automation/ui-operation-schema';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -228,7 +232,9 @@ const webmExportJobMap = new Map<string, WebmExportRequest>();
 const webmExportActiveCountByOwner = new Map<number, number>();
 const webmExportOwnerByJobId = new Map<string, number>();
 const webmExportWindowByJobId = new Map<string, BrowserWindow>();
-const webmExportCleanupByJobId = new Map<string, () => void>();
+const webmExportCleanupByJobId = new Map<string, () => Promise<void>>();
+const webmExportTerminalByJobId = new Map<string, WebmExportResult['status']>();
+const webmExportCancelRequested = new Set<string>();
 const webmSaveSessionMap = new Map<string, { filePath: string; handle: fs.promises.FileHandle }>();
 const ensuredDirectoryPathSet = new Set<string>();
 
@@ -2088,28 +2094,53 @@ ipcMain.handle('export:pngSequenceCompleted', async (_event, progress: PngSequen
 
 ipcMain.handle(
   'export:startWebmWindow',
-  async (event, request: WebmExportRequest): Promise<WebmExportLaunchResult | null> => {
+  async (event, request: WebmExportRequest, automation?: AutomationVideoOptions): Promise<WebmExportLaunchResult | null> => {
     let exportWindow: BrowserWindow | undefined;
     let releaseOwnerExport = () => undefined;
     let jobId: string | null = null;
-    let cleanedUp = false;
-    const cleanup = (): void => {
-      if (cleanedUp) return;
-      cleanedUp = true;
+    let output: Awaited<ReturnType<typeof prepareAutomationVideoOutput>> | undefined;
+    let cleanupPromise: Promise<void> | undefined;
+    const cleanup = (): Promise<void> => cleanupPromise ??= (async () => {
+      let finalResult: WebmExportResult | undefined;
       if (jobId) {
+        const result: WebmExportResult = { jobId, status: webmExportTerminalByJobId.get(jobId) ?? 'failed' };
+        try {
+          if (result.status === 'completed' && output) Object.assign(result, await output.publish());
+          else if (result.status === 'completed') result.filePath = request.outputFilePath;
+          if (result.status === 'failed') result.errorCode = 'VIDEO_EXPORT_FAILED';
+        } catch (error) {
+          result.status = 'failed'; result.errorCode = toAutomationFailure(error).code;
+        }
+        finalResult = result;
         webmExportJobMap.delete(jobId);
         webmExportOwnerByJobId.delete(jobId);
         webmExportWindowByJobId.delete(jobId);
         webmExportCleanupByJobId.delete(jobId);
+        webmExportTerminalByJobId.delete(jobId);
+        webmExportCancelRequested.delete(jobId);
+      }
+      if (output) {
+        try {
+          for (const [saveId, save] of webmSaveSessionMap) if (save.filePath === output.temporaryPath) {
+            webmSaveSessionMap.delete(saveId); await save.handle.close();
+          }
+          await output.dispose();
+        } catch (error) { writeAppLog('warn', 'webm', 'temporary export cleanup failed', createLogErrorData(error)); }
       }
       releaseOwnerExport();
-    };
+      if (finalResult && !event.sender.isDestroyed()) event.sender.send('export:webmResult', finalResult);
+    })();
 
     try {
       const sanitized = sanitizeWebmExportRequest(request);
       if (!sanitized) {
         writeAppLog('warn', 'webm', 'invalid WebM export request');
         return null;
+      }
+      if (automation) {
+        if (event.senderFrame !== event.sender.mainFrame) throw new AutomationError('ACCESS_REVOKED');
+        output = await prepareAutomationVideoOutput(request.outputFilePath, automation.overwrite, () => automationBridge.canEdit(event.sender.id, automation.permission));
+        sanitized.outputFilePath = output.temporaryPath;
       }
 
       const ownerWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
@@ -2161,7 +2192,11 @@ ipcMain.handle(
       exportWindow.setContentSize(sanitized.outputWidth, sanitized.outputHeight);
 
       exportWindow.on('closed', () => {
-        cleanup();
+        void cleanup();
+      });
+      exportWindow.webContents.on('render-process-gone', () => {
+        if (exportWindow && !exportWindow.isDestroyed()) exportWindow.close();
+        void cleanup();
       });
 
       await loadEditorWindow(exportWindow, { mode: 'webm-exporter', jobId });
@@ -2169,22 +2204,23 @@ ipcMain.handle(
 
       return { jobId };
     } catch (err) {
-      cleanup();
+      await cleanup();
       if (exportWindow && !exportWindow.isDestroyed()) {
         exportWindow.close();
       }
       writeAppLog('error', 'webm', 'failed to start WebM export window', createLogErrorData(err));
-      return null;
+      return automation ? { jobId: '', errorCode: toAutomationFailure(err).code } : null;
     }
   },
 );
 
-ipcMain.handle('export:takeWebmJob', async (_event, jobId: string): Promise<WebmExportRequest | null> => {
+ipcMain.handle('export:takeWebmJob', async (event, jobId: string): Promise<WebmExportRequest | null> => {
   if (!jobId || typeof jobId !== 'string') return null;
+  if (webmExportWindowByJobId.get(jobId)?.webContents.id !== event.sender.id) return null;
   const job = webmExportJobMap.get(jobId);
   if (!job) return null;
   webmExportJobMap.delete(jobId);
-  return job;
+  return { ...job, cancelRequested: webmExportCancelRequested.has(jobId) };
 });
 
 ipcMain.handle('export:cancelWebmJob', async (event, jobId: string): Promise<boolean> => {
@@ -2193,6 +2229,7 @@ ipcMain.handle('export:cancelWebmJob', async (event, jobId: string): Promise<boo
   if (ownerId !== event.sender.id) return false;
   const exporterWindow = webmExportWindowByJobId.get(jobId);
   if (!exporterWindow || exporterWindow.isDestroyed()) return false;
+  webmExportCancelRequested.add(jobId);
   exporterWindow.webContents.send('export:webmCancelRequested', jobId);
   writeAppLog('info', 'webm', 'WebM export cancellation requested', { jobId, ownerWebContentsId: ownerId });
   return true;
@@ -2200,9 +2237,10 @@ ipcMain.handle('export:cancelWebmJob', async (event, jobId: string): Promise<boo
 
 ipcMain.handle('export:finishWebmJob', async (event, jobId: string): Promise<boolean> => {
   if (!jobId || typeof jobId !== 'string') return false;
+  if (webmExportWindowByJobId.get(jobId)?.webContents.id !== event.sender.id) return false;
   const cleanup = webmExportCleanupByJobId.get(jobId);
   if (!cleanup) return false;
-  cleanup();
+  await cleanup();
   writeAppLog('info', 'webm', 'finished WebM export job', { jobId });
   const exporterWindow = BrowserWindow.fromWebContents(event.sender);
   if (exporterWindow && !exporterWindow.isDestroyed()) {
@@ -2211,10 +2249,12 @@ ipcMain.handle('export:finishWebmJob', async (event, jobId: string): Promise<boo
   return true;
 });
 
-ipcMain.on('export:webmProgress', (_event, progress: WebmExportProgress) => {
+ipcMain.on('export:webmProgress', (event, progress: WebmExportProgress) => {
   if (!progress || typeof progress !== 'object') return;
   if (typeof progress.jobId !== 'string' || progress.jobId.length === 0) return;
   if (!webmExportOwnerByJobId.has(progress.jobId)) return;
+  if (webmExportWindowByJobId.get(progress.jobId)?.webContents.id !== event.sender.id) return;
+  if (progress.phase === 'completed' || progress.phase === 'canceled' || progress.phase === 'failed') webmExportTerminalByJobId.set(progress.jobId, progress.phase);
   sendWebmExportProgressToOwner(progress.jobId, progress);
 });
 

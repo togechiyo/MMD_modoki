@@ -613,10 +613,11 @@ export class ExportUiController {
         this.showToast(`PNG sequence export started (${frameList.length} files)`, "success");
     }
 
-    public async exportWebm(): Promise<void> {
+    public async exportWebm(automationTarget?: { filePath: string; overwrite: boolean; permission: AutomationPermission }): Promise<import("../types").WebmExportLaunchResult | void> {
         if (!window.isSecureContext) {
             logError("webm", "export blocked by insecure context");
             this.showToast("WebM export requires a secure context", "error");
+            if (automationTarget) throw new Error("WebM secure context unavailable");
             return;
         }
 
@@ -649,7 +650,7 @@ export class ExportUiController {
             startFrame,
             endFrame,
         );
-        const outputFilePath = await window.electronAPI.saveWebmDialog(defaultFileName);
+        const outputFilePath = automationTarget?.filePath ?? await window.electronAPI.saveWebmDialog(defaultFileName);
         if (!outputFilePath) {
             logInfo("webm", "export canceled before launch", { defaultFileName });
             this.showToast(t("toast.webmExportCanceled"), "info");
@@ -698,8 +699,13 @@ export class ExportUiController {
             preferredVideoCodec,
             captureMode,
             initialPhysicsState,
-        });
+        }, automationTarget ? { permission: automationTarget.permission, overwrite: automationTarget.overwrite } : undefined);
 
+        if (result?.errorCode) {
+            this.setStatus("WebM export launch failed", false);
+            this.showToast(`WebM export failed: ${result.errorCode}`, "error");
+            return result;
+        }
         if (!result) {
             logError("webm", "export launch failed", { outputFilePath });
             this.setStatus("WebM export launch failed", false);
@@ -713,6 +719,7 @@ export class ExportUiController {
         });
         this.setStatus("WebM export started", false);
         this.showToast(`WebM export started (${totalOutputFrames} frames)`, "success");
+        return result;
     }
 
     private sanitizeFileNameSegment(value: string): string {

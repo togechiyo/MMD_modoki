@@ -74,7 +74,7 @@
 
 cameraのsource値は注視点xyz、Euler radians xyz、**負のdistance**、degreeのFoV。boneはローカル移動と単位quaternion xyzw。補間は `[x1,x2,y1,y2]` の0〜127整数、位置はxyzの3組・12値。線形例は `[20,107,20,107]`。previewの角度（度）とキーの表現を混同しない。変更しない補間は取得した値を保持する。
 
-再生中はキー編集を拒否する。external-parentを持つキーは専用の依存関係検査が未接続のため拒否し、リンクを黙って削除しない。property編集では既存IKトラック名と順序を保つ。キー編集のsource値と保存値を共通にし、モデル本体を扱うexport APIには接続しない。
+再生中はキー編集を拒否する。external-parentを持つキーは、2026-09-11に依存関係検査を接続して編集・コピー・移動・削除を許可した。ポーズだけを変更する場合はexternalParentを保持する。専用の関係取得・一括編集・dryRunは [外部親編集](./mcp-external-parent-2026-09-11.md) を参照。property編集では既存IKトラック名と順序を保つ。キー編集のsource値と保存値を共通にし、モデル本体を扱うexport APIには接続しない。
 
 ### 現在値登録・モーフ・列操作
 
@@ -115,12 +115,12 @@ SDKがcallbackより前に拒否するschema不正や未認証HTTP要求はSDK/t
 | 編集対象 | モデル/カメラ/アクセサリ選択、複数ボーン選択 | モーフ選択 |
 | ポーズ・表情 | カメラ/単一ボーン/モーフpreview、現在値登録、ボーン/モーフのキー値設定 | 一括ポーズpreview、専用IK操作 |
 | キー編集 | 値/補間参照、set/delete/copy/move、現在値登録、ミラー、列挿入/削除、補正、batch、GUI/MCP Undo/Redo、自動キー設定 | GUI範囲選択、クリップボード |
-| シーンキー | カメラ、照明、影、重力、アクセサリ、モデル表示/IKのキー値 | 外部親のキーと依存関係編集 |
+| シーンキー | カメラ、照明、影、重力、アクセサリ、モデル表示/IKのキー値、モデル/カメラ外部親の一括編集・dryRun | 複数モデル間の外部親同時組替え、アクセサリ親 |
 | 材質 | モデル材質表示、モデル/アクセサリ内蔵プリセット、通常/PBR切替、追加許可による詳細参照 | 詳細値の編集、アクセサリ材質表示 |
 | 表示・実行 | 地面、空、背景メディア、AA、物理、影、剛体表示、環境、エッジ、物理評価buffer/全減衰補正 | 床衝突、GI、高度な物理設定 |
 | 色・描画 | 基本色調整、Bloom/DOF/SSAO/SSR/Fog、照明・影の一部、Frame Graph効果順序（検索カタログ54項目） | 高度な効果の全パラメータ、描画/物理backend切替等 |
-| ファイル・素材管理 | 元path一覧、モデル/アクセサリ/モーション/ポーズ/音声/背景/環境/LUTの明示path読込 | 削除、差替え |
-| 保存・出力 | project保存/復元、VMD/VPD/BVMD、PNG、出力条件 | PNG連番、動画、別プロセス出力・取消 |
+| ファイル・素材管理 | 元path一覧、明示path読込、モデル/アクセサリ・音声・背景・カメラモーション・外部環境/LUTの指定削除 | 統合済みモデルモーションの個別削除、差替え |
+| 保存・出力 | project保存/復元、VMD/VPD/BVMD、PNG、出力条件、別ウィンドウWebMと進捗・取消 | PNG連番、別プロセスPNG出力 |
 | アプリ設定 | 言語、UI倍率、全画面。MCP開始・編集許可はユーザーUI | レイアウト詳細、入力機器設定等 |
 
 UI全項目対応は、DOMイベント発火や任意メソッド呼出しをMCPへ公開して達成したことにしない。入出力は明示path・対象・上書き条件を検査し、受付と完了/失敗を分けたjobへ接続した。詳細と今回の検証結果は [UI対応拡張](./mcp-ui-coverage-expansion-2026-09-10.md) を参照。MCP自身の公開権限・認証情報はAIに自己変更させない。通常実行時に外部サービス依存は追加しない。
@@ -135,7 +135,7 @@ UI全項目対応は、DOMイベント発火や任意メソッド呼出しをMCP
 - 診断追加後も上記4 E2Eが成功。権限不足の構造化エラーと参照のみでの診断取得、モーダルのbusy理由、revisionの期待値/実値、補正の操作番号/field/計算値/上限、失敗のoperationId照会、診断取得前後のrevision・Undo ID・GUI値の無変更を確認。モーフ補正とモーダル診断は通常/PBRの両方で実施。
 - モデル一覧E2E: 2つの配布fixtureを読み込み、一方を選択した状態で他方のボーン・モーフ・材質を参照のみの権限で全ページ取得。通常/PBR × Frame Graph/Classicで件数・項目番号・返却フィールドの限定、GUI選択・frame・revision・Undo IDの維持を確認。
 - 配布fixture `tofu.pmx` と `external-parent/material-switch.pmx` を使用。ユーザー所有モデルの探索・読み込みは行っていない。
-- 上記は各段階の検証履歴。UI拡張後の結果・制限は [UI対応拡張](./mcp-ui-coverage-expansion-2026-09-10.md) を参照。元pathの再解決、一括ポーズ、外部親、動画出力等は残件。クライアント別権限管理、各クライアント設定UIとの互換性、p95性能目標、複数window・最小化、全設定の個別保存/再読込は未検証。
+- 上記は各段階の検証履歴。UI拡張後の結果・制限は [UI対応拡張](./mcp-ui-coverage-expansion-2026-09-10.md) を参照。外部親とWebM動画出力は2026-09-11に追加。元pathの再解決、一括ポーズ等は残件。クライアント別権限管理、各クライアント設定UIとの互換性、p95性能目標、複数window・最小化、全設定の個別保存/再読込は未検証。
 
 公式API確認: [Electron capturePage / frame subscription](https://www.electronjs.org/docs/latest/api/web-contents)、[safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)、[MCP仕様](https://modelcontextprotocol.io/specification/2026-07-28)。SDKの `LATEST_PROTOCOL_VERSION` は2.0.0でも2025-11-25のため、その定数だけでHTTP入口の方式を判定しない。2026要求では `Mcp-Method` / `Mcp-Name` と本文 `_meta` の一致も検証される。
 

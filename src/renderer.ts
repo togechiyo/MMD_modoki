@@ -774,6 +774,9 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
   let totalOutputFrames = 0;
 
   try {
+    cancelUnsubscribe = window.electronAPI.onWebmExportCancelRequested((requestedJobId) => {
+      if (requestedJobId === jobId) abortController.abort();
+    });
     request = await window.electronAPI.takeWebmExportJob(jobId);
     if (!request) {
       logError("webm", "export job is unavailable", { jobId });
@@ -783,11 +786,7 @@ async function initializeWebmExporter(searchParams: URLSearchParams): Promise<vo
     }
     currentFrame = request.startFrame;
     totalOutputFrames = Math.max(1, Math.round(((request.endFrame - request.startFrame + 1) / 30) * Math.max(1, request.fps || 30)));
-    cancelUnsubscribe = window.electronAPI.onWebmExportCancelRequested((requestedJobId) => {
-      if (requestedJobId === jobId) {
-        abortController.abort();
-      }
-    });
+    if (request.cancelRequested) abortController.abort();
 
     canvas.style.width = `${request.outputWidth}px`;
     canvas.style.height = `${request.outputHeight}px`;

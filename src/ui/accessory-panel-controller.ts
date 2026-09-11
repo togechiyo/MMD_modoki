@@ -165,10 +165,16 @@ export class AccessoryPanelController {
         const ok = window.confirm(`Delete accessory '${targetName}'?`);
         if (!ok) return;
 
+        this.removeAccessory(selectedIndex);
+    }
+
+    public removeAccessory(selectedIndex: number): boolean {
+        const targetName = this.mmdManager.getLoadedAccessories().find(item => item.index === selectedIndex)?.name ?? "Accessory";
+
         const removed = this.mmdManager.removeAccessory(selectedIndex);
         if (!removed) {
             this.showToast("Failed to delete accessory", "error");
-            return;
+            return false;
         }
 
         const remainingAccessories = this.mmdManager.getLoadedAccessories();
@@ -178,6 +184,7 @@ export class AccessoryPanelController {
         this.refresh();
         this.onAccessoriesChanged();
         this.showToast(`Accessory deleted: ${targetName}`, "success");
+        return true;
     }
 
     private setAccessoryContentVisible(visible: boolean): void {

@@ -3,7 +3,7 @@ id: experimental-settings-live-under-tools
 status: decision
 scope: ui/experimental-settings
 confidence: high
-last_verified: 2026-09-10
+last_verified: 2026-09-11
 evidence:
   - project-owner-directive
 source_docs:
@@ -11,6 +11,7 @@ source_docs:
   - ../../docs/mcp-integration-design-investigation-2026-09-10.md
   - ../../docs/mcp-editor-integration-design-2026-09-10.md
   - ../../docs/mcp-detailed-diagnostics-2026-09-10.md
+  - ../../docs/mcp-external-parent-2026-09-11.md
 superseded_by: null
 decision_owner: project-owner
 decision: adopted
@@ -40,6 +41,8 @@ decided_on: 2026-09-08
 さらに所有者は、初期位置・剛体等の診断情報について「リクエストのあったもののみ詳細を送る」案を検討し、「うん。説明付きならいいかな。その方向で実装おねがい」と了承した。クラウドAIへ提供され得ることを説明した追加許可の下で、要求された個別対象のボーン・モーフ属性・材質・剛体・ジョイントの詳細を返す。モデル本体・メッシュ・頂点ウェイト・モーフoffset・テクスチャ原本の非公開は維持する。個別取得でも繰り返せば構造情報が蓄積する点を隠さず、完全な流出防止や第三者の利用条件への適合を保証するものと説明しない。具体的な上限・履歴・初期OFF等は[実装設計](../../docs/mcp-detailed-diagnostics-2026-09-10.md)に分離する。
 
 同日の後続指示で、所有者は主用途をキーフレーム編集としつつ、「UIから触れる項目は一通りMCPからも操作できるようにしたい」と範囲を指定した。少数のpreview操作で完了とせず、UI各分野の対応表を持って拡張する。モデル本体を送信しない条件は引き続き適用する。全項目の実装完了を意味しない。
+
+2026-09-11、所有者は外部親を「人間がやるの地味に面倒」「AIに任せたい分野」としてMCP操作へ含め、AIから動かしやすい形にまとめるよう指定した。単なるGUI操作の置換だけでなく、編集対象の発見と関係の確認を含めた操作設計を行う。具体的なAPI、一括件数、poseMode、dryRun等は[実装メモ](../../docs/mcp-external-parent-2026-09-11.md)に分離し、個々の制約まで所有者が了承したとは扱わない。
 
 後続指示により詳細項目は常時表示する。PBR切替は次回読込だけでなく読込済みモデルへ適用する。所有者への確認で即時切替の対象はIBL影ではなく通常MMD/PBRと確定した。当初の内部再読込やUndoリセットは実装上の制約であり、所有者が制約を承認したとは扱わない。後続実装ではruntimeを維持した材質交換へ変更している。
 

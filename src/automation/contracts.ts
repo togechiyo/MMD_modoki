@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { externalParentSubjectSchema, externalParentOperationSchema } from "./external-parent-schema";
 import { automationTrackSchema, keyframeOperationSchema, timelineScopeSchema, timelineTransformSchema } from "./keyframe-schema";
 import { automationSettingSchema } from "./settings";
 import type { AutomationFailure } from "./diagnostics";
@@ -16,6 +17,9 @@ const query = { target };
 const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(100) };
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
+    mmd_get_external_parent: { description: "指定モデルまたはカメラの外部親キーと現在フレームの関係。選択を変えずページ取得。モデル構造・本体は返さない。", edit: false, schema: z.object({ ...query, ...paging, scope: z.discriminatedUnion("kind", [z.object({ kind: z.literal("camera") }).strict(), z.object({ kind: z.literal("model"), modelInstanceId: z.string().min(1).max(200) }).strict()]), expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
+    mmd_edit_external_parent: { description: "選択中モデルの指定ボーン、またはカメラの外部親を最大100フレーム一括編集。parent:nullは解除キー、deleteはポーズを含むキー削除。poseModeと制限はexternal-parentヘルプ参照。dryRunで無変更の事前検証。1回のUndo単位。", edit: true, schema: z.object({ ...edit, subject: externalParentSubjectSchema, operations: z.array(externalParentOperationSchema).min(1).max(100), collision: z.enum(["reject", "replace"]), dryRun: z.boolean().default(false) }).strict() },
+    mmd_cancel_operation: { description: "MCPで開始した動画出力の取消を要求。受付後は元のjobOperationIdで終端状態を確認する。", edit: true, schema: z.object({ ...edit, jobOperationId: z.string().uuid() }).strict() },
     mmd_list_material_presets: { description: "モデル/アクセサリで利用できる内蔵材質プリセットと材質キー一覧。通常/PBR別、モデル本体やshaderソースは返さない。材質はページ取得。", edit: false, schema: z.object({ ...query, ...paging, subject: automationMaterialTargetSchema, expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
     mmd_set_material_preset: { description: "指定材質へUIと同じ内蔵プリセットを適用。materialKey:nullは対象全材質。Undo対象外。外部shaderの文字列は受け付けない。", edit: true, schema: z.object({ ...edit, subject: automationMaterialTargetSchema, materialKey: z.string().min(1).max(200).nullable(), presetId: z.string().min(1).max(100) }).strict() },
     mmd_get_editor_options: { description: "自動キー・再生範囲・出力設定・言語・UI倍率・選択ボーンの現在状態。", edit: false, schema: z.object(query).strict() },

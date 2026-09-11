@@ -148,6 +148,9 @@ import { prepareModelMaterialSwitch, type PreparedMaterialSwitch } from "./asset
 import { SwitchableMaterialProxy } from "./runtime/switchable-material-proxy";
 import { MaterialVisibilityController } from "./scene/material-visibility-controller";
 import { captureMaterialBank, type MaterialSettingsByMode } from "./project/material-mode-state";
+import { validateExternalParentTransaction, type ExternalParentIssue } from "./editor/external-parent-transaction";
+import type { KeyframeTransaction } from "./actions/keyframe-transaction";
+import type { CommandDirection } from "./actions/command-types";
 import {
     convertPmxFileToBpmx as convertPmxFileToBpmxImpl,
     convertVmdBytesToBvmd as convertVmdBytesToBvmdImpl,
@@ -2775,6 +2778,38 @@ ${beforeFogAppendBlock}
         }
     }
 
+    private externalParentTransactionDepth = 0;
+
+    public validateExternalParentEdit(diff: KeyframeTransaction, direction: CommandDirection): ExternalParentIssue | null {
+        return validateExternalParentTransaction(this.sceneModels.map((entry, index) => ({
+            instanceId: entry.info.instanceId, path: entry.info.path, boneNames: this.getModelBoneNames(index),
+            keys: entry.externalParentKeyframes, fallback: entry.externalParent,
+        })), diff, direction);
+    }
+
+    public beginExternalParentEdit(diff: KeyframeTransaction, direction: CommandDirection): boolean {
+        if (this.validateExternalParentEdit(diff, direction)) return false;
+        this.externalParentTransactionDepth++;
+        return true;
+    }
+
+    public endExternalParentEdit(): void {
+        this.externalParentTransactionDepth = Math.max(0, this.externalParentTransactionDepth - 1);
+    }
+
+    public getExternalParentEditingState(modelInstanceId?: string) {
+        if (modelInstanceId === undefined) {
+            const keys = this.cameraExternalParentKeyframes;
+            const effective = keys.length ? selectCameraExternalParentKeyframeAtFrame(keys, this._currentFrame) : this.getCameraExternalParentPayload();
+            return { keys: keys.map(key => ({ ...key, modelInstanceId: key.modelInstanceId ?? null })), effective: effective ? { ...effective, modelInstanceId: effective.modelInstanceId ?? null } : null };
+        }
+        const model = this.sceneModels.find(entry => entry.info.instanceId === modelInstanceId);
+        if (!model) return null;
+        const keys = model.externalParentKeyframes;
+        const effective = keys.length ? selectModelExternalParentKeyframeAtFrame(keys, this._currentFrame) : model.externalParent;
+        return { keys: keys.map(key => ({ ...key })), effective: effective ? { ...effective } : null };
+    }
+
     public getModelExternalParent(modelIndex: number): (ModelExternalParentState & { parentModelIndex: number }) | null {
         this.applyModelExternalParentKeyframesAtFrame(this._currentFrame);
         const state = this.sceneModels[modelIndex]?.externalParent;
@@ -2846,7 +2881,7 @@ ${beforeFogAppendBlock}
         const nextKeyframes = childEntry.externalParentKeyframes.filter((entry) => entry.frame !== normalizedPayload.frame);
         nextKeyframes.push(normalizedPayload);
         nextKeyframes.sort((a, b) => a.frame - b.frame);
-        if (!this.validateModelExternalParentTimeline(childModelIndex, nextKeyframes)) {
+        if (!this.externalParentTransactionDepth && !this.validateModelExternalParentTimeline(childModelIndex, nextKeyframes)) {
             return false;
         }
 
@@ -2862,6 +2897,7 @@ ${beforeFogAppendBlock}
         childEntry.externalParentKeyframes = childEntry.externalParentKeyframes.filter((entry) =>
             !targets.has(entry.frame) || entry.childBoneName !== childBoneName
         );
+        if (!childEntry.externalParentKeyframes.length) childEntry.externalParent = null;
         this.applyModelExternalParentKeyframesAtFrame(this._currentFrame);
         return true;
     }
@@ -3299,6 +3335,30 @@ ${beforeFogAppendBlock}
         add("environment", "environment", this.environmentLightingSourcePathValue);
         add("lut", "lut", this.postEffectLutExternalPathValue);
         return rows;
+    }
+
+    public async clearLoadedAudio(): Promise<void> {
+        await this.mmdRuntime.setAudioPlayer(null);
+        this.audioPlayer?.dispose();
+        this.audioPlayer = null;
+        if (this.audioBlobUrl) URL.revokeObjectURL(this.audioBlobUrl);
+        this.audioBlobUrl = null;
+        this.audioSourcePath = null;
+        this.refreshTotalFramesFromContent();
+    }
+
+    public clearLoadedCameraMotion(): void {
+        this.mmdCamera.setRuntimeAnimation(null);
+        if (this.cameraAnimationHandle !== null) this.mmdCamera.destroyRuntimeAnimation(this.cameraAnimationHandle);
+        this.cameraAnimationHandle = null;
+        this.hasCameraMotion = false;
+        this.cameraMotionPath = null;
+        this.cameraSourceAnimation = null;
+        this.cameraKeyframeFrames = EMPTY_KEYFRAME_FRAMES;
+        this.cameraExternalParentKeyframes = [];
+        this.setCameraExternalParentState(null, null, null);
+        this.emitMergedKeyframeTracks();
+        this.refreshTotalFramesFromContent();
     }
 
     public setExperimentalPbrEnabled(enabled: boolean): void {

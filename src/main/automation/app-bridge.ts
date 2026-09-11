@@ -12,7 +12,7 @@ import { serializeVmd } from "../../export/vmd-serializer";
 import { serializeVpd } from "../../export/vpd-serializer";
 
 type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[] };
-export function installAutomationAppBridge(report: (code: string, data?: Record<string, string>) => void): { register(window: BrowserWindow): void } {
+export function installAutomationAppBridge(report: (code: string, data?: Record<string, string>) => void): { register(window: BrowserWindow): void; canEdit(owner: number, permission: AutomationPermission): boolean } {
     const windows = new Map<number, PublishedWindow>();
     const pending = new Map<string, { owner: number; resolve: (result: AutomationResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
     let listener: AutomationListener | undefined;
@@ -237,7 +237,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         else if (reply.result && JSON.stringify(reply.result).length < 2 * 1024 * 1024) item.resolve(reply.result);
         else item.reject(new AutomationError("INVALID_REPLY"));
     });
-    return { register(window) {
+    return { canEdit(owner, permission) { const entry = windows.get(owner); return Boolean(entry && hasPermission(entry, permission)); }, register(window) {
         const owner = window.webContents.id;
         const entry: PublishedWindow = { window, diagnostics: new AutomationDiagnosticHistory(), detailAccess: [], state: { enabled: false, editable: false, detailedDiagnostics: false, sessionId: randomUUID(), grant: 0, endpoint: null } };
         windows.set(owner, entry);

@@ -264,14 +264,20 @@ export class ModelInfoPanelController {
         const ok = window.confirm("Delete selected model?");
         if (!ok) return;
 
+        this.removeActiveModel();
+    }
+
+    public removeActiveModel(): boolean {
+
         const removed = this.mmdManager.removeActiveModel();
         if (!removed) {
             this.showToast("Failed to delete model", "error");
-            return;
+            return false;
         }
 
         this.onModelDeleted(this.mmdManager.getLoadedModels().length > 0);
         this.showToast("Model deleted", "success");
+        return true;
     }
 
     private setupControls(): void {

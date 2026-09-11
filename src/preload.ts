@@ -138,8 +138,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.removeListener('export:pngSequenceProgress', listener);
         };
     },
-    startWebmExportWindow: (request: WebmExportRequest) =>
-        ipcRenderer.invoke('export:startWebmWindow', request),
+    startWebmExportWindow: (request: WebmExportRequest, automation) =>
+        ipcRenderer.invoke('export:startWebmWindow', request, automation),
+    onWebmExportResult: callback => {
+        const listener = (_event: Electron.IpcRendererEvent, result: import('./types').WebmExportResult) => callback(result);
+        ipcRenderer.on('export:webmResult', listener);
+        return () => ipcRenderer.removeListener('export:webmResult', listener);
+    },
     takeWebmExportJob: (jobId: string) =>
         ipcRenderer.invoke('export:takeWebmJob', jobId),
     cancelWebmExportJob: (jobId: string) =>

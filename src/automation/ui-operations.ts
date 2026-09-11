@@ -4,6 +4,7 @@ import { serializeCameraBvmd, serializeModelBvmd } from "../export/bvmd-exporter
 import { AutomationError } from "./diagnostics";
 import type { AutomationUiOperation, AutomationOutput, AutomationPermission } from "./ui-operation-schema";
 import type { KeyframeScope } from "../actions/keyframe-transaction";
+import type { AutomationJobContext } from "./ui-jobs";
 
 export async function assertAutomationPermission(permission: AutomationPermission): Promise<void> {
     const current = await window.electronAPI.automation.getState();
@@ -22,6 +23,8 @@ export type UiOperationHost = {
     materialMode(pbr: boolean): Promise<void>;
     saveProject(target: { filePath: string; overwrite: boolean }): Promise<Record<string, unknown>>;
     exportPng(target: { filePath: string; overwrite: boolean }): Promise<Record<string, unknown>>;
+    exportWebm(target: { filePath: string; overwrite: boolean }, context: AutomationJobContext): Promise<Record<string, unknown>>;
+    removeAsset(assetId: string, expectedPath: string): Promise<Record<string, unknown>>;
     loadProject(filePath: string): Promise<Record<string, unknown>>;
     loadModel(filePath: string): Promise<unknown>;
     loadAccessory(filePath: string): Promise<boolean>;
@@ -32,7 +35,7 @@ const extensions = {
     model: ["pmx", "pmd", "bpmx"], accessory: ["x", "obj"], motion: ["vmd", "bvmd"], cameraMotion: ["vmd", "bvmd"], pose: ["vpd"],
     audio: ["mp3", "wav", "ogg"], backgroundImage: ["png", "jpg", "jpeg", "bmp", "webp"], backgroundVideo: ["webm", "mp4", "avi"], environment: ["hdr", "env", "dds"], lut: ["cube", "3dl"],
 };
-export async function runAutomationUiOperation(host: UiOperationHost, operation: AutomationUiOperation): Promise<Record<string, unknown>> {
+export async function runAutomationUiOperation(host: UiOperationHost, operation: AutomationUiOperation, context: AutomationJobContext): Promise<Record<string, unknown>> {
     const m = host.manager;
     if (operation.kind === "materialMode") {
         await host.materialMode(operation.pbr);
@@ -41,6 +44,8 @@ export async function runAutomationUiOperation(host: UiOperationHost, operation:
     }
     if (operation.kind === "saveProject") return host.saveProject(operation);
     if (operation.kind === "exportPng") return host.exportPng(operation);
+    if (operation.kind === "exportWebm") return host.exportWebm(operation, context);
+    if (operation.kind === "removeAsset") return host.removeAsset(operation.assetId, operation.expectedPath);
     if (operation.kind === "loadProject") return host.loadProject(operation.filePath);
     if (operation.kind === "loadAsset") {
         const ext = operation.filePath.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase() ?? "";

@@ -16,6 +16,8 @@
 - [MMD_modoki MCP操作・情報取得・ヘルプ設計](./mcp-editor-integration-design-2026-09-10.md)
 - [MCPアプリ操作の実装状況・使い方](./mcp-implementation-progress-2026-09-10.md)
 - [MCPのUI対応拡張と残件](./mcp-ui-coverage-expansion-2026-09-10.md)
+- [MCPの動画出力と素材の指定削除](./mcp-video-and-asset-removal-2026-09-11.md)
+- [MCPからの外部親編集](./mcp-external-parent-2026-09-11.md)
 - [MCPのAI向け操作・診断機能の候補](./mcp-ai-ergonomics-proposals-2026-09-10.md)
 - [MCPの対象指定による詳細診断と提供許可](./mcp-detailed-diagnostics-2026-09-10.md)
 - [MCPの2026年最新動向とMMD_modokiへの影響](./mcp-2026-latest-findings-2026-09-10.md)

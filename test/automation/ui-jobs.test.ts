@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { AutomationUiJobs } from "../../src/automation/ui-jobs";
+import { AutomationError } from "../../src/automation/diagnostics";
 
 describe("UI operation lifecycle", () => {
     it("returns running, deduplicates while pending, and keeps completion after scene changes", async () => {
@@ -31,5 +32,21 @@ describe("UI operation lifecycle", () => {
         await vi.waitFor(() => expect(jobs.busy).toBe(false));
         expect(jobs.get("one")).toMatchObject({ status: "failed", diagnostic: { error: { code: "OPERATION_FAILED" } } });
         expect(JSON.stringify(jobs.get("one"))).not.toContain("SECRET_MODEL_DATA");
+    });
+    it("holds the lock after cancellation until the exporter confirms its terminal state", async () => {
+        const jobs = new AutomationUiJobs();
+        let finish: () => void = () => undefined;
+        let signal: AbortSignal | undefined;
+        jobs.start("video", "input", context => {
+            signal = context.signal;
+            return new Promise((_resolve, reject) => { finish = () => reject(new AutomationError("OPERATION_CANCELED")); });
+        }, () => true, true);
+        await Promise.resolve();
+        expect(jobs.cancel("video")).toBe(true);
+        expect(signal?.aborted).toBe(true);
+        expect(jobs.busy).toBe(true);
+        finish();
+        await vi.waitFor(() => expect(jobs.busy).toBe(false));
+        expect(jobs.get("video")?.status).toBe("canceled");
     });
 });

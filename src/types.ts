@@ -73,7 +73,9 @@ export interface ElectronAPI {
     onPngSequenceExportProgress: (callback: (progress: PngSequenceExportProgress) => void) => () => void;
     startWebmExportWindow: (
         request: WebmExportRequest,
+        automation?: import("./automation/ui-operation-schema").AutomationVideoOptions,
     ) => Promise<WebmExportLaunchResult | null>;
+    onWebmExportResult: (callback: (result: WebmExportResult) => void) => () => void;
     takeWebmExportJob: (jobId: string) => Promise<WebmExportRequest | null>;
     cancelWebmExportJob: (jobId: string) => Promise<boolean>;
     finishWebmExportJob: (jobId: string) => Promise<boolean>;
@@ -1063,6 +1065,7 @@ export interface WebmInitialPhysicsState {
 }
 
 export interface WebmExportRequest {
+    cancelRequested?: boolean;
     project: MmdModokiProjectFileV1;
     externalLut?: ExportExternalLutAsset | null;
     outputFilePath: string;
@@ -1089,6 +1092,15 @@ export interface ExportExternalLutAsset {
 
 export interface WebmExportLaunchResult {
     jobId: string;
+    errorCode?: string;
+}
+
+export interface WebmExportResult {
+    jobId: string;
+    status: "completed" | "canceled" | "failed";
+    filePath?: string;
+    byteLength?: number;
+    errorCode?: string;
 }
 
 export interface WebmExportState {

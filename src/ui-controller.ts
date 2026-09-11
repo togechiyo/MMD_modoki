@@ -81,6 +81,9 @@ import type { AutomationUiOperation, AutomationPermission } from "./automation/u
 import { AutomationError } from "./automation/diagnostics";
 import type { AutomationEditorOptions } from "./automation/editor-options";
 import type { AutomationMaterialTarget } from "./automation/material-schema";
+import type { AutomationJobContext } from "./automation/ui-jobs";
+import { runAutomationVideo } from "./automation/video-operation";
+import { resolveAssetRemoval } from "./automation/asset-removal";
 import type {
     BoneKeyframePayload,
     CameraExternalParentKeyframePayload,
@@ -7812,17 +7815,23 @@ export class UIController {
                 return true;
             },
             applyKeyframeTransaction: (diff, direction) => {
+                if (!this.mmdManager.beginExternalParentEdit(diff, direction)) return false;
                 let attempted = false;
-                const applied = executeKeyframeTransaction(diff, direction, {
-                    scope: () => this.getAutomationTimelineScope(),
-                    read: (track, frame) => this.mmdManager.readTimelineKeyframePayload(track, frame),
-                    write: (track, frame, payload) => {
-                        if (payload?.kind === "property" && !this.mmdManager.ensureModelAnimationForEditing(track)) return false;
-                        return this.mmdManager.applyTimelineKeyframePayload(track, frame, payload);
-                    },
-                    begin: () => { attempted = true; this.mmdManager.beginTimelineEditBatch(); },
-                    end: () => this.mmdManager.endTimelineEditBatch(),
-                });
+                let applied: boolean;
+                try {
+                    applied = executeKeyframeTransaction(diff, direction, {
+                        scope: () => this.getAutomationTimelineScope(),
+                        read: (track, frame) => this.mmdManager.readTimelineKeyframePayload(track, frame),
+                        write: (track, frame, payload) => {
+                            if (payload?.kind === "property" && !this.mmdManager.ensureModelAnimationForEditing(track)) return false;
+                            return this.mmdManager.applyTimelineKeyframePayload(track, frame, payload);
+                        },
+                        begin: () => { attempted = true; this.mmdManager.beginTimelineEditBatch(); },
+                        end: () => this.mmdManager.endTimelineEditBatch(),
+                    });
+                } finally {
+                    this.mmdManager.endExternalParentEdit();
+                }
                 if (attempted) {
                     this.refreshRuntimeAnimationForTrack();
                     this.updateTimelineEditState();
@@ -8407,6 +8416,8 @@ export class UIController {
         const command: BuiltCommand = { id: editId, label: `AI: キーフレーム編集 (${diff.items.length})`, scope: "keyframe", createdAtMs: Date.now(), diff };
         if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) throw new Error("Keyframe transaction failed");
         this.commandHistory.push(command);
+        this.modelExternalParentController?.refresh();
+        this.cameraPanelController?.refresh(true);
         return true;
     }
 
@@ -8529,7 +8540,7 @@ export class UIController {
         return this.getAutomationEditorOptions();
     }
 
-    public async runAutomationUiOperation(operation: AutomationUiOperation, permission: AutomationPermission): Promise<Record<string, unknown>> {
+    public async runAutomationUiOperation(operation: AutomationUiOperation, permission: AutomationPermission, jobContext: AutomationJobContext): Promise<Record<string, unknown>> {
         if (operation.kind === "loadProject" && !/\.(json|mmdproj)$/i.test(operation.filePath)) throw new AutomationError("INVALID_PROJECT");
         return runAutomationUiOperation({
             permission,
@@ -8538,12 +8549,49 @@ export class UIController {
             materialMode: pbr => this.switchExperimentalPbr(pbr),
             saveProject: async target => { const result = await this.saveProject(false, { ...target, permission }); if (!result) throw new AutomationError("OUTPUT_WRITE_FAILED"); return result; },
             exportPng: async target => { const result = await this.exportUiController?.exportPNG({ ...target, permission }); if (!result) throw new AutomationError("OUTPUT_WRITE_FAILED"); return result; },
+            exportWebm: (target, context) => runAutomationVideo(window.electronAPI, async () => this.exportUiController?.exportWebm({ ...target, permission }), context),
+            removeAsset: (assetId, expectedPath) => this.removeAutomationAsset(assetId, expectedPath),
             loadProject: async filePath => { const result = await this.loadProject(filePath, permission); if (!result) throw new AutomationError("ASSET_LOAD_FAILED"); return result; },
             loadModel: filePath => this.loadModelInteractively(filePath, permission),
             loadAccessory: filePath => this.loadAccessoryFromPath(filePath),
             loadLut: async filePath => await this.lutPanelController?.importExternalLutFile(filePath, "dialog") ?? false,
             refresh: () => { this.applyLocalizedUiState(); this.refreshShaderPanel(); this.refreshModelSelector(); },
-        }, operation);
+        }, operation, jobContext);
+    }
+
+    private async removeAutomationAsset(assetId: string, expectedPath: string): Promise<Record<string, unknown>> {
+        const asset = resolveAssetRemoval(this.mmdManager.getAutomationAssetReferences(), assetId, expectedPath);
+        const accessoryCount = this.mmdManager.getLoadedAccessories().length;
+        const previous = this.getAutomationTimelineScope();
+        let restore = previous;
+        if (asset.kind === "model") {
+            if (!asset.modelInstanceId || !this.selectAutomationTimeline({ kind: "model", modelInstanceId: asset.modelInstanceId })) throw new AutomationError("MODEL_NOT_FOUND");
+            if (!this.modelInfoPanelController?.removeActiveModel()) throw new AutomationError("OPERATION_FAILED");
+            if (previous?.kind === "model" && previous.modelInstanceId === asset.modelInstanceId) restore = null;
+        } else if (asset.kind === "accessory") {
+            const index = Number(asset.assetId.slice("accessory:".length));
+            if (!this.accessoryPanelController?.removeAccessory(index)) throw new AutomationError("OPERATION_FAILED");
+            if (previous?.kind === "accessory") restore = previous.accessoryIndex === index ? { kind: "camera" } : { kind: "accessory", accessoryIndex: previous.accessoryIndex > index ? previous.accessoryIndex - 1 : previous.accessoryIndex };
+        } else if (asset.kind === "audio") {
+            await this.mmdManager.clearLoadedAudio();
+            await this.refreshTimelineWaveformFromAudio();
+        } else if (asset.kind === "camera-motion") this.mmdManager.clearLoadedCameraMotion();
+        else if (asset.kind === "background-image") this.mmdManager.clearBackgroundImage();
+        else if (asset.kind === "background-video") this.mmdManager.clearBackgroundVideo();
+        else if (asset.kind === "environment") this.mmdManager.clearExternalEnvironmentLightingSource();
+        else if (asset.kind === "lut") {
+            this.lutPanelController?.clearExternalAsset();
+            this.mmdManager.postEffectLutSourceMode = "builtin";
+            this.mmdManager.postEffectLutEnabled = false;
+        }
+        if (restore) this.selectAutomationTimeline(restore);
+        this.commandHistory.clear("asset-remove");
+        this.refreshModelSelector();
+        this.refreshShaderPanel();
+        this.applyLocalizedUiState();
+        if (asset.kind === "accessory" ? this.mmdManager.getLoadedAccessories().length !== accessoryCount - 1
+            : this.mmdManager.getAutomationAssetReferences().some(item => item.assetId === assetId && item.recordedPath === expectedPath)) throw new AutomationError("OPERATION_FAILED");
+        return { removedAssetId: assetId, filePath: expectedPath, sourceFileDeleted: false, historyCleared: true };
     }
 
     public isAutomationBusy(): boolean {

@@ -12,11 +12,14 @@ export const uiOperationSchema = z.discriminatedUnion("kind", [
         modelInstanceId: z.string().min(1).max(200).optional() }).strict(),
     z.object({ kind: z.literal("saveProject"), ...output }).strict(),
     z.object({ kind: z.literal("exportPng"), ...output }).strict(),
+    z.object({ kind: z.literal("exportWebm"), ...output }).strict(),
+    z.object({ kind: z.literal("removeAsset"), assetId: z.string().min(1).max(300), expectedPath: z.string().min(1).max(4096) }).strict(),
     z.object({ kind: z.literal("loadProject"), filePath: automationLocalPathSchema }).strict(),
     z.object({ kind: z.literal("exportMotion"), ...output, format: z.enum(["vmd", "vpd", "bvmd"]),
         scope: z.discriminatedUnion("kind", [z.object({ kind: z.literal("camera") }).strict(), z.object({ kind: z.literal("model"), modelInstanceId: z.string().min(1).max(200) }).strict()]) }).strict(),
 ]);
 export type AutomationUiOperation = z.infer<typeof uiOperationSchema>;
 export type AutomationPermission = { sessionId: string; grant: number };
+export type AutomationVideoOptions = { overwrite: boolean; permission: AutomationPermission };
 export type AutomationOutput = { filePath: string; overwrite: boolean; format: "project" | "vmd" | "vpd" | "bvmd" | "png" | "lut" | "wgsl"; bytes: Uint8Array };
 export type AutomationOutputResult = { status: "saved"; filePath: string; byteLength: number } | { status: "failed"; code: string };

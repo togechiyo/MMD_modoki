@@ -49,6 +49,15 @@ group(["EXTERNAL_PARENT_KEY_UNSUPPORTED", "SETTING_UNAVAILABLE", "UNKNOWN_TOOL"]
 group(["CAPTURE_UNAVAILABLE", "CAPTURE_TOO_LARGE"], "現在のviewport画像を取得できません。ウィンドウ表示とstatusを確認してください。", "user_action", "none", "viewport");
 
 /** Never forwards exception messages, stacks, arbitrary request values, or GPU shader messages. */
+group(["EXTERNAL_PARENT_CYCLE"], "外部親が自己参照または循環します。frameは循環が生じる最初の切替点です。全モデルの解除キーも含めて確認してください。", "correct_input", "none", "external-parent");
+group(["EXTERNAL_PARENT_TARGET_CHANGED"], "親モデルのインスタンスID・pathが一致しません。現在のモデル一覧から指定し直してください。", "refresh_context", "none", "external-parent");
+group(["EXTERNAL_PARENT_CHILD_MISMATCH", "EXTERNAL_PARENT_FRAME_CONFLICT"], "子ボーン指定が不一致、または同じモデルの同一フレームに別の子ボーンの外部親キーがあります。関係一覧を確認してください。", "correct_input", "none", "external-parent");
+group(["EXTERNAL_PARENT_LOCAL_POSE_REQUIRED"], "keepLocalは既存のポーズキー、または現在フレームの編集値が必要です。そのフレームへseekして登録するか、snapを明示してください。", "correct_input", "none", "external-parent");
+group(["ASSET_CHANGED"], "素材IDまたは元pathが一致しません。一覧を再取得してください。", "refresh_context", "none", "files-and-output");
+group(["ASSET_REMOVAL_UNSUPPORTED"], "モデルへ統合済みのモーションは履歴単位に分離削除できません。モデル削除は所属モーションも除去します。キー編集の削除は別途利用できます。", "unsupported", "none", "files-and-output");
+group(["OPERATION_NOT_CANCELABLE"], "指定jobは取消可能な実行中動画出力ではありません。結果を照会してください。", "inspect_operation", "none", "ui-operations");
+group(["OPERATION_CANCELED"], "動画出力を取り消しました。出力先は更新していません。", "inspect_operation", "none", "ui-operations");
+group(["VIDEO_EXPORT_FAILED"], "動画出力を完了できませんでした。進捗とローカルログを確認してください。", "inspect_operation", "unknown", "ui-operations");
 export function toAutomationFailure(error: unknown): AutomationFailure {
     if (error instanceof AutomationError) {
         const code = Object.hasOwn(rules, error.code) ? error.code : "OPERATION_FAILED";

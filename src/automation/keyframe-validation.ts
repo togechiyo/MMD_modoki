@@ -4,14 +4,12 @@ import { keyframeValuesEqual, type KeyframeTransaction } from "../actions/keyfra
 import { AutomationError } from "./contracts";
 
 export function validateAutomationKeyframes(manager: MmdManager, timeline: Timeline, diff: KeyframeTransaction): void {
+    const parentIssue = manager.validateExternalParentEdit(diff, "apply");
+    if (parentIssue) throw new AutomationError(parentIssue.code, { frame: parentIssue.frame, operationIndex: parentIssue.operationIndex });
     const tracks = timeline.getKeyframeTracks();
     for (const item of diff.items) {
         if (tracks.filter(track => track.category === item.track.category && track.name === item.track.name).length !== 1) throw new AutomationError("TRACK_NOT_UNIQUE");
         const payload = item.after;
-        // External-parent links need separate cycle/dependency transactions; do not silently drop them.
-        for (const value of [item.before, payload]) {
-            if (value && "externalParent" in value && value.externalParent && Object.values(value.externalParent).some(v => v !== null && v !== undefined)) throw new AutomationError("EXTERNAL_PARENT_KEY_UNSUPPORTED");
-        }
         if (!payload) continue;
         const boneCategory = ["root", "semi-standard", "bone"].includes(item.track.category);
         if (!boneCategory && item.track.category !== payload.kind) throw new AutomationError("KEY_KIND_MISMATCH");

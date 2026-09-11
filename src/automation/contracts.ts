@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { bonePoseSchema } from "./bone-pose";
+import { keySelectionSchema } from "./keyframe-selection";
+import { objectSubjectSchema, objectPatchSchema } from "./object-state";
 import { externalParentSubjectSchema, externalParentOperationSchema } from "./external-parent-schema";
 import { automationTrackSchema, keyframeOperationSchema, timelineScopeSchema, timelineTransformSchema } from "./keyframe-schema";
 import { automationSettingSchema } from "./settings";
@@ -17,9 +20,18 @@ const query = { target };
 const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(100) };
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
+    mmd_get_keyframe_selection: { description: "現在のGUIキー選択をページ取得。scopeとframeを確認でき、選択やseekは変更しない。", edit: false, schema: z.object({ ...query, ...paging, expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
+    mmd_select_keyframes: { description: "指定scopeのキーを明示リストまたは両端を含むフレーム範囲で選択。最大100件、GUI選択を置換。clearで解除。Undo対象外。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema, selection: keySelectionSchema }).strict() },
+    mmd_copy_keyframes: { description: "現在選択中の最大100キーをアプリ内部のGUI共通クリップボードへコピー。OSクリップボードは使わない。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema }).strict() },
+    mmd_get_keyframe_clipboard: { description: "アプリ内部キークリップボードのID、元種別、相対frame、payloadをページ取得。モデル本体は返さない。", edit: false, schema: z.object({ ...query, ...paging, expectedClipboardId: z.string().uuid().optional() }).strict() },
+    mmd_paste_keyframes: { description: "確認したclipboardIdのキーを指定frameへ相対間隔を維持して貼り付け。scopeと同名トラックを照合、最大100件、dryRunと共有Undo。key-selectionヘルプ参照。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema, clipboardId: z.string().uuid(), frame: z.number().int().min(0).max(1000000), collision: z.enum(["reject", "replace"]), dryRun: z.boolean().default(false) }).strict() },
+    mmd_edit_keyframe_selection: { description: "現在選択中のキーをまとめて移動または削除。最大100件、dryRunで事前検証し1回の共有Undo。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema, operation: z.discriminatedUnion("action", [z.object({ action: z.literal("delete") }).strict(), z.object({ action: z.literal("move"), frameOffset: z.number().int().min(-1000000).max(1000000) }).strict()]), collision: z.enum(["reject", "replace"]), dryRun: z.boolean().default(false) }).strict() },
+    mmd_set_pose: { description: "選択中モデルの最大100ボーンをまとめてpreview調整。全件事前検証、dryRun、1回の共有Undo。位置はローカル移動、回転は度。キー登録なし。pose-editingヘルプ参照。", edit: true, schema: z.object({ ...edit, modelInstanceId: z.string().min(1).max(200), poses: bonePoseSchema, mode: z.literal("preview"), dryRun: z.boolean().default(false) }).strict() },
+    mmd_get_object_state: { description: "指定モデルの表示・影・IK、またはアクセサリの親・ローカル変形・表示・影を取得。選択は変更しない。モデルのIK一覧はページ取得。", edit: false, schema: z.object({ ...query, ...paging, subject: objectSubjectSchema, expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
+    mmd_set_object_state: { description: "選択中モデルの表示・影・複数IK、またはアクセサリの親・変形・表示・影を一括変更。未登録編集で自動キーなし。1回のUndo単位、dryRunで差分確認。object-editingヘルプ参照。", edit: true, schema: z.object({ ...edit, subject: objectSubjectSchema, patch: objectPatchSchema, mode: z.literal("preview"), dryRun: z.boolean().default(false) }).strict() },
     mmd_get_external_parent: { description: "指定モデルまたはカメラの外部親キーと現在フレームの関係。選択を変えずページ取得。モデル構造・本体は返さない。", edit: false, schema: z.object({ ...query, ...paging, scope: z.discriminatedUnion("kind", [z.object({ kind: z.literal("camera") }).strict(), z.object({ kind: z.literal("model"), modelInstanceId: z.string().min(1).max(200) }).strict()]), expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
     mmd_edit_external_parent: { description: "選択中モデルの指定ボーン、またはカメラの外部親を最大100フレーム一括編集。parent:nullは解除キー、deleteはポーズを含むキー削除。poseModeと制限はexternal-parentヘルプ参照。dryRunで無変更の事前検証。1回のUndo単位。", edit: true, schema: z.object({ ...edit, subject: externalParentSubjectSchema, operations: z.array(externalParentOperationSchema).min(1).max(100), collision: z.enum(["reject", "replace"]), dryRun: z.boolean().default(false) }).strict() },
-    mmd_cancel_operation: { description: "MCPで開始した動画出力の取消を要求。受付後は元のjobOperationIdで終端状態を確認する。", edit: true, schema: z.object({ ...edit, jobOperationId: z.string().uuid() }).strict() },
+    mmd_cancel_operation: { description: "MCPで開始した動画・PNG連番出力の取消を要求。受付後は元のjobOperationIdで終端状態を確認する。", edit: true, schema: z.object({ ...edit, jobOperationId: z.string().uuid() }).strict() },
     mmd_list_material_presets: { description: "モデル/アクセサリで利用できる内蔵材質プリセットと材質キー一覧。通常/PBR別、モデル本体やshaderソースは返さない。材質はページ取得。", edit: false, schema: z.object({ ...query, ...paging, subject: automationMaterialTargetSchema, expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
     mmd_set_material_preset: { description: "指定材質へUIと同じ内蔵プリセットを適用。materialKey:nullは対象全材質。Undo対象外。外部shaderの文字列は受け付けない。", edit: true, schema: z.object({ ...edit, subject: automationMaterialTargetSchema, materialKey: z.string().min(1).max(200).nullable(), presetId: z.string().min(1).max(100) }).strict() },
     mmd_get_editor_options: { description: "自動キー・再生範囲・出力設定・言語・UI倍率・選択ボーンの現在状態。", edit: false, schema: z.object(query).strict() },

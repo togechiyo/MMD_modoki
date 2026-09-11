@@ -25,6 +25,8 @@ function color(id: string, read: (m: MmdManager) => { r: number; g: number; b: n
 
 /** Explicit allowlist. These are the same runtime setters used by the GUI; no reflection-based method execution. */
 export const automationControls: readonly Control[] = [
+    { id: "physics.floorCollision", unit: "boolean", schema: z.boolean(), available: m => m.isPhysicsFloorCollisionAvailable(), read: m => m.getPhysicsFloorCollisionEnabled(), write: (m, v) => { m.setPhysicsFloorCollisionEnabled(z.boolean().parse(v)); } },
+    { id: "viewport.physicsBones", unit: "boolean", schema: z.boolean(), available, read: m => m.getShowPhysicsBones(), write: (m, v) => { m.setShowPhysicsBones(z.boolean().parse(v)); } },
     { id: "render.stack", unit: "ordered effects", schema: stack, available: frameGraph, read: m => m.getFrameGraphPostEffectStackEntries(), write: (m, value) => m.setFrameGraphPostEffectStackEntries(stack.parse(value)) },
     flag("bloom.enabled", "postEffectBloomEnabled"),
     numeric("bloom.weight", "postEffectBloomWeight", 0, 2),

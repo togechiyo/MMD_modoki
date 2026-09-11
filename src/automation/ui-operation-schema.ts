@@ -13,6 +13,7 @@ export const uiOperationSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("saveProject"), ...output }).strict(),
     z.object({ kind: z.literal("exportPng"), ...output }).strict(),
     z.object({ kind: z.literal("exportWebm"), ...output }).strict(),
+    z.object({ kind: z.literal("exportPngSequence"), outputDirectoryPath: automationLocalPathSchema }).strict(),
     z.object({ kind: z.literal("removeAsset"), assetId: z.string().min(1).max(300), expectedPath: z.string().min(1).max(4096) }).strict(),
     z.object({ kind: z.literal("loadProject"), filePath: automationLocalPathSchema }).strict(),
     z.object({ kind: z.literal("exportMotion"), ...output, format: z.enum(["vmd", "vpd", "bvmd"]),

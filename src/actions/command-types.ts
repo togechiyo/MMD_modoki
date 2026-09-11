@@ -1,6 +1,8 @@
 import type { TrackCategory } from "../types";
 import type { TimelineKeyframePayload } from "../editor/timeline-edit-service";
 import type { KeyframeTransaction } from "./keyframe-transaction";
+import type { ObjectStateEdit } from "../editor/object-state-edit";
+import type { BonePoseBatch } from "../editor/bone-pose-batch";
 
 export type CommandScope =
     | "keyframe"
@@ -116,6 +118,8 @@ export type CameraTransformCommandSnapshot = {
 };
 
 export type EditCommandDiff =
+    | BonePoseBatch
+    | ObjectStateEdit
     | {
         type: "edit.morphWeight";
         modelInstanceId: string;

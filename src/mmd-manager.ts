@@ -4568,6 +4568,15 @@ ${beforeFogAppendBlock}
         return false;
     }
 
+    public getModelEditingState(instanceId: string) {
+        const entry = this.sceneModels.find(item => item.info.instanceId === instanceId);
+        if (!entry) return null;
+        const visible = [entry.mesh, ...entry.mesh.getChildMeshes()].some(mesh => mesh.isEnabled() && mesh.isVisible && mesh.visibility > 0);
+        return { visible, castsShadow: entry.castShadow, ikStates: entry.model.runtimeBones.flatMap(bone => bone.ikSolverIndex < 0 ? [] : [{
+            boneName: bone.name, enabled: (entry.model.ikSolverStates[bone.ikSolverIndex] ?? 0) !== 0,
+        }]) };
+    }
+
     public setActiveModelVisibility(visible: boolean): boolean {
         if (!this.currentMesh) return false;
 

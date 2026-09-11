@@ -111,8 +111,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('file:finishWebmStreamSave', saveId),
     cancelWebmStreamSave: (saveId: string) =>
         ipcRenderer.invoke('file:cancelWebmStreamSave', saveId),
-    startPngSequenceExportWindow: (request: PngSequenceExportRequest) =>
-        ipcRenderer.invoke('export:startPngSequenceWindow', request),
+    startPngSequenceExportWindow: (request: PngSequenceExportRequest, permission) =>
+        ipcRenderer.invoke('export:startPngSequenceWindow', request, permission),
+    cancelPngSequenceExportJob: jobId => ipcRenderer.invoke('export:cancelPngSequenceJob', jobId),
+    onPngSequenceExportResult: callback => {
+        const listener = (_event: Electron.IpcRendererEvent, result: import('./types').AutomationPngSequenceResult) => callback(result);
+        ipcRenderer.on('export:pngSequenceResult', listener);
+        return () => ipcRenderer.removeListener('export:pngSequenceResult', listener);
+    },
     takePngSequenceExportJob: (jobId: string) =>
         ipcRenderer.invoke('export:takePngSequenceJob', jobId),
     reportPngSequenceExportProgress: (progress: PngSequenceExportProgress) => {

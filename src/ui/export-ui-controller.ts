@@ -554,8 +554,8 @@ export class ExportUiController {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
 
-    public async exportPNGSequence(): Promise<void> {
-        const directoryPath = await window.electronAPI.openDirectoryDialog();
+    public async exportPNGSequence(automationTarget?: { outputDirectoryPath: string; permission: AutomationPermission }): Promise<import("../types").PngSequenceExportLaunchResult | void> {
+        const directoryPath = automationTarget?.outputDirectoryPath ?? await window.electronAPI.openDirectoryDialog();
         if (!directoryPath) {
             this.showToast("PNG sequence export canceled", "info");
             return;
@@ -563,6 +563,7 @@ export class ExportUiController {
 
         const { startFrame, endFrame } = this.getOutputFrameRange();
         const step = 1;
+        if (automationTarget && endFrame - startFrame + 1 > 10000) return { jobId: "", errorCode: "INVALID_OUTPUT" };
         const outputSettings = this.getOutputSettings();
         const prefix = `mmd_seq_${outputSettings.width}x${outputSettings.height}`;
 
@@ -581,7 +582,7 @@ export class ExportUiController {
             endFrame,
             step
         );
-        const outputDirectoryPath = this.joinPathForRenderer(directoryPath, outputFolderName);
+        const outputDirectoryPath = automationTarget ? directoryPath : this.joinPathForRenderer(directoryPath, outputFolderName);
 
         const project = this.buildProjectState();
         project.assets.audioPath = null;
@@ -601,8 +602,12 @@ export class ExportUiController {
             outputWidth: outputSettings.width,
             outputHeight: outputSettings.height,
             transparentBackground: this.outputState.pngTransparentBackground,
-        });
+        }, automationTarget?.permission);
 
+        if (automationTarget && !result?.jobId) {
+            this.setStatus("PNG sequence export launch failed", false);
+            return result ?? { jobId: "", errorCode: "PNG_EXPORT_FAILED" };
+        }
         if (!result) {
             this.setStatus("PNG sequence export launch failed", false);
             this.showToast("Failed to start PNG sequence export window", "error");
@@ -611,6 +616,7 @@ export class ExportUiController {
 
         this.setStatus("PNG sequence export started", false);
         this.showToast(`PNG sequence export started (${frameList.length} files)`, "success");
+        return result;
     }
 
     public async exportWebm(automationTarget?: { filePath: string; overwrite: boolean; permission: AutomationPermission }): Promise<import("../types").WebmExportLaunchResult | void> {

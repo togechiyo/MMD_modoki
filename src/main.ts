@@ -33,8 +33,9 @@ import type { VpdExportDocument, VpdSaveResult } from './export/vpd-export-docum
 import { serializeVpd } from './export/vpd-serializer';
 import { installAutomationAppBridge } from './main/automation/app-bridge';
 import { prepareAutomationVideoOutput } from './main/automation/video-output';
+import { prepareAutomationPngOutput, type AutomationPngOutput } from './main/automation/png-output';
 import { AutomationError, toAutomationFailure } from './automation/diagnostics';
-import type { AutomationVideoOptions } from './automation/ui-operation-schema';
+import type { AutomationPermission, AutomationVideoOptions } from './automation/ui-operation-schema';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -228,6 +229,8 @@ const SMOKE_TEST_PBR_MMD_LIKE = process.env.MMD_MODOKI_SMOKE_PBR_MMD_LIKE === '1
 const pngSequenceExportJobMap = new Map<string, PngSequenceExportRequest>();
 const pngSequenceExportActiveCountByOwner = new Map<number, number>();
 const pngSequenceExportOwnerByJobId = new Map<string, number>();
+const pngSequenceExportWindowByJobId = new Map<string, BrowserWindow>();
+const automationPngBySender = new Map<number, { jobId: string; output: AutomationPngOutput; completed: boolean; canceled: boolean }>();
 const webmExportJobMap = new Map<string, WebmExportRequest>();
 const webmExportActiveCountByOwner = new Map<number, number>();
 const webmExportOwnerByJobId = new Map<string, number>();
@@ -1559,7 +1562,7 @@ function encodeRgbaToPngBytes(rgbaData: Uint8Array, width: number, height: numbe
 ipcMain.handle(
   'file:savePngRgbaToPath',
   async (
-    _event,
+    event,
     rgbaData: Uint8Array,
     width: number,
     height: number,
@@ -1576,6 +1579,11 @@ ipcMain.handle(
       const encodeMs = performance.now() - encodeStartedAt;
 
       const saveStartedAt = performance.now();
+      const automationOutput = automationPngBySender.get(event.sender.id)?.output;
+      if (automationOutput) {
+        const filePath = await automationOutput.write(directoryPath, fileName, pngBytes);
+        return { path: filePath, byteLength: pngBytes.byteLength, encodeMs, saveMs: performance.now() - saveStartedAt };
+      }
       await ensureDirectoryExists(directoryPath);
       const filePath = path.join(directoryPath, safeFileName);
       await fs.promises.writeFile(filePath, pngBytes);
@@ -1848,7 +1856,7 @@ ipcMain.handle(
 ipcMain.handle(
   'file:savePngBytesToPath',
   async (
-    _event,
+    event,
     pngBytes: Uint8Array,
     directoryPath: string,
     fileName: string,
@@ -1860,6 +1868,11 @@ ipcMain.handle(
       if (!safeFileName.toLowerCase().endsWith('.png')) return null;
 
       const saveStartedAt = performance.now();
+      const automationOutput = automationPngBySender.get(event.sender.id)?.output;
+      if (automationOutput) {
+        const filePath = await automationOutput.write(directoryPath, fileName, pngBytes);
+        return { path: filePath, byteLength: pngBytes.byteLength, saveMs: performance.now() - saveStartedAt };
+      }
       await ensureDirectoryExists(directoryPath);
       const filePath = path.join(directoryPath, safeFileName);
       await fs.promises.writeFile(filePath, pngBytes);
@@ -1973,24 +1986,40 @@ ipcMain.handle('file:cancelWebmStreamSave', async (_event, saveId: string) => {
 
 ipcMain.handle(
   'export:startPngSequenceWindow',
-  async (event, request: PngSequenceExportRequest): Promise<PngSequenceExportLaunchResult | null> => {
+  async (event, request: PngSequenceExportRequest, permission?: AutomationPermission): Promise<PngSequenceExportLaunchResult | null> => {
     let exportWindow: BrowserWindow | undefined;
     let releaseOwnerExport = () => undefined;
     let jobId: string | null = null;
-    let cleanedUp = false;
-    const cleanup = (): void => {
-      if (cleanedUp) return;
-      cleanedUp = true;
+    let output: AutomationPngOutput | undefined;
+    let exporterId: number | undefined;
+    let cleanupPromise: Promise<void> | null = null;
+    const cleanup = (): Promise<void> => cleanupPromise ??= (async () => {
+      const automation = exporterId === undefined ? undefined : automationPngBySender.get(exporterId);
+      const counts = await output?.stop();
       if (jobId) {
         pngSequenceExportJobMap.delete(jobId);
         pngSequenceExportOwnerByJobId.delete(jobId);
+        pngSequenceExportWindowByJobId.delete(jobId);
       }
+      if (exporterId !== undefined) automationPngBySender.delete(exporterId);
       releaseOwnerExport();
-    };
+      if (counts && jobId && !event.sender.isDestroyed()) event.sender.send('export:pngSequenceResult', {
+        jobId, ...counts, status: automation?.completed ? 'completed' : automation?.canceled ? 'canceled' : 'failed',
+        errorCode: output?.errorCode ?? (automation?.completed ? undefined : 'PNG_EXPORT_FAILED'),
+      });
+    })();
 
     try {
       const sanitized = sanitizePngSequenceExportRequest(request);
       if (!sanitized) return null;
+      if (permission) {
+        if (event.senderFrame !== event.sender.mainFrame) throw new AutomationError('ACCESS_REVOKED');
+        const total = Math.floor((sanitized.endFrame - sanitized.startFrame) / sanitized.step) + 1;
+        if (sanitized.exportKind !== 'sequence' || total > 10000 || sanitized.endFrame > 1000000 || !/^[A-Za-z0-9_-]{1,100}$/.test(sanitized.prefix)) throw new AutomationError('INVALID_OUTPUT');
+        const pad = Math.max(4, String(sanitized.endFrame).length);
+        const names = Array.from({ length: total }, (_, i) => sanitized.prefix + '_' + String(sanitized.startFrame + i * sanitized.step).padStart(pad, '0') + '.png');
+        output = await prepareAutomationPngOutput(sanitized.outputDirectoryPath, names, () => automationBridge.canEdit(event.sender.id, permission));
+      }
 
       const ownerWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
       releaseOwnerExport = retainPngSequenceExportOwner(ownerWindow);
@@ -2034,12 +2063,19 @@ ipcMain.handle(
           backgroundThrottling: false,
         },
       });
+      pngSequenceExportWindowByJobId.set(jobId, exportWindow);
+      exporterId = exportWindow.webContents.id;
+      if (output) automationPngBySender.set(exporterId, { jobId, output, completed: false, canceled: false });
+      exportWindow.webContents.on('render-process-gone', () => {
+        if (exportWindow && !exportWindow.isDestroyed()) exportWindow.close();
+        void cleanup();
+      });
       exportWindow.setAspectRatio(sanitized.outputWidth / sanitized.outputHeight);
       exportWindow.setMenuBarVisibility(false);
       exportWindow.setContentSize(initialContentSize.width, initialContentSize.height);
 
       exportWindow.on('closed', () => {
-        cleanup();
+        void cleanup();
       });
 
       await loadEditorWindow(exportWindow, {
@@ -2050,18 +2086,19 @@ ipcMain.handle(
 
       return { jobId };
     } catch (err) {
-      cleanup();
+      await cleanup();
       if (exportWindow && !exportWindow.isDestroyed()) {
         exportWindow.close();
       }
       writeAppLog('error', 'ipc', 'failed to start PNG sequence export window', createLogErrorData(err));
-      return null;
+      return permission ? { jobId: '', errorCode: toAutomationFailure(err).code } : null;
     }
   },
 );
 
-ipcMain.handle('export:takePngSequenceJob', async (_event, jobId: string): Promise<PngSequenceExportRequest | null> => {
+ipcMain.handle('export:takePngSequenceJob', async (event, jobId: string): Promise<PngSequenceExportRequest | null> => {
   if (!jobId || typeof jobId !== 'string') return null;
+  if (pngSequenceExportWindowByJobId.get(jobId)?.webContents.id !== event.sender.id) return null;
   const job = pngSequenceExportJobMap.get(jobId);
   if (!job) return null;
   pngSequenceExportJobMap.delete(jobId);
@@ -2084,13 +2121,27 @@ const acceptPngSequenceExportProgress = (progress: PngSequenceExportProgress): b
   return true;
 };
 
-ipcMain.on('export:pngSequenceProgress', (_event, progress: PngSequenceExportProgress) => {
+ipcMain.on('export:pngSequenceProgress', (event, progress: PngSequenceExportProgress) => {
+  if (pngSequenceExportWindowByJobId.get(progress?.jobId)?.webContents.id !== event.sender.id) return;
   acceptPngSequenceExportProgress(progress);
 });
 
-ipcMain.handle('export:pngSequenceCompleted', async (_event, progress: PngSequenceExportProgress) => (
-  acceptPngSequenceExportProgress(progress)
-));
+ipcMain.handle('export:pngSequenceCompleted', async (event, progress: PngSequenceExportProgress) => {
+  if (pngSequenceExportWindowByJobId.get(progress?.jobId)?.webContents.id !== event.sender.id) return false;
+  const automation = automationPngBySender.get(event.sender.id);
+  if (automation) automation.completed = await automation.output.complete();
+  return acceptPngSequenceExportProgress(progress);
+});
+ipcMain.handle('export:cancelPngSequenceJob', async (event, jobId: string) => {
+  if (pngSequenceExportOwnerByJobId.get(jobId) !== event.sender.id) return false;
+  const exporter = pngSequenceExportWindowByJobId.get(jobId);
+  const automation = exporter ? automationPngBySender.get(exporter.webContents.id) : undefined;
+  if (!exporter || !automation || automation.completed) return false;
+  automation.canceled = true;
+  await automation.output.stop();
+  if (!exporter.isDestroyed()) exporter.close();
+  return true;
+});
 
 ipcMain.handle(
   'export:startWebmWindow',

@@ -23,6 +23,7 @@ export type UiOperationHost = {
     materialMode(pbr: boolean): Promise<void>;
     saveProject(target: { filePath: string; overwrite: boolean }): Promise<Record<string, unknown>>;
     exportPng(target: { filePath: string; overwrite: boolean }): Promise<Record<string, unknown>>;
+    exportPngSequence(target: { outputDirectoryPath: string }, context: AutomationJobContext): Promise<Record<string, unknown>>;
     exportWebm(target: { filePath: string; overwrite: boolean }, context: AutomationJobContext): Promise<Record<string, unknown>>;
     removeAsset(assetId: string, expectedPath: string): Promise<Record<string, unknown>>;
     loadProject(filePath: string): Promise<Record<string, unknown>>;
@@ -44,6 +45,7 @@ export async function runAutomationUiOperation(host: UiOperationHost, operation:
     }
     if (operation.kind === "saveProject") return host.saveProject(operation);
     if (operation.kind === "exportPng") return host.exportPng(operation);
+    if (operation.kind === "exportPngSequence") return host.exportPngSequence(operation, context);
     if (operation.kind === "exportWebm") return host.exportWebm(operation, context);
     if (operation.kind === "removeAsset") return host.removeAsset(operation.assetId, operation.expectedPath);
     if (operation.kind === "loadProject") return host.loadProject(operation.filePath);

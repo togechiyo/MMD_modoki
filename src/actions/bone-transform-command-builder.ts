@@ -21,7 +21,7 @@ export function buildBoneTransformCommand(
     const frame = normalizeFrame(input.frame);
     if (frame === null) return null;
     if (!input.before || !input.after) return null;
-    if (areSnapshotsEqual(input.before, input.after)) return null;
+    if (areBoneTransformSnapshotsEqual(input.before, input.after)) return null;
 
     const diff: EditCommandDiff = {
         type: "edit.boneTransform",
@@ -54,7 +54,7 @@ function cloneSnapshot(snapshot: BoneTransformCommandSnapshot): BoneTransformCom
     };
 }
 
-function areSnapshotsEqual(
+export function areBoneTransformSnapshotsEqual(
     left: BoneTransformCommandSnapshot,
     right: BoneTransformCommandSnapshot,
 ): boolean {

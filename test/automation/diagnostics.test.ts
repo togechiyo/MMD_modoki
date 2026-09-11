@@ -4,8 +4,9 @@ import { AutomationDiagnosticHistory, AutomationError, automationFailureSchema, 
 import { buildAutomationTimelineTransform } from "../../src/automation/timeline-transform";
 
 describe("MCP diagnostic boundary", () => {
-    it.each(["EDITOR_TIMEOUT", "OPERATION_FAILED", "ACCESS_REVOKED", "UNDO_CONFLICT"])("does not claim unchanged state for %s", code => {
+    it.each(["EDITOR_TIMEOUT", "OPERATION_FAILED", "ACCESS_REVOKED", "UNDO_CONFLICT", "OPERATION_CANCELED", "PNG_EXPORT_FAILED"])("does not claim unchanged state for %s", code => {
         const result = describeAutomationFailure(toAutomationFailure(new AutomationError(code)));
+        expect(result.error.code).toBe(code);
         expect(result.effects.state).toBe("unknown");
         expect(result.recovery.retrySameInput).toBe(false);
     });

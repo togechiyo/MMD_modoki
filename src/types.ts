@@ -65,7 +65,10 @@ export interface ElectronAPI {
     cancelWebmStreamSave: (saveId: string) => Promise<boolean>;
     startPngSequenceExportWindow: (
         request: PngSequenceExportRequest,
+        permission?: import("./automation/ui-operation-schema").AutomationPermission,
     ) => Promise<PngSequenceExportLaunchResult | null>;
+    cancelPngSequenceExportJob: (jobId: string) => Promise<boolean>;
+    onPngSequenceExportResult: (callback: (result: AutomationPngSequenceResult) => void) => () => void;
     takePngSequenceExportJob: (jobId: string) => Promise<PngSequenceExportRequest | null>;
     reportPngSequenceExportProgress: (progress: PngSequenceExportProgress) => void;
     completePngSequenceExport: (progress: PngSequenceExportProgress) => Promise<boolean>;
@@ -1026,6 +1029,17 @@ export interface PngSequenceExportDiagnostics {
 
 export interface PngSequenceExportLaunchResult {
     jobId: string;
+    errorCode?: string;
+}
+
+export interface AutomationPngSequenceResult {
+    jobId: string;
+    status: "completed" | "failed" | "canceled";
+    outputDirectoryPath: string;
+    savedFiles: number;
+    totalFiles: number;
+    byteLength: number;
+    errorCode?: string;
 }
 
 export interface PngSequenceExportState {

@@ -15,6 +15,10 @@ import { AutomationUiJobs } from "./ui-jobs";
 import { cameraRevisionValues } from "./camera-revision";
 import { assetRemovalInfo } from "./asset-removal";
 import { buildExternalParentEdit } from "./external-parent-edit";
+import { readObjectState, normalizeObjectPatch } from "./object-state";
+import { selectObjectStateFields } from "../editor/object-state-edit";
+import { buildClipboardOperations, buildSelectionOperations } from "./keyframe-selection";
+import type { AutomationKeyframeOperation } from "./keyframe-schema";
 
 export function connectAutomationEditor(manager: MmdManager, ui: UIController, timeline: Timeline): void {
     let state: AutomationState | null = null;
@@ -108,6 +112,21 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         if (args.target && (args.target.editorSessionId !== state.sessionId || (request.tool !== "mmd_get_context" && args.target.sceneGeneration !== sceneGeneration))) throw new AutomationError("SCENE_CHANGED");
         if (request.tool === "mmd_get_context") return { data: before };
         if (!args.target) throw new AutomationError("TARGET_REQUIRED");
+        if (request.tool === "mmd_get_keyframe_selection") {
+            const input = automationTools.mmd_get_keyframe_selection.schema.parse(args);
+            if (busy()) throw new AutomationError("EDITOR_BUSY");
+            if ((input.offset > 0 && input.expectedEditRevision === undefined) || (input.expectedEditRevision !== undefined && input.expectedEditRevision !== revision)) throw new AutomationError("REVISION_CONFLICT");
+            const keys = ui.getAutomationKeySelection();
+            return { data: { scope: ui.getAutomationTimelineScope(), items: keys.slice(input.offset, input.offset + input.limit), totalCount: keys.length,
+                nextOffset: input.offset + input.limit < keys.length ? input.offset + input.limit : null, frame: manager.currentFrame, editRevision: revision } };
+        }
+        if (request.tool === "mmd_get_keyframe_clipboard") {
+            const input = automationTools.mmd_get_keyframe_clipboard.schema.parse(args);
+            const clipboard = ui.getAutomationKeyClipboard();
+            if ((input.offset > 0 && input.expectedClipboardId === undefined) || (input.expectedClipboardId !== undefined && input.expectedClipboardId !== clipboard.clipboardId)) throw new AutomationError("CLIPBOARD_CHANGED");
+            return { data: { ...clipboard, items: structuredClone(clipboard.items.slice(input.offset, input.offset + input.limit)), totalCount: clipboard.items.length,
+                nextOffset: input.offset + input.limit < clipboard.items.length ? input.offset + input.limit : null, modelContentShared: false } };
+        }
         if (request.tool === "mmd_list_material_presets") {
             const input = automationTools.mmd_list_material_presets.schema.parse(args);
             if ((input.offset > 0 && input.expectedEditRevision === undefined) || (input.expectedEditRevision !== undefined && input.expectedEditRevision !== revision)) throw new AutomationError("REVISION_CONFLICT");
@@ -116,6 +135,16 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                 nextOffset: input.offset + input.limit < catalog.materials.length ? input.offset + input.limit : null, editRevision: revision, modelContentShared: false } };
         }
         if (request.tool === "mmd_get_editor_options") return { data: { ...ui.getAutomationEditorOptions(), editRevision: revision } };
+        if (request.tool === "mmd_get_object_state") {
+            const input = automationTools.mmd_get_object_state.schema.parse(args);
+            if (busy()) throw new AutomationError("EDITOR_BUSY");
+            if ((input.offset > 0 && input.expectedEditRevision === undefined) || (input.expectedEditRevision !== undefined && input.expectedEditRevision !== revision)) throw new AutomationError("REVISION_CONFLICT");
+            const value = readObjectState(manager, input.subject);
+            const ikStates = value.kind === "model" ? value.ikStates ?? [] : [];
+            return { data: { subject: input.subject, state: value.kind === "model" ? { ...value, ikStates: ikStates.slice(input.offset, input.offset + input.limit) } : value,
+                ikTotalCount: ikStates.length, nextOffset: input.offset + input.limit < ikStates.length ? input.offset + input.limit : null,
+                frame: manager.currentFrame, editRevision: revision, modelContentShared: false } };
+        }
         if (request.tool === "mmd_get_external_parent") {
             const input = automationTools.mmd_get_external_parent.schema.parse(args);
             if (busy()) throw new AutomationError("EDITOR_BUSY");
@@ -256,7 +285,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                 inputRevision++;
                 const current = context();
                 return { ...output, target: current.target, editRevision: current.editRevision, modelContentShared: false };
-            }, () => Boolean(state?.enabled && state.editable && state.grant === grant && state.sessionId === sessionId), input.operation.kind === "exportWebm") };
+            }, () => Boolean(state?.enabled && state.editable && state.grant === grant && state.sessionId === sessionId), input.operation.kind === "exportWebm" || input.operation.kind === "exportPngSequence") };
         }
         const editId = `ai:${args.operationId}`;
         let changed = true;
@@ -281,7 +310,60 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             if (args.playbackPolicy === "reject") throw new AutomationError("PLAYING");
             manager.pause();
         }
-        if (request.tool === "mmd_edit_external_parent") {
+        if (request.tool === "mmd_select_keyframes" || request.tool === "mmd_copy_keyframes") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools[request.tool].schema.parse(args);
+            if (!keyframeValuesEqual(input.scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+            controlResult = request.tool === "mmd_select_keyframes" ? { items: ui.selectAutomationKeys(automationTools.mmd_select_keyframes.schema.parse(args).selection) } : ui.copyAutomationKeys();
+        } else if (request.tool === "mmd_paste_keyframes" || request.tool === "mmd_edit_keyframe_selection") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools[request.tool].schema.parse(args);
+            if (!keyframeValuesEqual(input.scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+            let keyOperations: AutomationKeyframeOperation[];
+            if ("clipboardId" in input) {
+                const clipboard = ui.getAutomationKeyClipboard();
+                if (clipboard.clipboardId !== input.clipboardId) throw new AutomationError("CLIPBOARD_CHANGED");
+                if (clipboard.sourceTarget !== input.scope.kind) throw new AutomationError("KEY_KIND_MISMATCH");
+                keyOperations = buildClipboardOperations(clipboard.items, input.frame);
+            } else keyOperations = buildSelectionOperations(ui.getAutomationKeySelection(), input.operation.action, input.operation.action === "move" ? input.operation.frameOffset : 0);
+            const diff = buildAutomationKeyframeEdit(input.scope, keyOperations, input.collision, (track, frame) => manager.readTimelineKeyframePayload(track, frame));
+            validateAutomationKeyframes(manager, timeline, diff);
+            const plan = { changedKeyCount: diff.items.length, items: diff.items };
+            if (input.dryRun) {
+                const result = { status: "validated", operationId: input.operationId, editId: null, editRevision: revision, plan };
+                operations.set(input.operationId, { input: inputKey, result });
+                if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
+                return { data: result };
+            }
+            changed = ui.applyAutomationKeyframes(diff, editId);
+            controlResult = plan;
+        } else if (request.tool === "mmd_set_pose") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools.mmd_set_pose.schema.parse(args);
+            const diff = ui.prepareAutomationPose(input.modelInstanceId, input.poses);
+            const plan = { modelInstanceId: input.modelInstanceId, frame: diff.frame, changedBoneCount: diff.items.length, items: diff.items, keyframesRegistered: false, modelContentShared: false };
+            if (input.dryRun) {
+                const result = { status: "validated", operationId: input.operationId, editId: null, editRevision: revision, plan };
+                operations.set(input.operationId, { input: inputKey, result });
+                if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
+                return { data: result };
+            }
+            changed = ui.applyAutomationPose(diff, editId);
+            controlResult = plan;
+        } else if (request.tool === "mmd_set_object_state") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools.mmd_set_object_state.schema.parse(args);
+            const diff = ui.prepareAutomationObjectEdit(input.subject, normalizeObjectPatch(input.patch));
+            const plan = { subject: input.subject, before: diff.before, after: diff.after, keyframesRegistered: false, worldPosePreserved: false };
+            if (input.dryRun) {
+                const result = { status: "validated", operationId: input.operationId, editId: null, editRevision: revision, plan };
+                operations.set(input.operationId, { input: inputKey, result });
+                if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
+                return { data: result };
+            }
+            changed = ui.applyAutomationObjectEdit(diff, editId);
+            controlResult = { ...plan, applied: selectObjectStateFields(readObjectState(manager, input.subject), diff.after) };
+        } else if (request.tool === "mmd_edit_external_parent") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_edit_external_parent.schema.parse(args);
             const scope = input.subject.kind === "camera" ? { kind: "camera" as const } : { kind: "model" as const, modelInstanceId: input.subject.modelInstanceId };
@@ -407,7 +489,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         const after = context();
         const result = { operationId: args.operationId, status: changed ? "applied" : "no-change", beforeRevision: before.editRevision, afterRevision: after.editRevision,
             ...(controlResult ? { control: controlResult } : {}),
-            editId: request.tool === "mmd_redo" && "editId" in args ? args.editId : changed && ["mmd_set_camera", "mmd_set_bone", "mmd_set_morph", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_register_keyframes", "mmd_edit_external_parent"].includes(request.tool) ? editId : null, frame: manager.currentFrame, playing: manager.isPlaying };
+            editId: request.tool === "mmd_redo" && "editId" in args ? args.editId : changed && ["mmd_paste_keyframes", "mmd_edit_keyframe_selection", "mmd_set_pose", "mmd_set_camera", "mmd_set_bone", "mmd_set_morph", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_register_keyframes", "mmd_edit_external_parent", "mmd_set_object_state"].includes(request.tool) ? editId : null, frame: manager.currentFrame, playing: manager.isPlaying };
         operations.set(args.operationId, { input: inputKey, result });
         if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
         return { data: result };

@@ -52,6 +52,7 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
                 return { structuredContent: result.data, content: [
                     { type: "text" as const, text: JSON.stringify(result.data) },
                     ...(result.image ? [{ type: "image" as const, ...result.image }] : []),
+                    ...(result.images ?? []).map(image => ({ type: "image" as const, ...image })),
                 ] };
             } catch (error) {
                 const diagnostic = error instanceof AutomationError && error.diagnostic ? error.diagnostic : describeAutomationFailure(toAutomationFailure(error));

@@ -10,8 +10,9 @@ import { writeAutomationOutput } from "./output-file";
 import type { AutomationOutput, AutomationPermission } from "../../automation/ui-operation-schema";
 import { serializeVmd } from "../../export/vmd-serializer";
 import { serializeVpd } from "../../export/vpd-serializer";
+import { ViewportSnapshots, snapshotCameraSchema } from "../../automation/viewport-snapshots";
 
-type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[] };
+type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[]; snapshots: ViewportSnapshots };
 export function installAutomationAppBridge(report: (code: string, data?: Record<string, string>) => void): { register(window: BrowserWindow): void; canEdit(owner: number, permission: AutomationPermission): boolean } {
     const windows = new Map<number, PublishedWindow>();
     const pending = new Map<string, { owner: number; resolve: (result: AutomationResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -28,6 +29,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         return entry;
     };
     function revoke(entry: PublishedWindow): void {
+        entry.snapshots.clear();
         entry.diagnostics.clear();
         entry.state.enabled = false;
         entry.state.detailedDiagnostics = false;
@@ -80,7 +82,17 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         if (requiresDetailedDiagnostics(tool) && !entry.state.detailedDiagnostics) throw new AutomationError("DETAILED_DIAGNOSTICS_DISABLED");
         if (automationTools[tool].edit && !entry.state.editable) throw new AutomationError("READ_ONLY");
         const grant = entry.state.grant;
-        if (tool !== "mmd_capture_viewport") return requestEditor(entry, tool, args);
+        if (tool === "mmd_list_snapshots" || tool === "mmd_compare_snapshots") {
+            const current = await requestEditor(entry, "mmd_get_context", { target: args.target });
+            if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
+            const currentTarget = current.data.target as { sceneGeneration: number };
+            entry.snapshots.synchronize(`${grant}:${currentTarget.sceneGeneration}`);
+            if (args.target?.sceneGeneration !== currentTarget.sceneGeneration) throw new AutomationError("SCENE_CHANGED");
+            if (tool === "mmd_list_snapshots") return { data: { snapshots: entry.snapshots.list(), target: current.data.target, modelContentShared: false } };
+            const input = automationTools.mmd_compare_snapshots.schema.parse(args);
+            return entry.snapshots.compare(input.snapshotIds);
+        }
+        if (tool !== "mmd_capture_viewport" && tool !== "mmd_capture_snapshot") return requestEditor(entry, tool, args);
         const owner = entry.window.webContents.id;
         if (capturing.has(owner)) throw new AutomationError("CAPTURE_BUSY");
         capturing.add(owner);
@@ -119,8 +131,22 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             if (Math.max(dimensions.width, dimensions.height) > 1280) picture = picture.resize(dimensions.width >= dimensions.height ? { width: 1280 } : { height: 1280 });
             const png = picture.toPNG();
             if (png.length > 4 * 1024 * 1024) throw new AutomationError("CAPTURE_TOO_LARGE");
-            const after = await requestEditor(entry, "mmd_get_context", args);
+            const after = await requestEditor(entry, "mmd_get_context", { target: args.target });
             if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
+            if (tool === "mmd_capture_snapshot") {
+                const input = automationTools.mmd_capture_snapshot.schema.parse(args);
+                const currentTarget = after.data.target as { sceneGeneration: number };
+                entry.snapshots.synchronize(`${grant}:${currentTarget.sceneGeneration}`);
+                if (currentTarget.sceneGeneration !== input.target.sceneGeneration) throw new AutomationError("SCENE_CHANGED");
+                if (after.data.editRevision !== input.expectedEditRevision || before.data.frame !== after.data.frame || after.data.playing || after.data.busy) throw new AutomationError("REVISION_CONFLICT");
+                if (entry.window.isMinimized() || !entry.window.isVisible()) throw new AutomationError("CAPTURE_UNAVAILABLE");
+                const image = { data: png.toString("base64"), mimeType: "image/png" as const };
+                const stored = entry.snapshots.add({ id: randomUUID(), label: input.label, capturedAt: new Date().toISOString(),
+                    frame: Number(after.data.frame), editRevision: Number(after.data.editRevision), ...picture.getSize(),
+                    camera: snapshotCameraSchema.parse(after.data.camera), physicsEnabled: Boolean(before.data.physicsEnabled),
+                    materialMode: String(after.data.materialMode), backend: String(after.data.backend), image });
+                return { data: { ...stored, target: after.data.target, source: "viewport", consistency: "observed", sceneModified: false, modelContentShared: false }, image };
+            }
             return { data: { target: after.data.target, source: "viewport", consistency: "observed", capturedAt: new Date().toISOString(),
                 frameBefore: before.data.frame, frameAfter: after.data.frame, editRevisionBefore: before.data.editRevision, editRevisionAfter: after.data.editRevision,
                 ...picture.getSize(), materialMode: after.data.materialMode, backend: after.data.backend }, image: { data: png.toString("base64"), mimeType: "image/png" } };
@@ -239,7 +265,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
     });
     return { canEdit(owner, permission) { const entry = windows.get(owner); return Boolean(entry && hasPermission(entry, permission)); }, register(window) {
         const owner = window.webContents.id;
-        const entry: PublishedWindow = { window, diagnostics: new AutomationDiagnosticHistory(), detailAccess: [], state: { enabled: false, editable: false, detailedDiagnostics: false, sessionId: randomUUID(), grant: 0, endpoint: null } };
+        const entry: PublishedWindow = { window, diagnostics: new AutomationDiagnosticHistory(), detailAccess: [], snapshots: new ViewportSnapshots(), state: { enabled: false, editable: false, detailedDiagnostics: false, sessionId: randomUUID(), grant: 0, endpoint: null } };
         windows.set(owner, entry);
         window.webContents.on("render-process-gone", () => {
             revoke(entry);

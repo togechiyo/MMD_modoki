@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { bonePoseSchema } from "./bone-pose";
+import { morphBatchSchema } from "./morph-batch";
+import { keyframeSearchSchema } from "./keyframe-search";
 import { materialBatchSchema } from "./material-batch";
 import { keySelectionSchema } from "./keyframe-selection";
 import { objectSubjectSchema, objectPatchSchema } from "./object-state";
@@ -21,6 +23,12 @@ const query = { target };
 const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(100) };
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
+    mmd_wait_for_render: { description: "停止中の指定revisionで実engine frameを2回待機。競合・busyは拒否。物理収束やGPU全処理完了を保証しない。viewport-comparisonヘルプ参照。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative() }).strict() },
+    mmd_capture_snapshot: { description: "停止中の指定revisionのviewportを撮影し画像IDで一時保持。画像とframe/revisionを返す。最大8枚、古い画像は破棄。シーン・許可変更で失効。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative(), label: z.string().max(100).default("") }).strict() },
+    mmd_list_snapshots: { description: "現在の許可・シーンで保持中の比較画像IDと撮影条件を一覧。画像本文は返さない。", edit: false, schema: z.object(query).strict() },
+    mmd_compare_snapshots: { description: "撮影済み画像2〜4枚を指定ID順の画像Contentで返す。前後比較や複数フレーム確認用。seek・選択・編集・Undoは変更しない。", edit: false, schema: z.object({ ...query, snapshotIds: z.array(z.string().uuid()).min(2).max(4).refine(ids => new Set(ids).size === ids.length, "Duplicate snapshot") }).strict() },
+    mmd_search_keyframes: { description: "現在選択中scopeのキーを範囲・種別・名前で検索。件数、範囲内の前後キー、ページを返す。選択やseekは変更しない。key-searchヘルプ参照。", edit: false, schema: z.object({ ...query, ...paging, scope: timelineScopeSchema, filter: keyframeSearchSchema, expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
+    mmd_set_morphs: { description: "最大100モーフの表情を一括preview。全件事前検証、dryRun、1回の共有Undo。自動キーONでも登録しない。morph-batchヘルプ参照。", edit: true, schema: z.object({ ...edit, modelInstanceId: z.string().min(1).max(200), morphs: morphBatchSchema, mode: z.literal("preview"), dryRun: z.boolean().default(true) }).strict() },
     mmd_edit_materials: { description: "公開UIの材質プリセット・リセット・表示切替を複数モデル/アクセサリに一括適用。元pathを照合、最大200材質。全件事前検証・dryRun。実行時の部分失敗は結果に明記、Undo対象外。", edit: true, schema: z.object({ ...edit, entries: materialBatchSchema, dryRun: z.boolean().default(true) }).strict() },
     mmd_correct_body_motion: { description: "選択中モデルの移動キーを、別の読込済みモデルとの体格比で一括補正。GUI共通処理、dryRunと共有Undo対応。詳細なボーン構造は返さない。", edit: true, schema: z.object({ ...edit, modelInstanceId: z.string().min(1).max(200), sourceModelInstanceId: z.string().min(1).max(200), dryRun: z.boolean().default(true) }).strict() },
     mmd_get_keyframe_selection: { description: "現在のGUIキー選択をページ取得。scopeとframeを確認でき、選択やseekは変更しない。", edit: false, schema: z.object({ ...query, ...paging, expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
@@ -68,7 +76,7 @@ export const automationTools = {
 export type AutomationToolName = keyof typeof automationTools;
 export type AutomationTarget = z.infer<typeof target>;
 export type AutomationRequest = { requestId: string; sessionId: string; grant: number; tool: AutomationToolName; args: unknown };
-export type AutomationResult = { data: Record<string, unknown>; image?: { data: string; mimeType: "image/png" } };
+export type AutomationResult = { data: Record<string, unknown>; image?: { data: string; mimeType: "image/png" }; images?: { data: string; mimeType: "image/png" }[] };
 export type AutomationReply = { requestId: string; result?: AutomationResult; error?: string; failure?: AutomationFailure };
 export type AutomationState = { enabled: boolean; editable: boolean; detailedDiagnostics: boolean; sessionId: string; grant: number; endpoint: string | null; error?: string };
 export type AutomationApi = {

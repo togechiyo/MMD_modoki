@@ -27,6 +27,9 @@ function group(codes: string[], message: string, recovery: Recovery, effects: Ru
     for (const code of codes) rules[code] = { message, recovery, effects, helpTopic };
 }
 
+group(["SNAPSHOT_NOT_FOUND"], "比較画像が失効または上限により破棄されています。mmd_list_snapshotsでIDを確認し、必要なら再撮影してください。", "refresh_context", "none", "viewport-comparison");
+group(["RENDER_UNAVAILABLE"], "期限内に描画フレームを観測できませんでした。ウィンドウ表示と実行状態を確認し、contextを再取得してください。物理収束は待機対象ではありません。", "user_action", "none", "viewport-comparison");
+group(["MORPH_NOT_FOUND"], "対象モーフの現在値を取得できません。mmd_inspect(kind:morphs)で選択中モデルの対象と状態を再取得してください。", "refresh_context", "none", "morph-batch");
 group(["CONVERSION_FAILED"], "ローカル変換を完了できませんでした。入力形式とローカルログを確認してください。バッチの処理済み出力は残ります。", "inspect_operation", "unknown", "file-tools");
 group(["BODY_CORRECTION_UNAVAILABLE"], "体格を比較できる別モデルと、補正対象モデルのモーションが必要です。モデル選択とdryRun結果を確認してください。", "correct_input", "none", "file-tools");
 group(["IK_NOT_UNIQUE"], "指定IKが存在しないか名前が重複しています。mmd_get_object_stateで対象モデルのIK一覧を取得してください。", "refresh_context", "none", "object-editing");

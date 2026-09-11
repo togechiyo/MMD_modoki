@@ -14,6 +14,7 @@ source_docs:
   - ../../docs/mcp-external-parent-2026-09-11.md
   - ../../docs/mcp-object-editing-2026-09-11.md
   - ../../docs/mcp-public-ui-tools-effects-2026-09-11.md
+  - ../../docs/mcp-search-expression-comparison-2026-09-11.md
 superseded_by: null
 decision_owner: project-owner
 decision: adopted
@@ -55,6 +56,8 @@ decided_on: 2026-09-08
 2026-09-08の環境素材検討では、所有者は内蔵TrueHDRIの維持と、外部ENV / DDS読込の追加を指定した。Babylon Texture Libraryの素材は動作確認用途に使ってよいが、内蔵素材の置換を承認したものではない。詳細は[環境ライト仕様](../../docs/external-hdri-environment-lighting-2026-07-21.md)を参照する。
 
 2026-09-11、所有者はUIのMCP対応を「AIが操作するに当たって重要そうな順」に進めるよう指定した。項目数を埋めるだけの順序にせず、編集ワークフローでの重要性を優先する。個別機能の順位は実装判断であり、全UI対応の範囲を狭める指示ではない。
+
+2026-09-11、所有者は残件と便利機能の提案後、「キー検索 → 複数モーフ一括編集 → 描画完了待機と比較画像」の順でまとめて進めるよう指定した。既存のUI操作範囲に加え、AIが対象を絞り、編集結果を観測しやすくする機能を進める。その他の候補（復元地点・モーション数値診断等）を同時に採用したとは扱わない。APIや画像保持上限は[実装メモ](../../docs/mcp-search-expression-comparison-2026-09-11.md)に分ける。
 
 ## 避けること
 

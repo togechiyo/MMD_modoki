@@ -19,6 +19,7 @@ import { readObjectState, normalizeObjectPatch } from "./object-state";
 import { selectObjectStateFields } from "../editor/object-state-edit";
 import { buildClipboardOperations, buildSelectionOperations } from "./keyframe-selection";
 import type { AutomationKeyframeOperation } from "./keyframe-schema";
+import { searchKeyframes } from "./keyframe-search";
 
 export function connectAutomationEditor(manager: MmdManager, ui: UIController, timeline: Timeline): void {
     let state: AutomationState | null = null;
@@ -112,6 +113,15 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         if (args.target && (args.target.editorSessionId !== state.sessionId || (request.tool !== "mmd_get_context" && args.target.sceneGeneration !== sceneGeneration))) throw new AutomationError("SCENE_CHANGED");
         if (request.tool === "mmd_get_context") return { data: before };
         if (!args.target) throw new AutomationError("TARGET_REQUIRED");
+        if (request.tool === "mmd_search_keyframes") {
+            const input = automationTools.mmd_search_keyframes.schema.parse(args);
+            if (busy()) throw new AutomationError("EDITOR_BUSY");
+            if ((input.offset > 0 && input.expectedEditRevision === undefined) || (input.expectedEditRevision !== undefined && input.expectedEditRevision !== revision)) throw new AutomationError("REVISION_CONFLICT");
+            if (!keyframeValuesEqual(input.scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+            return { data: { ...searchKeyframes(timeline.getKeyframeTracks(), input.filter, input.filter.anchorFrame ?? manager.currentFrame,
+                input.offset, input.limit, (track, frame) => manager.readTimelineKeyframePayload(track, frame)),
+                scope: input.scope, editRevision: revision, modelContentShared: false } };
+        }
         if (request.tool === "mmd_get_keyframe_selection") {
             const input = automationTools.mmd_get_keyframe_selection.schema.parse(args);
             if (busy()) throw new AutomationError("EDITOR_BUSY");
@@ -193,10 +203,17 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             const all = manager.getAutomationAssetReferences();
             return { data: { assets: all.slice(input.offset, input.offset + input.limit).map(asset => ({ ...asset, removal: assetRemovalInfo(asset.kind) })), assetRevision, nextOffset: input.offset + input.limit < all.length ? input.offset + input.limit : null, modelContentShared: false } };
         }
-        if (request.tool === "mmd_capture_viewport") {
+        if (request.tool === "mmd_wait_for_render" || request.tool === "mmd_capture_snapshot") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            if (busy()) throw new AutomationError("EDITOR_BUSY");
+            if (!("expectedEditRevision" in args) || args.expectedEditRevision !== revision) throw new AutomationError("REVISION_CONFLICT");
+            if (request.tool === "mmd_wait_for_render") return { data: { target: before.target, editRevision: revision, frame: manager.currentFrame,
+                backend: manager.getPostEffectBackend(), physicsEnabled: manager.getPhysicsEnabled(), physicsConvergence: "not_observed", modelContentShared: false } };
+        }
+        if (request.tool === "mmd_capture_viewport" || request.tool === "mmd_capture_snapshot") {
             const rect = document.getElementById("render-canvas")?.getBoundingClientRect();
             if (!rect || rect.width < 1 || rect.height < 1 || busy()) throw new AutomationError("CAPTURE_UNAVAILABLE");
-            return { data: { ...before, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } } };
+            return { data: { ...before, physicsEnabled: manager.getPhysicsEnabled(), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } } };
         }
         if (request.tool === "mmd_inspect") {
             const input = automationTools.mmd_inspect.schema.parse(args);
@@ -350,6 +367,19 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             }
             changed = ui.applyAutomationKeyframes(diff, editId);
             controlResult = { plan: preview };
+        } else if (request.tool === "mmd_set_morphs") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools.mmd_set_morphs.schema.parse(args);
+            const diff = ui.prepareAutomationMorphs(input.modelInstanceId, input.morphs);
+            const plan = { modelInstanceId: diff.modelInstanceId, frame: diff.frame, items: diff.items, changedMorphCount: diff.items.length, keyframesRegistered: false };
+            if (input.dryRun) {
+                const result = { status: "validated", operationId: input.operationId, editId: null, editRevision: revision, plan };
+                operations.set(input.operationId, { input: inputKey, result });
+                if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
+                return { data: result };
+            }
+            changed = ui.applyAutomationMorphs(diff, editId);
+            controlResult = plan;
         } else if (request.tool === "mmd_set_pose") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_set_pose.schema.parse(args);
@@ -507,7 +537,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         const after = context();
         const result = { operationId: args.operationId, status: changed ? "applied" : "no-change", beforeRevision: before.editRevision, afterRevision: after.editRevision,
             ...(controlResult ? { control: controlResult } : {}),
-            editId: request.tool === "mmd_redo" && "editId" in args ? args.editId : changed && ["mmd_correct_body_motion", "mmd_paste_keyframes", "mmd_edit_keyframe_selection", "mmd_set_pose", "mmd_set_camera", "mmd_set_bone", "mmd_set_morph", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_register_keyframes", "mmd_edit_external_parent", "mmd_set_object_state"].includes(request.tool) ? editId : null, frame: manager.currentFrame, playing: manager.isPlaying };
+            editId: request.tool === "mmd_redo" && "editId" in args ? args.editId : changed && ["mmd_set_morphs", "mmd_correct_body_motion", "mmd_paste_keyframes", "mmd_edit_keyframe_selection", "mmd_set_pose", "mmd_set_camera", "mmd_set_bone", "mmd_set_morph", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_register_keyframes", "mmd_edit_external_parent", "mmd_set_object_state"].includes(request.tool) ? editId : null, frame: manager.currentFrame, playing: manager.isPlaying };
         operations.set(args.operationId, { input: inputKey, result });
         if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
         return { data: result };
@@ -515,13 +545,16 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
     disposers.push(window.electronAPI.automation.onRequest(request => {
         const run = async (): Promise<void> => {
             try {
-                if (request.tool === "mmd_capture_viewport") {
+                if (["mmd_capture_viewport", "mmd_capture_snapshot", "mmd_wait_for_render"].includes(request.tool)) {
                     // Validate before waiting, then revalidate the grant/scene after actual engine frames.
                     execute(request);
                     try { await manager.waitForAutomationRender(); }
-                    catch { throw new AutomationError("CAPTURE_UNAVAILABLE"); }
+                    catch { throw new AutomationError(request.tool === "mmd_wait_for_render" ? "RENDER_UNAVAILABLE" : "CAPTURE_UNAVAILABLE"); }
                 }
-                window.electronAPI.automation.reply({ requestId: request.requestId, result: execute(request) });
+                const result = execute(request);
+                if (request.tool === "mmd_wait_for_render") result.data = { ...result.data, status: "observed", engineFrameEnds: 2,
+                    observedAt: new Date().toISOString(), renderCompletion: "engine_frames_observed", gpuCompletion: "not_observed" };
+                window.electronAPI.automation.reply({ requestId: request.requestId, result });
             } catch (error) {
                 window.electronAPI.automation.reply({ requestId: request.requestId, failure: toAutomationFailure(error) });
             }

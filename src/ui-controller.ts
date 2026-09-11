@@ -1,6 +1,8 @@
 import type { MmdManager } from "./mmd-manager";
 import { buildObjectStateEdit, executeObjectStateEdit, type ObjectState, type ObjectStateEdit, type ObjectSubject } from "./editor/object-state-edit";
 import { executeBonePoseBatch, type BonePoseBatch } from "./editor/bone-pose-batch";
+import { executeMorphWeightBatch, type MorphWeightBatch } from "./editor/morph-weight-batch";
+import { buildMorphWeightBatch, type MorphBatchInput } from "./automation/morph-batch";
 import { buildBonePoseBatch, type BonePoseInput } from "./automation/bone-pose";
 import { assertKeyCount, resolveKeySelection, type KeySelection, type SelectedKey } from "./automation/keyframe-selection";
 import { readObjectState, validateObjectState, writeObjectState } from "./automation/object-state";
@@ -7812,6 +7814,7 @@ export class UIController {
         return {
             applyObjectState: (diff, direction) => this.executeObjectStateCommand(diff, direction),
             applyBonePoseBatch: (diff, direction) => this.executeBonePoseBatchCommand(diff, direction),
+            applyMorphWeightBatch: (diff, direction) => this.executeMorphWeightBatchCommand(diff, direction),
             applyMorphWeight: (diff, direction) => {
                 const scope = this.getAutomationTimelineScope();
                 if (scope?.kind !== "model" || scope.modelInstanceId !== diff.modelInstanceId || this.mmdManager.currentFrame !== diff.frame) return false;
@@ -8785,6 +8788,36 @@ export class UIController {
         return this.moveAutomationHistory(editId, "apply");
     }
 
+    public prepareAutomationMorphs(modelInstanceId: string, morphs: MorphBatchInput): MorphWeightBatch {
+        const scope = this.getAutomationTimelineScope();
+        if (scope?.kind !== "model" || scope.modelInstanceId !== modelInstanceId) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+        return buildMorphWeightBatch(modelInstanceId, this.mmdManager.currentFrame, morphs,
+            this.mmdManager.getActiveModelInfo()?.morphNames ?? [], name => this.mmdManager.getMorphWeight(name));
+    }
+
+    public applyAutomationMorphs(diff: MorphWeightBatch, editId: string): boolean {
+        if (!diff.items.length) return false;
+        const command: BuiltCommand = { id: editId, label: `AI: 表情編集 (${diff.items.length})`, scope: "edit", createdAtMs: Date.now(), diff };
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) throw new AutomationError("OPERATION_FAILED");
+        this.commandHistory.push(command);
+        return true;
+    }
+
+    private executeMorphWeightBatchCommand(diff: MorphWeightBatch, direction: CommandDirection): boolean {
+        const names = this.mmdManager.getActiveModelInfo()?.morphNames ?? [];
+        try {
+            return executeMorphWeightBatch(diff, direction, {
+                matches: (modelInstanceId, frame) => !this.mmdManager.isPlaying && frame === this.mmdManager.currentFrame
+                    && keyframeValuesEqual(this.getAutomationTimelineScope(), { kind: "model", modelInstanceId }),
+                read: name => names.filter(candidate => candidate === name).length === 1 ? this.mmdManager.getMorphWeight(name) : null,
+                write: (name, value) => { this.mmdManager.setMorphWeight(name, value); return keyframeValuesEqual(this.mmdManager.getMorphWeight(name), value); },
+            });
+        } finally {
+            this.bottomPanel.syncSelectedMorphFrameSlidersFromRuntime(true);
+            this.updateSectionKeyframeButtons();
+        }
+    }
+
     public applyAutomationMorph(modelInstanceId: string, morphName: string, weight: number, editId: string): boolean {
         const before = this.mmdManager.getMorphWeight(morphName);
         if (keyframeValuesEqual(before, weight)) return false;
@@ -8804,7 +8837,7 @@ export class UIController {
         } else if (diff.type === "edit.boneTransform") {
             const current = this.captureBoneTransformCommandSnapshot(diff.boneName, diff.modelInstanceId);
             if (!current || diff.frame !== this.mmdManager.currentFrame || buildBoneTransformCommand({ modelInstanceId: diff.modelInstanceId, boneName: diff.boneName, frame: diff.frame, before: direction === "revert" ? diff.after : diff.before, after: current })) return false;
-        } else if (diff.type !== "keyframe.transaction" && diff.type !== "edit.morphWeight" && diff.type !== "edit.objectState" && diff.type !== "edit.bonePoseBatch") return false;
+        } else if (diff.type !== "keyframe.transaction" && diff.type !== "edit.morphWeight" && diff.type !== "edit.morphWeightBatch" && diff.type !== "edit.objectState" && diff.type !== "edit.bonePoseBatch") return false;
         if (!executeCommand(command, direction, this.createCommandExecutionContext({ seekToFrame: false }))) return false;
         if (direction === "revert") this.commandHistory.undo(); else this.commandHistory.redo();
         return true;

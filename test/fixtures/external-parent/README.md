@@ -13,12 +13,13 @@
 - `tofu.pmx`: クリーム色の直方体。原点と`センター`ボーンは底面の中央
 - `dynamic-follower.pmx`: `Physics Input`剛体へ外部親入力を渡し、バネ接続した動的な`Camera Output`で水平遅延を再現する最小モデル
 - `material-switch.pmx`: dynamic-followerに加算材質モーフ（色・alpha）を追加した、材質モード切替と未登録状態保持用の自作fixture。
+- `expression-test.pmx`: tofuに2種類の加算材質モーフを追加した、一括モーフ編集・キー検索・画像比較用fixture。外部素材・物理なし。自作形状のためモデル本体をテストで配布できる。
 - 両モデルの赤い三角が正面（+Z）の目印
 - 材質は本体と正面マーカーの2個
 - `plate.pmx`と`tofu.pmx`のボーンは移動・回転可能な`センター`1本で、剛体とジョイントはなし
 - `dynamic-follower.pmx`は3ボーン、2剛体、1ジョイント
 - `body-source.pmx` / `body-target.pmx` は左右の足IKを含む体格差・Propertyキー確認用モデル
-- `material-switch.pmx`以外はモーフなし。独自textureは`sss-blue-toon.pmx`の青Toonだけ
+- `material-switch.pmx` / `expression-test.pmx`以外はモーフなし。独自textureは`sss-blue-toon.pmx`の青Toonだけ
 - 文字列エンコードはUTF-16LE
 
 ## 既知の互換性

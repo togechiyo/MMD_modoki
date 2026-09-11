@@ -49,8 +49,12 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP app operations preser
         expect(ctx.backend).toBe(backend);
         const assets = await rpc("mmd_list_assets", { target: ctx.target });
         expect(assets.structuredContent.assets).toContainEqual(expect.objectContaining({ recordedPath: modelPath, kind: "model" }));
-        const allowedAssetKeys = ["assetId", "kind", "modelInstanceId", "recordedPath", "usageRole", "frame", "availability"];
-        for (const asset of assets.structuredContent.assets) expect(Object.keys(asset).sort()).toEqual([...allowedAssetKeys].sort());
+        const allowedAssetKeys = ["assetId", "kind", "modelInstanceId", "recordedPath", "usageRole", "frame", "availability", "removal"];
+        for (const asset of assets.structuredContent.assets) {
+            expect(Object.keys(asset).sort()).toEqual([...allowedAssetKeys].sort());
+            expect(Object.keys(asset.removal).sort()).toEqual(["deletesSourceFile", "removable", "removalScope", "undoable"]);
+            expect(asset.removal).toMatchObject({ deletesSourceFile: false, undoable: false });
+        }
         const keys = await rpc("mmd_inspect", { target: ctx.target, kind: "keyframes" });
         expect(keys.structuredContent.items).toContainEqual(expect.objectContaining({ category: "camera", frame: 0 }));
         const denied = await rpc("mmd_set_camera", { target: ctx.target, expectedEditRevision: ctx.editRevision, operationId: randomUUID(), mode: "preview", playbackPolicy: "reject", camera: ctx.camera });

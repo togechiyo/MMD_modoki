@@ -285,7 +285,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                 inputRevision++;
                 const current = context();
                 return { ...output, target: current.target, editRevision: current.editRevision, modelContentShared: false };
-            }, () => Boolean(state?.enabled && state.editable && state.grant === grant && state.sessionId === sessionId), input.operation.kind === "exportWebm" || input.operation.kind === "exportPngSequence") };
+            }, () => Boolean(state?.enabled && state.editable && state.grant === grant && state.sessionId === sessionId), input.operation.kind === "exportWebm" || input.operation.kind === "exportPngSequence" || input.operation.kind === "fileTools") };
         }
         const editId = `ai:${args.operationId}`;
         let changed = true;
@@ -337,6 +337,19 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             }
             changed = ui.applyAutomationKeyframes(diff, editId);
             controlResult = plan;
+        } else if (request.tool === "mmd_correct_body_motion") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools.mmd_correct_body_motion.schema.parse(args);
+            const { diff, preview } = ui.prepareAutomationBodyCorrection(input.modelInstanceId, input.sourceModelInstanceId);
+            validateAutomationKeyframes(manager, timeline, diff);
+            if (input.dryRun) {
+                const result = { status: "validated", operationId: input.operationId, editId: null, editRevision: revision, plan: preview };
+                operations.set(input.operationId, { input: inputKey, result });
+                if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
+                return { data: result };
+            }
+            changed = ui.applyAutomationKeyframes(diff, editId);
+            controlResult = { plan: preview };
         } else if (request.tool === "mmd_set_pose") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_set_pose.schema.parse(args);
@@ -408,6 +421,11 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_select_bones.schema.parse(args);
             ui.selectAutomationBones(input.modelInstanceId, input.boneNames);
+        } else if (request.tool === "mmd_edit_materials") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools.mmd_edit_materials.schema.parse(args);
+            controlResult = ui.editAutomationMaterials(input.entries, input.dryRun);
+            changed = !input.dryRun;
         } else if (request.tool === "mmd_set_control") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_set_control.schema.parse(args);
@@ -489,7 +507,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         const after = context();
         const result = { operationId: args.operationId, status: changed ? "applied" : "no-change", beforeRevision: before.editRevision, afterRevision: after.editRevision,
             ...(controlResult ? { control: controlResult } : {}),
-            editId: request.tool === "mmd_redo" && "editId" in args ? args.editId : changed && ["mmd_paste_keyframes", "mmd_edit_keyframe_selection", "mmd_set_pose", "mmd_set_camera", "mmd_set_bone", "mmd_set_morph", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_register_keyframes", "mmd_edit_external_parent", "mmd_set_object_state"].includes(request.tool) ? editId : null, frame: manager.currentFrame, playing: manager.isPlaying };
+            editId: request.tool === "mmd_redo" && "editId" in args ? args.editId : changed && ["mmd_correct_body_motion", "mmd_paste_keyframes", "mmd_edit_keyframe_selection", "mmd_set_pose", "mmd_set_camera", "mmd_set_bone", "mmd_set_morph", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_register_keyframes", "mmd_edit_external_parent", "mmd_set_object_state"].includes(request.tool) ? editId : null, frame: manager.currentFrame, playing: manager.isPlaying };
         operations.set(args.operationId, { input: inputKey, result });
         if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
         return { data: result };

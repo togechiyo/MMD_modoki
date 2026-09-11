@@ -26,6 +26,9 @@ const rules: Record<string, Rule> = {};
 function group(codes: string[], message: string, recovery: Recovery, effects: Rule["effects"], helpTopic: string): void {
     for (const code of codes) rules[code] = { message, recovery, effects, helpTopic };
 }
+
+group(["CONVERSION_FAILED"], "ローカル変換を完了できませんでした。入力形式とローカルログを確認してください。バッチの処理済み出力は残ります。", "inspect_operation", "unknown", "file-tools");
+group(["BODY_CORRECTION_UNAVAILABLE"], "体格を比較できる別モデルと、補正対象モデルのモーションが必要です。モデル選択とdryRun結果を確認してください。", "correct_input", "none", "file-tools");
 group(["IK_NOT_UNIQUE"], "指定IKが存在しないか名前が重複しています。mmd_get_object_stateで対象モデルのIK一覧を取得してください。", "refresh_context", "none", "object-editing");
 group(["CLIPBOARD_CHANGED"], "アプリ内クリップボードが変更されています。mmd_get_keyframe_clipboardで内容とIDを再取得してください。", "refresh_context", "none", "key-selection");
 group(["KEY_SELECTION_EMPTY", "KEY_SELECTION_TOO_LARGE"], "選択キー数は1〜100件が必要です。範囲またはトラックを絞って選択し直してください。", "correct_input", "none", "key-selection");
@@ -58,8 +61,8 @@ group(["EXTERNAL_PARENT_CHILD_MISMATCH", "EXTERNAL_PARENT_FRAME_CONFLICT"], "子
 group(["EXTERNAL_PARENT_LOCAL_POSE_REQUIRED"], "keepLocalは既存のポーズキー、または現在フレームの編集値が必要です。そのフレームへseekして登録するか、snapを明示してください。", "correct_input", "none", "external-parent");
 group(["ASSET_CHANGED"], "素材IDまたは元pathが一致しません。一覧を再取得してください。", "refresh_context", "none", "files-and-output");
 group(["ASSET_REMOVAL_UNSUPPORTED"], "モデルへ統合済みのモーションは履歴単位に分離削除できません。モデル削除は所属モーションも除去します。キー編集の削除は別途利用できます。", "unsupported", "none", "files-and-output");
-group(["OPERATION_NOT_CANCELABLE"], "指定jobは取消可能な実行中出力ではありません。結果を照会してください。", "inspect_operation", "none", "ui-operations");
-group(["OPERATION_CANCELED"], "出力を取り消しました。PNG連番では保存済み画像を残します。元jobのprogressで保存先と保存済み枚数を確認してください。", "inspect_operation", "unknown", "ui-operations");
+group(["OPERATION_NOT_CANCELABLE"], "指定jobは取消可能な実行中の出力・変換batchではありません。結果を照会してください。", "inspect_operation", "none", "ui-operations");
+group(["OPERATION_CANCELED"], "操作を取り消しました。PNG連番・変換batchの保存済みファイルは残ります。元jobのprogressで保存先・枚数または項目別resultsを確認してください。", "inspect_operation", "unknown", "ui-operations");
 
 group(["PNG_EXPORT_FAILED"], "PNG連番出力を完了できませんでした。元jobのprogressで保存先と保存済み枚数を確認し、ローカルログを調査してください。途中の画像は自動削除しません。", "inspect_operation", "unknown", "png-sequence");
 group(["VIDEO_EXPORT_FAILED"], "動画出力を完了できませんでした。進捗とローカルログを確認してください。", "inspect_operation", "unknown", "ui-operations");

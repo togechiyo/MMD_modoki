@@ -3,7 +3,7 @@ import path from "node:path";
 import { automationLocalPathSchema, type AutomationOutput, type AutomationOutputResult } from "../../automation/ui-operation-schema";
 
 const extensions: Record<AutomationOutput["format"], readonly string[]> = {
-    project: [".json", ".mmdproj"], vmd: [".vmd"], vpd: [".vpd"], bvmd: [".bvmd"], png: [".png"], lut: [".cube", ".3dl"], wgsl: [".wgsl"],
+    project: [".json", ".mmdproj"], vmd: [".vmd"], vpd: [".vpd"], bvmd: [".bvmd"], bpmx: [".bpmx"], png: [".png"], lut: [".cube", ".3dl"], wgsl: [".wgsl"],
 };
 /** Renderer-internal sink for app-generated files. Never exposed as an MCP binary/file write tool. */
 export async function writeAutomationOutput(input: AutomationOutput, authorized: () => boolean = () => true): Promise<AutomationOutputResult> {

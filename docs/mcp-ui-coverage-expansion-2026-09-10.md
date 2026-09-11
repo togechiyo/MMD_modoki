@@ -16,7 +16,7 @@
 
 | MCP tool | 操作 |
 | --- | --- |
-| `mmd_list_controls` / `mmd_set_control` | 検索・ページ取得可能な54設定。Bloom、SSAO、SSR、Fog、DOF、レンズ、照明、影、エッジ、接触影、環境、物理評価とFrame Graph効果順序。基本15設定の既存APIも維持 |
+| `mmd_list_controls` / `mmd_set_control` | 検索・ページ取得可能な97設定。Bloom、SSAO、SSR、Fog、DOF、レンズ、照明、影、エッジ、接触影、環境、物理評価とFrame Graph効果順序。基本15設定の既存APIも維持 |
 | `mmd_start_ui_operation` | モデル/アクセサリ/モーション/ポーズ/音声/背景/環境/LUT読込、project保存/復元、PNG・VMD・VPD・BVMD保存、通常/PBR切替 |
 | `mmd_get_operation` | 長時間操作の受付・処理中・完了・失敗。モデルコメントなどの確認待ちは `phase:waiting_for_user` |
 | `mmd_select_bones` | 選択中モデルの複数ボーン選択をGUI・VPD出力対象へ同期 |
@@ -42,12 +42,12 @@
 
 ## 残るUI項目と構造上の課題
 
-全UI対応は未完了。複数ボーンの一括previewは[一括ポーズ編集](./mcp-pose-editing-2026-09-11.md)で接続。以下を残件として扱う。
+公開UI対応は未完了。非公開・没機能の復活は残件に含めない。複数ボーンの一括previewは[一括ポーズ編集](./mcp-pose-editing-2026-09-11.md)で接続。以下を残件として扱う。
 
 1. 別プロセス単発PNG出力。PNG連番・進捗・取消は [PNG連番出力](./mcp-png-sequence-2026-09-11.md) で接続。WebM動画・進捗・取消は [2026-09-11追加](./mcp-video-and-asset-removal-2026-09-11.md) で接続。
 2. 素材の差替え、統合済みモデルモーションの個別削除。モデル/アクセサリ・カメラモーション・音声・背景・外部環境・LUTの指定削除は2026-09-11追加で接続。
-3. 体格補正。GUIキー範囲選択・クリップボード・選択キー移動/削除は[キー範囲編集](./mcp-key-selection-2026-09-11.md)で接続。モデル/カメラ外部親は [外部親編集](./mcp-external-parent-2026-09-11.md)、モデル表示・複数IK・アクセサリ親/変形・物理キー入力は [モデル・アクセサリ編集](./mcp-object-editing-2026-09-11.md) で接続。
-4. 高度なPostFX/GI/水面/物理の全パラメータ、材質詳細編集、レイアウト詳細・入力機器設定。
+3. 体格補正とPMX/PMD/VMD最適化・リターゲットの一括変換は[公開UIツール追加](./mcp-public-ui-tools-effects-2026-09-11.md)で接続済み。GUIキー範囲選択・クリップボード・選択キー移動/削除は[キー範囲編集](./mcp-key-selection-2026-09-11.md)で接続。モデル/カメラ外部親は [外部親編集](./mcp-external-parent-2026-09-11.md)、モデル表示・複数IK・アクセサリ親/変形・物理キー入力は [モデル・アクセサリ編集](./mcp-object-editing-2026-09-11.md) で接続。
+4. 公開PostFX詳細41項目と材質表示/preset/reset一括操作は[公開UI追加](./mcp-public-ui-tools-effects-2026-09-11.md)で接続済み。レイアウト詳細・公開入力設定・残る個別E2Eは継続。非公開の水面/物性値/外部WGSL等は所有者の2026-09-11指定で追加対象外。
 5. 描画・物理backend切替。既存UIにreloadがあるため、状態保存・復元と新sessionへの再接続を先に設計する。無条件reloadのtoolは追加しない。
 
 これらは任意DOMイベントやmanagerメソッドの遠隔呼出しで代用せず、既存処理の完了を観測できる単位で追加する。今回の公開catalogは全UIを網羅するものではない。

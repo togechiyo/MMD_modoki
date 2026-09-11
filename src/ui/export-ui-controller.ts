@@ -5,7 +5,7 @@
  * Builds PNG / WebM export requests from output UI state.
  */
 import { t } from "../i18n";
-import { saveAutomationBytes } from "../automation/ui-operations";
+import { saveAutomationBytes } from "../automation/file-access";
 import type { AutomationPermission } from "../automation/ui-operation-schema";
 import { logError, logInfo } from "../app-logger";
 import type { MmdManager } from "../mmd-manager";

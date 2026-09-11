@@ -5,7 +5,17 @@ export const automationLocalPathSchema = z.string().min(1).max(4096).refine(valu
     !Array.from(value).some(character => character.charCodeAt(0) < 32) && !value.startsWith("\\\\") && !value.startsWith("//") &&
     (/^[A-Za-z]:[\\/][^:]*$/.test(value) || /^\/[^:]*$/.test(value)), "Absolute local path required");
 const output = { filePath: automationLocalPathSchema, overwrite: z.boolean() };
+export const fileToolItemSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("optimizeModel"), sourcePath: automationLocalPathSchema, ...output }).strict(),
+    z.object({ kind: z.literal("optimizeMotion"), sourcePath: automationLocalPathSchema, ...output }).strict(),
+    z.object({ kind: z.literal("retargetMotion"), sourceModelPath: automationLocalPathSchema, sourceMotionPath: automationLocalPathSchema,
+        targetModelPath: automationLocalPathSchema, ...output, options: z.object({
+            retargetRotations: z.boolean(), correctRootPosition: z.boolean(), correctFootIkPosition: z.boolean(),
+        }).strict() }).strict(),
+]);
+export type AutomationFileToolItem = z.infer<typeof fileToolItemSchema>;
 export const uiOperationSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("fileTools"), items: z.array(fileToolItemSchema).min(1).max(20), continueOnError: z.boolean() }).strict(),
     z.object({ kind: z.literal("materialMode"), pbr: z.boolean() }).strict(),
     z.object({ kind: z.literal("loadAsset"), filePath: automationLocalPathSchema,
         assetKind: z.enum(["model", "accessory", "motion", "cameraMotion", "pose", "audio", "backgroundImage", "backgroundVideo", "environment", "lut"]),
@@ -22,5 +32,5 @@ export const uiOperationSchema = z.discriminatedUnion("kind", [
 export type AutomationUiOperation = z.infer<typeof uiOperationSchema>;
 export type AutomationPermission = { sessionId: string; grant: number };
 export type AutomationVideoOptions = { overwrite: boolean; permission: AutomationPermission };
-export type AutomationOutput = { filePath: string; overwrite: boolean; format: "project" | "vmd" | "vpd" | "bvmd" | "png" | "lut" | "wgsl"; bytes: Uint8Array };
+export type AutomationOutput = { filePath: string; overwrite: boolean; format: "project" | "vmd" | "vpd" | "bvmd" | "bpmx" | "png" | "lut" | "wgsl"; bytes: Uint8Array };
 export type AutomationOutputResult = { status: "saved"; filePath: string; byteLength: number } | { status: "failed"; code: string };

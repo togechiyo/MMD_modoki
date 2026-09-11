@@ -81,11 +81,13 @@ import type { BoneTransformCommandSnapshot, BuiltCommand, CameraTransformCommand
 import { executeKeyframeTransaction, keyframeValuesEqual, type KeyframeScope, type KeyframeTransaction } from "./actions/keyframe-transaction";
 import { applyAutomationSetting, getAutomationSettings, type AutomationSetting } from "./automation/settings";
 import { applyAutomationControl, type AutomationControl } from "./automation/controls";
-import { runAutomationUiOperation, saveAutomationBytes, assertAutomationPermission } from "./automation/ui-operations";
+import { runAutomationUiOperation } from "./automation/ui-operations";
+import { saveAutomationBytes, assertAutomationPermission } from "./automation/file-access";
 import type { AutomationUiOperation, AutomationPermission } from "./automation/ui-operation-schema";
 import { AutomationError } from "./automation/diagnostics";
 import type { AutomationEditorOptions } from "./automation/editor-options";
 import type { AutomationMaterialTarget } from "./automation/material-schema";
+import { runMaterialBatch, type MaterialBatch } from "./automation/material-batch";
 import type { AutomationJobContext } from "./automation/ui-jobs";
 import { runAutomationVideo } from "./automation/video-operation";
 import { runAutomationPngSequence } from "./automation/png-operation";
@@ -8465,6 +8467,18 @@ export class UIController {
         return true;
     }
 
+    public prepareAutomationBodyCorrection(modelInstanceId: string, sourceModelInstanceId: string) {
+        const scope = this.getAutomationTimelineScope();
+        if (scope?.kind !== "model" || scope.modelInstanceId !== modelInstanceId) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+        const source = this.mmdManager.getLoadedModels().find(model => model.instanceId === sourceModelInstanceId && model.instanceId !== modelInstanceId);
+        if (!source) throw new AutomationError("MODEL_NOT_FOUND");
+        const { preview, items } = this.collectBodyMotionCorrection(source.index);
+        if (!preview.valid) throw new AutomationError("BODY_CORRECTION_UNAVAILABLE");
+        if (items.length > 10000) throw new AutomationError("EDIT_TOO_LARGE");
+        const diff: KeyframeTransaction = { type: "keyframe.transaction", owner: scope, items };
+        return { diff, preview };
+    }
+
     public prepareAutomationObjectEdit(subject: ObjectSubject, patch: ObjectState): ObjectStateEdit {
         const scope = subject.kind === "model" ? { kind: "model", modelInstanceId: subject.modelInstanceId } : { kind: "accessory", accessoryIndex: subject.accessoryIndex };
         if (!keyframeValuesEqual(scope, this.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
@@ -8592,6 +8606,21 @@ export class UIController {
     public setAutomationMaterialPreset(subject: AutomationMaterialTarget, materialKey: string | null, presetId: string) {
         if (!this.shaderPanelController) throw new AutomationError("SETTING_UNAVAILABLE");
         return this.shaderPanelController.applyAutomationPreset(subject, materialKey, presetId);
+    }
+
+    public editAutomationMaterials(entries: MaterialBatch, dryRun: boolean) {
+        const result = runMaterialBatch({
+            catalog: subject => this.getAutomationMaterialPresets(subject),
+            preset: (subject, key, id) => this.setAutomationMaterialPreset(subject, key, id),
+            visibility: (subject, key, visible) => {
+                const model = subject.kind === "model" ? this.mmdManager.getLoadedModels().find(item => item.instanceId === subject.modelInstanceId) : null;
+                const ok = subject.kind === "accessory" ? this.mmdManager.setAccessoryMaterialVisibility(subject.accessoryIndex, key, visible)
+                    : model && this.mmdManager.setModelMaterialVisibility(model.index, key, visible);
+                if (!ok || this.getAutomationMaterialPresets(subject).materials.find(material => material.key === key)?.visible !== visible) throw new AutomationError("OPERATION_FAILED");
+            },
+        }, entries, dryRun);
+        if (!dryRun) this.refreshShaderPanel();
+        return result;
     }
 
     public getAutomationEditorOptions() {

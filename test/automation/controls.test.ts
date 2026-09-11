@@ -3,6 +3,17 @@ import { automationControlSchema, automationControls } from "../../src/automatio
 import { automationLocalPathSchema, uiOperationSchema } from "../../src/automation/ui-operation-schema";
 
 describe("UI MCP input boundary", () => {
+    it("exposes public effect parameters with bounded values and excludes hidden ocean controls", () => {
+        for (const value of [{ id: "ssgi.radius", value: 50 }, { id: "luminous.intensity", value: 0.5 },
+            { id: "dof.focusMode", value: "model-target" }]) {
+            expect(automationControlSchema.safeParse(value).success).toBe(true);
+        }
+        for (const value of [{ id: "ssgi.radius", value: 300 }, { id: "water.settings", value: { resolution: 123 } },
+            { id: "water.settings", value: { oceanClarity: 1 } }, { id: "offsetShadow.x", value: 1.5 },
+            { id: "ocean.clarity", value: 1 }, { id: "offsetHighlight.thickness", value: 1 }]) {
+            expect(automationControlSchema.safeParse(value).success).toBe(false);
+        }
+    });
     it("has unique explicitly registered IDs and rejects arbitrary properties and nested fields", () => {
         expect(new Set(automationControls.map(entry => entry.id)).size).toBe(automationControls.length);
         expect(automationControlSchema.safeParse({ id: "bloom.weight", value: 0.4 }).success).toBe(true);

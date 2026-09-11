@@ -101,9 +101,17 @@ export class ExperimentalPostFxController {
             Math.max(0, Math.min(200, Math.round((this.mmdManager.postEffectVlsEnabled ? this.mmdManager.postEffectVlsExposure : 0) * 100))),
         );
 
-        applyMotionBlur();
-        applySsr();
-        applyVls();
+        // Rebuilding the panel reflects runtime state; it must not replay edits or
+        // replace saved sample counts/disabled-effect parameters with defaults.
+        elements.motionBlurStrengthValue.textContent = this.mmdManager.postEffectMotionBlurEnabled
+            ? this.mmdManager.postEffectMotionBlurStrength.toFixed(2) : t("status.off");
+        elements.ssrStrengthValue.textContent = this.mmdManager.postEffectSsrEnabled
+            ? this.mmdManager.postEffectSsrStrength.toFixed(2) : t("status.off");
+        elements.vlsExposureValue.textContent = this.mmdManager.postEffectVlsEnabled
+            ? this.mmdManager.postEffectVlsExposure.toFixed(2) : t("status.off");
+        if (this.mmdManager.getPostEffectBackend() !== "frameGraph") {
+            this.setSsrStrengthPercent(0);
+        }
 
         elements.motionBlurStrengthInput.addEventListener("input", applyMotionBlur);
         elements.ssrStrengthInput.addEventListener("input", applySsr);

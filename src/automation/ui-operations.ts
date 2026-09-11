@@ -2,20 +2,12 @@ import type { MmdManager } from "../mmd-manager";
 import { createCameraVmdExportDocument, createModelVmdExportDocument } from "../export/vmd-export-adapter";
 import { serializeCameraBvmd, serializeModelBvmd } from "../export/bvmd-exporter";
 import { AutomationError } from "./diagnostics";
-import type { AutomationUiOperation, AutomationOutput, AutomationPermission } from "./ui-operation-schema";
+import type { AutomationUiOperation, AutomationPermission } from "./ui-operation-schema";
 import type { KeyframeScope } from "../actions/keyframe-transaction";
 import type { AutomationJobContext } from "./ui-jobs";
-
-export async function assertAutomationPermission(permission: AutomationPermission): Promise<void> {
-    const current = await window.electronAPI.automation.getState();
-    if (!current.enabled || !current.editable || current.sessionId !== permission.sessionId || current.grant !== permission.grant) throw new AutomationError("ACCESS_REVOKED");
-}
-
-export async function saveAutomationBytes(input: AutomationOutput, permission: AutomationPermission): Promise<Record<string, unknown>> {
-    const result = await window.electronAPI.automation.writeOutput(input, permission);
-    if (result.status !== "saved") throw new AutomationError(result.code);
-    return result;
-}
+import { runFileToolBatch } from "./file-tools";
+import { runFileTool } from "./file-tool-runner";
+import { assertAutomationPermission, saveAutomationBytes } from "./file-access";
 export type UiOperationHost = {
     permission: AutomationPermission;
     manager: MmdManager;
@@ -37,6 +29,8 @@ const extensions = {
     audio: ["mp3", "wav", "ogg"], backgroundImage: ["png", "jpg", "jpeg", "bmp", "webp"], backgroundVideo: ["webm", "mp4", "avi"], environment: ["hdr", "env", "dds"], lut: ["cube", "3dl"],
 };
 export async function runAutomationUiOperation(host: UiOperationHost, operation: AutomationUiOperation, context: AutomationJobContext): Promise<Record<string, unknown>> {
+    if (operation.kind === "fileTools") return runFileToolBatch(operation.items, operation.continueOnError,
+        item => runFileTool(host.manager, item, host.permission), () => assertAutomationPermission(host.permission), context);
     const m = host.manager;
     if (operation.kind === "materialMode") {
         await host.materialMode(operation.pbr);

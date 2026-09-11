@@ -137,7 +137,10 @@ export class ShaderPanelController {
         const presets = pbr ? createPbrPresetCatalog() : this.mmdManager.getWgslMaterialShaderPresets().filter(preset =>
             !HIDDEN_SHADER_PRESET_IDS.has(preset.id) || ("kind" in target && ((target.kind === "x" && preset.id === "wgsl-accessory-toon") ||
                 (target.kind === "obj" && ["wgsl-obj-untextured", "wgsl-obj-mtl"].includes(preset.id)))));
-        return { pbr, available: pbr || this.mmdManager.isWgslMaterialShaderAssignmentAvailable(), presets, materials: target.materials.map(item => ({ key: item.key, name: item.name, visible: item.visible,
+        const sourcePath = model?.path ?? (subject.kind === "accessory" ? this.mmdManager.getLoadedAccessories().find(item => item.index === subject.accessoryIndex)?.path : undefined);
+        if (!sourcePath) throw new AutomationError("MODEL_NOT_FOUND");
+        const defaultPresetId = pbr ? DEFAULT_PBR_MATERIAL_SHADER_PRESET : "defaultPresetId" in target ? target.defaultPresetId : "wgsl-mmd-standard";
+        return { pbr, sourcePath, defaultPresetId, available: pbr || this.mmdManager.isWgslMaterialShaderAssignmentAvailable(), presets, materials: target.materials.map(item => ({ key: item.key, name: item.name, visible: item.visible,
             presetId: pbr && "pbrPresetId" in item ? item.pbrPresetId : item.presetId })) };
     }
 

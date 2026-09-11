@@ -13,6 +13,7 @@ source_docs:
   - ../../docs/mcp-detailed-diagnostics-2026-09-10.md
   - ../../docs/mcp-external-parent-2026-09-11.md
   - ../../docs/mcp-object-editing-2026-09-11.md
+  - ../../docs/mcp-public-ui-tools-effects-2026-09-11.md
 superseded_by: null
 decision_owner: project-owner
 decision: adopted
@@ -56,6 +57,8 @@ decided_on: 2026-09-08
 2026-09-11、所有者はUIのMCP対応を「AIが操作するに当たって重要そうな順」に進めるよう指定した。項目数を埋めるだけの順序にせず、編集ワークフローでの重要性を優先する。個別機能の順位は実装判断であり、全UI対応の範囲を狭める指示ではない。
 
 ## 避けること
+
+2026-09-11、所有者は非公開UIの機能はほぼ没機能なのでMCPへ追加しなくてよいと明示した。公開ツールは一括利用を想定し、公開エフェクト・材質の操作とまとめて進める。内部setterの存在だけを根拠に新規公開しない。詳細は[公開UIの追加対応](../../docs/mcp-public-ui-tools-effects-2026-09-11.md)を参照する。
 
 2026-09-08、所有者は旧`PBR Skin SSS`（Babylon画面空間SSS）の採用取りやめを明示した。続けて通常側で作り直した自前SSSの見た目を好むと説明し、MMD Likeは陰影、Skinは自前SSS、FaceはSkin＋法線補正という整理を承認した。旧SSS調整の延長を採用しない。現仕様と移行は[PBRプリセット整理](../../docs/pbr-material-presets-2026-09-08.md)を参照する。
 

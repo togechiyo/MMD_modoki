@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { MmdManager } from "../mmd-manager";
 import { AutomationError } from "./diagnostics";
 import { FRAME_GRAPH_POST_EFFECT_IDS } from "../shared/frame-graph-post-effect-stack";
+import { FRAME_GRAPH_EFFECT_SLIDER_SPECS, type FrameGraphEffectSliderField } from "../ui/frame-graph-effect-slider-mapping";
 
 type NumericKey = { [K in keyof MmdManager]: MmdManager[K] extends number ? K : never }[keyof MmdManager];
 type BooleanKey = { [K in keyof MmdManager]: MmdManager[K] extends boolean ? K : never }[keyof MmdManager];
@@ -23,8 +24,76 @@ function color(id: string, read: (m: MmdManager) => { r: number; g: number; b: n
     return { id, unit: "RGB 0..1", schema: rgb, read, available, write: (m, value) => { const v = rgb.parse(value); write(m, v.r, v.g, v.b); } };
 }
 
+function panelNumber(id: string, field: FrameGraphEffectSliderField, key: NumericKey): Control {
+    const spec = FRAME_GRAPH_EFFECT_SLIDER_SPECS[field];
+    return numeric(id, key, spec.actualMin, spec.actualMax, "runtime scalar (GUI slider uses 0..100)", "actualStep" in spec && spec.actualStep === 1, frameGraph);
+}
+const panelNumbers: readonly (readonly [string, FrameGraphEffectSliderField, NumericKey])[] = [
+    ["luminous.intensity", "luminousIntensity", "postEffectGlowIntensity"],
+    ["luminous.threshold", "luminousThreshold", "postEffectGlowThreshold"],
+    ["luminous.radius", "luminousRadius", "postEffectGlowKernel"],
+    ["dof.lensSize", "dofLensSize", "dofLensSize"],
+    ["lut.intensity", "lutIntensity", "postEffectLutIntensity"],
+    ["motionBlur.strength", "motionBlurStrength", "postEffectMotionBlurStrength"],
+    ["motionBlur.samples", "motionBlurSamples", "postEffectMotionBlurSamples"],
+    ["ssgi.strength", "ssgiStrength", "postEffectSsgiStrength"],
+    ["ssgi.radius", "ssgiSampleRadius", "postEffectSsgiSampleRadius"],
+    ["aerialPerspective.strength", "aerialPerspectiveStrength", "postEffectAerialPerspectiveStrength"],
+    ["aerialPerspective.start", "aerialPerspectiveStart", "postEffectAerialPerspectiveStart"],
+    ["aerialPerspective.range", "aerialPerspectiveRange", "postEffectAerialPerspectiveRange"],
+    ["directionalLightShafts.strength", "directionalLightShaftsStrength", "postEffectDirectionalLightShaftsStrength"],
+    ["directionalLightShafts.phaseG", "directionalLightShaftsPhaseG", "postEffectDirectionalLightShaftsPhaseG"],
+    ["offsetShadow.strength", "offsetShadowStrength", "postEffectOffsetShadowStrength"],
+    ["offsetShadow.x", "offsetShadowOffsetX", "postEffectOffsetShadowOffsetX"],
+    ["offsetShadow.y", "offsetShadowOffsetY", "postEffectOffsetShadowOffsetY"],
+    ["offsetShadow.minDepth", "offsetShadowDepthBias", "postEffectOffsetShadowDepthBias"],
+    ["offsetShadow.maxDepth", "offsetShadowMaxDepth", "postEffectOffsetShadowMaxDepth"],
+    ["offsetShadow.depthScale", "offsetShadowDepthScale", "postEffectOffsetShadowDepthScale"],
+    ["offsetHighlight.strength", "offsetHighlightStrength", "postEffectOffsetHighlightStrength"],
+    ["offsetHighlight.x", "offsetHighlightOffsetX", "postEffectOffsetHighlightOffsetX"],
+    ["offsetHighlight.y", "offsetHighlightOffsetY", "postEffectOffsetHighlightOffsetY"],
+    ["offsetHighlight.depthScale", "offsetHighlightDepthScale", "postEffectOffsetHighlightDepthScale"],
+    ["ssr.step", "ssrStep", "postEffectSsrStep"],
+];
+const focusMode = z.enum(["camera-target", "person-auto", "model-target"]);
+const focusTarget = z.object({ modelInstanceId: z.string().min(1).max(200).nullable(), boneName: z.string().min(1).max(200).nullable() }).strict();
+const ringNumbers = [["count", "ringParticleCount"], ["density", "ringParticleDensity"], ["size", "ringParticleSize"],
+    ["speed", "ringParticleSpeed"], ["intensity", "ringParticleIntensity"]] as const;
+
 /** Explicit allowlist. These are the same runtime setters used by the GUI; no reflection-based method execution. */
 export const automationControls: readonly Control[] = [
+    ...panelNumbers.map(([id, field, key]) => panelNumber(id, field, key)),
+    ...ringNumbers.map(([key, field]): Control => {
+        const spec = FRAME_GRAPH_EFFECT_SLIDER_SPECS[field];
+        const schema = key === "count" ? z.number().int().min(spec.actualMin).max(spec.actualMax)
+            : z.number().finite().min(spec.actualMin).max(spec.actualMax);
+        return { id: "ringParticles." + key, unit: "runtime scalar", schema, available: frameGraph,
+            read: m => m.getRingParticleSettings()[key], write: (m, v) => m.setRingParticleSettings({ ...m.getRingParticleSettings(), [key]: schema.parse(v) }) };
+    }),
+    ...(["colorA", "colorB", "colorC"] as const).map(key => ({ ...color("ringParticles." + key, m => m.getRingParticleSettings()[key],
+        (m, r, g, b) => m.setRingParticleSettings({ ...m.getRingParticleSettings(), [key]: { r, g, b } })), available: frameGraph })),
+    { ...color("aerialPerspective.color", m => m.getPostEffectAerialPerspectiveColor(), (m, r, g, b) => m.setPostEffectAerialPerspectiveColor(r, g, b)), available: frameGraph },
+    { ...color("directionalLightShafts.lightColor", m => m.getPostEffectDirectionalLightShaftsLightColor(), (m, r, g, b) => m.setPostEffectDirectionalLightShaftsLightColor(r, g, b)), available: frameGraph },
+    { ...color("directionalLightShafts.shadowColor", m => m.getPostEffectDirectionalLightShaftsShadowColor(), (m, r, g, b) => m.setPostEffectDirectionalLightShaftsShadowColor(r, g, b)), available: frameGraph },
+    { ...color("offsetShadow.color", m => m.getPostEffectOffsetShadowColor(), (m, r, g, b) => m.setPostEffectOffsetShadowColor(r, g, b)), available: frameGraph },
+    { ...color("offsetHighlight.color", m => m.getPostEffectOffsetHighlightColor(), (m, r, g, b) => m.setPostEffectOffsetHighlightColor(r, g, b)), available: frameGraph },
+    { id: "dof.focusMode", unit: "mode", schema: focusMode, available, read: m => m.getDofFocusMode(), write: (m, v) => { m.setDofFocusMode(focusMode.parse(v)); } },
+    { id: "dof.target", unit: "model and bone", schema: focusTarget, available: m => m.getDofFocusMode() === "model-target",
+        read: m => ({ modelInstanceId: m.getDofFocusTargetModelInstanceId(), boneName: m.getDofFocusTargetBoneName() }),
+        write: (m, value) => {
+            const v = focusTarget.parse(value);
+            if (!v.modelInstanceId) { if (v.boneName) throw new AutomationError("INVALID_INPUT"); m.setDofFocusTargetByIndex(null, null); return; }
+            const model = m.getLoadedModels().find(item => item.instanceId === v.modelInstanceId);
+            if (!model) throw new AutomationError("MODEL_NOT_FOUND");
+            if (v.boneName && m.getModelBoneNames(model.index).filter(name => name === v.boneName).length !== 1) throw new AutomationError("BONE_NOT_UNIQUE");
+            m.setDofFocusTargetByIndex(model.index, v.boneName ?? null);
+        } },
+    { id: "lut.preset", unit: "builtin preset id", schema: z.string().min(1).max(100), available: m => m.postEffectLutSourceMode === "builtin",
+        read: m => m.postEffectLutPreset, write: (m, v) => {
+            const id = z.string().parse(v);
+            if (!m.getPostEffectLutPresetOptions().some(p => p.id === id)) throw new AutomationError("INVALID_INPUT");
+            m.postEffectLutPreset = id;
+        } },
     { id: "physics.floorCollision", unit: "boolean", schema: z.boolean(), available: m => m.isPhysicsFloorCollisionAvailable(), read: m => m.getPhysicsFloorCollisionEnabled(), write: (m, v) => { m.setPhysicsFloorCollisionEnabled(z.boolean().parse(v)); } },
     { id: "viewport.physicsBones", unit: "boolean", schema: z.boolean(), available, read: m => m.getShowPhysicsBones(), write: (m, v) => { m.setShowPhysicsBones(z.boolean().parse(v)); } },
     { id: "render.stack", unit: "ordered effects", schema: stack, available: frameGraph, read: m => m.getFrameGraphPostEffectStackEntries(), write: (m, value) => m.setFrameGraphPostEffectStackEntries(stack.parse(value)) },
@@ -39,7 +108,7 @@ export const automationControls: readonly Control[] = [
     numeric("ssao.fadeEnd", "postEffectSsaoFadeEnd", 4, 200, "meters"),
     flag("ssao.debug", "postEffectSsaoDebugView"),
     flag("ssr.enabled", "postEffectSsrEnabled"),
-    numeric("ssr.strength", "postEffectSsrStrength", 0, 1),
+    numeric("ssr.strength", "postEffectSsrStrength", 0, 2),
     flag("fog.enabled", "postEffectFogEnabled"),
     numeric("fog.start", "postEffectFogStart", 0, 10000, "scene units"),
     numeric("fog.end", "postEffectFogEnd", 0, 10000, "scene units"),
@@ -91,6 +160,7 @@ export function readAutomationControls(manager: MmdManager, query: string, offse
     const matches = automationControls.filter(control => control.id.toLowerCase().includes(query.toLowerCase()));
     return { totalCount: matches.length, nextOffset: offset + limit < matches.length ? offset + limit : null,
         items: matches.slice(offset, offset + limit).map(control => ({ id: control.id, unit: control.unit, value: control.read(manager),
+            ...(control.id === "lut.preset" ? { choices: manager.getPostEffectLutPresetOptions() } : {}),
             available: control.available(manager), valueSchema: z.toJSONSchema(control.schema), undoable: false })) };
 }
 export function applyAutomationControl(manager: MmdManager, input: AutomationControl) {

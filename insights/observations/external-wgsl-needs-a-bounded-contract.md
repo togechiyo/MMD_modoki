@@ -14,6 +14,7 @@ source_docs:
   - ../../docs/external-wgsl-shader-loading-concept-2026-06-12.md
   - ../../docs/wgsl-shader-capabilities.md
   - ../../docs/external-wgsl-reopening-review-2026-09-12.md
+  - ../../docs/external-wgsl-mme-semantics-design-2026-09-12.md
 superseded_by: null
 ---
 
@@ -25,11 +26,11 @@ MME風のユーザー shader、材質snippet、画面後段effectを外部ファ
 
 ## 判断
 
-最初は WebGPU 専用の Material Snippet に限定し、許可変数、resource、適用対象、保存、compile失敗時の復帰をアプリ側で規定する。Named Material Effect、Screen-Space Effect、Post Effect Block は別levelとして段階的に検証する。
+入力、resource、適用対象、保存、compile失敗時の復帰をアプリ側で規定し、段階的に検証する。初期のMaterial Snippet案は実装順の候補であり、用途の恒久的な制限ではない。2026-09-12の[所有者方針](../decisions/external-wgsl-follows-mme-concepts.md)に従い、MMEの名前と用途を参考に公開APIを検討する。
 
 ## 避けること
 
-- 任意の full WGSL module や pass graph をそのまま実行する。
+- 入出力・resource・失敗時復帰を定義せず、full WGSL moduleやpass graphを受け付ける。
 - PMX キャラクター全体へ暗黙適用する。
 - resource依存、diagnostic、project相対参照なしでUIだけ開放する。
 

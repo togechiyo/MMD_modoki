@@ -77,6 +77,8 @@ GUI保存では共有snapshotを `<project名>.assets/effects/<revision>/effect.
 
 ## 診断と実装上の境界
 
+ファイルIO・GPU停止・project由来の実行とElectron設定を含む安全性の範囲は [外部WGSLの安全性確認](./external-wgsl-security-review-2026-09-12.md) を参照。コンパイル検査や15秒の準備待機期限は、任意のGPU処理を安全に強制終了する保証ではない。
+
 材質cloneでモーフ参照や組込presetを取りこぼさないよう、適用時だけscene描画を一時停止し、実対象submeshで候補を準備する。BabylonのisReadyに加え、WebGPU ShaderModuleのgetCompilationInfoとvalidation error scopeで診断し、全対象成功後に割当を確定する。通常の失敗でengine全体のeffectを解放しない。
 
 専用UBOはlayout変更時だけ交換し、値の編集ではshaderを再生成しない。古いGPU effectはBabylonのdraw cache解放経路を使う。CPU側revisionは現行割当・mode bank・Undo/Redoが参照するものを保持し、WGSL操作確定時に不要なものを回収する。保存先の未参照sidecarは自動削除しない。

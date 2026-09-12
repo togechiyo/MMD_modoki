@@ -110,6 +110,9 @@ export class ExternalWgslPanel {
         catch (error) {
             this.message = t("wgsl.failed") + ": " + (error instanceof Error ? error.message : String(error));
             window.electronAPI.logError("ui", "External WGSL operation failed", { message: this.message });
+            // Use the same viewport error card as model loading. Keep full compiler output in diagnostics.
+            const summary = this.message.split(/\r?\n/, 1)[0].slice(0, 300);
+            this.manager.onError?.("WGSL: " + summary + (summary.length < this.message.length ? "…" : ""));
         } finally { this.busy = false; (document.activeElement as HTMLElement | null)?.blur(); this.refresh(); }
     }
 }

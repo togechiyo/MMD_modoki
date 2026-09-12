@@ -54,6 +54,8 @@ GUI保存では共有snapshotを `<project名>.assets/effects/<revision>/effect.
 
 詳細は「診断・生成コード」に表示する。GPUの行番号は生成shader側の位置で、作者fileへの正確な逆変換は未実装。失敗候補の生成interfaceと本文も保持する。Babylonの準備待機は15秒で終了するが、GPU上の無限loopを安全に停止する仕組みではない。
 
+パネルからの読込・適用・再読込・パラメーター編集に失敗した場合は、PMX読込と共通のビューポート通知にもエラーを表示する。通知にはWGSLという識別名と先頭行を最大300文字で示し、全文と生成コードは「診断・生成コード」、全文のエラー情報はapp logに残す。通知は「閉じる」で消せ、「ログを開く」も使える。ファイル選択のキャンセルはエラーにしない。
+
 後から描画条件が変わる全variantの事前検証、透過・頂点変更の別pass対応、一般resource契約は後続課題。現在未対応のresource/stage宣言で回避することはできない。
 
 ## 確認結果
@@ -65,3 +67,5 @@ GUI保存では共有snapshotを `<project名>.assets/effects/<revision>/effect.
 - fixtureは `test/fixtures/external-parent/sss-reference.pmx`。ユーザー所有モデルは使っていない。任意モデル・全presetの画質保証、動画実ファイルの比較は含まない。
 
 テスト: `src/external-wgsl/*.test.ts`、`test/e2e/external-wgsl.spec.mjs`。
+
+2026-09-12の通知追加では、Classic / Frame Graphでコンパイル失敗・ソース検証失敗のviewport表示、閉じる操作、修正後の復帰、ファイル選択キャンセルをGUIで確認。元の材質割当維持・保存復元を含む同E2Eの2件とlintが通過した。`typecheck:critical`は未定義名エラー0件、通常型検査は既存系の非critical診断542件で、変更したパネルに診断なし。

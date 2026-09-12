@@ -78,6 +78,10 @@ MMEの `MMDPass` と、現在の「ライトごとのToon計算位置」は別�
 
 初期成果物は入力対応表、MMEとの差分表、最小template、材質色/時刻/操作対象参照のsampleを想定する。実装順は既存の[保存と復帰の課題](./external-wgsl-reopening-review-2026-09-12.md)と合わせて決める。仕様の段階導入は用途の恒久的な制限と区別する。
 
+## 外部ツールとの接続
+
+外部ツールからの持込候補として、[NMEのJSONと生成WGSLを調査](./node-material-editor-wgsl-import-review-2026-09-12.md)した。NMEは別adapterで受け、MME風入力とは明示的に対応付ける案。生成shaderの内部変数名を共通APIへ固定しない。
+
 ## 未確認
 
 MME本体との実行比較、行列・光色の数値一致、出力時刻、GPUコンパイル、提案形式のGUIは未確認。本稿は仕様調査であり、MME互換や既存fxの読込対応を保証するものではない。

@@ -56,6 +56,7 @@
 - 手動のファイル編集は `apply_patch` を使う
 - ユーザーが行った無関係な差分は戻さない
 - ユーザーの明示的な依頼なしに branch を作成・切替しない。通常作業は現在の branch 上で行う
+- 依頼された作業は、機能・不具合修正・調査記録などの意味のある区切りで、必要な検証と差分確認を済ませて現在の branch へ commit・push する。所有者がタイミングを agent に継続委任しているため、都度の指示・確認は不要。詳細は [作業の区切りで commit・push する](./insights/decisions/commit-and-push-at-verified-work-boundaries.md) を参照する。無関係な作業差分は含めず、tag・Release 公開・force push はこの委任に含めない
 - 配布・ビルド後のアプリの通常実行経路は offline-first とし、明示的に採用された機能を除いて外部ネットワーク、CDN、外部 API へ接続しない。開発時の公式情報検索、依存取得、権利確認済みtest/reference assetの取得、localhost通信はこの制約に含めない。ただし取得したassetはlocalへ固定し、自動testや配布アプリのremote runtime dependencyにしない
 - テストや調査のためにユーザー所有のモデルを探索・読み込みしない。ユーザーが対象ファイルを明示して利用を許可した場合だけ扱う
 - 自動テストは `test/fixtures/` の配布可能な fixture を使い、必要な再現データがなければ最小 fixture を作成する

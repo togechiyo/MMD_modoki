@@ -45,6 +45,7 @@
 | adopted | [物理ボーンは標準でtimelineに残しviewportから隠す](./decisions/physics-bones-stay-on-timeline-but-hide-in-viewport.md) | 物理ボーンの表示メニュー、PMX表示フラグ、timeline行、viewport overlayを変更する |
 | adopted | [実体のないヘルプ項目は表示しない](./decisions/omit-empty-help-menu-items.md) | 上位メニュー、ショートカット、ログ、Aboutの導線を変更する |
 | adopted | [キー登録の上書き確認は出さない](./decisions/key-registration-overwrites-without-confirmation.md) | キー登録、同一フレーム上書き、Auto Key、Undo導線を変更する |
+| adopted | [作業の区切りで commit・push する](./decisions/commit-and-push-at-verified-work-boundaries.md) | 通常作業のcommit・push時期、検証、対象差分を判断する |
 
 ## 却下
 

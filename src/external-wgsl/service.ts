@@ -10,6 +10,7 @@ import { canonicalEffectContent, defaultEffectAssignment, getEffectAssignment, p
 
 export type LiveEffectTarget = { target: EffectTarget; material: StandardMaterial; meshes: AbstractMesh[] };
 type ServiceHost = { scene: Scene; targets: () => LiveEffectTarget[]; frame: () => number; playing: () => boolean;
+    viewportSize: () => { width: number; height: number };
     available: () => boolean; suspend: () => void; resume: () => void; changed: () => void };
 const permissionKey = "mmd_modoki.externalWgsl";
 export class ExternalWgslService {
@@ -88,7 +89,7 @@ export class ExternalWgslService {
     private plugin(item: LiveEffectTarget): ExternalWgslMaterialPlugin {
         let plugin = this.plugins.get(item.material);
         if (!plugin) {
-            plugin = new ExternalWgslMaterialPlugin(item.material, (asset, assignment, mesh) => resolveEffectInputs(asset, assignment, item.material, mesh, this.time));
+            plugin = new ExternalWgslMaterialPlugin(item.material, (asset, assignment, mesh) => resolveEffectInputs(asset, assignment, item.material, mesh, this.time, this.host.viewportSize()));
             this.plugins.set(item.material, plugin);
         }
         return plugin;

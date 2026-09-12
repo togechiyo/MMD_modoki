@@ -1045,6 +1045,7 @@ export class MmdManager {
     public getExternalWgslService(): ExternalWgslService {
         if (!this.externalWgslService) this.externalWgslService = new ExternalWgslService({
             scene: this.scene,
+            viewportSize: () => this.exportRenderSurface ?? { width: this.engine.getRenderWidth(true), height: this.engine.getRenderHeight(true) },
             targets: () => this.sceneModels.flatMap(entry => entry.materials.flatMap(item => {
                 const material = item.material as unknown;
                 return material instanceof StandardMaterial ? [{ target: { modelInstanceId: entry.info.instanceId, materialKey: item.key }, material, meshes: entry.renderMeshes } satisfies LiveEffectTarget] : [];

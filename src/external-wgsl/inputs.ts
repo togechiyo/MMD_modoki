@@ -17,7 +17,7 @@ export class EffectClock {
             asyncElapsed: output || playing ? elapsed : previous ? now - previous.now : 0 };
     }
 }
-export function resolveEffectInputs(asset: EffectAsset, assignment: EffectAssignment, material: StandardMaterial, mesh: AbstractMesh, time: EffectTime): Record<string, EffectValue> {
+export function resolveEffectInputs(asset: EffectAsset, assignment: EffectAssignment, material: StandardMaterial, mesh: AbstractMesh, time: EffectTime, viewportSize: { width: number; height: number }): Record<string, EffectValue> {
     const scene = material.getScene();
     const values: Record<string, EffectValue> = { ...assignment.parameters };
     const light = scene.lights.find(item => item instanceof DirectionalLight) as DirectionalLight | undefined;
@@ -42,7 +42,8 @@ export function resolveEffectInputs(asset: EffectAsset, assignment: EffectAssign
             case "TIME": values[name] = input.annotations?.SyncInEditMode ? time.time : time.asyncTime; break;
             case "ELAPSEDTIME": values[name] = input.annotations?.SyncInEditMode ? time.elapsed : time.asyncElapsed; break;
             case "MODOKI_FRAME": values[name] = time.frame; break;
-            case "VIEWPORTPIXELSIZE": values[name] = [scene.getEngine().getRenderWidth(), scene.getEngine().getRenderHeight()]; break;
+            // The host owns output dimensions; the currently bound target may be an intermediate pass.
+            case "VIEWPORTPIXELSIZE": values[name] = [viewportSize.width, viewportSize.height]; break;
             case "DIFFUSE":
                 if (input.annotations?.Object === "Light") { if (!light) throw new Error("Directional light unavailable"); values[name] = light.diffuse.asArray(); }
                 else values[name] = [...material.diffuseColor.asArray(), material.alpha];

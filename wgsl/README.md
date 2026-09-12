@@ -17,8 +17,13 @@
 | [Prismatic Fire](./prismatic-fire/effect.modoki.json) | 落ち着いた石の光沢に、ときどき鮮やかな色のきらめきが現れる分散風。 |
 | [Soft Pastel](./soft-pastel/effect.modoki.json) | 元の照明・影の位置を保ったパステル調の色仕上げ。 |
 | [Template](./template/effect.modoki.json) | 色乗算だけの編集開始用。既定値は元の見た目を保持。 |
+| [MME入力：材質・ライト・視点](./mme-light-material/effect.modoki.json) | DIFFUSEのObject指定、材質の光沢、ライト方向、カメラ位置を使った簡易照明教材。 |
+| [MME入力：行列・画面サイズ](./mme-space-grid/effect.modoki.json) | 物体に付く格子と画面に付く格子を比較。WORLD・逆行列・WVP・viewportの実用例。 |
+| [MME入力：時間・フレーム](./mme-time-scan/effect.modoki.json) | 編集同期あり／なしのTIME・ELAPSEDTIMEと独自のMODOKI_FRAMEを可視化。 |
 
-いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。元のMMD材質がテクスチャを持つ場合は通常どおり描画されます。WebGPUのMMD材質モード向けで、PBRでは休止します。
+いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。WebGPUのMMD材質モード向けで、PBRでは休止します。元のテクスチャを含む色への合成方法はサンプルごとに異なります。
+
+MME風の自動入力を学ぶ場合は [入力サンプルの解説](../docs/external-wgsl-mme-inputs-examples.md) から始めてください。材質・ライトの教材は入力を単独表示するため、強さ1では元の材質の照明・テクスチャを置き換えます。
 
 ## Aurora Opalの調整
 
@@ -54,6 +59,8 @@ API・保存の説明は [外部WGSL材質の使い方](../docs/external-wgsl-ma
 
 ## 確認結果（2026-09-12）
 
-自作の`sss-reference.pmx`でClassic / Frame GraphのローカルElectron E2Eを実施。全6パッケージをGUIから読み込み、実GPUでのコンパイルとPNG描画を確認しました。テンプレートの既定値が元の画像を保持すること、装飾5種で色が変わること、Aurora Opalの0 → 90 → 0フレームで変化・再現すること、強さの編集が反映されることを画像のRGB差分で確認しています。角度依存の宝石3種は、カメラを固定した0・90フレームの画像が一致し、各効果の強さを0にした材質で描画が変わることも確認しました。WebGPU validation errorは0件。新作の画像と角度を変えた比較画像を出力して目視確認しています。
+自作の`sss-reference.pmx`でClassic / Frame GraphのローカルElectron E2Eを実施。装飾・テンプレートの6パッケージをGUIから読み込み、実GPUでのコンパイルとPNG描画を確認しました。テンプレートの既定値が元の画像を保持すること、装飾5種で色が変わること、Aurora Opalの0 → 90 → 0フレームで変化・再現すること、強さの編集が反映されることを画像のRGB差分で確認しています。角度依存の宝石3種は、カメラを固定した0・90フレームの画像が一致し、各効果の強さを0にした材質で描画が変わることも確認しました。WebGPU validation errorは0件。新作の画像と角度を変えた比較画像を出力して目視確認しています。
 
 lint通過。組込13本は移動前後で説明コメント以外の本文一致を確認しています。任意のモデル・全材質プリセットとの組合せや動画ファイル出力の比較は未実施です。再確認コマンド: `npm.cmd run test:e2e -- external-wgsl-samples.spec.mjs`。
+
+追加のMME入力教材3本も、両経路でGUI読込・ライト変更・格子の座標切替・時間同期を確認しました。サンプルで見つかった出力時の画面サイズ入力を修正し、960×640／640×360 PNGで32pixelの格子間隔を画像測定しています。詳細・確認範囲は [入力サンプルの解説](../docs/external-wgsl-mme-inputs-examples.md) を参照。再確認コマンド: `npm.cmd run test:e2e -- external-wgsl-inputs.spec.mjs`。

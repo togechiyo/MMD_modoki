@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { checkMetadataBudget, checkTextBudget, WGSL_SOURCE_BYTES } from "./limits";
 
 const identifier = z.string().regex(/^(?!fx_|Modoki|modoki|__)[A-Za-z_][A-Za-z0-9_]*$/)
     .refine(value => !new Set("_ fn var let const override struct alias return if else for while loop break continue switch case default true false discard enable requires diagnostic".split(" ")).has(value), "Reserved WGSL identifier");
@@ -52,7 +53,10 @@ export function validateParameter(parameter: EffectParameter, value: EffectValue
     }
 }
 export function parseEffectManifest(value: unknown): EffectManifest {
+    checkMetadataBudget(value);
     const manifest = manifestSchema.parse(value);
+    if (manifest.sources.length > 16) throw new Error("WGSL supports at most 16 internal sources");
+    if (Object.keys(manifest.inputs ?? {}).length + Object.keys(manifest.parameters ?? {}).length > 128) throw new Error("WGSL supports at most 128 inputs and parameters combined");
     if (!manifest.hooks.surface && !manifest.hooks.finalColor) throw new Error("At least one material hook is required");
     if (new Set(manifest.sources).size !== manifest.sources.length) throw new Error("Duplicate source path");
     for (const [name, input] of Object.entries(manifest.inputs ?? {})) {
@@ -97,7 +101,11 @@ export function maskWgslComments(source: string): string {
     return output;
 }
 export function validateEffectSources(manifest: EffectManifest, sources: EffectAsset["sources"]): void {
+    if (!Array.isArray(sources) || sources.length > 16) throw new Error("Invalid WGSL source list");
     if (sources.length !== manifest.sources.length || sources.some((s, i) => s.path !== manifest.sources[i] || typeof s.text !== "string")) throw new Error("Source list does not match manifest");
+    let bytes = 0;
+    for (const file of sources) bytes += checkTextBudget(file.text, WGSL_SOURCE_BYTES, file.path);
+    if (bytes > WGSL_SOURCE_BYTES) throw new Error("WGSL sources exceed 1 MiB combined");
     for (const file of sources) {
         const text = maskWgslComments(file.text);
         const invalid = /@(vertex|fragment|compute|group|binding)\b|\bdiscard\b|\bvar\s*<\s*(uniform|storage|workgroup)\b|^\s*#|\b(?:fn|struct|alias|var|let|const|override)\s+(?:modoki|Modoki|fx_)/m.exec(text);
@@ -118,6 +126,7 @@ const assignments = new WeakMap<object, EffectAssignment>();
 export function getEffectAssignment(material: object): EffectAssignment | null { return structuredClone(assignments.get(material) ?? null); }
 export function setEffectAssignment(material: object, value: EffectAssignment | null): void {
     if (value) {
+        checkMetadataBudget(value);
         const parsed = z.object({ effectRevision: z.string().regex(/^[a-f0-9]{64}$/), enabled: z.boolean(), parameters: z.record(identifier, z.union([z.number(), z.array(z.number())])) }).strict().parse(value);
         assignments.set(material, parsed);
     } else assignments.delete(material);

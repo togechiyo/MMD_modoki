@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { wgslRecoveryApi } from "../external-wgsl/recovery";
 import { mountAutomationSettings } from "./automation-settings-panel";
 import type { PopupContentController } from "./popup-dialog-controller";
 import { HdriSettingsDialogController, type HdriSettingsDialogControllerDeps } from "./hdri-settings-dialog-controller";
@@ -7,7 +8,11 @@ import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField }
 export class ExperimentalSettingsDialogController implements PopupContentController {
     private busy = false;
     private disposeAutomation: (() => void) | undefined;
-    public unmount(): void { this.disposeAutomation?.(); this.disposeAutomation = undefined; }
+    private disposeWgsl: (() => void) | undefined;
+    public unmount(): void {
+        this.disposeAutomation?.(); this.disposeAutomation = undefined;
+        this.disposeWgsl?.(); this.disposeWgsl = undefined;
+    }
     constructor(private readonly deps: HdriSettingsDialogControllerDeps & { switchPbr: (enabled: boolean) => Promise<void> }) {}
 
     public canClose(): boolean { return !this.busy; }
@@ -18,7 +23,11 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         this.disposeAutomation = mountAutomationSettings(form);
         const wgsl = document.createElement("input"); wgsl.type = "checkbox"; wgsl.className = "popup-form-checkbox";
         wgsl.checked = this.deps.mmdManager.getExternalWgslService().enabled;
+        this.disposeWgsl = wgslRecoveryApi()?.onBlocked(() => { wgsl.checked = false; });
         form.append(createPopupFormField(t("wgsl.permission"), wgsl));
+        const wgslNote = document.createElement("p");
+        wgslNote.className = "popup-form-note"; wgslNote.textContent = t("wgsl.safetyNote");
+        form.append(wgslNote);
         wgsl.addEventListener("change", () => {
             wgsl.disabled = true; this.busy = true;
             void this.deps.mmdManager.getExternalWgslService().setEnabled(wgsl.checked).catch((error: unknown) => {

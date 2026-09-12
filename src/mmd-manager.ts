@@ -1,5 +1,6 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { ExternalWgslService, type LiveEffectTarget } from "./external-wgsl/service";
+import { checkProjectEffectCount } from "./external-wgsl/limits";
 import type { EffectAsset, EffectAssignment, EffectChange, EffectTarget } from "./external-wgsl/contract";
 import { externalParentOmissionCount } from "./export/external-parent-warning";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
@@ -1054,6 +1055,7 @@ export class MmdManager {
             playing: () => this.isPlaying,
             available: () => this.isWebGpuEngine() && this.getMmdMaterialPipelinePreset() === "mmd-standard",
             suspend: () => this.suspendSceneRendering(), resume: () => this.resumeSceneRendering(),
+            failed: message => this.onError?.(message),
             changed: () => this.onMaterialShaderStateChanged?.(),
         });
         return this.externalWgslService;
@@ -10246,6 +10248,7 @@ ${beforeFogAppendBlock}
         if (this.externalWgslService?.busy) throw new Error("Wait for WGSL compilation before loading a project");
         if (!this.isProjectFileV1(data)) throw new Error("Invalid project file format or version");
         const project = data as Partial<MmdModokiProjectFileV1> | null;
+        if (Array.isArray(project?.externalEffects)) checkProjectEffectCount(project.externalEffects);
         const service = this.getExternalWgslService();
         const result = await importProjectStateImpl(this, data, options);
         const warnings = await service.importAssets(Array.isArray(project?.externalEffects) ? project.externalEffects : []);

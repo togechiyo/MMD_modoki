@@ -14,6 +14,16 @@ async function fixture() {
     return { directory, file, manifest };
 }
 describe("WGSL package and project IO", () => {
+    it("rejects oversized author files before parsing and keeps oversized sidecars unresolved", async () => {
+        const f = await fixture(); const asset = await readEffectPackage(f.file);
+        await fs.writeFile(f.file, " ".repeat(1024 * 1024 + 1));
+        await expect(readEffectPackage(f.file)).rejects.toThrow(/exceeds/);
+        const project = path.join(f.directory, "large.mmdproj");
+        await writeTextWithEffects(project, JSON.stringify({ format: "mmd_modoki_project", version: 1, externalEffects: [asset] }));
+        const saved = JSON.parse(await fs.readFile(project, "utf8"));
+        await fs.writeFile(path.join(f.directory, saved.externalEffects[0].path), " ".repeat(8 * 1024 * 1024 + 1));
+        expect(JSON.parse(await readTextWithEffects(project)).externalEffects).toEqual(saved.externalEffects);
+    });
     it("rejects the old JSON import even when the file contains valid metadata", async () => {
         const f = await fixture();
         const oldPath = path.join(f.directory, "effect.modoki.json");

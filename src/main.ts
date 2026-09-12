@@ -2,6 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, se
 import path from 'node:path';
 import fs from 'node:fs';
 import { readEffectPackage, readTextWithEffects, writeTextWithEffects } from './external-wgsl/file-store';
+import { installWgslRecovery } from './main/wgsl-recovery';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import log from 'electron-log/main';
@@ -989,6 +990,7 @@ const showRendererFailureDialog = async (
 };
 
 const automationBridge = installAutomationAppBridge((code, data) => writeAppLog('warn', 'main', code, data));
+const wgslRecovery = installWgslRecovery((message, error) => writeAppLog('warn', 'main', message, error ? createLogErrorData(error) : undefined));
 const createWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
@@ -1021,7 +1023,7 @@ const createWindow = (): BrowserWindow => {
       exitCode: details.exitCode,
       webContentsId: mainWindow.webContents.id,
     });
-    if (isSmokeMode || isE2eMode || details.reason === 'clean-exit') return;
+    if (isSmokeMode || isE2eMode || details.reason === 'clean-exit' || wgslRecovery.handlesFailure(mainWindow.webContents.id)) return;
     void showRendererFailureDialog(mainWindow, details.reason, details.exitCode).catch((err: unknown) => {
       writeAppLog('error', 'main', 'failed to show renderer failure dialog', createLogErrorData(err));
     });

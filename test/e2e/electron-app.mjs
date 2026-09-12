@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,6 +46,8 @@ export async function launchMmdModoki(repoRoot) {
       if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") delete env[key];
     }
 
+    // Chromium writes DevToolsActivePort before renderer startup. Recovery tests reconnect after a renderer crash.
+    mkdirSync(env.MMD_MODOKI_E2E_USER_DATA_PATH, { recursive: true });
     const app = await electron.launch({ args: ["."], cwd: repoRoot, env });
     const close = async () => {
       await app.close().catch(() => undefined);

@@ -13,6 +13,7 @@ export type MmdOptimizedFileSaveResult =
     | { status: "failed"; message: string };
 
 export interface ElectronAPI {
+    wgslRecovery: import("./external-wgsl/recovery-state").WgslRecoveryApi;
     automation: import("./automation/contracts").AutomationApi;
     readEffectPackage: (filePath: string) => Promise<{ asset?: import("./external-wgsl/contract").EffectAsset; error?: string }>;
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;

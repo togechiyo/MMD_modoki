@@ -4,6 +4,10 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { WebGPUPipelineContext } from "@babylonjs/core/Engines/WebGPU/webgpuPipelineContext";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { ExternalWgslMaterialPlugin } from "./material-plugin";
+import { beforeDeadline, WgslTimeoutError } from "./deadline";
+import { checkProjectEffectCount } from "./limits";
+import { isWgslRecoveryBlocked, setWgslRecoveryBlocked, wgslPermissionKey as permissionKey, wgslRecoveryApi } from "./recovery";
+import { t } from "../i18n";
 import { EffectClock, resolveEffectInputs, type EffectTime } from "./inputs";
 import { canonicalEffectContent, defaultEffectAssignment, getEffectAssignment, parseEffectManifest, setEffectAssignment, validateEffectSources, validateParameter,
     type EffectAsset, type EffectAssetReference, type EffectAssignment, type EffectChange, type EffectTarget } from "./contract";
@@ -11,8 +15,7 @@ import { canonicalEffectContent, defaultEffectAssignment, getEffectAssignment, p
 export type LiveEffectTarget = { target: EffectTarget; material: StandardMaterial; meshes: AbstractMesh[] };
 type ServiceHost = { scene: Scene; targets: () => LiveEffectTarget[]; frame: () => number; playing: () => boolean;
     viewportSize: () => { width: number; height: number };
-    available: () => boolean; suspend: () => void; resume: () => void; changed: () => void };
-const permissionKey = "mmd_modoki.externalWgsl";
+    available: () => boolean; suspend: () => void; resume: () => void; changed: () => void; failed: (message: string) => void };
 export class ExternalWgslService {
     public busy = false;
     public enabled = false;
@@ -24,8 +27,20 @@ export class ExternalWgslService {
     private time: EffectTime = { frame: 0, time: 0, elapsed: 0, asyncTime: 0, asyncElapsed: 0 };
     private output: { elapsed: number; frame?: number } | undefined;
     private pendingPermission: boolean | null = null;
+    private compilation: AbortController | null = null;
+    private armed = false;
     constructor(private readonly host: ServiceHost) {
         try { this.enabled = localStorage.getItem(permissionKey) === "true"; } catch { this.enabled = false; }
+        if (isWgslRecoveryBlocked()) this.enabled = false;
+        const removeBlockedListener = wgslRecoveryApi()?.onBlocked(() => this.stopAfterFailure(t("wgsl.recovered"), false));
+        const engine = host.scene.getEngine();
+        const lost = engine.onContextLostObservable.add(() => {
+            if (this.armed) this.stopAfterFailure(t("wgsl.deviceLost"));
+        });
+        host.scene.onDisposeObservable.addOnce(() => {
+            removeBlockedListener?.(); engine.onContextLostObservable.remove(lost);
+            this.compilation?.abort(new Error("WGSL scene disposed"));
+        });
         const onStorage = (event: StorageEvent): void => {
             if (event.key !== permissionKey) return;
             const enabled = event.newValue === "true";
@@ -46,6 +61,13 @@ export class ExternalWgslService {
     }
     public async setEnabled(enabled: boolean, persist = true): Promise<void> {
         if (this.busy) throw new Error("WGSL operation is in progress");
+        if (enabled && persist) {
+            const api = wgslRecoveryApi();
+            if (!api) throw new Error("WGSL recovery service unavailable");
+            await beforeDeadline(api.allow(), performance.now() + 15000);
+            setWgslRecoveryBlocked(false);
+        }
+        if (enabled && isWgslRecoveryBlocked()) enabled = false;
         this.enabled = enabled;
         let persistenceFailure = "";
         if (persist) {
@@ -53,8 +75,24 @@ export class ExternalWgslService {
             catch { persistenceFailure = "WGSL permission changed for this session; setting could not be saved"; }
         }
         await this.reconcile();
+        if (!this.enabled) { this.armed = false; await wgslRecoveryApi()?.disarm(); }
         if (persistenceFailure) this.diagnostic = persistenceFailure;
         this.host.changed();
+    }
+    private stopAfterFailure(message: string, report = true): void {
+        const alreadyStopped = isWgslRecoveryBlocked() && !this.enabled;
+        setWgslRecoveryBlocked(true);
+        this.enabled = false; this.armed = false; this.pendingPermission = null;
+        this.compilation?.abort(new Error(message));
+        // Preserve assignments and assets for save/edit, but never restore the previous GPU shader here.
+        for (const item of this.host.targets()) this.plugins.get(item.material)?.configure(null, null);
+        if (!alreadyStopped) {
+            this.diagnostic = message; this.host.changed(); this.host.failed(message);
+        }
+        if (report) void wgslRecoveryApi()?.fail().catch(error => {
+            this.diagnostic = message + "\nWGSL recovery marker: " + String(error);
+            this.host.failed(this.diagnostic);
+        });
     }
     public async addAsset(value: EffectAsset): Promise<void> {
         const manifest = parseEffectManifest(value.manifest);
@@ -74,6 +112,7 @@ export class ExternalWgslService {
         });
     }
     public async importAssets(values: Array<EffectAsset | EffectAssetReference>): Promise<string[]> {
+        checkProjectEffectCount(values);
         this.assets.clear(); this.clock = new EffectClock();
         const warnings: string[] = [];
         for (const value of values) {
@@ -142,6 +181,7 @@ export class ExternalWgslService {
             return;
         }
         for (const change of changes) {
+            if (!this.enabled) break;
             if (change.after?.enabled === false) {
                 const item = this.find(change.target);
                 if (item) this.plugins.get(item.material)?.configure(null, null);
@@ -166,15 +206,24 @@ export class ExternalWgslService {
             return { item, change, asset, oldHotSwap: item.material.allowShaderHotSwapping };
         });
         this.busy = true; this.host.suspend(); this.host.changed();
+        this.compilation = new AbortController();
         try {
+            const deadline = performance.now() + 15000;
+            if (live.some(({ asset }) => asset)) {
+                const api = wgslRecoveryApi();
+                if (!api) throw new Error("WGSL recovery service unavailable");
+                await beforeDeadline(api.arm(), deadline, this.compilation.signal);
+                this.armed = true;
+            }
+            this.compilation.signal.throwIfAborted();
             for (const { item, change, asset } of live) {
                 item.material.allowShaderHotSwapping = false;
                 if (asset) this.plugin(item).configure(asset, change.after);
                 else this.plugins.get(item.material)?.configure(null, null);
             }
             this.diagnosticSource = live.map(({ item }) => this.plugins.get(item.material)?.generatedSource() ?? "").find(Boolean) ?? "";
-            const deadline = performance.now() + 15000;
             if (this.host.available()) for (const { item } of live) await this.compile(item, deadline);
+            this.compilation.signal.throwIfAborted();
             for (const { item, change } of live) {
                 if (this.find(change.target)?.material !== item.material) throw new Error("WGSL target changed during compilation");
             }
@@ -182,11 +231,13 @@ export class ExternalWgslService {
             this.diagnostic = "";
             this.diagnosticSource = "";
         } catch (error) {
+            if (error instanceof WgslTimeoutError) this.stopAfterFailure(error.message);
             for (const { item, change } of live) {
                 if (this.find(change.target)?.material !== item.material) continue;
                 const previous = change.before ? this.getAsset(change.before.effectRevision) : null;
                 const plugin = this.plugins.get(item.material);
-                plugin?.configure(rollbackPrevious ? previous : null, rollbackPrevious ? change.before : null);
+                const restore = rollbackPrevious && this.enabled && !isWgslRecoveryBlocked();
+                plugin?.configure(restore ? previous : null, restore ? change.before : null);
                 if (!rollbackPrevious && plugin) plugin.failure = String(error);
                 if (rollbackPrevious) setEffectAssignment(item.material, change.before);
             }
@@ -194,6 +245,7 @@ export class ExternalWgslService {
             throw error;
         } finally {
             for (const { item, oldHotSwap } of live) item.material.allowShaderHotSwapping = oldHotSwap;
+            this.compilation = null;
             this.busy = false; this.host.resume(); this.host.changed();
             if (this.pendingPermission !== null) {
                 const enabled = this.pendingPermission; this.pendingPermission = null;
@@ -208,7 +260,7 @@ export class ExternalWgslService {
         let failure: unknown;
         try { await this.compileStages(item, deadline); }
         catch (error) { failure = error; }
-        const validation = await engine._device.popErrorScope();
+        const validation = await beforeDeadline(engine._device.popErrorScope(), deadline, this.compilation?.signal);
         if (failure) throw failure;
         if (validation) throw new Error(validation.message);
     }
@@ -216,9 +268,10 @@ export class ExternalWgslService {
         for (const mesh of item.meshes) for (const subMesh of mesh.subMeshes ?? []) {
             if (subMesh.getMaterial() !== item.material || mesh.getTotalVertices() === 0) continue;
             while (!item.material.isReadyForSubMesh(mesh, subMesh)) {
+                this.compilation?.signal.throwIfAborted();
                 if (mesh.isDisposed() || this.find(item.target)?.material !== item.material) throw new Error("WGSL target removed");
                 const error = subMesh.effect?.getCompilationError(); if (error) throw new Error(error);
-                if (performance.now() > deadline) throw new Error("WGSL compilation timed out");
+                if (performance.now() > deadline) throw new WgslTimeoutError();
                 await new Promise<void>(resolve => setTimeout(resolve, 16));
             }
             // Babylon's WebGPU isReady can precede native WGSL validation.
@@ -226,7 +279,7 @@ export class ExternalWgslService {
             if (!context?.stages) throw new Error("WGSL pipeline stages unavailable");
             for (const stage of [context.stages.vertexStage, context.stages.fragmentStage]) {
                 if (!stage) continue;
-                const info = await stage.module.getCompilationInfo();
+                const info = await beforeDeadline(stage.module.getCompilationInfo(), deadline, this.compilation?.signal);
                 const errors = info.messages.filter(message => message.type === "error");
                 if (errors.length) throw new Error(errors.map(message => `Generated WGSL ${message.lineNum}:${message.linePos}: ${message.message}`).join("\n"));
             }

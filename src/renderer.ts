@@ -6,6 +6,7 @@
 import "@babylonjs/loaders/glTF";
 import { WebRequest } from "@babylonjs/core/Misc/webRequest";
 import "./index.css";
+import { initializeWgslRecovery } from "./external-wgsl/recovery";
 import { MmdManager, type RenderEnginePreference } from "./mmd-manager";
 import "./mmd-manager-x-extension";
 import { Timeline } from "./timeline";
@@ -231,6 +232,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initializeApp(): Promise<void> {
+  const wgslRecovered = await initializeWgslRecovery();
   const searchParams = new URLSearchParams(window.location.search);
   const mode = searchParams.get("mode");
   const rendererBackendParam = searchParams.get("rendererBackend");
@@ -330,6 +332,7 @@ async function initializeApp(): Promise<void> {
 
     const uiController = new UIController(mmdManager, timeline, bottomPanel);
     await uiController.restoreProjectAfterRuntimeModeReload();
+    if (wgslRecovered) mmdManager.onError?.(t("wgsl.recovered"));
     connectAutomationEditor(mmdManager, uiController, timeline);
     if (new URLSearchParams(window.location.search).get("e2e") === "1") {
       window.mmdModokiE2e = {

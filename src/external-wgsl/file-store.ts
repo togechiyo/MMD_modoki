@@ -3,6 +3,25 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalEffectContent, parseEffectManifest, relativeEffectPath, validateEffectSources, type EffectAsset, type EffectAssetReference } from "./contract";
 import { parseEffectFile } from "./single-file";
+import { checkProjectEffectCount, WGSL_SIDECAR_BYTES, WGSL_SOURCE_BYTES } from "./limits";
+
+async function readBounded(file: string, limit: number): Promise<string> {
+    const handle = await fs.open(file, "r");
+    try {
+        const stat = await handle.stat();
+        if (!stat.isFile() || stat.size > limit) throw new Error(`WGSL file exceeds ${limit} bytes or is not a regular file`);
+        // Also bound the read itself: a file can grow after stat().
+        const buffer = Buffer.alloc(limit + 1);
+        let length = 0;
+        while (length < buffer.length) {
+            const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
+            if (!bytesRead) break;
+            length += bytesRead;
+        }
+        if (length > limit) throw new Error(`WGSL file exceeds ${limit} bytes`);
+        return buffer.toString("utf8", 0, length);
+    } finally { await handle.close(); }
+}
 
 async function containedFile(directory: string, relative: string): Promise<string> {
     relativeEffectPath.parse(relative);
@@ -21,7 +40,7 @@ export function validateEffectAsset(value: EffectAsset): EffectAsset {
 }
 export async function readEffectPackage(filePath: string): Promise<EffectAsset> {
     if (path.extname(filePath).toLowerCase() !== ".wgsl") throw new Error("Select a .wgsl file with @modoki metadata; JSON import is no longer supported");
-    const { manifest, sources } = parseEffectFile(await fs.readFile(filePath, "utf8"), path.basename(filePath));
+    const { manifest, sources } = parseEffectFile(await readBounded(filePath, WGSL_SOURCE_BYTES), path.basename(filePath));
     const revision = createHash("sha256").update(canonicalEffectContent({ manifest, sources })).digest("hex");
     return { revision, manifest, sources, originPath: filePath };
 }
@@ -41,6 +60,7 @@ async function atomicWrite(file: string, content: string): Promise<void> {
 export async function writeTextWithEffects(file: string, content: string): Promise<void> {
     const project = projectWithEffects(content);
     if (!project) { await fs.writeFile(file, content, "utf8"); return; }
+    checkProjectEffectCount(project.externalEffects);
     const refs: EffectAssetReference[] = [];
     for (const value of project.externalEffects) {
         if (!("manifest" in value)) throw new Error("Cannot save a portable project: unresolved WGSL asset " + value.revision);
@@ -58,14 +78,17 @@ export async function readTextWithEffects(file: string): Promise<string> {
     const content = await fs.readFile(file, "utf8");
     const project = projectWithEffects(content);
     if (!project) return content;
-    project.externalEffects = await Promise.all(project.externalEffects.map(async value => {
-        if ("manifest" in value) return value;
+    checkProjectEffectCount(project.externalEffects);
+    const assets: ProjectWithEffects["externalEffects"] = [];
+    // Sequential IO bounds peak sidecar buffers; each asset is validated before IPC.
+    for (const value of project.externalEffects) {
+        if ("manifest" in value) { assets.push(validateEffectAsset(value)); continue; }
         try {
             const resolved = await containedFile(path.dirname(file), value.path);
-            const asset = validateEffectAsset(JSON.parse(await fs.readFile(resolved, "utf8")));
-            if (asset.revision !== value.revision) return value;
-            return asset;
-        } catch { return value; } // Unresolved is an explicit renderer state, not a successful load.
-    }));
+            const asset = validateEffectAsset(JSON.parse(await readBounded(resolved, WGSL_SIDECAR_BYTES)));
+            assets.push(asset.revision === value.revision ? asset : value);
+        } catch { assets.push(value); } // Unresolved is an explicit renderer state, not a successful load.
+    }
+    project.externalEffects = assets;
     return JSON.stringify(project);
 }

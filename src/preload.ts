@@ -35,6 +35,18 @@ const automation: AutomationApi = {
 };
 contextBridge.exposeInMainWorld('electronAPI', {
     automation,
+    wgslRecovery: {
+        state: () => ipcRenderer.invoke('wgsl:state'),
+        allow: () => ipcRenderer.invoke('wgsl:allow'),
+        arm: () => ipcRenderer.invoke('wgsl:arm'),
+        disarm: () => ipcRenderer.invoke('wgsl:disarm'),
+        fail: () => ipcRenderer.invoke('wgsl:fail'),
+        onBlocked: listener => {
+            const handler = (): void => listener();
+            ipcRenderer.on('wgsl:blocked', handler);
+            return () => { ipcRenderer.removeListener('wgsl:blocked', handler); };
+        },
+    },
     readEffectPackage: (filePath: string) => ipcRenderer.invoke('file:readEffectPackage', filePath),
     openFileDialog: (filters: { name: string; extensions: string[] }[]) =>
         ipcRenderer.invoke('dialog:openFile', filters),

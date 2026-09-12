@@ -21,7 +21,7 @@ async function changedPixels(app, before, after) {
     }, [before, after]);
 }
 
-for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: compile every package and render animated opal`, async ({}, testInfo) => {
+for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: compile packages and render animated and angular gems`, async ({}, testInfo) => {
     const app = await launchMmdModoki(root);
     try {
         const page = await app.app.firstWindow();
@@ -49,7 +49,8 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
             return result.path;
         };
         const original = await capture("original");
-        for (const sample of ["template", "soft-pastel", "aurora-opal"]) {
+        const angularSamples = ["moonstone-schiller", "black-opal", "prismatic-fire"];
+        for (const sample of ["template", "soft-pastel", ...angularSamples, "aurora-opal"]) {
             await app.app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }); }, resolve(root, "wgsl", sample, "effect.modoki.json"));
             await page.locator("#external-wgsl-load").click();
             await expect(page.locator("#external-wgsl-status")).toContainText("読込済み");
@@ -60,6 +61,27 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
             const image = await capture(sample);
             if (sample === "template") expect(await changedPixels(app.app, original, image)).toBeLessThan(100);
             else expect(await changedPixels(app.app, original, image)).toBeGreaterThan(1000);
+            if (angularSamples.includes(sample)) {
+                const frame = page.locator("#viewport-seek-current-frame");
+                await frame.fill("90"); await frame.press("Enter");
+                const repeat = await capture(`${sample}-frame90`);
+                // Test time in isolation before moving the camera for visual inspection.
+                // setCameraPose preserves the editor's rotation state; it is not an exact restore.
+                expect(await changedPixels(app.app, image, repeat)).toBeLessThan(100);
+                await frame.fill("0"); await frame.press("Enter");
+                const parameter = { "moonstone-schiller": "SheenStrength", "black-opal": "ColorStrength", "prismatic-fire": "FireStrength" }[sample];
+                const control = page.locator(`[data-wgsl-parameter="${parameter}"]`);
+                const defaultStrength = await control.inputValue();
+                await control.fill("0"); await control.press("Tab");
+                await expect(page.locator("#external-wgsl-load")).toBeEnabled();
+                const without = await capture(`${sample}-feature-zero-selected`);
+                expect(await changedPixels(app.app, image, without)).toBeGreaterThan(100);
+                await control.fill(defaultStrength); await control.press("Tab");
+                await expect(page.locator("#external-wgsl-load")).toBeEnabled();
+                await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 2.4, y: 2.5, z: -6.5 }, { x: 0, y: 1.5, z: 0 }));
+                await capture(`${sample}-side`);
+                await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 0.4, y: 2, z: -7 }, { x: 0, y: 1.5, z: 0 }));
+            }
         }
         const frame0 = await capture("opal-frame-0");
         const frameInput = page.locator("#viewport-seek-current-frame");

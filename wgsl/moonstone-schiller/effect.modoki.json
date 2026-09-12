@@ -1,0 +1,22 @@
+{
+  "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
+  "apiVersion": 1,
+  "kind": "mmd-material",
+  "name": "Moonstone Schiller / 青いシラー",
+  "description": "乳白色の表面に角度で浮かぶ青い光。内部散乱を表面の柔らかな光で近似。",
+  "sources": ["main.wgsl"],
+  "hooks": { "finalColor": "shadeMoonstone" },
+  "inputs": {
+    "WorldInverse": { "type": "mat4x4f", "semantic": "WORLDINVERSE", "annotations": { "Object": "Geometry" } },
+    "CameraPosition": { "type": "vec3f", "semantic": "POSITION", "annotations": { "Object": "Camera" } },
+    "LightDirection": { "type": "vec3f", "semantic": "DIRECTION", "annotations": { "Object": "Light" } }
+  },
+  "parameters": {
+    "BodyColor": { "type": "vec3f", "default": [0.65, 0.69, 0.76], "ui": { "label": "乳白色", "control": "color", "min": 0, "max": 1 } },
+    "SheenColor": { "type": "vec3f", "default": [0.08, 0.48, 1.0], "ui": { "label": "シラーの色", "control": "color", "min": 0, "max": 1 } },
+    "LayerTilt": { "type": "vec3f", "default": [-0.35, 0.12, 0.1], "ui": { "label": "光の層の傾き", "min": -1, "max": 1, "step": 0.05 } },
+    "SheenWidth": { "type": "f32", "default": 0.45, "ui": { "label": "シラーの広がり", "min": 0.1, "max": 1, "step": 0.05 } },
+    "SheenStrength": { "type": "f32", "default": 0.9, "ui": { "label": "シラーの強さ", "min": 0, "max": 2, "step": 0.05 } },
+    "Coating": { "type": "f32", "default": 1, "ui": { "label": "コーティングの強さ", "min": 0, "max": 1, "step": 0.01 } }
+  }
+}

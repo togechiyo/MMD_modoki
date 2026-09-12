@@ -29,6 +29,21 @@ test("experimental settings persist PBR imports and expose environment and log o
     };
     await open();
     const dialog = page.locator('[data-popup-id="experimental-settings"]');
+    await expect(dialog.locator(".experimental-settings-section > h3")).toHaveText(["PBR", "WGSL", "MCP"]);
+    const sections = dialog.locator(".experimental-settings-section");
+    await expect(sections.nth(0).getByLabel("PBRモード", { exact: true })).toBeVisible();
+    await expect(sections.nth(1).getByLabel("外部WGSL材質を有効にする", { exact: true })).toBeVisible();
+    await expect(sections.nth(2).getByLabel("構造情報を含む詳細診断を許可", { exact: true })).toBeVisible();
+    expect(await dialog.locator(".experimental-settings-toggle").evaluateAll(fields => fields.every(field => {
+      const checkbox = field.querySelector("input").getBoundingClientRect();
+      const label = field.querySelector("span").getBoundingClientRect();
+      return checkbox.right <= label.left && label.width > 250;
+    }))).toBe(true);
+    await dialog.screenshot({ path: testInfo.outputPath("experimental-settings-pbr.png") });
+    await sections.nth(1).scrollIntoViewIfNeeded();
+    await dialog.screenshot({ path: testInfo.outputPath("experimental-settings-wgsl.png") });
+    await sections.nth(2).evaluate(element => element.scrollIntoView({ block: "start" }));
+    await dialog.screenshot({ path: testInfo.outputPath("experimental-settings-mcp.png") });
     const pbr = dialog.getByLabel("PBRモード", { exact: true });
     await expect(pbr).not.toBeChecked();
     const checks = dialog.locator('[data-experimental-lighting] input[type="checkbox"]');
@@ -50,6 +65,7 @@ test("experimental settings persist PBR imports and expose environment and log o
     expect(saved.lighting.environmentLightingIntensity).toBe(1.5);
 
     const logInfo = await page.evaluate(() => window.electronAPI.getLogFileInfo());
+    await dialog.locator(".experimental-settings-logs > summary").click();
     await expect(dialog.getByLabel("現在のログファイル")).toHaveValue(logInfo.path);
     await dialog.getByRole("button", { name: "ログフォルダを開く", exact: true }).click();
     await dialog.getByRole("button", { name: "現在のログを開く", exact: true }).click();

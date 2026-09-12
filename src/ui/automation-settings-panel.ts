@@ -1,10 +1,12 @@
-import { createPopupFormButton, createPopupFormField } from "./popup-form-helpers";
+import { createPopupFormButton, createPopupFormButtonRow } from "./popup-form-helpers";
+import { createExperimentalSection, createExperimentalToggle } from "./experimental-settings-layout";
 import type { AutomationState } from "../automation/contracts";
 
 export function mountAutomationSettings(container: HTMLElement): () => void {
-    const section = document.createElement("section");
-    const title = document.createElement("h3");
-    title.textContent = "AI連携（MCP）";
+    const section = createExperimentalSection("MCP");
+    const title = document.createElement("p");
+    title.className = "experimental-settings-subtitle";
+    title.textContent = "AI連携";
     const enabled = document.createElement("input");
     enabled.type = "checkbox"; enabled.className = "popup-form-checkbox";
     enabled.disabled = true;
@@ -19,10 +21,13 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
     detailed.setAttribute("aria-describedby", detailNote.id);
     const note = document.createElement("p");
     note.className = "popup-form-note";
+    note.id = "mcp-sharing-note";
+    enabled.setAttribute("aria-describedby", note.id);
     note.textContent = "このウィンドウの画像・元パス・キー情報とボーン・モーフ・材質の名前一覧を公開します。モデルファイル・メッシュ・テクスチャ原本は提供しません。起動時はOFFです。";
     const status = document.createElement("p");
     status.setAttribute("role", "status");
     status.dataset.mcpStatus = "true";
+    status.className = "experimental-settings-status";
     const connection = createPopupFormButton("接続設定を表示", "secondary");
     connection.disabled = true;
     const config = document.createElement("textarea");
@@ -31,6 +36,7 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
     config.setAttribute("aria-label", "MCP接続設定");
     const historyButton = createPopupFormButton("詳細情報の提供履歴を更新", "secondary");
     const history = document.createElement("ol");
+    history.className = "experimental-settings-history";
     history.setAttribute("aria-label", "詳細情報の提供履歴");
     const historyNote = document.createElement("p");
     historyNote.className = "popup-form-note";
@@ -66,7 +72,7 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
         void window.electronAPI.automation.getDetailAccessHistory().then(entries => {
             if (!mounted) return;
             history.replaceChildren();
-            if (!entries.length) { const item = document.createElement("li"); item.textContent = "提供履歴はありません。"; history.append(item); }
+            if (!entries.length) { const item = document.createElement("li"); item.className = "is-empty"; item.textContent = "提供履歴はありません。"; history.append(item); }
             for (const entry of entries) {
                 const item = document.createElement("li");
                 item.textContent = `${new Date(entry.timestamp).toLocaleTimeString()} — ${entry.modelName} / ${entry.kind}[${entry.index}] ${entry.name ?? "名称なし"}`;
@@ -84,8 +90,20 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
             config.value = JSON.stringify({ mcpServers: { mmd_modoki: { type: "http", url: value.endpoint, headers: { Authorization: `Bearer ${value.token}` } } } }, null, 2);
         }).catch(() => { status.textContent = "公開をONにしてから接続設定を表示してください。"; });
     });
-    section.append(title, createPopupFormField("MCPを有効にする", enabled), createPopupFormField("AIからの編集も許可", editable), note,
-        createPopupFormField("構造情報を含む詳細診断を許可", detailed), detailNote, status, connection, config, historyButton, historyNote, history);
+    const permissions = document.createElement("div");
+    permissions.className = "experimental-settings-subsection";
+    const permissionTitle = document.createElement("h4"); permissionTitle.textContent = "操作の許可";
+    permissions.append(permissionTitle, createExperimentalToggle("AIからの編集も許可", editable));
+    const diagnostics = document.createElement("div");
+    diagnostics.className = "experimental-settings-subsection experimental-settings-consent";
+    const diagnosticsTitle = document.createElement("h4"); diagnosticsTitle.textContent = "詳細診断の共有";
+    diagnostics.append(diagnosticsTitle, detailNote, createExperimentalToggle("構造情報を含む詳細診断を許可", detailed));
+    const historySection = document.createElement("div");
+    historySection.className = "experimental-settings-subsection";
+    const historyTitle = document.createElement("h4"); historyTitle.textContent = "提供履歴";
+    historySection.append(historyTitle, historyNote, history, createPopupFormButtonRow([historyButton]));
+    section.append(title, createExperimentalToggle("MCPを有効にする", enabled), note, permissions,
+        diagnostics, status, createPopupFormButtonRow([connection]), config, historySection);
     container.append(section);
     return () => { mounted = false; config.value = ""; unsubscribe(); };
 }

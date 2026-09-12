@@ -3,7 +3,7 @@ id: experimental-settings-live-under-tools
 status: decision
 scope: ui/experimental-settings
 confidence: high
-last_verified: 2026-09-11
+last_verified: 2026-09-12
 evidence:
   - project-owner-directive
 source_docs:
@@ -29,7 +29,9 @@ decided_on: 2026-09-08
 
 ## 判断
 
-「ツール → 実験設定…」を入口とし、PBRモードに環境ライト・IBL影の詳細をまとめ、ログの場所・コピー操作を置く。当面は外部WGSLなど他機能まで広げない。
+「ツール → 実験設定…」を入口とし、PBRモードに環境ライト・IBL影の詳細をまとめ、ログの場所・コピー操作を置く。当初は外部WGSLなど他機能を含めず、後続の指示で追加した。
+
+2026-09-12、所有者は実験設定をPBR・WGSL・MCPの大段落に整理し、その中へ説明・小項目のチェック・了承を配置するよう明示した。機能間の区切りと、見出し・小見出し・説明の強弱をつける。説明付きの許可を、他機能の設定や無関係な注記へ混ぜない。
 
 2026-09-10、所有者はMCPによるAI連携の追加を希望し、そのON/OFFを実験設定へ置くよう指定した。MCPは上記の範囲へ追加する対象とする。当初は通信方式を未決定として[MCP連携方式の検討](../../docs/mcp-integration-design-investigation-2026-09-10.md)を行った。
 

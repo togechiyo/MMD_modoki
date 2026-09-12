@@ -3,7 +3,8 @@ import { wgslRecoveryApi } from "../external-wgsl/recovery";
 import { mountAutomationSettings } from "./automation-settings-panel";
 import type { PopupContentController } from "./popup-dialog-controller";
 import { HdriSettingsDialogController, type HdriSettingsDialogControllerDeps } from "./hdri-settings-dialog-controller";
-import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField } from "./popup-form-helpers";
+import { createPopupFormButton, createPopupFormButtonRow } from "./popup-form-helpers";
+import { createExperimentalSection, createExperimentalToggle } from "./experimental-settings-layout";
 
 export class ExperimentalSettingsDialogController implements PopupContentController {
     private busy = false;
@@ -19,15 +20,18 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
 
     public mount(container: HTMLElement): void {
         const form = document.createElement("div");
-        form.className = "popup-form";
-        this.disposeAutomation = mountAutomationSettings(form);
+        form.className = "popup-form experimental-settings";
+        const pbrSection = createExperimentalSection("PBR");
+        const wgslSection = createExperimentalSection("WGSL");
         const wgsl = document.createElement("input"); wgsl.type = "checkbox"; wgsl.className = "popup-form-checkbox";
         wgsl.checked = this.deps.mmdManager.getExternalWgslService().enabled;
         this.disposeWgsl = wgslRecoveryApi()?.onBlocked(() => { wgsl.checked = false; });
-        form.append(createPopupFormField(t("wgsl.permission"), wgsl));
+        wgslSection.append(createExperimentalToggle(t("wgsl.permission"), wgsl));
         const wgslNote = document.createElement("p");
         wgslNote.className = "popup-form-note"; wgslNote.textContent = t("wgsl.safetyNote");
-        form.append(wgslNote);
+        wgslSection.append(wgslNote);
+        wgslNote.id = "experiment-wgsl-note";
+        wgsl.setAttribute("aria-describedby", wgslNote.id);
         wgsl.addEventListener("change", () => {
             wgsl.disabled = true; this.busy = true;
             void this.deps.mmdManager.getExternalWgslService().setEnabled(wgsl.checked).catch((error: unknown) => {
@@ -44,14 +48,17 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
             return this.deps.mmdManager.getMmdMaterialPipelinePreset() === "pbr-standard";
         };
         pbr.checked = isPbr();
-        form.append(createPopupFormField(t("experiment.pbr"), pbr));
+        pbrSection.append(createExperimentalToggle(t("experiment.pbr"), pbr));
         const note = document.createElement("p");
         note.className = "popup-form-note";
         note.textContent = t("experiment.pbrNote");
-        form.append(note);
+        pbrSection.append(note);
+        note.id = "experiment-pbr-note";
+        pbr.setAttribute("aria-describedby", note.id);
         const details = document.createElement("section");
+        details.className = "experimental-settings-subsection";
         details.dataset.experimentalLighting = "true";
-        const summary = document.createElement("h3");
+        const summary = document.createElement("h4");
         summary.textContent = t("experiment.pbrDetails");
         details.append(summary);
         const hdri = new HdriSettingsDialogController(this.deps);
@@ -60,7 +67,7 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         ibl.className = "popup-form-note";
         ibl.textContent = t("experiment.iblUnavailable");
         details.append(ibl);
-        form.append(details);
+        pbrSection.append(details);
         pbr.addEventListener("change", () => {
             this.busy = true;
             pbr.disabled = true;
@@ -80,7 +87,9 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
             });
         });
 
-        const heading = document.createElement("h3");
+        const logs = document.createElement("details");
+        logs.className = "experimental-settings-logs experimental-settings-details";
+        const heading = document.createElement("summary");
         heading.textContent = t("experiment.logs");
         const path = document.createElement("input");
         path.type = "text";
@@ -106,7 +115,10 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
             });
             return button;
         }));
-        form.append(heading, path, row);
+        logs.append(heading, path, row);
+        form.append(pbrSection, wgslSection);
+        this.disposeAutomation = mountAutomationSettings(form);
+        form.append(logs);
         container.append(form);
     }
 }

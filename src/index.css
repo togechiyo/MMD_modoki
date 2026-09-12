@@ -718,6 +718,130 @@ select.popup-form-control {
   gap: 8px;
 }
 
+/* Experimental settings have their own hierarchy; other popup forms keep their layout. */
+.experimental-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.experimental-settings-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.experimental-settings-section > h3 {
+  margin: 0 0 2px;
+  color: var(--text-primary);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.experimental-settings .popup-form-field:has(> .popup-form-checkbox) {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.experimental-settings .popup-form-field > .popup-form-checkbox {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 2px 0 0;
+}
+
+.experimental-settings .popup-form-field:has(> .popup-form-checkbox) > .popup-form-label {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.experimental-settings .popup-form-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.experimental-settings-subtitle {
+  margin: -6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.experimental-settings-subsection {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.experimental-settings-subsection > h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.experimental-settings-consent {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.experimental-settings-status {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.experimental-settings-details > summary {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding-block: 4px;
+}
+
+.experimental-settings-details[open] > summary {
+  margin-bottom: 12px;
+}
+
+.experimental-settings-details > .popup-form-note,
+.experimental-settings-logs > .popup-form-button-row {
+  margin-top: 12px;
+}
+
+.experimental-settings-logs {
+  padding: 0 16px 8px;
+  min-width: 0;
+}
+
+.experimental-settings-history {
+  margin: 0;
+  padding-left: 22px;
+  max-height: 160px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.experimental-settings-history > .is-empty {
+  list-style: none;
+  margin-left: -22px;
+}
+
 .popup-form-frame-range {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

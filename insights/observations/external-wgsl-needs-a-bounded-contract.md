@@ -8,9 +8,12 @@ last_verified: null
 evidence:
   - primary-source-investigation
   - existing-prototype
+  - source-review-2026-09-12
+  - existing-validator-execution-2026-09-12
 source_docs:
   - ../../docs/external-wgsl-shader-loading-concept-2026-06-12.md
   - ../../docs/wgsl-shader-capabilities.md
+  - ../../docs/external-wgsl-reopening-review-2026-09-12.md
 superseded_by: null
 ---
 
@@ -33,6 +36,8 @@ MME風のユーザー shader、材質snippet、画面後段effectを外部ファ
 ## 根拠
 
 Babylon.jsはcompile/binding基盤を提供するが、入力texture、pass順、fallback、export再現性はMMD_modoki側の責任として残る。
+
+2026-09-12の静的確認では、材質別の外部割当が単一pathの保存後に全モデルへ適用される経路と、GPUコンパイル前に成功通知する経路が残っている。既存validatorもコメントだけの加算を受理し、コメント中のreturnを拒否する。UI再公開前に保存と復帰の整備が必要。実機描画・保存復元は未検証のため、段階設計は引き続きobservationとする。
 
 ## 再確認条件
 

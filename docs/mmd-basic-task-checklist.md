@@ -252,6 +252,7 @@
 - [x] WebGPU 非対応時の WebGL2 フォールバック
 - [x] WebGPU 時の描画整合確認
 - [x] カスタムシェーダーの WGSL 対応方針整理
+- [ ] 外部WGSL材質snippetの保存・失敗時復帰を整備し、実験機能からの許可導線を検討（[再公開前レビュー](./external-wgsl-reopening-review-2026-09-12.md)）
 - [ ] 主要エフェクトの WGSL 化
 - [ ] WebGL2 vs WebGPU 性能比較
 - [x] WebGPU 関連の既知落ちケースに対する設計整理

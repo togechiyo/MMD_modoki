@@ -4,6 +4,8 @@
 
 アプリが現在の材質・ライト・カメラ・時間から更新する値を、manifestの`inputs`で受け取る教材。値を手で設定する`parameters`と区別して使う。いずれも外部材質API v1のMMD材質向けで、テクスチャ入力は不要。
 
+以下の「表示」「時計」「格子」等の切替は、テキストエディタでmanifestの`parameters.DisplayMode.default`、`parameters.Clock.default`等を書き換え、「外部WGSL読込…」から再読込して共通ボタンで割り当てる。専用の色・数値入力UIは設けない。照明方向などアプリ本体の操作は従来どおりGUIを使う。
+
 ## 変数名・semantic・Objectの関係
 
 ```json

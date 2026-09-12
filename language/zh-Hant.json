@@ -1,12 +1,7 @@
 ﻿{
     "effect.frameGraphPost.masterOn": "整體開啟",
     "wgsl.title": "外部 WGSL 材質",
-    "wgsl.loadShort": "讀取…",
-    "wgsl.reloadShort": "重新讀取",
-    "wgsl.clearShort": "解除",
-    "wgsl.applySelectedShort": "套用至選取",
-    "wgsl.applyAllShort": "套用至全部",
-    "wgsl.colorComponents": "RGB / alpha 數值",
+    "wgsl.import": "讀取外部 WGSL…",
     "wgsl.permission": "啟用外部 WGSL 材質",
     "wgsl.load": "讀取定義檔",
     "wgsl.loaded": "已讀取",

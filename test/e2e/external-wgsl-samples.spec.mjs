@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { wgslFixtureEditor } from "./external-wgsl-fixture-editor.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test.setTimeout(120000);
@@ -50,27 +51,22 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
         };
         const original = await capture("original");
         const angularSamples = ["moonstone-schiller", "black-opal", "prismatic-fire"];
+        const editor = wgslFixtureEditor(app.app, page, testInfo, root);
         for (const sample of ["template", "soft-pastel", ...angularSamples, "aurora-opal"]) {
-            await app.app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }); }, resolve(root, "wgsl", sample, "effect.modoki.json"));
-            await page.locator("#external-wgsl-load").click();
-            await expect(page.locator("#external-wgsl-status")).toContainText("読込済み");
-            await page.locator("#external-wgsl-apply-all").click();
-            await expect(page.locator("#external-wgsl-apply-all")).toBeEnabled({ timeout: 25000 });
-            await expect(page.locator("#external-wgsl-diagnostic")).not.toContainText("操作に失敗");
-            await expect(page.locator("#external-wgsl-status")).toHaveAttribute("data-state", "ready");
+            await editor.load(sample);
             const image = await capture(sample);
             if (sample === "prismatic-fire") {
-                const panel = page.locator("#external-wgsl-panel");
-                await expect(panel.locator(".external-wgsl-name")).toHaveCount(1);
-                await expect(panel.locator(".external-wgsl-pending")).toHaveCount(0);
-                await expect(page.locator('[data-wgsl-parameter="BodyColor"]')).toHaveCount(3);
-                await expect(page.locator('[data-wgsl-parameter="BodyColor"]').first()).toBeHidden();
-                await expect(page.locator('[data-wgsl-range="FireStrength"]')).toBeVisible();
+                const panel = page.locator('[data-effect-tab-view="materials"]');
+                await expect(page.locator('[id^="external-wgsl-"]')).toHaveCount(1);
+                await expect(page.locator('[data-wgsl-parameter]')).toHaveCount(0);
+                await expect(page.locator(".shader-material-list")).toBeVisible();
+                expect(await page.locator(".shader-material-name").first().evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThan(20);
                 const bounds = await panel.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth, height: element.getBoundingClientRect().height }));
                 expect(bounds.content).toBeLessThanOrEqual(bounds.width + 1);
-                expect(bounds.height).toBeLessThan(450);
-                await page.screenshot({ path: testInfo.outputPath("prismatic-compact-panel.png") });
-                await panel.screenshot({ path: testInfo.outputPath("prismatic-controls.png") });
+                await page.screenshot({ path: testInfo.outputPath("prismatic-shared-panel.png") });
+                const area = await panel.boundingBox();
+                const lastRow = await page.locator(".shader-material-item").last().boundingBox();
+                await page.screenshot({ path: testInfo.outputPath("prismatic-controls.png"), clip: { ...area, height: lastRow.y + lastRow.height - area.y + 8 } });
             }
             if (sample === "template") expect(await changedPixels(app.app, original, image)).toBeLessThan(100);
             else expect(await changedPixels(app.app, original, image)).toBeGreaterThan(1000);
@@ -83,14 +79,11 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
                 expect(await changedPixels(app.app, image, repeat)).toBeLessThan(100);
                 await frame.fill("0"); await frame.press("Enter");
                 const parameter = { "moonstone-schiller": "SheenStrength", "black-opal": "ColorStrength", "prismatic-fire": "FireStrength" }[sample];
-                const control = page.locator(`[data-wgsl-parameter="${parameter}"]`);
-                const defaultStrength = await control.inputValue();
-                await control.fill("0"); await control.press("Enter");
-                await expect(page.locator("#external-wgsl-load")).toBeEnabled();
+                const defaultStrength = editor.parameterValue(parameter);
+                await editor.parameter(parameter, 0);
                 const without = await capture(`${sample}-feature-zero-selected`);
                 expect(await changedPixels(app.app, image, without)).toBeGreaterThan(100);
-                await control.fill(defaultStrength); await control.press("Enter");
-                await expect(page.locator("#external-wgsl-load")).toBeEnabled();
+                await editor.parameter(parameter, defaultStrength);
                 await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 2.4, y: 2.5, z: -6.5 }, { x: 0, y: 1.5, z: 0 }));
                 await capture(`${sample}-side`);
                 await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 0.4, y: 2, z: -7 }, { x: 0, y: 1.5, z: 0 }));
@@ -105,9 +98,7 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
         await frameInput.fill("0"); await frameInput.press("Enter");
         const frame0Again = await capture("opal-frame-0-repeat");
         expect(await changedPixels(app.app, frame0, frame0Again)).toBeLessThan(100);
-        await page.locator('[data-wgsl-parameter="Coating"]').fill("0");
-        await page.locator('[data-wgsl-parameter="Coating"]').press("Enter");
-        await expect(page.locator("#external-wgsl-load")).toBeEnabled();
+        await editor.parameter("Coating", 0);
         const reduced = await capture("opal-coating-zero-selected");
         expect(await changedPixels(app.app, frame0, reduced)).toBeGreaterThan(1000);
         expect((await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).messages).toEqual([]);

@@ -65,6 +65,7 @@ export class ExternalWgslService {
         this.assets.set(revision, structuredClone({ ...value, manifest }));
     }
     public getAsset(revision: string): EffectAsset | null { const asset = this.assets.get(revision); return asset && "manifest" in asset ? asset : null; }
+    public getAssets(): EffectAsset[] { return [...this.assets.values()].filter((asset): asset is EffectAsset => "manifest" in asset); }
     public exportAssets(revisions: Set<string>): Array<EffectAsset | EffectAssetReference> {
         return [...revisions].map(revision => {
             const asset = this.assets.get(revision);

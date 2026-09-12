@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { wgslFixtureEditor } from "./external-wgsl-fixture-editor.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test.setTimeout(120000);
@@ -69,20 +70,9 @@ for (const backend of ["classic", "frameGraph"]) test(`MME-style WGSL inputs ${b
         await page.locator("#btn-toggle-shader-panel").click();
         await page.locator('[data-effect-tab="materials"]').click();
         await page.locator(".shader-material-item").first().click();
-        const load = async name => {
-            await app.app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }); }, resolve(root, "wgsl", name, "effect.modoki.json"));
-            await page.locator("#external-wgsl-load").click();
-            await expect(page.locator("#external-wgsl-status")).toContainText("読込済み");
-            await page.locator("#external-wgsl-apply-all").click();
-            await expect(page.locator("#external-wgsl-apply-all")).toBeEnabled({ timeout: 25000 });
-            await expect(page.locator("#external-wgsl-diagnostic")).not.toContainText("操作に失敗");
-            await expect(page.locator("#external-wgsl-status")).toHaveAttribute("data-state", "ready");
-        };
-        const parameter = async (name, value) => {
-            const control = page.locator(`[data-wgsl-parameter="${name}"]`);
-            await control.fill(String(value)); await control.press("Enter");
-            await expect(page.locator("#external-wgsl-load")).toBeEnabled();
-        };
+        const editor = wgslFixtureEditor(app.app, page, testInfo, root);
+        const load = name => editor.load(name);
+        const parameter = (name, value) => editor.parameter(name, value);
         const frame = async value => {
             const control = page.locator("#viewport-seek-current-frame");
             await control.fill(String(value)); await control.press("Enter");
@@ -111,7 +101,7 @@ for (const backend of ["classic", "frameGraph"]) test(`MME-style WGSL inputs ${b
         if (await page.locator("#btn-toggle-shader-panel").getAttribute("aria-pressed") !== "true") await page.locator("#btn-toggle-shader-panel").click();
         await page.locator('[data-effect-tab="materials"]').click();
         if (!(await page.locator(".shader-material-item").first().getAttribute("class"))?.split(" ").includes("active")) await page.locator(".shader-material-item").first().click();
-        await expect(page.locator("#external-wgsl-status")).toHaveAttribute("data-state", "ready");
+        await expect(page.locator(".shader-material-item.active .shader-material-preset")).toContainText("WGSL:");
         const rotatedLight = await capture("light-direction-changed");
         expect(await changedPixels(app.app, [lighting, rotatedLight])).toBeGreaterThan(500);
         await parameter("DisplayMode", 1);

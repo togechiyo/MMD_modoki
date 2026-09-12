@@ -1,12 +1,7 @@
 ﻿{
     "effect.frameGraphPost.masterOn": "All ON",
     "wgsl.title": "External WGSL material",
-    "wgsl.loadShort": "Load…",
-    "wgsl.reloadShort": "Reload",
-    "wgsl.clearShort": "Clear",
-    "wgsl.applySelectedShort": "Apply selected",
-    "wgsl.applyAllShort": "Apply all",
-    "wgsl.colorComponents": "RGB / alpha values",
+    "wgsl.import": "Load external WGSL…",
     "wgsl.permission": "Enable external WGSL materials",
     "wgsl.load": "Load manifest",
     "wgsl.loaded": "Loaded",

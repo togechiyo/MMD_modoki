@@ -1,5 +1,5 @@
 import { t } from "../i18n";
-import { ExternalWgslPanel } from "./external-wgsl-panel";
+import { ExternalWgslPresets } from "./external-wgsl-presets";
 import type { EffectChange, EffectTarget } from "../external-wgsl/contract";
 import type { MmdManager, WgslMaterialShaderPresetId } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
@@ -130,7 +130,8 @@ function createPbrPresetCatalog(): Array<{ id: string; label: string; descriptio
 }
 
 export class ShaderPanelController {
-    private readonly externalPanel: ExternalWgslPanel;
+    private readonly externalPresets: ExternalWgslPresets;
+    private presetSelectionContext = "";
     public getAutomationPresetCatalog(subject: AutomationMaterialTarget) {
         const model = subject.kind === "model" ? this.mmdManager.getLoadedModels().find(item => item.instanceId === subject.modelInstanceId) : null;
         const target = subject.kind === "model"
@@ -198,13 +199,14 @@ export class ShaderPanelController {
         this.showToast = deps.showToast;
         this.onExternalWgslToonChanged = deps.onExternalWgslToonChanged;
         this.dispatchAction = deps.dispatchAction ?? null;
-        this.externalPanel = new ExternalWgslPanel(this.mmdManager, all => this.externalTargets(all), deps.onExternalEffectCommitted);
+        this.externalPresets = new ExternalWgslPresets(this.mmdManager, deps.onExternalEffectCommitted,
+            () => this.refresh(), id => { if (this.elements.presetSelect) this.elements.presetSelect.value = id; });
 
         this.setupEventListeners();
     }
 
     public refresh(): void {
-        this.externalPanel.refresh();
+        this.externalPresets.update(this.externalTargets(true).length > 0);
         const elements = this.elements;
         if (
             !elements.modelSelect ||
@@ -320,6 +322,14 @@ export class ShaderPanelController {
                 elements.presetSelect.appendChild(option);
             }
         }
+        if (!isPbrModel && !selectedAccessory) {
+            for (const preset of this.externalPresets.catalog()) {
+                const option = document.createElement("option");
+                option.value = preset.id; option.textContent = preset.label; option.title = preset.description;
+                option.disabled = !this.mmdManager.getExternalWgslService().enabled;
+                elements.presetSelect.appendChild(option);
+            }
+        }
         if (selectedMaterials.length === 0) {
             elements.presetSelect.disabled = true;
             elements.applySelectedButton.disabled = true;
@@ -371,9 +381,18 @@ export class ShaderPanelController {
                 return paths.size === 1 ? Array.from(paths)[0] : null;
             })();
 
-        let selectedShaderValue = previousSelectedShaderValue;
+        const modelInstanceId = this.mmdManager.getLoadedModels().find(item => item.index === selectedModelIndex)?.instanceId;
+        const externalFor = (key: string) => modelInstanceId && !isPbrModel && !selectedAccessory
+            ? this.externalPresets.assigned({ modelInstanceId, materialKey: key }) : null;
+        const assignedValues = selectedMaterials.map(material => externalFor(material.key)?.id ?? (isPbrModel ? material.pbrPresetId : material.presetId));
+        if (!selectedMaterial && new Set(assignedValues).size > 1) mixedPresets = true;
+        const assignedValue = selectedMaterial ? externalFor(selectedMaterial.key)?.id ?? selectedPresetId
+            : new Set(assignedValues).size === 1 ? assignedValues[0] : selectedPresetId;
+        const selectionContext = JSON.stringify([selectedTargetValue, modelInstanceId, selectedMaterial?.key, isPbrModel, assignedValues]);
+        let selectedShaderValue = selectionContext === this.presetSelectionContext ? previousSelectedShaderValue : "";
+        this.presetSelectionContext = selectionContext;
         if (!selectedShaderValue || !Array.from(elements.presetSelect.options).some((option) => option.value === selectedShaderValue)) {
-            selectedShaderValue = selectedPresetId;
+            selectedShaderValue = assignedValue;
         }
         if (!Array.from(elements.presetSelect.options).some((option) => option.value === selectedShaderValue)) {
             selectedShaderValue = presets[0]?.id ?? "wgsl-mmd-standard";
@@ -387,8 +406,10 @@ export class ShaderPanelController {
         elements.materialList.innerHTML = "";
 
         for (const material of selectedMaterials) {
+            const externalPreset = externalFor(material.key);
             const item = document.createElement("div");
             item.className = "shader-material-item";
+            if (externalPreset) item.classList.add("shader-material-item--external");
             if (selectedMaterial?.key === material.key) {
                 item.classList.add("active");
             }
@@ -444,11 +465,12 @@ export class ShaderPanelController {
 
             const presetEl = document.createElement("span");
             presetEl.className = "shader-material-preset";
-            presetEl.textContent = material.externalWgslPath
+            presetEl.textContent = externalPreset?.label ?? (material.externalWgslPath
                 ? `WGSL: ${this.getBaseNameForRenderer(material.externalWgslPath)}`
                 : (isPbrModel
                     ? (presetLabelById.get(material.pbrPresetId) ?? material.pbrPresetId)
-                    : (presetLabelById.get(material.presetId) ?? material.presetId));
+                    : (presetLabelById.get(material.presetId) ?? material.presetId)));
+            presetEl.title = presetEl.textContent;
             item.appendChild(presetEl);
 
             elements.materialList.appendChild(item);
@@ -477,8 +499,10 @@ export class ShaderPanelController {
 
         const hasSelectableOption = Array.from(elements.presetSelect.options).some((option) => !option.disabled && option.value.length > 0);
         elements.presetSelect.disabled = !hasSelectableOption;
-        elements.applySelectedButton.disabled = !hasSelectableOption || !selectedMaterial;
-        elements.applyAllButton.disabled = !hasSelectableOption;
+        const applying = this.externalPresets.busy || this.mmdManager.getExternalWgslService().busy;
+        const chosenAvailable = hasSelectableOption && !elements.presetSelect.selectedOptions[0]?.disabled;
+        elements.applySelectedButton.disabled = !chosenAvailable || !selectedMaterial || applying;
+        elements.applyAllButton.disabled = !chosenAvailable || applying;
         elements.resetButton.disabled = false;
     }
 
@@ -577,6 +601,7 @@ export class ShaderPanelController {
     }
 
     private setupEventListeners(): void {
+        this.elements.presetSelect?.addEventListener("change", () => this.refresh());
         this.elements.materialPipelineSelect?.addEventListener("change", () => {
             const next = this.mmdManager.setMmdMaterialPipelinePreset(
                 this.elements.materialPipelineSelect?.value,
@@ -622,6 +647,7 @@ export class ShaderPanelController {
     }
 
     private async applyShaderPresetFromPanel(resetToDefault: boolean, target: "auto" | "selected" | "all"): Promise<void> {
+        if (this.externalPresets.busy || this.mmdManager.getExternalWgslService().busy) return;
         if (!this.elements.presetSelect) {
             return;
         }
@@ -674,6 +700,12 @@ export class ShaderPanelController {
             this.showToast("Effect preset is not selected", "error");
             return;
         }
+
+        if (ExternalWgslPresets.isExternal(selectedValue)) {
+            await this.externalPresets.apply(selectedValue, this.externalTargets(materialKey === null));
+            return;
+        }
+        if (!isPbrModel && !selectedAccessory && !await this.externalPresets.clear(this.externalTargets(materialKey === null))) return;
 
         if (isPbrModel) {
             const ok = this.mmdManager.setPbrMaterialShaderPreset(

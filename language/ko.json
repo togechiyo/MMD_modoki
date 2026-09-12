@@ -1,12 +1,7 @@
 ﻿{
     "effect.frameGraphPost.masterOn": "전체 켜짐",
     "wgsl.title": "외부 WGSL 재질",
-    "wgsl.loadShort": "불러오기…",
-    "wgsl.reloadShort": "다시 읽기",
-    "wgsl.clearShort": "해제",
-    "wgsl.applySelectedShort": "선택에 적용",
-    "wgsl.applyAllShort": "전체에 적용",
-    "wgsl.colorComponents": "RGB / alpha 값",
+    "wgsl.import": "외부 WGSL 불러오기…",
     "wgsl.permission": "외부 WGSL 재질 활성화",
     "wgsl.load": "정의 파일 읽기",
     "wgsl.loaded": "읽음",

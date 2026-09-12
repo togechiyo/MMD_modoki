@@ -1,12 +1,7 @@
 ﻿{
     "effect.frameGraphPost.masterOn": "全体ON",
     "wgsl.title": "外部WGSL材質",
-    "wgsl.loadShort": "読込…",
-    "wgsl.reloadShort": "再読込",
-    "wgsl.clearShort": "解除",
-    "wgsl.applySelectedShort": "選択へ適用",
-    "wgsl.applyAllShort": "全材質へ適用",
-    "wgsl.colorComponents": "数値で編集",
+    "wgsl.import": "外部WGSL読込…",
     "wgsl.permission": "外部WGSL材質を有効にする",
     "wgsl.load": "定義ファイルを読む",
     "wgsl.loaded": "読込済み",

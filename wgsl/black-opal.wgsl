@@ -1,3 +1,25 @@
+/* @modoki
+{
+  "apiVersion": 1,
+  "kind": "mmd-material",
+  "name": "Black Opal",
+  "description": "暗い石の中で区画ごとの赤・緑・青が角度に応じて現れる、遊色風の表面表現。",
+  "hooks": { "finalColor": "shadeBlackOpal" },
+  "inputs": {
+    "WorldInverse": { "type": "mat4x4f", "semantic": "WORLDINVERSE", "annotations": { "Object": "Geometry" } },
+    "CameraPosition": { "type": "vec3f", "semantic": "POSITION", "annotations": { "Object": "Camera" } },
+    "LightDirection": { "type": "vec3f", "semantic": "DIRECTION", "annotations": { "Object": "Light" } }
+  },
+  "parameters": {
+    "BodyColor": { "type": "vec3f", "default": [0.018, 0.025, 0.045], "ui": { "label": "石の地色", "control": "color", "min": 0, "max": 1 } },
+    "FlakeScale": { "type": "f32", "default": 5, "ui": { "label": "かけらの細かさ", "min": 0.1, "max": 16, "step": 0.1 } },
+    "ColorStrength": { "type": "f32", "default": 1.1, "ui": { "label": "遊色の強さ", "min": 0, "max": 2, "step": 0.05 } },
+    "FlashWidth": { "type": "f32", "default": 0.4, "ui": { "label": "光る角度の広さ", "min": 0.1, "max": 1, "step": 0.05 } },
+    "Coating": { "type": "f32", "default": 1, "ui": { "label": "コーティングの強さ", "min": 0, "max": 1, "step": 0.01 } }
+  }
+}
+*/
+
 // Play-of-colour approximation: stable 3D domains with different angular responses.
 // Independent from TIME; a stationary camera/light leaves the stone stationary.
 fn blackOpalUnit(v: vec3f) -> vec3f {

@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalEffectContent, parseEffectManifest, relativeEffectPath, validateEffectSources, type EffectAsset, type EffectAssetReference } from "./contract";
+import { parseEffectFile } from "./single-file";
 
 async function containedFile(directory: string, relative: string): Promise<string> {
     relativeEffectPath.parse(relative);
@@ -18,20 +19,11 @@ export function validateEffectAsset(value: EffectAsset): EffectAsset {
     if (value.revision !== revision) throw new Error("Effect content hash mismatch");
     return { revision, manifest, sources: value.sources, ...(value.originPath ? { originPath: value.originPath } : {}) };
 }
-export async function readEffectPackage(manifestPath: string): Promise<EffectAsset> {
-    const manifest = parseEffectManifest(JSON.parse((await fs.readFile(manifestPath, "utf8")).replace(/^\uFEFF/, "")));
-    const sources: EffectAsset["sources"] = [];
-    const seen = new Set<string>();
-    for (const relative of manifest.sources) {
-        const file = await containedFile(path.dirname(manifestPath), relative);
-        const key = process.platform === "win32" ? file.toLowerCase() : file;
-        if (seen.has(key)) throw new Error("Duplicate source file: " + relative);
-        seen.add(key);
-        sources.push({ path: relative, text: (await fs.readFile(file, "utf8")).replace(/^\uFEFF/, "") });
-    }
-    validateEffectSources(manifest, sources);
+export async function readEffectPackage(filePath: string): Promise<EffectAsset> {
+    if (path.extname(filePath).toLowerCase() !== ".wgsl") throw new Error("Select a .wgsl file with @modoki metadata; JSON import is no longer supported");
+    const { manifest, sources } = parseEffectFile(await fs.readFile(filePath, "utf8"), path.basename(filePath));
     const revision = createHash("sha256").update(canonicalEffectContent({ manifest, sources })).digest("hex");
-    return { revision, manifest, sources, originPath: manifestPath };
+    return { revision, manifest, sources, originPath: filePath };
 }
 type ProjectWithEffects = { format: string; version: number; externalEffects: Array<EffectAsset | EffectAssetReference> };
 function projectWithEffects(content: string): ProjectWithEffects | null {

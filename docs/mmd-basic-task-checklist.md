@@ -257,6 +257,7 @@
 - [x] 外部WGSLサンプルをAPI v1へ整理。Aurora Opal・シラー・遊色・分散風・Soft Pastel・Templateの6種を追加し、組込Toon断片をsrc配下へ分離。両描画経路で読込・描画・時間再現と角度依存作例を確認（[サンプル一覧](../wgsl/README.md)）
 - [x] MME風の自動入力を実際に使う教材3種を追加。材質・ライト・視点、行列・viewport、TIME・ELAPSEDTIME・frameを解説付きで比較（[入力サンプル](./external-wgsl-mme-inputs-examples.md)）
 - [x] 外部WGSLの専用編集UIを撤去。読込1ボタンから既存プリセット一覧・割当ボタンへ統合し、テキスト編集・保存復元・解除を確認（[現行の使い方](./external-wgsl-material-usage.md)）
+- [x] 外部WGSLを冒頭設定コメント付きの単一ファイルへ統一。JSON読込を撤去し、9作例・作者例を移行。両描画経路で読込・再編集・失敗復帰・元ファイル削除後の保存復元を確認（[単一WGSL書式](./external-wgsl-material-usage.md#単一wgslの書式)）
 - [ ] 外部WGSL材質B以降：light hook・texture・CONTROL入力、全variant検証とsource位置の逆変換（[詳細設計](./external-wgsl-material-api-v1-design.md)）
 - [ ] 主要エフェクトの WGSL 化
 - [ ] WebGL2 vs WebGPU 性能比較

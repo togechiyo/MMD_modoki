@@ -19,7 +19,7 @@ export class ExternalWgslPresets {
         this.loadButton.type = "button"; this.loadButton.className = "info-action-btn";
         document.getElementById("shader-preset-select")?.parentElement?.after(this.loadButton);
         this.loadButton.addEventListener("click", () => void this.run(async () => {
-            const path = await window.electronAPI.openFileDialog([{ name: "Modoki WGSL manifest", extensions: ["json"] }]);
+            const path = await window.electronAPI.openFileDialog([{ name: "Modoki WGSL", extensions: ["wgsl"] }]);
             if (!path) return;
             const result = await window.electronAPI.readEffectPackage(path);
             if (!result.asset) throw new Error(result.error ?? "WGSL read failed");

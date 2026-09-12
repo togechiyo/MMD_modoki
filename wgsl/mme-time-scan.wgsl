@@ -1,3 +1,27 @@
+/* @modoki
+{
+  "apiVersion": 1,
+  "kind": "mmd-material",
+  "name": "MME Time Scan",
+  "description": "TIMEとELAPSEDTIMEの編集同期あり・なしを比較。MODOKI_FRAMEは独自拡張として別に示す。",
+  "hooks": { "finalColor": "shadeMmeTime" },
+  "inputs": {
+    "TimelineTime": { "type": "f32", "semantic": "TIME", "annotations": { "SyncInEditMode": true } },
+    "PreviewTime": { "type": "f32", "semantic": "TIME", "annotations": { "SyncInEditMode": false } },
+    "TimelineDelta": { "type": "f32", "semantic": "ELAPSEDTIME", "annotations": { "SyncInEditMode": true } },
+    "PreviewDelta": { "type": "f32", "semantic": "ELAPSEDTIME", "annotations": { "SyncInEditMode": false } },
+    "Frame": { "type": "f32", "semantic": "MODOKI_FRAME" }
+  },
+  "parameters": {
+    "Clock": { "type": "u32", "default": 0, "ui": { "label": "時計 0:タイムライン 1:停止中も進む", "min": 0, "max": 1, "step": 1 } },
+    "DisplayMode": { "type": "u32", "default": 0, "ui": { "label": "表示 0:走査線 1:elapsed診断 2:フレーム縞", "min": 0, "max": 2, "step": 1 } },
+    "Speed": { "type": "f32", "default": 0.7, "ui": { "label": "走査速度", "min": -3, "max": 3, "step": 0.1 } },
+    "PatternScale": { "type": "f32", "default": 1, "ui": { "label": "縞の細かさ", "min": 0.05, "max": 10, "step": 0.05 } },
+    "Strength": { "type": "f32", "default": 0.85, "ui": { "label": "表示の強さ", "min": 0, "max": 1, "step": 0.05 } }
+  }
+}
+*/
+
 // TIMEは秒。編集同期ありではframe / 30。停止中にも進めたいときだけ同期なしを選ぶ。
 fn shadeMmeTime(input: ModokiFinalColor) -> vec3f {
     let live = modokiInputs.Clock == 1u;

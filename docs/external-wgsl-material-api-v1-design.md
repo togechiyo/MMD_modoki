@@ -8,29 +8,23 @@
 
 所有者が採用した方向は、**Babylon.jsのWGSL宣言・コンパイル基盤と、MME風の入力semanticを組み合わせる**こと。以下のファイル名、API、既定値、導入順は、この方向を具体化した実装提案であり、実装済み仕様ではない。
 
-作者の計算はWGSLの関数として記述する。入力の意味、ファイル参照、適用先、呼出位置はmanifestで宣言する。独自のシェーダー言語やNMEのnode graph実行系は追加しない。NME生成コードは作者が入出力を合わせて移植できるようにする。
+作者の計算はWGSLの関数として記述する。入力の意味、適用先、呼出位置は単一WGSL冒頭の設定コメント（manifest）で宣言する。独自のシェーダー言語やNMEのnode graph実行系は追加しない。NME生成コードは作者が入出力を合わせて移植できるようにする。
 
 初期profileは `mmd-material`。MMD Standard材質に差し込み、既存のボーン・SDEF・モーフ・材質・輪郭の基盤を保持する。独立vertex/fragment、PBR、post effectは別profileとして拡張可能にするが、未対応profileを黙って材質snippetとして解釈しない。これは段階導入であり、外部WGSLの用途を恒久的に限定する判断ではない。
 
 ## 2. ファイルと宣言の正本
 
-```text
-effect-folder/
-  effect.modoki.json
-  main.wgsl
-  math.wgsl            # 必要ならsourcesへ追加
-  textures/           # 外部画像を使う場合
-```
+配布・読込は `effect.wgsl` などの単一ファイルへ統一する。先頭に `/* @modoki` とJSON設定を置き、`*/` の後へ計算・struct・helper関数を書く。旧JSON定義の直接読込は撤去する（2026-09-12の所有者指定）。
 
-manifestが入力型・semantic・parameter既定値・texture接続・entry関数の正本。WGSLには計算と独自struct/helper関数を書く。schema案は [JSON Schema](./schemas/external-material-effect-v1.schema.json)、整合例は [manifest](./examples/external-material-effect-v1/effect.modoki.json) と [WGSL](./examples/external-material-effect-v1/main.wgsl)。この例は初期実装でGPU動作を確認した。schemaのB向けfieldはruntime未対応。
+設定が入力型・semantic・parameter既定値・entry関数の正本。書式は [使い方](./external-wgsl-material-usage.md#単一wgslの書式)、[実例](./examples/external-material-effect-v1/effect.wgsl)、[設定のSchema案](./schemas/external-material-effect-v1.schema.json)を参照する。schemaのB向けfieldはruntime未対応。
 
-- UTF-8。読込時のBOMを除去し、source mapで元の行番号を保持する。
-- `sources`を記載順に結合する。同一module内のWGSL関数として扱い、1ファイルでもよい。重複pathはエラー。ファイル参照はmanifestフォルダ基準で、ネットワーク取得は行わない。
-- package内参照は相対pathのみ。`..`、絶対path、URLでpackage外へ出ない。共有ライブラリを使いたい場合はpackageへ同梱する。shaderからのIOやJavaScript実行は導入しない。
-- path区切りは `/` とし、runtimeでは実pathを解決してsymlink/junction経由もpackage内であることを確認する。同じ実体を指すsourceの重複も拒否する。schemaの文字列検査だけでfile境界を保証しない。
+- UTF-8。BOMと先頭空白は許可する。設定ブロックは先頭に1つのみ。
+- 設定JSONへ `sources` は指定しない。全関数を同じファイル内に置く。複数ソース参照・独自include・ネットワーク取得は行わない。
+- 読込時は設定ブロックを改行を残して空白化し、ファイル名と本文を内部sourceへ正規化する。宣言検査の行番号を維持する。GPU生成コードから作者ファイルへの厳密な逆変換は未実装。
+- 内部manifestの `sources` は実装側で生成する。既存の正規化assetとproject sidecar形式は維持し、保存済みの旧assetも復元可能。作者向けJSON読込の存続とは区別する。
 - author identifierはASCII識別子とし、WGSL予約語、`fx_`、`Modoki`、`modoki`で始まる名前は生成コード用に予約する。UI label・説明・assetファイル名・control対象名は日本語を含むUnicodeを保持する。
 - `apiVersion`はmanifestのmajor version。未知major、未知field、未知semanticは診断する。`requires`は追加機能の要求であり、runtimeの対応一覧にない要求は適用前に拒否する。
-- Babylon include/defineはadapterが宣言したものだけを供給する。任意includeをネットワークから解決しない。v1 author moduleは `sources`による結合を使い、独自の `#include` 展開器は作らない。将来のfull shader profileとは区別する。
+- Babylon include/defineはadapterが宣言したものだけを供給する。任意includeをネットワークから解決しない。v1 author moduleは同じWGSL内へ関数をまとめ、独自の `#include` 展開器は作らない。将来のfull shader profileとは区別する。
 
 ### Babylon式の公開名
 

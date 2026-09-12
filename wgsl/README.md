@@ -1,25 +1,25 @@
 # 外部WGSL材質サンプル（API v1）
 
-このフォルダは、新しい外部WGSL読込で実際に選べるサンプルです。各フォルダの **`effect.modoki.json`** を選びます。`.wgsl`単独を読む旧方式ではありません。
+このフォルダは、外部WGSL読込で実際に選べる単一ファイルのサンプルです。**`prismatic-fire.wgsl`** などを選びます。冒頭の `/* @modoki … */` に設定、その後にWGSL本文を収録しています。旧JSON定義の読込は撤去しました。
 
 ## 使い方
 
 1. ツール → 実験機能 →「外部WGSL材質を有効にする」をON。
 2. モデルを選び、エフェクトパネル → 材質 →「外部WGSL読込…」。
 3. 以下の定義を読むと「種類」の既存一覧に追加されます。共通の「選択へ割り当て」または「全材質へ割り当て」で適用。
-4. 調整はテキストエディタでmanifestの`parameters.変数名.default`やWGSL本文を編集し、同じボタンで読み直して再適用します。以下の調整名はmanifest内の項目を指し、画面に色・数値入力欄はありません。組込プリセットを割り当てると外部WGSLを解除します。
+4. 調整はテキストエディタで冒頭設定の`parameters.変数名.default`やWGSL本文を編集し、同じボタンで読み直して再適用します。以下の調整名は冒頭設定内の項目を指し、画面に色・数値入力欄はありません。組込プリセットを割り当てると外部WGSLを解除します。
 
 | サンプル | 内容 |
 | --- | --- |
-| [Aurora Opal](./aurora-opal/effect.modoki.json) | 時間で流れる鉱石模様、視線角度で変わる虹色、発光する帯と縁取り。 |
-| [Moonstone Schiller](./moonstone-schiller/effect.modoki.json) | 乳白色の表面に、角度で浮かぶ柔らかな青いシラー。 |
-| [Black Opal](./black-opal/effect.modoki.json) | 黒い地に点在するかけらが、角度に応じて赤・緑・青に光る遊色風。 |
-| [Prismatic Fire](./prismatic-fire/effect.modoki.json) | 落ち着いた石の光沢に、ときどき鮮やかな色のきらめきが現れる分散風。 |
-| [Soft Pastel](./soft-pastel/effect.modoki.json) | 元の照明・影の位置を保ったパステル調の色仕上げ。 |
-| [Template](./template/effect.modoki.json) | 色乗算だけの編集開始用。既定値は元の見た目を保持。 |
-| [MME入力：材質・ライト・視点](./mme-light-material/effect.modoki.json) | DIFFUSEのObject指定、材質の光沢、ライト方向、カメラ位置を使った簡易照明教材。 |
-| [MME入力：行列・画面サイズ](./mme-space-grid/effect.modoki.json) | 物体に付く格子と画面に付く格子を比較。WORLD・逆行列・WVP・viewportの実用例。 |
-| [MME入力：時間・フレーム](./mme-time-scan/effect.modoki.json) | 編集同期あり／なしのTIME・ELAPSEDTIMEと独自のMODOKI_FRAMEを可視化。 |
+| [Aurora Opal](./aurora-opal.wgsl) | 時間で流れる鉱石模様、視線角度で変わる虹色、発光する帯と縁取り。 |
+| [Moonstone Schiller](./moonstone-schiller.wgsl) | 乳白色の表面に、角度で浮かぶ柔らかな青いシラー。 |
+| [Black Opal](./black-opal.wgsl) | 黒い地に点在するかけらが、角度に応じて赤・緑・青に光る遊色風。 |
+| [Prismatic Fire](./prismatic-fire.wgsl) | 落ち着いた石の光沢に、ときどき鮮やかな色のきらめきが現れる分散風。 |
+| [Soft Pastel](./soft-pastel.wgsl) | 元の照明・影の位置を保ったパステル調の色仕上げ。 |
+| [Template](./template.wgsl) | 色乗算だけの編集開始用。既定値は元の見た目を保持。 |
+| [MME入力：材質・ライト・視点](./mme-light-material.wgsl) | DIFFUSEのObject指定、材質の光沢、ライト方向、カメラ位置を使った簡易照明教材。 |
+| [MME入力：行列・画面サイズ](./mme-space-grid.wgsl) | 物体に付く格子と画面に付く格子を比較。WORLD・逆行列・WVP・viewportの実用例。 |
+| [MME入力：時間・フレーム](./mme-time-scan.wgsl) | 編集同期あり／なしのTIME・ELAPSEDTIMEと独自のMODOKI_FRAMEを可視化。 |
 
 いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。WebGPUのMMD材質モード向けで、PBRでは休止します。元のテクスチャを含む色への合成方法はサンプルごとに異なります。
 

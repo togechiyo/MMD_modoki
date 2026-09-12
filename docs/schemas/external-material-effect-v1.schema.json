@@ -1,20 +1,16 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "MMD_modoki external material effect v1 (design draft)",
-  "description": "Design-time structural schema. Semantic/type, resource and GPU validation remain runtime responsibilities.",
+  "title": "MMD_modoki @modoki metadata v1 (design draft)",
+  "description": "Metadata inside the initial WGSL comment, without external sources. Includes future fields; semantic/type, capability and GPU validation remain runtime responsibilities.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["apiVersion", "kind", "name", "sources", "hooks"],
+  "required": ["apiVersion", "kind", "name", "hooks"],
   "properties": {
     "$schema": { "type": "string" },
     "apiVersion": { "const": 1 },
     "kind": { "const": "mmd-material" },
     "name": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
-    "sources": {
-      "type": "array", "minItems": 1, "uniqueItems": true,
-      "items": { "$ref": "#/definitions/relativePath" }
-    },
     "requires": {
       "type": "array", "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }

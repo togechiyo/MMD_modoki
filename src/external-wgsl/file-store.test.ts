@@ -8,17 +8,17 @@ const directories: string[] = [];
 afterEach(async () => { for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }); });
 async function fixture() {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "modoki-effect-test-")); directories.push(directory);
-    const manifest = { apiVersion: 1, kind: "mmd-material", name: "色", sources: ["main.wgsl"], hooks: { finalColor: "shade" } };
-    const file = path.join(directory, "effect.modoki.json");
-    await fs.writeFile(file, JSON.stringify(manifest));
-    await fs.writeFile(path.join(directory, "main.wgsl"), "fn shade(s: ModokiFinalColor) -> vec3f { return s.color; }");
+    const manifest = { apiVersion: 1, kind: "mmd-material", name: "色", hooks: { finalColor: "shade" } };
+    const file = path.join(directory, "effect.wgsl");
+    await fs.writeFile(file, `/* @modoki\n${JSON.stringify(manifest)}\n*/\nfn shade(s: ModokiFinalColor) -> vec3f { return s.color; }`);
     return { directory, file, manifest };
 }
 describe("WGSL package and project IO", () => {
-    it("rejects two paths resolving to the same source", async () => {
+    it("rejects the old JSON import even when the file contains valid metadata", async () => {
         const f = await fixture();
-        await fs.writeFile(f.file, JSON.stringify({ ...f.manifest, sources: ["main.wgsl", "./main.wgsl"] }));
-        await expect(readEffectPackage(f.file)).rejects.toThrow("Duplicate source");
+        const oldPath = path.join(f.directory, "effect.modoki.json");
+        await fs.writeFile(oldPath, JSON.stringify({ ...f.manifest, sources: ["effect.wgsl"] }));
+        await expect(readEffectPackage(oldPath)).rejects.toThrow("JSON import is no longer supported");
     });
     it("saves one shared asset and restores it after original source removal", async () => {
         const f = await fixture(); const asset = await readEffectPackage(f.file);
@@ -28,7 +28,7 @@ describe("WGSL package and project IO", () => {
         const saved = JSON.parse(await fs.readFile(target, "utf8"));
         expect(saved.externalEffects[0].manifest).toBeUndefined();
         expect(saved.externalEffects[0].path).toContain(asset.revision);
-        await fs.unlink(path.join(f.directory, "main.wgsl"));
+        await fs.unlink(f.file);
         expect(JSON.parse(await readTextWithEffects(target)).externalEffects[0]).toEqual(asset);
         await writeTextWithEffects(target, JSON.stringify(project));
         expect(await fs.readdir(path.join(f.directory, "scene.mmdproj.assets/effects"))).toHaveLength(1);

@@ -1,9 +1,8 @@
+/* @modoki
 {
-  "$schema": "../../schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
   "name": "タイムライン連動の色調整",
-  "sources": ["main.wgsl"],
   "hooks": {
     "surface": "shadeSurface",
     "finalColor": "shadeFinalColor"
@@ -27,4 +26,21 @@
       "ui": { "label": "強さ", "control": "number", "min": 0, "max": 1, "step": 0.01 }
     }
   }
+}
+*/
+
+// External material API v1. The host supplies the declared inputs and hook interfaces.
+// TIME follows the timeline and is fixed to the frame being exported.
+fn shadeSurface(surface: ModokiSurface) -> ModokiSurfaceOutput {
+    return ModokiSurfaceOutput(
+        surface.baseColor * modokiInputs.Tint,
+        surface.diffuseColor,
+        surface.normalWS
+    );
+}
+
+fn shadeFinalColor(surface: ModokiFinalColor) -> vec3f {
+    let wave = 0.5 + 0.5 * sin(modokiInputs.Time * 6.2831853);
+    let gain = mix(1.0, 0.7 + 0.3 * wave, modokiInputs.Strength);
+    return surface.color * gain;
 }

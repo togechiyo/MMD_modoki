@@ -4,6 +4,7 @@ import type { KeyframeTransaction } from "./keyframe-transaction";
 import type { ObjectStateEdit } from "../editor/object-state-edit";
 import type { BonePoseBatch } from "../editor/bone-pose-batch";
 import type { MorphWeightBatch } from "../editor/morph-weight-batch";
+import type { ModelMotionClearDiff } from "../editor/model-motion-state";
 
 export type CommandScope =
     | "keyframe"
@@ -119,6 +120,7 @@ export type CameraTransformCommandSnapshot = {
 };
 
 export type EditCommandDiff =
+    | ModelMotionClearDiff
     | MorphWeightBatch
     | BonePoseBatch
     | ObjectStateEdit

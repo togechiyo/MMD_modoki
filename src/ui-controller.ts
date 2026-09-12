@@ -2665,6 +2665,11 @@ export class UIController {
         this.actionDispatcher.register("model.deleteActive", () => {
             this.modelInfoPanelController?.deleteActiveModel();
         });
+        this.actionDispatcher.register("model.clearMotion", () => {
+            const command = this.mmdManager.buildClearActiveModelMotionCommand();
+            if (!command || !executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) return;
+            this.commandHistory.push(command);
+        });
         this.actionDispatcher.register("model.setExternalParent", () => {
             this.modelExternalParentController?.setExternalParentFromPanel();
         });
@@ -7872,6 +7877,16 @@ export class UIController {
             },
             addTimelineKeyframe: (track, frame) => this.mmdManager.addTimelineKeyframe(track, frame),
             removeTimelineKeyframe: (track, frame) => this.mmdManager.removeTimelineKeyframe(track, frame),
+            applyModelMotionClear: (diff, direction) => {
+                const applied = this.mmdManager.applyModelMotionState(diff.modelInstanceId, direction === "revert" ? diff.before : null);
+                if (applied) {
+                    this.timeline.setSelectedKeys([]);
+                    this.updateTimelineEditState();
+                    this.modelExternalParentController?.refresh();
+                    this.appMenuController?.refresh();
+                }
+                return applied;
+            },
             removeTimelineKeyframePayloads: (track, frames) =>
                 this.mmdManager.removeTimelineKeyframePayloads(track, frames),
             moveTimelineKeyframe: (track, fromFrame, toFrame) => this.mmdManager.moveTimelineKeyframe(

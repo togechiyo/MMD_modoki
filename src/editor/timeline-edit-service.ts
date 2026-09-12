@@ -4,6 +4,7 @@ import type { KeyframeTrack, ModelInfo, TimelineTarget, TrackCategory } from "..
 import type { AccessoryTransformKeyframeValue } from "./accessory-transform-keyframe-track";
 import type { ModelExternalParentKeyframePayload } from "../shared/model-external-parent";
 import { addFrameNumber, classifyBone, createTrackKey, hasFrameNumber, mergeFrameNumbers, moveFrameNumber, parseTrackKey, removeFrameNumber } from "../shared/timeline-helpers";
+import { normalizeModelBoneTracks } from "./model-bone-track-normalization";
 
 const EMPTY_KEYFRAME_FRAMES = new Uint32Array(0);
 const DEFAULT_EDIT_TIMELINE_FRAMES = 300;
@@ -1141,6 +1142,15 @@ export function ensureModelAnimationForEditing(host: TimelineEditHost, track: Pi
     const hasExistingMovableTrack = animationMutable.movableBoneTracks.some((candidate) => candidate.name === track.name);
     const preferMovableTrack = shouldUseMovableBoneTrack(host, track);
     if (preferMovableTrack) {
+        if (hasExistingBoneTrack) {
+            const normalized = normalizeModelBoneTracks(
+                animationMutable.boneTracks, animationMutable.movableBoneTracks,
+                new Set([...animationMutable.movableBoneTracks.map(candidate => candidate.name), track.name]),
+            );
+            animationMutable.boneTracks = normalized.boneTracks;
+            animationMutable.movableBoneTracks = normalized.movableBoneTracks;
+            return true;
+        }
         if (!hasExistingMovableTrack) {
             animationMutable.movableBoneTracks.push(new MmdMovableBoneAnimationTrack(track.name, 0));
         }
@@ -1645,6 +1655,14 @@ function applyBoneKeyframePayload(
 ): boolean {
     if (!host.currentModel) return false;
     let animation = getCurrentModelAnimation(host);
+    if (shouldUseMovableBoneTrack(host, track) && animation?.movableBoneTracks.some(candidate => candidate.name === track.name)) {
+        return applyMovableBoneKeyframePayload(host, track, frame, {
+            ...payload,
+            kind: "movableBone",
+            positions: [0, 0, 0],
+            positionInterpolations: [20, 107, 20, 107, 20, 107, 20, 107, 20, 107, 20, 107],
+        });
+    }
     if (!animation) {
         if (!ensureModelAnimationForEditing(host, track)) return false;
         animation = getCurrentModelAnimation(host);
@@ -1944,13 +1962,16 @@ export function createOffsetModelAnimation(animation: MmdAnimation, frameOffset:
 }
 
 export function mergeModelAnimations(baseAnimation: MmdAnimation, overlayAnimation: MmdAnimation): MmdAnimation {
-    const mergedBoneTracks = mergeBoneTrackArrays(baseAnimation.boneTracks, overlayAnimation.boneTracks);
-    const mergedMovableBoneTracks = mergeMovableBoneTrackArrays(baseAnimation.movableBoneTracks, overlayAnimation.movableBoneTracks);
+    const movableNames = new Set([...baseAnimation.movableBoneTracks, ...overlayAnimation.movableBoneTracks].map(track => track.name));
+    const base = normalizeModelBoneTracks(baseAnimation.boneTracks, baseAnimation.movableBoneTracks, movableNames);
+    const overlay = normalizeModelBoneTracks(overlayAnimation.boneTracks, overlayAnimation.movableBoneTracks, movableNames);
+    const mergedBoneTracks = mergeBoneTrackArrays(base.boneTracks, overlay.boneTracks);
+    const mergedMovableBoneTracks = mergeMovableBoneTrackArrays(base.movableBoneTracks, overlay.movableBoneTracks);
     const mergedMorphTracks = mergeMorphTrackArrays(baseAnimation.morphTracks, overlayAnimation.morphTracks);
     const mergedPropertyTrack = mergePropertyTrack(baseAnimation.propertyTrack, overlayAnimation.propertyTrack);
 
     return new MmdAnimation(
-        `${baseAnimation.name}+${overlayAnimation.name}`,
+        overlayAnimation.name,
         mergedBoneTracks,
         mergedMovableBoneTracks,
         mergedMorphTracks,

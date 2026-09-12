@@ -813,6 +813,8 @@
   "dialog.vmdRetarget.saveCancelled": "VMD save was cancelled",
   "dialog.vmdRetarget.saveFailed": "Could not save the retargeted VMD",
     "menu.edit.deleteActiveModel": "Delete Selected Model",
+    "menu.edit.clearModelMotion": "Clear All Motion from Selected Model",
+    "menu.edit.clearModelMotion.title": "Remove all bone (including hidden), morph, visibility/IK and external-parent keys and motion import history. Can be undone.",
     "menu.edit.preferences": "Preferences...",
     "menu.view": "View",
     "menu.view.toggleGround": "Ground",

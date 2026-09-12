@@ -122,6 +122,7 @@ export type ModelAction =
     | { type: "model.toggleActiveVisibility"; source: ActionSource }
     | { type: "model.setActiveShadow"; source: ActionSource; castShadow: boolean }
     | { type: "model.deleteActive"; source: ActionSource }
+    | { type: "model.clearMotion"; source: ActionSource }
     | { type: "model.setExternalParent"; source: ActionSource };
 
 export type ShaderAction =

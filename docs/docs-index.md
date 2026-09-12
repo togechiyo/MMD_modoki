@@ -185,6 +185,7 @@
 - [タイムライン データフロー](./data-flow-timeline.md)
 - [MMD timeline track scope note](./mmd-timeline-track-scope-note-2026-04-20.md)
 - [キーフレーム保存仕様](./keyframe-storage-spec.md)
+- [Issue #25 プロジェクト肥大・モーション削除後の残留調査 2026-09-12](./issue-25-project-motion-retention-2026-09-12.md)
 - [キー登録 UI 配置メモ](./key-registration-ui-note-2026-04-18.md)
 - [キー登録 UI 移設計画](./key-registration-ui-relocation-plan-2026-06-15.md)
 - [キー登録 v0.2 release focus](./key-registration-v0.2-release-focus-2026-06-25.md)

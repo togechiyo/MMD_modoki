@@ -81,6 +81,8 @@ import type { IMmdBindableCameraAnimation } from "babylon-mmd/esm/Runtime/Animat
 import type { IMmdRuntimeBone } from "babylon-mmd/esm/Runtime/IMmdRuntimeBone";
 import type { VpdBonePose } from "./export/vpd-export-document";
 import { exportProjectState as exportProjectStateImpl } from "./project/project-serializer";
+import { serializeModelAnimation, deserializeModelAnimation } from "./project/project-codec";
+import { buildClearModelMotionCommand, type ModelMotionState } from "./editor/model-motion-state";
 import { importProjectState as importProjectStateImpl } from "./project/project-importer";
 import {
     colorToHex,
@@ -818,7 +820,7 @@ import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
 import { VpdLoader } from "babylon-mmd/esm/Loader/vpdLoader";
 import { BvmdLoader } from "babylon-mmd/esm/Loader/Optimized/bvmdLoader";
 import { MmdAnimation } from "babylon-mmd/esm/Loader/Animation/mmdAnimation";
-import { MmdBoneAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack, MmdPropertyAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
+import { MmdBoneAnimationTrack, MmdCameraAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack, MmdPropertyAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
 import { MmdMaterialRenderMethod } from "babylon-mmd/esm/Loader/materialBuilderBase";
@@ -3295,8 +3297,50 @@ ${beforeFogAppendBlock}
 
     public appendModelMotionImport(model: RuntimeModel, value: ProjectMotionImport): void {
         const current = this.modelMotionImportsByModel.get(model) ?? [];
+        const last = current[current.length - 1];
+        if (last?.type === value.type && last.path === value.path && last.frame === value.frame) return;
         current.push({ ...value });
         this.modelMotionImportsByModel.set(model, current);
+    }
+
+    public canClearActiveModelMotion(): boolean {
+        if (this.timelineTarget !== "model" || !this.currentModel || this.isPlaying) return false;
+        return this.hasActiveModelVmdExportKeys()
+            || (this.modelMotionImportsByModel.get(this.currentModel)?.length ?? 0) > 0
+            || this.sceneModels.some(entry => entry.model === this.currentModel && entry.externalParentKeyframes.length > 0);
+    }
+
+    public buildClearActiveModelMotionCommand() {
+        if (!this.canClearActiveModelMotion()) return null;
+        const entry = this.sceneModels.find(candidate => candidate.model === this.currentModel);
+        if (!entry) return null;
+        return buildClearModelMotionCommand(entry.info.instanceId, {
+            animation: serializeModelAnimation(this.modelSourceAnimationsByModel.get(entry.model)),
+            imports: (this.modelMotionImportsByModel.get(entry.model) ?? []).map(item => ({ ...item })),
+            externalParentKeyframes: entry.externalParentKeyframes.map(item => ({ ...item })),
+        }, Date.now());
+    }
+
+    public applyModelMotionState(modelInstanceId: string, state: ModelMotionState | null): boolean {
+        const index = this.sceneModels.findIndex(candidate => candidate.info.instanceId === modelInstanceId);
+        const entry = this.sceneModels[index];
+        if (!entry) return false;
+        const externalParentKeyframes = state?.externalParentKeyframes.map(item => ({ ...item })) ?? [];
+        if (!this.validateModelExternalParentTimeline(index, externalParentKeyframes)) return false;
+        const animation = deserializeModelAnimation(state?.animation, "editorModel")
+            ?? new MmdAnimation("editorModel", [], [], [], new MmdPropertyAnimationTrack(0, []), new MmdCameraAnimationTrack(0));
+        const handle = this.createModelRuntimeAnimation(entry.model, animation);
+        const oldHandles = [...entry.model.runtimeAnimations.keys()].filter(candidate => candidate !== handle);
+        entry.model.setRuntimeAnimation(handle);
+        for (const oldHandle of oldHandles) entry.model.destroyRuntimeAnimation(oldHandle);
+        this.modelSourceAnimationsByModel.set(entry.model, animation);
+        this.setModelMotionImports(entry.model, state?.imports ?? []);
+        this.modelKeyframeTracksByModel.set(entry.model, this.buildModelTrackFrameMapFromAnimation(animation));
+        entry.externalParentKeyframes = externalParentKeyframes;
+        this.applyModelExternalParentKeyframesAtFrame(this._currentFrame);
+        this.emitMergedKeyframeTracks();
+        this.seekToBoundary(this._currentFrame);
+        return true;
     }
 
     public isWgslMaterialShaderAssignmentAvailable(): boolean {

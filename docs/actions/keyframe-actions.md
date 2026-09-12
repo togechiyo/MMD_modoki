@@ -224,6 +224,19 @@
 
 ## Command化方針
 
+### `model.clearMotion`
+
+- 意図: 選択modelの全motionを、非表示boneを含めて削除する。
+- 入口: 編集メニュー「選択モデルの全モーションを削除」。Actionには入力元だけを渡す。
+- canExecute: modelモード・停止中で、対象modelにsource key、外部親key、motion読込履歴のいずれかがある。
+- 差分: `edit.modelMotionClear`に`modelInstanceId`と対象modelのpacked animation / 読込履歴 / 外部親keyだけを保存する。
+- 結果: sourceとruntimeを空animationへ切替え、timelineと保存状態を同期する。model本体・他model・camera・scene keyは保持する。
+- Undo / Redo: 選択先が変わっていても元modelだけへ適用する。modelがなく適用不能なら履歴を進めない。
+- 選択削除との関係: `keyframe.deleteSelected`の範囲は変えず、全motion削除を別の編集意図として扱う。
+- 検証: [Issue #25修正・GUI検証](../issue-25-project-motion-retention-2026-09-12.md#2026-09-12-後続修正)。
+
+### 既存方針
+
 - 最初のPoCは `keyframe.addCurrent` と `keyframe.deleteSelected` から始める。
 - Commandは「source animationの差分」「timeline表示更新」「runtime refresh」をまとめて扱う。
 - `keyframe.nudgeSelected` は移動前 / 移動後の差分が必要。

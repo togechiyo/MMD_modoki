@@ -813,6 +813,8 @@
   "dialog.vmdRetarget.saveCancelled": "已取消儲存 VMD",
   "dialog.vmdRetarget.saveFailed": "無法儲存轉換後的 VMD",
     "menu.edit.deleteActiveModel": "刪除所選模型",
+    "menu.edit.clearModelMotion": "清除所選模型的全部動作",
+    "menu.edit.clearModelMotion.title": "刪除所有骨骼（包括隱藏骨骼）、表情、顯示/IK、外部父級關鍵影格及動作匯入記錄。可以復原。",
     "menu.edit.preferences": "偏好設定...",
     "menu.view": "檢視",
     "menu.view.toggleGround": "地面",

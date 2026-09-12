@@ -104,6 +104,32 @@ function createHost(modelInfo: ModelInfo): { host: TestHost; model: TestModel } 
 }
 
 describe("timeline edit service model animation tracks", () => {
+    it("promotes an imported rotation track before adding translation without losing earlier keys", () => {
+        const { host, model } = createHost(createModelInfo([{ name: "センター", movable: true }]));
+        const bone = new MmdBoneAnimationTrack("センター", 1);
+        bone.frameNumbers.set([5]);
+        bone.rotations.set([0, 0.25, 0, 0.96875]);
+        bone.rotationInterpolations.set([20, 107, 20, 107]);
+        bone.physicsToggles.set([0]);
+        const animation = new MmdAnimation("imported", [bone], [], [], new MmdPropertyAnimationTrack(0, []), new MmdCameraAnimationTrack(0));
+        host.modelSourceAnimationsByModel.set(model, animation);
+        const track = { name: "センター", category: "root" } as const;
+        expect(applyTimelineKeyframePayload(host, track, 10, {
+            kind: "movableBone", positions: [1, 2, 3], positionInterpolations: Array(12).fill(20),
+            rotations: [0, 0, 0, 1], rotationInterpolations: [20, 107, 20, 107], physicsToggles: [1],
+        })).toBe(true);
+        expect(animation.boneTracks).toHaveLength(0);
+        expect([...animation.movableBoneTracks[0].frameNumbers]).toEqual([5, 10]);
+        expect(readTimelineKeyframePayload(host, track, 5)).toMatchObject({ positions: [0, 0, 0], rotations: [0, 0.25, 0, 0.96875], physicsToggles: [0] });
+        // A rotation-only undo payload must not recreate a second track.
+        expect(applyTimelineKeyframePayload(host, track, 5, {
+            kind: "bone", rotations: [0, 0, 0, 1], rotationInterpolations: [20, 107, 20, 107], physicsToggles: [1],
+        })).toBe(true);
+        expect(animation.boneTracks).toHaveLength(0);
+        expect(removeTimelineKeyframePayloads(host, track, [5, 10])).toBe(true);
+        expect(animation.movableBoneTracks[0].frameNumbers).toHaveLength(0);
+    });
+
     it("exposes Property keys and evaluates visibility/IK as held step values", () => {
         const { host, model } = createHost(createModelInfo([]));
         const animation = createAnimation();

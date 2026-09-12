@@ -252,6 +252,8 @@ export class AppMenuController {
     private resolveCommandDisabled(command: string): boolean | null {
         const timelineTarget = this.mmdManager.getTimelineTarget();
         switch (command) {
+            case "edit.clearModelMotion":
+                return !this.mmdManager.canClearActiveModelMotion();
             case "edit.selectAllCameraKeys":
                 return timelineTarget !== "camera" || this.countTimelineKeysByCategories(["camera"]) === 0;
             case "edit.selectAllLightKeys":
@@ -510,6 +512,9 @@ export class AppMenuController {
                 return;
             case "edit.deleteActiveModel":
                 this.dispatchAction({ type: "model.deleteActive", source: "menu" });
+                return;
+            case "edit.clearModelMotion":
+                this.dispatchAction({ type: "model.clearMotion", source: "menu" });
                 return;
             case "view.toggleGround":
                 this.dispatchAction({ type: "viewport.toggleGround", source: "menu" });

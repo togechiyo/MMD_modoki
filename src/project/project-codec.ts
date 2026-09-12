@@ -9,6 +9,7 @@ import type {
     ProjectSerializedPropertyTrack,
 } from "../types";
 import { MmdAnimation } from "babylon-mmd/esm/Loader/Animation/mmdAnimation";
+import { normalizeModelBoneTracks } from "../editor/model-bone-track-normalization";
 import { MmdBoneAnimationTrack, MmdCameraAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack, MmdPropertyAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
 
 export function isPackedProjectArray(value: unknown): value is ProjectPackedArray {
@@ -318,7 +319,8 @@ export function deserializeModelAnimation(data: ProjectSerializedModelAnimation 
     const cameraTrack = new MmdCameraAnimationTrack(0);
     const animationName = typeof data.name === "string" && data.name.length > 0 ? data.name : fallbackName;
 
-    return new MmdAnimation(animationName, boneTracks, movableBoneTracks, morphTracks, propertyTrack, cameraTrack);
+    const normalized = normalizeModelBoneTracks(boneTracks, movableBoneTracks);
+    return new MmdAnimation(animationName, normalized.boneTracks, normalized.movableBoneTracks, morphTracks, propertyTrack, cameraTrack);
 }
 
 export function createCameraAnimationFromTrack(cameraTrack: MmdCameraAnimationTrack, name: string): MmdAnimation {

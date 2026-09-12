@@ -813,6 +813,8 @@
   "dialog.vmdRetarget.saveCancelled": "VMD 저장을 취소했습니다",
   "dialog.vmdRetarget.saveFailed": "변환된 VMD를 저장할 수 없습니다",
     "menu.edit.deleteActiveModel": "선택한 모델 삭제",
+    "menu.edit.clearModelMotion": "선택한 모델의 모든 모션 삭제",
+    "menu.edit.clearModelMotion.title": "숨겨진 본을 포함한 본, 모프, 표시/IK, 외부 부모의 모든 키와 모션 불러오기 기록을 삭제합니다. 실행 취소할 수 있습니다.",
     "menu.edit.preferences": "환경 설정...",
     "menu.view": "보기",
     "menu.view.toggleGround": "지면",

@@ -813,6 +813,8 @@
   "dialog.vmdRetarget.saveCancelled": "VMDの保存をキャンセルしました",
   "dialog.vmdRetarget.saveFailed": "変換後VMDを保存できませんでした",
     "menu.edit.deleteActiveModel": "選択モデルを削除",
+    "menu.edit.clearModelMotion": "選択モデルの全モーションを削除",
+    "menu.edit.clearModelMotion.title": "非表示ボーン・表情・表示/IK・外部親の全キーとモーション読込履歴を削除します。元に戻せます。",
     "menu.edit.preferences": "設定...",
     "menu.view": "表示",
     "menu.view.toggleGround": "床を表示",

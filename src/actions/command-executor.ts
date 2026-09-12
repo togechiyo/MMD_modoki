@@ -15,6 +15,7 @@ export type CommandSelectedKeyRef = {
 };
 
 export type CommandExecutionContext = {
+    applyModelMotionClear?(diff: Extract<EditCommandDiff, { type: "edit.modelMotionClear" }>, direction: CommandDirection): boolean;
     applyMorphWeightBatch?(diff: Extract<EditCommandDiff, { type: "edit.morphWeightBatch" }>, direction: CommandDirection): boolean;
     applyBonePoseBatch?(diff: Extract<EditCommandDiff, { type: "edit.bonePoseBatch" }>, direction: CommandDirection): boolean;
     applyObjectState?(diff: Extract<EditCommandDiff, { type: "edit.objectState" }>, direction: CommandDirection): boolean;
@@ -45,6 +46,8 @@ export function executeCommand(
     context: CommandExecutionContext,
 ): boolean {
     switch (command.diff.type) {
+        case "edit.modelMotionClear":
+            return context.applyModelMotionClear?.(command.diff, direction) ?? false;
         case "edit.morphWeightBatch":
             return context.applyMorphWeightBatch?.(command.diff, direction) ?? false;
         case "edit.bonePoseBatch":

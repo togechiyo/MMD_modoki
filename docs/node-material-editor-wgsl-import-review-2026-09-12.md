@@ -2,7 +2,9 @@
 
 ## 結論
 
-Babylon.jsのNode Material Editor（NME）はWGSLを生成できる。外部から持ち込まれる形式として想定する価値がある。取込案はNMEのnode graph JSONを優先し、手書きWGSLとは別adapterで受ける。既存Toon snippetへ生成shaderを貼るだけでは動作しない。
+Babylon.jsのNode Material Editor（NME）はWGSLを生成できる。外部から持ち込まれる形式として想定する価値がある。NME固有のruntimeを復元する場合はnode graph JSONを別adapterで受ける案がある。既存Toon snippetへ生成shaderを貼るだけでは動作しない。
+
+同日の後続判断では、所有者はBabylonのWGSL基盤とMME風semanticを組み合わせる方向を採用した。[現在の詳細設計](./external-wgsl-material-api-v1-design.md)では手書きWGSLと生成コードの手動移植を主軸とし、NME JSON loaderは必須作業に含めない。以下のJSON取込案は、将来NME対応を独立して行う場合の参考とする。
 
 本稿は仕様調査。アプリへの読込機能・独立材質の採用は未実施。前提は導入済み `@babylonjs/core` 9.2.0 / babylon-mmd 1.2.0。
 

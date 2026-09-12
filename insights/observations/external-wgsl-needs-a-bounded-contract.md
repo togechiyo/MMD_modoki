@@ -16,6 +16,7 @@ source_docs:
   - ../../docs/external-wgsl-reopening-review-2026-09-12.md
   - ../../docs/external-wgsl-mme-semantics-design-2026-09-12.md
   - ../../docs/node-material-editor-wgsl-import-review-2026-09-12.md
+  - ../../docs/external-wgsl-material-api-v1-design.md
 superseded_by: null
 ---
 
@@ -41,7 +42,7 @@ Babylon.jsはcompile/binding基盤を提供するが、入力texture、pass順�
 
 2026-09-12の静的確認では、材質別の外部割当が単一pathの保存後に全モデルへ適用される経路と、GPUコンパイル前に成功通知する経路が残っている。既存validatorもコメントだけの加算を受理し、コメント中のreturnを拒否する。UI再公開前に保存と復帰の整備が必要。実機描画・保存復元は未検証のため、段階設計は引き続きobservationとする。
 
-NME持込では、9.2.0でWGSL生成を確認したが、生成text単体にはruntime bindingが揃わない。JSONをNodeMaterialで復元する別adapterを候補とし、手書きsnippetと混同しない。GPU・PMX適用は未確認。
+NME持込では、9.2.0でWGSL生成を確認したが、生成text単体にはruntime bindingが揃わない。現在の詳細設計ではWGSL関数とMME風入力接続を主軸とし、生成コードは入出力を合わせて移植する。JSONをNodeMaterialで復元する案は将来の別adapter候補であり、今回の必須実装ではない。GPU・PMX適用は未確認。
 
 ## 再確認条件
 

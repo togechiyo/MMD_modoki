@@ -12,6 +12,7 @@ evidence:
   - conversation-explicit-instruction
 source_docs:
   - ../../docs/external-wgsl-mme-semantics-design-2026-09-12.md
+  - ../../docs/external-wgsl-material-api-v1-design.md
 superseded_by: null
 ---
 
@@ -25,6 +26,8 @@ superseded_by: null
 
 用途を過度に狭めず、必要な入力情報と簡易チェックを提供する。MMEの設計を調査し、変数名・用途など寄せられる部分を活かす。最初の実装範囲を、そのまま将来の用途制限にしない。
 
+Babylon.jsのWGSL宣言・コンパイル基盤を使い、入力の意味をMME風semanticへ寄せる組合せを採用する。アプリ固有部分は入力接続・適用対象・呼出位置などの契約として設計する。NMEの完全互換やgraph runtimeの導入をこの判断から必須化しない。
+
 ## 避けること
 
 - 初期Toon snippet実装を根拠に、外部WGSLを恒久的にToon用途へ限定する。
@@ -34,6 +37,8 @@ superseded_by: null
 ## 根拠
 
 2026-09-12、所有者は上級者向けなので用途をあまり制限したくないと述べ、必要な情報と簡易チェックを求めた。続いて「MMEの設計を参考にして寄せれるとこは寄せたい、変数名とか用途とか」と明示し、公開referenceの調査を依頼した。
+
+同日、Babylon式の基盤とMME風の入力を組み合わせる提案に対し「じゃあその方向でいこうか、詳細な設計つめて」と明示した。これは方向の採用であり、後から具体化したmanifestの全fieldや導入順まで所有者が承認したことにはしない。
 
 ## 再確認条件
 

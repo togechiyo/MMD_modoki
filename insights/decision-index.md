@@ -46,7 +46,7 @@
 | adopted | [実体のないヘルプ項目は表示しない](./decisions/omit-empty-help-menu-items.md) | 上位メニュー、ショートカット、ログ、Aboutの導線を変更する |
 | adopted | [キー登録の上書き確認は出さない](./decisions/key-registration-overwrites-without-confirmation.md) | キー登録、同一フレーム上書き、Auto Key、Undo導線を変更する |
 | adopted | [作業の区切りで commit・push する](./decisions/commit-and-push-at-verified-work-boundaries.md) | 通常作業のcommit・push時期、検証、対象差分を判断する |
-| adopted | [上級者向け外部WGSLはMMEの名前と用途を参考にする](./decisions/external-wgsl-follows-mme-concepts.md) | 外部shaderの入力仕様・用途・MMEとの対応を設計する |
+| adopted | [上級者向け外部WGSLはMMEの名前と用途を参考にする](./decisions/external-wgsl-follows-mme-concepts.md) | BabylonのWGSL基盤とMME風semanticを組み合わせ、外部shaderの入力仕様・用途・互換範囲を設計する |
 
 ## 却下
 

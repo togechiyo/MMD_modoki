@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MMD_modoki external material effect v1 (design draft)",
+  "description": "Design-time structural schema. Semantic/type, resource and GPU validation remain runtime responsibilities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "name", "sources", "hooks"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "apiVersion": { "const": 1 },
+    "kind": { "const": "mmd-material" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "sources": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "$ref": "#/definitions/relativePath" }
+    },
+    "requires": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "hooks": {
+      "type": "object", "minProperties": 1, "additionalProperties": false,
+      "properties": {
+        "surface": { "$ref": "#/definitions/identifier" },
+        "light": { "$ref": "#/definitions/identifier" },
+        "finalColor": { "$ref": "#/definitions/identifier" }
+      }
+    },
+    "inputs": {
+      "type": "object", "propertyNames": { "$ref": "#/definitions/identifier" },
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["type", "semantic"],
+        "properties": {
+          "type": { "$ref": "#/definitions/inputType" },
+          "semantic": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "annotations": {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "Object": { "enum": ["Geometry", "Camera", "Light"] },
+              "SyncInEditMode": { "type": "boolean" },
+              "name": { "type": "string", "minLength": 1 },
+              "item": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": { "required": ["semantic"], "properties": { "semantic": { "enum": ["TIME", "ELAPSEDTIME"] } } },
+            "then": { "required": ["annotations"], "properties": { "type": { "const": "f32" }, "annotations": { "required": ["SyncInEditMode"] } } }
+          }
+        ]
+      }
+    },
+    "parameters": {
+      "type": "object", "propertyNames": { "$ref": "#/definitions/identifier" },
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["type", "default"],
+        "properties": {
+          "type": { "enum": ["f32", "i32", "u32", "vec2f", "vec3f", "vec4f"] },
+          "default": { "oneOf": [{ "type": "number" }, { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 4 }] },
+          "ui": {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string" },
+              "control": { "enum": ["number", "color"] },
+              "min": { "type": "number" },
+              "max": { "type": "number" },
+              "step": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          }
+        },
+        "allOf": [
+          { "if": { "properties": { "type": { "const": "f32" } } }, "then": { "properties": { "default": { "type": "number" } } } },
+          { "if": { "properties": { "type": { "const": "i32" } } }, "then": { "properties": { "default": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 } } } },
+          { "if": { "properties": { "type": { "const": "u32" } } }, "then": { "properties": { "default": { "type": "integer", "minimum": 0, "maximum": 4294967295 } } } },
+          { "if": { "properties": { "type": { "const": "vec2f" } } }, "then": { "properties": { "default": { "type": "array", "minItems": 2, "maxItems": 2 } } } },
+          { "if": { "properties": { "type": { "const": "vec3f" } } }, "then": { "properties": { "default": { "type": "array", "minItems": 3, "maxItems": 3 } } } },
+          { "if": { "properties": { "type": { "const": "vec4f" } } }, "then": { "properties": { "default": { "type": "array", "minItems": 4, "maxItems": 4 } } } }
+        ]
+      }
+    },
+    "textures": {
+      "type": "object", "propertyNames": { "$ref": "#/definitions/identifier" },
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["source", "sampler"],
+        "properties": {
+          "source": {
+            "oneOf": [
+              { "type": "object", "additionalProperties": false, "required": ["semantic"], "properties": { "semantic": { "enum": ["MATERIALTEXTURE", "MATERIALSPHEREMAP", "MATERIALTOONTEXTURE"] } } },
+              { "type": "object", "additionalProperties": false, "required": ["path", "encoding"], "properties": { "path": { "$ref": "#/definitions/relativePath" }, "encoding": { "enum": ["srgb", "linear"] } } }
+            ]
+          },
+          "sampler": {
+            "type": "object", "additionalProperties": false,
+            "required": ["filter", "addressU", "addressV"],
+            "properties": {
+              "filter": { "enum": ["nearest", "linear"] },
+              "addressU": { "enum": ["clamp", "repeat", "mirror"] },
+              "addressV": { "enum": ["clamp", "repeat", "mirror"] }
+            }
+          },
+          "optional": { "type": "boolean" },
+          "fallback": { "enum": ["white", "black", "normal"] }
+        },
+        "allOf": [
+          { "if": { "required": ["optional"], "properties": { "optional": { "const": true } } }, "then": { "required": ["fallback"] } },
+          { "if": { "required": ["fallback"] }, "then": { "required": ["optional"], "properties": { "optional": { "const": true } } } }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "identifier": { "type": "string", "pattern": "^(?!fx_|Modoki|modoki|__)[A-Za-z_][A-Za-z0-9_]*$" },
+    "inputType": { "enum": ["f32", "i32", "u32", "vec2f", "vec3f", "vec4f", "mat4x4f"] },
+    "relativePath": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*[\\\\:])(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000-\\u001f]+$" }
+  }
+}

@@ -4,6 +4,8 @@
 
 所有者は上級者向けの表現の自由度を重視し、MMEの変数名・用途・設計へ寄せられる部分を調査するよう指示した。本稿はその調査と設計案。書式・対応範囲は未確定で、実装変更はない。
 
+同日の後続判断でBabylonのWGSL基盤とMME風semanticを組み合わせる方向を採用。[材質API v1 詳細設計](./external-wgsl-material-api-v1-design.md)を現在の実装提案の正本とし、本稿の宣言例・入力候補は調査時点の案として残す。
+
 MME仕様の参照先は、配布版v0.37のREFERENCE.txtを移植したと明記する[MME Reference](https://kamedesuyo.github.io/MME_REFERENCE/)。作者配布アーカイブとのバイト一致は未確認。仕様本文の転載として参照し、他アプリ独自の拡張をMME仕様へ混ぜない。基礎となるFXの仕組みは[MicrosoftのEffect資料](https://learn.microsoft.com/en-us/windows/win32/direct3d9/using-an-effect)で照合した。
 
 ## 参考にする仕組み

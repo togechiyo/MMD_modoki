@@ -15,6 +15,7 @@ export type CommandSelectedKeyRef = {
 };
 
 export type CommandExecutionContext = {
+    applyExternalWgsl?(changes: import("../external-wgsl/contract").EffectChange[], direction: CommandDirection): boolean;
     applyModelMotionClear?(diff: Extract<EditCommandDiff, { type: "edit.modelMotionClear" }>, direction: CommandDirection): boolean;
     applyMorphWeightBatch?(diff: Extract<EditCommandDiff, { type: "edit.morphWeightBatch" }>, direction: CommandDirection): boolean;
     applyBonePoseBatch?(diff: Extract<EditCommandDiff, { type: "edit.bonePoseBatch" }>, direction: CommandDirection): boolean;
@@ -46,6 +47,8 @@ export function executeCommand(
     context: CommandExecutionContext,
 ): boolean {
     switch (command.diff.type) {
+        case "effect.externalWgsl":
+            return context.applyExternalWgsl?.(command.diff.changes, direction) ?? false;
         case "edit.modelMotionClear":
             return context.applyModelMotionClear?.(command.diff, direction) ?? false;
         case "edit.morphWeightBatch":

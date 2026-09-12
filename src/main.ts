@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, session, shell, type IpcMainEvent } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import { readEffectPackage, readTextWithEffects, writeTextWithEffects } from './external-wgsl/file-store';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import log from 'electron-log/main';
@@ -1435,9 +1436,14 @@ ipcMain.handle('file:findNearby', async (_event, baseDirectoryPath: string, targ
   }
 });
 
+ipcMain.handle('file:readEffectPackage', async (_event, filePath: string) => {
+  try { return { asset: await readEffectPackage(filePath) }; }
+  catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
+});
+
 ipcMain.handle('file:readText', async (_event, filePath: string) => {
   try {
-    return fs.readFileSync(filePath, 'utf-8');
+    return await readTextWithEffects(filePath);
   } catch (err) {
     writeAppLog('error', 'ipc', 'failed to read text file', {
       filePath,
@@ -1513,7 +1519,7 @@ ipcMain.handle(
         return null;
       }
 
-      fs.writeFileSync(result.filePath, content, 'utf-8');
+      await writeTextWithEffects(result.filePath, content);
       return result.filePath;
     } catch (err) {
       writeAppLog('error', 'ipc', 'failed to save text file', createLogErrorData(err));
@@ -1527,7 +1533,7 @@ ipcMain.handle('file:writeTextToPath', async (_event, filePath: string, content:
     if (!filePath || typeof filePath !== 'string') return false;
     const targetDir = path.dirname(filePath);
     await fs.promises.mkdir(targetDir, { recursive: true });
-    await fs.promises.writeFile(filePath, content, 'utf-8');
+    await writeTextWithEffects(filePath, content);
     return true;
   } catch (err) {
     writeAppLog('error', 'ipc', 'failed to write text file to path', {

@@ -1069,6 +1069,14 @@ export class UIController {
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
         this.shaderPanelController = new ShaderPanelController({
+            onExternalEffectCommitted: changes => {
+                this.commandHistory.push({ id: crypto.randomUUID(), label: "External WGSL", scope: "effect", createdAtMs: Date.now(), diff: { type: "effect.externalWgsl", changes } });
+                const retained = new Set<string>();
+                for (const command of this.commandHistory.getRetainedCommands()) if (command.diff.type === "effect.externalWgsl") {
+                    for (const change of command.diff.changes) for (const assignment of [change.before, change.after]) if (assignment) retained.add(assignment.effectRevision);
+                }
+                this.mmdManager.pruneExternalWgslAssets(retained);
+            },
             mmdManager: this.mmdManager,
             getInfoModelSelectState: () => this.getInfoModelSelectState(),
             onModelTargetSelected: (value, showToast) => this.handleModelTargetSelection(value, showToast),
@@ -3331,10 +3339,7 @@ export class UIController {
                 state.externalWgslToon.path,
                 state.externalWgslToon.text,
             );
-            this.mmdManager.setExternalWgslToonShader(
-                state.externalWgslToon.path,
-                state.externalWgslToon.text,
-            );
+            this.mmdManager.setExternalWgslToonShader(null, null);
             this.applyOutputProjectState(state.project.output);
             this.refreshUiAfterProjectImport(state.project.lighting);
 
@@ -3632,7 +3637,8 @@ export class UIController {
             this.postFxWgslToonPath = resolvedWgslToonPath;
             this.postFxWgslToonText = resolvedWgslToonText;
             this.shaderPanelController?.setExternalWgslToonAsset(resolvedWgslToonPath, resolvedWgslToonText);
-            this.mmdManager.setExternalWgslToonShader(resolvedWgslToonPath, resolvedWgslToonText);
+            this.mmdManager.setExternalWgslToonShader(null, null);
+            if (resolvedWgslToonPath) result.warnings.push("Legacy WGSL was retained without automatic application. Convert it to an external material manifest and choose its targets.");
             this.lutPanelController?.restoreProjectExternalAsset(resolvedExternalLutPath, resolvedExternalLutText);
             if (isExternalLutMode && !resolvedExternalLutText) {
                 this.mmdManager.postEffectLutEnabled = false;
@@ -7818,6 +7824,7 @@ export class UIController {
         };
         return {
             applyObjectState: (diff, direction) => this.executeObjectStateCommand(diff, direction),
+            applyExternalWgsl: (changes, direction) => this.mmdManager.restoreExternalWgsl(changes, direction),
             applyBonePoseBatch: (diff, direction) => this.executeBonePoseBatchCommand(diff, direction),
             applyMorphWeightBatch: (diff, direction) => this.executeMorphWeightBatchCommand(diff, direction),
             applyMorphWeight: (diff, direction) => {

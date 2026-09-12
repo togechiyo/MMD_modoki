@@ -14,6 +14,7 @@ export type MmdOptimizedFileSaveResult =
 
 export interface ElectronAPI {
     automation: import("./automation/contracts").AutomationApi;
+    readEffectPackage: (filePath: string) => Promise<{ asset?: import("./external-wgsl/contract").EffectAsset; error?: string }>;
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
     openDirectoryDialog: () => Promise<string | null>;
     choosePngSaveTarget: (defaultFileName?: string) => Promise<PngSaveTarget | null>;
@@ -534,6 +535,7 @@ export interface ProjectMotionImport {
 }
 
 export interface ProjectModelMaterialShaderState {
+    externalEffect?: import("./external-wgsl/contract").EffectAssignment;
     materialKey: string;
     presetId: string;
     /** Omitted in older projects; defaults to visible. */
@@ -941,6 +943,7 @@ export interface ProjectKeyframeBundle {
 }
 
 export interface MmdModokiProjectFileV1 {
+    externalEffects?: Array<import("./external-wgsl/contract").EffectAsset | import("./external-wgsl/contract").EffectAssetReference>;
     format: "mmd_modoki_project";
     version: 1;
     savedAt: string;

@@ -16,6 +16,18 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         const form = document.createElement("div");
         form.className = "popup-form";
         this.disposeAutomation = mountAutomationSettings(form);
+        const wgsl = document.createElement("input"); wgsl.type = "checkbox"; wgsl.className = "popup-form-checkbox";
+        wgsl.checked = this.deps.mmdManager.getExternalWgslService().enabled;
+        form.append(createPopupFormField(t("wgsl.permission"), wgsl));
+        wgsl.addEventListener("change", () => {
+            wgsl.disabled = true; this.busy = true;
+            void this.deps.mmdManager.getExternalWgslService().setEnabled(wgsl.checked).catch((error: unknown) => {
+                this.deps.showToast(String(error), "error");
+            }).finally(() => {
+                wgsl.checked = this.deps.mmdManager.getExternalWgslService().enabled;
+                wgsl.disabled = false; this.busy = false; this.deps.refreshUi();
+            });
+        });
         const pbr = document.createElement("input");
         pbr.type = "checkbox";
         pbr.className = "popup-form-checkbox";

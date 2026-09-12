@@ -1,5 +1,5 @@
-// Design example: generated interfaces and bindings are supplied by the host.
-// Not a standalone WGSL module; GPU integration has not been implemented.
+// Load effect.modoki.json; the host supplies these interfaces and input bindings.
+// TIME follows the timeline and is fixed to the frame being exported.
 fn shadeSurface(surface: ModokiSurface) -> ModokiSurfaceOutput {
     return ModokiSurfaceOutput(
         surface.baseColor * modokiInputs.Tint,

@@ -35,6 +35,7 @@ const automation: AutomationApi = {
 };
 contextBridge.exposeInMainWorld('electronAPI', {
     automation,
+    readEffectPackage: (filePath: string) => ipcRenderer.invoke('file:readEffectPackage', filePath),
     openFileDialog: (filters: { name: string; extensions: string[] }[]) =>
         ipcRenderer.invoke('dialog:openFile', filters),
     openDirectoryDialog: () =>

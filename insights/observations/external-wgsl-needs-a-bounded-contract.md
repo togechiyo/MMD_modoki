@@ -10,6 +10,7 @@ evidence:
   - existing-prototype
   - source-review-2026-09-12
   - existing-validator-execution-2026-09-12
+  - local-electron-webgpu-e2e-2026-09-12
 source_docs:
   - ../../docs/external-wgsl-shader-loading-concept-2026-06-12.md
   - ../../docs/wgsl-shader-capabilities.md
@@ -17,6 +18,7 @@ source_docs:
   - ../../docs/external-wgsl-mme-semantics-design-2026-09-12.md
   - ../../docs/node-material-editor-wgsl-import-review-2026-09-12.md
   - ../../docs/external-wgsl-material-api-v1-design.md
+  - ../../docs/external-wgsl-material-usage.md
 superseded_by: null
 ---
 
@@ -40,10 +42,14 @@ MME風のユーザー shader、材質snippet、画面後段effectを外部ファ
 
 Babylon.jsはcompile/binding基盤を提供するが、入力texture、pass順、fallback、export再現性はMMD_modoki側の責任として残る。
 
-2026-09-12の静的確認では、材質別の外部割当が単一pathの保存後に全モデルへ適用される経路と、GPUコンパイル前に成功通知する経路が残っている。既存validatorもコメントだけの加算を受理し、コメント中のreturnを拒否する。UI再公開前に保存と復帰の整備が必要。実機描画・保存復元は未検証のため、段階設計は引き続きobservationとする。
+2026-09-12の実装前レビューでは単一pathの自動全適用とGPUコンパイル前の成功通知が問題だった。同日の初期実装では、manifest＋WGSL関数、材質別割当、共有snapshot保存、実験許可、失敗復帰、Undoを追加し、Classic/FrameGraphのローカルElectron E2Eで確認した。旧pathの自動全適用は停止。新形式はコメントを区別して検査し、returnを許可する。
+
+WebGPUではBabylonのisReady後にもShaderModuleが不正な場合があった。getCompilationInfoとvalidation error scopeを併用し、不正候補を局所診断へ回収する。材質pluginのextra eventを使う場合はregisterForExtraEventsを設定してから_enableする。後から設定するだけでは専用UBOが描画時にbindされなかった。
+
+初期のtextureなし材質profileを越えるresource/pass契約と全variant検証は未完了のため、全体方針の分類は引き続きobservationとする。
 
 NME持込では、9.2.0でWGSL生成を確認したが、生成text単体にはruntime bindingが揃わない。現在の詳細設計ではWGSL関数とMME風入力接続を主軸とし、生成コードは入出力を合わせて移植する。JSONをNodeMaterialで復元する案は将来の別adapter候補であり、今回の必須実装ではない。GPU・PMX適用は未確認。
 
 ## 再確認条件
 
-既存snippet経路のvalidationと復帰をunit test化し、UI再公開を検討するとき。
+texture/light/CONTROLや別profileを追加するとき、Babylon/babylon-mmdのversionを更新するとき、全variantの検証方式を変更するとき。

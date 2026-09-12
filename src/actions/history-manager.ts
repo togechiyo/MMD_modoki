@@ -13,6 +13,7 @@ export class HistoryManager {
 
     public getRevision(): number { return this.revision; }
     public getGeneration(): number { return this.generation; }
+    public getRetainedCommands(): readonly BuiltCommand[] { return [...this.past, ...this.future]; }
     public peekUndo(): BuiltCommand | null { return this.past[this.past.length - 1] ?? null; }
     public peekRedo(): BuiltCommand | null { return this.future[this.future.length - 1] ?? null; }
 

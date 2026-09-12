@@ -1,6 +1,8 @@
 # 外部WGSL材質API v1 詳細設計
 
-更新: 2026-09-12 / 状態: 実装前の設計案
+更新: 2026-09-12 / 状態: Aの初期実装を追加。B以降と未検証項目は設計案
+
+現在の使い方・実装差分・確認範囲は [外部WGSL材質の使い方](./external-wgsl-material-usage.md)を参照する。以下は拡張も含めた設計であり、全項目が実装済みという意味ではない。
 
 ## 1. 採用した方向と設計の範囲
 
@@ -20,7 +22,7 @@ effect-folder/
   textures/           # 外部画像を使う場合
 ```
 
-manifestが入力型・semantic・parameter既定値・texture接続・entry関数の正本。WGSLには計算と独自struct/helper関数を書く。schema案は [JSON Schema](./schemas/external-material-effect-v1.schema.json)、整合例は [manifest](./examples/external-material-effect-v1/effect.modoki.json) と [WGSL](./examples/external-material-effect-v1/main.wgsl)。この例はアプリでのGPU動作未検証。
+manifestが入力型・semantic・parameter既定値・texture接続・entry関数の正本。WGSLには計算と独自struct/helper関数を書く。schema案は [JSON Schema](./schemas/external-material-effect-v1.schema.json)、整合例は [manifest](./examples/external-material-effect-v1/effect.modoki.json) と [WGSL](./examples/external-material-effect-v1/main.wgsl)。この例は初期実装でGPU動作を確認した。schemaのB向けfieldはruntime未対応。
 
 - UTF-8。読込時のBOMを除去し、source mapで元の行番号を保持する。
 - `sources`を記載順に結合する。同一module内のWGSL関数として扱い、1ファイルでもよい。重複pathはエラー。ファイル参照はmanifestフォルダ基準で、ネットワーク取得は行わない。

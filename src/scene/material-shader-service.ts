@@ -36,6 +36,7 @@ import { Effect } from "@babylonjs/core/Materials/effect";
 import { Material } from "@babylonjs/core/Materials/material";
 import { RenderTargetTexture } from "@babylonjs/core/Materials/Textures/renderTargetTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { getEffectAssignment, setEffectAssignment } from "../external-wgsl/contract";
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { GetExponentOfTwo } from "@babylonjs/core/Misc/tools.functions";
 import { PostProcess } from "@babylonjs/core/PostProcesses/postProcess";
@@ -2305,11 +2306,13 @@ export function getSerializedMaterialShaderStates(host: MaterialShaderHost, entr
     for (const material of entry.materials) {
         const presetId = getWgslMaterialShaderPresetForMaterial(host, material.material);
         const hidden = host.isMaterialVisible?.(material.material) === false;
-        if (presetId === getDefaultPreset(host) && !hidden) continue;
+        const externalEffect = getEffectAssignment(material.material);
+        if (presetId === getDefaultPreset(host) && !hidden && !externalEffect) continue;
         states.push({
             materialKey: material.key,
             presetId,
             ...(hidden ? { visible: false } : {}),
+            ...(externalEffect ? { externalEffect } : {}),
         });
     }
     return states;
@@ -2323,16 +2326,20 @@ export function applyImportedMaterialShaderStates(
     modelPath: string,
     pbrBaseline: "pbr-base" | "pbr-mmd-like" = "pbr-base",
 ): void {
-    if (!isWgslMaterialShaderAssignmentAvailable(host)) return;
-
     const entry = host.sceneModels[modelIndex];
     if (!entry) return;
 
     // Visibility is independent of the shader preset and older saves default to ON.
     for (const material of entry.materials) {
         const state = Array.isArray(states) ? states.find(item => item?.materialKey === material.key) : undefined;
+        if (entry.materialPipeline !== "pbr-standard") {
+            try { setEffectAssignment(material.material, state?.externalEffect ?? null); }
+            catch (error) { setEffectAssignment(material.material, null); warnings.push("Invalid external WGSL assignment: " + String(error)); }
+        }
         host.setModelMaterialVisibility?.(modelIndex, material.key, state?.visible !== false);
     }
+
+    if (!isWgslMaterialShaderAssignmentAvailable(host)) return;
 
     if (entry.materialPipeline === "pbr-standard") {
         // Older projects omitted Standard assignments. Preserve that baseline;

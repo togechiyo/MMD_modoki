@@ -1,4 +1,6 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { ExternalWgslService, type LiveEffectTarget } from "./external-wgsl/service";
+import type { EffectAsset, EffectAssignment, EffectChange, EffectTarget } from "./external-wgsl/contract";
 import { externalParentOmissionCount } from "./export/external-parent-warning";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
 import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
@@ -1039,6 +1041,51 @@ interface PreferredEngineResult {
 export type RenderEnginePreference = "auto" | "webgpu" | "webgl2";
 
 export class MmdManager {
+    private externalWgslService: ExternalWgslService | null = null;
+    public getExternalWgslService(): ExternalWgslService {
+        if (!this.externalWgslService) this.externalWgslService = new ExternalWgslService({
+            scene: this.scene,
+            targets: () => this.sceneModels.flatMap(entry => entry.materials.flatMap(item => {
+                const material = item.material as unknown;
+                return material instanceof StandardMaterial ? [{ target: { modelInstanceId: entry.info.instanceId, materialKey: item.key }, material, meshes: entry.renderMeshes } satisfies LiveEffectTarget] : [];
+            })),
+            frame: () => this.isPlaying ? this.mmdRuntime.currentFrameTime : this.currentFrame,
+            playing: () => this.isPlaying,
+            available: () => this.isWebGpuEngine() && this.getMmdMaterialPipelinePreset() === "mmd-standard",
+            suspend: () => this.suspendSceneRendering(), resume: () => this.resumeSceneRendering(),
+            changed: () => this.onMaterialShaderStateChanged?.(),
+        });
+        return this.externalWgslService;
+    }
+    public async applyExternalWgsl(targets: EffectTarget[], asset: EffectAsset | null, parameters?: EffectAssignment["parameters"]): Promise<EffectChange[]> {
+        if (this.materialModeSwitching) throw new Error("Material mode switch in progress");
+        return this.getExternalWgslService().apply(targets, asset, parameters);
+    }
+    public restoreExternalWgsl(changes: EffectChange[], direction: "apply" | "revert"): boolean {
+        if (this.materialModeSwitching || this.externalWgslService?.busy) return false;
+        if (this.getMmdMaterialPipelinePreset() !== "pbr-standard") return this.getExternalWgslService().restore(changes, direction);
+        const entries = changes.map(change => this.sceneModels.find(entry => entry.info.instanceId === change.target.modelInstanceId && entry.materials.some(item => item.key === change.target.materialKey)));
+        if (entries.some(entry => !entry)) return false;
+        changes.forEach((change, index) => {
+            const entry = entries[index]; if (!entry) return;
+            entry.materialSettingsByMode ??= {};
+            const bank = entry.materialSettingsByMode["mmd-standard"] ??= { materials: [] };
+            let state = bank.materials.find(item => item.materialKey === change.target.materialKey);
+            if (!state) { state = { materialKey: change.target.materialKey, presetId: "wgsl-mmd-standard" }; bank.materials.push(state); }
+            const assignment = direction === "apply" ? change.after : change.before;
+            if (assignment) state.externalEffect = structuredClone(assignment); else delete state.externalEffect;
+        });
+        this.onMaterialShaderStateChanged?.(); return true;
+    }
+    public pruneExternalWgslAssets(retained: Set<string>): void {
+        const project = this.exportProjectState();
+        for (const model of project.scene.models) {
+            for (const state of [...model.materialShaders ?? [], ...Object.values(model.materialSettingsByMode ?? {}).flatMap(bank => bank?.materials ?? [])]) {
+                if (state.externalEffect) retained.add(state.externalEffect.effectRevision);
+            }
+        }
+        this.externalWgslService?.pruneAssets(retained);
+    }
     private static readonly RENDER_ENGINE_OPTIONS = {
         preserveDrawingBuffer: false,
         stencil: true,
@@ -3461,6 +3508,7 @@ ${beforeFogAppendBlock}
 
     public async switchMaterialMode(enabled: boolean): Promise<void> {
         if (this.materialModeSwitching) throw new Error("Material mode switch is already running");
+        if (this.externalWgslService?.busy) throw new Error("Wait for WGSL compilation before switching material mode");
         const next = enabled ? "pbr-standard" : "mmd-standard";
         const previous = this.getMmdMaterialPipelinePreset();
         if (next === previous) return;
@@ -3508,6 +3556,7 @@ ${beforeFogAppendBlock}
                     || (entry.standardReceiveShadows?.get(mesh) ?? mesh.receiveShadows);
             });
             this.setMmdMaterialPipelinePreset(next);
+            await this.externalWgslService?.reconcile();
             if (enabled) this.setEnvironmentLightingEnabled(true);
             for (const { entry } of snapshots) {
                 for (const mesh of entry.renderMeshes) {
@@ -10176,7 +10225,16 @@ ${beforeFogAppendBlock}
     }
     public exportProjectState(): MmdModokiProjectFileV1 {
         if (this.materialModeSwitching) throw new Error("Wait for the material mode switch before saving or exporting");
-        return exportProjectStateImpl(this);
+        if (this.externalWgslService?.busy) throw new Error("Wait for WGSL compilation before saving or exporting");
+        const project = exportProjectStateImpl(this);
+        const revisions = new Set<string>();
+        for (const model of project.scene.models) {
+            for (const state of [...model.materialShaders ?? [], ...Object.values(model.materialSettingsByMode ?? {}).flatMap(bank => bank?.materials ?? [])]) {
+                if (state.externalEffect) revisions.add(state.externalEffect.effectRevision);
+            }
+        }
+        if (revisions.size) project.externalEffects = this.getExternalWgslService().exportAssets(revisions);
+        return project;
     }
 
     public async importProjectState(
@@ -10184,7 +10242,16 @@ ${beforeFogAppendBlock}
         options: { forExport?: boolean } = {},
     ): Promise<{ loadedModels: number; warnings: string[] }> {
         if (this.materialModeSwitching) throw new Error("Wait for the material mode switch before loading a project");
-        return importProjectStateImpl(this, data, options);
+        if (this.externalWgslService?.busy) throw new Error("Wait for WGSL compilation before loading a project");
+        if (!this.isProjectFileV1(data)) throw new Error("Invalid project file format or version");
+        const project = data as Partial<MmdModokiProjectFileV1> | null;
+        const service = this.getExternalWgslService();
+        const result = await importProjectStateImpl(this, data, options);
+        const warnings = await service.importAssets(Array.isArray(project?.externalEffects) ? project.externalEffects : []);
+        service.setOutput(options.forExport ? 0 : null);
+        await service.reconcile();
+        result.warnings.push(...warnings, ...(service.diagnostic ? [service.diagnostic] : []));
+        return result;
     }
 
     /** Current render FPS (rounded) */
@@ -11889,6 +11956,7 @@ ${beforeFogAppendBlock}
     ): Promise<{ width: number; height: number; rgbaData: Uint8Array } | null> {
         const previousTransparentBackground = this.exportTransparentBackgroundEnabled;
         const previousCheckerPreview = this.checkerBackgroundPreviewEnabled;
+        const restoreEffectTime = this.externalWgslService?.freezeForCapture(this.currentFrame);
         try {
             const options = typeof precisionOrOptions === "number"
                 ? { precision: precisionOrOptions }
@@ -11928,6 +11996,7 @@ ${beforeFogAppendBlock}
             this.releaseExportRenderSurface();
             this.setExportTransparentBackgroundEnabled(previousTransparentBackground);
             this.setCheckerBackgroundPreviewEnabled(previousCheckerPreview);
+            restoreEffectTime?.();
         }
     }
     get volume(): number {

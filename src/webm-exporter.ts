@@ -1038,6 +1038,7 @@ export async function runWebmExportJob(
                         startFrame + Math.round((outputFrameIndex * TIMELINE_FPS) / fps),
                     );
                     mmdManager.setExternalPlaybackFrame(frame);
+                    mmdManager.getExternalWgslService().setOutput(1 / fps, startFrame + outputFrameIndex * TIMELINE_FPS / fps);
                     const renderStartedAt = performance.now();
                     if (!playbackStarted) {
                         if (captureMode === "readpixels") {

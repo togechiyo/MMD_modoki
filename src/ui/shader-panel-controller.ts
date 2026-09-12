@@ -1,4 +1,6 @@
 import { t } from "../i18n";
+import { ExternalWgslPanel } from "./external-wgsl-panel";
+import type { EffectChange, EffectTarget } from "../external-wgsl/contract";
 import type { MmdManager, WgslMaterialShaderPresetId } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
 import type { AutomationMaterialTarget } from "../automation/material-schema";
@@ -33,6 +35,7 @@ type InfoModelSelectState = {
 };
 
 export type ShaderPanelControllerDeps = {
+    onExternalEffectCommitted: (changes: EffectChange[]) => void;
     mmdManager: MmdManager;
     getInfoModelSelectState: () => InfoModelSelectState;
     onModelTargetSelected: (value: string, showToast: boolean) => void;
@@ -127,6 +130,7 @@ function createPbrPresetCatalog(): Array<{ id: string; label: string; descriptio
 }
 
 export class ShaderPanelController {
+    private readonly externalPanel: ExternalWgslPanel;
     public getAutomationPresetCatalog(subject: AutomationMaterialTarget) {
         const model = subject.kind === "model" ? this.mmdManager.getLoadedModels().find(item => item.instanceId === subject.modelInstanceId) : null;
         const target = subject.kind === "model"
@@ -194,11 +198,13 @@ export class ShaderPanelController {
         this.showToast = deps.showToast;
         this.onExternalWgslToonChanged = deps.onExternalWgslToonChanged;
         this.dispatchAction = deps.dispatchAction ?? null;
+        this.externalPanel = new ExternalWgslPanel(this.mmdManager, all => this.externalTargets(all), deps.onExternalEffectCommitted);
 
         this.setupEventListeners();
     }
 
     public refresh(): void {
+        this.externalPanel.refresh();
         const elements = this.elements;
         if (
             !elements.modelSelect ||
@@ -491,6 +497,17 @@ export class ShaderPanelController {
             ? state.value
             : (this.elements.modelSelect.options[0]?.value ?? "");
         this.elements.modelSelect.disabled = state.disabled || !hasModelOption;
+    }
+
+    private externalTargets(all: boolean): EffectTarget[] {
+        const value = this.getInfoModelSelectState().value;
+        if (!/^\d+$/.test(value)) return [];
+        const index = Number(value);
+        const model = this.mmdManager.getLoadedModels().find(item => item.index === index);
+        const state = this.mmdManager.getWgslModelShaderStates().find(item => item.modelIndex === index);
+        if (!model || !state || state.materialPipeline !== "mmd-standard") return [];
+        const key = this.selectedMaterialKeys.get(String(index));
+        return state.materials.filter(item => all || item.key === key).map(item => ({ modelInstanceId: model.instanceId, materialKey: item.key }));
     }
 
     public getExternalWgslToonAsset(): { path: string | null; text: string | null } {

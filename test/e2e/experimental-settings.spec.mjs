@@ -30,6 +30,12 @@ test("experimental settings persist PBR imports and expose environment and log o
     await open();
     const dialog = page.locator('[data-popup-id="experimental-settings"]');
     await expect(dialog.locator(".experimental-settings-section > h3")).toHaveText(["PBR", "WGSL", "MCP"]);
+    for (const name of ["PBR", "WGSL", "MCP"]) {
+      const heading = dialog.getByRole("heading", { name, exact: true });
+      await expect(heading.getByRole("checkbox")).toHaveCount(1);
+      await expect(heading.locator("label > span")).toHaveText(name);
+    }
+    await expect(dialog.locator('.experimental-settings-section > .experimental-settings-toggle')).toHaveCount(0);
     const sections = dialog.locator(".experimental-settings-section");
     await expect(sections.nth(0).getByLabel("PBRモード", { exact: true })).toBeVisible();
     await expect(sections.nth(1).getByLabel("外部WGSL材質を有効にする", { exact: true })).toBeVisible();
@@ -51,7 +57,8 @@ test("experimental settings persist PBR imports and expose environment and log o
     await expect(checks.nth(1)).toBeDisabled();
     await expect(ranges.nth(1)).toBeDisabled();
     await expect(dialog.getByRole("button", { name: "HDRI読込", exact: true })).toBeDisabled();
-    await pbr.check();
+    await dialog.getByRole("heading", { name: "PBR", exact: true }).locator("label > span").click();
+    await expect(pbr).toBeChecked();
     await expect(pbr).toBeEnabled();
     await expect(checks.nth(1)).toBeEnabled();
     await checks.nth(1).check();

@@ -3,14 +3,15 @@ import { createExperimentalSection, createExperimentalToggle } from "./experimen
 import type { AutomationState } from "../automation/contracts";
 
 export function mountAutomationSettings(container: HTMLElement): () => void {
-    const section = createExperimentalSection("MCP");
-    section.dataset.enabled = "false";
     const title = document.createElement("p");
     title.className = "experimental-settings-subtitle";
     title.textContent = "AI連携";
     const enabled = document.createElement("input");
     enabled.type = "checkbox"; enabled.className = "popup-form-checkbox";
     enabled.disabled = true;
+    enabled.setAttribute("aria-label", "MCPを有効にする");
+    const section = createExperimentalSection("MCP", enabled);
+    section.dataset.enabled = "false";
     const editable = document.createElement("input");
     editable.type = "checkbox"; editable.className = "popup-form-checkbox";
     editable.disabled = true;
@@ -104,7 +105,7 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
     historySection.className = "experimental-settings-subsection";
     const historyTitle = document.createElement("h4"); historyTitle.textContent = "提供履歴";
     historySection.append(historyTitle, historyNote, history, createPopupFormButtonRow([historyButton]));
-    section.append(title, createExperimentalToggle("MCPを有効にする", enabled), note, permissions,
+    section.append(title, note, permissions,
         diagnostics, status, createPopupFormButtonRow([connection]), config, historySection);
     container.append(section);
     return () => { mounted = false; config.value = ""; unsubscribe(); };

@@ -742,6 +742,23 @@ select.popup-form-control {
   line-height: 1.3;
 }
 
+.experimental-settings-heading-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.experimental-settings-heading-toggle > .popup-form-checkbox {
+  flex: none;
+  margin: 0;
+}
+
+.experimental-settings-heading-toggle:has(> input:disabled) {
+  cursor: default;
+}
+
 .experimental-settings .popup-form-field:has(> .popup-form-checkbox) {
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: start;

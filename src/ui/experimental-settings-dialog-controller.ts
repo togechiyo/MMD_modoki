@@ -4,7 +4,7 @@ import { mountAutomationSettings } from "./automation-settings-panel";
 import type { PopupContentController } from "./popup-dialog-controller";
 import { HdriSettingsDialogController, type HdriSettingsDialogControllerDeps } from "./hdri-settings-dialog-controller";
 import { createPopupFormButton, createPopupFormButtonRow } from "./popup-form-helpers";
-import { createExperimentalSection, createExperimentalToggle } from "./experimental-settings-layout";
+import { createExperimentalSection } from "./experimental-settings-layout";
 
 export class ExperimentalSettingsDialogController implements PopupContentController {
     private busy = false;
@@ -21,12 +21,11 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
     public mount(container: HTMLElement): void {
         const form = document.createElement("div");
         form.className = "popup-form experimental-settings";
-        const pbrSection = createExperimentalSection("PBR");
-        const wgslSection = createExperimentalSection("WGSL");
         const wgsl = document.createElement("input"); wgsl.type = "checkbox"; wgsl.className = "popup-form-checkbox";
+        wgsl.setAttribute("aria-label", t("wgsl.permission"));
+        const wgslSection = createExperimentalSection("WGSL", wgsl);
         wgsl.checked = this.deps.mmdManager.getExternalWgslService().enabled;
         this.disposeWgsl = wgslRecoveryApi()?.onBlocked(() => { wgsl.checked = false; });
-        wgslSection.append(createExperimentalToggle(t("wgsl.permission"), wgsl));
         const wgslNote = document.createElement("p");
         wgslNote.className = "popup-form-note"; wgslNote.textContent = t("wgsl.safetyNote");
         wgslSection.append(wgslNote);
@@ -44,11 +43,12 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         const pbr = document.createElement("input");
         pbr.type = "checkbox";
         pbr.className = "popup-form-checkbox";
+        pbr.setAttribute("aria-label", t("experiment.pbr"));
+        const pbrSection = createExperimentalSection("PBR", pbr);
         const isPbr = (): boolean => {
             return this.deps.mmdManager.getMmdMaterialPipelinePreset() === "pbr-standard";
         };
         pbr.checked = isPbr();
-        pbrSection.append(createExperimentalToggle(t("experiment.pbr"), pbr));
         const note = document.createElement("p");
         note.className = "popup-form-note";
         note.textContent = t("experiment.pbrNote");

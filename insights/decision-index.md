@@ -8,7 +8,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
-| adopted | [実験設定はツールメニューにまとめる](./decisions/experimental-settings-live-under-tools.md) | PBR・WGSL・MCPの大段落内に説明・小項目・了承を配置。大項目OFF時は小項目を無効表示。PBR詳細・ログ操作への入口、内蔵TrueHDRI維持と外部ENV / DDS対応、旧PBR Skin SSSの採用取りやめ、PBR内の既定をMMD Likeにする、金属・樹脂・Clay White・衣装用4種・特殊プリセット追加、Pearl不採用、Thin Translucent再開、標準MCPのローカルHTTP・ON/OFF・viewport画像・元path一覧・検索helpの設計方針を了承、MCPからモデル本体は送信しないがボーン/モーフ/材質の名前一覧は公開する、説明付き追加許可で要求された個別対象の構造・物理診断を提供、キー編集を中心にUI各項目をMCPへ接続、外部親はAIに任せやすい操作を重視、AI操作で重要なUIから接続、非公開UIは対象外とし公開ツールの一括利用・エフェクト・材質を接続、次はキー検索→一括モーフ→描画待機・画像比較 |
+| adopted | [実験設定はツールメニューにまとめる](./decisions/experimental-settings-live-under-tools.md) | PBR・WGSL・MCPの大段落内に説明・小項目・了承を配置。有効化チェックは大見出しに統合。大項目OFF時は小項目を無効表示。PBR詳細・ログ操作への入口、内蔵TrueHDRI維持と外部ENV / DDS対応、旧PBR Skin SSSの採用取りやめ、PBR内の既定をMMD Likeにする、金属・樹脂・Clay White・衣装用4種・特殊プリセット追加、Pearl不採用、Thin Translucent再開、標準MCPのローカルHTTP・ON/OFF・viewport画像・元path一覧・検索helpの設計方針を了承、MCPからモデル本体は送信しないがボーン/モーフ/材質の名前一覧は公開する、説明付き追加許可で要求された個別対象の構造・物理診断を提供、キー編集を中心にUI各項目をMCPへ接続、外部親はAIに任せやすい操作を重視、AI操作で重要なUIから接続、非公開UIは対象外とし公開ツールの一括利用・エフェクト・材質を接続、次はキー検索→一括モーフ→描画待機・画像比較 |
 | adopted | [光色の超過分は通常MMDとPBRのモードで分ける](./decisions/light-color-boost-switches-by-scene-mode.md) | 光色100%超過時の影側増幅を避け、小さなモード分岐で直す |
 | adopted | [FrameGraph全体切替は資源解放と再構築にする](./decisions/framegraph-master-toggle-releases-resources.md) | 一括停止・再開と個別切替の役割を決める |
 | adopted | [Stage Standardは背景向けの汎用マット材質にする](./decisions/stage-standard-is-a-matte-background-preset.md) | 背景材質の追加・調整。事前計算を導入せずリアルタイム描画に限定する |

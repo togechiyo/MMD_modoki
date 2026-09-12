@@ -1,13 +1,19 @@
 import { createPopupFormField } from "./popup-form-helpers";
 
-export function createExperimentalSection(name: "PBR" | "WGSL" | "MCP"): HTMLElement {
+export function createExperimentalSection(name: "PBR" | "WGSL" | "MCP", input: HTMLInputElement): HTMLElement {
     const section = document.createElement("section");
     section.className = "experimental-settings-section";
     section.dataset.experimentSection = name.toLowerCase();
     const title = document.createElement("h3");
-    title.id = `experiment-section-${name.toLowerCase()}`;
-    title.textContent = name;
-    section.setAttribute("aria-labelledby", title.id);
+    const label = document.createElement("label");
+    label.className = "experimental-settings-heading-toggle";
+    const text = document.createElement("span");
+    text.id = `experiment-section-${name.toLowerCase()}`;
+    text.textContent = name;
+    label.append(input, text);
+    title.append(label);
+    title.setAttribute("aria-labelledby", text.id);
+    section.setAttribute("aria-labelledby", text.id);
     section.append(title);
     return section;
 }

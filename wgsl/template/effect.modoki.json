@@ -1,0 +1,11 @@
+{
+  "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
+  "apiVersion": 1,
+  "kind": "mmd-material",
+  "name": "Template / 色調整テンプレート",
+  "sources": ["main.wgsl"],
+  "hooks": { "surface": "tintSurface" },
+  "parameters": {
+    "Tint": { "type": "vec3f", "default": [1, 1, 1], "ui": { "label": "色", "control": "color", "min": 0, "max": 1 } }
+  }
+}

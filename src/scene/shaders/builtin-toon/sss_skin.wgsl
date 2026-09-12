@@ -1,3 +1,4 @@
+// Internal built-in Toon fragment; not an external material API v1 sample.
 // @apply-without-toon
 {
 // Keep ordinary MMD direct lighting as the surface irradiance producer. The

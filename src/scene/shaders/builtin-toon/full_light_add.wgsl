@@ -1,3 +1,4 @@
+// Internal built-in Toon fragment; not an external material API v1 sample.
 // @apply-without-toon
 {
 let rawBaseColor=clamp(baseColor.rgb,vec3f(0.0),vec3f(1.0));

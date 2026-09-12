@@ -1,3 +1,4 @@
+// Internal built-in Toon fragment; not an external material API v1 sample.
 // Broad, smooth form shading for textured stage surfaces. Cast shadows keep
 // their existing visibility/filter; this preset adds no screen-space occlusion.
 // @signed-light-ndl

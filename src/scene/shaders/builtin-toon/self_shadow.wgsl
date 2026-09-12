@@ -1,3 +1,4 @@
+// Internal built-in Toon fragment; not an external material API v1 sample.
 #ifdef TOON_TEXTURE_COLOR
 {
 let one=vec3f(1.0);

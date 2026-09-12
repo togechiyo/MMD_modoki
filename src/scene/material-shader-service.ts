@@ -1,29 +1,29 @@
 // eslint-disable-next-line import/no-unresolved
-import debugWhiteWgslText from "../../wgsl/toon_debug_white_shadow.wgsl?raw";
+import debugWhiteWgslText from "./shaders/builtin-toon/toon_debug_white_shadow.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import alphaTextureDebugWgslText from "../../wgsl/alpha_texture_debug.wgsl?raw";
+import alphaTextureDebugWgslText from "./shaders/builtin-toon/alpha_texture_debug.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import fullLightWgslText from "../../wgsl/full_light.wgsl?raw";
+import fullLightWgslText from "./shaders/builtin-toon/full_light.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import fullLightAddWgslText from "../../wgsl/full_light_add.wgsl?raw";
+import fullLightAddWgslText from "./shaders/builtin-toon/full_light_add.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import glossHighlightWgslText from "../../wgsl/gloss_highlight.wgsl?raw";
+import glossHighlightWgslText from "./shaders/builtin-toon/gloss_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import fullShadowWgslText from "../../wgsl/full_shadow.wgsl?raw";
+import fullShadowWgslText from "./shaders/builtin-toon/full_shadow.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import selfShadowWgslText from "../../wgsl/self_shadow.wgsl?raw";
+import selfShadowWgslText from "./shaders/builtin-toon/self_shadow.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import sssSkinWgslText from "../../wgsl/sss_skin.wgsl?raw";
+import sssSkinWgslText from "./shaders/builtin-toon/sss_skin.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import sssStandardWgslText from "../../wgsl/sss_standard.wgsl?raw";
+import sssStandardWgslText from "./shaders/builtin-toon/sss_standard.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import matteHighlightWgslText from "../../wgsl/matte_highlight.wgsl?raw";
+import matteHighlightWgslText from "./shaders/builtin-toon/matte_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import stageStandardWgslText from "../../wgsl/stage_standard.wgsl?raw";
+import stageStandardWgslText from "./shaders/builtin-toon/stage_standard.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import semiMatteHighlightWgslText from "../../wgsl/semi_matte_highlight.wgsl?raw";
+import semiMatteHighlightWgslText from "./shaders/builtin-toon/semi_matte_highlight.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
-import toonHardShadowWgslText from "../../wgsl/toon_hard_shadow.wgsl?raw";
+import toonHardShadowWgslText from "./shaders/builtin-toon/toon_hard_shadow.wgsl?raw";
 // eslint-disable-next-line import/no-unresolved
 import fallbackAccessoryToonTextureUrl from "../assets/textures/toon/fallback_accessory_toon.bmp?url";
 // eslint-disable-next-line import/no-unresolved

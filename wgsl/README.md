@@ -1,36 +1,44 @@
-# WGSL Toon Snippet Samples
+# 外部WGSL材質サンプル（API v1）
 
-このフォルダの `.wgsl` は、**シェーダー全体**ではなく、
-MMD Toon の一部計算（`diffuseBase` 加算部分）を差し替えるための
-**WGSLスニペット**です。
+このフォルダは、新しい外部WGSL読込で実際に選べるサンプルです。各フォルダの **`effect.modoki.json`** を選びます。`.wgsl`単独を読む旧方式ではありません。
 
 ## 使い方
 
-1. アプリの Shader パネルで `WGSL -> Load...` を押す
-2. このフォルダの `.wgsl` を選ぶ
-3. 見た目を確認し、必要なら `Clear` で戻す
+1. ツール → 実験機能 →「外部WGSL材質を有効にする」をON。
+2. モデルを選び、エフェクトパネル → 材質 →「定義ファイルを読む」。
+3. 以下の定義を選び、「選択材質へ適用」または「モデル全材質へ適用」。
+4. パラメーターの数値・色を編集。解除やUndoで元へ戻せます。
 
-## 注意
+| サンプル | 内容 |
+| --- | --- |
+| [Aurora Opal](./aurora-opal/effect.modoki.json) | 流れる鉱石模様、視線角度で変わる虹色、発光する帯と縁取り。今回の凝った作例。 |
+| [Soft Pastel](./soft-pastel/effect.modoki.json) | 元の照明・影の位置を保ったパステル調の色仕上げ。 |
+| [Template](./template/effect.modoki.json) | 色乗算だけの編集開始用。既定値は元の見た目を保持。 |
 
-- WebGPU / WGSL 時のみ有効
-- `#ifdef TOON_TEXTURE_COLOR` ブロックを含む形式を推奨
-- `diffuseBase+=...` 相当の処理を必ず含める
+いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。元のMMD材質がテクスチャを持つ場合は通常どおり描画されます。WebGPUのMMD材質モード向けで、PBRでは休止します。
 
-## 同梱サンプル
+## Aurora Opalの調整
 
-- `toon_template.wgsl`
-  - 編集用の最小テンプレート
-- `toon_balanced_default.wgsl`
-  - 標準寄りのバランス型
-- `toon_hard_shadow.wgsl`
-  - 影境界を硬くしたハイコントラスト型
-- `self_shadow.wgsl`
-  - Toonテクスチャを法線のライト向きで評価し、shadow map遮蔽を使わないSelf Shadowプリセット
-- `sss_standard.wgsl`
-  - 再設計を保留している旧SSS Standard局所近似。Toon影色、signed N dot L、world-space曲率を使う
-- `sss_skin.wgsl`
-  - MMD direct diffuseをBabylon PrePassへ渡し、固定赤優勢Burley profileと均一厚みの逆光透過を使うSSS Skinプリセット
-- `toon_soft_pastel.wgsl`
-  - 影を柔らかくしたパステル寄り
-- `toon_debug_white_shadow.wgsl`
-  - テクスチャ無視の白表示 + 影のみ保持（SSAO/Fog確認向け）
+- タイムラインを再生するか、0 → 90フレームへ移動すると模様が流れます。停止中は静止し、同じフレームへ戻ると同じ模様になります。
+- `模様の細かさ`を上げると細かくなります。既定値0.65は数MMD単位の形状向け。大きいモデルで細かすぎる場合は0.1〜0.3程度から調整。
+- `流れる速さ`を0にすると静止。負数は逆方向。
+- `コーティングの強さ`が0なら元の最終色、1ならオパール調。顔全体より衣装・小物の一部から試すと調整しやすいです。
+- `鉱石の地色`、`発光色`、`光の帯の太さ`、`発光の強さ`で印象を調整。
+
+3段の固定noise、滑らかな縞、簡易干渉色、Fresnel風の縁取りとハイライトを重ねています。物理的な薄膜・屈折・SSSではなく、透明度や形状は変更しません。発光は表面への色加算で、周囲の空間へ光をにじませる処理は含みません。
+
+模様の座標はworld行列の逆変換後の位置です。モデル全体の移動・回転には追従しますが、スキニング前の静止座標ではないため、ボーン変形時に模様が変化します。細い帯には微分によるぼかしを入れていますが、任意の距離・出力解像度でのちらつき抑制を保証するものではありません。
+
+## 旧サンプルの整理（2026-09-12）
+
+旧`diffuseBase`差替えsnippetはこのフォルダから撤去しました。テンプレート・パステル・装飾系は上記のAPI v1作例へ置き換えています。旧コードとの描画互換はありません。
+
+組込プリセットが使用中の13ファイルは [src/scene/shaders/builtin-toon](../src/scene/shaders/builtin-toon/) へ移しました。こちらは内部専用のToon処理であり、外部読込の対象ではありません。使用されていなかった旧template、balanced default、soft pastel、poster pop、cyber neon、luminous、light and shadowの7ファイルは削除しました。過去の調査メモにある`wgsl/*.wgsl`は当時のパスです。
+
+API・保存の説明は [外部WGSL材質の使い方](../docs/external-wgsl-material-usage.md) を参照。
+
+## 確認結果（2026-09-12）
+
+自作の`sss-reference.pmx`でClassic / Frame GraphのローカルElectron E2Eを実施。3パッケージをGUIから読み込み、実GPUでのコンパイルとPNG描画を確認しました。テンプレートの既定値が元の画像を保持すること、装飾2種で色が変わること、オパールの0 → 90 → 0フレームで変化・再現すること、強さの編集が反映されることを画像のRGB差分で確認しています。WebGPU validation errorは0件。オパールの0・90フレームの出力画像も目視確認しました。
+
+lint通過。組込13本は移動前後で説明コメント以外の本文一致を確認しています。任意のモデル・全材質プリセットとの組合せや動画ファイル出力の比較は未実施です。再確認コマンド: `npm.cmd run test:e2e -- external-wgsl-samples.spec.mjs`。

@@ -1,0 +1,14 @@
+{
+  "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
+  "apiVersion": 1,
+  "kind": "mmd-material",
+  "name": "Soft Pastel / パステル仕上げ",
+  "description": "既存の照明結果にパステル調の色調整を重ねる。旧Toon snippetの完全互換ではありません。",
+  "sources": ["main.wgsl"],
+  "hooks": { "finalColor": "pastelFinish" },
+  "parameters": {
+    "ShadowColor": { "type": "vec3f", "default": [0.28, 0.22, 0.4], "ui": { "label": "暗部の色", "control": "color", "min": 0, "max": 1 } },
+    "PaperColor": { "type": "vec3f", "default": [1.0, 0.94, 0.87], "ui": { "label": "明部の色", "control": "color", "min": 0, "max": 1 } },
+    "Strength": { "type": "f32", "default": 0.55, "ui": { "label": "強さ", "min": 0, "max": 1, "step": 0.01 } }
+  }
+}

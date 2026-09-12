@@ -254,6 +254,7 @@
 - [x] カスタムシェーダーの WGSL 対応方針整理
 - [x] BabylonのWGSL基盤とMME風semanticを組み合わせる外部材質APIの詳細設計、Schema、作者サンプルを整理（[詳細設計](./external-wgsl-material-api-v1-design.md)）
 - [x] 外部WGSL材質A：入力・パラメーター・材質別保存・失敗復帰・Undoと、実験機能からの許可導線を実装。Classic/FrameGraphのGUI・PNGで確認（[使い方・確認範囲](./external-wgsl-material-usage.md)）
+- [x] 外部WGSLサンプルをAPI v1へ整理。テクスチャ不要のAurora Opal・Soft Pastel・Templateを追加し、組込Toon断片をsrc配下へ分離。両描画経路で読込・描画・時間再現を確認（[サンプル一覧](../wgsl/README.md)）
 - [ ] 外部WGSL材質B以降：light hook・texture・CONTROL入力、全variant検証とsource位置の逆変換（[詳細設計](./external-wgsl-material-api-v1-design.md)）
 - [ ] 主要エフェクトの WGSL 化
 - [ ] WebGL2 vs WebGPU 性能比較

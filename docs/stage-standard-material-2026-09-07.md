@@ -47,7 +47,7 @@ ToonなしではStage Standard専用fallbackを使ってMMDの照明経路を有
 
 ## 実装・一次情報
 
-- `wgsl/stage_standard.wgsl`: 受光曲線と影色の合成。
+- `src/scene/shaders/builtin-toon/stage_standard.wgsl`: 受光曲線と影色の合成（2026-09-12に旧`wgsl/`から移動）。
 - `src/scene/material-shader-service.ts`: 元材質の復元、マット化、Toonなしの基準色。
 - `src/mmd-manager.ts`: カタログ・表示名。
 - インストール済みbabylon-mmd 1.2.0の

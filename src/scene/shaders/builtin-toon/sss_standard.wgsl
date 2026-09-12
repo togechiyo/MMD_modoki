@@ -1,3 +1,4 @@
+// Internal built-in Toon fragment; not an external material API v1 sample.
 {
 let one=vec3f(1.0);
 let toonShadowPixel=vec2i(0,0);

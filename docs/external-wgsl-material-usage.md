@@ -12,6 +12,8 @@
 
 [サンプル定義](./examples/external-material-effect-v1/effect.modoki.json) と [main.wgsl](./examples/external-material-effect-v1/main.wgsl) を同じフォルダへ置いて試せる。材質の色味と、タイムラインに連動する明るさを変更するサンプル。
 
+追加の作例は [wgslサンプル一覧](../wgsl/README.md)。テクスチャ不要の「Aurora Opal」、パステル仕上げ、最小テンプレートを収録している。各フォルダの `effect.modoki.json` を選ぶ。
+
 「再読込して適用」は選択材質の元ファイルを読み直す。初期実装では再読込時のパラメーターは新定義の既定値に戻る。失敗時は前の割当・値を維持する。「割当を解除」は選択材質の外部処理を取り除く。適用、再読込、解除、パラメーター変更はUndo/Redo対象。
 
 ## 作者が指定できるもの

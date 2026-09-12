@@ -1,3 +1,4 @@
+// Internal built-in Toon fragment; not an external material API v1 sample.
 // @apply-without-toon
 // Debug snippet: visualize the sampled diffuse texture alpha as grayscale.
 // White = alpha 1, black = alpha 0. The output alpha is forced opaque so the

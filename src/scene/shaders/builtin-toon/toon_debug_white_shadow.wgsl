@@ -1,3 +1,4 @@
+// Internal built-in Toon fragment; not an external material API v1 sample.
 // @apply-without-toon
 // Debug snippet:
 // - Keep MMD Standard-like shadow placement as much as possible

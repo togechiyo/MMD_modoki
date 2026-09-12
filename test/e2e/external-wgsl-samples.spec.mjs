@@ -50,10 +50,20 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
             return result.path;
         };
         const original = await capture("original");
+        const standardRowHeight = await page.locator(".shader-material-item").first().evaluate(element => element.getBoundingClientRect().height);
         const angularSamples = ["moonstone-schiller", "black-opal", "prismatic-fire"];
         const editor = wgslFixtureEditor(app.app, page, testInfo, root);
         for (const sample of ["template", "soft-pastel", ...angularSamples, "aurora-opal"]) {
             await editor.load(sample);
+            const layout = await page.locator(".shader-material-item").first().evaluate(element => {
+                const name = element.querySelector(".shader-material-name").getBoundingClientRect();
+                const preset = element.querySelector(".shader-material-preset").getBoundingClientRect();
+                return { height: element.getBoundingClientRect().height, nameWidth: name.width,
+                    alignment: Math.abs(name.y + name.height / 2 - preset.y - preset.height / 2) };
+            });
+            expect(Math.abs(layout.height - standardRowHeight)).toBeLessThan(1);
+            expect(layout.alignment).toBeLessThan(1);
+            expect(layout.nameWidth).toBeGreaterThan(20);
             const image = await capture(sample);
             if (sample === "prismatic-fire") {
                 const panel = page.locator('[data-effect-tab-view="materials"]');

@@ -3698,13 +3698,10 @@ body.png-capture-mode .model-comment-notice {
 }
 
 .shader-material-item--external {
-  grid-template-columns: auto minmax(0, 1fr);
-  row-gap: 2px;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 60%);
 }
-.shader-material-item--external .shader-material-toggle { grid-row: 1 / span 2; }
-.shader-material-item--external .shader-material-name,
-.shader-material-item--external .shader-material-preset { grid-column: 2; }
 .shader-material-item--external .shader-material-preset {
+  text-align: right;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

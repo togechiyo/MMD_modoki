@@ -32,6 +32,7 @@ export function client(connection) {
 export async function enableMcpEditing(page) {
     const dialog = await settings(page);
     await expect(dialog.getByLabel("MCPを有効にする", { exact: true })).not.toBeChecked();
+    await expect(dialog.getByLabel("AIからの編集も許可", { exact: true })).toBeDisabled();
     await dialog.getByLabel("MCPを有効にする", { exact: true }).click();
     await expect(dialog.locator("[data-mcp-status]")).toContainText("公開中");
     await dialog.getByLabel("AIからの編集も許可", { exact: true }).click();

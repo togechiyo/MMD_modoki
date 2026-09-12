@@ -100,10 +100,14 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP detailed diagnostics 
         await expect(dialog.locator("[data-mcp-status]")).toContainText("詳細診断：許可");
         await dialog.getByLabel("MCPを有効にする", { exact: true }).click();
         await expect(dialog.locator("[data-mcp-status]")).toContainText("OFF：");
+        await expect(dialog.getByLabel("AIからの編集も許可", { exact: true })).toBeDisabled();
+        await expect(dialog.getByLabel(label, { exact: true })).toBeDisabled();
         await expect(dialog.getByLabel(label, { exact: true })).not.toBeChecked();
         await expect(dialog.getByRole("list", { name: "詳細情報の提供履歴" }).locator("li")).toHaveCount(10);
         await dialog.getByLabel("MCPを有効にする", { exact: true }).click();
         await expect(dialog.locator("[data-mcp-status]")).toContainText("公開中");
+        await expect(dialog.getByLabel("AIからの編集も許可", { exact: true })).toBeEnabled();
+        await expect(dialog.getByLabel(label, { exact: true })).toBeEnabled();
         await expect(dialog.getByLabel(label, { exact: true })).not.toBeChecked();
         await dialog.getByLabel(label, { exact: true }).click();
         await expect(dialog.locator("[data-mcp-status]")).toContainText("詳細診断：許可");

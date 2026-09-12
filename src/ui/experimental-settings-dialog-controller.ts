@@ -55,10 +55,12 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         pbrSection.append(note);
         note.id = "experiment-pbr-note";
         pbr.setAttribute("aria-describedby", note.id);
-        const details = document.createElement("section");
+        const details = document.createElement("fieldset");
         details.className = "experimental-settings-subsection";
         details.dataset.experimentalLighting = "true";
         const summary = document.createElement("h4");
+        summary.id = "experiment-pbr-details-title";
+        details.setAttribute("aria-labelledby", summary.id);
         summary.textContent = t("experiment.pbrDetails");
         details.append(summary);
         const hdri = new HdriSettingsDialogController(this.deps);
@@ -67,11 +69,12 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         ibl.className = "popup-form-note";
         ibl.textContent = t("experiment.iblUnavailable");
         details.append(ibl);
+        details.disabled = !isPbr();
         pbrSection.append(details);
         pbr.addEventListener("change", () => {
             this.busy = true;
             pbr.disabled = true;
-            details.inert = true;
+            details.disabled = true;
             void this.deps.switchPbr(pbr.checked).catch((error: unknown) => {
                 window.electronAPI.logError("ui", "Material mode switch failed", {
                     message: error instanceof Error ? error.message : String(error),
@@ -80,8 +83,8 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
             }).finally(() => {
                 this.busy = false;
                 pbr.disabled = false;
-                details.inert = false;
                 pbr.checked = isPbr();
+                details.disabled = !pbr.checked;
                 hdri.refresh();
                 this.deps.refreshUi();
             });

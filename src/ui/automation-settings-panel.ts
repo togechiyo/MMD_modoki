@@ -4,6 +4,7 @@ import type { AutomationState } from "../automation/contracts";
 
 export function mountAutomationSettings(container: HTMLElement): () => void {
     const section = createExperimentalSection("MCP");
+    section.dataset.enabled = "false";
     const title = document.createElement("p");
     title.className = "experimental-settings-subtitle";
     title.textContent = "AI連携";
@@ -46,7 +47,8 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
     const render = (state: AutomationState): void => {
         if (!mounted) return;
         enabled.checked = state.enabled; editable.checked = state.editable; detailed.checked = state.detailedDiagnostics;
-        enabled.disabled = configuring; editable.disabled = configuring;
+        section.dataset.enabled = String(state.enabled);
+        enabled.disabled = configuring; editable.disabled = configuring || !state.enabled;
         detailed.disabled = configuring || !state.enabled;
         connection.disabled = !state.enabled;
         status.textContent = configuring ? "設定変更中…" : state.error ?? (state.enabled ? (state.editable ? "公開中：参照・編集を許可" : "公開中：参照のみ") : "OFF：公開していません");
@@ -60,7 +62,7 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
         void window.electronAPI.automation.configure(enabled.checked, editable.checked, detailed.checked).then(state => {
             configuring = false; render(state);
         }).catch(() => {
-            configuring = false; enabled.disabled = false; editable.disabled = false; detailed.checked = false; detailed.disabled = !enabled.checked;
+            configuring = false; enabled.disabled = false; editable.disabled = !enabled.checked; detailed.checked = false; detailed.disabled = !enabled.checked;
             status.textContent = "MCP設定を変更できませんでした。";
         });
     };
@@ -91,11 +93,11 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
         }).catch(() => { status.textContent = "公開をONにしてから接続設定を表示してください。"; });
     });
     const permissions = document.createElement("div");
-    permissions.className = "experimental-settings-subsection";
+    permissions.className = "experimental-settings-subsection experimental-settings-permissions";
     const permissionTitle = document.createElement("h4"); permissionTitle.textContent = "操作の許可";
     permissions.append(permissionTitle, createExperimentalToggle("AIからの編集も許可", editable));
     const diagnostics = document.createElement("div");
-    diagnostics.className = "experimental-settings-subsection experimental-settings-consent";
+    diagnostics.className = "experimental-settings-subsection experimental-settings-consent experimental-settings-permissions";
     const diagnosticsTitle = document.createElement("h4"); diagnosticsTitle.textContent = "詳細診断の共有";
     diagnostics.append(diagnosticsTitle, detailNote, createExperimentalToggle("構造情報を含む詳細診断を許可", detailed));
     const historySection = document.createElement("div");

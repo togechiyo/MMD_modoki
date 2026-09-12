@@ -790,6 +790,22 @@ select.popup-form-control {
   font-weight: 600;
 }
 
+fieldset.experimental-settings-subsection {
+  margin: 0;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+fieldset.experimental-settings-subsection:disabled,
+[data-experiment-section="mcp"][data-enabled="false"] .experimental-settings-permissions {
+  opacity: 0.45;
+}
+
+.experimental-settings-toggle:has(> input:disabled) {
+  cursor: default;
+}
+
 .experimental-settings-consent {
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);

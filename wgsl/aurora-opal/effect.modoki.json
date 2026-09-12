@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "Aurora Opal / オーロラ・オパール",
+  "name": "Aurora Opal",
   "description": "テクスチャ不要。流れる鉱石模様、虹色の干渉色、発光する細い帯とリムを重ねた装飾材質。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "shadeOpal" },

@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "MME Inputs / 材質・ライト・視点",
+  "name": "MME Light & Material",
   "description": "同じDIFFUSEでもObjectで材質色とライト色を区別。材質の光沢値と視点から簡易照明を組み立てる教材。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "shadeMmeLighting" },

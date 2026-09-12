@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "Black Opal / 遊色のかけら",
+  "name": "Black Opal",
   "description": "暗い石の中で区画ごとの赤・緑・青が角度に応じて現れる、遊色風の表面表現。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "shadeBlackOpal" },

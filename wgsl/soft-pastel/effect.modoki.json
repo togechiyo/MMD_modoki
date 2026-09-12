@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "Soft Pastel / パステル仕上げ",
+  "name": "Soft Pastel",
   "description": "既存の照明結果にパステル調の色調整を重ねる。旧Toon snippetの完全互換ではありません。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "pastelFinish" },

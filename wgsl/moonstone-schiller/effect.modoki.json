@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "Moonstone Schiller / 青いシラー",
+  "name": "Moonstone Schiller",
   "description": "乳白色の表面に角度で浮かぶ青い光。内部散乱を表面の柔らかな光で近似。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "shadeMoonstone" },

@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "MME Inputs / 時間とフレーム",
+  "name": "MME Time Scan",
   "description": "TIMEとELAPSEDTIMEの編集同期あり・なしを比較。MODOKI_FRAMEは独自拡張として別に示す。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "shadeMmeTime" },

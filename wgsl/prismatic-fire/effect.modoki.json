@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "Prismatic Fire / 分散風のきらめき",
+  "name": "Prismatic Fire",
   "description": "白い光沢の中に、角度が合うと赤・緑・青の細いきらめきが現れる。背景屈折なしの見た目優先サンプル。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "shadePrismaticFire" },

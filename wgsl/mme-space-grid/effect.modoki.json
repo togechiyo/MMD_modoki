@@ -2,7 +2,7 @@
   "$schema": "../../docs/schemas/external-material-effect-v1.schema.json",
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "MME Inputs / 行列と画面サイズ",
+  "name": "MME Space Grid",
   "description": "WORLDINVERSEでモデル側の座標へ戻し、WORLDVIEWPROJECTIONで画面へ投影。物体に付く格子と画面に付く格子を比較。",
   "sources": ["main.wgsl"],
   "hooks": { "finalColor": "shadeMmeGrid" },

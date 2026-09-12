@@ -1,17 +1,18 @@
 import { t } from "../i18n";
-import { createPopupFormButton, createPopupFormField } from "./popup-form-helpers";
+import { createPopupFormButton } from "./popup-form-helpers";
+import { createExternalWgslParameter } from "./external-wgsl-parameter";
 import type { MmdManager } from "../mmd-manager";
-import type { EffectAsset, EffectChange, EffectTarget, EffectValue } from "../external-wgsl/contract";
+import type { EffectAsset, EffectChange, EffectTarget } from "../external-wgsl/contract";
 
 export class ExternalWgslPanel {
     private readonly root = document.createElement("section");
     private loaded: EffectAsset | null = null;
     private busy = false;
     private message = "";
+    private readonly expandedColours = new Set<string>();
     constructor(private readonly manager: MmdManager, private readonly targets: (all: boolean) => EffectTarget[], private readonly committed: (changes: EffectChange[]) => void) {
         this.root.id = "external-wgsl-panel";
-        this.root.className = "popup-form";
-        this.root.style.display = "grid"; this.root.style.gap = "8px";
+        this.root.className = "external-wgsl-panel";
         document.getElementById("shader-material-list")?.before(this.root);
     }
     public refresh(): void {
@@ -22,14 +23,29 @@ export class ExternalWgslPanel {
         this.root.style.display = this.root.hidden ? "none" : "grid";
         if (this.busy || this.root.contains(document.activeElement)) return;
         this.root.replaceChildren();
+        const header = document.createElement("div"); header.className = "external-wgsl-header";
         const title = document.createElement("h3"); title.textContent = t("wgsl.title");
-        const status = document.createElement("p"); status.id = "external-wgsl-status"; status.className = "popup-form-note";
+        const badge = document.createElement("span"); badge.className = "external-wgsl-badge";
+        badge.textContent = t("wgsl.state." + (state?.status ?? (service.enabled ? "none" : "disabled")));
+        badge.dataset.state = state?.status ?? "none";
+        header.append(title, badge);
+        const status = document.createElement("div"); status.id = "external-wgsl-status";
         status.dataset.state = state?.status ?? (service.enabled ? "none" : "disabled");
-        status.textContent = [state?.name, t("wgsl.state." + (state?.status ?? "none")), this.loaded ? t("wgsl.loaded") + ": " + this.loaded.manifest.name : ""].filter(Boolean).join(" / ");
-        this.root.append(title, status);
-        const row = document.createElement("div"); row.className = "popup-form-button-row";
+        const applied = state?.assignment ? service.getAsset(state.assignment.effectRevision) : null;
+        const currentName = document.createElement("div"); currentName.className = "external-wgsl-name";
+        currentName.textContent = state?.name ?? "";
+        if (currentName.textContent) { currentName.title = currentName.textContent; status.append(currentName); }
+        if (this.loaded && this.loaded.revision !== state?.assignment?.effectRevision) {
+            const pending = document.createElement("div"); pending.className = "external-wgsl-pending";
+            pending.textContent = t("wgsl.loaded") + ": " + this.loaded.manifest.name;
+            pending.title = pending.textContent; status.append(pending);
+        }
+        status.title = applied?.manifest.description ?? "";
+        this.root.append(header, status);
+        const row = document.createElement("div"); row.className = "external-wgsl-actions";
         const button = (key: string, id: string, action: () => Promise<void>, disabled = false): void => {
-            const element = createPopupFormButton(t(key), id.includes("apply") ? "primary" : "secondary"); element.id = id;
+            const element = createPopupFormButton(t(key + "Short"), id.includes("apply") ? "primary" : "secondary"); element.id = id;
+            element.title = t(key); element.setAttribute("aria-label", t(key));
             element.disabled = disabled || this.busy || service.busy;
             element.addEventListener("click", () => void this.run(action)); row.append(element);
         };
@@ -44,8 +60,6 @@ export class ExternalWgslPanel {
             if (!targets.length) throw new Error(t("wgsl.selectMaterial"));
             this.committed(await this.manager.applyExternalWgsl(targets, this.loaded));
         };
-        button("wgsl.applySelected", "external-wgsl-apply-selected", () => apply(false), !this.loaded || !target || !service.enabled);
-        button("wgsl.applyAll", "external-wgsl-apply-all", () => apply(true), !this.loaded || !this.targets(true).length || !service.enabled);
         button("wgsl.reload", "external-wgsl-reload", async () => {
             const targets = this.targets(false); const assignment = state?.assignment;
             const previous = assignment ? service.getAsset(assignment.effectRevision) : null;
@@ -56,39 +70,20 @@ export class ExternalWgslPanel {
         button("wgsl.clear", "external-wgsl-clear", async () => {
             this.committed(await this.manager.applyExternalWgsl(this.targets(false), null));
         }, !state?.assignment);
+        button("wgsl.applySelected", "external-wgsl-apply-selected", () => apply(false), !this.loaded || !target || !service.enabled);
+        button("wgsl.applyAll", "external-wgsl-apply-all", () => apply(true), !this.loaded || !this.targets(true).length || !service.enabled);
         this.root.append(row);
-        const asset = state?.assignment ? service.getAsset(state.assignment.effectRevision) : null;
+        const asset = applied;
         if (asset && state?.assignment && target) {
             for (const [name, parameter] of Object.entries(asset.manifest.parameters ?? {})) {
-                const value = state.assignment.parameters[name];
-                const values = Array.isArray(value) ? value : [value];
-                const row = document.createElement("div"); row.className = "external-wgsl-parameter-row";
-                row.style.display = "grid"; row.style.gap = "4px";
-                if (parameter.ui?.control === "color") {
-                    const picker = document.createElement("input"); picker.type = "color"; picker.className = "popup-form-control";
-                    picker.value = "#" + values.slice(0, 3).map(n => Math.round(Math.max(0, Math.min(1, n)) * 255).toString(16).padStart(2, "0")).join("");
-                    picker.disabled = !service.enabled || service.busy;
-                    row.append(createPopupFormField((parameter.ui.label ?? name) + " RGB", picker));
-                    picker.addEventListener("change", () => { picker.blur(); void this.run(async () => {
-                        const rgb = [1, 3, 5].map(offset => parseInt(picker.value.slice(offset, offset + 2), 16) / 255);
-                        const next = values.length === 4 ? [...rgb, values[3]] : rgb;
+                this.root.append(createExternalWgslParameter({
+                    name, parameter, value: state.assignment.parameters[name], disabled: !service.enabled || service.busy,
+                    expanded: this.expandedColours.has(name),
+                    expand: open => { if (open) this.expandedColours.add(name); else this.expandedColours.delete(name); },
+                    commit: next => void this.run(async () => {
                         this.committed(await this.manager.applyExternalWgsl([target], asset, { ...state.assignment?.parameters, [name]: next }));
-                    }); });
-                }
-                const inputs: HTMLInputElement[] = [];
-                values.forEach((component, index) => {
-                    const input = document.createElement("input"); input.type = "number"; input.value = String(component); input.step = String(parameter.ui?.step ?? "any");
-                    input.className = "popup-form-control";
-                    input.dataset.wgslParameter = name; input.dataset.component = String(index); input.disabled = !service.enabled || service.busy;
-                    if (parameter.ui?.min !== undefined) input.min = String(parameter.ui.min);
-                    if (parameter.ui?.max !== undefined) input.max = String(parameter.ui.max);
-                    inputs.push(input); row.append(createPopupFormField((parameter.ui?.label ?? name) + (values.length > 1 ? ` [${index}]` : ""), input));
-                    input.addEventListener("change", () => { input.blur(); void this.run(async () => {
-                        const next: EffectValue = values.length === 1 ? Number(inputs[0].value) : inputs.map(item => Number(item.value));
-                        this.committed(await this.manager.applyExternalWgsl([target], asset, { ...state.assignment?.parameters, [name]: next }));
-                    }); });
-                });
-                this.root.append(row);
+                    }),
+                }));
             }
         }
         const details = document.createElement("details");

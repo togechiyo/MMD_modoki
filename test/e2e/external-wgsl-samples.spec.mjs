@@ -59,6 +59,19 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
             await expect(page.locator("#external-wgsl-diagnostic")).not.toContainText("操作に失敗");
             await expect(page.locator("#external-wgsl-status")).toHaveAttribute("data-state", "ready");
             const image = await capture(sample);
+            if (sample === "prismatic-fire") {
+                const panel = page.locator("#external-wgsl-panel");
+                await expect(panel.locator(".external-wgsl-name")).toHaveCount(1);
+                await expect(panel.locator(".external-wgsl-pending")).toHaveCount(0);
+                await expect(page.locator('[data-wgsl-parameter="BodyColor"]')).toHaveCount(3);
+                await expect(page.locator('[data-wgsl-parameter="BodyColor"]').first()).toBeHidden();
+                await expect(page.locator('[data-wgsl-range="FireStrength"]')).toBeVisible();
+                const bounds = await panel.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth, height: element.getBoundingClientRect().height }));
+                expect(bounds.content).toBeLessThanOrEqual(bounds.width + 1);
+                expect(bounds.height).toBeLessThan(450);
+                await page.screenshot({ path: testInfo.outputPath("prismatic-compact-panel.png") });
+                await panel.screenshot({ path: testInfo.outputPath("prismatic-controls.png") });
+            }
             if (sample === "template") expect(await changedPixels(app.app, original, image)).toBeLessThan(100);
             else expect(await changedPixels(app.app, original, image)).toBeGreaterThan(1000);
             if (angularSamples.includes(sample)) {
@@ -72,11 +85,11 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
                 const parameter = { "moonstone-schiller": "SheenStrength", "black-opal": "ColorStrength", "prismatic-fire": "FireStrength" }[sample];
                 const control = page.locator(`[data-wgsl-parameter="${parameter}"]`);
                 const defaultStrength = await control.inputValue();
-                await control.fill("0"); await control.press("Tab");
+                await control.fill("0"); await control.press("Enter");
                 await expect(page.locator("#external-wgsl-load")).toBeEnabled();
                 const without = await capture(`${sample}-feature-zero-selected`);
                 expect(await changedPixels(app.app, image, without)).toBeGreaterThan(100);
-                await control.fill(defaultStrength); await control.press("Tab");
+                await control.fill(defaultStrength); await control.press("Enter");
                 await expect(page.locator("#external-wgsl-load")).toBeEnabled();
                 await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 2.4, y: 2.5, z: -6.5 }, { x: 0, y: 1.5, z: 0 }));
                 await capture(`${sample}-side`);
@@ -93,7 +106,7 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
         const frame0Again = await capture("opal-frame-0-repeat");
         expect(await changedPixels(app.app, frame0, frame0Again)).toBeLessThan(100);
         await page.locator('[data-wgsl-parameter="Coating"]').fill("0");
-        await page.locator('[data-wgsl-parameter="Coating"]').press("Tab");
+        await page.locator('[data-wgsl-parameter="Coating"]').press("Enter");
         await expect(page.locator("#external-wgsl-load")).toBeEnabled();
         const reduced = await capture("opal-coating-zero-selected");
         expect(await changedPixels(app.app, frame0, reduced)).toBeGreaterThan(1000);

@@ -80,7 +80,7 @@ for (const backend of ["classic", "frameGraph"]) test(`MME-style WGSL inputs ${b
         };
         const parameter = async (name, value) => {
             const control = page.locator(`[data-wgsl-parameter="${name}"]`);
-            await control.fill(String(value)); await control.press("Tab");
+            await control.fill(String(value)); await control.press("Enter");
             await expect(page.locator("#external-wgsl-load")).toBeEnabled();
         };
         const frame = async value => {

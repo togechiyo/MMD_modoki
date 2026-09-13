@@ -75,7 +75,9 @@ Object注釈・型・行列規約は [詳細設計](./external-wgsl-material-api
 
 WGSL関数、helper、struct、return、分岐・ループを利用できる。旧Toon snippet用の「return禁止」「diffuseBaseへの加算必須」は新形式にはない。コメントを除いた宣言検査と実WebGPUのコンパイル診断を行う。
 
-初期実装は**テクスチャ入力なしのMMD材質profile**。light hook、テクスチャ、CONTROLOBJECT、独立vertex/fragment、PBR向けWGSL、post effectは未対応。未知入力を0で埋めず診断する。NME生成shaderの無加工読込は未対応で、計算部分を上記hook・入力へ移植する。
+**通常MMD・PBRの両モード**で同じ単一WGSLを読み込み、共通一覧・割当ボタンから適用できる。宝石サンプルのsurface/finalColorも共用できる。PBRではsurfaceのbaseColorが評価済みalbedo、diffuseColorは白で、出力2色を乗算してPBR照明へ渡す。finalColorは照明・反射の合成後、fog・画像処理前に実行する。詳細は[PBR接続仕様](./external-wgsl-pbr-adapter.md)を参照。
+
+PBRではGeometry DIFFUSEがalbedoColorとalpha、AMBIENTがambientColorとなる。Phong固有のSPECULAR / SPECULARPOWERは非対応のため、これらを読む`mme-light-material.wgsl`は通常MMD専用。粗さ・金属度・alphaは元のPBR材質が保持する。light hook、テクスチャ入力、CONTROLOBJECT、独立vertex/fragment、post effectは未対応。未知入力を0で埋めず診断する。NME生成shaderの無加工読込は未対応で、計算部分を上記hook・入力へ移植する。
 
 色は既存MMD shaderの値で、線形sRGBとの一致は保証しない。時間入力は `SyncInEditMode` 必須。静止画は現在frame/30・elapsed=0、動画のWGSL時間は出力fpsのschedulerに固定する。動画の既存モデル姿勢評価方式は変更していない。
 
@@ -87,7 +89,7 @@ GUI保存では共有snapshotを `<project名>.assets/effects/<revision>/effect.
 
 メモリー上のproject snapshot、runtime再起動用snapshot、MCPの既存JSON保存経路には共有本文が1回入る。通常GUI保存ではsidecarへ分離する。将来のテクスチャblob保存は未実装。
 
-許可OFFでも割当を保持・保存する。PBR切替時はMMDのmode bankへ残し、PBR材質へコピーしない。MMDへ戻ると再検証して復帰する。許可OFF中の解除・Undoにも対応。旧 `wgslToonShaderPath` は本文を保持するが、自動全モデル適用は停止した。旧snippetは新しい関数形式へ移して適用先を選ぶ必要がある。
+許可OFFでも割当を保持・保存する。通常MMD・PBRそれぞれのmode bankへ残し、相互に自動コピーしない。各モードへ戻ると再検証して復帰する。Undo/Redoも操作したモードの割当を更新する。許可OFF中の解除・Undoにも対応。旧 `wgslToonShaderPath` は本文を保持するが、自動全モデル適用は停止した。旧snippetは新しい関数形式へ移して適用先を選ぶ必要がある。
 
 ## 診断と実装上の境界
 

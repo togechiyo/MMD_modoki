@@ -322,7 +322,7 @@ export class ShaderPanelController {
                 elements.presetSelect.appendChild(option);
             }
         }
-        if (!isPbrModel && !selectedAccessory) {
+        if (!selectedAccessory) {
             for (const preset of this.externalPresets.catalog()) {
                 const option = document.createElement("option");
                 option.value = preset.id; option.textContent = preset.label; option.title = preset.description;
@@ -382,7 +382,7 @@ export class ShaderPanelController {
             })();
 
         const modelInstanceId = this.mmdManager.getLoadedModels().find(item => item.index === selectedModelIndex)?.instanceId;
-        const externalFor = (key: string) => modelInstanceId && !isPbrModel && !selectedAccessory
+        const externalFor = (key: string) => modelInstanceId && !selectedAccessory
             ? this.externalPresets.assigned({ modelInstanceId, materialKey: key }) : null;
         const assignedValues = selectedMaterials.map(material => externalFor(material.key)?.id ?? (isPbrModel ? material.pbrPresetId : material.presetId));
         if (!selectedMaterial && new Set(assignedValues).size > 1) mixedPresets = true;
@@ -529,9 +529,9 @@ export class ShaderPanelController {
         const index = Number(value);
         const model = this.mmdManager.getLoadedModels().find(item => item.index === index);
         const state = this.mmdManager.getWgslModelShaderStates().find(item => item.modelIndex === index);
-        if (!model || !state || state.materialPipeline !== "mmd-standard") return [];
+        if (!model || !state) return [];
         const key = this.selectedMaterialKeys.get(String(index));
-        return state.materials.filter(item => all || item.key === key).map(item => ({ modelInstanceId: model.instanceId, materialKey: item.key }));
+        return state.materials.filter(item => all || item.key === key).map(item => ({ modelInstanceId: model.instanceId, materialKey: item.key, materialMode: state.materialPipeline }));
     }
 
     public getExternalWgslToonAsset(): { path: string | null; text: string | null } {
@@ -705,7 +705,7 @@ export class ShaderPanelController {
             await this.externalPresets.apply(selectedValue, this.externalTargets(materialKey === null));
             return;
         }
-        if (!isPbrModel && !selectedAccessory && !await this.externalPresets.clear(this.externalTargets(materialKey === null))) return;
+        if (!selectedAccessory && !await this.externalPresets.clear(this.externalTargets(materialKey === null))) return;
 
         if (isPbrModel) {
             const ok = this.mmdManager.setPbrMaterialShaderPreset(

@@ -51,6 +51,16 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("WGSL transaction recovery", () => {
+    it("records the assignment mode and refuses to restore into another live mode", async () => {
+        const f = fixture();
+        const changes = await f.service.apply([f.target], asset("mmd"));
+        expect(changes[0].target.materialMode).toBe("mmd-standard");
+        const targets = f.host.targets();
+        f.host.targets = () => targets.map(item => ({ ...item, target: { ...item.target, materialMode: "pbr-standard" as const } }));
+        expect(f.service.restore(changes, "revert")).toBe(false);
+        const pbrChanges = await f.service.apply([{ ...f.target, materialMode: "pbr-standard" }], asset("pbr"));
+        expect(pbrChanges[0].target.materialMode).toBe("pbr-standard");
+    });
     it("rolls back ordinary validation errors to the previous working assignment", async () => {
         const f = fixture(); await f.service.apply([f.target], asset("before"));
         const previous = getEffectAssignment(f.material);

@@ -389,6 +389,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [MMEを参考にした外部WGSLの入力設計 2026-09-12](./external-wgsl-mme-semantics-design-2026-09-12.md)
 - [外部WGSL材質API v1 詳細設計・Schema・作者サンプル](./external-wgsl-material-api-v1-design.md)
 - [外部WGSL材質の使い方・初期実装の対応範囲](./external-wgsl-material-usage.md)
+- [外部WGSLのPBR接続・入力とモード別保存](./external-wgsl-pbr-adapter.md)
 - [MME風入力のWGSL教材：材質・ライト・行列・時間](./external-wgsl-mme-inputs-examples.md)
 - [Babylon Node Material EditorのWGSL出力と取込案 2026-09-12](./node-material-editor-wgsl-import-review-2026-09-12.md)
 - [Node Particle Effects 構想メモ](./node-particle-effects-concept-2026-06-12.md)

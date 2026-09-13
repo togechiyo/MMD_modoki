@@ -1,10 +1,21 @@
 import { Matrix } from "@babylonjs/core/Maths/math.vector";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import type { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { matrixSemantic, type EffectAsset, type EffectAssignment, type EffectValue } from "./contract";
 
 export type EffectTime = { frame: number; time: number; elapsed: number; asyncTime: number; asyncElapsed: number };
+export type EffectMaterial = StandardMaterial | PBRMaterial;
+
+export function validateEffectMaterialInputs(asset: EffectAsset, material: EffectMaterial): void {
+    if (!(material instanceof PBRMaterial)) return;
+    for (const [name, input] of Object.entries(asset.manifest.inputs ?? {})) {
+        if (input.annotations?.Object === "Geometry" && ["SPECULAR", "SPECULARPOWER"].includes(input.semantic)) {
+            throw new Error(`PBR does not support Phong input ${name} (${input.semantic}); use a shader parameter instead`);
+        }
+    }
+}
 export class EffectClock {
     private previous: { frame: number; now: number; playing: boolean; anchor: number } | null = null;
     public evaluate(frame: number, playing: boolean, now: number, output?: { elapsed: number }): EffectTime {
@@ -17,7 +28,8 @@ export class EffectClock {
             asyncElapsed: output || playing ? elapsed : previous ? now - previous.now : 0 };
     }
 }
-export function resolveEffectInputs(asset: EffectAsset, assignment: EffectAssignment, material: StandardMaterial, mesh: AbstractMesh, time: EffectTime, viewportSize: { width: number; height: number }): Record<string, EffectValue> {
+export function resolveEffectInputs(asset: EffectAsset, assignment: EffectAssignment, material: EffectMaterial, mesh: AbstractMesh, time: EffectTime, viewportSize: { width: number; height: number }): Record<string, EffectValue> {
+    validateEffectMaterialInputs(asset, material);
     const scene = material.getScene();
     const values: Record<string, EffectValue> = { ...assignment.parameters };
     const light = scene.lights.find(item => item instanceof DirectionalLight) as DirectionalLight | undefined;
@@ -46,11 +58,11 @@ export function resolveEffectInputs(asset: EffectAsset, assignment: EffectAssign
             case "VIEWPORTPIXELSIZE": values[name] = [viewportSize.width, viewportSize.height]; break;
             case "DIFFUSE":
                 if (input.annotations?.Object === "Light") { if (!light) throw new Error("Directional light unavailable"); values[name] = light.diffuse.asArray(); }
-                else values[name] = [...material.diffuseColor.asArray(), material.alpha];
+                else values[name] = [...(material instanceof PBRMaterial ? material.albedoColor : material.diffuseColor).asArray(), material.alpha];
                 break;
             case "AMBIENT": values[name] = material.ambientColor.asArray(); break;
-            case "SPECULAR": values[name] = material.specularColor.asArray(); break;
-            case "SPECULARPOWER": values[name] = material.specularPower; break;
+            case "SPECULAR": if (!(material instanceof PBRMaterial)) values[name] = material.specularColor.asArray(); break;
+            case "SPECULARPOWER": if (!(material instanceof PBRMaterial)) values[name] = material.specularPower; break;
             case "POSITION": if (!scene.activeCamera) throw new Error("Camera unavailable"); values[name] = scene.activeCamera.globalPosition.asArray(); break;
             case "DIRECTION": if (!light) throw new Error("Directional light unavailable"); values[name] = light.direction.normalizeToNew().asArray(); break;
         }

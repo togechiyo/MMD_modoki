@@ -28,6 +28,7 @@ import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Layer } from "@babylonjs/core/Layers/layer";
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { BackgroundMaterial } from "@babylonjs/core/Materials/Background/backgroundMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { RenderTargetTexture } from "@babylonjs/core/Materials/Textures/renderTargetTexture";
@@ -1049,11 +1050,12 @@ export class MmdManager {
             viewportSize: () => this.exportRenderSurface ?? { width: this.engine.getRenderWidth(true), height: this.engine.getRenderHeight(true) },
             targets: () => this.sceneModels.flatMap(entry => entry.materials.flatMap(item => {
                 const material = item.material as unknown;
-                return material instanceof StandardMaterial ? [{ target: { modelInstanceId: entry.info.instanceId, materialKey: item.key }, material, meshes: entry.renderMeshes } satisfies LiveEffectTarget] : [];
+                return material instanceof StandardMaterial || material instanceof PBRMaterial
+                    ? [{ target: { modelInstanceId: entry.info.instanceId, materialKey: item.key, materialMode: entry.materialPipeline }, material, meshes: entry.renderMeshes } satisfies LiveEffectTarget] : [];
             })),
             frame: () => this.isPlaying ? this.mmdRuntime.currentFrameTime : this.currentFrame,
             playing: () => this.isPlaying,
-            available: () => this.isWebGpuEngine() && this.getMmdMaterialPipelinePreset() === "mmd-standard",
+            available: () => this.isWebGpuEngine(),
             suspend: () => this.suspendSceneRendering(), resume: () => this.resumeSceneRendering(),
             failed: message => this.onError?.(message),
             changed: () => this.onMaterialShaderStateChanged?.(),
@@ -1066,15 +1068,18 @@ export class MmdManager {
     }
     public restoreExternalWgsl(changes: EffectChange[], direction: "apply" | "revert"): boolean {
         if (this.materialModeSwitching || this.externalWgslService?.busy) return false;
-        if (this.getMmdMaterialPipelinePreset() !== "pbr-standard") return this.getExternalWgslService().restore(changes, direction);
         const entries = changes.map(change => this.sceneModels.find(entry => entry.info.instanceId === change.target.modelInstanceId && entry.materials.some(item => item.key === change.target.materialKey)));
         if (entries.some(entry => !entry)) return false;
+        const live = changes.filter((change, index) => (change.target.materialMode ?? "mmd-standard") === entries[index]?.materialPipeline);
+        if (live.length && !this.getExternalWgslService().restore(live, direction)) return false;
         changes.forEach((change, index) => {
             const entry = entries[index]; if (!entry) return;
+            const mode = change.target.materialMode ?? "mmd-standard";
+            if (mode === entry.materialPipeline) return;
             entry.materialSettingsByMode ??= {};
-            const bank = entry.materialSettingsByMode["mmd-standard"] ??= { materials: [] };
+            const bank = entry.materialSettingsByMode[mode] ??= { materials: [] };
             let state = bank.materials.find(item => item.materialKey === change.target.materialKey);
-            if (!state) { state = { materialKey: change.target.materialKey, presetId: "wgsl-mmd-standard" }; bank.materials.push(state); }
+            if (!state) { state = { materialKey: change.target.materialKey, presetId: mode === "pbr-standard" ? DEFAULT_PBR_MATERIAL_SHADER_PRESET : "wgsl-mmd-standard" }; bank.materials.push(state); }
             const assignment = direction === "apply" ? change.after : change.before;
             if (assignment) state.externalEffect = structuredClone(assignment); else delete state.externalEffect;
         });

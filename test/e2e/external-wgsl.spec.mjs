@@ -120,8 +120,15 @@ for (const backend of ["classic", "frameGraph"]) test(`external WGSL ${backend}:
         await expect(dialog.getByLabel("PBRモード", { exact: true })).toBeEnabled({ timeout: 25000 });
         expect((await state()).scene.models[0].materialShaders.every(item => !item.externalEffect)).toBe(true);
         await dialog.locator(".app-menu-dialog-close").click();
-        await expect(select.locator('option[value^="external-effect::"]')).toHaveCount(0);
-        await expect(page.locator("#external-wgsl-load")).toBeDisabled();
+        await expect(select.locator('option[value^="external-effect::"]')).not.toHaveCount(0);
+        await expect(page.locator("#external-wgsl-load")).toBeEnabled();
+        // Reuse the packaged finalColor shader on PBR; each mode keeps its own assignment.
+        await select.selectOption(id); await editor.apply();
+        await expect.poll(externalCount).toBe(2);
+        const pbrSaved = await state();
+        expect(pbrSaved.scene.models[0].materialShaders.every(item => item.presetId.startsWith("pbr-"))).toBe(true);
+        await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), pbrSaved);
+        await expect.poll(externalCount).toBe(2);
         await openSettings(); await dialog.getByLabel("PBRモード", { exact: true }).uncheck();
         await expect(dialog.getByLabel("PBRモード", { exact: true })).toBeEnabled({ timeout: 25000 });
         await dialog.locator(".app-menu-dialog-close").click(); await expect.poll(externalCount).toBe(2);

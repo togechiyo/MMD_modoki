@@ -1,4 +1,3 @@
-import type { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { WebGPUPipelineContext } from "@babylonjs/core/Engines/WebGPU/webgpuPipelineContext";
@@ -8,11 +7,11 @@ import { beforeDeadline, WgslTimeoutError } from "./deadline";
 import { checkProjectEffectCount } from "./limits";
 import { isWgslRecoveryBlocked, setWgslRecoveryBlocked, wgslPermissionKey as permissionKey, wgslRecoveryApi } from "./recovery";
 import { t } from "../i18n";
-import { EffectClock, resolveEffectInputs, type EffectTime } from "./inputs";
+import { EffectClock, resolveEffectInputs, validateEffectMaterialInputs, type EffectTime, type EffectMaterial } from "./inputs";
 import { canonicalEffectContent, defaultEffectAssignment, getEffectAssignment, parseEffectManifest, setEffectAssignment, validateEffectSources, validateParameter,
     type EffectAsset, type EffectAssetReference, type EffectAssignment, type EffectChange, type EffectTarget } from "./contract";
 
-export type LiveEffectTarget = { target: EffectTarget; material: StandardMaterial; meshes: AbstractMesh[] };
+export type LiveEffectTarget = { target: EffectTarget; material: EffectMaterial; meshes: AbstractMesh[] };
 type ServiceHost = { scene: Scene; targets: () => LiveEffectTarget[]; frame: () => number; playing: () => boolean;
     viewportSize: () => { width: number; height: number };
     available: () => boolean; suspend: () => void; resume: () => void; changed: () => void; failed: (message: string) => void };
@@ -22,7 +21,7 @@ export class ExternalWgslService {
     public diagnostic = "";
     private diagnosticSource = "";
     private readonly assets = new Map<string, EffectAsset | EffectAssetReference>();
-    private readonly plugins = new WeakMap<StandardMaterial, ExternalWgslMaterialPlugin>();
+    private readonly plugins = new WeakMap<EffectMaterial, ExternalWgslMaterialPlugin>();
     private clock = new EffectClock();
     private time: EffectTime = { frame: 0, time: 0, elapsed: 0, asyncTime: 0, asyncElapsed: 0 };
     private output: { elapsed: number; frame?: number } | undefined;
@@ -124,7 +123,8 @@ export class ExternalWgslService {
         return warnings;
     }
     private find(target: EffectTarget): LiveEffectTarget | undefined {
-        return this.host.targets().find(item => item.target.modelInstanceId === target.modelInstanceId && item.target.materialKey === target.materialKey);
+        return this.host.targets().find(item => item.target.modelInstanceId === target.modelInstanceId && item.target.materialKey === target.materialKey
+            && (target.materialMode === undefined || target.materialMode === (item.target.materialMode ?? "mmd-standard")));
     }
     private plugin(item: LiveEffectTarget): ExternalWgslMaterialPlugin {
         let plugin = this.plugins.get(item.material);
@@ -154,7 +154,7 @@ export class ExternalWgslService {
             const item = this.find(target); if (!item) throw new Error("WGSL target no longer exists");
             const after = asset ? defaultEffectAssignment(asset) : null;
             if (after && parameters) after.parameters = structuredClone(parameters);
-            return { target, before: getEffectAssignment(item.material), after };
+            return { target: { ...target, materialMode: item.target.materialMode ?? "mmd-standard" }, before: getEffectAssignment(item.material), after };
         });
         try { await this.transaction(changes, Boolean(asset), true); }
         catch (error) { if (asset && !alreadyStored) this.assets.delete(asset.revision); throw error; }
@@ -194,12 +194,13 @@ export class ExternalWgslService {
     }
     private async transaction(changes: EffectChange[], requireEnabled: boolean, rollbackPrevious = false): Promise<void> {
         if (this.busy) throw new Error("WGSL operation is in progress");
-        if (requireEnabled && (!this.enabled || !this.host.available())) throw new Error("Enable external WGSL in experimental settings; WebGPU / MMD material mode is required");
+        if (requireEnabled && (!this.enabled || !this.host.available())) throw new Error("Enable external WGSL in experimental settings; WebGPU is required");
         const live = changes.map(change => {
             const item = this.find(change.target); if (!item) throw new Error("WGSL target no longer exists");
             const asset = change.after ? this.getAsset(change.after.effectRevision) : null;
             if (change.after && !asset) throw new Error("Unresolved WGSL asset: " + change.after.effectRevision);
             if (asset && change.after) {
+                validateEffectMaterialInputs(asset, item.material);
                 for (const [name, parameter] of Object.entries(asset.manifest.parameters ?? {})) validateParameter(parameter, change.after.parameters[name]);
                 if (asset.manifest.requires?.includes("uv0") && item.meshes.some(mesh => !mesh.isVerticesDataPresent("uv"))) throw new Error("Target has no UV0");
             }

@@ -72,7 +72,9 @@ test("material mode round trips preserve runtime, unregistered edits, history an
     await page.locator("#shader-preset-select").selectOption("pbr-base");
     await page.locator("#btn-shader-apply-all").click();
     await toggle(false); await toggle(true);
-    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).scene.models[0].materialShaders).toEqual([]);
+    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).scene.models[0].materialShaders).toEqual(
+      saved.scene.models[0].materialShaders.map(({ materialKey }) => ({ materialKey, presetId: "pbr-base" })),
+    );
     await page.keyboard.press("Control+z");
     expect((await page.evaluate(() => window.mmdModokiE2e.getCommandHistoryState())).redoCount).toBeGreaterThan(0);
     await page.keyboard.press("Control+y");

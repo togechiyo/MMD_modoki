@@ -1,7 +1,8 @@
 import { MaterialPluginBase } from "@babylonjs/core/Materials/materialPluginBase";
 import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { UniformBuffer } from "@babylonjs/core/Materials/uniformBuffer";
-import type { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
+import type { EffectMaterial } from "./inputs";
 import type { MaterialDefines } from "@babylonjs/core/Materials/materialDefines";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
@@ -20,7 +21,7 @@ export class ExternalWgslMaterialPlugin extends MaterialPluginBase {
     private generation = 0;
     public assignment: EffectAssignment | null = null;
     public failure: string | null = null;
-    constructor(material: StandardMaterial, private readonly values: (asset: EffectAsset, assignment: EffectAssignment, mesh: AbstractMesh) => Record<string, EffectValue>) {
+    constructor(material: EffectMaterial, private readonly values: (asset: EffectAsset, assignment: EffectAssignment, mesh: AbstractMesh) => Record<string, EffectValue>) {
         super(material, "ModokiExternalMaterial", 1000, { MODOKI_EFFECT_REV: 0, MODOKI_HAS_UV: false }, true, false);
         this.doNotSerialize = true;
         this.registerForExtraEvents = true;
@@ -80,6 +81,16 @@ export class ExternalWgslMaterialPlugin extends MaterialPluginBase {
             CUSTOM_VERTEX_MAIN_END: this.asset ? "#ifdef MODOKI_HAS_UV\nvertexOutputs.modokiUV0 = vertexInputs.uv;\n#else\nvertexOutputs.modokiUV0 = vec2f(0.0);\n#endif" : "",
         };
         const hooks = this.asset?.manifest.hooks;
+        if (this._material instanceof PBRMaterial) return {
+            CUSTOM_FRAGMENT_DEFINITIONS: this.asset ? "varying modokiUV0: vec2f;\n" + this.generatedSource() : "",
+            CUSTOM_FRAGMENT_BEFORE_LIGHTS: this.asset ? `
+var modokiSurface = ModokiSurface(fragmentInputs.vPositionW, normalW, fragmentInputs.modokiUV0, surfaceAlbedo, vec3f(1.0));
+${hooks?.surface ? `let modokiOutput = ${hooks.surface}(modokiSurface);
+surfaceAlbedo = modokiOutput.baseColor * modokiOutput.diffuseColor;
+if (dot(modokiOutput.normalWS, modokiOutput.normalWS) > 0.00000001) { normalW = normalize(modokiOutput.normalWS); }
+modokiSurface = ModokiSurface(fragmentInputs.vPositionW, normalW, fragmentInputs.modokiUV0, modokiOutput.baseColor, modokiOutput.diffuseColor);` : ""}` : "",
+            CUSTOM_FRAGMENT_BEFORE_FOG: hooks?.finalColor ? `finalColor = vec4f(${hooks.finalColor}(ModokiFinalColor(modokiSurface, finalColor.rgb)), finalColor.a);` : "",
+        };
         return {
             CUSTOM_FRAGMENT_DEFINITIONS: this.asset ? "varying modokiUV0: vec2f;\n" + this.generatedSource() : "",
             CUSTOM_FRAGMENT_BEFORE_LIGHTS: this.asset ? `

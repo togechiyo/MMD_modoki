@@ -31,7 +31,7 @@ export type EffectValue = number | number[];
 export type EffectAssignment = { effectRevision: string; enabled: boolean; parameters: Record<string, EffectValue> };
 export type EffectAsset = { revision: string; manifest: EffectManifest; sources: Array<{ path: string; text: string }>; originPath?: string };
 export type EffectAssetReference = { revision: string; path: string; originPath?: string };
-export type EffectTarget = { modelInstanceId: string; materialKey: string };
+export type EffectTarget = { modelInstanceId: string; materialKey: string; materialMode?: "mmd-standard" | "pbr-standard" };
 export type EffectChange = { target: EffectTarget; before: EffectAssignment | null; after: EffectAssignment | null };
 
 const matrixBases = ["WORLD", "VIEW", "PROJECTION", "WORLDVIEW", "VIEWPROJECTION", "WORLDVIEWPROJECTION"];

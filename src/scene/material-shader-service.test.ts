@@ -251,6 +251,14 @@ describe("material shader preset restore", () => {
         expect(pbrMaterial.roughness).toBe(0.4);
         applyImportedMaterialShaderStates(host, 0, undefined, warnings, "fixture.pmx", "pbr-mmd-like");
         expect(pbrMaterial.roughness).toBe(0.8);
+        const externalEffect = { effectRevision: "a".repeat(64), enabled: true, parameters: { Strength: 0.7 } };
+        const externalStates = [{ materialKey: "0:face", presetId: "pbr-mmd-like", externalEffect }];
+        const externalHost = host as unknown as Parameters<typeof applyImportedMaterialShaderStates>[0];
+        applyImportedMaterialShaderStates(externalHost, 0, externalStates, warnings, "fixture.pmx");
+        expect(getSerializedMaterialShaderStates(externalHost, externalHost.sceneModels[0])).toEqual(externalStates);
+        applyImportedMaterialShaderStates(externalHost, 0, [], warnings, "fixture.pmx");
+        expect(getSerializedMaterialShaderStates(externalHost, externalHost.sceneModels[0])[0].externalEffect).toBeUndefined();
+        expect(warnings).toEqual([]);
     });
 
     it("keeps preset fragment override when clearing global external wgsl override", () => {

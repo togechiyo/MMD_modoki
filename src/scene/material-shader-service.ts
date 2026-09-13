@@ -2298,7 +2298,9 @@ export function getSerializedMaterialShaderStates(host: MaterialShaderHost, entr
     if (entry.materialPipeline === "pbr-standard") {
         return entry.materials.flatMap((material) => {
             const presetId = getPbrMaterialShaderPreset(material.material);
+            const externalEffect = getEffectAssignment(material.material);
             return [{ materialKey: material.key, presetId,
+                ...(externalEffect ? { externalEffect } : {}),
                 ...(host.isMaterialVisible?.(material.material) === false ? { visible: false } : {}) }];
         });
     }
@@ -2332,10 +2334,8 @@ export function applyImportedMaterialShaderStates(
     // Visibility is independent of the shader preset and older saves default to ON.
     for (const material of entry.materials) {
         const state = Array.isArray(states) ? states.find(item => item?.materialKey === material.key) : undefined;
-        if (entry.materialPipeline !== "pbr-standard") {
-            try { setEffectAssignment(material.material, state?.externalEffect ?? null); }
-            catch (error) { setEffectAssignment(material.material, null); warnings.push("Invalid external WGSL assignment: " + String(error)); }
-        }
+        try { setEffectAssignment(material.material, state?.externalEffect ?? null); }
+        catch (error) { setEffectAssignment(material.material, null); warnings.push("Invalid external WGSL assignment: " + String(error)); }
         host.setModelMaterialVisibility?.(modelIndex, material.key, state?.visible !== false);
     }
 

@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: experiments/shaders
 confidence: high
-last_verified: 2026-09-12
+last_verified: 2026-09-13
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-09-12
@@ -15,6 +15,7 @@ source_docs:
   - ../../docs/external-wgsl-material-api-v1-design.md
   - ../../docs/external-wgsl-material-usage.md
   - ../../docs/external-wgsl-security-review-2026-09-12.md
+  - ../../docs/external-wgsl-pbr-adapter.md
 superseded_by: null
 ---
 
@@ -27,6 +28,8 @@ superseded_by: null
 ## 判断
 
 用途を過度に狭めず、必要な入力情報と簡易チェックを提供する。MMEの設計を調査し、変数名・用途など寄せられる部分を活かす。最初の実装範囲を、そのまま将来の用途制限にしない。
+
+2026-09-13、所有者はPBRモードでもカスタムシェーダーを使えるよう接続を求めた。通常MMD専用という初期制限を維持せず、PBRへの適用を扱う。共通hookへの対応や非対応semanticの扱いは[PBR接続仕様](../../docs/external-wgsl-pbr-adapter.md)で定義する実装判断とする。
 
 Babylon.jsのWGSL宣言・コンパイル基盤を使い、入力の意味をMME風semanticへ寄せる組合せを採用する。アプリ固有部分は入力接続・適用対象・呼出位置などの契約として設計する。NMEの完全互換やgraph runtimeの導入をこの判断から必須化しない。
 

@@ -22,7 +22,7 @@
 | [MME入力：行列・画面サイズ](./mme-space-grid.wgsl) | 物体に付く格子と画面に付く格子を比較。WORLD・逆行列・WVP・viewportの実用例。 |
 | [MME入力：時間・フレーム](./mme-time-scan.wgsl) | 編集同期あり／なしのTIME・ELAPSEDTIMEと独自のMODOKI_FRAMEを可視化。 |
 
-いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。WebGPUのMMD材質モード向けで、PBRでは休止します。元のテクスチャを含む色への合成方法はサンプルごとに異なります。
+いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。WebGPUの通常MMD・PBR両モードで利用できます。ただしPhongの光沢値を読む`mme-light-material.wgsl`は通常MMD専用です。元のテクスチャを含む色への合成方法はサンプルごとに異なります。PBRでの色・入力の意味は[PBR接続仕様](../docs/external-wgsl-pbr-adapter.md)を参照してください。
 
 MME風の自動入力を学ぶ場合は [入力サンプルの解説](../docs/external-wgsl-mme-inputs-examples.md) から始めてください。材質・ライトの教材は入力を単独表示するため、強さ1では元の材質の照明・テクスチャを置き換えます。
 

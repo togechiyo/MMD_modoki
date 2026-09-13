@@ -4,7 +4,7 @@ status: decision
 priority: low
 scope: experiments/shader-samples
 confidence: high
-last_verified: 2026-09-12
+last_verified: 2026-09-13
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-09-12
@@ -12,6 +12,7 @@ evidence:
   - conversation-explicit-instruction
 source_docs:
   - ../../docs/external-wgsl-material-usage.md
+  - ../../wgsl/README.md
 superseded_by: null
 ---
 
@@ -24,6 +25,8 @@ superseded_by: null
 ## 判断
 
 厳密な光学再現を必須にせず、それらしく見える近似を採用してよい。分散も、ときどき鮮やかな色が現れて移る程度でよい。
+
+2026-09-13、所有者は宝石サンプルを、モデルの色を参照しつつ効果を重ねる方向へ変更した。固定の石の地色でモデル色を置き換える作例を既定にせず、元の材質色・模様を下地に光学効果を追加する。具体的な加算式と強度はサンプルの実装判断であり、材質API全体の混合方式を制限しない。
 
 ## 避けること
 

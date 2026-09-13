@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "kind": "mmd-material",
   "name": "Aurora Opal",
-  "description": "テクスチャ不要。流れる鉱石模様、虹色の干渉色、発光する細い帯とリムを重ねた装飾材質。",
+  "description": "モデルの色・模様・陰影を下地に、流れる虹色の鉱石模様と発光する細い帯・リムを重ねる。",
   "hooks": { "finalColor": "shadeOpal" },
   "inputs": {
     "Time": { "type": "f32", "semantic": "TIME", "annotations": { "SyncInEditMode": true } },
@@ -12,7 +12,6 @@
     "LightDirection": { "type": "vec3f", "semantic": "DIRECTION", "annotations": { "Object": "Light" } }
   },
   "parameters": {
-    "BodyColor": { "type": "vec3f", "default": [0.025, 0.065, 0.16], "ui": { "label": "鉱石の地色", "control": "color", "min": 0, "max": 1 } },
     "RimColor": { "type": "vec3f", "default": [0.25, 0.95, 0.85], "ui": { "label": "発光色", "control": "color", "min": 0, "max": 1 } },
     "PatternScale": { "type": "f32", "default": 0.65, "ui": { "label": "模様の細かさ", "min": 0.02, "max": 8, "step": 0.02 } },
     "Speed": { "type": "f32", "default": 0.35, "ui": { "label": "流れる速さ", "min": -2, "max": 2, "step": 0.05 } },
@@ -83,10 +82,8 @@ fn shadeOpal(input: ModokiFinalColor) -> vec3f {
     let layers = 0.5 + 0.5 * sin(flow * 6.2831853);
     let mineral = smoothstep(0.18, 0.85, layers);
     let grain = mix(0.65, 1.0, cloud);
-    let body = mix(modokiInputs.BodyColor, spectrum * grain, 0.22 + 0.55 * mineral);
-    // Retain some scene shading; this decorative coating intentionally adds light.
-    let sceneLight = clamp(dot(max(input.color, vec3f(0.0)), vec3f(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
-    let shaded = body * (0.3 + 0.45 * ndl + 0.25 * sceneLight);
+    // The mineral pattern is a thin colour effect over the original model, not a new body colour.
+    let film = spectrum * grain * mineral * 0.18 * (0.2 + 0.8 * ndl);
 
     // Derivative filtering softens subpixel bands; no hard threshold shimmer.
     let stripe = abs(sin(flow * 6.2831853));
@@ -94,8 +91,9 @@ fn shadeOpal(input: ModokiFinalColor) -> vec3f {
     let ribbon = 1.0 - smoothstep(modokiInputs.RibbonWidth, modokiInputs.RibbonWidth + aa, stripe);
     let pulse = 0.7 + 0.3 * sin(time * 1.8 + cloud * 8.0);
     let emission = mix(spectrum, modokiInputs.RimColor, 0.65)
-        * (ribbon * pulse * 0.65 + rim * 0.85) * modokiInputs.Glow;
-    let coat = shaded + emission + mix(vec3f(1.0), spectrum, 0.25) * glint * 0.65;
+        * (ribbon * pulse * 0.4 + rim * 0.5) * modokiInputs.Glow;
+    let effect = film + emission + mix(vec3f(1.0), spectrum, 0.25) * glint * 0.3;
+    // input.color retains texture, material colour and lighting at every coating strength.
     // Alpha is owned by the host. Coating=0 is exactly the original final colour.
-    return mix(input.color, coat, modokiInputs.Coating);
+    return input.color + effect * modokiInputs.Coating;
 }

@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "kind": "mmd-material",
   "name": "Prismatic Fire",
-  "description": "白い光沢の中に、角度が合うと赤・緑・青の細いきらめきが現れる。背景屈折なしの見た目優先サンプル。",
+  "description": "モデルの色・模様・陰影を下地に、角度が合うと現れる鮮やかな分散風のきらめきを重ねる。",
   "hooks": { "finalColor": "shadePrismaticFire" },
   "inputs": {
     "WorldInverse": { "type": "mat4x4f", "semantic": "WORLDINVERSE", "annotations": { "Object": "Geometry" } },
@@ -11,7 +11,6 @@
     "LightDirection": { "type": "vec3f", "semantic": "DIRECTION", "annotations": { "Object": "Light" } }
   },
   "parameters": {
-    "BodyColor": { "type": "vec3f", "default": [0.3, 0.32, 0.35], "ui": { "label": "石の地色", "control": "color", "min": 0, "max": 1 } },
     "FacetScale": { "type": "f32", "default": 4.5, "ui": { "label": "きらめきの細かさ", "min": 0.1, "max": 16, "step": 0.1 } },
     "FireSpread": { "type": "f32", "default": 0.17, "ui": { "label": "色の分かれ幅", "min": 0, "max": 0.4, "step": 0.01 } },
     "Sharpness": { "type": "f32", "default": 96, "ui": { "label": "きらめきの鋭さ", "min": 8, "max": 256, "step": 4 } },
@@ -73,11 +72,10 @@ fn shadePrismaticFire(input: ModokiFinalColor) -> vec3f {
     let rgb = vec3f(red, green, blue);
     // Keep colour in the flashes instead of clipping all three channels to white.
     let colourful = max(rgb - vec3f(min(red, min(green, blue))) * 0.8, vec3f(0.0));
-    let ndl = max(dot(facet, light), 0.0);
-    let body = modokiInputs.BodyColor * (0.22 + 0.55 * ndl) * mix(0.75, 1.15, seed.y);
-    let whiteGloss = pow(max(dot(normal, halfVector), 0.0), 120.0) * 0.65;
-    let rim = pow(1.0 - clamp(abs(dot(normal, view)), 0.0, 1.0), 4.0) * 0.35;
-    let crystal = body + vec3f(whiteGloss + rim) + colourful * modokiInputs.FireStrength;
-    // This coat is opaque if the model is opaque. Alpha remains the host's value.
-    return mix(input.color, crystal, modokiInputs.Coating);
+    let whiteGloss = pow(max(dot(normal, halfVector), 0.0), 120.0) * 0.3;
+    let rim = pow(1.0 - clamp(abs(dot(normal, view)), 0.0, 1.0), 4.0) * 0.1;
+    let effect = vec3f(whiteGloss + rim) + colourful * modokiInputs.FireStrength;
+    // Add flashes to the model's textured/shaded colour, without replacing its base.
+    // No clamp here: HDR highlights continue into the host's image processing. Alpha is unchanged.
+    return input.color + effect * modokiInputs.Coating;
 }

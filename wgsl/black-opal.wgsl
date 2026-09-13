@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "kind": "mmd-material",
   "name": "Black Opal",
-  "description": "暗い石の中で区画ごとの赤・緑・青が角度に応じて現れる、遊色風の表面表現。",
+  "description": "モデルの色・模様・陰影を残し、角度で現れる赤・緑・青の遊色を重ねる。暗い下地では特に鮮やか。",
   "hooks": { "finalColor": "shadeBlackOpal" },
   "inputs": {
     "WorldInverse": { "type": "mat4x4f", "semantic": "WORLDINVERSE", "annotations": { "Object": "Geometry" } },
@@ -11,7 +11,6 @@
     "LightDirection": { "type": "vec3f", "semantic": "DIRECTION", "annotations": { "Object": "Light" } }
   },
   "parameters": {
-    "BodyColor": { "type": "vec3f", "default": [0.018, 0.025, 0.045], "ui": { "label": "石の地色", "control": "color", "min": 0, "max": 1 } },
     "FlakeScale": { "type": "f32", "default": 5, "ui": { "label": "かけらの細かさ", "min": 0.1, "max": 16, "step": 0.1 } },
     "ColorStrength": { "type": "f32", "default": 1.1, "ui": { "label": "遊色の強さ", "min": 0, "max": 2, "step": 0.05 } },
     "FlashWidth": { "type": "f32", "default": 0.4, "ui": { "label": "光る角度の広さ", "min": 0.1, "max": 1, "step": 0.05 } },
@@ -70,9 +69,11 @@ fn shadeBlackOpal(input: ModokiFinalColor) -> vec3f {
     let saturated = rainbow * rainbow;
     let aa = min(max(fwidth(domain.w), 0.01), 0.2);
     let flake = smoothstep(0.015, 0.07 + aa, domain.w);
-    let body = modokiInputs.BodyColor * (0.5 + 0.5 * max(dot(normal, light), 0.0));
-    let colour = saturated * flake * flash * modokiInputs.ColorStrength;
-    let gloss = pow(max(dot(normal, halfVector), 0.0), 100.0) * 0.55;
-    let rim = pow(1.0 - clamp(abs(dot(normal, view)), 0.0, 1.0), 4.0) * 0.12;
-    return mix(input.color, body + colour + vec3f(gloss + rim), modokiInputs.Coating);
+    let illumination = 0.2 + 0.8 * max(dot(normal, light), 0.0);
+    let colour = saturated * flake * flash * modokiInputs.ColorStrength * 0.55 * illumination;
+    let gloss = pow(max(dot(normal, halfVector), 0.0), 100.0) * 0.25;
+    let rim = pow(1.0 - clamp(abs(dot(normal, view)), 0.0, 1.0), 4.0) * 0.06;
+    // Use the existing textured/shaded colour as the base, even at Coating=1.
+    // Black Opal does not force a black body colour; choose a dark model material for that look.
+    return input.color + (colour + vec3f(gloss + rim)) * modokiInputs.Coating;
 }

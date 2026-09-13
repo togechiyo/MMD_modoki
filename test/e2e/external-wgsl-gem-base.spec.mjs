@@ -6,7 +6,7 @@ import { launchMmdModoki } from "./electron-app.mjs";
 import { editWgslParameter, wgslFixtureEditor } from "./external-wgsl-fixture-editor.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const gems = ["moonstone-schiller", "black-opal", "prismatic-fire", "aurora-opal"];
+const gems = ["moonstone-schiller", "white-opal", "black-opal", "prismatic-fire", "aurora-opal"];
 test.setTimeout(120000);
 
 // Only recolour the two known material records in our generated, redistributable fixture.

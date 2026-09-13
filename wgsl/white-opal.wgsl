@@ -2,9 +2,9 @@
 {
   "apiVersion": 1,
   "kind": "mmd-material",
-  "name": "Black Opal",
-  "description": "モデルの色・模様・陰影を下地に、暗い遊色を乗算する。白い光沢だけを少量加算。",
-  "hooks": { "finalColor": "shadeBlackOpal" },
+  "name": "White Opal",
+  "description": "モデルの色・模様・陰影を下地に、淡い遊色を加算する。Black Opalと同じ模様の明るい合成例。",
+  "hooks": { "finalColor": "shadeWhiteOpal" },
   "inputs": {
     "WorldInverse": { "type": "mat4x4f", "semantic": "WORLDINVERSE", "annotations": { "Object": "Geometry" } },
     "CameraPosition": { "type": "vec3f", "semantic": "POSITION", "annotations": { "Object": "Camera" } },
@@ -12,7 +12,7 @@
   },
   "parameters": {
     "FlakeScale": { "type": "f32", "default": 5, "ui": { "label": "かけらの細かさ", "min": 0.1, "max": 16, "step": 0.1 } },
-    "ColorStrength": { "type": "f32", "default": 1, "ui": { "label": "遊色の強さ", "min": 0, "max": 1, "step": 0.05 } },
+    "ColorStrength": { "type": "f32", "default": 1.1, "ui": { "label": "遊色の強さ", "min": 0, "max": 2, "step": 0.05 } },
     "FlashWidth": { "type": "f32", "default": 0.4, "ui": { "label": "光る角度の広さ", "min": 0.1, "max": 1, "step": 0.05 } },
     "Coating": { "type": "f32", "default": 1, "ui": { "label": "コーティングの強さ", "min": 0, "max": 1, "step": 0.01 } }
   }
@@ -21,18 +21,18 @@
 
 // Play-of-colour approximation: stable 3D domains with different angular responses.
 // Independent from TIME; a stationary camera/light leaves the stone stationary.
-fn blackOpalUnit(v: vec3f) -> vec3f {
+fn whiteOpalUnit(v: vec3f) -> vec3f {
     return v * inverseSqrt(max(dot(v, v), 0.000001));
 }
 
-fn blackOpalHash(point: vec3f) -> vec3f {
+fn whiteOpalHash(point: vec3f) -> vec3f {
     var p = fract(point * vec3f(0.1031, 0.1030, 0.0973));
     p += vec3f(dot(p, p.yxz + vec3f(33.33)));
     return fract((p.xxy + p.yzz) * p.zyx);
 }
 
 // Fixed 27-cell nearest-site search. xyz = seed, w = gap to the next domain.
-fn blackOpalDomain(p: vec3f) -> vec4f {
+fn whiteOpalDomain(p: vec3f) -> vec4f {
     let cell = floor(p);
     var nearest = 100.0;
     var second = 100.0;
@@ -41,7 +41,7 @@ fn blackOpalDomain(p: vec3f) -> vec4f {
         for (var y = -1; y <= 1; y++) {
             for (var x = -1; x <= 1; x++) {
                 let id = cell + vec3f(f32(x), f32(y), f32(z));
-                let candidate = blackOpalHash(id);
+                let candidate = whiteOpalHash(id);
                 let delta = id + vec3f(0.15) + candidate * 0.7 - p;
                 let distance = dot(delta, delta);
                 if (distance < nearest) { second = nearest; nearest = distance; seed = candidate; }
@@ -52,15 +52,15 @@ fn blackOpalDomain(p: vec3f) -> vec4f {
     return vec4f(seed, sqrt(second) - sqrt(nearest));
 }
 
-fn shadeBlackOpal(input: ModokiFinalColor) -> vec3f {
+fn shadeWhiteOpal(input: ModokiFinalColor) -> vec3f {
     let s = input.surface;
     let local = (modokiInputs.WorldInverse * vec4f(s.positionWS, 1.0)).xyz;
-    let domain = blackOpalDomain(local * modokiInputs.FlakeScale * vec3f(1.0, 1.45, 1.0));
-    let normal = blackOpalUnit(s.normalWS);
-    let view = blackOpalUnit(modokiInputs.CameraPosition - s.positionWS);
-    let light = blackOpalUnit(-modokiInputs.LightDirection);
-    let halfVector = blackOpalUnit(view + light);
-    let axis = blackOpalUnit((transpose(modokiInputs.WorldInverse) * vec4f(domain.xyz * 2.0 - vec3f(1.0), 0.0)).xyz);
+    let domain = whiteOpalDomain(local * modokiInputs.FlakeScale * vec3f(1.0, 1.45, 1.0));
+    let normal = whiteOpalUnit(s.normalWS);
+    let view = whiteOpalUnit(modokiInputs.CameraPosition - s.positionWS);
+    let light = whiteOpalUnit(-modokiInputs.LightDirection);
+    let halfVector = whiteOpalUnit(view + light);
+    let axis = whiteOpalUnit((transpose(modokiInputs.WorldInverse) * vec4f(domain.xyz * 2.0 - vec3f(1.0), 0.0)).xyz);
     let phase = dot(view, axis) * 0.9 + dot(light, axis) * 0.35 + domain.y * 2.0;
     let window = 0.5 + 0.5 * cos(phase * 6.2831853);
     let flash = pow(window, 2.0 / modokiInputs.FlashWidth);
@@ -70,13 +70,10 @@ fn shadeBlackOpal(input: ModokiFinalColor) -> vec3f {
     let aa = min(max(fwidth(domain.w), 0.01), 0.2);
     let flake = smoothstep(0.015, 0.07 + aa, domain.w);
     let illumination = 0.2 + 0.8 * max(dot(normal, light), 0.0);
-    // Multiplication keeps the model's colour ratios and texture in the dark body.
-    // Coloured domains transmit different channels; pure black cannot gain colour by multiplication.
-    let tint = mix(vec3f(0.45), vec3f(0.35) + saturated * 0.65, flake * flash * illumination);
-    let strength = clamp(modokiInputs.ColorStrength * modokiInputs.Coating, 0.0, 1.0);
-    let body = input.color * mix(vec3f(1.0), tint, strength);
+    let colour = saturated * flake * flash * modokiInputs.ColorStrength * 0.55 * illumination;
     let gloss = pow(max(dot(normal, halfVector), 0.0), 100.0) * 0.25;
     let rim = pow(1.0 - clamp(abs(dot(normal, view)), 0.0, 1.0), 4.0) * 0.06;
-    // Only the surface reflection is additive. Coating=0 restores the original colour.
-    return body + vec3f(gloss + rim) * modokiInputs.Coating;
+    // Use the existing textured/shaded colour as the base, even at Coating=1.
+    // Additive white-opal coating: brighter than the base without replacing its texture.
+    return input.color + (colour + vec3f(gloss + rim)) * modokiInputs.Coating;
 }

@@ -51,7 +51,7 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
         };
         const original = await capture("original");
         const standardRowHeight = await page.locator(".shader-material-item").first().evaluate(element => element.getBoundingClientRect().height);
-        const angularSamples = ["moonstone-schiller", "black-opal", "prismatic-fire"];
+        const angularSamples = ["moonstone-schiller", "white-opal", "black-opal", "prismatic-fire"];
         const editor = wgslFixtureEditor(app.app, page, testInfo, root);
         for (const sample of ["template", "soft-pastel", ...angularSamples, "aurora-opal"]) {
             await editor.load(sample);
@@ -88,7 +88,7 @@ for (const backend of ["classic", "frameGraph"]) test(`WGSL samples ${backend}: 
                 // setCameraPose preserves the editor's rotation state; it is not an exact restore.
                 expect(await changedPixels(app.app, image, repeat)).toBeLessThan(100);
                 await frame.fill("0"); await frame.press("Enter");
-                const parameter = { "moonstone-schiller": "SheenStrength", "black-opal": "ColorStrength", "prismatic-fire": "FireStrength" }[sample];
+                const parameter = { "moonstone-schiller": "SheenStrength", "white-opal": "ColorStrength", "black-opal": "ColorStrength", "prismatic-fire": "FireStrength" }[sample];
                 const defaultStrength = editor.parameterValue(parameter);
                 await editor.parameter(parameter, 0);
                 const without = await capture(`${sample}-feature-zero-selected`);

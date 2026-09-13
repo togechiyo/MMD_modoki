@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "kind": "mmd-material",
   "name": "Aurora Opal",
-  "description": "モデルの色・模様・陰影を下地に、流れる虹色の鉱石模様と発光する細い帯・リムを重ねる。",
+  "description": "モデルの色・模様・陰影を下地に、ゆっくり移り変わる柔らかな虹色のグラデーションを重ねる。",
   "hooks": { "finalColor": "shadeOpal" },
   "inputs": {
     "Time": { "type": "f32", "semantic": "TIME", "annotations": { "SyncInEditMode": true } },
@@ -15,7 +15,6 @@
     "RimColor": { "type": "vec3f", "default": [0.25, 0.95, 0.85], "ui": { "label": "発光色", "control": "color", "min": 0, "max": 1 } },
     "PatternScale": { "type": "f32", "default": 0.65, "ui": { "label": "模様の細かさ", "min": 0.02, "max": 8, "step": 0.02 } },
     "Speed": { "type": "f32", "default": 0.35, "ui": { "label": "流れる速さ", "min": -2, "max": 2, "step": 0.05 } },
-    "RibbonWidth": { "type": "f32", "default": 0.075, "ui": { "label": "光の帯の太さ", "min": 0.01, "max": 0.3, "step": 0.005 } },
     "Glow": { "type": "f32", "default": 0.7, "ui": { "label": "発光の強さ", "min": 0, "max": 2, "step": 0.05 } },
     "Coating": { "type": "f32", "default": 0.92, "ui": { "label": "コーティングの強さ", "min": 0, "max": 1, "step": 0.01 } }
   }
@@ -66,7 +65,6 @@ fn shadeOpal(input: ModokiFinalColor) -> vec3f {
     let time = modokiInputs.Time * modokiInputs.Speed;
     let drift = vec3f(time * 0.17, -time * 0.23, time * 0.11);
     let cloud = opalCloud(p + drift);
-    let flow = dot(p, vec3f(0.32, 0.88, -0.27)) + 2.4 * cloud - time * 0.32;
 
     let normal = opalUnit(surface.normalWS);
     let view = opalUnit(modokiInputs.CameraPosition - surface.positionWS);
@@ -79,19 +77,11 @@ fn shadeOpal(input: ModokiFinalColor) -> vec3f {
 
     // A stylized angle-dependent film colour, not a physical thin-film solver.
     let spectrum = opalSpectrum(cloud * 0.8 + (1.0 - facing) * 0.65 + time * 0.035);
-    let layers = 0.5 + 0.5 * sin(flow * 6.2831853);
-    let mineral = smoothstep(0.18, 0.85, layers);
-    let grain = mix(0.65, 1.0, cloud);
-    // The mineral pattern is a thin colour effect over the original model, not a new body colour.
-    let film = spectrum * grain * mineral * 0.18 * (0.2 + 0.8 * ndl);
-
-    // Derivative filtering softens subpixel bands; no hard threshold shimmer.
-    let stripe = abs(sin(flow * 6.2831853));
-    let aa = max(fwidth(flow) * 6.2831853, 0.008);
-    let ribbon = 1.0 - smoothstep(modokiInputs.RibbonWidth, modokiInputs.RibbonWidth + aa, stripe);
-    let pulse = 0.7 + 0.3 * sin(time * 1.8 + cloud * 8.0);
+    // Broad continuous gradients: no repeated stripe phase or narrow threshold bands.
+    let softness = mix(0.35, 0.85, cloud);
+    let film = spectrum * softness * 0.24 * (0.2 + 0.8 * ndl);
     let emission = mix(spectrum, modokiInputs.RimColor, 0.65)
-        * (ribbon * pulse * 0.4 + rim * 0.5) * modokiInputs.Glow;
+        * (softness * 0.18 + rim * 0.35) * modokiInputs.Glow;
     let effect = film + emission + mix(vec3f(1.0), spectrum, 0.25) * glint * 0.3;
     // input.color retains texture, material colour and lighting at every coating strength.
     // Alpha is owned by the host. Coating=0 is exactly the original final colour.

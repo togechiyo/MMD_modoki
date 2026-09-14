@@ -23,7 +23,7 @@ export class EffectSceneTrackStore {
         this.ensure(id, base);
         const entry = this.entries.get(id);
         if (!entry) return;
-        const normalized = normalizeEffectValue(getEffectDefinition(id), value);
+        const normalized = normalizeEffectValue(getEffectDefinition(id), value, entry.track.baseValue);
         if (!entry.track.keyframes.length) entry.track.baseValue = normalized;
         entry.preview = { frame: frameNumber(frame), value: normalized };
         entry.revision++;
@@ -96,7 +96,7 @@ export class EffectSceneTrackStore {
             ...(entry.preview ? { preview: structuredClone(entry.preview) } : {}),
         })) ] };
     }
-    restore(data: unknown): void {
+    restore(data: unknown, staticValue?: (id: EffectId) => EffectValue): void {
         this.entries.clear(); this.unknownTracks = []; this.unknownBlock = null;
         if (!data || typeof data !== "object") return;
         const block = data as SerializedEffectAnimations;
@@ -107,7 +107,7 @@ export class EffectSceneTrackStore {
             const item = raw as { effectId?: string; valueVersion?: number; base?: unknown; keys?: Array<{ frame: number; value: unknown }>; preview?: { frame: number; value: unknown } };
             if (!item.effectId || !isEffectId(item.effectId) || item.valueVersion !== 1) { this.unknownTracks.push(structuredClone(raw)); continue; }
             const id = item.effectId;
-            this.ensure(id, item.base);
+            this.ensure(id, normalizeEffectValue(getEffectDefinition(id), item.base, staticValue?.(id)));
             const base = this.base(id);
             if (Array.isArray(item.keys)) for (const key of item.keys) {
                 if (!key || !Number.isFinite(key.frame) || key.frame < 0) continue;

@@ -88,7 +88,7 @@ function addFace(vertices, indices, positions, normal, uvs = [[0, 1], [1, 1], [1
     );
 }
 
-function createTofuModel() {
+export function createTofuModel() {
     const vertices = [];
     const bodyIndices = [];
     const halfWidth = 2;
@@ -358,7 +358,7 @@ function createBodyCorrectionModel(scale, label) {
     };
 }
 
-function writePmx(model) {
+export function writePmx(model) {
     const writer = new PmxWriter();
     const vertexIndexSize = model.vertices.length <= 255 ? 1 : 2;
 
@@ -623,4 +623,4 @@ async function main() {
     }
 }
 
-await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

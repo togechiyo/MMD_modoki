@@ -255,10 +255,10 @@ type ProjectExportHost = {
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
     getSerializedEffectSceneTracks?: () => import("../editor/effect-scene-track-store").SerializedEffectAnimations;
-    getStaticResourcePostEffects?: () => { lutEnabled: boolean; lutIntensity: number; glowEnabled: boolean; glowIntensity: number };
+    getStaticResourcePostEffects?: () => { lutEnabled: boolean; lutIntensity: number; glowEnabled: boolean; glowIntensity: number; glowThreshold?: number; glowKernel?: number };
     getStaticScalarPostEffects?: () => { vignetteEnabled: boolean; postEffectVignetteWeight: number; postEffectSharpenEdge: number; postEffectChromaticAberration: number; dofLensEdgeBlur: number; dofLensDistortionInfluence: number; };
     getStaticPostEffectGamma?: () => number;
-    getStaticPostEffectBloom?: () => { enabled: boolean; weight: number; threshold: number };
+    getStaticPostEffectBloom?: () => { enabled: boolean; weight: number; threshold: number; kernel?: number };
     getStaticPostEffectGrainIntensity?: () => number;
     getDofFocusMode?: () => "camera-target" | "person-auto" | "model-target";
     getDofFocusTargetModelPath?: () => string | null;
@@ -528,7 +528,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             bloomEnabled: host.getStaticPostEffectBloom?.().enabled ?? host.postEffectBloomEnabled,
             bloomWeight: host.getStaticPostEffectBloom?.().weight ?? host.postEffectBloomWeight,
             bloomThreshold: host.getStaticPostEffectBloom?.().threshold ?? host.postEffectBloomThreshold,
-            bloomKernel: host.postEffectBloomKernel,
+            bloomKernel: host.getStaticPostEffectBloom?.().kernel ?? host.postEffectBloomKernel,
             bloomColor: host.getPostEffectBloomColor(),
             chromaticAberration: host.getStaticScalarPostEffects?.().postEffectChromaticAberration ?? host.postEffectChromaticAberration,
             grainIntensity: host.getStaticPostEffectGrainIntensity?.() ?? host.postEffectGrainIntensity,
@@ -568,8 +568,8 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             colorCurvesExposure: host.postEffectColorCurvesExposure,
             glowEnabled: host.getStaticResourcePostEffects?.().glowEnabled ?? host.postEffectGlowEnabled,
             glowIntensity: host.getStaticResourcePostEffects?.().glowIntensity ?? host.postEffectGlowIntensity,
-            glowThreshold: host.postEffectGlowThreshold,
-            glowKernel: host.postEffectGlowKernel,
+            glowThreshold: host.getStaticResourcePostEffects?.().glowThreshold ?? host.postEffectGlowThreshold,
+            glowKernel: host.getStaticResourcePostEffects?.().glowKernel ?? host.postEffectGlowKernel,
             glowGlareCount: host.postEffectGlowGlareCount,
             glowGlareLength: host.postEffectGlowGlareLength,
             glowGlareAngle: host.postEffectGlowGlareAngle,

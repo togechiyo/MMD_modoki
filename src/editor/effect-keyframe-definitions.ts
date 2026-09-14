@@ -3,14 +3,14 @@ import { z } from "zod";
 export type EffectValueById = {
     gamma: { enabled: boolean; gamma: number };
     grain: { enabled: boolean; intensity: number };
-    bloom: { enabled: boolean; weight: number; threshold: number };
+    bloom: { enabled: boolean; weight: number; threshold: number; kernel: number };
     vignette: { enabled: boolean; weight: number };
     sharpen: { enabled: boolean; edge: number };
     chromatic: { enabled: boolean; amount: number };
     edgeBlur: { enabled: boolean; strength: number };
     distortion: { enabled: boolean; influence: number };
     lut: { enabled: boolean; intensity: number };
-    luminous: { enabled: boolean; intensity: number };
+    luminous: { enabled: boolean; intensity: number; threshold: number; radius: number };
 };
 export type EffectId = keyof EffectValueById;
 export type EffectKeyframePayload = {
@@ -30,10 +30,11 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
         sliders: [{ field: "gamma", panelField: "gammaPower", min: -100, max: 100, toValue: position => 2 ** (-position / 100), toPosition: value => -Math.log2(value) * 100 }] },
     { id: "grain", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0, min: 0, max: 100 } },
         sliders: [{ field: "intensity", panelField: "grainIntensity", min: 0, max: 100, toValue: position => position, toPosition: value => value }] },
-    { id: "bloom", fields: { enabled: { kind: "step", default: false }, weight: { kind: "linear", default: 1, min: 0, max: 2 }, threshold: { kind: "linear", default: 1, min: 0, max: 2 } },
+    { id: "bloom", fields: { enabled: { kind: "step", default: false }, weight: { kind: "linear", default: 1, min: 0, max: 2 }, threshold: { kind: "linear", default: 1, min: 0, max: 2 }, kernel: { kind: "linear", default: 100, min: 1, max: 256 } },
         sliders: [
             { field: "weight", panelField: "bloomWeight", labelKey: "effect.frameGraphPost.controls.weight", min: 0, max: 200, toValue: position => position / 100, toPosition: value => value * 100 },
             { field: "threshold", panelField: "bloomThreshold", labelKey: "effect.frameGraphPost.controls.threshold", min: 0, max: 200, toValue: position => position / 100, toPosition: value => value * 100 },
+            { field: "kernel", panelField: "bloomKernel", labelKey: "effect.frameGraphPost.controls.kernel", min: 0, max: 100, toValue: position => 1 + position * 255 / 100, toPosition: value => (value - 1) / 255 * 100 },
         ] },
     { id: "vignette", fields: { enabled: { kind: "step", default: false }, weight: { kind: "linear", default: 0.3, min: 0, max: 4 } },
         sliders: [{ field: "weight", panelField: "vignetteWeight", min: 0, max: 100, toValue: position => position * 4 / 100, toPosition: value => value / 4 * 100 }] },
@@ -47,8 +48,12 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
         sliders: [{ field: "influence", panelField: "distortion", labelKey: "effect.frameGraphPost.controls.influence", min: 0, max: 100, toValue: position => position * 1 / 100, toPosition: value => value / 1 * 100 }] },
     { id: "lut", fixedSettingsLabelKey: "timeline.lutFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 1, min: 0, max: 1 } },
         sliders: [{ field: "intensity", panelField: "lutIntensity", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 }] },
-    { id: "luminous", fixedSettingsLabelKey: "timeline.luminousFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0.5, min: 0, max: 4 } },
-        sliders: [{ field: "intensity", panelField: "luminousIntensity", min: 0, max: 400, toValue: position => position / 100, toPosition: value => value * 100 }] },
+    { id: "luminous", fixedSettingsLabelKey: "timeline.luminousFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0.5, min: 0, max: 4 }, threshold: { kind: "linear", default: 0.5, min: 0, max: 1.5 }, radius: { kind: "linear", default: 20, min: 1, max: 128 } },
+        sliders: [
+            { field: "intensity", panelField: "luminousIntensity", labelKey: "effect.frameGraphPost.controls.intensity", min: 0, max: 400, toValue: position => position / 100, toPosition: value => value * 100 },
+            { field: "threshold", panelField: "luminousThreshold", labelKey: "effect.frameGraphPost.controls.threshold", min: 0, max: 150, toValue: position => position / 100, toPosition: value => value * 100 },
+            { field: "radius", panelField: "luminousRadius", labelKey: "effect.frameGraphPost.controls.radius", min: 0, max: 100, toValue: position => 1 + position * 127 / 100, toPosition: value => (value - 1) / 127 * 100 },
+        ] },
 ];
 export function isEffectId(id: string): id is EffectId {
     return EFFECT_KEYFRAME_DEFINITIONS.some(definition => definition.id === id);

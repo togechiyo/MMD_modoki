@@ -1,3 +1,4 @@
+import { applyClassicKeyframedBloomBlur } from "./keyframed-bloom-blur";
 import { lensDistortionForFov } from "./effect-keyframe-runtime";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
@@ -114,6 +115,7 @@ type PostProcessHost = {
     getEffectScalarRenderValue?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion" | "lut", field: string, fallback: number): number;
     getEffectRenderLensDistortion?(): number;
     effectKeyframeBloomPrepared?: boolean;
+    getEffectParameterRenderValue?(id: "bloom", field: string, fallback: number): number;
     postEffectMotionBlurEnabledValue: boolean;
     postEffectMotionBlurStrengthValue: number;
     postEffectMotionBlurSamplesValue: number;
@@ -819,7 +821,11 @@ function applyStandaloneBloomSettings(host: PostProcessHost): void {
 
     host.standaloneBloomEffect.weight = host.postEffectBloomWeightValue;
     host.standaloneBloomEffect.threshold = host.postEffectBloomThresholdValue;
-    host.standaloneBloomEffect.kernel = host.postEffectBloomKernelValue;
+    if (host.effectKeyframeBloomPrepared) {
+        applyClassicKeyframedBloomBlur(host.standaloneBloomEffect, host.getEffectParameterRenderValue?.("bloom", "kernel", host.postEffectBloomKernelValue) ?? host.postEffectBloomKernelValue);
+    } else {
+        host.standaloneBloomEffect.kernel = host.postEffectBloomKernelValue;
+    }
     host.enforceFinalPostProcessOrder();
 }
 

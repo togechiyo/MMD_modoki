@@ -3,6 +3,7 @@ import { existsSync, readFileSync, mkdirSync, statSync, writeFileSync } from "no
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyEffectShapeKeys } from "./effect-shape-checks.mjs";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -111,9 +112,9 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     await add(20, false, config.position / 2);
     await add(40, true, 0);
     const expectedKeys = [
-      { frame: 0, value: { enabled: true, [config.field]: config.max } },
-      { frame: 20, value: { enabled: false, [config.field]: config.max / 2 } },
-      { frame: 40, value: { enabled: true, [config.field]: 0 } },
+      { frame: 0, value: { ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: true, [config.field]: config.max } },
+      { frame: 20, value: { ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: false, [config.field]: config.max / 2 } },
+      { frame: 40, value: { ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: true, [config.field]: 0 } },
     ];
     expect((await savedKeys()).keys).toEqual(expectedKeys);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
@@ -142,7 +143,7 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
       await control.fill("25"); await control.dispatchEvent("input");
       await expect(enabled).not.toBeChecked();
       await expect(slider).toHaveValue(String(config.position / 4));
-      expect((await savedKeys()).preview.value).toEqual({ enabled: false, [config.field]: config.max / 4 });
+      expect((await savedKeys()).preview.value).toEqual({ ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: false, [config.field]: config.max / 4 });
       await seek(page, 0);
     }
 
@@ -269,6 +270,7 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
         PNG.sync.write({ width: 640, height: 360, data: Buffer.from(videoFrames[index]) }));
     }
     for (const item of report) expect(item.matchingPngDifference).toBeLessThan(item.oppositePngDifference);
+    if (effectId === "luminous") await verifyEffectShapeKeys(page, launched.app, testInfo, effectId, selectEffect);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });
     expect(errors).toEqual([]);
   } finally { await launched.close(); }

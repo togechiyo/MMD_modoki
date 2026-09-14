@@ -301,10 +301,12 @@ describe("exportProjectState", () => {
     it("keeps LUT and luminous static settings separate from evaluated keys", () => {
         const project = exportProjectState({
             ...createHost(), postEffectLutEnabled: true, postEffectLutIntensity: 0.5,
-            postEffectGlowEnabled: true, postEffectGlowIntensity: 3,
-            getStaticResourcePostEffects: () => ({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5 }),
+            postEffectGlowEnabled: true, postEffectGlowIntensity: 3, postEffectGlowThreshold: 1.5, postEffectGlowKernel: 128,
+            postEffectBloomKernel: 256,
+            getStaticPostEffectBloom: () => ({ enabled: false, weight: 1, threshold: 1, kernel: 37 }),
+            getStaticResourcePostEffects: () => ({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5, glowThreshold: 0.7, glowKernel: 42 }),
         });
-        expect(project.effects).toMatchObject({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5 });
+        expect(project.effects).toMatchObject({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5, glowThreshold: 0.7, glowKernel: 42, bloomKernel: 37 });
     });
     it("keeps static scalar effect settings separate from evaluated key values", () => {
         const project = exportProjectState({

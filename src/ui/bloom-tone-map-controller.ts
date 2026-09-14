@@ -240,7 +240,7 @@ export class BloomToneMapController {
     public setBloom(enabled: boolean, weightPercent: number, thresholdSlider: number, kernel: number): void {
         // The classic threshold slider is inverted; keyframes contain actual values.
         if (this.mmdManager.hasEffectSceneTrack("bloom")) {
-            this.mmdManager.setEffectScenePreview("bloom", { enabled, weight: weightPercent / 100, threshold: 2 - thresholdSlider / 100 });
+            this.mmdManager.setEffectScenePreview("bloom", { enabled, weight: weightPercent / 100, threshold: 2 - thresholdSlider / 100, kernel });
         } else {
             this.mmdManager.postEffectBloomEnabled = enabled;
             this.mmdManager.postEffectBloomWeight = weightPercent / 100;
@@ -311,7 +311,7 @@ export class BloomToneMapController {
             const locked = this.mmdManager.isPlaying || (!enabled && !this.mmdManager.hasEffectSceneTrack("bloom"));
             weightInput.disabled = locked;
             thresholdInput.disabled = locked;
-            kernelInput.disabled = !enabled || this.mmdManager.isPlaying;
+            kernelInput.disabled = locked;
             weightValue.textContent = weightText;
             thresholdValue.textContent = thresholdText;
             kernelValue.textContent = kernelText;

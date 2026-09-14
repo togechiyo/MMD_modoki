@@ -82,12 +82,12 @@ describe("effect scene track foundation", () => {
         const to = makeEffectPayload("bloom", { enabled: false, weight: 0, threshold: 2 });
         store.apply("bloom", 0, from, {});
         store.apply("bloom", 20, to, {});
-        expect(store.evaluate("bloom", 5)).toEqual({ enabled: true, weight: 1.5, threshold: 0.5 });
+        expect(store.evaluate("bloom", 5)).toEqual({ enabled: true, weight: 1.5, threshold: 0.5, kernel: 100 });
         expect(store.evaluate("bloom", 20)).toEqual(to.value);
         store.preview("bloom", 5, { enabled: false, weight: 0.2, threshold: 0.8 }, {});
-        expect(store.evaluate("bloom", 5)).toEqual({ enabled: true, weight: 1.5, threshold: 0.5 });
+        expect(store.evaluate("bloom", 5)).toEqual({ enabled: true, weight: 1.5, threshold: 0.5, kernel: 100 });
         const restored = new EffectSceneTrackStore(); restored.restore(store.serialize());
-        expect(restored.evaluate("bloom", 5, true)).toEqual({ enabled: false, weight: 0.2, threshold: 0.8 });
+        expect(restored.evaluate("bloom", 5, true)).toEqual({ enabled: false, weight: 0.2, threshold: 0.8, kernel: 100 });
         expect(restored.read("bloom", 0)).toEqual(from);
         expect(effectKeyframePayloadSchema.safeParse(from).success).toBe(true);
         expect(effectKeyframePayloadSchema.safeParse({ kind: "effect", effectId: "bloom", value: { enabled: true, weight: 1 } }).success).toBe(false);
@@ -103,11 +103,29 @@ describe("effect scene track foundation", () => {
         store.apply(id, 0, from, {});
         store.apply(id, 20, to, {});
         const restored = new EffectSceneTrackStore(); restored.restore(store.serialize());
-        expect(restored.evaluate(id, 5)).toEqual({ enabled: true, [field]: max * 0.75 });
+        expect(restored.evaluate(id, 5)).toEqual({ ...from.value, enabled: true, [field]: max * 0.75 });
         expect(restored.evaluate(id, 20)).toEqual(to.value);
         expect(effectKeyframePayloadSchema.safeParse(from).success).toBe(true);
         expect(effectKeyframePayloadSchema.safeParse({ ...from, value: { enabled: true, [field]: max + 1 } }).success).toBe(false);
         expect(effectKeyframePayloadSchema.safeParse({ ...from, value: { enabled: true, wrongField: max } }).success).toBe(false);
+    });
+    it("restores newly added shape fields from static settings and preserves them in old previews", () => {
+        const store = new EffectSceneTrackStore();
+        store.restore({ version: 1, tracks: [{ effectId: "luminous", valueVersion: 1,
+            base: { enabled: true, intensity: 1 }, keys: [{ frame: 0, value: { enabled: true, intensity: 2 } }],
+            preview: { frame: 0, value: { enabled: false, intensity: 3 } },
+        }] }, () => ({ enabled: false, intensity: 0.5, threshold: 1.25, radius: 73 }));
+        expect(store.evaluate("luminous", 0)).toEqual({ enabled: true, intensity: 2, threshold: 1.25, radius: 73 });
+        expect(store.evaluate("luminous", 0, true)).toEqual({ enabled: false, intensity: 3, threshold: 1.25, radius: 73 });
+    });
+    it("interpolates all luminous shape fields while keeping the OFF state separate", () => {
+        const store = new EffectSceneTrackStore();
+        store.apply("luminous", 0, makeEffectPayload("luminous", { enabled: false, intensity: 4, threshold: 0, radius: 1 }), {});
+        store.apply("luminous", 20, makeEffectPayload("luminous", { enabled: true, intensity: 2, threshold: 1.5, radius: 128 }), {});
+        expect(store.evaluate("luminous", 10)).toEqual({ enabled: false, intensity: 3, threshold: 0.75, radius: 64.5 });
+        store.apply("bloom", 0, makeEffectPayload("bloom", { enabled: true, weight: 2, threshold: 0, kernel: 1 }), {});
+        store.apply("bloom", 20, makeEffectPayload("bloom", { enabled: false, weight: 0, threshold: 2, kernel: 256 }), {});
+        expect(store.evaluate("bloom", 10)).toEqual({ enabled: true, weight: 1, threshold: 1, kernel: 128.5 });
     });
     it("validates automation values against the same field definitions", () => {
         expect(effectKeyframePayloadSchema.safeParse(makeEffectPayload("grain", { enabled: true, intensity: 20 })).success).toBe(true);

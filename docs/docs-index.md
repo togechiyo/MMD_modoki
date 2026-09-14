@@ -168,6 +168,7 @@
 - [アクセサリ・タイムライン仕様](./accessory-timeline-spec.md)
 - [エフェクト・DoF 対象のタイムラインキー化 事前検討 2026-08-25](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)
 - [エフェクト単位のタイムライン共通基盤：設計・見積もり 2026-09-14](./effect-timeline-common-foundation-design-2026-09-14.md)
+- [ブルーム幅・ルミナス形状のキーとLUT選択の後続設計 2026-09-14](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)
 - [LUT・ルミナスのタイムラインキー 2026-09-14](./resource-effect-timeline-2026-09-14.md)
 - [数値中心のエフェクト5種のキー対応 2026-09-14](./scalar-effect-timeline-2026-09-14.md)
 - [ブルームの複数パラメーターキー 2026-09-14](./bloom-timeline-key-2026-09-14.md)

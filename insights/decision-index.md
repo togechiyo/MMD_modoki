@@ -26,7 +26,7 @@
 | adopted | [街モデルを扱える広域描画を支援する](./decisions/support-city-scale-wide-area-rendering.md) | far、空ドーム、影距離を変更する |
 | accepted-with-constraints | [シーン全体の影設定変更には所有者の許可を必要とする](./decisions/scene-wide-shadow-settings-require-owner-approval.md) | CSM、ShadowGenerator、cascade、全体bias、影距離を変更する |
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |
-| adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | 海を除く全effectへの拡張を希望。登録はeffect単位。未配布の旧ガンマキー互換は不要、新形式へ一本化。共通基盤・ブルーム・数値5種に続き、進められる効果の追加を継続依頼。全パラメータ・金曜までの全件完了は未確定（2026-09-14） |
+| adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | 海を除く全effectへの拡張を希望。登録はeffect単位。未配布の旧ガンマキー互換は不要、新形式へ一本化。共通基盤・ブルーム・数値5種に続き追加を継続依頼。スライダーを優先、LUT選択も希望（難しければ後回し可）。全パラメータ・金曜までの全件完了は未確定（2026-09-14） |
 | adopted | [再生中の編集権限はカテゴリごとのキー有無で決める](./decisions/playback-ownership-follows-category-key-presence.md) | camera / light / shadow / gravity の再生中評価とUIロックを変更する |
 | adopted | [DoF autofocusは手前のsurfaceより人物を優先する](./decisions/dof-autofocus-prefers-people-over-foreground-depth.md) | DoFの自動対象選択やfocus modeを変更する |
 | confirmed | [動画出力は現在のviewport物理状態から開始する](./decisions/webm-export-starts-from-current-viewport-physics-state.md) | WebM出力開始時の物理reset、warm-up、snapshot引き継ぎを変更する |

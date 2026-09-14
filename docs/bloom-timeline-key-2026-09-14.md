@@ -4,6 +4,8 @@
 
 共通基盤の次の確認として、所有者がブルームの複数パラメーター実装を指定した。カメラモードの「ブルーム」行で、ON / OFF・強度・しきい値を1個のキーへ登録する。
 
+同日、[カーネル幅のキー](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)も追加した。以下は強度・しきい値の初回実装時点の記録。
+
 ## 値と操作
 
 - `effectId: "bloom"`、値は`{ enabled, weight, threshold }`。強度・しきい値とも実値0〜2、線形補間。ON / OFFはstep。

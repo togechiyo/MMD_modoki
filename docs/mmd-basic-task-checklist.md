@@ -191,6 +191,7 @@
 - [x] DoF `オートフォーカス`（人物優先）を新規sceneの既定として実装（頭 / 首 / 上半身系boneを持つmodelのみ、中央score、25%切替hysteresis、camera target fallback、project round-trip、focused E2E）
 - [x] エフェクトキーの最小PoCとして、カメラモードへガンマのON / OFF・スライダー値のキーを追加。保存・Undo / Redo・Classic / FrameGraph・PNG / WebMを確認（[実験メモ](./gamma-timeline-key-experiment-2026-09-14.md)、2026-09-14）。他エフェクトへの展開は後続で判断する。
 - [x] 海を除く1エフェクト1行の共通基盤について、状態・新形式保存・UI・描画adapter・作業分解を設計。所有者指定により未配布の旧ガンマキー互換を外し、下準備10〜18h（予備込み14〜24h）へ改定（[設計・見積もり](./effect-timeline-common-foundation-design-2026-09-14.md)、2026-09-14）。
+- [x] ブルームのカーネル幅、ルミナスのしきい値・半径もキーへ接続。再生中の再コンパイルを避け、両backendの補間・保存・PNG/WebMを確認。LUT選択は内蔵presetのstep切替と事前読込を後続設計（[実装・後続設計](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)、2026-09-14）。
 - [x] LUT・ルミナスのON / OFFと強度をキーへ接続。初期OFFの資源準備、保存・両backend・PNG / WebMを確認し、対応は合計10種（[実装・検証](./resource-effect-timeline-2026-09-14.md)、2026-09-14）。LUTの選択・ファイルと発光の対象・しきい値・ぼかし・光条は固定設定。
 - [x] ビネット・シャープ・色収差・エッジブラー・レンズ歪み（画角への影響度）のON / OFFと数値をエフェクト単位のキーへ接続。対応は合計8種（[実装・検証](./scalar-effect-timeline-2026-09-14.md)、2026-09-14）。
 - [x] ブルームのON / OFF・強度・しきい値を1つのキーへ接続。複数スライダー、未編集値の精度保持、Classic / FrameGraphの保存・出力とガンマ／グレイン回帰を確認（[実装・検証](./bloom-timeline-key-2026-09-14.md)、2026-09-14）。カーネル・色は固定設定。

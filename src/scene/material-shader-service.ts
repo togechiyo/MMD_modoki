@@ -148,6 +148,7 @@ type MaterialShaderHost = Record<string, unknown> & {
     skinSssPrePassMaterials?: Set<object>;
     defaultRenderingPipeline?: { glowLayerEnabled: boolean; bloomEnabled: boolean; bloomWeight: number; bloomThreshold: number; bloomKernel: number } | null;
     hasEffectSceneTrack?(id: "luminous"): boolean;
+    getEffectParameterRenderValue?(id: "luminous", field: string, fallback: number): number;
     isEffectKeyframePrepared?(id: "luminous"): boolean;
     getEffectScalarRenderValue?(id: "luminous", field: string, fallback: number): number;
     postEffectGlowEnabledValue?: boolean;
@@ -252,6 +253,16 @@ function ensureLuminousGlowDepthBlurShader(): void {
                 uniform vec2 direction;
                 uniform float blurWidth;
                 uniform float depthSigma;
+                uniform float luminousThreshold;
+
+                vec4 readGlow(vec2 uv) {
+                    vec4 color = texture2D(textureSampler, uv);
+                    if (luminousThreshold < 0.0) return color;
+                    float peak = max(max(color.r, color.g), color.b);
+                    float cutoff = luminousThreshold * 0.35;
+                    float mask = smoothstep(max(0.0, cutoff - 0.24), min(1.5, cutoff + 0.24), peak);
+                    return vec4(color.rgb * mask, color.a);
+                }
 
                 float depthWeight(float centerDepth, float sampleDepth) {
                     return exp(-abs(sampleDepth - centerDepth) * depthSigma);
@@ -259,7 +270,7 @@ function ensureLuminousGlowDepthBlurShader(): void {
 
                 void main(void) {
                     vec2 texel = 1.0 / max(screenSize, vec2(1.0));
-                    vec4 center = texture2D(textureSampler, vUV);
+                    vec4 center = readGlow(vUV);
                     float centerDepth = clamp(abs(texture2D(depthSampler, clamp(vUV, vec2(0.001), vec2(0.999))).r), 0.0, 1.0);
                     vec4 accum = center * 0.26;
                     float weightSum = 0.26;
@@ -277,8 +288,8 @@ function ensureLuminousGlowDepthBlurShader(): void {
                         float weightA = baseWeight * depthWeight(centerDepth, depthA);
                         float weightB = baseWeight * depthWeight(centerDepth, depthB);
 
-                        accum += texture2D(textureSampler, uvA) * weightA;
-                        accum += texture2D(textureSampler, uvB) * weightB;
+                        accum += readGlow(uvA) * weightA;
+                        accum += readGlow(uvB) * weightB;
                         weightSum += weightA + weightB;
                     }
 
@@ -297,6 +308,16 @@ function ensureLuminousGlowDepthBlurShader(): void {
                 uniform direction: vec2f;
                 uniform blurWidth: f32;
                 uniform depthSigma: f32;
+                uniform luminousThreshold: f32;
+
+                fn readGlow(uv: vec2f) -> vec4f {
+                    let color = textureSample(textureSampler, textureSamplerSampler, uv);
+                    if (uniforms.luminousThreshold < 0.0) { return color; }
+                    let peak = max(max(color.r, color.g), color.b);
+                    let cutoff = uniforms.luminousThreshold * 0.35;
+                    let mask = smoothstep(max(0.0, cutoff - 0.24), min(1.5, cutoff + 0.24), peak);
+                    return vec4f(color.rgb * mask, color.a);
+                }
 
                 fn depthWeight(centerDepth: f32, sampleDepth: f32) -> f32 {
                     return exp(-abs(sampleDepth - centerDepth) * uniforms.depthSigma);
@@ -305,7 +326,7 @@ function ensureLuminousGlowDepthBlurShader(): void {
                 @fragment
                 fn main(input: FragmentInputs) -> FragmentOutputs {
                     let texel = 1.0 / max(uniforms.screenSize, vec2f(1.0));
-                    let center = textureSample(textureSampler, textureSamplerSampler, input.vUV);
+                    let center = readGlow(input.vUV);
                     let centerDepth = clamp(abs(textureSampleLevel(depthSampler, depthSamplerSampler, clamp(input.vUV, vec2f(0.001), vec2f(0.999)), 0.0).r), 0.0, 1.0);
 
                     var accum = center * 0.26;
@@ -324,8 +345,8 @@ function ensureLuminousGlowDepthBlurShader(): void {
                         let weightA = baseWeight * depthWeight(centerDepth, depthA);
                         let weightB = baseWeight * depthWeight(centerDepth, depthB);
 
-                        accum = accum + textureSample(textureSampler, textureSamplerSampler, uvA) * weightA;
-                        accum = accum + textureSample(textureSampler, textureSamplerSampler, uvB) * weightB;
+                        accum = accum + readGlow(uvA) * weightA;
+                        accum = accum + readGlow(uvB) * weightB;
                         weightSum = weightSum + weightA + weightB;
                     }
 
@@ -553,12 +574,12 @@ class LuminousGlowLayer extends GlowLayer {
             effect.setFloat("edgeThresholdHigh", LUMINOUS_GLOW_DEPTH_EDGE_THRESHOLD_HIGH);
         };
 
-        const createDepthAwareBlur = (name: string, width: number, height: number, directionX: number, directionY: number): PostProcess => {
+        const createDepthAwareBlur = (name: string, width: number, height: number, directionX: number, directionY: number, extractSource = false): PostProcess => {
             const postProcess = new PostProcess(
                 name,
                 "mmdLuminousGlowDepthBlur",
                 {
-                    uniforms: ["screenSize", "direction", "blurWidth", "depthSigma"],
+                    uniforms: ["screenSize", "direction", "blurWidth", "depthSigma", "luminousThreshold"],
                     samplers: ["depthSampler"],
                     width,
                     height,
@@ -574,13 +595,21 @@ class LuminousGlowLayer extends GlowLayer {
                 effect.setTexture("depthSampler", depthMap ?? self._mainTexture);
                 effect.setFloat2("screenSize", width, height);
                 effect.setFloat2("direction", directionX, directionY);
-                effect.setFloat("blurWidth", this.blurKernelSize * 0.5);
+                const keyed = host?.hasEffectSceneTrack?.("luminous") === true;
+                const radius = keyed ? getManagedLuminousGlowKernel(
+                    host?.getEffectParameterRenderValue?.("luminous", "radius", 20) ?? 20,
+                    this.name === "luminousGlowCore" ? "core" : "halo",
+                ) : this.blurKernelSize;
+                effect.setFloat("blurWidth", radius * 0.5);
+                // Extract once, before the first blur. Later passes preserve the signal.
+                effect.setFloat("luminousThreshold", keyed && extractSource
+                    ? host?.getEffectParameterRenderValue?.("luminous", "threshold", 0.5) ?? 0.5 : -1);
                 effect.setFloat("depthSigma", LUMINOUS_GLOW_DEPTH_BLUR_SIGMA);
             });
             return postProcess;
         };
 
-        self._horizontalBlurPostprocess1 = createDepthAwareBlur("GlowLayerDepthBlurH1", blurTextureWidth, blurTextureHeight, 1, 0);
+        self._horizontalBlurPostprocess1 = createDepthAwareBlur("GlowLayerDepthBlurH1", blurTextureWidth, blurTextureHeight, 1, 0, true);
         self._verticalBlurPostprocess1 = createDepthAwareBlur("GlowLayerDepthBlurV1", blurTextureWidth, blurTextureHeight, 0, 1);
         self._horizontalBlurPostprocess2 = createDepthAwareBlur("GlowLayerDepthBlurH2", blurTextureWidth2, blurTextureHeight2, 1, 0);
         self._verticalBlurPostprocess2 = createDepthAwareBlur("GlowLayerDepthBlurV2", blurTextureWidth2, blurTextureHeight2, 0, 1);

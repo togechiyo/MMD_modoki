@@ -509,6 +509,7 @@ import {
 } from "./editor/scene-keyframe-track";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue } from "./editor/effect-keyframe-definitions";
+import { applyClassicKeyframedBloomBlur } from "./render/keyframed-bloom-blur";
 import { effectRenderValues, scalarEffectRenderValue, lensDistortionForFov } from "./render/effect-keyframe-runtime";
 import { EffectPlaybackPreparation } from "./render/effect-playback-preparation";
 import {
@@ -6390,13 +6391,13 @@ ${beforeFogAppendBlock}
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
         if (id === "lut") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectLutEnabledValue, intensity: this.postEffectLutIntensityValue };
-        if (id === "luminous") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectGlowEnabledValue, intensity: this.postEffectGlowIntensityValue };
+        if (id === "luminous") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectGlowEnabledValue, intensity: this.postEffectGlowIntensityValue, threshold: this.postEffectGlowThresholdValue, radius: this.postEffectGlowKernelValue };
         if (id === "vignette") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectVignetteEnabledValue, weight: this.postEffectVignetteWeightValue };
         if (id === "sharpen") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectSharpenEdgeValue > 0), edge: this.postEffectSharpenEdgeValue };
         if (id === "chromatic") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectChromaticAberrationValue > 0), amount: this.postEffectChromaticAberrationValue };
         if (id === "edgeBlur") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.dofLensEdgeBlurValue > 0), strength: this.dofLensEdgeBlurValue };
         if (id === "distortion") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.dofLensDistortionInfluenceValue > 0), influence: this.dofLensDistortionInfluenceValue };
-        if (id === "bloom") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue };
+        if (id === "bloom") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue, kernel: this.postEffectBloomKernelValue };
         const enabled = this.frameGraphPostEffectStackEnabledValue.get(id) ?? (id === "gamma" ? this.postEffectGammaValue !== 1 : this.postEffectGrainIntensityValue > 0);
         return id === "gamma" ? { enabled, gamma: this.postEffectGammaValue } : { enabled, intensity: this.postEffectGrainIntensityValue };
     }
@@ -6448,7 +6449,7 @@ ${beforeFogAppendBlock}
     }
     public getSerializedEffectSceneTracks(): SerializedEffectAnimations { return this.effectSceneTracks.serialize(); }
     public setSerializedEffectSceneTracks(data: unknown): void {
-        this.effectSceneTracks.restore(data);
+        this.effectSceneTracks.restore(data, id => this.getStaticEffectValue(id));
         this.applyDefaultPipelinePostProcessSettings();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
         this.effectSceneTracksChanged();
@@ -6460,6 +6461,10 @@ ${beforeFogAppendBlock}
         return scalarEffectRenderValue(this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0),
             field, this.getFrameGraphPostEffectStackIds().includes(id), fallback);
     }
+    /** Shape parameters retain their authored value even while the effect is OFF. */
+    public getEffectParameterRenderValue(id: EffectId, field: string, fallback: number): number {
+        return Number(this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0)?.[field] ?? fallback);
+    }
     public getEffectRenderLensDistortion(): number {
         return lensDistortionForFov(this.camera.fov,
             this.getEffectScalarRenderValue("distortion", "influence", this.dofLensDistortionInfluenceValue),
@@ -6467,7 +6472,8 @@ ${beforeFogAppendBlock}
     }
     public getStaticResourcePostEffects() {
         return { lutEnabled: this.postEffectLutEnabledValue, lutIntensity: this.postEffectLutIntensityValue,
-            glowEnabled: this.postEffectGlowEnabledValue, glowIntensity: this.postEffectGlowIntensityValue };
+            glowEnabled: this.postEffectGlowEnabledValue, glowIntensity: this.postEffectGlowIntensityValue,
+            glowThreshold: this.postEffectGlowThresholdValue, glowKernel: this.postEffectGlowKernelValue };
     }
     public getStaticScalarPostEffects() {
         return {
@@ -6479,8 +6485,8 @@ ${beforeFogAppendBlock}
             dofLensDistortionInfluence: this.dofLensDistortionInfluenceValue,
         };
     }
-    public getStaticPostEffectBloom(): { enabled: boolean; weight: number; threshold: number } {
-        return { enabled: this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue };
+    public getStaticPostEffectBloom(): { enabled: boolean; weight: number; threshold: number; kernel: number } {
+        return { enabled: this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue, kernel: this.postEffectBloomKernelValue };
     }
     public get effectKeyframeBloomPrepared(): boolean {
         return this.effectSceneTracks.has("bloom") && this.getFrameGraphPostEffectStackIds().includes("bloom");
@@ -6502,6 +6508,7 @@ ${beforeFogAppendBlock}
         if (this.postEffectBackend === "classic" && this.standaloneBloomEffect) {
             this.standaloneBloomEffect.weight = this.effectRenderState.bloomWeight;
             this.standaloneBloomEffect.threshold = this.effectRenderState.bloomThreshold;
+            if (this.effectKeyframeBloomPrepared) applyClassicKeyframedBloomBlur(this.standaloneBloomEffect, this.getEffectParameterRenderValue("bloom", "kernel", this.postEffectBloomKernelValue));
         }
         if (this.postEffectBackend === "classic") {
             if (this.effectSceneTracks.has("luminous")) applyLuminousKeyframeIntensity(this.luminousGlowLayer, this.luminousGlowCoreLayer, this.getEffectScalarRenderValue("luminous", "intensity", this.postEffectGlowIntensityValue));
@@ -11147,8 +11154,8 @@ ${beforeFogAppendBlock}
             luminousEnabled: this.effectSceneTracks.has("luminous") ? this.isEffectKeyframePrepared("luminous") : this.isFrameGraphPostEffectActive("luminous"),
             luminousPrepared: this.isEffectKeyframePrepared("luminous"),
             luminousIntensity: this.getEffectScalarRenderValue("luminous", "intensity", this.postEffectGlowIntensityValue),
-            luminousThreshold: this.postEffectGlowThresholdValue,
-            luminousRadius: this.postEffectGlowKernelValue,
+            luminousThreshold: this.getEffectParameterRenderValue("luminous", "threshold", this.postEffectGlowThresholdValue),
+            luminousRadius: this.getEffectParameterRenderValue("luminous", "radius", this.postEffectGlowKernelValue),
             luminousGlareCount: this.postEffectGlowGlareCountValue,
             luminousGlareLength: this.postEffectGlowGlareLengthValue,
             luminousGlareAngle: this.postEffectGlowGlareAngleValue,
@@ -11156,7 +11163,8 @@ ${beforeFogAppendBlock}
             bloomEnabled: this.effectSceneTracks.has("bloom") ? this.effectKeyframeBloomPrepared : this.isFrameGraphPostEffectActive("bloom"),
             bloomWeight: this.effectRenderState.bloomWeight,
             bloomThreshold: this.effectRenderState.bloomThreshold,
-            bloomKernel: this.postEffectBloomKernelValue,
+            bloomKernel: this.getEffectParameterRenderValue("bloom", "kernel", this.postEffectBloomKernelValue),
+            bloomPrepared: this.effectKeyframeBloomPrepared,
             bloomColor: this.getPostEffectBloomColor(),
             vignetteEnabled: this.effectSceneTracks.has("vignette") ? this.isEffectKeyframePrepared("vignette") : this.isFrameGraphPostEffectActive("vignette"),
             vignetteWeight: this.getEffectScalarRenderValue("vignette", "weight", this.postEffectVignetteWeightValue),
@@ -12330,9 +12338,10 @@ ${beforeFogAppendBlock}
 
     /** Default pipeline bloom kernel (1..256). */
     get postEffectBloomKernel(): number {
-        return this.postEffectBloomKernelValue;
+        return this.getEffectParameterRenderValue("bloom", "kernel", this.postEffectBloomKernelValue);
     }
     set postEffectBloomKernel(v: number) {
+        if (this.effectSceneTracks.has("bloom")) { this.setEffectScenePreview("bloom", { ...this.captureCurrentEffectKeyframePayload("bloom").value, kernel: v }); return; }
         this.postEffectBloomKernelValue = Math.max(1, Math.min(256, Math.round(v)));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -12721,18 +12730,20 @@ ${beforeFogAppendBlock}
 
     /** LuminousGlow threshold (0..1.5). */
     get postEffectGlowThreshold(): number {
-        return this.postEffectGlowThresholdValue;
+        return this.getEffectParameterRenderValue("luminous", "threshold", this.postEffectGlowThresholdValue);
     }
     set postEffectGlowThreshold(v: number) {
+        if (this.effectSceneTracks.has("luminous")) { this.setEffectScenePreview("luminous", { ...this.captureCurrentEffectKeyframePayload("luminous").value, threshold: v }); return; }
         this.postEffectGlowThresholdValue = Math.max(0, Math.min(1.5, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     /** LuminousGlow kernel size (1..256). */
     get postEffectGlowKernel(): number {
-        return this.postEffectGlowKernelValue;
+        return this.getEffectParameterRenderValue("luminous", "radius", this.postEffectGlowKernelValue);
     }
     set postEffectGlowKernel(v: number) {
+        if (this.effectSceneTracks.has("luminous")) { this.setEffectScenePreview("luminous", { ...this.captureCurrentEffectKeyframePayload("luminous").value, radius: v }); return; }
         this.postEffectGlowKernelValue = Math.max(1, Math.min(256, Math.round(v)));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -15800,6 +15811,8 @@ ${beforeFogAppendBlock}
     }
 
     public isPostEffectBackendReadyForCapture(): boolean {
+        if (this.postEffectBackend === "classic" && this.effectKeyframeBloomPrepared
+            && !this.standaloneBloomEffect?._isReady()) return false;
         if (this.postEffectBackend === "classic" && this.isEffectKeyframePrepared("lut")
             && this.isLutSourceReady() && !this.postEffectLutTexture?.isReady()) return false;
         if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) {

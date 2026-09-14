@@ -39,6 +39,7 @@ import type { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import type { Scene } from "@babylonjs/core/scene";
 import type { SsgiBlendMode } from "../types";
 import { WATER_SURFACE_MESH_NAME } from "../scene/water-surface-settings";
+import { applyFrameGraphKeyframedBloomBlur } from "./keyframed-bloom-blur";
 import { createLutAtlasTextureFrom3dlText } from "./lut-atlas-texture";
 import {
     FRAME_GRAPH_POST_EFFECT_IDS,
@@ -213,6 +214,7 @@ export type FrameGraphPostEffectsSettings = {
     bloomWeight: number;
     bloomThreshold: number;
     bloomKernel: number;
+    bloomPrepared?: boolean;
     bloomColor: { r: number; g: number; b: number };
     vignetteEnabled: boolean;
     vignetteWeight: number;
@@ -2132,6 +2134,7 @@ export class FrameGraphPostEffectsController {
         if (!this.ready) return false;
         const settings = this.getSettings();
         if (settings.luminousPrepared && !this.areLuminousEffectsReady()) return false;
+        if (settings.bloomPrepared && !this.bloomTask?.bloom.isReady()) return false;
         if (settings.lutEnabled && settings.lutRuntimeText
             && (this.lutTextureKey !== settings.lutTextureKey || !this.lutTexture?.isReady())) return false;
         return true;
@@ -3004,6 +3007,7 @@ export class FrameGraphPostEffectsController {
             Math.max(0, initialSettings.bloomThreshold),
             false,
         );
+        if (initialSettings.bloomPrepared) applyFrameGraphKeyframedBloomBlur(bloomTask.bloom, initialSettings.bloomKernel);
         bloomTask.sourceTexture = luminousOutputTexture;
         bloomTask.disabled = !initialSettings.bloomEnabled;
         deferEffectTask("bloom", bloomTask);
@@ -3761,7 +3765,8 @@ export class FrameGraphPostEffectsController {
     ): void {
         bloomTask.bloom.weight = Math.max(0, settings.bloomWeight);
         bloomTask.bloom.threshold = Math.max(0, settings.bloomThreshold);
-        bloomTask.bloom.kernel = Math.max(1, settings.bloomKernel);
+        if (settings.bloomPrepared) applyFrameGraphKeyframedBloomBlur(bloomTask.bloom, settings.bloomKernel);
+        else bloomTask.bloom.kernel = Math.max(1, settings.bloomKernel);
     }
 
     private isLutEnabled(settings: FrameGraphPostEffectsSettings): boolean {

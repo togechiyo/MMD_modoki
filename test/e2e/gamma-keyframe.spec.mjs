@@ -3,6 +3,7 @@ import { existsSync, readFileSync, mkdirSync, statSync, writeFileSync } from "no
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyEffectShapeKeys } from "./effect-shape-checks.mjs";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -109,7 +110,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
       await expect(slider).toHaveValue("120");
       await expect(threshold).toHaveValue("80");
       await page.locator("#btn-kf-add").click();
-      expect((await savedKeys()).keys.find(key => key.frame === 10).value).toEqual({ enabled: true, weight: 1.2, threshold: 0.8 });
+      expect((await savedKeys()).keys.find(key => key.frame === 10).value).toEqual({ enabled: true, weight: 1.2, threshold: 0.8, kernel: 100 });
       await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
       expect((await savedKeys()).keys.map(key => key.frame)).toEqual([0, 20, 40]);
       await seek(page, 0);
@@ -136,7 +137,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
       await slider.fill("130"); await slider.dispatchEvent("input");
       expect((await savedKeys()).preview.value.threshold).toBeCloseTo(untouchedThreshold, 12);
       await enabled.uncheck();
-      expect((await savedKeys()).preview.value).toEqual({ enabled: false, weight: 1.3, threshold: untouchedThreshold });
+      expect((await savedKeys()).preview.value).toEqual({ enabled: false, weight: 1.3, threshold: untouchedThreshold, kernel: 100 });
       await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
       expect((await savedKeys()).keys.map(key => key.frame)).toEqual([0, 20, 40, 60]);
     }
@@ -325,6 +326,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
       expect(difference(videoFrames[0], pngs[1])).toBeGreaterThan(difference(videoFrames[1], pngs[1]) * 3);
       for (const index of [1, 2]) expect(report[index].matchingPngDifference).toBeLessThan(report[index].oppositePngDifference);
     }
+    if (effectId === "bloom") await verifyEffectShapeKeys(page, launched.app, testInfo, effectId, selectEffect);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });
     expect(errors).toEqual([]);
   } finally {

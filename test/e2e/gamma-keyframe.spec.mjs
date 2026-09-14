@@ -20,21 +20,26 @@ async function menu(page, command) {
   await page.locator(`[data-menu-command="${command}"]`).click();
 }
 
-async function selectGamma(page) {
+async function selectEffect(page, id) {
   // Camera mode has one spacer row after Camera.
-  const index = await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().findIndex(track => track.category === "gamma"));
+  const index = await page.evaluate(id => window.mmdModokiE2e.getTimelineTracks().findIndex(track => track.category === "effect" && track.name === id), id);
   expect(index).toBeGreaterThan(0);
   await page.locator("#timeline-labels").evaluate(element => { element.scrollTop = 0; });
   await page.locator("#timeline-label-canvas").click({ position: { x: 40, y: 20 + (index + 1) * 18 + 9 } });
-  await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack)).toEqual({ name: "Gamma", category: "gamma" });
+  await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack)).toEqual({ name: id, category: "effect" });
 }
 
 for (const backend of ["frameGraph", "classic"]) {
-test(`camera gamma keys: ${backend} registration, playback, save and output`, async ({}, testInfo) => {
+for (const effectId of ["gamma", "grain"]) {
+test(`camera ${effectId} keys: ${backend} registration, playback, save and output`, async ({}, testInfo) => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
     const errors = [];
+    page.on("dialog", dialog => {
+      if (dialog.type() !== "beforeunload") errors.push(`Unexpected dialog: ${dialog.message()}`);
+      void dialog.dismiss().catch(() => undefined);
+    });
     page.on("pageerror", error => errors.push(error.message));
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     if (backend === "classic") {
@@ -45,12 +50,12 @@ test(`camera gamma keys: ${backend} registration, playback, save and output`, as
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().backend)).toBe(backend);
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath);
     await page.locator("#btn-toolbar-mode-toggle").click();
-    await selectGamma(page);
-    await expect(page.locator("#gamma-key-controls")).toBeVisible();
-    await expect(page.locator("#gamma-key-controls label")).toHaveText("ガンマ");
-    const enabled = page.locator("#gamma-key-enabled");
-    const slider = page.locator("#gamma-key-value");
-    const savedKeys = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().keyframes.gammaAnimation);
+    await selectEffect(page, effectId);
+    await expect(page.locator("#effect-key-controls")).toBeVisible();
+    await expect(page.locator("#effect-key-controls label")).toHaveText(effectId === "gamma" ? "ガンマ" : "グレイン");
+    const enabled = page.locator("#effect-key-enabled");
+    const slider = page.locator("#effect-key-value");
+    const savedKeys = () => page.evaluate(id => window.mmdModokiE2e.exportProjectState().keyframes.effectAnimations.tracks.find(track => track.effectId === id), effectId);
     const add = async (frame, on, offset) => {
       await seek(page, frame);
       await enabled.setChecked(on);
@@ -59,57 +64,57 @@ test(`camera gamma keys: ${backend} registration, playback, save and output`, as
       await page.locator("#btn-kf-add").click();
     };
     await add(0, true, 100);
-    await add(20, false, -100);
+    await add(20, false, effectId === "gamma" ? -100 : 100);
     await add(40, true, 0);
-    expect(await savedKeys()).toMatchObject({ frameNumbers: [0, 20, 40], enabled: [true, false, true], gammas: [0.5, 2, 1] });
+    expect(await savedKeys()).toMatchObject({ effectId, valueVersion: 1, keys: effectId === "gamma" ? [{ frame: 0, value: { enabled: true, gamma: 0.5 } }, { frame: 20, value: { enabled: false, gamma: 2 } }, { frame: 40, value: { enabled: true, gamma: 1 } }] : [{ frame: 0, value: { enabled: true, intensity: 100 } }, { frame: 20, value: { enabled: false, intensity: 100 } }, { frame: 40, value: { enabled: true, intensity: 0 } }] });
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-    expect((await savedKeys()).frameNumbers).toEqual([0, 20]);
+    expect((await savedKeys()).keys.map(key => key.frame)).toEqual([0, 20]);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
-    expect((await savedKeys()).frameNumbers).toEqual([0, 20, 40]);
+    expect((await savedKeys()).keys.map(key => key.frame)).toEqual([0, 20, 40]);
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
     await seek(page, 10);
-    await expect(slider).toHaveValue("0");
+    await expect(slider).toHaveValue(effectId === "gamma" ? "0" : "100");
     await expect(enabled).toBeChecked();
     await seek(page, 19);
     await expect(enabled).toBeChecked();
     await seek(page, 20);
     await expect(enabled).not.toBeChecked();
-    await expect(slider).toHaveValue("-100");
+    await expect(slider).toHaveValue(effectId === "gamma" ? "-100" : "100");
     await seek(page, 30);
-    await expect(slider).toHaveValue("-50");
+    await expect(slider).toHaveValue(effectId === "gamma" ? "-50" : "50");
     await expect(enabled).not.toBeChecked();
     await seek(page, 40);
     await expect(enabled).toBeChecked();
     await seek(page, 0);
     await expect(slider).toHaveValue("100");
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
-    await page.screenshot({ path: testInfo.outputPath("gamma-key-ui.png") });
+    await page.screenshot({ path: testInfo.outputPath("effect-key-ui.png") });
 
     // Copy/paste and delete share normal command history.
     await page.locator("#btn-kf-copy").click();
     await seek(page, 60);
     await page.locator("#btn-kf-paste").click();
-    expect((await savedKeys()).frameNumbers).toContain(60);
+    expect((await savedKeys()).keys.map(key => key.frame)).toContain(60);
     await page.locator("#btn-kf-delete").click();
-    expect((await savedKeys()).frameNumbers).not.toContain(60);
+    expect((await savedKeys()).keys.map(key => key.frame)).not.toContain(60);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-    expect((await savedKeys()).frameNumbers).toContain(60);
+    expect((await savedKeys()).keys.map(key => key.frame)).toContain(60);
 
     const path = testInfo.outputPath("gamma-project.json");
     await launched.app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, path);
     await menu(page, "file.saveProject");
     await expect.poll(() => existsSync(path)).toBe(true);
     const saved = JSON.parse(readFileSync(path, "utf8"));
-    expect(saved.keyframes.gammaAnimation.frameNumbers).toContain(60);
+    expect(saved.keyframes.effectAnimations.tracks.find(track => track.effectId === effectId).keys.map(key => key.frame)).toContain(60);
     await launched.app.evaluate(({ dialog }, filePath) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] }); }, path);
     await menu(page, "file.loadProject");
     await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
-    await selectGamma(page);
+    await selectEffect(page, effectId);
     await seek(page, 20);
     await expect(enabled).not.toBeChecked();
-    await expect(slider).toHaveValue("-100");
-    expect(await savedKeys()).toEqual(saved.keyframes.gammaAnimation);
+    await expect(slider).toHaveValue(effectId === "gamma" ? "-100" : "100");
+    expect(await savedKeys()).toEqual(saved.keyframes.effectAnimations.tracks.find(track => track.effectId === effectId));
 
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeDisabled();
@@ -117,9 +122,71 @@ test(`camera gamma keys: ${backend} registration, playback, save and output`, as
     await expect(page.locator("#btn-kf-add")).toBeDisabled();
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeEnabled();
-    for (const [locale, label] of [["en", "Gamma"], ["zh-Hant", "伽瑪"], ["zh-Hans", "伽马"], ["ko", "감마"], ["ja", "ガンマ"]]) {
+    for (const [locale, label] of Object.entries(Object.fromEntries(["en", "zh-Hant", "zh-Hans", "ko", "ja"].map(locale => [locale, JSON.parse(readFileSync(resolve(repoRoot, `language/${locale}.json`), "utf8").replace(/^\uFEFF/, ""))[`effect.frameGraphPost.effects.${effectId}`]])))) {
       await page.locator("#toolbar-locale-select").selectOption(locale);
-      await expect(page.locator("#gamma-key-controls label")).toHaveText(label);
+      await expect(page.locator("#effect-key-controls label")).toHaveText(label);
+    }
+
+    // A stopped preview is saved separately and must not replace the authored keys.
+    await seek(page, 10);
+    await slider.fill("17");
+    await slider.dispatchEvent("input");
+    const previewState = await savedKeys();
+    expect(previewState.preview.frame).toBe(10);
+    expect(previewState.keys).toEqual(saved.keyframes.effectAnimations.tracks.find(track => track.effectId === effectId).keys);
+    await menu(page, "file.saveProject");
+    await expect.poll(() => JSON.parse(readFileSync(path, "utf8")).keyframes.effectAnimations.tracks.find(track => track.effectId === effectId).preview?.frame).toBe(10);
+    await menu(page, "file.loadProject");
+    await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
+    await selectEffect(page, effectId);
+    await expect(slider).toHaveValue("17");
+    if (effectId === "gamma") {
+      const capture = async name => {
+        const output = testInfo.outputPath(name);
+        mkdirSync(output, { recursive: true });
+        await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output, 640, 360), output);
+        return PNG.sync.read(readFileSync(resolve(output, "single_rgba_surface_e2e.png"))).data;
+      };
+      const withPreview = await capture("preview-export");
+      await expect(slider).toHaveValue("17");
+      await seek(page, 11);
+      await seek(page, 10);
+      const authored = await capture("authored-export");
+      expect(withPreview.equals(authored)).toBe(true);
+    }
+    await seek(page, 20);
+    await expect(slider).toHaveValue(effectId === "gamma" ? "-100" : "100");
+    expect((await savedKeys()).preview).toBeUndefined();
+
+    if (backend === "frameGraph") {
+      const remove = page.locator(`[data-effect-stack-remove="${effectId}"]`);
+      if (!await remove.isVisible()) await page.locator("#btn-toggle-shader-panel").click();
+      await remove.click();
+      await expect(page.locator("[data-effect-key-state]")).toHaveText("スタックから外れています");
+      expect((await savedKeys()).keys).toEqual(previewState.keys);
+      await page.locator("#btn-effect-add-post").click();
+      await page.locator(`[data-effect-add-post="${effectId}"]`).click();
+      await expect(page.locator("[data-effect-key-state]")).toHaveText("");
+      await expect(slider).toHaveValue(effectId === "gamma" ? "-100" : "100");
+      await page.locator("#btn-effect-toggle-framegraph").click();
+      await expect(page.locator("#btn-effect-toggle-framegraph")).toHaveAttribute("aria-pressed", "false");
+      await page.locator("#btn-effect-toggle-framegraph").click();
+      await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+    }
+
+    if (backend === "frameGraph" && effectId === "gamma") {
+      for (const nextBackend of ["classic", "frameGraph"]) {
+        const select = page.locator('select[data-postfx-select="backend"]');
+        await select.selectOption(nextBackend, { force: true });
+        await page.waitForFunction(value => window.mmdModokiE2e?.getFrameGraphPostEffectsState().backend === value, nextBackend);
+        await expect(page.locator("#status-text")).toContainText("Project restored after Runtime change");
+        await expect.poll(savedKeys).toMatchObject({ keys: previewState.keys });
+        await selectEffect(page, effectId);
+        await seek(page, 20);
+        await expect(enabled).not.toBeChecked();
+        await expect(slider).toHaveValue("-100");
+        await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+      }
     }
 
     const pngPaths = [];
@@ -150,7 +217,10 @@ test(`camera gamma keys: ${backend} registration, playback, save and output`, as
     await page.locator("#webm-output-fps").selectOption("30");
     await page.locator("#webm-output-include-audio").uncheck();
     await page.getByRole("button", { name: "WebM出力", exact: true }).click();
-    await expect.poll(() => existsSync(webmPath) && statSync(webmPath).size > 1000, { timeout: 60000 }).toBe(true);
+    await expect.poll(async () => {
+      if (existsSync(webmPath) && statSync(webmPath).size > 1000) return "written";
+      return await page.locator("#status-text").textContent();
+    }, { timeout: 60000 }).toBe("written");
     await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 30000 });
     const videoFrames = await page.evaluate(async path => {
       const bytes = await window.electronAPI.readBinaryFile(path);
@@ -185,11 +255,20 @@ test(`camera gamma keys: ${backend} registration, playback, save and output`, as
     }, webmPath);
     const report = videoFrames.map((frame, index) => ({ frame: [0, 20, 40][index], matchingPngDifference: difference(frame, pngs[index]), oppositePngDifference: difference(frame, pngs[index === 0 ? 1 : 0]) }));
     writeFileSync(testInfo.outputPath("gamma-output-comparison.json"), JSON.stringify(report, null, 2));
-    for (const item of report) expect(item.matchingPngDifference).toBeLessThan(item.oppositePngDifference);
+    if (effectId === "gamma") {
+      for (const item of report) expect(item.matchingPngDifference).toBeLessThan(item.oppositePngDifference);
+    } else {
+      // Animated grain uses a fresh random seed. Compare noise against the clean image,
+      // rather than requiring independently rendered noise samples to match.
+      expect(difference(videoFrames[0], pngs[1])).toBeGreaterThan(2);
+      expect(difference(videoFrames[0], pngs[1])).toBeGreaterThan(difference(videoFrames[1], pngs[1]) * 3);
+      for (const index of [1, 2]) expect(report[index].matchingPngDifference).toBeLessThan(report[index].oppositePngDifference);
+    }
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });
     expect(errors).toEqual([]);
   } finally {
     await launched.close();
   }
 });
+}
 }

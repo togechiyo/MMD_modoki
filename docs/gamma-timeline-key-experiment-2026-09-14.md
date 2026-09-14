@@ -2,6 +2,8 @@
 
 更新日: 2026-09-14
 
+本書はcommit `41505e6`時点の単独PoCの記録。現在は[エフェクト共通基盤](./effect-timeline-common-foundation-design-2026-09-14.md)へ置換し、保存先は`keyframes.effectAnimations`。旧`gammaAnimation`の読み込み・変換・互換出力は行わない。
+
 ## 採用範囲
 
 所有者が、次release前の最小実験としてガンマだけのキー登録を指定した。カメラモードのタイムラインへ「ガンマ」行を置き、ON / OFFと既存スライダー値を同じキーへ記録する。全エフェクトへの展開は今回の採用範囲に含めない。

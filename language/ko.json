@@ -614,6 +614,8 @@
     "effect.frameGraphPost.effects.luminous":  "루미너스",
     "effect.frameGraphPost.effects.bloom":  "블룸",
     "effect.frameGraphPost.effects.lut":  "LUT",
+    "timeline.effect": "효과",
+    "timeline.effectSuspended": "효과 스택에서 제외됨",
     "timeline.gamma": "감마",
     "effect.frameGraphPost.effects.gamma":  "감마",
     "effect.frameGraphPost.effects.motionBlur":  "모션 블러",

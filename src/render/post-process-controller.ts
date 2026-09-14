@@ -108,6 +108,7 @@ type PostProcessHost = {
     postEffectBloomWeightValue: number;
     postEffectBloomThresholdValue: number;
     postEffectBloomKernelValue: number;
+    effectKeyframeGrainPrepared?: boolean;
     postEffectMotionBlurEnabledValue: boolean;
     postEffectMotionBlurStrengthValue: number;
     postEffectMotionBlurSamplesValue: number;
@@ -1562,7 +1563,7 @@ export function applyDefaultPipelinePostProcessSettings(host: PostProcessHost): 
         pipeline.chromaticAberration.screenHeight = host.engine.getRenderHeight();
     }
 
-    pipeline.grainEnabled = useClassicDefaultPipelineEffects && host.postEffectGrainIntensityValue > 1e-4;
+    pipeline.grainEnabled = useClassicDefaultPipelineEffects && (host.effectKeyframeGrainPrepared === true || host.postEffectGrainIntensityValue > 1e-4);
     if (pipeline.grain) {
         pipeline.grain.intensity = host.postEffectGrainIntensityValue;
         pipeline.grain.animated = false;

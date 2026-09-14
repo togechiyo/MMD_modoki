@@ -254,7 +254,9 @@ type ProjectExportHost = {
     getSerializedLightSceneTrack?: () => ProjectSerializedLightSceneTrack | null;
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
-    getSerializedGammaSceneTrack?: () => import("../editor/gamma-scene-track").SerializedGammaSceneTrack | null;
+    getSerializedEffectSceneTracks?: () => import("../editor/effect-scene-track-store").SerializedEffectAnimations;
+    getStaticPostEffectGamma?: () => number;
+    getStaticPostEffectGrainIntensity?: () => number;
     getDofFocusMode?: () => "camera-target" | "person-auto" | "model-target";
     getDofFocusTargetModelPath?: () => string | null;
     getDofFocusTargetModelInstanceId?: () => string | null;
@@ -353,8 +355,8 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
     if (shadowAnimation) {
         keyframes.shadowAnimation = shadowAnimation;
     }
-    const gammaAnimation = host.getSerializedGammaSceneTrack?.() ?? null;
-    if (gammaAnimation) keyframes.gammaAnimation = gammaAnimation;
+    const effectAnimations = host.getSerializedEffectSceneTracks?.();
+    if (effectAnimations) keyframes.effectAnimations = effectAnimations;
     const gravityAnimation = host.getSerializedGravitySceneTrack?.() ?? null;
     if (gravityAnimation) {
         keyframes.gravityAnimation = gravityAnimation;
@@ -512,7 +514,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             modelEdgeColorOverrideEnabled: host.modelEdgeColorOverrideEnabled,
             modelEdgeColor: host.getModelEdgeColor(),
             contrast: host.postEffectContrast,
-            gamma: host.postEffectGamma,
+            gamma: host.getStaticPostEffectGamma?.() ?? host.postEffectGamma,
             exposure: host.postEffectExposure,
             toneMappingEnabled: host.postEffectToneMappingEnabled,
             toneMappingType: host.postEffectToneMappingType,
@@ -526,7 +528,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             bloomKernel: host.postEffectBloomKernel,
             bloomColor: host.getPostEffectBloomColor(),
             chromaticAberration: host.postEffectChromaticAberration,
-            grainIntensity: host.postEffectGrainIntensity,
+            grainIntensity: host.getStaticPostEffectGrainIntensity?.() ?? host.postEffectGrainIntensity,
             sharpenEdge: host.postEffectSharpenEdge,
             ssaoEnabled: host.postEffectSsaoEnabled,
             ssaoStrength: host.postEffectSsaoStrength,

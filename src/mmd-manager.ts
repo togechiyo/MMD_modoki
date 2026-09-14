@@ -479,7 +479,7 @@ import {
     type LightKeyframePayload,
     type ShadowKeyframePayload,
     type GravityKeyframePayload,
-    type GammaKeyframePayload,
+    type EffectKeyframePayload,
 } from "./editor/timeline-edit-service";
 import {
     createGravitySceneTrack,
@@ -506,7 +506,10 @@ import {
     type SerializedGravitySceneTrack,
     type SerializedShadowSceneTrack,
 } from "./editor/scene-keyframe-track";
-import { createGammaSceneTrack, deserializeGammaSceneTrack, evaluateGammaSceneTrack, normalizeGammaSceneValue, serializeGammaSceneTrack, type GammaSceneValue, type SerializedGammaSceneTrack } from "./editor/gamma-scene-track";
+import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
+import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue } from "./editor/effect-keyframe-definitions";
+import { effectRenderValues } from "./render/effect-keyframe-runtime";
+import { EffectPlaybackPreparation } from "./render/effect-playback-preparation";
 import {
     buildMmdAnimationFromEditorMotion,
     createEditorModelMotionFromMmdAnimation,
@@ -1957,9 +1960,11 @@ ${beforeFogAppendBlock}
     private lastEvaluatedShadowSceneFrame: number | null = null;
     private gravitySceneTrack: SceneKeyframeTrack<GravitySceneKeyframeValue> | null = null;
     private lastEvaluatedGravitySceneFrame: number | null = null;
-    private gammaSceneTrack: SceneKeyframeTrack<GammaSceneValue> | null = null;
-    private gammaSceneEnabled = false;
-    private lastEvaluatedGammaSceneFrame: number | null = null;
+    public onEffectKeyframePreviewChanged: (() => void) | null = null;
+    private readonly effectSceneTracks = new EffectSceneTrackStore();
+    private effectCaptureDepth = 0;
+    private readonly effectPlaybackPreparation = new EffectPlaybackPreparation();
+    private effectRenderState = { gammaPower: 1, grainIntensity: 0, grainPrepared: false };
     private timelineTarget: TimelineTarget = "model";
     private activeTimelineAccessoryIndex: number | null = null;
     private boneVisualizerTarget: { mesh: Mesh; skeleton: Skeleton | null; pairs: Array<[number, number]>; positionMesh: Mesh; runtimeBones: readonly IMmdRuntimeBone[] | null; runtimeUseMeshWorldMatrix: boolean; boneControlInfoByName: ReadonlyMap<string, BoneControlInfo> } | null = null;
@@ -6374,97 +6379,90 @@ ${beforeFogAppendBlock}
         emitMergedKeyframeTracksImpl(this);
     }
 
-    public getGammaSceneKeyframeFrames(): Uint32Array {
-        return new Uint32Array(this.gammaSceneTrack?.keyframes.map(key => key.frame) ?? []);
+    public getEffectSceneKeyframeFrames(id?: string): Uint32Array {
+        if (id !== undefined) return isEffectId(id) ? this.effectSceneTracks.frames(id) : new Uint32Array();
+        return new Uint32Array([...new Set(this.effectSceneTracks.ids().flatMap(effect => [...this.effectSceneTracks.frames(effect)]))].sort((a, b) => a - b));
     }
-
-    public captureCurrentGammaKeyframePayload(): GammaKeyframePayload {
-        return {
-            kind: "gamma",
-            enabled: this.gammaSceneTrack ? this.gammaSceneEnabled : this.postEffectBackend === "frameGraph"
-                ? this.isFrameGraphPostEffectActive("gamma") : Math.abs(this.postEffectGammaValue - 1) > 0.000001,
-            gamma: this.postEffectGammaValue,
-        };
+    public getEffectTimelineTracks(): KeyframeTrack[] {
+        return EFFECT_KEYFRAME_DEFINITIONS
+            .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
-
-    public setGammaScenePreview(enabled: boolean, gamma: number): void {
-        const first = this.gammaSceneTrack === null;
-        if (first) this.gammaSceneTrack = createGammaSceneTrack(this.captureCurrentGammaKeyframePayload());
-        const value = normalizeGammaSceneValue({ enabled, gamma });
-        this.gammaSceneEnabled = value.enabled;
-        this.postEffectGamma = value.gamma;
-        // An unkeyed track is a static setting; retain it across save/load.
-        if (this.gammaSceneTrack && this.gammaSceneTrack.keyframes.length === 0) this.gammaSceneTrack.baseValue = value;
-        if (first) this.refreshFrameGraphPostEffectsBackendForOrderChange();
+    private getStaticEffectValue(id: EffectId): EffectValue {
+        const enabled = this.frameGraphPostEffectStackEnabledValue.get(id) ?? (id === "gamma" ? this.postEffectGammaValue !== 1 : this.postEffectGrainIntensityValue > 0);
+        return id === "gamma" ? { enabled, gamma: this.postEffectGammaValue } : { enabled, intensity: this.postEffectGrainIntensityValue };
     }
-
-    public readGammaSceneKeyframePayload(frame: number): GammaKeyframePayload | null {
-        const key = this.gammaSceneTrack?.keyframes.find(candidate => candidate.frame === Math.max(0, Math.floor(frame)));
-        return key ? { kind: "gamma", ...key.value } : null;
+    public captureCurrentEffectKeyframePayload(id: string): EffectKeyframePayload {
+        if (!isEffectId(id)) throw new Error(`Unsupported effect key: ${id}`);
+        return makeEffectPayload(id, this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying) ?? this.getStaticEffectValue(id));
     }
-
-    private gammaSceneTrackChanged(structureChanged = false): void {
-        this.lastEvaluatedGammaSceneFrame = null;
-        if (this.gammaSceneTrack) {
-            const value = evaluateGammaSceneTrack(this.gammaSceneTrack, this._currentFrame);
-            this.gammaSceneEnabled = value.enabled;
-            this.postEffectGamma = value.gamma;
-            this.lastEvaluatedGammaSceneFrame = Math.max(0, Math.floor(this._currentFrame));
-        }
-        if (structureChanged) this.refreshFrameGraphPostEffectsBackendForOrderChange();
+    public hasEffectSceneTrack(id: EffectId): boolean { return this.effectSceneTracks.has(id); }
+    public isEffectTrackSuspended(id: string): boolean {
+        return isEffectId(id) && this.effectSceneTracks.has(id) && !this.getFrameGraphPostEffectStackIds().includes(id);
+    }
+    public setEffectScenePreview(id: EffectId, value: unknown): void {
+        if (this.isPlaying) return;
+        const first = !this.effectSceneTracks.has(id);
+        this.effectSceneTracks.preview(id, this._currentFrame, value, this.getStaticEffectValue(id));
+        if (first) this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(this.getFrameGraphPostEffectStackIds(), id));
+        if (first) this.applyDefaultPipelinePostProcessSettings();
+        this.evaluateEffectTracks(this._currentFrame);
+        this.onEffectKeyframePreviewChanged?.();
+    }
+    public readEffectSceneKeyframePayload(id: string, frame: number): EffectKeyframePayload | null {
+        return isEffectId(id) ? this.effectSceneTracks.read(id, frame) : null;
+    }
+    private effectSceneTracksChanged(): void {
+        this.evaluateEffectTracks(this._currentFrame);
         refreshTotalFramesFromContentImpl(this);
         emitMergedKeyframeTracksImpl(this);
     }
-
-    public applyGammaSceneKeyframePayload(frame: number, payload: GammaKeyframePayload | null): boolean {
-        const first = this.gammaSceneTrack === null;
-        if (payload === null) {
-            if (!this.gammaSceneTrack) return false;
-            const next = removeSceneKeyframe(this.gammaSceneTrack, frame);
-            if (!next) return false;
-            this.gammaSceneTrack = next;
-        } else {
-            const track = this.gammaSceneTrack ?? createGammaSceneTrack(this.captureCurrentGammaKeyframePayload());
-            this.gammaSceneTrack = upsertSceneKeyframe(track, frame, normalizeGammaSceneValue(payload));
+    public applyEffectSceneKeyframePayload(id: string, frame: number, payload: EffectKeyframePayload | null): boolean {
+        if (!isEffectId(id)) return false;
+        const first = !this.effectSceneTracks.has(id);
+        if (!this.effectSceneTracks.apply(id, frame, payload, this.getStaticEffectValue(id))) return false;
+        if (first) {
+            this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(this.getFrameGraphPostEffectStackIds(), id));
+            this.applyDefaultPipelinePostProcessSettings();
         }
-        this.gammaSceneTrackChanged(first);
+        this.effectSceneTracksChanged();
         return true;
     }
-
-    public removeGammaSceneKeyframePayloads(frames: readonly number[]): boolean {
-        if (!this.gammaSceneTrack) return false;
-        let next = this.gammaSceneTrack;
-        for (const frame of frames) {
-            const removed = removeSceneKeyframe(next, frame);
-            if (!removed) return false;
-            next = removed;
+    public removeEffectSceneKeyframePayloads(id: string, frames: readonly number[]): boolean {
+        if (!isEffectId(id) || !this.effectSceneTracks.remove(id, frames)) return false;
+        this.effectSceneTracksChanged();
+        return true;
+    }
+    public moveEffectSceneKeyframe(id: string, fromFrame: number, toFrame: number): boolean {
+        if (!isEffectId(id) || !this.effectSceneTracks.move(id, fromFrame, toFrame)) return false;
+        this.effectSceneTracksChanged();
+        return true;
+    }
+    public getSerializedEffectSceneTracks(): SerializedEffectAnimations { return this.effectSceneTracks.serialize(); }
+    public setSerializedEffectSceneTracks(data: unknown): void {
+        this.effectSceneTracks.restore(data);
+        this.applyDefaultPipelinePostProcessSettings();
+        this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        this.effectSceneTracksChanged();
+    }
+    public getStaticPostEffectGamma(): number { return this.postEffectGammaValue; }
+    public getStaticPostEffectGrainIntensity(): number { return this.postEffectGrainIntensityValue; }
+    public get effectKeyframeGrainPrepared(): boolean {
+        return this.effectSceneTracks.has("grain") && this.getFrameGraphPostEffectStackIds().includes("grain");
+    }
+    private evaluateEffectTracks(frame: number): void {
+        if (this._isPlaying) this.effectSceneTracks.clearPreviews();
+        const withPreview = !this._isPlaying && this.effectCaptureDepth === 0;
+        this.effectRenderState = effectRenderValues(
+            this.effectSceneTracks.evaluate("gamma", frame, withPreview), this.effectSceneTracks.evaluate("grain", frame, withPreview),
+            this.postEffectGammaValue, this.postEffectGrainIntensityValue,
+            this.getFrameGraphPostEffectStackIds().includes("gamma"), this.getFrameGraphPostEffectStackIds().includes("grain"),
+        );
+        if (this.postEffectBackend === "classic" && this.defaultRenderingPipeline?.grain) {
+            this.defaultRenderingPipeline.grain.intensity = this.effectRenderState.grainIntensity;
         }
-        this.gammaSceneTrack = next;
-        this.gammaSceneTrackChanged();
-        return true;
-    }
-
-    public moveGammaSceneKeyframe(fromFrame: number, toFrame: number): boolean {
-        if (!this.gammaSceneTrack) return false;
-        const next = moveSceneKeyframe(this.gammaSceneTrack, fromFrame, toFrame);
-        if (!next) return false;
-        this.gammaSceneTrack = next;
-        this.gammaSceneTrackChanged();
-        return true;
-    }
-
-    public getSerializedGammaSceneTrack(): SerializedGammaSceneTrack | null {
-        return serializeGammaSceneTrack(this.gammaSceneTrack);
-    }
-
-    public setSerializedGammaSceneTrack(data: SerializedGammaSceneTrack | null | undefined): void {
-        const hadTrack = this.gammaSceneTrack !== null;
-        this.gammaSceneTrack = deserializeGammaSceneTrack(data);
-        this.gammaSceneTrackChanged(hadTrack !== (this.gammaSceneTrack !== null));
     }
 
     public refreshSceneTracksAtCurrentFrame(): void {
-        this.lastEvaluatedGammaSceneFrame = null;
         this.lastEvaluatedLightSceneFrame = null;
         this.lastEvaluatedShadowSceneFrame = null;
         this.lastEvaluatedGravitySceneFrame = null;
@@ -6473,12 +6471,7 @@ ${beforeFogAppendBlock}
 
     private evaluateSceneTracksAtFrame(frame: number): void {
         const normalizedFrame = Math.max(0, Math.floor(frame));
-        if (this.gammaSceneTrack?.keyframes.length && this.lastEvaluatedGammaSceneFrame !== normalizedFrame) {
-            this.lastEvaluatedGammaSceneFrame = normalizedFrame;
-            const value = evaluateGammaSceneTrack(this.gammaSceneTrack, normalizedFrame);
-            this.gammaSceneEnabled = value.enabled;
-            this.postEffectGamma = value.gamma;
-        }
+        this.evaluateEffectTracks(normalizedFrame);
         this.evaluateAccessoryTransformKeyframes(normalizedFrame);
         if (this.lightSceneTrack?.keyframes.length && this.lastEvaluatedLightSceneFrame !== normalizedFrame) {
             this.lastEvaluatedLightSceneFrame = normalizedFrame;
@@ -9773,7 +9766,20 @@ ${beforeFogAppendBlock}
     }
 
     play(): void {
-        if (!this.currentModel) return;
+        if (!this.currentModel || this.effectPlaybackPreparation.pending) return;
+        if (this.effectSceneTracks.ids().length && !this.isPostEffectBackendReadyForCapture()) {
+            this.effectSceneTracks.clearPreviews();
+            this.effectPlaybackPreparation.run(
+                () => this.waitForPostEffectBackendReadyForCapture(),
+                () => this.play(),
+                () => {
+                    logWarn("render", "effect preparation failed before playback", { backend: this.postEffectBackend });
+                    this.onError?.("Post effects were not ready; playback was canceled");
+                    this.onFrameUpdate?.(this._currentFrame, this._totalFrames);
+                },
+            );
+            return;
+        }
         this._isPlaying = true;
         this.manualPlaybackWithoutAudio = false;
         this.refreshActiveRuntimeAnimationHandles();
@@ -9804,6 +9810,7 @@ ${beforeFogAppendBlock}
     }
 
     pause(): void {
+        this.effectPlaybackPreparation.cancel();
         this._isPlaying = false;
         this.manualPlaybackWithoutAudio = false;
         this.physicsController.syncBulletEvaluationTypeForPlayback(false);
@@ -9815,6 +9822,7 @@ ${beforeFogAppendBlock}
     }
 
     stop(): void {
+        this.effectPlaybackPreparation.cancel();
         this._isPlaying = false;
         this.manualPlaybackWithoutAudio = false;
         this.manualPlaybackFrameCursor = 0;
@@ -9841,6 +9849,7 @@ ${beforeFogAppendBlock}
             this._totalFrames = targetFrame;
         }
         this._currentFrame = targetFrame;
+        this.effectSceneTracks.clearPreviewsOutside(targetFrame);
         this.evaluateSceneTracksAtFrame(this._currentFrame);
         this.mmdRuntime.seekAnimation(this._currentFrame, true);
         this.applyActiveModelPropertyPreview(this._currentFrame);
@@ -10069,7 +10078,7 @@ ${beforeFogAppendBlock}
     }
 
     get isPlaying(): boolean {
-        return this._isPlaying;
+        return this._isPlaying || this.effectPlaybackPreparation.pending;
     }
 
     get currentFrame(): number {
@@ -10278,9 +10287,7 @@ ${beforeFogAppendBlock}
         this.lastEvaluatedShadowSceneFrame = null;
         this.gravitySceneTrack = null;
         this.lastEvaluatedGravitySceneFrame = null;
-        this.gammaSceneTrack = null;
-        this.gammaSceneEnabled = false;
-        this.lastEvaluatedGammaSceneFrame = null;
+        this.effectSceneTracks.restore(null);
 
         if (this.audioPlayer) {
             void this.mmdRuntime.setAudioPlayer(null);
@@ -11071,8 +11078,8 @@ ${beforeFogAppendBlock}
         this.updateEditorDofFocusAndFStop();
         return {
             contrast: this.postEffectContrastValue,
-            gammaPower: this.gammaSceneTrack && !this.gammaSceneEnabled ? 1 : this.postEffectGammaValue,
-            gammaEnabled: this.gammaSceneTrack !== null || this.isFrameGraphPostEffectActive("gamma"),
+            gammaPower: this.effectRenderState.gammaPower,
+            gammaEnabled: this.effectSceneTracks.has("gamma") ? this.getFrameGraphPostEffectStackIds().includes("gamma") : this.isFrameGraphPostEffectActive("gamma"),
             imageProcessingEnabled: this.isFrameGraphImageProcessingTaskNeeded(),
             dofEnabled: this.isFrameGraphPostEffectActive("dof"),
             dofBlurLevel: this.dofBlurLevelValue,
@@ -11099,7 +11106,7 @@ ${beforeFogAppendBlock}
             lensDistortionEnabled: this.isFrameGraphPostEffectActive("distortion"),
             lensDistortion: this.isFrameGraphPostEffectActive("distortion") ? this.dofLensDistortionValue : 0,
             chromaticAberration: this.isFrameGraphPostEffectActive("chromatic") ? this.postEffectChromaticAberrationValue : 0,
-            grainIntensity: this.isFrameGraphPostEffectActive("grain") ? this.postEffectGrainIntensityValue : 0,
+            grainIntensity: this.effectSceneTracks.has("grain") ? this.effectRenderState.grainIntensity : this.isFrameGraphPostEffectActive("grain") ? this.postEffectGrainIntensityValue : 0,
             sharpenEdge: this.isFrameGraphPostEffectActive("sharpen") ? this.postEffectSharpenEdgeValue : 0,
             ssaoEnabled: this.isFrameGraphPostEffectActive("ssao"),
             ssaoStrength: this.postEffectSsaoStrengthValue,
@@ -11663,7 +11670,7 @@ ${beforeFogAppendBlock}
                 ? []
                 : this.getParameterActiveFrameGraphPostEffectIds(),
         );
-        return this.gammaSceneTrack ? addFrameGraphPostEffectId(ids, "gamma") : ids;
+        return ids;
     }
 
     public setFrameGraphPostEffectStackIds(ids: readonly FrameGraphPostEffectId[]): void {
@@ -11686,6 +11693,8 @@ ${beforeFogAppendBlock}
         this.frameGraphPostEffectStackIdsValue = normalized;
         this.syncRingParticleEnabledFromFrameGraphStack();
         this.syncWaterSurfaceEnabledFromFrameGraphStack();
+        this.applyDefaultPipelinePostProcessSettings();
+        this.effectSceneTracksChanged();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
 
@@ -11731,7 +11740,7 @@ ${beforeFogAppendBlock}
 
     public getFrameGraphPostEffectRuntimeOrder(): readonly FrameGraphPostEffectId[] {
         const ids = this.getFrameGraphPostEffectStackIds();
-        return this.gammaSceneTrack ? addFrameGraphPostEffectId(ids, "gamma") : normalizeFrameGraphPostEffectIds(ids);
+        return normalizeFrameGraphPostEffectIds(ids);
     }
 
     public isFrameGraphPostEffectActive(id: FrameGraphPostEffectId): boolean {
@@ -11740,8 +11749,8 @@ ${beforeFogAppendBlock}
     }
 
     public setFrameGraphPostEffectStackEntryEnabled(id: FrameGraphPostEffectId, enabled: boolean): void {
-        if (id === "gamma" && this.gammaSceneTrack) {
-            this.setGammaScenePreview(enabled, this.postEffectGamma);
+        if (isEffectId(id) && this.effectSceneTracks.has(id)) {
+            this.setEffectScenePreview(id, { ...this.captureCurrentEffectKeyframePayload(id).value, enabled });
             return;
         }
         const next = Boolean(enabled);
@@ -11762,7 +11771,7 @@ ${beforeFogAppendBlock}
     }
 
     private isFrameGraphPostEffectStackEnabled(id: FrameGraphPostEffectId): boolean {
-        if (id === "gamma" && this.gammaSceneTrack) return this.gammaSceneEnabled;
+        if (isEffectId(id) && this.effectSceneTracks.has(id)) return this.captureCurrentEffectKeyframePayload(id).value.enabled;
         return this.frameGraphPostEffectStackEnabledValue.get(id)
             ?? this.isFrameGraphPostEffectParameterActive(id);
     }
@@ -11821,7 +11830,7 @@ ${beforeFogAppendBlock}
 
     private getActiveFrameGraphPostEffectIds(): FrameGraphPostEffectId[] {
         return FRAME_GRAPH_POST_EFFECT_IDS.filter((id) => (
-            (id === "gamma" && this.gammaSceneTrack !== null) || (id !== "ringParticles" && this.isFrameGraphPostEffectActive(id))
+            (isEffectId(id) && this.effectSceneTracks.has(id) && this.getFrameGraphPostEffectStackIds().includes(id)) || (id !== "ringParticles" && this.isFrameGraphPostEffectActive(id))
         ));
     }
 
@@ -12151,13 +12160,11 @@ ${beforeFogAppendBlock}
 
     /** Gamma power for mid-tone correction (1.0 = neutral). */
     get postEffectGamma(): number {
-        return this.postEffectGammaValue;
+        return Number(this.effectSceneTracks.evaluate("gamma", this._currentFrame, !this._isPlaying)?.gamma ?? this.postEffectGammaValue);
     }
     set postEffectGamma(v: number) {
-        this.postEffectGammaValue = Number.isFinite(v) ? Math.max(0.25, Math.min(4, v)) : 1;
-        if (this.gammaSceneTrack && this.gammaSceneTrack.keyframes.length === 0) {
-            this.gammaSceneTrack.baseValue = { enabled: this.gammaSceneEnabled, gamma: this.postEffectGammaValue };
-        }
+        if (this.effectSceneTracks.has("gamma")) this.setEffectScenePreview("gamma", { ...this.captureCurrentEffectKeyframePayload("gamma").value, gamma: v });
+        else this.postEffectGammaValue = Number.isFinite(v) ? Math.max(0.25, Math.min(4, v)) : 1;
     }
 
     /** Image-processing exposure scale (1.0 = neutral). */
@@ -12295,10 +12302,11 @@ ${beforeFogAppendBlock}
 
     /** Default pipeline grain intensity (0..100, 0 = OFF). */
     get postEffectGrainIntensity(): number {
-        return this.postEffectGrainIntensityValue;
+        return Number(this.effectSceneTracks.evaluate("grain", this._currentFrame, !this._isPlaying)?.intensity ?? this.postEffectGrainIntensityValue);
     }
     set postEffectGrainIntensity(v: number) {
-        this.postEffectGrainIntensityValue = Math.max(0, Math.min(100, v));
+        if (this.effectSceneTracks.has("grain")) { this.setEffectScenePreview("grain", { ...this.captureCurrentEffectKeyframePayload("grain").value, intensity: v }); return; }
+        this.postEffectGrainIntensityValue = Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 0;
         this.applyDefaultPipelinePostProcessSettings();
     }
 
@@ -13758,7 +13766,7 @@ ${beforeFogAppendBlock}
         );
         this.colorCorrectionPostProcess.onApplyObservable.add((effect) => {
             effect.setFloat("contrast", this.postEffectContrastValue);
-            effect.setFloat("gammaPower", this.gammaSceneTrack && !this.gammaSceneEnabled ? 1 : this.postEffectGammaValue);
+            effect.setFloat("gammaPower", this.effectRenderState.gammaPower);
         });
     }
 
@@ -15859,6 +15867,12 @@ ${beforeFogAppendBlock}
     }
 
     public renderOnceForCapture(deltaMs = 1000 / 30): void {
+        this.effectCaptureDepth++;
+        try { this.renderEffectCaptureFrame(deltaMs); }
+        finally { this.effectCaptureDepth--; this.evaluateEffectTracks(this._currentFrame); }
+    }
+
+    private renderEffectCaptureFrame(deltaMs: number): void {
         const clampedDeltaMs = Math.max(0, Math.min(100, deltaMs));
         const now = performance.now();
         this.lastRenderTimestampMs = now;
@@ -15918,6 +15932,7 @@ ${beforeFogAppendBlock}
     }
 
     dispose(): void {
+        this.effectPlaybackPreparation.cancel();
         this.disposeWebGpuValidationMonitor?.();
         this.disposeWebGpuValidationMonitor = null;
         this.renderingCanvas.removeEventListener("pointerdown", this.onCanvasPointerDown);

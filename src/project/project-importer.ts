@@ -188,7 +188,7 @@ type ProjectImportHost = {
     setSerializedLightSceneTrack?: (data: ProjectSerializedLightSceneTrack | null | undefined) => void;
     setSerializedShadowSceneTrack?: (data: ProjectSerializedShadowSceneTrack | null | undefined) => void;
     setSerializedGravitySceneTrack?: (data: ProjectSerializedGravitySceneTrack | null | undefined) => void;
-    setSerializedGammaSceneTrack?: (data: import("../editor/gamma-scene-track").SerializedGammaSceneTrack | null | undefined) => void;
+    setSerializedEffectSceneTracks?: (data: unknown) => void;
     setPhysicsFloorCollisionEnabled(enabled: boolean): void;
     isPhysicsAvailable(): boolean;
     setPhysicsEnabled(enabled: boolean): void;
@@ -1516,7 +1516,7 @@ export async function importProjectState(
         }
     }
 
-    host.setSerializedGammaSceneTrack?.(data.keyframes?.gammaAnimation);
+    host.setSerializedEffectSceneTracks?.(data.keyframes?.effectAnimations);
     host.refreshTotalFramesFromContent();
     host.setFrameGraphPostEffectsEnabled?.(data.effects.frameGraphPostEnabled !== false);
     host.setRenderFpsLimit(host.renderFpsLimit);

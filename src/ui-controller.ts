@@ -146,7 +146,8 @@ import {
     type RuntimeReloadProjectState,
 } from "./project/runtime-reload-project-state";
 
-import { GammaKeyframeControls } from "./ui/gamma-keyframe-controls";
+import { EffectKeyframeController } from "./ui/effect-keyframe-controller";
+import { isEffectId } from "./editor/effect-keyframe-definitions";
 
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
 
@@ -576,7 +577,7 @@ export class UIController {
     private bloomToneMapController: BloomToneMapController | null = null;
     private cameraPanelController: CameraPanelController | null = null;
     private colorPostFxController: ColorPostFxController | null = null;
-    private gammaKeyframeControls: GammaKeyframeControls | null = null;
+    private effectKeyframeController: EffectKeyframeController | null = null;
     private dofPanelController: DofPanelController | null = null;
     private effectPanelShellController: EffectPanelShellController | null = null;
     private experimentalPostFxController: ExperimentalPostFxController | null = null;
@@ -655,11 +656,13 @@ export class UIController {
         });
         this.modelCommentNoticeController = new ModelCommentNoticeController();
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
-        this.gammaKeyframeControls = new GammaKeyframeControls(getRequiredElement("gamma-key-controls"), value => {
-            if (this.mmdManager.isPlaying) return;
-            this.mmdManager.setGammaScenePreview(value.enabled, value.gamma);
-            this.colorPostFxController?.refreshGammaUi();
+        this.effectKeyframeController = new EffectKeyframeController(getRequiredElement("effect-key-controls"), (id, value) => {
+            const first = !this.mmdManager.hasEffectSceneTrack(id);
+            this.mmdManager.setEffectScenePreview(id, value);
+            if (first) this.refreshFrameGraphPostAddUi();
+            this.refreshEffectKeyframeUi();
         });
+        this.mmdManager.onEffectKeyframePreviewChanged = () => this.refreshEffectKeyframeUi();
         this.btnKeyframeCopy = document.getElementById("btn-kf-copy") as HTMLButtonElement;
         this.btnKeyframePaste = document.getElementById("btn-kf-paste") as HTMLButtonElement;
         this.btnKeyframeMirrorPaste = document.getElementById("btn-kf-mirror-paste") as HTMLButtonElement;
@@ -1263,6 +1266,11 @@ export class UIController {
         });
 
         this.timeline.onSelectionChanged = (track) => {
+            if (track?.category === "effect" && isEffectId(track.name)) {
+                this.expandedFrameGraphPostEffectId = track.name;
+                this.effectPanelShellController?.setActiveTab("post");
+                this.refreshFrameGraphPostAddUi();
+            }
             this.actionDispatcher.dispatch({
                 type: "timeline.selectionChanged",
                 source: "timeline",
@@ -1793,7 +1801,7 @@ export class UIController {
             }
 
             if (this.mmdManager.isPlaying) {
-                this.refreshGammaKeyframeUi();
+                this.refreshEffectKeyframeUi();
                 this.refreshPlaybackFrameBar();
                 const { startFrame, endFrame } = this.getPlaybackFrameRange();
                 if (this.isPlaybackFrameStopEnabled() && frame >= endFrame) {
@@ -3279,6 +3287,14 @@ export class UIController {
         const project = this.mmdManager.exportProjectState();
         project.output = this.exportOutputProjectState();
         return project;
+    }
+
+    private discardProjectForRuntimeModeReload(): void {
+        try {
+            sessionStorage.removeItem(RUNTIME_RELOAD_PROJECT_STORAGE_KEY);
+        } catch {
+            // A failed backend change leaves the current project open.
+        }
     }
 
     private storeProjectForRuntimeModeReload(): boolean {
@@ -5269,9 +5285,14 @@ export class UIController {
             return;
         }
 
+        if (!this.storeProjectForRuntimeModeReload()) {
+            this.showToast("PostFX change canceled: the current project could not be preserved", "error");
+            return;
+        }
         try {
             localStorage.setItem(POST_EFFECT_BACKEND_STORAGE_KEY, "frameGraph");
         } catch {
+            this.discardProjectForRuntimeModeReload();
             this.showToast(t("effect.frameGraphPost.backendSaveFailed"), "error");
             return;
         }
@@ -5396,7 +5417,9 @@ export class UIController {
 
         const wasActive = this.mmdManager.isFrameGraphPostEffectActive(effectId);
         const previousStackIds = [...this.mmdManager.getFrameGraphPostEffectStackIds()];
-        this.applyFrameGraphPostEffectDefaultValues(effectId);
+        if (!isEffectId(effectId) || !this.mmdManager.hasEffectSceneTrack(effectId)) {
+            this.applyFrameGraphPostEffectDefaultValues(effectId);
+        }
         switch (effectId) {
             case "bloom":
                 this.mmdManager.postEffectBloomEnabled = true;
@@ -5464,7 +5487,7 @@ export class UIController {
         this.mmdManager.setFrameGraphPostEffectStackIds(
             currentStackIds.filter((id) => id !== effectId),
         );
-        if (effectId === "gamma") {
+        if (effectId === "gamma" && !this.mmdManager.hasEffectSceneTrack("gamma")) {
             this.mmdManager.postEffectGamma = 1;
         }
         if (this.expandedFrameGraphPostEffectId === effectId) {
@@ -6775,11 +6798,19 @@ export class UIController {
             const currentBackend = this.getConfiguredPostEffectBackend();
             this.applyPostEffectBackendPanelState(root, nextBackend);
             if (nextBackend === currentBackend) return;
+            if (!this.storeProjectForRuntimeModeReload()) {
+                this.syncPostEffectBackendSelect();
+                this.applyPostEffectBackendPanelState(root, currentBackend);
+                this.showToast("PostFX change canceled: the current project could not be preserved", "error");
+                return;
+            }
 
             try {
                 localStorage.setItem(POST_EFFECT_BACKEND_STORAGE_KEY, nextBackend);
             } catch {
+                this.discardProjectForRuntimeModeReload();
                 this.syncPostEffectBackendSelect();
+                this.applyPostEffectBackendPanelState(root, currentBackend);
                 this.showToast("PostFX backend setting could not be saved", "error");
                 return;
             }
@@ -7961,8 +7992,8 @@ export class UIController {
                 return "影";
             case "gravity":
                 return "重力";
-            case "gamma":
-                return t("timeline.gamma");
+            case "effect":
+                return t("timeline.effect");
             case "morph":
                 return "Morph";
             case "root":
@@ -8167,18 +8198,30 @@ export class UIController {
         };
     }
 
-    private refreshGammaKeyframeUi(): void {
-        this.gammaKeyframeControls?.refresh(
-            this.getSelectedTimelineTrack()?.category === "gamma",
-            this.mmdManager.isPlaying,
-            this.mmdManager.captureCurrentGammaKeyframePayload(),
-        );
+    private refreshEffectKeyframeUi(): void {
+        const track = this.getSelectedTimelineTrack();
+        const id = track?.category === "effect" && isEffectId(track.name) ? track.name : null;
+        const payload = id ? this.mmdManager.captureCurrentEffectKeyframePayload(id) : null;
+        this.effectKeyframeController?.refresh(payload, this.mmdManager.isPlaying, id ? this.mmdManager.isEffectTrackSuspended(id) : false);
         this.colorPostFxController?.refreshGammaUi();
-        if (this.getSelectedTimelineTrack()?.category === "gamma") this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying;
+        this.colorPostFxController?.refreshGrainUi();
+        for (const effectId of ["gamma", "grain"] as const) {
+            const value = this.mmdManager.captureCurrentEffectKeyframePayload(effectId);
+            const toggle = this.postEffectStackList?.querySelector<HTMLInputElement>(`[data-effect-stack-toggle="${effectId}"]`);
+            if (toggle) { toggle.checked = value.value.enabled; toggle.disabled = this.mmdManager.isPlaying; }
+            const row = this.postEffectStackList?.querySelector<HTMLElement>(`[data-effect-stack-row="${effectId}"]`);
+            row?.querySelectorAll<HTMLInputElement>("input[data-effect-stack-control]").forEach(input => {
+                input.disabled = this.mmdManager.isPlaying;
+                const position = value.effectId === "gamma" ? toFrameGraphEffectSliderValue("gammaPower", value.value.gamma) : toFrameGraphEffectSliderValue("grainIntensity", value.value.intensity);
+                if (document.activeElement !== input) input.value = String(Math.round(position));
+                this.updateFrameGraphPostStackControlValue(input);
+            });
+        }
+        if (id) this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying;
     }
 
     private updateTimelineEditState(): void {
-        this.refreshGammaKeyframeUi();
+        this.refreshEffectKeyframeUi();
         this.updateScenePlaybackControlLocks();
         const track = this.getSelectedTimelineTrack();
         const selectedFrame = this.timeline.getSelectedFrame();
@@ -8238,7 +8281,7 @@ export class UIController {
         } else {
             this.updateInterpolationPreview(track, interpolationFrame);
         }
-        this.btnKeyframeAdd.disabled = track.category === "gamma" && this.mmdManager.isPlaying;
+        this.btnKeyframeAdd.disabled = track.category === "effect" && this.mmdManager.isPlaying;
 
         const hasCurrentFrameKey = this.mmdManager.hasTimelineKeyframe(track, currentFrame);
         const canDelete = selectedFrame !== null || hasCurrentFrameKey;
@@ -8579,7 +8622,7 @@ export class UIController {
         if (track.category === "light") return this.mmdManager.captureCurrentLightKeyframePayload();
         if (track.category === "shadow") return this.mmdManager.captureCurrentShadowKeyframePayload();
         if (track.category === "gravity") return this.mmdManager.captureCurrentGravityKeyframePayload();
-        if (track.category === "gamma") return this.mmdManager.captureCurrentGammaKeyframePayload();
+        if (track.category === "effect") return this.mmdManager.captureCurrentEffectKeyframePayload(track.name);
         if (track.category === "accessory") {
             const index = this.mmdManager.getActiveTimelineAccessoryIndex();
             const value = index === null ? null : this.mmdManager.captureAccessoryTransformKeyframeValue(index);
@@ -9513,7 +9556,7 @@ export class UIController {
 
     private buildInterpolationPreviewFromRuntime(track: KeyframeTrack, frame: number): TimelineInterpolationPreview {
         this.interpolationChannelBindings.clear();
-        if (track.category === "gamma") {
+        if (track.category === "effect") {
             return { source: "none", frame: Math.max(0, Math.floor(frame)), hasKeyframe: this.mmdManager.hasTimelineKeyframe(track, frame), hasCurveData: false, channels: [] };
         }
         const normalizedFrame = Math.max(0, Math.floor(frame));
@@ -10439,14 +10482,15 @@ export class UIController {
         this.showToast(before ? `Frame ${frame} gravity keyframe updated` : `Frame ${frame}: gravity keyframe added`, "success");
     }
 
-    private registerGammaKeyframeAtCurrentFrame(): void {
+    private registerEffectKeyframeAtCurrentFrame(): void {
         if (this.mmdManager.isPlaying) return;
-        const track = { name: "Gamma", category: "gamma" as const };
+        const track = this.getSelectedTimelineTrack();
+        if (track?.category !== "effect" || !isEffectId(track.name)) return;
         const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
-        const after = this.mmdManager.captureCurrentGammaKeyframePayload();
+        const after = this.mmdManager.captureCurrentEffectKeyframePayload(track.name);
         if (this.getKeyframeRegistrationDecision(before, after) !== "proceed") return;
-        const command = this.createKeyframePasteCommand(track, frame, before, after, `Register gamma keyframe at frame ${frame}`);
+        const command = this.createKeyframePasteCommand(track, frame, before, after, `Register ${track.name} keyframe at frame ${frame}`);
         if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) return;
         this.commandHistory.push(command);
         this.updateTimelineEditState();
@@ -10473,8 +10517,8 @@ export class UIController {
             this.registerGravityKeyframeAtCurrentFrame();
             return;
         }
-        if (track.category === "gamma") {
-            this.registerGammaKeyframeAtCurrentFrame();
+        if (track.category === "effect") {
+            this.registerEffectKeyframeAtCurrentFrame();
             return;
         }
         if (track.category === "accessory") {
@@ -11864,11 +11908,12 @@ export class UIController {
         if (selectedTrack && this.isCompatibleKeyframePayloadTarget(selectedTrack, clipboard.payload)) {
             return { track: { category: selectedTrack.category, name: selectedTrack.name } };
         }
+        if (clipboard.payload.kind === "effect" && selectedTrack) return null;
         return { track: clipboard.track };
     }
 
     private isCompatibleKeyframePayloadTarget(
-        track: Pick<KeyframeTrack, "category">,
+        track: Pick<KeyframeTrack, "category" | "name">,
         payload: TimelineKeyframePayload,
     ): boolean {
         switch (payload.kind) {
@@ -11882,8 +11927,8 @@ export class UIController {
                 return track.category === "shadow";
             case "gravity":
                 return track.category === "gravity";
-            case "gamma":
-                return track.category === "gamma";
+            case "effect":
+                return track.category === "effect" && track.name === payload.effectId;
             case "morph":
                 return track.category === "morph";
             case "property":
@@ -11962,8 +12007,8 @@ export class UIController {
                     maxZ: payload.maxZ,
                     lightIntensity: payload.lightIntensity,
                 };
-            case "gamma":
-                return { kind: "gamma", enabled: payload.enabled, gamma: payload.gamma };
+            case "effect":
+                return structuredClone(payload);
             case "gravity":
                 return {
                     kind: "gravity",
@@ -12411,7 +12456,7 @@ export class UIController {
             this.mmdManager.seekTo(startFrame);
         }
         this.mmdManager.play();
-        this.refreshGammaKeyframeUi();
+        this.refreshEffectKeyframeUi();
         this.updateScenePlaybackControlLocks();
         this.updateSectionKeyframeButtons();
         this.btnPlay.style.display = "none";

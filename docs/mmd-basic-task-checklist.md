@@ -191,7 +191,7 @@
 - [x] DoF `オートフォーカス`（人物優先）を新規sceneの既定として実装（頭 / 首 / 上半身系boneを持つmodelのみ、中央score、25%切替hysteresis、camera target fallback、project round-trip、focused E2E）
 - [x] エフェクトキーの最小PoCとして、カメラモードへガンマのON / OFF・スライダー値のキーを追加。保存・Undo / Redo・Classic / FrameGraph・PNG / WebMを確認（[実験メモ](./gamma-timeline-key-experiment-2026-09-14.md)、2026-09-14）。他エフェクトへの展開は後続で判断する。
 - [x] 海を除く1エフェクト1行の共通基盤について、状態・新形式保存・UI・描画adapter・作業分解を設計。所有者指定により未配布の旧ガンマキー互換を外し、下準備10〜18h（予備込み14〜24h）へ改定（[設計・見積もり](./effect-timeline-common-foundation-design-2026-09-14.md)、2026-09-14）。
-- [ ] エフェクトキー共通基盤を実装し、ガンマ移植＋グレインで登録・保存・両backend・出力を検証する（設計案、未着手）。他エフェクトの本実装とは区切る。
+- [x] エフェクトキー共通基盤を実装し、ガンマ移植＋グレインで登録・保存・両backend・PNG / WebMを検証。effectカテゴリ、新形式保存、preview分離、stack休止、backend切替の状態保持、再生準備待ちを接続（[実装範囲・検証結果](./effect-timeline-common-foundation-design-2026-09-14.md#11-下準備の実装範囲2026-09-14)、2026-09-14）。他エフェクトの本実装とは区切る。
 
 詳細: [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)
 

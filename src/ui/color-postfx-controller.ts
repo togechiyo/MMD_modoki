@@ -325,9 +325,11 @@ export class ColorPostFxController {
         if (!elements) return;
         const roundedOffset = Math.round(-Math.log2(this.mmdManager.postEffectGamma) * 100);
         const value = String(roundedOffset);
+        elements.gammaInput.disabled = this.mmdManager.isPlaying;
         elements.gammaInput.value = value;
         elements.gammaValue.textContent = `${roundedOffset}%`;
         if (elements.frameGraphGammaInput && elements.frameGraphGammaValue) {
+            elements.frameGraphGammaInput.disabled = this.mmdManager.isPlaying;
             elements.frameGraphGammaInput.value = value;
             elements.frameGraphGammaValue.textContent = `${roundedOffset}%`;
         }
@@ -363,16 +365,18 @@ export class ColorPostFxController {
             : t("status.off");
     }
 
-    private refreshGrainUi(): void {
+    public refreshGrainUi(): void {
         const elements = this.elements;
         if (!elements) return;
         const value = String(Math.max(0, Math.min(100, Math.round(this.mmdManager.postEffectGrainIntensity))));
         const label = this.mmdManager.postEffectGrainIntensity > 0.000001
             ? this.mmdManager.postEffectGrainIntensity.toFixed(1)
             : t("status.off");
+        elements.grainInput.disabled = this.mmdManager.isPlaying;
         elements.grainInput.value = value;
         elements.grainValue.textContent = label;
         if (elements.frameGraphGrainInput && elements.frameGraphGrainValue) {
+            elements.frameGraphGrainInput.disabled = this.mmdManager.isPlaying;
             elements.frameGraphGrainInput.value = value;
             elements.frameGraphGrainValue.textContent = label;
         }

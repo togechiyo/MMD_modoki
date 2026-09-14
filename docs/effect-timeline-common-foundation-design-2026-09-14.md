@@ -1,7 +1,7 @@
 # エフェクト単位のタイムライン共通基盤：設計・見積もり
 
 更新日: 2026-09-14
-状態: 設計案。今回の作業は設計・見積もりまでで、以下の共通基盤は未実装。
+状態: ガンマ＋グレインで共通基盤を実装・検証済み。1〜10節は設計時の案、採用範囲と検証結果は11節を参照。
 
 ## 1. 結論と対象
 
@@ -169,7 +169,7 @@ DoFの対象位置解決はmodel・bone・camera更新後、描画直前の既�
 
 ## 9. 必須確認と進め方
 
-共通基盤の検証には`mmd-test`の選定手順を使う。今回の設計文書だけの変更ではアプリテストを実行しない。
+共通基盤の検証には`mmd-test`の選定手順を使う。設計段階ではアプリテストを実行せず、実装後の結果を末尾に記録する。
 
 必須のpure / Command / 保存テスト:
 
@@ -204,3 +204,31 @@ GPUを利用するローカルElectron E2E（sandbox外、順次実行）:
 - [タイムライン仕様](./timeline-spec.md)
 - [FrameGraphの構造変更と個別切替](../insights/policies/framegraph-structure-changes-require-rebuild.md)
 - [基本機能チェックリスト](./mmd-basic-task-checklist.md)
+
+## 11. 下準備の実装範囲（2026-09-14）
+
+所有者の着手指定を受け、ガンマとグレインを共通の`effect`カテゴリへ接続した。他18種・海・材質は追加していない。冒頭の時間は設計時の見積もりとして残す。
+
+- `effect-keyframe-definitions.ts`: ID別の値型、初期値、範囲、step / 線形 / 対数補間、スライダー変換とautomation検証。ガンマはenabled＋gamma、グレインはenabled＋intensity。
+- `effect-scene-track-store.ts`: base、キー、未登録preview、revision、二分探索と同frameキャッシュ、編集、version付き保存復元。converterは小さいため別ファイルへ分けずstoreに置いた。連続再生でも二分探索を使い、前区間cursorは現段階で追加していない。
+- `timeline-edit-service.ts`と既存Command: 登録、異なるeffectへのpaste拒否、コピー、移動、複数削除、Undo / Redoを共通経路へ接続。初回登録のUndoでも空trackとbaseを残し、最後のキー削除と同じ扱いにした。
+- `effect-playback-preparation.ts`: 資源準備完了まで再生開始を遅延し、停止・project import・破棄で古い開始要求を取り消す。準備失敗は既存の通知経路へ渡す。captureは既存のready待機を共用する。
+- `effect-keyframe-runtime.ts`とmanagerの既存描画接続: OFFと休止は描画値だけを中立化。Classicのgrain passはtrackがstack内にある間保持し、キー評価からpipeline enabledを切り替えない。FrameGraphも使用するtaskを確保したまま値を更新する。
+- `effect-keyframe-controller.ts`: 選択行のON / OFF・スライダーを共通化。右パネルとの相互更新、再生中lock、stackから外したときの休止表示。右パネルと小スライダーで異なる目盛りは実値を介して変換する。
+- 保存は`keyframes.effectAnimations`だけ。停止previewは別フィールドで保持し、capture時は除外する。静的ガンマの`gammaEncodingVersion`は従来どおり維持する。未知ID / versionは実行せず再保存する。
+- backendの2つの切替入口に既存のproject一時保存を接続。再読み込み後に同じprojectを復元する。スタック再追加時は、trackを持つ効果に初期値を再適用しない。
+
+操作入口がなくなることを避けるため、今回のガンマ・グレイン2行は常時表示する。小スライダーの初回操作では空trackのbaseを作る。20種へ増やす段階では、設計の「使用中stackまたは保存済みtrackだけ表示」へ切り替える。20行の実描画・非対応backendの表示は、今回の2効果で確認済みとは扱わない。
+
+次の効果を追加するときは、値型・定義・静的値のcapture・右パネルのpreview接続・backend別の値反映と資源保持を追加する。キーstore、Command、保存ブロック、タイムライン描画を効果ごとに複製する必要はない。ブルームの複数値実描画、DoF対象解決、モーションブラー履歴、パーティクルの時間再現は引き続き個別作業となる。
+
+### 実装後の検証
+
+- `lint`、`typecheck:critical`、`smoke:launch`成功。smokeはWebGPU / Bullet MPRの初期化・安定待機まで到達。通常のtypecheckは既存の非criticalエラー544件を検出し、直前のガンマ時点545件との診断内容比較で追加なし。`TS2304` / `TS2552`は0件。Insights validatorと`git diff --check`も成功。
+- `test:unit`: 149 files / 820 tests成功。step / 対数 / 線形補間、複数フィールド、逆seek、revision、preview、空track・未知version、新形式保存、異なるeffectへのpaste拒否、初回登録Undo、複数effect削除Undo、移動衝突、再生準備待ちと取消を含む。
+- GPUを利用するローカルElectron `test:e2e -- gamma-keyframe.spec.mjs --max-failures=1`: ガンマ・グレイン × Classic・FrameGraphの4件成功（2.4分）。fixtureは既存の配布可能なtofu PMX。
+- GUI登録、copy / paste、削除・Undo / Redo、保存・読込、停止previewの保存復元とseek破棄、再生中lock、5言語の名称を確認。FrameGraphではstack休止・再追加と全体OFF / ON、ガンマでは同じprojectを保ったClassic往復も確認した。
+- 各backendでframe 0 / 20 / 40のPNGと640×360・41 frameのWebMを出力して比較。OFFと中立値ONのPNGは平均RGB差0.05未満。ガンマでは未登録previewの有無によらず出力PNGが一致し、撮影後のUIにはpreviewが残ることを確認。グレインは乱数seedが異なるため、動画の粒子を別撮影PNGとの画素一致で判定せず、clean画像に対するノイズ量とOFF区間で判定した。
+- キーのON / OFF境界・逆seekでFrameGraph build generation不変、各ケースのWebGPU validation error / renderer pageerrorは0。
+
+今回のGPU specは単発PNGとWebMを実行した。PNG連番の専用GUI操作、20行スクロール、未実装effectの非対応backend表示、ブルーム等の複数パラメータ実描画は未検証。これらを今回の4件の成功へ含めない。

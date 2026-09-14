@@ -614,6 +614,8 @@
     "effect.frameGraphPost.effects.luminous":  "ルミナス",
     "effect.frameGraphPost.effects.bloom":  "ブルーム",
     "effect.frameGraphPost.effects.lut":  "LUT",
+    "timeline.effect": "エフェクト",
+    "timeline.effectSuspended": "スタックから外れています",
     "timeline.gamma": "ガンマ",
     "effect.frameGraphPost.effects.gamma":  "ガンマ",
     "effect.frameGraphPost.effects.motionBlur":  "モーションブラー",

@@ -7510,7 +7510,7 @@ body.bottom-panel-resizing {
   }
 }
 
-#gamma-key-controls:not([hidden]) {
+#effect-key-controls:not([hidden]) {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -7519,20 +7519,20 @@ body.bottom-panel-resizing {
   font-size: 11px;
 }
 
-#gamma-key-controls label {
+#effect-key-controls label {
   display: flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
 }
 
-#gamma-key-value {
+#effect-key-value {
   flex: 1;
   min-width: 40px;
   accent-color: #39c5bb;
 }
 
-#gamma-key-controls output {
+#effect-key-controls output {
   min-width: 40px;
   text-align: right;
 }

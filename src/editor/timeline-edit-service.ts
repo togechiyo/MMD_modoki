@@ -4,6 +4,7 @@ import type { KeyframeTrack, ModelInfo, TimelineTarget, TrackCategory } from "..
 import type { AccessoryTransformKeyframeValue } from "./accessory-transform-keyframe-track";
 import type { ModelExternalParentKeyframePayload } from "../shared/model-external-parent";
 import { addFrameNumber, classifyBone, createTrackKey, hasFrameNumber, mergeFrameNumbers, moveFrameNumber, parseTrackKey, removeFrameNumber } from "../shared/timeline-helpers";
+import type { EffectKeyframePayload } from "./effect-keyframe-definitions";
 import { normalizeModelBoneTracks } from "./model-bone-track-normalization";
 
 const EMPTY_KEYFRAME_FRAMES = new Uint32Array(0);
@@ -144,12 +145,13 @@ type TimelineEditHost = {
     applyGravitySceneKeyframePayload?: (frame: number, payload: GravityKeyframePayload | null) => boolean;
     removeGravitySceneKeyframePayloads?: (frames: readonly number[]) => boolean;
     moveGravitySceneKeyframe?: (fromFrame: number, toFrame: number) => boolean;
-    getGammaSceneKeyframeFrames?: () => Uint32Array;
-    captureCurrentGammaKeyframePayload?: () => GammaKeyframePayload;
-    readGammaSceneKeyframePayload?: (frame: number) => GammaKeyframePayload | null;
-    applyGammaSceneKeyframePayload?: (frame: number, payload: GammaKeyframePayload | null) => boolean;
-    removeGammaSceneKeyframePayloads?: (frames: readonly number[]) => boolean;
-    moveGammaSceneKeyframe?: (fromFrame: number, toFrame: number) => boolean;
+    getEffectSceneKeyframeFrames?: (id?: string) => Uint32Array;
+    captureCurrentEffectKeyframePayload?: (id: string) => EffectKeyframePayload;
+    readEffectSceneKeyframePayload?: (id: string, frame: number) => EffectKeyframePayload | null;
+    applyEffectSceneKeyframePayload?: (id: string, frame: number, payload: EffectKeyframePayload | null) => boolean;
+    removeEffectSceneKeyframePayloads?: (id: string, frames: readonly number[]) => boolean;
+    getEffectTimelineTracks?: () => KeyframeTrack[];
+    moveEffectSceneKeyframe?: (id: string, fromFrame: number, toFrame: number) => boolean;
 };
 
 export type BoneKeyframePayload = {
@@ -220,7 +222,7 @@ export type GravityKeyframePayload = {
     direction: { x: number; y: number; z: number };
 };
 
-export type GammaKeyframePayload = { kind: "gamma"; enabled: boolean; gamma: number };
+export type { EffectKeyframePayload } from "./effect-keyframe-definitions";
 
 export type AccessoryKeyframePayload = AccessoryTransformKeyframeValue & {
     kind: "accessory";
@@ -236,7 +238,7 @@ export type TimelineKeyframePayload =
     | LightKeyframePayload
     | ShadowKeyframePayload
     | GravityKeyframePayload
-    | GammaKeyframePayload;
+    | EffectKeyframePayload;
 
 export function getOrCreateModelTrackFrameMap(host: TimelineEditHost, model: TimelineEditRuntimeModel): Map<string, Uint32Array> {
     let frameMap = host.modelKeyframeTracksByModel.get(model);
@@ -555,10 +557,10 @@ export function getRegisteredKeyframeStats(host: TimelineEditHost): { hasAnyKeyf
         hasAnyKeyframe = true;
         maxFrame = Math.max(maxFrame, gravityFrames[gravityFrames.length - 1]);
     }
-    const gammaFrames = host.getGammaSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
-    if (gammaFrames.length > 0) {
+    const effectFrames = host.getEffectSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES;
+    if (effectFrames.length > 0) {
         hasAnyKeyframe = true;
-        maxFrame = Math.max(maxFrame, gammaFrames[gammaFrames.length - 1]);
+        maxFrame = Math.max(maxFrame, effectFrames[effectFrames.length - 1]);
     }
 
     for (const accessoryFrames of host.getAllAccessoryTransformKeyframeFrames?.() ?? []) {
@@ -754,11 +756,7 @@ export function getCameraTimelineTracks(host: TimelineEditHost): KeyframeTrack[]
             category: "gravity",
             frames: gravityFrames,
         },
-        {
-            name: "Gamma",
-            category: "gamma",
-            frames: host.getGammaSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES,
-        },
+        ...(host.getEffectTimelineTracks?.() ?? []),
     ];
 }
 
@@ -853,8 +851,8 @@ export function hasTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyframe
     if (track.category === "gravity") {
         return hasFrameNumber(host.getGravitySceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES, normalized);
     }
-    if (track.category === "gamma") {
-        return hasFrameNumber(host.getGammaSceneKeyframeFrames?.() ?? EMPTY_KEYFRAME_FRAMES, normalized);
+    if (track.category === "effect") {
+        return hasFrameNumber(host.getEffectSceneKeyframeFrames?.(track.name) ?? EMPTY_KEYFRAME_FRAMES, normalized);
     }
 
     if (track.category === "property") {
@@ -912,9 +910,9 @@ export function addTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyframe
         const payload = host.captureCurrentGravityKeyframePayload?.();
         return payload ? (host.applyGravitySceneKeyframePayload?.(normalized, payload) ?? false) : false;
     }
-    if (track.category === "gamma") {
-        const payload = host.captureCurrentGammaKeyframePayload?.();
-        return payload ? (host.applyGammaSceneKeyframePayload?.(normalized, payload) ?? false) : false;
+    if (track.category === "effect") {
+        const payload = host.captureCurrentEffectKeyframePayload?.(track.name);
+        return payload ? (host.applyEffectSceneKeyframePayload?.(track.name, normalized, payload) ?? false) : false;
     }
 
     if (track.category === "property") {
@@ -1206,7 +1204,7 @@ function createBoneTrackFromMovableTrack(track: MmdMovableBoneAnimationTrack): M
 }
 
 function shouldUseMovableBoneTrack(host: TimelineEditHost, track: Pick<KeyframeTrack, "name" | "category">): boolean {
-    if (track.category === "camera" || track.category === "accessory" || track.category === "light" || track.category === "shadow" || track.category === "gamma" || track.category === "gravity" || track.category === "property" || track.category === "morph") return false;
+    if (track.category === "camera" || track.category === "accessory" || track.category === "light" || track.category === "shadow" || track.category === "effect" || track.category === "gravity" || track.category === "property" || track.category === "morph") return false;
     const boneControl = host.activeModelInfo?.boneControlInfos?.find((candidate) => candidate.name === track.name);
     if (boneControl) return boneControl.movable;
     return track.category === "root";
@@ -1243,8 +1241,8 @@ export function removeTimelineKeyframe(host: TimelineEditHost, track: Pick<Keyfr
     if (track.category === "gravity") {
         return host.applyGravitySceneKeyframePayload?.(normalized, null) ?? false;
     }
-    if (track.category === "gamma") {
-        return host.applyGammaSceneKeyframePayload?.(normalized, null) ?? false;
+    if (track.category === "effect") {
+        return host.applyEffectSceneKeyframePayload?.(track.name, normalized, null) ?? false;
     }
 
     if (track.category === "property") {
@@ -1300,8 +1298,8 @@ export function moveTimelineKeyframe(
     if (track.category === "gravity") {
         return host.moveGravitySceneKeyframe?.(normalizedFrom, normalizedTo) ?? false;
     }
-    if (track.category === "gamma") {
-        return host.moveGammaSceneKeyframe?.(normalizedFrom, normalizedTo) ?? false;
+    if (track.category === "effect") {
+        return host.moveEffectSceneKeyframe?.(track.name, normalizedFrom, normalizedTo) ?? false;
     }
 
     if (!host.currentModel) return false;
@@ -1363,8 +1361,8 @@ export function readTimelineKeyframePayload(
     if (track.category === "gravity") {
         return host.readGravitySceneKeyframePayload?.(normalized) ?? null;
     }
-    if (track.category === "gamma") {
-        return host.readGammaSceneKeyframePayload?.(normalized) ?? null;
+    if (track.category === "effect") {
+        return host.readEffectSceneKeyframePayload?.(track.name, normalized) ?? null;
     }
 
     const animation = getCurrentModelAnimation(host);
@@ -1480,8 +1478,9 @@ export function applyTimelineKeyframePayload(
             return host.applyShadowSceneKeyframePayload?.(normalized, payload) ?? false;
         case "gravity":
             return host.applyGravitySceneKeyframePayload?.(normalized, payload) ?? false;
-        case "gamma":
-            return host.applyGammaSceneKeyframePayload?.(normalized, payload) ?? false;
+        case "effect":
+            return track.category === "effect" && track.name === payload.effectId
+                ? host.applyEffectSceneKeyframePayload?.(track.name, normalized, payload) ?? false : false;
     }
 }
 
@@ -1533,8 +1532,8 @@ export function removeTimelineKeyframePayloads(
     if (track.category === "gravity") {
         return host.removeGravitySceneKeyframePayloads?.([...normalizedFrames]) ?? false;
     }
-    if (track.category === "gamma") {
-        return host.removeGammaSceneKeyframePayloads?.([...normalizedFrames]) ?? false;
+    if (track.category === "effect") {
+        return host.removeEffectSceneKeyframePayloads?.(track.name, [...normalizedFrames]) ?? false;
     }
 
     const animation = getCurrentModelAnimation(host);
@@ -1788,8 +1787,8 @@ function removeTimelineKeyframePayload(
     if (track.category === "gravity") {
         return host.applyGravitySceneKeyframePayload?.(normalized, null) ?? false;
     }
-    if (track.category === "gamma") {
-        return host.applyGammaSceneKeyframePayload?.(normalized, null) ?? false;
+    if (track.category === "effect") {
+        return host.applyEffectSceneKeyframePayload?.(track.name, normalized, null) ?? false;
     }
 
     const animation = getCurrentModelAnimation(host);

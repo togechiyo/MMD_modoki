@@ -94,7 +94,7 @@ const CAT = {
     accessory: { bg: "rgba(245,158,11,0.11)", kf: "#f59e0b", text: "#fbbf24", bar: "#f59e0b" },
     light: { bg: "rgba(224,113,123,0.11)", kf: "#e0717b", text: "#efa2a9", bar: "#e0717b" },
     shadow: { bg: "rgba(111,159,218,0.11)", kf: "#6f9fda", text: "#a9c7ea", bar: "#6f9fda" },
-    gamma: { bg: "rgba(57,197,187,0.11)", kf: "#39c5bb", text: "#7ddfd8", bar: "#39c5bb" },
+    effect: { bg: "rgba(57,197,187,0.11)", kf: "#39c5bb", text: "#7ddfd8", bar: "#39c5bb" },
     gravity: { bg: "rgba(217,143,183,0.11)", kf: "#d98fb7", text: "#ebbad4", bar: "#d98fb7" },
     property: { bg: "rgba(255,79,163,0.13)", kf: "#ff4fa3", text: "#ff8cc3", bar: "#ff4fa3" },
     "semi-standard": { bg: "rgba(99,102,241,0.08)", kf: "#818cf8", text: "#a5b4fc", bar: "" },
@@ -114,8 +114,8 @@ export function getTimelineTrackDisplayName(track: Pick<KeyframeTrack, "name" | 
             return "影";
         case "gravity":
             return "重力";
-        case "gamma":
-            return t("timeline.gamma");
+        case "effect":
+            return t(`effect.frameGraphPost.effects.${track.name}`);
         case "property":
             return "表示・IK";
         default:
@@ -838,7 +838,7 @@ export class Timeline {
             const frames = track.frames;
             const lo = lowerBound(frames, visStart);
             const hi = upperBound(frames, visEnd);
-            const markerSize = track.category === "root" ? 9 : (track.category === "camera" || track.category === "accessory" || track.category === "light" || track.category === "shadow" || track.category === "gamma" || track.category === "gravity") ? 8 : 6;
+            const markerSize = track.category === "root" ? 9 : (track.category === "camera" || track.category === "accessory" || track.category === "light" || track.category === "shadow" || track.category === "effect" || track.category === "gravity") ? 8 : 6;
             const midY = ry + rowH / 2;
             const selectedFrames = selectedFramesByTrack.get(this.createTrackSelectionKey(track));
             const physicsOnFrames = track.physicsOnFrames ?? EMPTY_FRAMES;
@@ -1103,7 +1103,7 @@ export class Timeline {
             ctx.beginPath();
             ctx.rect(4, y, w - 6, rowH);
             ctx.clip();
-            ctx.font = (track.category === "root" || track.category === "camera" || track.category === "accessory" || track.category === "light" || track.category === "shadow" || track.category === "gamma" || track.category === "gravity")
+            ctx.font = (track.category === "root" || track.category === "camera" || track.category === "accessory" || track.category === "light" || track.category === "shadow" || track.category === "effect" || track.category === "gravity")
                 ? `600 10px ${UI_FONT_FAMILY}`
                 : `400 9px ${UI_FONT_FAMILY}`;
             ctx.fillStyle = col.text;

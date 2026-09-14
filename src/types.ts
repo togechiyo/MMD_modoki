@@ -459,7 +459,7 @@ export interface MotionInfo {
 }
 
 /** Track category for timeline row ordering */
-export type TrackCategory = 'root' | 'camera' | 'accessory' | 'light' | 'shadow' | 'gravity' | 'gamma' | 'property' | 'semi-standard' | 'bone' | 'morph';
+export type TrackCategory = 'root' | 'camera' | 'accessory' | 'light' | 'shadow' | 'gravity' | 'effect' | 'property' | 'semi-standard' | 'bone' | 'morph';
 
 /** Active editor target whose keyframe rows are shown in the timeline. */
 export type TimelineTarget = "model" | "camera" | "accessory";
@@ -941,7 +941,7 @@ export interface ProjectKeyframeBundle {
     lightAnimation?: ProjectSerializedLightSceneTrack | null;
     shadowAnimation?: ProjectSerializedShadowSceneTrack | null;
     gravityAnimation?: ProjectSerializedGravitySceneTrack | null;
-    gammaAnimation?: import("./editor/gamma-scene-track").SerializedGammaSceneTrack | null;
+    effectAnimations?: import("./editor/effect-scene-track-store").SerializedEffectAnimations | null;
 }
 
 export interface MmdModokiProjectFileV1 {

@@ -20,6 +20,10 @@ import {
     removeTimelineKeyframePayloads,
     moveTimelineKeyframe,
 } from "../../src/editor/timeline-edit-service";
+import { EffectSceneTrackStore } from "../../src/editor/effect-scene-track-store";
+import { isEffectId, makeEffectPayload } from "../../src/editor/effect-keyframe-definitions";
+import { executeCommand, type CommandExecutionContext } from "../../src/actions/command-executor";
+import type { BuiltCommand } from "../../src/actions/command-types";
 import type { KeyframeTrack, ModelInfo } from "../../src/types";
 
 type TestModel = {
@@ -102,6 +106,52 @@ function createHost(modelInfo: ModelInfo): { host: TestHost; model: TestModel } 
     } satisfies TestHost;
     return { host, model };
 }
+
+describe("effect timeline commands", () => {
+    it("routes effect IDs through the common editor and reverses registration and multi-effect deletion", () => {
+        const { host, model } = createHost(createModelInfo([]));
+        const store = new EffectSceneTrackStore();
+        host.applyEffectSceneKeyframePayload = (id, frame, payload) => isEffectId(id) && store.apply(id, frame, payload, {});
+        host.readEffectSceneKeyframePayload = (id, frame) => isEffectId(id) ? store.read(id, frame) : null;
+        host.removeEffectSceneKeyframePayloads = (id, frames) => isEffectId(id) && store.remove(id, frames);
+        host.moveEffectSceneKeyframe = (id, from, to) => isEffectId(id) && store.move(id, from, to);
+        const context: CommandExecutionContext = {
+            addTimelineKeyframe: () => false,
+            removeTimelineKeyframe: (track, frame) => removeTimelineKeyframePayloads(host, track, [frame]),
+            moveTimelineKeyframe: (track, from, to) => moveTimelineKeyframe(host, track, from, to),
+            applyTimelineKeyframePayload: (track, frame, payload) => applyTimelineKeyframePayload(host, track, frame, payload),
+            setSelectedFrame: () => undefined, seekToBoundary: () => undefined, refreshAfterKeyframeEdit: () => undefined,
+        };
+        const gamma = { category: "effect", name: "gamma" } as const;
+        const grain = { category: "effect", name: "grain" } as const;
+        const gammaValue = makeEffectPayload("gamma", { enabled: true, gamma: 0.5 });
+        const grainValue = makeEffectPayload("grain", { enabled: true, intensity: 50 });
+        const register: BuiltCommand = { id: "register", label: "Register", scope: "keyframe", createdAtMs: 0,
+            diff: { type: "keyframe.paste", track: gamma, frame: 10, before: null, after: gammaValue } };
+        expect(executeCommand(register, "apply", context)).toBe(true);
+        expect(executeCommand(register, "revert", context)).toBe(true);
+        expect([...store.frames("gamma")]).toEqual([]);
+        expect(store.base("gamma")).toEqual({ enabled: false, gamma: 1 });
+        expect(executeCommand(register, "apply", context)).toBe(true);
+        expect(applyTimelineKeyframePayload(host, grain, 10, gammaValue)).toBe(false);
+        expect(applyTimelineKeyframePayload(host, grain, 10, grainValue)).toBe(true);
+        expect(applyTimelineKeyframePayload(host, grain, 30, grainValue)).toBe(true);
+        expect(moveTimelineKeyframe(host, grain, 10, 30)).toBe(false);
+        expect(moveTimelineKeyframe(host, grain, 10, 20)).toBe(true);
+        const remove: BuiltCommand = { id: "remove", label: "Remove", scope: "keyframe", createdAtMs: 0,
+            diff: { type: "keyframe.batchDelete", items: [
+                { track: gamma, frame: 10, before: gammaValue }, { track: grain, frame: 20, before: grainValue },
+            ] } };
+        expect(executeCommand(remove, "apply", context)).toBe(true);
+        expect(store.read("gamma", 10)).toBeNull();
+        expect(store.read("grain", 20)).toBeNull();
+        expect(executeCommand(remove, "revert", context)).toBe(true);
+        expect(readTimelineKeyframePayload(host, gamma, 10)).toEqual(gammaValue);
+        expect(readTimelineKeyframePayload(host, grain, 20)).toEqual(grainValue);
+        expect(store.read("grain", 30)).toEqual(grainValue);
+        expect(host.modelSourceAnimationsByModel.get(model)).toBeUndefined();
+    });
+});
 
 describe("timeline edit service model animation tracks", () => {
     it("promotes an imported rotation track before adding translation without losing earlier keys", () => {
@@ -209,7 +259,6 @@ describe("timeline edit service model animation tracks", () => {
             { name: "Light", category: "light", frames: [5] },
             { name: "Shadow", category: "shadow", frames: [10, 20] },
             { name: "Gravity", category: "gravity", frames: [15, 30] },
-            { name: "Gamma", category: "gamma", frames: [] },
         ]);
         expect(applyTimelineKeyframePayload(editableHost, { name: "Shadow", category: "shadow" }, 12, {
             kind: "shadow",

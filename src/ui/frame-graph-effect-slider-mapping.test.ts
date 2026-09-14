@@ -64,8 +64,8 @@ describe("FrameGraph effect detail slider mapping", () => {
 
     it("maps the light bloom preset into the shared range", () => {
         expect(toFrameGraphEffectSliderValue("bloomWeight", 0.4)).toBe(20);
-        expect(toFrameGraphEffectSliderValue("bloomThreshold", 0.9)).toBe(90);
-        expect(fromFrameGraphEffectSliderValue("bloomThreshold", 100)).toBe(1);
+        expect(toFrameGraphEffectSliderValue("bloomThreshold", 0.9)).toBe(45);
+        expect(fromFrameGraphEffectSliderValue("bloomThreshold", 100)).toBe(2);
         expect(toFrameGraphEffectSliderValue("bloomKernel", 205)).toBe(80);
     });
 

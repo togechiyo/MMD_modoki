@@ -615,6 +615,7 @@
     "effect.frameGraphPost.effects.bloom":  "블룸",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "효과",
+    "timeline.bloomFixedSettings": "커널과 색상은 고정 설정",
     "timeline.effectSuspended": "효과 스택에서 제외됨",
     "timeline.gamma": "감마",
     "effect.frameGraphPost.effects.gamma":  "감마",

@@ -7526,7 +7526,12 @@ body.bottom-panel-resizing {
   white-space: nowrap;
 }
 
-#effect-key-value {
+#effect-key-parameters { display: flex; flex: 1; gap: 12px; flex-wrap: wrap; }
+#effect-key-parameters label { flex: 1; }
+#effect-key-controls { flex-wrap: wrap; }
+#effect-key-controls [data-effect-key-scope] { color: var(--text-secondary); }
+
+#effect-key-parameters input {
   flex: 1;
   min-width: 40px;
   accent-color: #39c5bb;

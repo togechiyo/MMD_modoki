@@ -615,6 +615,7 @@
     "effect.frameGraphPost.effects.bloom":  "ブルーム",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "エフェクト",
+    "timeline.bloomFixedSettings": "カーネル・色は固定設定",
     "timeline.effectSuspended": "スタックから外れています",
     "timeline.gamma": "ガンマ",
     "effect.frameGraphPost.effects.gamma":  "ガンマ",

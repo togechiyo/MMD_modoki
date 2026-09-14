@@ -1964,7 +1964,7 @@ ${beforeFogAppendBlock}
     private readonly effectSceneTracks = new EffectSceneTrackStore();
     private effectCaptureDepth = 0;
     private readonly effectPlaybackPreparation = new EffectPlaybackPreparation();
-    private effectRenderState = { gammaPower: 1, grainIntensity: 0, grainPrepared: false };
+    private effectRenderState = { gammaPower: 1, grainIntensity: 0, grainPrepared: false, bloomWeight: 1, bloomThreshold: 1 };
     private timelineTarget: TimelineTarget = "model";
     private activeTimelineAccessoryIndex: number | null = null;
     private boneVisualizerTarget: { mesh: Mesh; skeleton: Skeleton | null; pairs: Array<[number, number]>; positionMesh: Mesh; runtimeBones: readonly IMmdRuntimeBone[] | null; runtimeUseMeshWorldMatrix: boolean; boneControlInfoByName: ReadonlyMap<string, BoneControlInfo> } | null = null;
@@ -6388,6 +6388,7 @@ ${beforeFogAppendBlock}
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
+        if (id === "bloom") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue };
         const enabled = this.frameGraphPostEffectStackEnabledValue.get(id) ?? (id === "gamma" ? this.postEffectGammaValue !== 1 : this.postEffectGrainIntensityValue > 0);
         return id === "gamma" ? { enabled, gamma: this.postEffectGammaValue } : { enabled, intensity: this.postEffectGrainIntensityValue };
     }
@@ -6444,6 +6445,12 @@ ${beforeFogAppendBlock}
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
         this.effectSceneTracksChanged();
     }
+    public getStaticPostEffectBloom(): { enabled: boolean; weight: number; threshold: number } {
+        return { enabled: this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue };
+    }
+    public get effectKeyframeBloomPrepared(): boolean {
+        return this.effectSceneTracks.has("bloom") && this.getFrameGraphPostEffectStackIds().includes("bloom");
+    }
     public getStaticPostEffectGamma(): number { return this.postEffectGammaValue; }
     public getStaticPostEffectGrainIntensity(): number { return this.postEffectGrainIntensityValue; }
     public get effectKeyframeGrainPrepared(): boolean {
@@ -6456,7 +6463,12 @@ ${beforeFogAppendBlock}
             this.effectSceneTracks.evaluate("gamma", frame, withPreview), this.effectSceneTracks.evaluate("grain", frame, withPreview),
             this.postEffectGammaValue, this.postEffectGrainIntensityValue,
             this.getFrameGraphPostEffectStackIds().includes("gamma"), this.getFrameGraphPostEffectStackIds().includes("grain"),
+            { value: this.effectSceneTracks.evaluate("bloom", frame, withPreview), present: this.getFrameGraphPostEffectStackIds().includes("bloom"), weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue },
         );
+        if (this.postEffectBackend === "classic" && this.standaloneBloomEffect) {
+            this.standaloneBloomEffect.weight = this.effectRenderState.bloomWeight;
+            this.standaloneBloomEffect.threshold = this.effectRenderState.bloomThreshold;
+        }
         if (this.postEffectBackend === "classic" && this.defaultRenderingPipeline?.grain) {
             this.defaultRenderingPipeline.grain.intensity = this.effectRenderState.grainIntensity;
         }
@@ -11095,9 +11107,9 @@ ${beforeFogAppendBlock}
             luminousGlareLength: this.postEffectGlowGlareLengthValue,
             luminousGlareAngle: this.postEffectGlowGlareAngleValue,
             luminousGlarePower: this.postEffectGlowGlarePowerValue,
-            bloomEnabled: this.isFrameGraphPostEffectActive("bloom"),
-            bloomWeight: this.postEffectBloomWeightValue,
-            bloomThreshold: this.postEffectBloomThresholdValue,
+            bloomEnabled: this.effectSceneTracks.has("bloom") ? this.effectKeyframeBloomPrepared : this.isFrameGraphPostEffectActive("bloom"),
+            bloomWeight: this.effectRenderState.bloomWeight,
+            bloomThreshold: this.effectRenderState.bloomThreshold,
             bloomKernel: this.postEffectBloomKernelValue,
             bloomColor: this.getPostEffectBloomColor(),
             vignetteEnabled: this.isFrameGraphPostEffectActive("vignette"),
@@ -12240,27 +12252,30 @@ ${beforeFogAppendBlock}
 
     /** Default pipeline bloom enabled state for grouped bloom controls. */
     get postEffectBloomEnabled(): boolean {
-        return this.postEffectBloomEnabledValue;
+        return this.effectSceneTracks.evaluate("bloom", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectBloomEnabledValue;
     }
     set postEffectBloomEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("bloom")) { this.setEffectScenePreview("bloom", { ...this.captureCurrentEffectKeyframePayload("bloom").value, enabled: Boolean(v) }); return; }
         this.postEffectBloomEnabledValue = Boolean(v);
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     /** Default pipeline bloom weight (0.0..2.0, 0 = OFF). */
     get postEffectBloomWeight(): number {
-        return this.postEffectBloomWeightValue;
+        return Number(this.effectSceneTracks.evaluate("bloom", this._currentFrame, !this.isPlaying)?.weight ?? this.postEffectBloomWeightValue);
     }
     set postEffectBloomWeight(v: number) {
+        if (this.effectSceneTracks.has("bloom")) { this.setEffectScenePreview("bloom", { ...this.captureCurrentEffectKeyframePayload("bloom").value, weight: v }); return; }
         this.postEffectBloomWeightValue = Math.max(0, Math.min(2, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     /** Default pipeline bloom threshold (0.0..2.0). */
     get postEffectBloomThreshold(): number {
-        return this.postEffectBloomThresholdValue;
+        return Number(this.effectSceneTracks.evaluate("bloom", this._currentFrame, !this.isPlaying)?.threshold ?? this.postEffectBloomThresholdValue);
     }
     set postEffectBloomThreshold(v: number) {
+        if (this.effectSceneTracks.has("bloom")) { this.setEffectScenePreview("bloom", { ...this.captureCurrentEffectKeyframePayload("bloom").value, threshold: v }); return; }
         this.postEffectBloomThresholdValue = Math.max(0, Math.min(2, v));
         this.applyDefaultPipelinePostProcessSettings();
     }

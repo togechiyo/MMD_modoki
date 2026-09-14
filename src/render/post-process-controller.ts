@@ -109,6 +109,7 @@ type PostProcessHost = {
     postEffectBloomThresholdValue: number;
     postEffectBloomKernelValue: number;
     effectKeyframeGrainPrepared?: boolean;
+    effectKeyframeBloomPrepared?: boolean;
     postEffectMotionBlurEnabledValue: boolean;
     postEffectMotionBlurStrengthValue: number;
     postEffectMotionBlurSamplesValue: number;
@@ -796,7 +797,7 @@ function applyStandaloneBloomSettings(host: PostProcessHost): void {
         pipeline.bloomEnabled = false;
     }
 
-    if (host.postEffectBackend === "frameGraph" || !host.postEffectBloomEnabledValue || !pipeline) {
+    if (host.postEffectBackend === "frameGraph" || (!host.effectKeyframeBloomPrepared && !host.postEffectBloomEnabledValue) || !pipeline) {
         disposeStandaloneBloomEffect(host);
         host.enforceFinalPostProcessOrder();
         return;

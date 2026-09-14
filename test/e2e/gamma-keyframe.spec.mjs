@@ -30,7 +30,7 @@ async function selectEffect(page, id) {
 }
 
 for (const backend of ["frameGraph", "classic"]) {
-for (const effectId of ["gamma", "grain"]) {
+for (const effectId of ["gamma", "grain", "bloom"]) {
 test(`camera ${effectId} keys: ${backend} registration, playback, save and output`, async ({}, testInfo) => {
   const launched = await launchMmdModoki(repoRoot);
   try {
@@ -52,21 +52,24 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     await page.locator("#btn-toolbar-mode-toggle").click();
     await selectEffect(page, effectId);
     await expect(page.locator("#effect-key-controls")).toBeVisible();
-    await expect(page.locator("#effect-key-controls label")).toHaveText(effectId === "gamma" ? "ガンマ" : "グレイン");
+    await expect(page.locator("[data-effect-key-label]")).toHaveText(effectId === "gamma" ? "ガンマ" : effectId === "grain" ? "グレイン" : "ブルーム");
     const enabled = page.locator("#effect-key-enabled");
     const slider = page.locator("#effect-key-value");
+    const initialPosition = effectId === "bloom" ? 200 : 100;
+    const threshold = page.locator("#effect-key-value-threshold");
     const savedKeys = () => page.evaluate(id => window.mmdModokiE2e.exportProjectState().keyframes.effectAnimations.tracks.find(track => track.effectId === id), effectId);
     const add = async (frame, on, offset) => {
       await seek(page, frame);
       await enabled.setChecked(on);
       await slider.fill(String(offset));
       await slider.dispatchEvent("input");
+      if (effectId === "bloom") { await threshold.fill(String(frame * 5)); await threshold.dispatchEvent("input"); }
       await page.locator("#btn-kf-add").click();
     };
-    await add(0, true, 100);
+    await add(0, true, initialPosition);
     await add(20, false, effectId === "gamma" ? -100 : 100);
     await add(40, true, 0);
-    expect(await savedKeys()).toMatchObject({ effectId, valueVersion: 1, keys: effectId === "gamma" ? [{ frame: 0, value: { enabled: true, gamma: 0.5 } }, { frame: 20, value: { enabled: false, gamma: 2 } }, { frame: 40, value: { enabled: true, gamma: 1 } }] : [{ frame: 0, value: { enabled: true, intensity: 100 } }, { frame: 20, value: { enabled: false, intensity: 100 } }, { frame: 40, value: { enabled: true, intensity: 0 } }] });
+    expect(await savedKeys()).toMatchObject({ effectId, valueVersion: 1, keys: effectId === "gamma" ? [{ frame: 0, value: { enabled: true, gamma: 0.5 } }, { frame: 20, value: { enabled: false, gamma: 2 } }, { frame: 40, value: { enabled: true, gamma: 1 } }] : effectId === "bloom" ? [{ frame: 0, value: { enabled: true, weight: 2, threshold: 0 } }, { frame: 20, value: { enabled: false, weight: 1, threshold: 1 } }, { frame: 40, value: { enabled: true, weight: 0, threshold: 2 } }] : [{ frame: 0, value: { enabled: true, intensity: 100 } }, { frame: 20, value: { enabled: false, intensity: 100 } }, { frame: 40, value: { enabled: true, intensity: 0 } }] });
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect((await savedKeys()).keys.map(key => key.frame)).toEqual([0, 20]);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
@@ -74,7 +77,8 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
     await seek(page, 10);
-    await expect(slider).toHaveValue(effectId === "gamma" ? "0" : "100");
+    await expect(slider).toHaveValue(effectId === "gamma" ? "0" : effectId === "bloom" ? "150" : "100");
+    if (effectId === "bloom") await expect(threshold).toHaveValue("50");
     await expect(enabled).toBeChecked();
     await seek(page, 19);
     await expect(enabled).toBeChecked();
@@ -87,9 +91,29 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     await seek(page, 40);
     await expect(enabled).toBeChecked();
     await seek(page, 0);
-    await expect(slider).toHaveValue("100");
+    await expect(slider).toHaveValue(String(initialPosition));
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
     await page.screenshot({ path: testInfo.outputPath("effect-key-ui.png") });
+
+    if (effectId === "bloom" && backend === "frameGraph") {
+      const weightControl = page.locator('[data-effect-stack-control="bloomWeight"]');
+      if (!await weightControl.isVisible()) await page.locator("#btn-toggle-shader-panel").click();
+      await seek(page, 10);
+      await expect(weightControl).toHaveValue("75");
+      await expect(page.locator('[data-effect-stack-control="bloomThreshold"]')).toHaveValue("25");
+      await weightControl.fill("60"); await weightControl.dispatchEvent("input");
+      await expect(slider).toHaveValue("120");
+      await expect(threshold).toHaveValue("50");
+      const cutoffControl = page.locator('[data-effect-stack-control="bloomThreshold"]');
+      await cutoffControl.fill("40"); await cutoffControl.dispatchEvent("input");
+      await expect(slider).toHaveValue("120");
+      await expect(threshold).toHaveValue("80");
+      await page.locator("#btn-kf-add").click();
+      expect((await savedKeys()).keys.find(key => key.frame === 10).value).toEqual({ enabled: true, weight: 1.2, threshold: 0.8 });
+      await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
+      expect((await savedKeys()).keys.map(key => key.frame)).toEqual([0, 20, 40]);
+      await seek(page, 0);
+    }
 
     // Copy/paste and delete share normal command history.
     await page.locator("#btn-kf-copy").click();
@@ -100,6 +124,22 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     expect((await savedKeys()).keys.map(key => key.frame)).not.toContain(60);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect((await savedKeys()).keys.map(key => key.frame)).toContain(60);
+
+    if (effectId === "bloom") {
+      const untouchedThreshold = ((await savedKeys()).keys.find(key => key.frame === 60).value.threshold + 0.37) / 2;
+      await seek(page, 80);
+      await enabled.check();
+      await slider.fill("113"); await slider.dispatchEvent("input");
+      await threshold.fill("37"); await threshold.dispatchEvent("input");
+      await page.locator("#btn-kf-add").click();
+      await seek(page, 70);
+      await slider.fill("130"); await slider.dispatchEvent("input");
+      expect((await savedKeys()).preview.value.threshold).toBeCloseTo(untouchedThreshold, 12);
+      await enabled.uncheck();
+      expect((await savedKeys()).preview.value).toEqual({ enabled: false, weight: 1.3, threshold: untouchedThreshold });
+      await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
+      expect((await savedKeys()).keys.map(key => key.frame)).toEqual([0, 20, 40, 60]);
+    }
 
     const path = testInfo.outputPath("gamma-project.json");
     await launched.app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, path);
@@ -124,7 +164,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     await expect(slider).toBeEnabled();
     for (const [locale, label] of Object.entries(Object.fromEntries(["en", "zh-Hant", "zh-Hans", "ko", "ja"].map(locale => [locale, JSON.parse(readFileSync(resolve(repoRoot, `language/${locale}.json`), "utf8").replace(/^\uFEFF/, ""))[`effect.frameGraphPost.effects.${effectId}`]])))) {
       await page.locator("#toolbar-locale-select").selectOption(locale);
-      await expect(page.locator("#effect-key-controls label")).toHaveText(label);
+      await expect(page.locator("[data-effect-key-label]")).toHaveText(label);
     }
 
     // A stopped preview is saved separately and must not replace the authored keys.
@@ -140,7 +180,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
     await selectEffect(page, effectId);
     await expect(slider).toHaveValue("17");
-    if (effectId === "gamma") {
+    if (effectId !== "grain") {
       const capture = async name => {
         const output = testInfo.outputPath(name);
         mkdirSync(output, { recursive: true });
@@ -174,7 +214,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     }
 
-    if (backend === "frameGraph" && effectId === "gamma") {
+    if (backend === "frameGraph" && effectId !== "grain") {
       for (const nextBackend of ["classic", "frameGraph"]) {
         const select = page.locator('select[data-postfx-select="backend"]');
         await select.selectOption(nextBackend, { force: true });
@@ -184,7 +224,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
         await selectEffect(page, effectId);
         await seek(page, 20);
         await expect(enabled).not.toBeChecked();
-        await expect(slider).toHaveValue("-100");
+        await expect(slider).toHaveValue(effectId === "gamma" ? "-100" : "100");
         await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       }
     }
@@ -205,6 +245,27 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     };
     expect(difference(pngs[0], pngs[1])).toBeGreaterThan(1);
     expect(difference(pngs[1], pngs[2])).toBeLessThan(0.05);
+
+    if (effectId === "bloom") {
+      // Hold one parameter fixed while changing the other, to catch missing bindings.
+      const extraPngs = [];
+      for (const [frame, weight, cutoff] of [[80, 200, 200], [100, 0, 0]]) {
+        await seek(page, frame);
+        await enabled.check();
+        await slider.fill(String(weight)); await slider.dispatchEvent("input");
+        await threshold.fill(String(cutoff)); await threshold.dispatchEvent("input");
+        await page.locator("#btn-kf-add").click();
+        const output = testInfo.outputPath(`bloom-parameter-${frame}`);
+        mkdirSync(output, { recursive: true });
+        await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output, 640, 360), output);
+        extraPngs.push(PNG.sync.read(readFileSync(resolve(output, "single_rgba_surface_e2e.png"))).data);
+      }
+      expect(difference(pngs[0], extraPngs[0])).toBeGreaterThan(1);
+      expect(difference(pngs[1], extraPngs[1])).toBeLessThan(0.05);
+      await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
+      await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
+      expect((await savedKeys()).keys).toEqual(previewState.keys);
+    }
 
     const webmPath = testInfo.outputPath("gamma.webm");
     await launched.app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, webmPath);
@@ -255,7 +316,7 @@ test(`camera ${effectId} keys: ${backend} registration, playback, save and outpu
     }, webmPath);
     const report = videoFrames.map((frame, index) => ({ frame: [0, 20, 40][index], matchingPngDifference: difference(frame, pngs[index]), oppositePngDifference: difference(frame, pngs[index === 0 ? 1 : 0]) }));
     writeFileSync(testInfo.outputPath("gamma-output-comparison.json"), JSON.stringify(report, null, 2));
-    if (effectId === "gamma") {
+    if (effectId !== "grain") {
       for (const item of report) expect(item.matchingPngDifference).toBeLessThan(item.oppositePngDifference);
     } else {
       // Animated grain uses a fresh random seed. Compare noise against the clean image,

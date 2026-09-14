@@ -256,6 +256,7 @@ type ProjectExportHost = {
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
     getSerializedEffectSceneTracks?: () => import("../editor/effect-scene-track-store").SerializedEffectAnimations;
     getStaticPostEffectGamma?: () => number;
+    getStaticPostEffectBloom?: () => { enabled: boolean; weight: number; threshold: number };
     getStaticPostEffectGrainIntensity?: () => number;
     getDofFocusMode?: () => "camera-target" | "person-auto" | "model-target";
     getDofFocusTargetModelPath?: () => string | null;
@@ -522,9 +523,9 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             ditheringIntensity: host.postEffectDitheringIntensity,
             vignetteEnabled: host.postEffectVignetteEnabled,
             vignetteWeight: host.postEffectVignetteWeight,
-            bloomEnabled: host.postEffectBloomEnabled,
-            bloomWeight: host.postEffectBloomWeight,
-            bloomThreshold: host.postEffectBloomThreshold,
+            bloomEnabled: host.getStaticPostEffectBloom?.().enabled ?? host.postEffectBloomEnabled,
+            bloomWeight: host.getStaticPostEffectBloom?.().weight ?? host.postEffectBloomWeight,
+            bloomThreshold: host.getStaticPostEffectBloom?.().threshold ?? host.postEffectBloomThreshold,
             bloomKernel: host.postEffectBloomKernel,
             bloomColor: host.getPostEffectBloomColor(),
             chromaticAberration: host.postEffectChromaticAberration,

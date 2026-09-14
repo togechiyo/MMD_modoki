@@ -5422,7 +5422,7 @@ export class UIController {
         }
         switch (effectId) {
             case "bloom":
-                this.mmdManager.postEffectBloomEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("bloom")) this.mmdManager.postEffectBloomEnabled = true;
                 break;
             case "dof":
                 this.mmdManager.dofEnabled = true;
@@ -8205,14 +8205,20 @@ export class UIController {
         this.effectKeyframeController?.refresh(payload, this.mmdManager.isPlaying, id ? this.mmdManager.isEffectTrackSuspended(id) : false);
         this.colorPostFxController?.refreshGammaUi();
         this.colorPostFxController?.refreshGrainUi();
-        for (const effectId of ["gamma", "grain"] as const) {
+        this.bloomToneMapController?.refreshBloomUi();
+        for (const effectId of ["gamma", "grain", "bloom"] as const) {
             const value = this.mmdManager.captureCurrentEffectKeyframePayload(effectId);
             const toggle = this.postEffectStackList?.querySelector<HTMLInputElement>(`[data-effect-stack-toggle="${effectId}"]`);
             if (toggle) { toggle.checked = value.value.enabled; toggle.disabled = this.mmdManager.isPlaying; }
             const row = this.postEffectStackList?.querySelector<HTMLElement>(`[data-effect-stack-row="${effectId}"]`);
+            const fields: Record<string, number> = value.effectId === "gamma" ? { gammaPower: value.value.gamma }
+                : value.effectId === "grain" ? { grainIntensity: value.value.intensity }
+                : { bloomWeight: value.value.weight, bloomThreshold: value.value.threshold };
             row?.querySelectorAll<HTMLInputElement>("input[data-effect-stack-control]").forEach(input => {
+                const field = input.dataset.effectStackControl ?? "";
+                if (!(field in fields) || !isFrameGraphEffectSliderField(field)) return;
                 input.disabled = this.mmdManager.isPlaying;
-                const position = value.effectId === "gamma" ? toFrameGraphEffectSliderValue("gammaPower", value.value.gamma) : toFrameGraphEffectSliderValue("grainIntensity", value.value.intensity);
+                const position = toFrameGraphEffectSliderValue(field, fields[field]);
                 if (document.activeElement !== input) input.value = String(Math.round(position));
                 this.updateFrameGraphPostStackControlValue(input);
             });

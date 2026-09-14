@@ -136,14 +136,15 @@ export class BloomToneMapController {
             weightInput: HTMLInputElement,
             thresholdInput: HTMLInputElement,
             kernelInput: HTMLInputElement,
+            changed: EventTarget | null,
         ): void => {
             const action = {
                 type: "effect.setBloom" as const,
                 source: "panel" as const,
-                enabled: enabledInput.checked,
-                weightPercent: Number(weightInput.value),
-                thresholdSlider: Number(thresholdInput.value),
-                kernel: Number(kernelInput.value),
+                enabled: changed === enabledInput ? enabledInput.checked : this.mmdManager.postEffectBloomEnabled,
+                weightPercent: changed === weightInput ? Number(weightInput.value) : this.mmdManager.postEffectBloomWeight * 100,
+                thresholdSlider: changed === thresholdInput ? Number(thresholdInput.value) : (2 - this.mmdManager.postEffectBloomThreshold) * 100,
+                kernel: changed === kernelInput ? Number(kernelInput.value) : this.mmdManager.postEffectBloomKernel,
             };
             if (!this.dispatchAction?.(action)) {
                 this.setBloom(action.enabled, action.weightPercent, action.thresholdSlider, action.kernel);
@@ -175,29 +176,33 @@ export class BloomToneMapController {
         this.refreshGlowUi();
 
         elements.toneMappingTypeSelect.addEventListener("change", applyToneMapping);
-        elements.bloomEnabledInput.addEventListener("input", () => applyBloom(
+        elements.bloomEnabledInput.addEventListener("input", (event) => applyBloom(
             elements.bloomEnabledInput,
             elements.bloomWeightInput,
             elements.bloomThresholdInput,
             elements.bloomKernelInput,
+            event.target,
         ));
-        elements.bloomWeightInput.addEventListener("input", () => applyBloom(
+        elements.bloomWeightInput.addEventListener("input", (event) => applyBloom(
             elements.bloomEnabledInput,
             elements.bloomWeightInput,
             elements.bloomThresholdInput,
             elements.bloomKernelInput,
+            event.target,
         ));
-        elements.bloomThresholdInput.addEventListener("input", () => applyBloom(
+        elements.bloomThresholdInput.addEventListener("input", (event) => applyBloom(
             elements.bloomEnabledInput,
             elements.bloomWeightInput,
             elements.bloomThresholdInput,
             elements.bloomKernelInput,
+            event.target,
         ));
-        elements.bloomKernelInput.addEventListener("input", () => applyBloom(
+        elements.bloomKernelInput.addEventListener("input", (event) => applyBloom(
             elements.bloomEnabledInput,
             elements.bloomWeightInput,
             elements.bloomThresholdInput,
             elements.bloomKernelInput,
+            event.target,
         ));
         if (
             elements.frameGraphBloomEnabledInput &&
@@ -205,11 +210,12 @@ export class BloomToneMapController {
             elements.frameGraphBloomThresholdInput &&
             elements.frameGraphBloomKernelInput
         ) {
-            const applyFrameGraphBloom = (): void => applyBloom(
+            const applyFrameGraphBloom = (event: Event): void => applyBloom(
                 elements.frameGraphBloomEnabledInput as HTMLInputElement,
                 elements.frameGraphBloomWeightInput as HTMLInputElement,
                 elements.frameGraphBloomThresholdInput as HTMLInputElement,
                 elements.frameGraphBloomKernelInput as HTMLInputElement,
+                event.target,
             );
             elements.frameGraphBloomEnabledInput.addEventListener("input", applyFrameGraphBloom);
             elements.frameGraphBloomWeightInput.addEventListener("input", applyFrameGraphBloom);
@@ -230,11 +236,15 @@ export class BloomToneMapController {
     }
 
     public setBloom(enabled: boolean, weightPercent: number, thresholdSlider: number, kernel: number): void {
-        this.mmdManager.postEffectBloomEnabled = enabled;
-        this.mmdManager.postEffectBloomWeight = weightPercent / 100;
-        // Invert threshold control: move right -> wider glow range (lower threshold).
-        this.mmdManager.postEffectBloomThreshold = 2 - (thresholdSlider / 100);
-        this.mmdManager.postEffectBloomKernel = kernel;
+        // The classic threshold slider is inverted; keyframes contain actual values.
+        if (this.mmdManager.hasEffectSceneTrack("bloom")) {
+            this.mmdManager.setEffectScenePreview("bloom", { enabled, weight: weightPercent / 100, threshold: 2 - thresholdSlider / 100 });
+        } else {
+            this.mmdManager.postEffectBloomEnabled = enabled;
+            this.mmdManager.postEffectBloomWeight = weightPercent / 100;
+            this.mmdManager.postEffectBloomThreshold = 2 - thresholdSlider / 100;
+        }
+        if (this.mmdManager.postEffectBloomKernel !== kernel) this.mmdManager.postEffectBloomKernel = kernel;
         this.refreshBloomUi();
     }
 
@@ -256,7 +266,7 @@ export class BloomToneMapController {
             : t("option.none");
     }
 
-    private refreshBloomUi(): void {
+    public refreshBloomUi(): void {
         const elements = this.elements;
         if (!elements) return;
         const enabled = this.mmdManager.postEffectBloomEnabled;
@@ -293,9 +303,11 @@ export class BloomToneMapController {
             weightInput.value = String(Math.max(0, Math.min(200, Math.round(this.mmdManager.postEffectBloomWeight * 100))));
             thresholdInput.value = String(Math.max(0, Math.min(200, Math.round((2 - this.mmdManager.postEffectBloomThreshold) * 100))));
             kernelInput.value = String(Math.max(1, Math.min(256, Math.round(this.mmdManager.postEffectBloomKernel))));
-            weightInput.disabled = !enabled;
-            thresholdInput.disabled = !enabled;
-            kernelInput.disabled = !enabled;
+            enabledInput.disabled = this.mmdManager.isPlaying;
+            const locked = this.mmdManager.isPlaying || (!enabled && !this.mmdManager.hasEffectSceneTrack("bloom"));
+            weightInput.disabled = locked;
+            thresholdInput.disabled = locked;
+            kernelInput.disabled = !enabled || this.mmdManager.isPlaying;
             weightValue.textContent = weightText;
             thresholdValue.textContent = thresholdText;
             kernelValue.textContent = kernelText;

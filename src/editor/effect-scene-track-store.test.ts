@@ -70,11 +70,28 @@ describe("effect scene track foundation", () => {
         expect(store.serialize()).toEqual(future);
     });
     it("supports several independent fields atomically without adding store branches", () => {
-        const definition: EffectDefinition = { id: "grain", slider: { field: "weight", min: 0, max: 1, toValue: n => n, toPosition: n => n }, fields: {
+        const definition: EffectDefinition = { id: "grain", sliders: [{ field: "weight", min: 0, max: 1, toValue: n => n, toPosition: n => n }], fields: {
             enabled: { kind: "step", default: false }, weight: { kind: "linear", min: 0, max: 2, default: 1 }, threshold: { kind: "linear", min: 0, max: 2, default: 1 },
         } };
         expect(interpolateEffectValue(definition, { enabled: true, weight: 0, threshold: 2 }, { enabled: false, weight: 2, threshold: 0 }, 0.25))
             .toEqual({ enabled: true, weight: 0.5, threshold: 1.5 });
+    });
+    it("registers, interpolates, previews and round-trips the complete bloom value", () => {
+        const store = new EffectSceneTrackStore();
+        const from = makeEffectPayload("bloom", { enabled: true, weight: 2, threshold: 0 });
+        const to = makeEffectPayload("bloom", { enabled: false, weight: 0, threshold: 2 });
+        store.apply("bloom", 0, from, {});
+        store.apply("bloom", 20, to, {});
+        expect(store.evaluate("bloom", 5)).toEqual({ enabled: true, weight: 1.5, threshold: 0.5 });
+        expect(store.evaluate("bloom", 20)).toEqual(to.value);
+        store.preview("bloom", 5, { enabled: false, weight: 0.2, threshold: 0.8 }, {});
+        expect(store.evaluate("bloom", 5)).toEqual({ enabled: true, weight: 1.5, threshold: 0.5 });
+        const restored = new EffectSceneTrackStore(); restored.restore(store.serialize());
+        expect(restored.evaluate("bloom", 5, true)).toEqual({ enabled: false, weight: 0.2, threshold: 0.8 });
+        expect(restored.read("bloom", 0)).toEqual(from);
+        expect(effectKeyframePayloadSchema.safeParse(from).success).toBe(true);
+        expect(effectKeyframePayloadSchema.safeParse({ kind: "effect", effectId: "bloom", value: { enabled: true, weight: 1 } }).success).toBe(false);
+        expect(effectKeyframePayloadSchema.safeParse({ kind: "effect", effectId: "bloom", value: { enabled: true, weight: 1, threshold: 3 } }).success).toBe(false);
     });
     it("validates automation values against the same field definitions", () => {
         expect(effectKeyframePayloadSchema.safeParse(makeEffectPayload("grain", { enabled: true, intensity: 20 })).success).toBe(true);

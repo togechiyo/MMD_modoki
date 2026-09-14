@@ -1,47 +1,75 @@
 import { t } from "../i18n";
-import { getEffectDefinition, type EffectId, type EffectKeyframePayload, type EffectValue } from "../editor/effect-keyframe-definitions";
+import { getEffectDefinition, type EffectId, type EffectKeyframePayload, type EffectSlider, type EffectValue } from "../editor/effect-keyframe-definitions";
 
-/** Compact shortcut for the selected effect; the existing right panel remains the full editor. */
+type SliderControl = { mapping: EffectSlider; input: HTMLInputElement; output: HTMLOutputElement; label: HTMLSpanElement };
+
+/** Builds controls on effect changes; readout updates preserve focus. */
 export class EffectKeyframeController {
     private id: EffectId | null = null;
     private current: EffectValue = { enabled: false };
     private readonly enabled: HTMLInputElement;
-    private readonly slider: HTMLInputElement;
-    private readonly output: HTMLOutputElement;
+    private readonly parameters: HTMLElement;
     private readonly label: HTMLElement;
     private readonly state: HTMLElement;
-    constructor(private readonly root: HTMLElement, preview: (id: EffectId, value: EffectValue) => void) {
+    private readonly scope: HTMLElement;
+    private controls: SliderControl[] = [];
+
+    constructor(private readonly root: HTMLElement, private readonly preview: (id: EffectId, value: EffectValue) => void) {
         const enabled = root.querySelector<HTMLInputElement>("#effect-key-enabled");
-        const slider = root.querySelector<HTMLInputElement>("#effect-key-value");
-        const output = root.querySelector<HTMLOutputElement>("output");
+        const parameters = root.querySelector<HTMLElement>("#effect-key-parameters");
         const label = root.querySelector<HTMLElement>("[data-effect-key-label]");
         const state = root.querySelector<HTMLElement>("[data-effect-key-state]");
-        if (!enabled || !slider || !output || !label || !state) throw new Error("Effect key controls are missing");
-        this.enabled = enabled; this.slider = slider; this.output = output; this.label = label; this.state = state;
-        const change = (): void => {
-            if (!this.id || this.slider.disabled) return;
-            const { slider: mapping } = getEffectDefinition(this.id);
-            this.current = { ...this.current, enabled: enabled.checked, [mapping.field]: mapping.toValue(Number(slider.value)) };
-            output.value = `${slider.value}%`;
-            preview(this.id, this.current);
-        };
-        enabled.addEventListener("change", change); slider.addEventListener("input", change);
+        const scope = root.querySelector<HTMLElement>("[data-effect-key-scope]");
+        if (!enabled || !parameters || !label || !state || !scope) throw new Error("Effect key controls are missing");
+        this.enabled = enabled; this.parameters = parameters; this.label = label; this.state = state; this.scope = scope;
+        enabled.addEventListener("change", () => this.change());
     }
+
+    private change(mapping?: EffectSlider, input?: HTMLInputElement): void {
+        if (!this.id || this.enabled.disabled) return;
+        this.current = { ...this.current, enabled: this.enabled.checked };
+        if (mapping && input) this.current[mapping.field] = mapping.toValue(Number(input.value));
+        this.preview(this.id, this.current);
+    }
+
+    private buildControls(id: EffectId): void {
+        this.parameters.replaceChildren();
+        this.controls = getEffectDefinition(id).sliders.map((mapping, index) => {
+            const row = document.createElement("label");
+            const label = document.createElement("span");
+            const input = document.createElement("input");
+            const output = document.createElement("output");
+            input.type = "range"; input.step = "1";
+            input.id = index === 0 ? "effect-key-value" : `effect-key-value-${mapping.field}`;
+            input.dataset.effectKeyField = mapping.field;
+            input.min = String(mapping.min); input.max = String(mapping.max);
+            output.htmlFor.value = input.id;
+            input.addEventListener("input", () => this.change(mapping, input));
+            row.append(label, input, output);
+            this.parameters.append(row);
+            return { mapping, input, output, label };
+        });
+    }
+
     refresh(payload: EffectKeyframePayload | null, playing: boolean, suspended: boolean): void {
         this.root.hidden = payload === null;
-        this.id = payload?.effectId ?? null;
-        if (!payload) return;
+        if (!payload) { this.id = null; return; }
+        if (this.id !== payload.effectId) this.buildControls(payload.effectId);
+        this.id = payload.effectId;
         this.current = payload.value;
-        const { slider: mapping } = getEffectDefinition(payload.effectId);
-        const label = t(`effect.frameGraphPost.effects.${payload.effectId}`);
-        this.label.textContent = label;
-        this.slider.setAttribute("aria-label", label);
-        this.enabled.disabled = playing; this.slider.disabled = playing;
+        const name = t(`effect.frameGraphPost.effects.${payload.effectId}`);
+        this.label.textContent = name;
+        this.enabled.disabled = playing;
         this.enabled.checked = payload.value.enabled;
-        this.slider.min = String(mapping.min); this.slider.max = String(mapping.max);
-        const position = String(Math.round(mapping.toPosition(Number(this.current[mapping.field]))));
-        if (this.slider.value !== position) this.slider.value = position;
-        this.output.value = `${position}%`;
+        for (const { mapping, input, output, label } of this.controls) {
+            label.textContent = mapping.labelKey ? t(mapping.labelKey) : "";
+            input.setAttribute("aria-label", mapping.labelKey ? `${name} ${t(mapping.labelKey)}` : name);
+            input.disabled = playing;
+            const position = String(Math.round(mapping.toPosition(Number(this.current[mapping.field]))));
+            if (input.value !== position) input.value = position;
+            output.value = `${position}%`;
+        }
         this.state.textContent = suspended ? t("timeline.effectSuspended") : "";
+        this.scope.textContent = payload.effectId === "bloom" ? t("timeline.bloomFixedSettings") : "";
     }
 }

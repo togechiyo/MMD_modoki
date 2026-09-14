@@ -615,6 +615,7 @@
     "effect.frameGraphPost.effects.bloom":  "Bloom",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "Effect",
+    "timeline.bloomFixedSettings": "Kernel and color are static",
     "timeline.effectSuspended": "Not in the effect stack",
     "timeline.gamma": "Gamma",
     "effect.frameGraphPost.effects.gamma":  "Gamma",

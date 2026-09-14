@@ -16,7 +16,7 @@ export type FrameGraphEffectSliderSpec = {
  */
 export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     bloomWeight: { actualMin: 0, actualMax: 2 },
-    bloomThreshold: { actualMin: 0, actualMax: 1 },
+    bloomThreshold: { actualMin: 0, actualMax: 2 },
     bloomKernel: { actualMin: 1, actualMax: 256, actualStep: 1 },
     luminousIntensity: { actualMin: 0, actualMax: 2 },
     luminousThreshold: { actualMin: 0, actualMax: 1.5 },

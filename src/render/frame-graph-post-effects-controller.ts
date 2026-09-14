@@ -230,6 +230,7 @@ export type FrameGraphPostEffectsSettings = {
     ssaoShadowColor: { r: number; g: number; b: number };
     ssaoToonInfluence: number;
     offsetShadowEnabled: boolean;
+    offsetShadowPrepared?: boolean;
     offsetShadowStrength: number;
     offsetShadowOffsetX: number;
     offsetShadowOffsetY: number;
@@ -242,6 +243,7 @@ export type FrameGraphPostEffectsSettings = {
     offsetShadowColor: { r: number; g: number; b: number };
     offsetShadowDebugView: boolean;
     offsetHighlightEnabled: boolean;
+    offsetHighlightPrepared?: boolean;
     offsetHighlightStrength: number;
     offsetHighlightOffsetX: number;
     offsetHighlightOffsetY: number;
@@ -3377,10 +3379,12 @@ export class FrameGraphPostEffectsController {
         }
         if (this.offsetShadowTask) {
             this.offsetShadowTask.disabled = !this.isPostEffectActive(settings, "offsetShadow")
+                || settings.offsetShadowStrength <= 0.0001
                 || this.offsetShadowTask.depthTexture === undefined;
         }
         if (this.offsetHighlightTask) {
             this.offsetHighlightTask.disabled = !this.isPostEffectActive(settings, "offsetHighlight")
+                || settings.offsetHighlightStrength <= 0.0001
                 || this.offsetHighlightTask.depthTexture === undefined;
         }
         if (this.motionBlurTask) {

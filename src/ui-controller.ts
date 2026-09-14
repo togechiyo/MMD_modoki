@@ -5440,10 +5440,10 @@ export class UIController {
                 this.mmdManager.postEffectSsaoEnabled = true;
                 break;
             case "offsetShadow":
-                this.mmdManager.postEffectOffsetShadowEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("offsetShadow")) this.mmdManager.postEffectOffsetShadowEnabled = true;
                 break;
             case "offsetHighlight":
-                this.mmdManager.postEffectOffsetHighlightEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("offsetHighlight")) this.mmdManager.postEffectOffsetHighlightEnabled = true;
                 break;
             case "ssr":
                 this.mmdManager.postEffectSsrEnabled = true;
@@ -8238,6 +8238,9 @@ export class UIController {
                 const position = toFrameGraphEffectSliderValue(field, fields[field]);
                 if (document.activeElement !== input) input.value = String(Math.round(position));
                 this.updateFrameGraphPostStackControlValue(input);
+                if (document.activeElement !== this.rangeNumberInputs.get(input) || this.mmdManager.isPlaying) {
+                    this.syncRangeNumberInput(input);
+                }
             });
         }
         if (id) this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying;

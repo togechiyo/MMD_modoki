@@ -191,6 +191,7 @@
 - [x] DoF `オートフォーカス`（人物優先）を新規sceneの既定として実装（頭 / 首 / 上半身系boneを持つmodelのみ、中央score、25%切替hysteresis、camera target fallback、project round-trip、focused E2E）
 - [x] エフェクトキーの最小PoCとして、カメラモードへガンマのON / OFF・スライダー値のキーを追加。保存・Undo / Redo・Classic / FrameGraph・PNG / WebMを確認（[実験メモ](./gamma-timeline-key-experiment-2026-09-14.md)、2026-09-14）。他エフェクトへの展開は後続で判断する。
 - [x] 海を除く1エフェクト1行の共通基盤について、状態・新形式保存・UI・描画adapter・作業分解を設計。所有者指定により未配布の旧ガンマキー互換を外し、下準備10〜18h（予備込み14〜24h）へ改定（[設計・見積もり](./effect-timeline-common-foundation-design-2026-09-14.md)、2026-09-14）。
+- [x] パラフレア・オフセット影・オフセットリムのON / OFFと現行UIの12スライダーをキー化。初期OFFの深度準備、補間・保存・数値入力同期・PNG/WebMを確認し、対応は合計14種（[実装・検証](./depth-effects-timeline-2026-09-14.md)、2026-09-14）。
 - [x] 空気遠近のON / OFF・強度・開始距離・広がりをキー化。初期OFFで深度を準備し、Frame Graphの補間・保存・PNG/WebM、Classic往復でキー保持を確認。対応は合計11種（[実装・次候補](./aerial-perspective-timeline-2026-09-14.md)、2026-09-14）。
 - [x] ブルームのカーネル幅、ルミナスのしきい値・半径もキーへ接続。再生中の再コンパイルを避け、両backendの補間・保存・PNG/WebMを確認。LUT選択は内蔵presetのstep切替と事前読込を後続設計（[実装・後続設計](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)、2026-09-14）。
 - [x] LUT・ルミナスのON / OFFと強度をキーへ接続。初期OFFの資源準備、保存・両backend・PNG / WebMを確認し、対応は合計10種（[実装・検証](./resource-effect-timeline-2026-09-14.md)、2026-09-14）。LUTの選択・ファイルと発光の対象・しきい値・ぼかし・光条は固定設定。

@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 export type EffectValueById = {
+    directionalLightShafts: { enabled: boolean; strength: number; phaseG: number };
+    offsetShadow: { enabled: boolean; strength: number; offsetX: number; offsetY: number; depthBias: number; maxDepth: number; depthScale: number };
+    offsetHighlight: { enabled: boolean; strength: number; offsetX: number; offsetY: number; depthScale: number };
     aerialPerspective: { enabled: boolean; strength: number; start: number; range: number };
     gamma: { enabled: boolean; gamma: number };
     grain: { enabled: boolean; intensity: number };
@@ -14,6 +17,7 @@ export type EffectValueById = {
     luminous: { enabled: boolean; intensity: number; threshold: number; radius: number };
 };
 export type EffectId = keyof EffectValueById;
+export type DepthEffectValues = Pick<EffectValueById, "directionalLightShafts" | "offsetShadow" | "offsetHighlight">;
 export type EffectKeyframePayload = {
     [K in EffectId]: { kind: "effect"; effectId: K; value: EffectValueById[K] }
 }[EffectId];
@@ -26,6 +30,14 @@ export type EffectDefinition = {
     sliders: readonly EffectSlider[];
     fixedSettingsLabelKey?: string;
 };
+function linearSlider(field: string, panelField: string, label: string, min: number, max: number, step?: number): EffectSlider {
+    return { field, panelField, labelKey: "effect.frameGraphPost.controls." + label, min: 0, max: 100,
+        toValue: position => {
+            const value = min + Math.max(0, Math.min(100, position)) * (max - min) / 100;
+            return step ? Math.max(min, Math.min(max, Number((min + Math.round((value - min) / step) * step).toFixed(10)))) : value;
+        },
+        toPosition: value => (value - min) / (max - min) * 100 };
+}
 export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
     { id: "gamma", fields: { enabled: { kind: "step", default: false }, gamma: { kind: "log", default: 1, min: 0.25, max: 4 } },
         sliders: [{ field: "gamma", panelField: "gammaPower", min: -100, max: 100, toValue: position => 2 ** (-position / 100), toPosition: value => -Math.log2(value) * 100 }] },
@@ -63,6 +75,42 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
         { field: "start", panelField: "aerialPerspectiveStart", labelKey: "effect.frameGraphPost.controls.startDistance", min: 0, max: 100, toValue: position => position * 5, toPosition: value => value / 5 },
         { field: "range", panelField: "aerialPerspectiveRange", labelKey: "effect.frameGraphPost.controls.transitionRange", min: 0, max: 100, toValue: position => Math.round(20 * 50 ** (position / 100)), toPosition: value => Math.log(value / 20) / Math.log(50) * 100 },
     ] },
+    { id: "directionalLightShafts", fixedSettingsLabelKey: "timeline.depthEffectFixedSettings", fields: {
+        enabled: { kind: "step", default: false },
+        strength: { kind: "linear", default: 0.08, min: 0, max: 0.16 },
+        phaseG: { kind: "linear", default: 0, min: -0.9, max: 0.9 },
+    }, sliders: [
+        linearSlider("strength", "directionalLightShaftsStrength", "strength", 0, 0.16),
+        linearSlider("phaseG", "directionalLightShaftsPhaseG", "gradientBias", -0.9, 0.9),
+    ] },
+    { id: "offsetShadow", fixedSettingsLabelKey: "timeline.depthEffectFixedSettings", fields: {
+        enabled: { kind: "step", default: false },
+        strength: { kind: "linear", default: 0.35, min: 0, max: 2 },
+        offsetX: { kind: "linear", default: 0, min: -64, max: 64 },
+        offsetY: { kind: "linear", default: -30, min: -64, max: 64 },
+        depthBias: { kind: "linear", default: 0.2, min: 0, max: 1 },
+        maxDepth: { kind: "linear", default: 2, min: 0.001, max: 4 },
+        depthScale: { kind: "linear", default: 1, min: 0, max: 1 },
+    }, sliders: [
+        linearSlider("strength", "offsetShadowStrength", "strength", 0, 2),
+        linearSlider("offsetX", "offsetShadowOffsetX", "offsetX", -64, 64, 1),
+        linearSlider("offsetY", "offsetShadowOffsetY", "offsetY", -64, 64, 1),
+        linearSlider("depthBias", "offsetShadowDepthBias", "minDepth", 0, 0.4, 0.001),
+        linearSlider("maxDepth", "offsetShadowMaxDepth", "maxDepth", 0.001, 4, 0.001),
+        linearSlider("depthScale", "offsetShadowDepthScale", "depthScale", 0, 1),
+    ] },
+    { id: "offsetHighlight", fixedSettingsLabelKey: "timeline.depthEffectFixedSettings", fields: {
+        enabled: { kind: "step", default: false },
+        strength: { kind: "linear", default: 1, min: 0, max: 2 },
+        offsetX: { kind: "linear", default: 0, min: -256, max: 256 },
+        offsetY: { kind: "linear", default: -100, min: -256, max: 256 },
+        depthScale: { kind: "linear", default: 1, min: 0, max: 1 },
+    }, sliders: [
+        linearSlider("strength", "offsetHighlightStrength", "strength", 0, 1),
+        linearSlider("offsetX", "offsetHighlightOffsetX", "offsetX", -256, 256, 1),
+        linearSlider("offsetY", "offsetHighlightOffsetY", "offsetY", -256, 256, 1),
+        linearSlider("depthScale", "offsetHighlightDepthScale", "depthScale", 0, 1),
+    ] },
 ];
 export function isEffectId(id: string): id is EffectId {
     return EFFECT_KEYFRAME_DEFINITIONS.some(definition => definition.id === id);
@@ -92,7 +140,7 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
+    kind: z.literal("effect"), effectId: z.enum(["directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
 }).strict().superRefine((payload, context) => {
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });

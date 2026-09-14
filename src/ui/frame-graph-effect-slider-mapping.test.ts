@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getEffectDefinition } from "../editor/effect-keyframe-definitions";
 import {
     FRAME_GRAPH_EFFECT_SLIDER_MAX,
     FRAME_GRAPH_EFFECT_SLIDER_MIN,
@@ -8,6 +9,17 @@ import {
     toFrameGraphEffectSliderValue,
 } from "./frame-graph-effect-slider-mapping";
 
+describe.each(["directionalLightShafts", "offsetShadow", "offsetHighlight"] as const)("%s key and panel mappings", id => {
+    it("uses the same public ranges and input quantization", () => {
+        for (const slider of getEffectDefinition(id).sliders) {
+            const field = slider.panelField as Parameters<typeof fromFrameGraphEffectSliderValue>[0];
+            for (const position of [0, 1, 25, 50, 73, 100]) {
+                expect(slider.toValue(position)).toBeCloseTo(fromFrameGraphEffectSliderValue(field, position));
+                expect(Math.round(slider.toPosition(slider.toValue(position)))).toBe(toFrameGraphEffectSliderValue(field, slider.toValue(position)));
+            }
+        }
+    });
+});
 describe("FrameGraph effect detail slider mapping", () => {
     it("uses the same 0..100 UI range for every numeric detail slider", () => {
         expect(FRAME_GRAPH_EFFECT_SLIDER_MIN).toBe(0);

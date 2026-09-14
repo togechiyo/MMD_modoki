@@ -308,6 +308,26 @@ describe("exportProjectState", () => {
         });
         expect(project.effects).toMatchObject({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5, glowThreshold: 0.7, glowKernel: 42, bloomKernel: 37 });
     });
+    it("saves public depth-effect settings separately from keyed UI values", () => {
+        const project = exportProjectState({
+            ...createHost(), postEffectDirectionalLightShaftsStrength: 0.16, postEffectDirectionalLightShaftsPhaseG: 0.9,
+            postEffectOffsetShadowEnabled: true, postEffectOffsetShadowStrength: 2, postEffectOffsetShadowOffsetX: 64,
+            postEffectOffsetShadowOffsetY: 64, postEffectOffsetShadowDepthBias: 0.4, postEffectOffsetShadowMaxDepth: 4, postEffectOffsetShadowDepthScale: 0,
+            postEffectOffsetHighlightEnabled: true, postEffectOffsetHighlightStrength: 0, postEffectOffsetHighlightOffsetX: 256,
+            postEffectOffsetHighlightOffsetY: 256, postEffectOffsetHighlightDepthScale: 0,
+            getStaticDepthPostEffects: () => ({
+                directionalLightShafts: { enabled: false, strength: 0.08, phaseG: 0 },
+                offsetShadow: { enabled: false, strength: 0.35, offsetX: 0, offsetY: -30, depthBias: 0.2, maxDepth: 2, depthScale: 1 },
+                offsetHighlight: { enabled: false, strength: 1, offsetX: 0, offsetY: -100, depthScale: 1 },
+            }),
+        });
+        expect(project.effects).toMatchObject({
+            directionalLightShaftsStrength: 0.08, directionalLightShaftsPhaseG: 0,
+            offsetShadowEnabled: false, offsetShadowStrength: 0.35, offsetShadowOffsetX: 0, offsetShadowOffsetY: -30,
+            offsetShadowDepthBias: 0.2, offsetShadowMaxDepth: 2, offsetShadowDepthScale: 1,
+            offsetHighlightEnabled: false, offsetHighlightStrength: 1, offsetHighlightOffsetX: 0, offsetHighlightOffsetY: -100, offsetHighlightDepthScale: 1,
+        });
+    });
     it("saves static aerial settings instead of the current key or preview", () => {
         const project = exportProjectState({
             ...createHost(), postEffectAerialPerspectiveStrength: 0.6, postEffectAerialPerspectiveStart: 0, postEffectAerialPerspectiveRange: 20,

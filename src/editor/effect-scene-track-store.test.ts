@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EffectSceneTrackStore } from "./effect-scene-track-store";
-import { effectKeyframePayloadSchema, interpolateEffectValue, makeEffectPayload, type EffectDefinition, type EffectId } from "./effect-keyframe-definitions";
+import { effectKeyframePayloadSchema, getEffectDefinition, interpolateEffectValue, makeEffectPayload, type EffectDefinition, type EffectId } from "./effect-keyframe-definitions";
 
 const base = { enabled: false, gamma: 1 };
 describe("effect scene track foundation", () => {
@@ -138,6 +138,24 @@ describe("effect scene track foundation", () => {
         expect(restored.evaluate("aerialPerspective", 20)).toEqual({ enabled: true, strength: 0.6, start: 500, range: 1000 });
         expect(restored.evaluate("aerialPerspective", 10)).toEqual(store.evaluate("aerialPerspective", 10));
         expect(effectKeyframePayloadSchema.safeParse(restored.read("aerialPerspective", 20)).success).toBe(true);
+    });
+    it.each(["directionalLightShafts", "offsetShadow", "offsetHighlight"] as const)("round-trips every public slider of %s and preserves fractional interpolation", id => {
+        const definition = getEffectDefinition(id);
+        const from = makeEffectPayload(id, { enabled: false });
+        const to = makeEffectPayload(id, { enabled: true });
+        for (const slider of definition.sliders) {
+            Object.assign(from.value, { [slider.field]: slider.toValue(0) });
+            Object.assign(to.value, { [slider.field]: slider.toValue(100) });
+        }
+        const store = new EffectSceneTrackStore();
+        store.apply(id, 0, from, from.value); store.apply(id, 20, to, from.value);
+        const midpoint = store.evaluate(id, 10);
+        expect(midpoint?.enabled).toBe(false);
+        for (const slider of definition.sliders) expect(midpoint?.[slider.field]).toBeCloseTo((Number(Reflect.get(from.value, slider.field)) + Number(Reflect.get(to.value, slider.field))) / 2);
+        const restored = new EffectSceneTrackStore(); restored.restore(store.serialize());
+        expect(restored.evaluate(id, 10)).toEqual(midpoint);
+        expect(restored.evaluate(id, 20)).toEqual(to.value);
+        expect(effectKeyframePayloadSchema.safeParse(restored.read(id, 20)).success).toBe(true);
     });
     it("validates automation values against the same field definitions", () => {
         expect(effectKeyframePayloadSchema.safeParse(makeEffectPayload("grain", { enabled: true, intensity: 20 })).success).toBe(true);

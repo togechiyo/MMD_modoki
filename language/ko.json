@@ -616,6 +616,7 @@
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "효과",
     "timeline.lutFixedSettings": "LUT 선택과 파일은 고정 설정입니다",
+    "timeline.depthEffectFixedSettings": "Frame Graph에서 렌더링됩니다. 색상은 고정 설정입니다.",
     "timeline.aerialPerspectiveFixedSettings": "Frame Graph에서 렌더링됩니다. 색상은 고정 설정입니다.",
     "timeline.luminousFixedSettings": "발광 대상과 광선은 고정 설정입니다",
     "timeline.bloomFixedSettings": "색상은 고정 설정",

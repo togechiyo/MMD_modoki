@@ -46,6 +46,14 @@ function createSettings(
 }
 
 describe("buildFrameGraphResourcePlan", () => {
+    it.each(["offsetShadow", "offsetHighlight"] as const)("prepares %s depth before its first visible key", id => {
+        const neutral = createSettings({ [id + "Enabled"]: true, [id + "Prepared"]: true, [id + "Strength"]: 0 });
+        const plan = buildFrameGraphResourcePlan(neutral);
+        expect(plan.requirementKeys).toContain("viewDepth");
+        expect(canReuseFrameGraphForActivation(plan, buildFrameGraphResourcePlan({ ...neutral, [id + "Strength"]: 1 }), [id])).toBe(true);
+        expect(buildFrameGraphResourcePlan({ ...neutral, [id + "Prepared"]: false }).activeEffects).not.toContain(id);
+        expect(buildFrameGraphResourcePlan({ ...neutral, [id + "Enabled"]: false }).activeEffects).not.toContain(id);
+    });
     it("retains aerial view depth when a prepared keyed effect is neutralized", () => {
         // The manager keeps enabled true for a prepared track and changes strength only.
         const neutral = { ...createSettings({ aerialPerspectiveEnabled: true }), aerialPerspectiveStrength: 0 };

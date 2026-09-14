@@ -3,6 +3,8 @@ import { existsSync, readFileSync, mkdirSync, statSync, writeFileSync } from "no
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyDepthEffectKeys } from "./depth-effect-key-checks.mjs";
+import { createDimLuminousFixture, createOffsetDepthFixture } from "../fixtures/effect-shape/generate.mjs";
 import { verifyAerialShapeKeys } from "./aerial-shape-checks.mjs";
 import { verifyEffectShapeKeys } from "./effect-shape-checks.mjs";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -27,24 +29,31 @@ async function selectEffect(page, id) {
   const index = await page.evaluate(id => window.mmdModokiE2e.getTimelineTracks().findIndex(track => track.category === "effect" && track.name === id), id);
   expect(index).toBeGreaterThan(0);
   const y = 20 + (index + 1) * 18 + 9;
-  const scroll = await page.locator("#timeline-labels").evaluate((element, y) => {
+  const point = await page.locator("#timeline-labels").evaluate(async (element, y) => {
     element.scrollTop = Math.max(0, y - element.clientHeight + 30);
-    return element.scrollTop;
+    await new Promise(requestAnimationFrame);
+    const bounds = element.getBoundingClientRect();
+    return { x: bounds.left + 40, y: bounds.top + y - element.scrollTop };
   }, y);
-  await page.locator("#timeline-label-canvas").click({ position: { x: 40, y: y - scroll } });
+  // The canvas itself scrolls; use viewport coordinates instead of subtracting
+  // scroll twice from a canvas-relative locator position.
+  await page.mouse.click(point.x, point.y);
   await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack)).toEqual({ name: id, category: "effect" });
 }
 
 
 
 const cases = [
+  { id: "directionalLightShafts", field: "strength", panel: "directionalLightShaftsStrength", max: 0.16, position: 100, static: "directionalLightShaftsStrength", frameGraphOnly: true, defaults: { phaseG: 0 } },
+  { id: "offsetShadow", field: "strength", panel: "offsetShadowStrength", max: 2, position: 100, static: "offsetShadowStrength", frameGraphOnly: true, defaults: { offsetX: 0, offsetY: -30, depthBias: 0.2, maxDepth: 2, depthScale: 1 } },
+  { id: "offsetHighlight", field: "strength", panel: "offsetHighlightStrength", max: 1, position: 100, static: "offsetHighlightStrength", frameGraphOnly: true, defaults: { offsetX: 0, offsetY: -100, depthScale: 1 } },
   { id: "aerialPerspective", field: "strength", panel: "aerialPerspectiveStrength", max: 0.6, position: 100, static: "aerialPerspectiveStrength", defaults: { start: 0, range: 20 } },
   { id: "lut", field: "intensity", panel: "lutIntensity", max: 1, position: 100, static: "lutIntensity" },
   { id: "luminous", field: "intensity", panel: "luminousIntensity", max: 4, position: 400, static: "glowIntensity" },
 ];
 for (const backend of ["frameGraph", "classic"]) {
 for (const config of cases) {
-if (config.id === "aerialPerspective" && backend === "classic") continue; // Existing effect renders only in Frame Graph.
+if ((config.frameGraphOnly || config.id === "aerialPerspective") && backend === "classic") continue; // Existing effect renders only in Frame Graph.
 test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output", async ({}, testInfo) => {
   const effectId = config.id;
   const shapeDefaults = config.defaults ?? (effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {});
@@ -63,7 +72,13 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
       await page.reload();
       await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     }
-    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath);
+    let fixturePath = modelPath;
+    if (effectId === "offsetHighlight" || effectId === "offsetShadow") {
+      mkdirSync(testInfo.outputPath(), { recursive: true });
+      fixturePath = testInfo.outputPath("offset-fixture.pmx");
+      writeFileSync(fixturePath, effectId === "offsetShadow" ? createOffsetDepthFixture() : createDimLuminousFixture());
+    }
+    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixturePath);
     await page.locator("#btn-toggle-shader-panel").click();
     if (effectId === "luminous") {
       await page.locator('[data-effect-tab="materials"]').click();
@@ -94,8 +109,8 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     await enabled.uncheck();
     await slider.fill(String(config.position)); await slider.dispatchEvent("input");
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
-    if (effectId === "aerialPerspective") {
-      expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().stack)).toContain("aerialPerspective");
+    if (config.frameGraphOnly || effectId === "aerialPerspective") {
+      expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().stack)).toContain(effectId);
     }
     if (effectId === "luminous" && backend === "frameGraph") {
       expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().stack)).toContain("luminous");
@@ -187,6 +202,9 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeDisabled();
     await expect(enabled).toBeDisabled();
+    if (config.frameGraphOnly) {
+      await expect(page.locator('[data-effect-stack-row="' + effectId + '"] .range-number-input').first()).toBeDisabled();
+    }
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeEnabled();
 
@@ -226,6 +244,10 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     };
     const pngReport = { onOff: difference(pngs[0], pngs[1]), offNeutral: difference(pngs[1], pngs[2]) };
     writeFileSync(testInfo.outputPath("scalar-png-comparison.json"), JSON.stringify(pngReport));
+    const diagnostics = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());
+    writeFileSync(testInfo.outputPath("output-diagnostics.json"), JSON.stringify({ diagnostics, errors }, null, 2));
+    expect(diagnostics).toMatchObject({ count: 0 });
+    expect(errors).toEqual([]);
     expect(pngReport.onOff).toBeGreaterThan(0.05);
     expect(pngReport.offNeutral).toBeLessThan(0.05);
     await page.screenshot({ path: testInfo.outputPath("scalar-ui.png") });
@@ -283,6 +305,7 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
         PNG.sync.write({ width: 640, height: 360, data: Buffer.from(videoFrames[index]) }));
     }
     for (const item of report) expect(item.matchingPngDifference).toBeLessThan(item.oppositePngDifference);
+    if (config.frameGraphOnly) await verifyDepthEffectKeys(page, launched.app, testInfo, config, selectEffect);
     if (effectId === "aerialPerspective") await verifyAerialShapeKeys(page, launched.app, testInfo, selectEffect);
     if (effectId === "luminous") await verifyEffectShapeKeys(page, launched.app, testInfo, effectId, selectEffect);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });

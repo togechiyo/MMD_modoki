@@ -508,7 +508,7 @@ import {
     type SerializedShadowSceneTrack,
 } from "./editor/scene-keyframe-track";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
-import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue } from "./editor/effect-keyframe-definitions";
+import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue, type DepthEffectValues } from "./editor/effect-keyframe-definitions";
 import { applyClassicKeyframedBloomBlur } from "./render/keyframed-bloom-blur";
 import { effectRenderValues, scalarEffectRenderValue, lensDistortionForFov } from "./render/effect-keyframe-runtime";
 import { EffectPlaybackPreparation } from "./render/effect-playback-preparation";
@@ -6390,6 +6390,10 @@ ${beforeFogAppendBlock}
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
+        if (id === "directionalLightShafts" || id === "offsetShadow" || id === "offsetHighlight") {
+            const value = this.getStaticDepthPostEffects()[id];
+            return { ...value, enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? value.enabled };
+        }
         if (id === "aerialPerspective") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? false, ...this.getStaticAerialPerspective() };
         if (id === "lut") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectLutEnabledValue, intensity: this.postEffectLutIntensityValue };
         if (id === "luminous") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectGlowEnabledValue, intensity: this.postEffectGlowIntensityValue, threshold: this.postEffectGlowThresholdValue, radius: this.postEffectGlowKernelValue };
@@ -6470,6 +6474,13 @@ ${beforeFogAppendBlock}
         return lensDistortionForFov(this.camera.fov,
             this.getEffectScalarRenderValue("distortion", "influence", this.dofLensDistortionInfluenceValue),
             this.dofLensDistortionMinTeleFovDeg, this.dofLensDistortionNeutralFovDeg, this.dofLensDistortionMaxWideFovDeg);
+    }
+    public getStaticDepthPostEffects(): DepthEffectValues {
+        return {
+            directionalLightShafts: { enabled: this.frameGraphPostEffectStackEnabledValue.get("directionalLightShafts") ?? false, strength: this.postEffectDirectionalLightShaftsStrengthValue, phaseG: this.postEffectDirectionalLightShaftsPhaseGValue },
+            offsetShadow: { enabled: this.postEffectOffsetShadowEnabledValue, strength: this.postEffectOffsetShadowStrengthValue, offsetX: this.postEffectOffsetShadowOffsetXValue, offsetY: this.postEffectOffsetShadowOffsetYValue, depthBias: this.postEffectOffsetShadowDepthBiasValue, maxDepth: this.postEffectOffsetShadowMaxDepthValue, depthScale: this.postEffectOffsetShadowDepthScaleValue },
+            offsetHighlight: { enabled: this.postEffectOffsetHighlightEnabledValue, strength: this.postEffectOffsetHighlightStrengthValue, offsetX: this.postEffectOffsetHighlightOffsetXValue, offsetY: this.postEffectOffsetHighlightOffsetYValue, depthScale: this.postEffectOffsetHighlightDepthScaleValue },
+        };
     }
     public getStaticAerialPerspective() {
         return { strength: this.postEffectAerialPerspectiveStrengthValue, start: this.postEffectAerialPerspectiveStartValue, range: this.postEffectAerialPerspectiveRangeValue };
@@ -11183,27 +11194,29 @@ ${beforeFogAppendBlock}
             ssaoRadius: this.postEffectSsaoRadiusValue,
             ssaoShadowColor: { r: 0.5, g: 0.5, b: 0.5 },
             ssaoToonInfluence: 1,
-            offsetShadowEnabled: this.isFrameGraphPostEffectActive("offsetShadow"),
-            offsetShadowStrength: this.postEffectOffsetShadowStrengthValue,
-            offsetShadowOffsetX: this.postEffectOffsetShadowOffsetXValue,
-            offsetShadowOffsetY: this.postEffectOffsetShadowOffsetYValue,
-            offsetShadowDepthBias: this.postEffectOffsetShadowDepthBiasValue,
-            offsetShadowMaxDepth: this.postEffectOffsetShadowMaxDepthValue,
-            offsetShadowDepthScale: this.postEffectOffsetShadowDepthScaleValue,
+            offsetShadowEnabled: this.effectSceneTracks.has("offsetShadow") ? this.isEffectKeyframePrepared("offsetShadow") : this.isFrameGraphPostEffectActive("offsetShadow"),
+            offsetShadowPrepared: this.isEffectKeyframePrepared("offsetShadow"),
+            offsetShadowStrength: this.getEffectScalarRenderValue("offsetShadow", "strength", this.postEffectOffsetShadowStrengthValue),
+            offsetShadowOffsetX: this.getEffectParameterRenderValue("offsetShadow", "offsetX", this.postEffectOffsetShadowOffsetXValue),
+            offsetShadowOffsetY: this.getEffectParameterRenderValue("offsetShadow", "offsetY", this.postEffectOffsetShadowOffsetYValue),
+            offsetShadowDepthBias: this.getEffectParameterRenderValue("offsetShadow", "depthBias", this.postEffectOffsetShadowDepthBiasValue),
+            offsetShadowMaxDepth: this.getEffectParameterRenderValue("offsetShadow", "maxDepth", this.postEffectOffsetShadowMaxDepthValue),
+            offsetShadowDepthScale: this.getEffectParameterRenderValue("offsetShadow", "depthScale", this.postEffectOffsetShadowDepthScaleValue),
             offsetShadowThickness: this.postEffectOffsetShadowThicknessValue,
             offsetShadowSoftness: this.postEffectOffsetShadowSoftnessValue,
             offsetShadowNormalInfluence: this.postEffectOffsetShadowNormalInfluenceValue,
             offsetShadowColor: this.getPostEffectOffsetShadowColor(),
             offsetShadowDebugView: this.postEffectOffsetShadowDebugViewValue,
-            offsetHighlightEnabled: this.isFrameGraphPostEffectActive("offsetHighlight"),
-            offsetHighlightStrength: this.postEffectOffsetHighlightStrengthValue,
-            offsetHighlightOffsetX: this.postEffectOffsetHighlightOffsetXValue,
-            offsetHighlightOffsetY: this.postEffectOffsetHighlightOffsetYValue,
+            offsetHighlightEnabled: this.effectSceneTracks.has("offsetHighlight") ? this.isEffectKeyframePrepared("offsetHighlight") : this.isFrameGraphPostEffectActive("offsetHighlight"),
+            offsetHighlightPrepared: this.isEffectKeyframePrepared("offsetHighlight"),
+            offsetHighlightStrength: this.getEffectScalarRenderValue("offsetHighlight", "strength", this.postEffectOffsetHighlightStrengthValue),
+            offsetHighlightOffsetX: this.getEffectParameterRenderValue("offsetHighlight", "offsetX", this.postEffectOffsetHighlightOffsetXValue),
+            offsetHighlightOffsetY: this.getEffectParameterRenderValue("offsetHighlight", "offsetY", this.postEffectOffsetHighlightOffsetYValue),
             offsetHighlightDepthThreshold: this.postEffectOffsetHighlightDepthThresholdValue,
             offsetHighlightNormalThreshold: this.postEffectOffsetHighlightNormalThresholdValue,
             offsetHighlightThickness: this.postEffectOffsetHighlightThicknessValue,
             offsetHighlightSoftness: this.postEffectOffsetHighlightSoftnessValue,
-            offsetHighlightDepthScale: this.postEffectOffsetHighlightDepthScaleValue,
+            offsetHighlightDepthScale: this.getEffectParameterRenderValue("offsetHighlight", "depthScale", this.postEffectOffsetHighlightDepthScaleValue),
             offsetHighlightColor: this.getPostEffectOffsetHighlightColor(),
             offsetHighlightDebugView: this.postEffectOffsetHighlightDebugViewValue,
             ssrEnabled: this.isFrameGraphPostEffectActive("ssr"),
@@ -11233,9 +11246,9 @@ ${beforeFogAppendBlock}
             aerialPerspectiveColor: this.getPostEffectAerialPerspectiveColor(),
             aerialPerspectiveLightColor: this.getLightColor(),
             aerialPerspectiveLightIntensity: this.dirLight?.intensity ?? 1,
-            directionalLightShaftsEnabled: this.isFrameGraphPostEffectActive("directionalLightShafts"),
-            directionalLightShaftsStrength: this.postEffectDirectionalLightShaftsStrengthValue,
-            directionalLightShaftsPhaseG: this.postEffectDirectionalLightShaftsPhaseGValue,
+            directionalLightShaftsEnabled: this.effectSceneTracks.has("directionalLightShafts") ? this.isEffectKeyframePrepared("directionalLightShafts") : this.isFrameGraphPostEffectActive("directionalLightShafts"),
+            directionalLightShaftsStrength: this.getEffectScalarRenderValue("directionalLightShafts", "strength", this.postEffectDirectionalLightShaftsStrengthValue),
+            directionalLightShaftsPhaseG: this.getEffectParameterRenderValue("directionalLightShafts", "phaseG", this.postEffectDirectionalLightShaftsPhaseGValue),
             directionalLightShaftsLightColor: this.getPostEffectDirectionalLightShaftsLightColor(),
             directionalLightShaftsShadowColor: this.getPostEffectDirectionalLightShaftsShadowColor(),
             lutEnabled: (this.effectSceneTracks.has("lut") ? this.isEffectKeyframePrepared("lut") : this.isFrameGraphPostEffectActive("lut")) && isLutSourceReadyImpl(this),
@@ -12445,57 +12458,64 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectOffsetShadowEnabled(): boolean {
-        return this.postEffectOffsetShadowEnabledValue;
+        return this.effectSceneTracks.evaluate("offsetShadow", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectOffsetShadowEnabledValue;
     }
     set postEffectOffsetShadowEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("offsetShadow")) { this.setEffectScenePreview("offsetShadow", { ...this.captureCurrentEffectKeyframePayload("offsetShadow").value, enabled: Boolean(v) }); return; }
         this.postEffectOffsetShadowEnabledValue = Boolean(v);
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetShadowStrength(): number {
-        return this.postEffectOffsetShadowStrengthValue;
+        return Number(this.effectSceneTracks.evaluate("offsetShadow", this._currentFrame, !this.isPlaying)?.strength ?? this.postEffectOffsetShadowStrengthValue);
     }
     set postEffectOffsetShadowStrength(v: number) {
+        if (this.effectSceneTracks.has("offsetShadow")) { this.setEffectScenePreview("offsetShadow", { ...this.captureCurrentEffectKeyframePayload("offsetShadow").value, strength: v }); return; }
         this.postEffectOffsetShadowStrengthValue = Math.max(0, Math.min(2, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetShadowOffsetX(): number {
-        return this.postEffectOffsetShadowOffsetXValue;
+        return Number(this.effectSceneTracks.evaluate("offsetShadow", this._currentFrame, !this.isPlaying)?.offsetX ?? this.postEffectOffsetShadowOffsetXValue);
     }
     set postEffectOffsetShadowOffsetX(v: number) {
+        if (this.effectSceneTracks.has("offsetShadow")) { this.setEffectScenePreview("offsetShadow", { ...this.captureCurrentEffectKeyframePayload("offsetShadow").value, offsetX: v }); return; }
         this.postEffectOffsetShadowOffsetXValue = Math.max(-64, Math.min(64, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetShadowOffsetY(): number {
-        return this.postEffectOffsetShadowOffsetYValue;
+        return Number(this.effectSceneTracks.evaluate("offsetShadow", this._currentFrame, !this.isPlaying)?.offsetY ?? this.postEffectOffsetShadowOffsetYValue);
     }
     set postEffectOffsetShadowOffsetY(v: number) {
+        if (this.effectSceneTracks.has("offsetShadow")) { this.setEffectScenePreview("offsetShadow", { ...this.captureCurrentEffectKeyframePayload("offsetShadow").value, offsetY: v }); return; }
         this.postEffectOffsetShadowOffsetYValue = Math.max(-64, Math.min(64, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetShadowDepthBias(): number {
-        return this.postEffectOffsetShadowDepthBiasValue;
+        return Number(this.effectSceneTracks.evaluate("offsetShadow", this._currentFrame, !this.isPlaying)?.depthBias ?? this.postEffectOffsetShadowDepthBiasValue);
     }
     set postEffectOffsetShadowDepthBias(v: number) {
+        if (this.effectSceneTracks.has("offsetShadow")) { this.setEffectScenePreview("offsetShadow", { ...this.captureCurrentEffectKeyframePayload("offsetShadow").value, depthBias: v }); return; }
         this.postEffectOffsetShadowDepthBiasValue = Math.max(0, Math.min(1, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetShadowMaxDepth(): number {
-        return this.postEffectOffsetShadowMaxDepthValue;
+        return Number(this.effectSceneTracks.evaluate("offsetShadow", this._currentFrame, !this.isPlaying)?.maxDepth ?? this.postEffectOffsetShadowMaxDepthValue);
     }
     set postEffectOffsetShadowMaxDepth(v: number) {
+        if (this.effectSceneTracks.has("offsetShadow")) { this.setEffectScenePreview("offsetShadow", { ...this.captureCurrentEffectKeyframePayload("offsetShadow").value, maxDepth: v }); return; }
         this.postEffectOffsetShadowMaxDepthValue = Math.max(0.001, Math.min(4, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetShadowDepthScale(): number {
-        return this.postEffectOffsetShadowDepthScaleValue;
+        return Number(this.effectSceneTracks.evaluate("offsetShadow", this._currentFrame, !this.isPlaying)?.depthScale ?? this.postEffectOffsetShadowDepthScaleValue);
     }
     set postEffectOffsetShadowDepthScale(v: number) {
+        if (this.effectSceneTracks.has("offsetShadow")) { this.setEffectScenePreview("offsetShadow", { ...this.captureCurrentEffectKeyframePayload("offsetShadow").value, depthScale: v }); return; }
         this.postEffectOffsetShadowDepthScaleValue = Math.max(0, Math.min(1, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -12550,33 +12570,37 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectOffsetHighlightEnabled(): boolean {
-        return this.postEffectOffsetHighlightEnabledValue;
+        return this.effectSceneTracks.evaluate("offsetHighlight", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectOffsetHighlightEnabledValue;
     }
     set postEffectOffsetHighlightEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("offsetHighlight")) { this.setEffectScenePreview("offsetHighlight", { ...this.captureCurrentEffectKeyframePayload("offsetHighlight").value, enabled: Boolean(v) }); return; }
         this.postEffectOffsetHighlightEnabledValue = Boolean(v);
         this.refreshFrameGraphPostEffectsBackendForResourcePlanChange();
     }
 
     get postEffectOffsetHighlightStrength(): number {
-        return this.postEffectOffsetHighlightStrengthValue;
+        return Number(this.effectSceneTracks.evaluate("offsetHighlight", this._currentFrame, !this.isPlaying)?.strength ?? this.postEffectOffsetHighlightStrengthValue);
     }
     set postEffectOffsetHighlightStrength(v: number) {
+        if (this.effectSceneTracks.has("offsetHighlight")) { this.setEffectScenePreview("offsetHighlight", { ...this.captureCurrentEffectKeyframePayload("offsetHighlight").value, strength: v }); return; }
         this.postEffectOffsetHighlightStrengthValue = Math.max(0, Math.min(2, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetHighlightOffsetX(): number {
-        return this.postEffectOffsetHighlightOffsetXValue;
+        return Number(this.effectSceneTracks.evaluate("offsetHighlight", this._currentFrame, !this.isPlaying)?.offsetX ?? this.postEffectOffsetHighlightOffsetXValue);
     }
     set postEffectOffsetHighlightOffsetX(v: number) {
+        if (this.effectSceneTracks.has("offsetHighlight")) { this.setEffectScenePreview("offsetHighlight", { ...this.captureCurrentEffectKeyframePayload("offsetHighlight").value, offsetX: v }); return; }
         this.postEffectOffsetHighlightOffsetXValue = Math.max(-256, Math.min(256, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
 
     get postEffectOffsetHighlightOffsetY(): number {
-        return this.postEffectOffsetHighlightOffsetYValue;
+        return Number(this.effectSceneTracks.evaluate("offsetHighlight", this._currentFrame, !this.isPlaying)?.offsetY ?? this.postEffectOffsetHighlightOffsetYValue);
     }
     set postEffectOffsetHighlightOffsetY(v: number) {
+        if (this.effectSceneTracks.has("offsetHighlight")) { this.setEffectScenePreview("offsetHighlight", { ...this.captureCurrentEffectKeyframePayload("offsetHighlight").value, offsetY: v }); return; }
         this.postEffectOffsetHighlightOffsetYValue = Math.max(-256, Math.min(256, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -12614,9 +12638,10 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectOffsetHighlightDepthScale(): number {
-        return this.postEffectOffsetHighlightDepthScaleValue;
+        return Number(this.effectSceneTracks.evaluate("offsetHighlight", this._currentFrame, !this.isPlaying)?.depthScale ?? this.postEffectOffsetHighlightDepthScaleValue);
     }
     set postEffectOffsetHighlightDepthScale(v: number) {
+        if (this.effectSceneTracks.has("offsetHighlight")) { this.setEffectScenePreview("offsetHighlight", { ...this.captureCurrentEffectKeyframePayload("offsetHighlight").value, depthScale: v }); return; }
         this.postEffectOffsetHighlightDepthScaleValue = Math.max(0, Math.min(1, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -13045,9 +13070,10 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectDirectionalLightShaftsStrength(): number {
-        return this.postEffectDirectionalLightShaftsStrengthValue;
+        return Number(this.effectSceneTracks.evaluate("directionalLightShafts", this._currentFrame, !this.isPlaying)?.strength ?? this.postEffectDirectionalLightShaftsStrengthValue);
     }
     set postEffectDirectionalLightShaftsStrength(v: number) {
+        if (this.effectSceneTracks.has("directionalLightShafts")) { this.setEffectScenePreview("directionalLightShafts", { ...this.captureCurrentEffectKeyframePayload("directionalLightShafts").value, strength: v }); return; }
         const value = Number(v);
         this.postEffectDirectionalLightShaftsStrengthValue = Number.isFinite(value)
             ? Math.max(0, Math.min(0.16, value))
@@ -13055,9 +13081,10 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectDirectionalLightShaftsPhaseG(): number {
-        return this.postEffectDirectionalLightShaftsPhaseGValue;
+        return Number(this.effectSceneTracks.evaluate("directionalLightShafts", this._currentFrame, !this.isPlaying)?.phaseG ?? this.postEffectDirectionalLightShaftsPhaseGValue);
     }
     set postEffectDirectionalLightShaftsPhaseG(v: number) {
+        if (this.effectSceneTracks.has("directionalLightShafts")) { this.setEffectScenePreview("directionalLightShafts", { ...this.captureCurrentEffectKeyframePayload("directionalLightShafts").value, phaseG: v }); return; }
         const value = Number(v);
         this.postEffectDirectionalLightShaftsPhaseGValue = Number.isFinite(value)
             ? Math.max(-0.9, Math.min(0.9, value))

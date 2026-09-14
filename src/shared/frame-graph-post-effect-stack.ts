@@ -50,8 +50,10 @@ export type FrameGraphPostEffectActivationSettings = {
     ssaoEnabled: boolean;
     ssaoStrength: number;
     offsetShadowEnabled: boolean;
+    offsetShadowPrepared?: boolean;
     offsetShadowStrength: number;
     offsetHighlightEnabled: boolean;
+    offsetHighlightPrepared?: boolean;
     offsetHighlightStrength: number;
     ssrEnabled: boolean;
     ssrStrength: number;
@@ -158,9 +160,9 @@ export function isFrameGraphPostEffectActiveInSettings(
             // FrameGraph stack UI, but does not allocate a FrameGraph post task.
             return false;
         case "offsetShadow":
-            return settings.offsetShadowEnabled && settings.offsetShadowStrength > 0.0001;
+            return settings.offsetShadowEnabled && (settings.offsetShadowPrepared === true || settings.offsetShadowStrength > 0.0001);
         case "offsetHighlight":
-            return settings.offsetHighlightEnabled && settings.offsetHighlightStrength > 0.0001;
+            return settings.offsetHighlightEnabled && (settings.offsetHighlightPrepared === true || settings.offsetHighlightStrength > 0.0001);
         case "dof":
             return settings.dofEnabled;
         case "luminous":

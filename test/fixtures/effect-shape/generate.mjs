@@ -10,3 +10,15 @@ export function createDimLuminousFixture() {
   }
   return writePmx(model);
 }
+
+// Keep the tested tofu topology; move its front marker 0.8 units toward the camera.
+export function createOffsetDepthFixture() {
+  const model = createTofuModel();
+  model.modelName = "Offset depth fixture";
+  const positions = [[-1.2, 0.5, -2.2], [1.2, 0.5, -2.2], [0, 2.5, -2.2]];
+  for (const [index, vertex] of model.vertices.slice(-3).entries()) {
+    vertex.position = positions[index];
+    vertex.normal = [0, 0, -1];
+  }
+  return writePmx(model);
+}

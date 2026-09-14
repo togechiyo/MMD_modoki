@@ -298,6 +298,21 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("keeps static scalar effect settings separate from evaluated key values", () => {
+        const project = exportProjectState({
+            ...createHost(),
+            postEffectVignetteEnabled: true, postEffectVignetteWeight: 4, postEffectSharpenEdge: 4,
+            postEffectChromaticAberration: 200, dofLensEdgeBlur: 3, dofLensDistortionInfluence: 1,
+            getStaticScalarPostEffects: () => ({
+                vignetteEnabled: false, postEffectVignetteWeight: 0.3, postEffectSharpenEdge: 0.2,
+                postEffectChromaticAberration: 10, dofLensEdgeBlur: 0.1, dofLensDistortionInfluence: 0.25,
+            }),
+        });
+        expect(project.effects).toMatchObject({
+            vignetteEnabled: false, vignetteWeight: 0.3, sharpenEdge: 0.2, chromaticAberration: 10,
+            dofLensEdgeBlur: 0.1, dofLensDistortionInfluence: 0.25,
+        });
+    });
     it("saves the master bypass separately from individual effect settings", () => {
         const enabled = exportProjectState(createHost());
         const disabled = exportProjectState({ ...createHost(), getFrameGraphPostEffectsEnabled: () => false });

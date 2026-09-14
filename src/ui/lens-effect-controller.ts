@@ -150,8 +150,8 @@ export class LensEffectController {
         this.refreshEdgeBlurValue(elements.edgeBlurInput, elements.edgeBlurValue);
 
         syncChromaticAberrationUi();
-        applyDistortionInfluence();
-        applyEdgeBlur();
+        // Connecting a panel only reads state; rounded controls must not create previews.
+        this.refreshStaticDistortionControls();
 
         elements.chromaticInput.addEventListener("input", applyChromaticAberration);
         elements.frameGraphChromaticInput?.addEventListener("input", applyFrameGraphChromaticAberration);
@@ -169,9 +169,11 @@ export class LensEffectController {
             const label = this.mmdManager.postEffectChromaticAberration > 0.000001
                 ? this.mmdManager.postEffectChromaticAberration.toFixed(0)
                 : t("status.off");
+            panelElements.chromaticInput.disabled = this.mmdManager.isPlaying;
             panelElements.chromaticInput.value = value;
             panelElements.chromaticValue.textContent = label;
             if (panelElements.frameGraphChromaticInput && panelElements.frameGraphChromaticValue) {
+                panelElements.frameGraphChromaticInput.disabled = this.mmdManager.isPlaying;
                 panelElements.frameGraphChromaticInput.value = value;
                 panelElements.frameGraphChromaticValue.textContent = label;
             }
@@ -185,7 +187,7 @@ export class LensEffectController {
         if (!this.elements.distortionInput || !this.elements.distortionValue) return;
         if (this.isRangeInputEditing(this.elements.distortionInput)) return;
 
-        const distortionPercent = this.mmdManager.dofLensDistortion * 100;
+        const distortionPercent = this.mmdManager.getEffectRenderLensDistortion() * 100;
         const sliderMin = Number(this.elements.distortionInput.min);
         const sliderMax = Number(this.elements.distortionInput.max);
         const clamped = Math.max(sliderMin, Math.min(sliderMax, distortionPercent));
@@ -250,7 +252,6 @@ export class LensEffectController {
         };
 
         this.refreshDistortionInfluenceValue(input, value);
-        applyLensDistortionInfluence();
         input.addEventListener("input", applyLensDistortionInfluence);
     }
 
@@ -297,6 +298,7 @@ export class LensEffectController {
 
     private refreshDistortionInfluenceValue(input: HTMLInputElement, value: HTMLElement): void {
         const percent = Math.round(this.mmdManager.dofLensDistortionInfluence * 100);
+        input.disabled = this.mmdManager.isPlaying;
         input.value = String(percent);
         value.textContent = `${percent}%`;
         this.syncRangeNumberInput(input);
@@ -311,10 +313,12 @@ export class LensEffectController {
         }
 
         const percent = Math.round(this.mmdManager.dofLensEdgeBlur * 100);
+        input.max = "300";
+        input.disabled = this.mmdManager.isPlaying;
         input.value = String(percent);
-        input.title = "独自ポストエフェクト実装待ち";
+        input.removeAttribute("title");
         value.textContent = `${percent}%`;
-        value.title = "独自ポストエフェクト実装待ち";
+        value.removeAttribute("title");
         this.syncRangeNumberInput(input);
     }
 }

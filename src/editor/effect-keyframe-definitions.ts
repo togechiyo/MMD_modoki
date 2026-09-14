@@ -4,6 +4,11 @@ export type EffectValueById = {
     gamma: { enabled: boolean; gamma: number };
     grain: { enabled: boolean; intensity: number };
     bloom: { enabled: boolean; weight: number; threshold: number };
+    vignette: { enabled: boolean; weight: number };
+    sharpen: { enabled: boolean; edge: number };
+    chromatic: { enabled: boolean; amount: number };
+    edgeBlur: { enabled: boolean; strength: number };
+    distortion: { enabled: boolean; influence: number };
 };
 export type EffectId = keyof EffectValueById;
 export type EffectKeyframePayload = {
@@ -11,7 +16,7 @@ export type EffectKeyframePayload = {
 }[EffectId];
 export type EffectValue = { enabled: boolean; [field: string]: number | boolean };
 type Field = { kind: "step"; default: boolean } | { kind: "linear" | "log"; default: number; min: number; max: number };
-export type EffectSlider = { field: string; labelKey?: string; min: number; max: number; toValue: (position: number) => number; toPosition: (value: number) => number };
+export type EffectSlider = { field: string; panelField?: string; labelKey?: string; min: number; max: number; toValue: (position: number) => number; toPosition: (value: number) => number };
 export type EffectDefinition = {
     id: EffectId;
     fields: Readonly<Record<string, Field>>;
@@ -19,14 +24,24 @@ export type EffectDefinition = {
 };
 export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
     { id: "gamma", fields: { enabled: { kind: "step", default: false }, gamma: { kind: "log", default: 1, min: 0.25, max: 4 } },
-        sliders: [{ field: "gamma", min: -100, max: 100, toValue: position => 2 ** (-position / 100), toPosition: value => -Math.log2(value) * 100 }] },
+        sliders: [{ field: "gamma", panelField: "gammaPower", min: -100, max: 100, toValue: position => 2 ** (-position / 100), toPosition: value => -Math.log2(value) * 100 }] },
     { id: "grain", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0, min: 0, max: 100 } },
-        sliders: [{ field: "intensity", min: 0, max: 100, toValue: position => position, toPosition: value => value }] },
+        sliders: [{ field: "intensity", panelField: "grainIntensity", min: 0, max: 100, toValue: position => position, toPosition: value => value }] },
     { id: "bloom", fields: { enabled: { kind: "step", default: false }, weight: { kind: "linear", default: 1, min: 0, max: 2 }, threshold: { kind: "linear", default: 1, min: 0, max: 2 } },
         sliders: [
-            { field: "weight", labelKey: "effect.frameGraphPost.controls.weight", min: 0, max: 200, toValue: position => position / 100, toPosition: value => value * 100 },
-            { field: "threshold", labelKey: "effect.frameGraphPost.controls.threshold", min: 0, max: 200, toValue: position => position / 100, toPosition: value => value * 100 },
+            { field: "weight", panelField: "bloomWeight", labelKey: "effect.frameGraphPost.controls.weight", min: 0, max: 200, toValue: position => position / 100, toPosition: value => value * 100 },
+            { field: "threshold", panelField: "bloomThreshold", labelKey: "effect.frameGraphPost.controls.threshold", min: 0, max: 200, toValue: position => position / 100, toPosition: value => value * 100 },
         ] },
+    { id: "vignette", fields: { enabled: { kind: "step", default: false }, weight: { kind: "linear", default: 0.3, min: 0, max: 4 } },
+        sliders: [{ field: "weight", panelField: "vignetteWeight", min: 0, max: 100, toValue: position => position * 4 / 100, toPosition: value => value / 4 * 100 }] },
+    { id: "sharpen", fields: { enabled: { kind: "step", default: false }, edge: { kind: "linear", default: 0, min: 0, max: 4 } },
+        sliders: [{ field: "edge", panelField: "sharpenEdge", min: 0, max: 100, toValue: position => position * 4 / 100, toPosition: value => value / 4 * 100 }] },
+    { id: "chromatic", fields: { enabled: { kind: "step", default: false }, amount: { kind: "linear", default: 0, min: 0, max: 200 } },
+        sliders: [{ field: "amount", panelField: "chromaticAberration", min: 0, max: 100, toValue: position => position * 200 / 100, toPosition: value => value / 200 * 100 }] },
+    { id: "edgeBlur", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0, min: 0, max: 3 } },
+        sliders: [{ field: "strength", panelField: "edgeBlur", min: 0, max: 300, toValue: position => position / 100, toPosition: value => value * 100 }] },
+    { id: "distortion", fields: { enabled: { kind: "step", default: false }, influence: { kind: "linear", default: 0, min: 0, max: 1 } },
+        sliders: [{ field: "influence", panelField: "distortion", labelKey: "effect.frameGraphPost.controls.influence", min: 0, max: 100, toValue: position => position * 1 / 100, toPosition: value => value / 1 * 100 }] },
 ];
 export function isEffectId(id: string): id is EffectId {
     return EFFECT_KEYFRAME_DEFINITIONS.some(definition => definition.id === id);
@@ -56,7 +71,7 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["gamma", "grain", "bloom"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
+    kind: z.literal("effect"), effectId: z.enum(["gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
 }).strict().superRefine((payload, context) => {
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });

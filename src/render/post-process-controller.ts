@@ -1,3 +1,4 @@
+import { lensDistortionForFov } from "./effect-keyframe-runtime";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
 import { ColorGradingTexture } from "@babylonjs/core/Materials/Textures/colorGradingTexture";
@@ -109,6 +110,9 @@ type PostProcessHost = {
     postEffectBloomThresholdValue: number;
     postEffectBloomKernelValue: number;
     effectKeyframeGrainPrepared?: boolean;
+    isEffectKeyframePrepared?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion"): boolean;
+    getEffectScalarRenderValue?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion", field: string, fallback: number): number;
+    getEffectRenderLensDistortion?(): number;
     effectKeyframeBloomPrepared?: boolean;
     postEffectMotionBlurEnabledValue: boolean;
     postEffectMotionBlurStrengthValue: number;
@@ -1267,7 +1271,7 @@ export function setupFinalLensDistortionPostProcess(host: PostProcessHost): void
         },
     );
     host.finalLensDistortionPostProcess.onApplyObservable.add((effect: PostProcessEffectLike) => {
-        effect.setFloat("distortion", host.dofLensDistortionValue);
+        effect.setFloat("distortion", host.getEffectRenderLensDistortion?.() ?? host.dofLensDistortionValue);
     });
     host.enforceFinalPostProcessOrder();
 }
@@ -1388,7 +1392,7 @@ export function setupEditorDofPipeline(host: PostProcessHost): void {
 export function isImageProcessingEffectsEnabled(host: PostProcessHost): boolean {
     if (host.postEffectBackend === "frameGraph" && host.getFrameGraphPostEffectsEnabled?.() === false) return false;
     const epsilon = 1e-4;
-    const useSceneVignette = host.postEffectBackend !== "frameGraph" && host.postEffectVignetteEnabledValue;
+    const useSceneVignette = host.postEffectBackend !== "frameGraph" && (host.isEffectKeyframePrepared?.("vignette") === true || host.postEffectVignetteEnabledValue);
     return host.postEffectToneMappingEnabledValue
         || host.postEffectDitheringEnabledValue
         || useSceneVignette
@@ -1404,9 +1408,9 @@ export function applyImageProcessingSettings(host: PostProcessHost): void {
     imageProcessing.toneMappingType = host.postEffectToneMappingTypeValue;
     imageProcessing.ditheringEnabled = host.postEffectDitheringEnabledValue;
     imageProcessing.ditheringIntensity = host.postEffectDitheringIntensityValue;
-    const useSceneVignette = host.postEffectBackend !== "frameGraph" && host.postEffectVignetteEnabledValue;
+    const useSceneVignette = host.postEffectBackend !== "frameGraph" && (host.isEffectKeyframePrepared?.("vignette") === true || host.postEffectVignetteEnabledValue);
     imageProcessing.vignetteEnabled = useSceneVignette;
-    imageProcessing.vignetteWeight = useSceneVignette ? host.postEffectVignetteWeightValue : 0;
+    imageProcessing.vignetteWeight = useSceneVignette ? (host.getEffectScalarRenderValue?.("vignette", "weight", host.postEffectVignetteWeightValue) ?? host.postEffectVignetteWeightValue) : 0;
     imageProcessing.vignetteColor.set(0, 0, 0, 1);
 
     if (host.postEffectColorCurvesEnabledValue) {
@@ -1554,7 +1558,7 @@ export function applyDefaultPipelinePostProcessSettings(host: PostProcessHost): 
 
     const useClassicDefaultPipelineEffects = host.postEffectBackend === "classic";
 
-    pipeline.chromaticAberrationEnabled = useClassicDefaultPipelineEffects && host.postEffectChromaticAberrationValue > 1e-4;
+    pipeline.chromaticAberrationEnabled = useClassicDefaultPipelineEffects && (host.isEffectKeyframePrepared?.("chromatic") === true || host.postEffectChromaticAberrationValue > 1e-4);
     if (pipeline.chromaticAberration) {
         pipeline.chromaticAberration.aberrationAmount = host.postEffectChromaticAberrationValue;
         pipeline.chromaticAberration.radialIntensity = 2.2;
@@ -1570,7 +1574,7 @@ export function applyDefaultPipelinePostProcessSettings(host: PostProcessHost): 
         pipeline.grain.animated = false;
     }
 
-    pipeline.sharpenEnabled = useClassicDefaultPipelineEffects && host.postEffectSharpenEdgeValue > 1e-4;
+    pipeline.sharpenEnabled = useClassicDefaultPipelineEffects && (host.isEffectKeyframePrepared?.("sharpen") === true || host.postEffectSharpenEdgeValue > 1e-4);
     if (pipeline.sharpen) {
         pipeline.sharpen.edgeAmount = host.postEffectSharpenEdgeValue;
         pipeline.sharpen.colorAmount = 1;
@@ -1581,6 +1585,8 @@ export function applyDefaultPipelinePostProcessSettings(host: PostProcessHost): 
         applyEditorDofSettings(host);
     }
 
+    host.applyImageProcessingSettings();
+    applyDofLensOpticsSettings(host);
     host.syncLuminousGlowLayer?.();
 }
 
@@ -1784,23 +1790,8 @@ export function updateEditorDofFocusAndFStop(host: PostProcessHost): void {
 }
 
 export function updateDofLensDistortionFromCameraFov(host: PostProcessHost): void {
-    const fovDeg = (host.camera.fov * 180) / Math.PI;
-    const minTele = host.dofLensDistortionMinTeleFovDeg;
-    const neutral = host.dofLensDistortionNeutralFovDeg;
-    const maxWide = host.dofLensDistortionMaxWideFovDeg;
-    const clampedFovDeg = Math.max(minTele, Math.min(maxWide, fovDeg));
-
-    let distortion = 0;
-    if (clampedFovDeg >= neutral) {
-        const wideSpan = Math.max(0.0001, maxWide - neutral);
-        distortion = (clampedFovDeg - neutral) / wideSpan;
-    } else {
-        const teleSpan = Math.max(0.0001, neutral - minTele);
-        distortion = -((neutral - clampedFovDeg) / teleSpan);
-    }
-
-    const influencedDistortion = distortion * host.dofLensDistortionInfluenceValue;
-    host.dofLensDistortionValue = Math.max(-1, Math.min(1, influencedDistortion));
+    host.dofLensDistortionValue = lensDistortionForFov(host.camera.fov, host.dofLensDistortionInfluenceValue,
+        host.dofLensDistortionMinTeleFovDeg, host.dofLensDistortionNeutralFovDeg, host.dofLensDistortionMaxWideFovDeg);
     applyDofLensOpticsSettings(host);
 }
 
@@ -2107,7 +2098,7 @@ export function setupFarDofPostProcess(host: PostProcessHost): void {
 
 export function applyDofLensOpticsSettings(host: PostProcessHost): void {
     const normalizedStrength = Math.max(0, Math.min(1, host.dofLensEdgeBlurValue / 3));
-    if (normalizedStrength <= 0.0001) {
+    if (host.postEffectBackend === "frameGraph" || (normalizedStrength <= 0.0001 && !host.isEffectKeyframePrepared?.("edgeBlur"))) {
         disposeStandaloneEdgeBlurPostProcess(host);
         if (host.lensRenderingPipeline) {
             host.lensRenderingPipeline.dispose(false);
@@ -2141,7 +2132,7 @@ export function applyDofLensOpticsSettings(host: PostProcessHost): void {
             const width = Math.max(1, host.standaloneEdgeBlurPostProcess?.width ?? host.engine.getRenderWidth());
             const height = Math.max(1, host.standaloneEdgeBlurPostProcess?.height ?? host.engine.getRenderHeight());
             effect.setFloat2("texelSize", 1 / width, 1 / height);
-            effect.setFloat("edgeBlurStrength", Math.max(0, Math.min(1, host.dofLensEdgeBlurValue / 3)));
+            effect.setFloat("edgeBlurStrength", Math.max(0, Math.min(1, (host.getEffectScalarRenderValue?.("edgeBlur", "strength", host.dofLensEdgeBlurValue) ?? host.dofLensEdgeBlurValue) / 3)));
             effect.setFloat("aspectRatio", width / height);
         });
     }

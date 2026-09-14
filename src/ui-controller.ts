@@ -147,7 +147,7 @@ import {
 } from "./project/runtime-reload-project-state";
 
 import { EffectKeyframeController } from "./ui/effect-keyframe-controller";
-import { isEffectId } from "./editor/effect-keyframe-definitions";
+import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
 
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
 
@@ -577,6 +577,7 @@ export class UIController {
     private bloomToneMapController: BloomToneMapController | null = null;
     private cameraPanelController: CameraPanelController | null = null;
     private colorPostFxController: ColorPostFxController | null = null;
+    private refreshLensEffectKeyframeUi: (() => void) | null = null;
     private effectKeyframeController: EffectKeyframeController | null = null;
     private dofPanelController: DofPanelController | null = null;
     private effectPanelShellController: EffectPanelShellController | null = null;
@@ -5454,7 +5455,7 @@ export class UIController {
             case "aerialPerspective":
                 break;
             case "vignette":
-                this.mmdManager.postEffectVignetteEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("vignette")) this.mmdManager.postEffectVignetteEnabled = true;
                 break;
             case "grain":
                 break;
@@ -6325,7 +6326,7 @@ export class UIController {
                 break;
             case "vignetteWeight":
                 this.mmdManager.postEffectVignetteWeight = Number(actualValue);
-                this.mmdManager.postEffectVignetteEnabled = this.mmdManager.postEffectVignetteWeight > 0.0001;
+                if (!this.mmdManager.hasEffectSceneTrack("vignette")) this.mmdManager.postEffectVignetteEnabled = this.mmdManager.postEffectVignetteWeight > 0.0001;
                 break;
             case "grainIntensity":
                 this.mmdManager.postEffectGrainIntensity = Number(actualValue);
@@ -6850,7 +6851,8 @@ export class UIController {
         }
 
         const refreshValues = (): void => {
-            const vignetteWeight = this.mmdManager.postEffectVignetteEnabled
+            for (const input of [vignetteSlider, edgeBlurSlider, distortionSlider]) input.disabled = this.mmdManager.isPlaying;
+            const vignetteWeight = this.mmdManager.hasEffectSceneTrack("vignette") || this.mmdManager.postEffectVignetteEnabled
                 ? this.mmdManager.postEffectVignetteWeight
                 : 0;
             vignetteSlider.value = Math.max(0, Math.min(4, vignetteWeight)).toFixed(2);
@@ -6858,7 +6860,7 @@ export class UIController {
                 ? this.mmdManager.postEffectVignetteWeight.toFixed(2)
                 : t("status.off");
 
-            const edgeBlurPercent = Math.max(0, Math.min(100, Math.round(this.mmdManager.dofLensEdgeBlur * 100)));
+            const edgeBlurPercent = Math.max(0, Math.min(300, Math.round(this.mmdManager.dofLensEdgeBlur * 100)));
             edgeBlurSlider.value = String(edgeBlurPercent);
             edgeBlurValue.textContent = edgeBlurPercent > 0
                 ? `${edgeBlurPercent}%`
@@ -6872,10 +6874,12 @@ export class UIController {
                 : t("status.off");
         };
 
+        this.refreshLensEffectKeyframeUi = refreshValues;
+        edgeBlurSlider.max = "300";
         vignetteSlider.addEventListener("input", () => {
             const weight = Number(vignetteSlider.value);
             this.mmdManager.postEffectVignetteWeight = weight;
-            this.mmdManager.postEffectVignetteEnabled = weight > 0.0001;
+            if (!this.mmdManager.hasEffectSceneTrack("vignette")) this.mmdManager.postEffectVignetteEnabled = weight > 0.0001;
             refreshValues();
         });
         edgeBlurSlider.addEventListener("input", () => {
@@ -8206,14 +8210,19 @@ export class UIController {
         this.colorPostFxController?.refreshGammaUi();
         this.colorPostFxController?.refreshGrainUi();
         this.bloomToneMapController?.refreshBloomUi();
-        for (const effectId of ["gamma", "grain", "bloom"] as const) {
+        this.refreshLensEffectKeyframeUi?.();
+        this.lensEffectController?.refresh();
+        this.colorPostFxController?.refreshVignetteUi();
+        this.colorPostFxController?.refreshSharpenUi();
+        for (const definition of EFFECT_KEYFRAME_DEFINITIONS) {
+            const effectId = definition.id;
             const value = this.mmdManager.captureCurrentEffectKeyframePayload(effectId);
             const toggle = this.postEffectStackList?.querySelector<HTMLInputElement>(`[data-effect-stack-toggle="${effectId}"]`);
             if (toggle) { toggle.checked = value.value.enabled; toggle.disabled = this.mmdManager.isPlaying; }
             const row = this.postEffectStackList?.querySelector<HTMLElement>(`[data-effect-stack-row="${effectId}"]`);
-            const fields: Record<string, number> = value.effectId === "gamma" ? { gammaPower: value.value.gamma }
-                : value.effectId === "grain" ? { grainIntensity: value.value.intensity }
-                : { bloomWeight: value.value.weight, bloomThreshold: value.value.threshold };
+            const fields: Record<string, number> = Object.fromEntries(definition.sliders
+                .filter(slider => slider.panelField)
+                .map(slider => [slider.panelField, Number((value.value as Record<string, number | boolean>)[slider.field])]));
             row?.querySelectorAll<HTMLInputElement>("input[data-effect-stack-control]").forEach(input => {
                 const field = input.dataset.effectStackControl ?? "";
                 if (!(field in fields) || !isFrameGraphEffectSliderField(field)) return;

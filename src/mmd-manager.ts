@@ -508,7 +508,7 @@ import {
 } from "./editor/scene-keyframe-track";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue } from "./editor/effect-keyframe-definitions";
-import { effectRenderValues } from "./render/effect-keyframe-runtime";
+import { effectRenderValues, scalarEffectRenderValue, lensDistortionForFov } from "./render/effect-keyframe-runtime";
 import { EffectPlaybackPreparation } from "./render/effect-playback-preparation";
 import {
     buildMmdAnimationFromEditorMotion,
@@ -6388,6 +6388,11 @@ ${beforeFogAppendBlock}
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
+        if (id === "vignette") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectVignetteEnabledValue, weight: this.postEffectVignetteWeightValue };
+        if (id === "sharpen") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectSharpenEdgeValue > 0), edge: this.postEffectSharpenEdgeValue };
+        if (id === "chromatic") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectChromaticAberrationValue > 0), amount: this.postEffectChromaticAberrationValue };
+        if (id === "edgeBlur") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.dofLensEdgeBlurValue > 0), strength: this.dofLensEdgeBlurValue };
+        if (id === "distortion") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.dofLensDistortionInfluenceValue > 0), influence: this.dofLensDistortionInfluenceValue };
         if (id === "bloom") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue };
         const enabled = this.frameGraphPostEffectStackEnabledValue.get(id) ?? (id === "gamma" ? this.postEffectGammaValue !== 1 : this.postEffectGrainIntensityValue > 0);
         return id === "gamma" ? { enabled, gamma: this.postEffectGammaValue } : { enabled, intensity: this.postEffectGrainIntensityValue };
@@ -6445,6 +6450,28 @@ ${beforeFogAppendBlock}
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
         this.effectSceneTracksChanged();
     }
+    public isEffectKeyframePrepared(id: EffectId): boolean {
+        return this.effectSceneTracks.has(id) && this.getFrameGraphPostEffectStackIds().includes(id);
+    }
+    public getEffectScalarRenderValue(id: EffectId, field: string, fallback: number): number {
+        return scalarEffectRenderValue(this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0),
+            field, this.getFrameGraphPostEffectStackIds().includes(id), fallback);
+    }
+    public getEffectRenderLensDistortion(): number {
+        return lensDistortionForFov(this.camera.fov,
+            this.getEffectScalarRenderValue("distortion", "influence", this.dofLensDistortionInfluenceValue),
+            this.dofLensDistortionMinTeleFovDeg, this.dofLensDistortionNeutralFovDeg, this.dofLensDistortionMaxWideFovDeg);
+    }
+    public getStaticScalarPostEffects() {
+        return {
+            vignetteEnabled: this.postEffectVignetteEnabledValue,
+            postEffectVignetteWeight: this.postEffectVignetteWeightValue,
+            postEffectSharpenEdge: this.postEffectSharpenEdgeValue,
+            postEffectChromaticAberration: this.postEffectChromaticAberrationValue,
+            dofLensEdgeBlur: this.dofLensEdgeBlurValue,
+            dofLensDistortionInfluence: this.dofLensDistortionInfluenceValue,
+        };
+    }
     public getStaticPostEffectBloom(): { enabled: boolean; weight: number; threshold: number } {
         return { enabled: this.postEffectBloomEnabledValue, weight: this.postEffectBloomWeightValue, threshold: this.postEffectBloomThresholdValue };
     }
@@ -6468,6 +6495,15 @@ ${beforeFogAppendBlock}
         if (this.postEffectBackend === "classic" && this.standaloneBloomEffect) {
             this.standaloneBloomEffect.weight = this.effectRenderState.bloomWeight;
             this.standaloneBloomEffect.threshold = this.effectRenderState.bloomThreshold;
+        }
+        if (this.postEffectBackend === "classic") {
+            const pipeline = this.defaultRenderingPipeline;
+            if (pipeline?.sharpen) pipeline.sharpen.edgeAmount = this.getEffectScalarRenderValue("sharpen", "edge", this.postEffectSharpenEdgeValue);
+            if (pipeline?.chromaticAberration) pipeline.chromaticAberration.aberrationAmount = this.getEffectScalarRenderValue("chromatic", "amount", this.postEffectChromaticAberrationValue);
+            if (this.effectSceneTracks.has("vignette")) {
+                const weight = this.getEffectScalarRenderValue("vignette", "weight", this.postEffectVignetteWeightValue);
+                if (this.scene.imageProcessingConfiguration.vignetteWeight !== weight) this.scene.imageProcessingConfiguration.vignetteWeight = weight;
+            }
         }
         if (this.postEffectBackend === "classic" && this.defaultRenderingPipeline?.grain) {
             this.defaultRenderingPipeline.grain.intensity = this.effectRenderState.grainIntensity;
@@ -11112,14 +11148,14 @@ ${beforeFogAppendBlock}
             bloomThreshold: this.effectRenderState.bloomThreshold,
             bloomKernel: this.postEffectBloomKernelValue,
             bloomColor: this.getPostEffectBloomColor(),
-            vignetteEnabled: this.isFrameGraphPostEffectActive("vignette"),
-            vignetteWeight: this.postEffectVignetteWeightValue,
-            edgeBlurStrength: this.isFrameGraphPostEffectActive("edgeBlur") ? this.dofLensEdgeBlurValue : 0,
-            lensDistortionEnabled: this.isFrameGraphPostEffectActive("distortion"),
-            lensDistortion: this.isFrameGraphPostEffectActive("distortion") ? this.dofLensDistortionValue : 0,
-            chromaticAberration: this.isFrameGraphPostEffectActive("chromatic") ? this.postEffectChromaticAberrationValue : 0,
+            vignetteEnabled: this.effectSceneTracks.has("vignette") ? this.isEffectKeyframePrepared("vignette") : this.isFrameGraphPostEffectActive("vignette"),
+            vignetteWeight: this.getEffectScalarRenderValue("vignette", "weight", this.postEffectVignetteWeightValue),
+            edgeBlurStrength: this.getEffectScalarRenderValue("edgeBlur", "strength", this.isFrameGraphPostEffectActive("edgeBlur") ? this.dofLensEdgeBlurValue : 0),
+            lensDistortionEnabled: this.effectSceneTracks.has("distortion") ? this.isEffectKeyframePrepared("distortion") : this.isFrameGraphPostEffectActive("distortion"),
+            lensDistortion: this.effectSceneTracks.has("distortion") ? this.getEffectRenderLensDistortion() : this.isFrameGraphPostEffectActive("distortion") ? this.dofLensDistortionValue : 0,
+            chromaticAberration: this.getEffectScalarRenderValue("chromatic", "amount", this.isFrameGraphPostEffectActive("chromatic") ? this.postEffectChromaticAberrationValue : 0),
             grainIntensity: this.effectSceneTracks.has("grain") ? this.effectRenderState.grainIntensity : this.isFrameGraphPostEffectActive("grain") ? this.postEffectGrainIntensityValue : 0,
-            sharpenEdge: this.isFrameGraphPostEffectActive("sharpen") ? this.postEffectSharpenEdgeValue : 0,
+            sharpenEdge: this.getEffectScalarRenderValue("sharpen", "edge", this.isFrameGraphPostEffectActive("sharpen") ? this.postEffectSharpenEdgeValue : 0),
             ssaoEnabled: this.isFrameGraphPostEffectActive("ssao"),
             ssaoStrength: this.postEffectSsaoStrengthValue,
             ssaoRadius: this.postEffectSsaoRadiusValue,
@@ -12234,18 +12270,20 @@ ${beforeFogAppendBlock}
 
     /** Image-processing vignette enabled state. */
     get postEffectVignetteEnabled(): boolean {
-        return this.postEffectVignetteEnabledValue;
+        return this.effectSceneTracks.evaluate("vignette", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectVignetteEnabledValue;
     }
     set postEffectVignetteEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("vignette")) { this.setEffectScenePreview("vignette", { ...this.captureCurrentEffectKeyframePayload("vignette").value, enabled: Boolean(v) }); return; }
         this.postEffectVignetteEnabledValue = Boolean(v);
         this.applyImageProcessingSettings();
     }
 
     /** Image-processing vignette weight (0.0..4.0). */
     get postEffectVignetteWeight(): number {
-        return this.postEffectVignetteWeightValue;
+        return Number(this.effectSceneTracks.evaluate("vignette", this._currentFrame, !this.isPlaying)?.weight ?? this.postEffectVignetteWeightValue);
     }
     set postEffectVignetteWeight(v: number) {
+        if (this.effectSceneTracks.has("vignette")) { this.setEffectScenePreview("vignette", { ...this.captureCurrentEffectKeyframePayload("vignette").value, weight: v }); return; }
         this.postEffectVignetteWeightValue = Math.max(0, Math.min(4, v));
         this.applyImageProcessingSettings();
     }
@@ -12308,9 +12346,10 @@ ${beforeFogAppendBlock}
 
     /** Default pipeline chromatic aberration amount (0..200, 0 = OFF). */
     get postEffectChromaticAberration(): number {
-        return this.postEffectChromaticAberrationValue;
+        return Number(this.effectSceneTracks.evaluate("chromatic", this._currentFrame, !this.isPlaying)?.amount ?? this.postEffectChromaticAberrationValue);
     }
     set postEffectChromaticAberration(v: number) {
+        if (this.effectSceneTracks.has("chromatic")) { this.setEffectScenePreview("chromatic", { ...this.captureCurrentEffectKeyframePayload("chromatic").value, amount: v }); return; }
         this.postEffectChromaticAberrationValue = Math.max(0, Math.min(200, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -12327,9 +12366,10 @@ ${beforeFogAppendBlock}
 
     /** Default pipeline sharpen edge amount (0.0..4.0, 0 = OFF). */
     get postEffectSharpenEdge(): number {
-        return this.postEffectSharpenEdgeValue;
+        return Number(this.effectSceneTracks.evaluate("sharpen", this._currentFrame, !this.isPlaying)?.edge ?? this.postEffectSharpenEdgeValue);
     }
     set postEffectSharpenEdge(v: number) {
+        if (this.effectSceneTracks.has("sharpen")) { this.setEffectScenePreview("sharpen", { ...this.captureCurrentEffectKeyframePayload("sharpen").value, edge: v }); return; }
         this.postEffectSharpenEdgeValue = Math.max(0, Math.min(4, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -13198,9 +13238,10 @@ ${beforeFogAppendBlock}
 
     /** Lens edge blur strength (0.0..3.0). */
     get dofLensEdgeBlur(): number {
-        return getDofLensEdgeBlurImpl(this);
+        return Number(this.effectSceneTracks.evaluate("edgeBlur", this._currentFrame, !this.isPlaying)?.strength ?? getDofLensEdgeBlurImpl(this));
     }
     set dofLensEdgeBlur(v: number) {
+        if (this.effectSceneTracks.has("edgeBlur")) { this.setEffectScenePreview("edgeBlur", { ...this.captureCurrentEffectKeyframePayload("edgeBlur").value, strength: v }); return; }
         setDofLensEdgeBlurImpl(this, v);
     }
 
@@ -13216,9 +13257,10 @@ ${beforeFogAppendBlock}
     }
     /** Distortion influence scale for FoV-linked distortion (0.0..1.0). */
     get dofLensDistortionInfluence(): number {
-        return getDofLensDistortionInfluenceImpl(this);
+        return Number(this.effectSceneTracks.evaluate("distortion", this._currentFrame, !this.isPlaying)?.influence ?? getDofLensDistortionInfluenceImpl(this));
     }
     set dofLensDistortionInfluence(v: number) {
+        if (this.effectSceneTracks.has("distortion")) { this.setEffectScenePreview("distortion", { ...this.captureCurrentEffectKeyframePayload("distortion").value, influence: v }); return; }
         setDofLensDistortionInfluenceImpl(this, v);
     }
     /** DoF lens size in scene units/1000 (mm). */

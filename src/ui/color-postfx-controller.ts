@@ -210,8 +210,9 @@ export class ColorPostFxController {
         elements.ditheringInput.value = String(
             Math.max(0, Math.min(1, this.mmdManager.postEffectDitheringEnabled ? this.mmdManager.postEffectDitheringIntensity : 0)).toFixed(4),
         );
+        elements.vignetteInput.disabled = this.mmdManager.isPlaying;
         elements.vignetteInput.value = String(
-            Math.max(0, Math.min(4, this.mmdManager.postEffectVignetteEnabled ? this.mmdManager.postEffectVignetteWeight : 0)).toFixed(2),
+            Math.max(0, Math.min(4, this.mmdManager.hasEffectSceneTrack("vignette") || this.mmdManager.postEffectVignetteEnabled ? this.mmdManager.postEffectVignetteWeight : 0)).toFixed(2),
         );
         elements.grainInput.value = String(
             Math.max(0, Math.min(100, Math.round(this.mmdManager.postEffectGrainIntensity))),
@@ -284,7 +285,7 @@ export class ColorPostFxController {
 
     public setVignetteWeight(value: number): void {
         this.mmdManager.postEffectVignetteWeight = value;
-        this.mmdManager.postEffectVignetteEnabled = this.mmdManager.postEffectVignetteWeight > 0.000001;
+        if (!this.mmdManager.hasEffectSceneTrack("vignette")) this.mmdManager.postEffectVignetteEnabled = this.mmdManager.postEffectVignetteWeight > 0.000001;
         this.refreshVignetteUi();
     }
 
@@ -354,11 +355,12 @@ export class ColorPostFxController {
             : t("status.off");
     }
 
-    private refreshVignetteUi(): void {
+    public refreshVignetteUi(): void {
         const elements = this.elements;
         if (!elements) return;
+        elements.vignetteInput.disabled = this.mmdManager.isPlaying;
         elements.vignetteInput.value = String(
-            Math.max(0, Math.min(4, this.mmdManager.postEffectVignetteEnabled ? this.mmdManager.postEffectVignetteWeight : 0)).toFixed(2),
+            Math.max(0, Math.min(4, this.mmdManager.hasEffectSceneTrack("vignette") || this.mmdManager.postEffectVignetteEnabled ? this.mmdManager.postEffectVignetteWeight : 0)).toFixed(2),
         );
         elements.vignetteValue.textContent = this.mmdManager.postEffectVignetteEnabled
             ? this.mmdManager.postEffectVignetteWeight.toFixed(2)
@@ -382,16 +384,18 @@ export class ColorPostFxController {
         }
     }
 
-    private refreshSharpenUi(): void {
+    public refreshSharpenUi(): void {
         const elements = this.elements;
         if (!elements) return;
         const value = String(Math.max(0, Math.min(400, Math.round(this.mmdManager.postEffectSharpenEdge * 100))));
         const label = this.mmdManager.postEffectSharpenEdge > 0.000001
             ? this.mmdManager.postEffectSharpenEdge.toFixed(2)
             : t("status.off");
+        elements.sharpenInput.disabled = this.mmdManager.isPlaying;
         elements.sharpenInput.value = value;
         elements.sharpenValue.textContent = label;
         if (elements.frameGraphSharpenInput && elements.frameGraphSharpenValue) {
+            elements.frameGraphSharpenInput.disabled = this.mmdManager.isPlaying;
             elements.frameGraphSharpenInput.value = value;
             elements.frameGraphSharpenValue.textContent = label;
         }

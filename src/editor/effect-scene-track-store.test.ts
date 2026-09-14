@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EffectSceneTrackStore } from "./effect-scene-track-store";
-import { effectKeyframePayloadSchema, interpolateEffectValue, makeEffectPayload, type EffectDefinition } from "./effect-keyframe-definitions";
+import { effectKeyframePayloadSchema, interpolateEffectValue, makeEffectPayload, type EffectDefinition, type EffectId } from "./effect-keyframe-definitions";
 
 const base = { enabled: false, gamma: 1 };
 describe("effect scene track foundation", () => {
@@ -92,6 +92,22 @@ describe("effect scene track foundation", () => {
         expect(effectKeyframePayloadSchema.safeParse(from).success).toBe(true);
         expect(effectKeyframePayloadSchema.safeParse({ kind: "effect", effectId: "bloom", value: { enabled: true, weight: 1 } }).success).toBe(false);
         expect(effectKeyframePayloadSchema.safeParse({ kind: "effect", effectId: "bloom", value: { enabled: true, weight: 1, threshold: 3 } }).success).toBe(false);
+    });
+    it.each([
+        ["vignette", "weight", 4], ["sharpen", "edge", 4], ["chromatic", "amount", 200],
+        ["edgeBlur", "strength", 3], ["distortion", "influence", 1],
+    ] as const)("round-trips independent %s keys and interpolates only their scalar", (id: EffectId, field, max) => {
+        const store = new EffectSceneTrackStore();
+        const from = makeEffectPayload(id, { enabled: true, [field]: max });
+        const to = makeEffectPayload(id, { enabled: false, [field]: 0 });
+        store.apply(id, 0, from, {});
+        store.apply(id, 20, to, {});
+        const restored = new EffectSceneTrackStore(); restored.restore(store.serialize());
+        expect(restored.evaluate(id, 5)).toEqual({ enabled: true, [field]: max * 0.75 });
+        expect(restored.evaluate(id, 20)).toEqual(to.value);
+        expect(effectKeyframePayloadSchema.safeParse(from).success).toBe(true);
+        expect(effectKeyframePayloadSchema.safeParse({ ...from, value: { enabled: true, [field]: max + 1 } }).success).toBe(false);
+        expect(effectKeyframePayloadSchema.safeParse({ ...from, value: { enabled: true, wrongField: max } }).success).toBe(false);
     });
     it("validates automation values against the same field definitions", () => {
         expect(effectKeyframePayloadSchema.safeParse(makeEffectPayload("grain", { enabled: true, intensity: 20 })).success).toBe(true);

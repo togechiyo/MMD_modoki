@@ -255,6 +255,7 @@ type ProjectExportHost = {
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
     getSerializedEffectSceneTracks?: () => import("../editor/effect-scene-track-store").SerializedEffectAnimations;
+    getStaticScalarPostEffects?: () => { vignetteEnabled: boolean; postEffectVignetteWeight: number; postEffectSharpenEdge: number; postEffectChromaticAberration: number; dofLensEdgeBlur: number; dofLensDistortionInfluence: number; };
     getStaticPostEffectGamma?: () => number;
     getStaticPostEffectBloom?: () => { enabled: boolean; weight: number; threshold: number };
     getStaticPostEffectGrainIntensity?: () => number;
@@ -507,9 +508,9 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             dofFocalLength: host.dofFocalLength,
             dofFocalLengthDistanceInverted: host.dofFocalLengthDistanceInverted,
             dofLensBlurStrength: host.dofLensBlurStrength,
-            dofLensEdgeBlur: host.dofLensEdgeBlur,
+            dofLensEdgeBlur: host.getStaticScalarPostEffects?.().dofLensEdgeBlur ?? host.dofLensEdgeBlur,
             dofLensDistortion: host.dofLensDistortion,
-            dofLensDistortionInfluence: host.dofLensDistortionInfluence,
+            dofLensDistortionInfluence: host.getStaticScalarPostEffects?.().dofLensDistortionInfluence ?? host.dofLensDistortionInfluence,
             modelEdgeWidth: host.modelEdgeWidth,
             modelEdgeUniformWidthEnabled: host.modelEdgeUniformWidthEnabled,
             modelEdgeColorOverrideEnabled: host.modelEdgeColorOverrideEnabled,
@@ -521,16 +522,16 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             toneMappingType: host.postEffectToneMappingType,
             ditheringEnabled: host.postEffectDitheringEnabled,
             ditheringIntensity: host.postEffectDitheringIntensity,
-            vignetteEnabled: host.postEffectVignetteEnabled,
-            vignetteWeight: host.postEffectVignetteWeight,
+            vignetteEnabled: host.getStaticScalarPostEffects?.().vignetteEnabled ?? host.postEffectVignetteEnabled,
+            vignetteWeight: host.getStaticScalarPostEffects?.().postEffectVignetteWeight ?? host.postEffectVignetteWeight,
             bloomEnabled: host.getStaticPostEffectBloom?.().enabled ?? host.postEffectBloomEnabled,
             bloomWeight: host.getStaticPostEffectBloom?.().weight ?? host.postEffectBloomWeight,
             bloomThreshold: host.getStaticPostEffectBloom?.().threshold ?? host.postEffectBloomThreshold,
             bloomKernel: host.postEffectBloomKernel,
             bloomColor: host.getPostEffectBloomColor(),
-            chromaticAberration: host.postEffectChromaticAberration,
+            chromaticAberration: host.getStaticScalarPostEffects?.().postEffectChromaticAberration ?? host.postEffectChromaticAberration,
             grainIntensity: host.getStaticPostEffectGrainIntensity?.() ?? host.postEffectGrainIntensity,
-            sharpenEdge: host.postEffectSharpenEdge,
+            sharpenEdge: host.getStaticScalarPostEffects?.().postEffectSharpenEdge ?? host.postEffectSharpenEdge,
             ssaoEnabled: host.postEffectSsaoEnabled,
             ssaoStrength: host.postEffectSsaoStrength,
             ssaoRadius: host.postEffectSsaoRadius,

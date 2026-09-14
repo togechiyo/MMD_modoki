@@ -64,7 +64,7 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     grainIntensity: { actualMin: 0, actualMax: 100, actualStep: 1 },
     sharpenEdge: { actualMin: 0, actualMax: 4 },
     chromaticAberration: { actualMin: 0, actualMax: 200, actualStep: 1 },
-    edgeBlur: { actualMin: 0, actualMax: 1 },
+    edgeBlur: { actualMin: 0, actualMax: 3 },
     distortion: { actualMin: 0, actualMax: 1 },
 } as const satisfies Record<string, FrameGraphEffectSliderSpec>;
 

@@ -49,5 +49,6 @@
 
 ## 関連資料
 
+- [エフェクト単位のタイムライン共通基盤：設計・見積もり](./effect-timeline-common-foundation-design-2026-09-14.md)
 - [エフェクト・DoF対象の事前検討](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)
 - [基本機能チェックリスト](./mmd-basic-task-checklist.md)

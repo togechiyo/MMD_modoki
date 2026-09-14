@@ -4,19 +4,20 @@ status: decision
 priority: normal
 scope: rendering/ocean
 confidence: high
-last_verified: 2026-08-27
+last_verified: 2026-09-14
 evidence:
   - project-owner-directive
   - electron-e2e
 source_docs:
   - ../../docs/babylon-watermaterial-surface-implementation-2026-08-27.md
+  - ../../docs/gamma-timeline-key-experiment-2026-09-14.md
 superseded_by: null
 decision_owner: project-owner
-decision: deferred
-decided_on: 2026-08-27
+decision: rejected
+decided_on: 2026-09-14
 ---
 
-# 海エフェクトは品質改善まで通常UIから隠す
+# 海エフェクトは没としタイムライン化の対象から外す
 
 ## 適用条件
 
@@ -24,7 +25,7 @@ decided_on: 2026-08-27
 
 ## 判断
 
-海エフェクトとWaterMaterial水面の実装・project互換は保持するが、品質改善までViewメニューとFrameGraphの通常UIから隠す。
+2026-08-27の品質改善待ちという保留から、2026-09-14に所有者が「海はもう没としていい」と却下へ変更した。海の再公開・品質改善・タイムライン化を通常の後続作業として進めない。既存実装やproject保存互換の削除は今回の判断から自動的に行わない。
 
 ## 避けること
 
@@ -34,8 +35,8 @@ decided_on: 2026-08-27
 
 ## 根拠
 
-所有者が現状は次Releaseへ載せるには完成度が不足していると判断し、海エフェクトのUIをいったん隠すよう明示した。
+2026-08-27に所有者が次Releaseへ載せるには完成度が不足していると判断し、UI非表示を指定した。2026-09-14、全エフェクトのキー化を検討する会話で海を没としてよいと明示した。
 
 ## 再確認条件
 
-水面、水中境界、コースティクスの品質基準と比較画像を定め、所有者が通常UIへの再公開を判断するとき。
+所有者が海の開発再開を改めて明示したとき。

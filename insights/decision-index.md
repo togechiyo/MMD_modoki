@@ -26,7 +26,7 @@
 | adopted | [街モデルを扱える広域描画を支援する](./decisions/support-city-scale-wide-area-rendering.md) | far、空ドーム、影距離を変更する |
 | accepted-with-constraints | [シーン全体の影設定変更には所有者の許可を必要とする](./decisions/scene-wide-shadow-settings-require-owner-approval.md) | CSM、ShadowGenerator、cascade、全体bias、影距離を変更する |
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |
-| adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | 最初のeffect実験はガンマのON / OFFと値。カメラモードの「ガンマ」行へ登録する（2026-09-14指定） |
+| adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | ガンマ実装後は海を除く全effectへの拡張を希望。登録はeffect単位。全パラメータ・金曜までの全件完了は未確定（2026-09-14） |
 | adopted | [再生中の編集権限はカテゴリごとのキー有無で決める](./decisions/playback-ownership-follows-category-key-presence.md) | camera / light / shadow / gravity の再生中評価とUIロックを変更する |
 | adopted | [DoF autofocusは手前のsurfaceより人物を優先する](./decisions/dof-autofocus-prefers-people-over-foreground-depth.md) | DoFの自動対象選択やfocus modeを変更する |
 | confirmed | [動画出力は現在のviewport物理状態から開始する](./decisions/webm-export-starts-from-current-viewport-physics-state.md) | WebM出力開始時の物理reset、warm-up、snapshot引き継ぎを変更する |
@@ -67,6 +67,6 @@
 | deferred | [汎用オブジェクト形式の拡張は v0.2.3 より後へ送る](./decisions/defer-generic-object-format-expansion-beyond-v023.md) | OBJ、PLY、glTF 等の対応を提案する |
 | deferred | [IBL Shadows は保留する](./decisions/defer-ibl-shadows.md) | IBL Shadows の調査・再実装を検討する |
 | deferred | [独立した開発者メニューの追加はいったん保留する](./decisions/defer-developer-menu-for-now.md) | PBR、外部WGSL、試験機能の公開導線をまとめ直す |
-| deferred | [海エフェクトは品質改善まで通常UIから隠す](./decisions/defer-ocean-effect-ui-until-quality-improves.md) | 海エフェクト、水面設定、FrameGraph追加候補、Release公開範囲を変更する |
+| rejected | [海エフェクトは没としタイムライン化の対象から外す](./decisions/defer-ocean-effect-ui-until-quality-improves.md) | 海の再開・UI復帰・キー化を検討する。旧実装・保存互換の削除は別判断 |
 | deferred | [VMDU は VMD 出力要件が固まるまで保留する](./decisions/defer-vmdu-until-vmd-export-proves-requirements.md) | VMDU や VMD 差分形式を検討する |
 | deferred | [自前の高度VMD retarget補正は構想に留める](./decisions/defer-custom-advanced-vmd-retarget-corrections.md) | 肩・腕basis、捩り分配、足接地bakeを提案する |

@@ -6,6 +6,12 @@
 
 開発時の型・変数名・入力宣言・座標・時刻の正確な仕様は **[カスタムWGSL開発リファレンス](./REFERENCE.md)** にまとめています。固定フィールドと作者が命名する入力を分け、行列24種とコピー用の入力辞書を掲載しています。
 
+## 配布アプリでの場所
+
+このフォルダはビルド時に`app.asar`の外へ自動同梱します。Windows／Linuxではアプリの`resources/wgsl`、macOSではアプリの`Contents/Resources/wgsl`にあります。
+
+改造するときは`wgsl`フォルダを自分の作業フォルダへコピーしてください。アプリ更新による上書きを避けられ、インストール先の書込権限やmacOSのアプリ署名にも影響しません。サンプルとこのフォルダ内の説明書はオフラインで利用できます。開発ソース・補足資料へのGitHubリンクはオンラインの開発版を参照します。
+
 ## 使い方
 
 1. ツール → 実験機能 →「外部WGSL材質を有効にする」をON。
@@ -27,9 +33,9 @@
 | [MME入力：行列・画面サイズ](./mme-space-grid.wgsl) | 物体に付く格子と画面に付く格子を比較。WORLD・逆行列・WVP・viewportの実用例。 |
 | [MME入力：時間・フレーム](./mme-time-scan.wgsl) | 編集同期あり／なしのTIME・ELAPSEDTIMEと独自のMODOKI_FRAMEを可視化。 |
 
-いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。WebGPUの通常MMD・PBR両モードで利用できます。ただしPhongの光沢値を読む`mme-light-material.wgsl`は通常MMD専用です。元のテクスチャを含む色への合成方法はサンプルごとに異なります。PBRでの色・入力の意味は[PBR接続仕様](../docs/external-wgsl-pbr-adapter.md)を参照してください。
+いずれも外部テクスチャ・UV必須条件なし、追加render targetなし。WebGPUの通常MMD・PBR両モードで利用できます。ただしPhongの光沢値を読む`mme-light-material.wgsl`は通常MMD専用です。元のテクスチャを含む色への合成方法はサンプルごとに異なります。PBRでの色・入力の意味は[PBR接続仕様](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-pbr-adapter.md)を参照してください。
 
-MME風の自動入力を学ぶ場合は [入力サンプルの解説](../docs/external-wgsl-mme-inputs-examples.md) から始めてください。材質・ライトの教材は入力を単独表示するため、強さ1では元の材質の照明・テクスチャを置き換えます。
+MME風の自動入力を学ぶ場合は [入力サンプルの解説](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-mme-inputs-examples.md) から始めてください。材質・ライトの教材は入力を単独表示するため、強さ1では元の材質の照明・テクスチャを置き換えます。
 
 ## 宝石の下地と効果（2026-09-13）
 
@@ -85,9 +91,9 @@ Moonstone Schiller / White Opal / Black Opal / Prismatic Fireは見た目を優�
 
 旧`diffuseBase`差替えsnippetはこのフォルダから撤去しました。テンプレート・パステル・装飾系は上記のAPI v1作例へ置き換えています。旧コードとの描画互換はありません。
 
-組込プリセットが使用中の13ファイルは [src/scene/shaders/builtin-toon](../src/scene/shaders/builtin-toon/) へ移しました。こちらは内部専用のToon処理であり、外部読込の対象ではありません。使用されていなかった旧template、balanced default、soft pastel、poster pop、cyber neon、luminous、light and shadowの7ファイルは削除しました。過去の調査メモにある`wgsl/*.wgsl`は当時のパスです。
+組込プリセットが使用中の13ファイルは [src/scene/shaders/builtin-toon](https://github.com/togechiyo/MMD_modoki/tree/main/src/scene/shaders/builtin-toon/) へ移しました。こちらは内部専用のToon処理であり、外部読込の対象ではありません。使用されていなかった旧template、balanced default、soft pastel、poster pop、cyber neon、luminous、light and shadowの7ファイルは削除しました。過去の調査メモにある`wgsl/*.wgsl`は当時のパスです。
 
-API・保存の説明は [外部WGSL材質の使い方](../docs/external-wgsl-material-usage.md) を参照。
+API・保存の説明は [外部WGSL材質の使い方](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-material-usage.md) を参照。
 
 ## 下地変更の確認結果（2026-09-13）
 
@@ -103,4 +109,4 @@ API・保存の説明は [外部WGSL材質の使い方](../docs/external-wgsl-ma
 
 lint通過。組込13本は移動前後で説明コメント以外の本文一致を確認しています。任意のモデル・全材質プリセットとの組合せや動画ファイル出力の比較は未実施です。再確認コマンド: `npm.cmd run test:e2e -- external-wgsl-samples.spec.mjs`。
 
-追加のMME入力教材3本も、両経路でGUI読込・ライト変更・格子の座標切替・時間同期を確認しました。サンプルで見つかった出力時の画面サイズ入力を修正し、960×640／640×360 PNGで32pixelの格子間隔を画像測定しています。詳細・確認範囲は [入力サンプルの解説](../docs/external-wgsl-mme-inputs-examples.md) を参照。再確認コマンド: `npm.cmd run test:e2e -- external-wgsl-inputs.spec.mjs`。
+追加のMME入力教材3本も、両経路でGUI読込・ライト変更・格子の座標切替・時間同期を確認しました。サンプルで見つかった出力時の画面サイズ入力を修正し、960×640／640×360 PNGで32pixelの格子間隔を画像測定しています。詳細・確認範囲は [入力サンプルの解説](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-mme-inputs-examples.md) を参照。再確認コマンド: `npm.cmd run test:e2e -- external-wgsl-inputs.spec.mjs`。

@@ -357,25 +357,25 @@ GPUエラーの行番号は生成shader側です。作者のファイルの同�
 | inputs＋parameters | 合計128項目 |
 | 適用時の準備待機 | 合計15秒 |
 
-これは任意のGPUコードが安全に終了する保証ではありません。ループの実行量や数値のNaN／Infinityは作者も確認します。復旧操作、保存snapshot、モード別割当、旧JSONとの違いは[作成ガイド](./AUTHORING.md#エラーの確認と作業の進め方)と[使い方](../docs/external-wgsl-material-usage.md)を参照してください。
+これは任意のGPUコードが安全に終了する保証ではありません。ループの実行量や数値のNaN／Infinityは作者も確認します。復旧操作、保存snapshot、モード別割当、旧JSONとの違いは[作成ガイド](./AUTHORING.md#エラーの確認と作業の進め方)と[使い方](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-material-usage.md)を参照してください。
 
 <a id="verification"></a>
 
 ## 10. 検証と実装の参照先
 
-この文書のコピー用入力辞書・固定構造体は[リファレンス検証テスト](../src/external-wgsl/reference.test.ts)で実装と照合します。対応入力の受理、uniform生成、代表的な値・行列・PBR差を確認します。CPU側の契約確認であり、全GPU・全材質の描画品質保証ではありません。
+この文書のコピー用入力辞書・固定構造体は[リファレンス検証テスト](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/reference.test.ts)で実装と照合します。対応入力の受理、uniform生成、代表的な値・行列・PBR差を確認します。CPU側の契約確認であり、全GPU・全材質の描画品質保証ではありません。
 
 再確認コマンド: `npm.cmd run test:unit -- src/external-wgsl`。実装変更時は表と辞書を両方更新してください。
 
 | 内容 | 実装の正本 |
 | --- | --- |
-| JSON、semantic／型／注釈、値検証、宣言検査 | [contract.ts](../src/external-wgsl/contract.ts) |
-| 単一WGSLの読込 | [single-file.ts](../src/external-wgsl/single-file.ts) |
-| 材質・ライト・カメラ・行列の取得と時間式 | [inputs.ts](../src/external-wgsl/inputs.ts) |
-| 固定型、uniform生成、hook差込み | [material-plugin.ts](../src/external-wgsl/material-plugin.ts) |
-| 更新タイミング、適用と停止 | [service.ts](../src/external-wgsl/service.ts) |
-| byte／項目数のbudget | [limits.ts](../src/external-wgsl/limits.ts) |
-| viewportサイズとPNGの時間固定 | [mmd-manager.ts](../src/mmd-manager.ts)のgetExternalWgslService／freezeForCapture呼出 |
-| 動画の時刻 | [webm-exporter.ts](../src/webm-exporter.ts)のsetOutput呼出 |
+| JSON、semantic／型／注釈、値検証、宣言検査 | [contract.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/contract.ts) |
+| 単一WGSLの読込 | [single-file.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/single-file.ts) |
+| 材質・ライト・カメラ・行列の取得と時間式 | [inputs.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/inputs.ts) |
+| 固定型、uniform生成、hook差込み | [material-plugin.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/material-plugin.ts) |
+| 更新タイミング、適用と停止 | [service.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/service.ts) |
+| byte／項目数のbudget | [limits.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/limits.ts) |
+| viewportサイズとPNGの時間固定 | [mmd-manager.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/mmd-manager.ts)のgetExternalWgslService／freezeForCapture呼出 |
+| 動画の時刻 | [webm-exporter.ts](https://github.com/togechiyo/MMD_modoki/blob/main/src/webm-exporter.ts)のsetOutput呼出 |
 
-旧[詳細設計](../docs/external-wgsl-material-api-v1-design.md)や[schema案](../docs/schemas/external-material-effect-v1.schema.json)には未対応機能が含まれます。現在使える入力の根拠として、提案中のfieldをそのまま採用しないでください。
+旧[詳細設計](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-material-api-v1-design.md)や[schema案](https://github.com/togechiyo/MMD_modoki/blob/main/docs/schemas/external-material-effect-v1.schema.json)には未対応機能が含まれます。現在使える入力の根拠として、提案中のfieldをそのまま採用しないでください。

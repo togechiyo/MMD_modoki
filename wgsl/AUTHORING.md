@@ -298,4 +298,4 @@ MMEの`.fx`やBabylon.js Node Material Editorの出力を、そのまま読み�
 | 行列・画面サイズ | [mme-space-grid.wgsl](./mme-space-grid.wgsl) |
 | 時間・フレーム | [mme-time-scan.wgsl](./mme-time-scan.wgsl) |
 
-サンプルの調整方法は[README](./README.md)、保存と復旧の詳細は[外部WGSL材質の使い方](../docs/external-wgsl-material-usage.md)、モード差は[PBR接続仕様](../docs/external-wgsl-pbr-adapter.md)を参照してください。設計メモには未実装の将来案もあるため、現在の対応範囲はこのガイドと使い方を優先してください。
+サンプルの調整方法は[README](./README.md)、保存と復旧の詳細は[外部WGSL材質の使い方](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-material-usage.md)、モード差は[PBR接続仕様](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-pbr-adapter.md)を参照してください。設計メモには未実装の将来案もあるため、現在の対応範囲はこのガイドと使い方を優先してください。

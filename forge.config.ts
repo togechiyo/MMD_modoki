@@ -14,6 +14,7 @@ const config: ForgeConfig = {
     extraResource: [
       'LICENSE',
       'THIRD_PARTY_NOTICES.md',
+      'wgsl',
     ],
   },
   rebuildConfig: {},

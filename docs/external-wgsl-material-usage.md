@@ -125,6 +125,18 @@ GUI保存では共有snapshotを `<project名>.assets/effects/<revision>/effect.
 
 Classic / Frame Graphの計6 E2Eシナリオで、9サンプル、テキスト編集後の再読込、同一ファイルの一覧重複防止、共通ボタンの選択／全材質適用、標準へ戻したときの外部解除、Undo、エラー通知、許可OFF、PBR往復、rendererを再起動した後のproject側snapshotからの一覧復元を確認。長いWGSL名でも材質名が見える最終配置は追加のClassic E2Eと画像で確認した。単体777件・lint通過。型検査は既存系542件、未定義名エラーと変更したUIモジュールの診断は0件。
 
+## サンプル・説明書の配布同梱（2026-09-14）
+
+所有者の指定で、`wgsl`フォルダをForgeの`packagerConfig.extraResource`へ追加した。手動のビルド後添付ではなく、packageと、それを使うZIP／インストーラー生成へ自動的に含める。`app.asar`の外へ通常ファイルとして置く。
+
+- Windows／Linux: `resources/wgsl`
+- macOS: `.app/Contents/Resources/wgsl`
+- 内容: WGSLサンプル11本、README・作成ガイド・開発リファレンスの3文書。
+- 利用者はフォルダを作業場所へコピーして編集する。同梱先は配布用の原本として扱い、編集内容の更新時保持をアプリに要求しない。
+- フォルダ内の参照は相対リンクを維持し、同梱しない開発ソース・補足資料への参照はGitHubの開発版リンクへ変更。サンプルと同梱説明書の利用自体にネットワークは不要。
+
+配置仕様は[Electron Packager公式Options](https://packages.electronjs.org/packager/v20.0.4/interfaces/Options.html#extraResource)と導入済み`@electron/packager`の`copyExtraResources`を照合した。Windows x64のForge packageを検証用出力先へ生成し、`app.asar`外に14ファイルが揃い、元ファイルとのbyte一致・同梱文書のローカルリンク解決を確認した。lint・insights検証も通過。macOS／Linuxの実パッケージ生成・署名・インストーラー実行はこの変更では確認していない。
+
 ## 単一WGSLへの移行確認（2026-09-12）
 
 所有者の指定でJSON読込を撤去し、9サンプルと作者用実例を冒頭設定付きWGSLへ移行した。新parserはBOM・CRLF、先頭設定必須、不正JSON、sources禁止、設定重複、semantic・hook検査、元行番号維持を単体確認。全単体785件・lint通過。型検査は既存系542件、重大な未定義名エラーと変更モジュールの診断は0件。

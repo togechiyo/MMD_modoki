@@ -14,6 +14,7 @@ evidence:
 source_docs:
   - ../../docs/v0.2.3-timeline-scene-key-editing-plan.md
   - ../../docs/gamma-timeline-key-experiment-2026-09-14.md
+  - ../../docs/effect-timeline-common-foundation-design-2026-09-14.md
 superseded_by: null
 ---
 
@@ -30,6 +31,8 @@ modoki-owned trackの実装順を決めるとき。
 2026-09-14、最初のeffect key実験はガンマだけとする指定を受けた。カメラモードのtimelineへ「ガンマ」行を追加し、ON / OFFとスライダー値を同じキーへ登録する。その他effectのキー化はこの指定から採用済みと推定しない。
 
 同日のガンマ実装後、所有者は海を除く全エフェクトのキー化を希望し、「エフェクトごとのキーでいい」と登録単位を指定した。以後の拡張設計は1エフェクト単位を前提にする。ただし全パラメータの補間仕様、準備案、金曜までの全件実装完了は未確定であり、採用済みと推定しない。
+
+共通基盤の設計後、所有者はガンマキーがまだ開発環境でのみ動作していることを理由に旧形式の互換対応を不要とし、新形式だけでよいと指定した。旧`gammaAnimation`の変換・派生出力・gamma専用キー入力aliasは作らない。既存project全体や静的ガンマ設定の互換廃止へ拡大解釈しない。
 
 ## 避けること
 

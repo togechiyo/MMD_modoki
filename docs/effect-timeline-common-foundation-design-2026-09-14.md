@@ -7,13 +7,14 @@
 
 タイムライン全体の作り直しは不要。ガンマで通したscene track、登録Command、コピー・削除・Undo / Redo、project保存、描画前評価を流用する。エフェクトごとの登録値と描画反映だけを小さな定義・adapterへ分離する。
 
-下準備の完了までを**12〜20時間、余裕を含め16〜26時間**と見積もる。1人で順に作業する実作業時間で、8時間換算で通常1.5〜2.5人日。以前の「半日〜1日」は骨組み中心の概算だったが、今回は保存互換、UI同期、両backend、第二のエフェクトによる検証も含めた。自動テストの実行時間だけや、agentの応答速度を日数換算したものではない。
+下準備の完了までを**10〜18時間、余裕を含め14〜24時間**と見積もる。1人で順に作業する実作業時間で、8時間換算で通常1.25〜2.25人日。初稿の12〜20時間から、所有者指定により未配布の旧ガンマキー形式への互換対応・検証を除いた。新形式の保存、UI同期、両backend、第二のエフェクトによる検証は含む。自動テストの実行時間だけや、agentの応答速度を日数換算したものではない。
 
 所有者が明示したこと:
 
 - 海は没。再公開・タイムライン化の対象から外す。
 - 残るエフェクトはできれば全てキー化したい。
 - 登録単位はエフェクトごとでよい。
+- ガンマキーは開発環境でのみ使用しているため、旧ガンマキー形式の互換対応は不要。新形式へ一本化する。
 
 本書で提案すること:
 
@@ -27,12 +28,12 @@
 | 現行箇所 | 流用するもの | 下準備で変えるもの |
 | --- | --- | --- |
 | `src/editor/scene-keyframe-track.ts` | frame正規化、挿入・移動・削除、区間評価 | 基本構造は維持。effect用の区間検索・キャッシュが必要なら専用helperへ置く |
-| `src/editor/gamma-scene-track.ts` | enabledのstep、gammaの対数空間補間、旧保存値の正規化 | effect定義と旧形式変換へ役割を分ける |
+| `src/editor/gamma-scene-track.ts` | enabledのstep、gammaの対数空間補間、値の正規化 | effect定義へ統合し、旧キー保存形式は廃止する |
 | `src/editor/timeline-edit-service.ts` | camera scope、各キー操作の共通入口 | gamma等を20カテゴリへ増やさず、effectカテゴリ1個からstoreへ委譲 |
 | `src/ui-controller.ts` / `src/actions/` | Action、keyframe diff、history | 登録・capture・clone・互換判定をeffect共通にする。効果別switchを増やさない |
 | `src/mmd-manager.ts` | scene track評価点、backend初期化、export連携 | store所有とadapter呼び出しに留め、gamma固有の評価・資源維持分岐を移す |
-| `src/project/project-serializer.ts` / importer | 静的effect設定を復元した後のtrack復元 | 汎用保存ブロックとgamma旧形式bridge |
-| `src/automation/keyframe-schema.ts` | GUIと同じ編集経路への入力検証 | effect payloadの定義と旧gamma入力の正規化。新ツールは増やさない |
+| `src/project/project-serializer.ts` / importer | 静的effect設定を復元した後のtrack復元 | 新しい汎用保存ブロックだけを読み書きする |
+| `src/automation/keyframe-schema.ts` | GUIと同じ編集経路への入力検証 | effect payloadへ統一し、開発中のgamma専用キー入力を置換。互換alias・新ツールは増やさない |
 | `src/timeline.ts` | 可視行描画、選択、レイヤ別更新 | effectの内部IDから表示名を引く。毎フレーム行・キー配列を再生成しない |
 
 現行Commandはtrackの`category + name`を識別に使い、コピー時にもこの2値を保持する。新しい必須`effectId`フィールドを全track参照へ足すより、effectカテゴリの`name`を安定IDとして扱う方が小さく接続できる。
@@ -45,7 +46,7 @@
 | --- | --- | --- |
 | `src/editor/effect-keyframe-definitions.ts` | ID、値型、初期値、範囲、補間種別、対応backend、キー化可否 | DOM、Babylon、動的な任意propertyアクセス |
 | `src/editor/effect-scene-track-store.ts` | base、keys、frame評価、revision、キー編集 | 描画資源、UI、ファイルIO |
-| `src/project/effect-track-serialization.ts` | version検証、旧gamma変換、不正値正規化、未知データ保持 | runtime設定変更 |
+| `src/project/effect-track-serialization.ts` | 新形式のversion検証、不正値正規化、未知データ保持 | runtime設定変更、旧gamma変換 |
 | `src/render/effect-keyframe-runtime.ts` | 評価値から描画設定への反映、必要処理の準備、backend別adapter | 履歴操作、キー書換え、UIイベント |
 | `src/ui/effect-keyframe-controller.ts` | 行選択、既存パネルとの橋渡し、登録状態・値表示 | 独自の描画計算、別のキー正本 |
 
@@ -93,7 +94,7 @@ type EffectKeyframePayload = {
 | Undo / Redo | キー差分と必要な初回track生成/base差分だけを復元。失敗時はhistoryを進めない |
 | 全体OFF | キーを保持し、backendの既存全体OFF経路で描画を止める |
 
-preview保存は、保存した調整値が消えることと、未登録値が出力アニメーションへ混ざることの両方を避ける案。旧gammaファイルにはpreviewの正本がないため、既存のkeys/baseを優先し、推測してpreviewを復元しない。
+preview保存は、保存した調整値が消えることと、未登録値が出力アニメーションへ混ざることの両方を避ける案。旧gammaファイルからのpreview復元は行わない。
 
 補間はeffectのフィールドごとに固定する。数値は正規化した実値、ガンマは既存の対数補間、boolean・enum・対象IDはstep。角度や色を追加するときは最短角か通常数値か、RGBのどの空間かを定義し、単なる数値として一括補間しない。初回はRGB各成分を既存保存値の空間で補間する案とし、HDR色は別定義にする。
 
@@ -101,12 +102,12 @@ preview保存は、保存した調整値が消えることと、未登録値が�
 
 ## 5. UIと静的スタックとの関係
 
-- カメラ、照明、影、重力の下にeffect行を置く。表示対象は「使用中のstack entry、または保存済みtrackがある効果」。既存ガンマの入口は移行期間中維持する。描画順とタイムライン行順は分け、後者は安定した定義順にする。
+- カメラ、照明、影、重力の下にeffect行を置く。表示対象は「使用中のstack entry、または保存済みtrackがある効果」。描画順とタイムライン行順は分け、後者は安定した定義順にする。
 - 行クリックで該当する既存右パネルを開き、そこを値編集の主な入口にする。タイムライン側には効果名・ON / OFF・登録状態を置く。20種分のパネルをタイムライン下へ複製しない。ガンマの小スライダーは同じpreview経路を使うショートカットとして残せる。
 - キー化できる項目をパネル上で区別する。「登録」はその効果の対応値全体を対象とし、任意の1値だけを部分登録するUIは今回作らない。
 - 通常の効果チェックとキーのenabledは同じ編集値を表示する。キーがあるときは停止中previewを編集し、再生中はreadoutとしてロックする。静的stackの存在、全体ON / OFFとは区別する。
 - **stackから削除した場合はキーを残し、その行を休止表示にする案を推奨**。再追加で復帰。同時にキーまで削除せず、通常のキー削除操作を使う。現行ガンマはtrackがあると自動的にstackへ再追加されるため、ここは意図的な挙動変更になり、専用E2Eを必須にする。
-- 旧gamma読込時だけ従来動作を維持するため必要なstack entryを補完する。新形式で明示的に削除済みのentryを自動復活させない。新しい休止状態はstack membershipで保存し、キーenabledと二重管理しない。
+- 新形式で明示的に削除済みのentryを自動復活させない。休止状態はstack membershipで保存し、キーenabledと二重管理しない。旧gammaキーによるstack補完は追加しない。
 - backend非対応の効果は、行と値を保持して「この描画方式では未対応」と表示。backendを戻すと復帰する。対応していないClassic描画を新設することは下準備に含めない。
 - UI更新は選択effectと開いているパネルに限定し、値が変わった要素だけ反映。locale変更、長い名称、全20行の縦スクロールを確認する。
 
@@ -137,13 +138,14 @@ Classicには強度0をまたぐとpipelineのenabledを変更する経路があ
 
 DoFの対象位置解決はmodel・bone・camera更新後、描画直前の既存タイミングを守る。モーションブラーはシーク・cut時の履歴resetや出力初期化、パーティクルは固定frameからの再現・速度の積分方針を個別に扱う。共通storeの導入だけでこれらを対応済みにしない。
 
-## 7. 保存互換と移行
+## 7. 新形式への一本化
 
 提案する保存先は任意の`keyframes.effectAnimations`。ブロックの`version: 1`、effectごとの安定ID・`valueVersion`・base・frameと値の列、任意previewを持つ。保存には実数値・IDだけを使い、DOM・texture・関数・翻訳表示名を含めない。
 
-- 旧projectにブロックがなければ従来の静的設定を使う。
-- 旧`gammaAnimation`は共通storeへ変換する。新形式にも同じgammaがあれば新形式を優先し、二重適用しない。
-- 移行期間は新形式を正本にし、旧版向け`gammaAnimation`を同じ正本から派生出力する。独立した2つの編集状態は持たない。旧版で他のeffectキーが編集・保持できるとは保証しない。
+- 新ブロックがなければeffectキーなしとして従来の静的設定を使う。
+- 旧`keyframes.gammaAnimation`は読み込まず、新形式へ変換・引き継ぎしない。旧形式の派生出力・二重保存も行わない。開発用の既存ガンマキーは新形式で登録し直す。
+- gamma専用のキーcategory / payload / serializer経路は共通effect形式へ置換し、内部呼出し・automation schema・testも同時に更新する。互換aliasや移行期間は設けない。
+- この互換不要判断は未配布のガンマキーが対象。既存project全体、静的ガンマ設定、照明・影・重力キー等の互換処理を削除する根拠にはしない。
 - importerは静的設定・asset・stackを復元し、trackを入れ、描画準備を完了してから保存frameへseekする。ガンマの既存`gammaEncodingVersion`変換は静的設定の従来入口だけで行い、track値へ二重変換しない。
 - 未知ID・未知versionは実行せず、通常のproject読込上限内で不透明なJSONとして保持して再保存する。既知IDの不正frame・NaN・重複frameは決めた規則で正規化し、欠けた値はその定義のbaseへ補完する。重複frameは後勝ちとする。
 - VMD / BVMDへ混ぜない。通常保存、backend reload、別windowのexport用状態復元も同じconverterを使う。
@@ -153,13 +155,13 @@ DoFの対象位置解決はmodel・bone・camera更新後、描画直前の既�
 | 区切り | 内容 | 実作業時間 | 完了条件 |
 | --- | --- | ---: | --- |
 | A1 データ・状態 | 型付き定義、store、base / preview / evaluated、補間・revision | 2〜3h | gammaと複数値のpure test fixtureで編集・評価が通る |
-| A2 保存・互換 | version付きconverter、旧gamma alias / 派生保存、preview | 2〜3h | 旧・新・両形式・空track・休止track・未知値のround-tripが通る |
-| A3 編集・UI接続 | effectカテゴリ、共通Command、右パネルbridge、休止表示、automation入力互換 | 2〜4h | 選択・登録・移動・複数選択・Undo・旧gamma入力が同じ経路を通る |
+| A2 新形式の保存 | version付きserializer / parser、preview、旧専用経路の撤去 | 1〜2h | 新形式・空track・休止track・未知値のround-tripが通る |
+| A3 編集・UI接続 | effectカテゴリ、共通Command、右パネルbridge、休止表示、automation入力更新 | 2〜4h | 選択・登録・移動・複数選択・Undo・共通effect入力が同じ経路を通る |
 | A4 描画adapter | gamma移植、grainを第二実装、準備と値反映の分離、両backend・export待機 | 3〜5h | OFF境界をまたいでも意図しない再構築がなく、保存値も変わらない |
-| A5 回帰・整理 | unit / lint / critical型確認、GPU E2E、旧gamma出力比較、文書更新 | 3〜5h | 下記の基盤完了条件を満たす |
-| 合計 | ガンマ＋グレインで共通化を実証 | **12〜20h** | 他18種の実装は含めない |
+| A5 回帰・整理 | unit / lint / critical型確認、GPU E2E、ガンマの描画・補間維持、文書更新 | 2〜4h | 下記の基盤完了条件を満たす |
+| 合計 | ガンマ＋グレインで共通化を実証 | **10〜18h** | 他18種の実装は含めない |
 
-上限側を使う条件は、Classicのenabled維持で想定外の再構築が起きる、保存とreloadの別経路にpreviewが漏れる、既存キー一括操作のカテゴリ前提が見つかる場合。追加調整の予備を4〜6h持ち、計画枠は16〜26hとする。GPU起動権限・fixture不足等による待ち時間は別。
+上限側を使う条件は、Classicのenabled維持で想定外の再構築が起きる、保存とreloadの別経路にpreviewが漏れる、既存キー一括操作のカテゴリ前提が見つかる場合。追加調整の予備を4〜6h持ち、計画枠は14〜24hとする。GPU起動権限・fixture不足等による待ち時間は別。
 
 基盤後にブルームの強度＋しきい値を実描画まで接続する確認を**追加3〜6h**で見込む。これで1スカラー専用の共通化になっていないことを実UIでも確かめられる。色・kernelのキー化はこの工数に含めない。
 
@@ -174,7 +176,7 @@ DoFの対象位置解決はmodel・bone・camera更新後、描画直前の既�
 - 同frame上書き、move衝突、複数delete、Undo / Redo、track初回作成のUndo、異なるeffectへのpaste拒否。
 - ON / OFFのstep境界、gamma既存補間、複数フィールドの同時評価、before-first / after-last / reverse seek。
 - previewの登録・破棄・保存復元、最後のキー削除、同frameのrevision変更、baseが再生で変わらないこと。
-- 旧gamma / 新形式 / 両方の優先順位、空・未知・不正データ、静的stack削除と再追加、非対応backendでの保持。
+- 新形式の保存復元、空・未知・不正データ、静的stack削除と再追加、非対応backendでの保持。旧gammaキーの引継ぎ・互換出力がないことと、新ブロックのないprojectの静的設定維持も確認する。
 - 区間検索・キャッシュの確認は時間閾値に依存するflaky testにせず、比較回数や検索区間を観測する。
 
 GPUを利用するローカルElectron E2E（sandbox外、順次実行）:

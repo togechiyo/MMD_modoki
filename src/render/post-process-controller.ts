@@ -110,8 +110,8 @@ type PostProcessHost = {
     postEffectBloomThresholdValue: number;
     postEffectBloomKernelValue: number;
     effectKeyframeGrainPrepared?: boolean;
-    isEffectKeyframePrepared?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion"): boolean;
-    getEffectScalarRenderValue?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion", field: string, fallback: number): number;
+    isEffectKeyframePrepared?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion" | "lut"): boolean;
+    getEffectScalarRenderValue?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion" | "lut", field: string, fallback: number): number;
     getEffectRenderLensDistortion?(): number;
     effectKeyframeBloomPrepared?: boolean;
     postEffectMotionBlurEnabledValue: boolean;
@@ -138,6 +138,7 @@ type PostProcessHost = {
     postEffectVignetteEnabledValue: boolean;
     postEffectColorCurvesEnabledValue: boolean;
     postEffectLutEnabledValue: boolean;
+    postEffectLutIntensityValue: number;
     postEffectExposureValue: number;
     postEffectToneMappingTypeValue: number;
     postEffectDitheringIntensityValue: number;
@@ -1397,7 +1398,7 @@ export function isImageProcessingEffectsEnabled(host: PostProcessHost): boolean 
         || host.postEffectDitheringEnabledValue
         || useSceneVignette
         || host.postEffectColorCurvesEnabledValue
-        || (host.postEffectBackend !== "frameGraph" && host.postEffectLutEnabledValue && isLutSourceReady(host))
+        || (host.postEffectBackend !== "frameGraph" && (host.isEffectKeyframePrepared?.("lut") === true || host.postEffectLutEnabledValue) && isLutSourceReady(host))
         || Math.abs(host.postEffectExposureValue - 1) > epsilon;
 }
 
@@ -1463,7 +1464,7 @@ export function applyLutSettings(host: PostProcessHost): void {
     }
 
     const mode = host.postEffectLutSourceModeValue;
-    const enabled = host.postEffectLutEnabledValue && isLutSourceReady(host);
+    const enabled = (host.isEffectKeyframePrepared?.("lut") === true || host.postEffectLutEnabledValue) && isLutSourceReady(host);
     if (!enabled) {
         imageProcessing.colorGradingEnabled = false;
         imageProcessing.colorGradingTexture = null;
@@ -1510,7 +1511,7 @@ export function applyLutSettings(host: PostProcessHost): void {
         return;
     }
 
-    host.postEffectLutTexture.level = Math.max(0, Math.min(1, host.postEffectLutIntensityValue));
+    host.postEffectLutTexture.level = host.getEffectScalarRenderValue?.("lut", "intensity", Math.min(1, host.postEffectLutIntensityValue)) ?? Math.min(1, host.postEffectLutIntensityValue);
     imageProcessing.colorGradingTexture = host.postEffectLutTexture;
     imageProcessing.colorGradingEnabled = true;
 }

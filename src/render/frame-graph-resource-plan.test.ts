@@ -15,6 +15,7 @@ function createSettings(
         luminousIntensity: 0.5,
         bloomEnabled: false,
         lutEnabled: false,
+        gammaEnabled: false,
         motionBlurEnabled: false,
         motionBlurStrength: 0.5,
         sharpenEdge: 0,
@@ -45,6 +46,14 @@ function createSettings(
 }
 
 describe("buildFrameGraphResourcePlan", () => {
+    it("allocates the luminous mask even when the initial keyed intensity is zero", () => {
+        const off = buildFrameGraphResourcePlan(createSettings({ luminousEnabled: true, luminousPrepared: true, luminousIntensity: 0 }));
+        const on = buildFrameGraphResourcePlan(createSettings({ luminousEnabled: true, luminousPrepared: true, luminousIntensity: 2 }));
+        expect(off.needsLuminousMask).toBe(true);
+        expect(canReuseFrameGraphForActivation(off, on, ["luminous"])).toBe(true);
+        expect(buildFrameGraphResourcePlan(createSettings({ luminousEnabled: true, luminousIntensity: 0 })).needsLuminousMask).toBe(false);
+        expect(buildFrameGraphResourcePlan(createSettings({ luminousEnabled: false, luminousPrepared: true })).needsLuminousMask).toBe(false);
+    });
     it("reuses recorded passes for OFF and re-ON but requires missing tasks and resources", () => {
         const on = buildFrameGraphResourcePlan(createSettings({ ssaoEnabled: true }));
         const off = buildFrameGraphResourcePlan(createSettings());

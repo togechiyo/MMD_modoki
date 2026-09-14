@@ -202,6 +202,7 @@ export type FrameGraphPostEffectsSettings = {
     dofFocalLength: number;
     luminousEnabled: boolean;
     luminousIntensity: number;
+    luminousPrepared?: boolean;
     luminousThreshold: number;
     luminousRadius: number;
     luminousGlareCount: number;
@@ -2123,6 +2124,17 @@ export class FrameGraphPostEffectsController {
 
     isReady(): boolean {
         return this.ready;
+    }
+
+    // Rebuild scheduling uses isReady(): new settings can require resources
+    // that only the next graph can create. Capture additionally waits for assets.
+    isReadyForCapture(): boolean {
+        if (!this.ready) return false;
+        const settings = this.getSettings();
+        if (settings.luminousPrepared && !this.areLuminousEffectsReady()) return false;
+        if (settings.lutEnabled && settings.lutRuntimeText
+            && (this.lutTextureKey !== settings.lutTextureKey || !this.lutTexture?.isReady())) return false;
+        return true;
     }
 
     canUpdateActivation(): boolean {

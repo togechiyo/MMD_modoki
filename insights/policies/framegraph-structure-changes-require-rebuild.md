@@ -3,12 +3,13 @@ id: framegraph-structure-changes-require-rebuild
 status: policy
 scope: rendering/framegraph
 confidence: high
-last_verified: 2026-09-08
+last_verified: 2026-09-14
 evidence:
   - webgpu-validation
   - user-device-confirmation
   - unit-test
 source_docs:
+  - ../../docs/resource-effect-timeline-2026-09-14.md
   - ../../docs/framegraph-master-toggle-2026-09-08.md
   - ../../docs/framegraph-post-stack-current-spec-2026-07-01.md
   - ../../docs/frame-graph-effect-stack-order-plan-2026-06-13.md
@@ -28,6 +29,8 @@ build 後に固定される task 依存を実行中に差し替えず、backend 
 
 接続済みtaskと確保済みresourceが足りる個別ON/OFFは、記録済みdisabled passで切り替え、再構築しない。全体OFFは資源解放、全体ONは再構築とする。
 
+キーで将来ONになる効果は、初期OFFでも必要資源を準備する。再構築の完了判定と、現在の設定で出力するための画像・シェーダー準備完了を分ける。新しい設定の資源待ちを古いgraphの再構築条件へ混ぜると、必要な再構築そのものが進まなくなる。
+
 ## 避けること
 
 - `execute()` 中に task の source/output texture を付け替える。
@@ -40,6 +43,8 @@ build 後に固定される task 依存を実行中に差し替えず、backend 
 live reconnect では同一 sync scope 内の `TextureBinding` と `RenderAttachment` が競合した。rebuild へ統一後は UI 順序が runtime 順序になり、効果間の入力関係を実機確認できた。
 
 2026-09-08のローカルWebGPU E2Eでは20効果の個別OFF/ONを同じbuild世代で確認した。全体OFF/ON・保存読込・PNG出力も通過。ClassicフォグがFrameGraph深度を参照する経路は、深度解放後にbinding例外となるため禁止した。
+
+2026-09-14、LUTの初期OFFキーで準備完了を再構築待ちにも使用すると停止することをローカルE2Eで確認した。判定を分けた後、LUT・ルミナスの初期OFF、シーク、PNG / WebM、backend切替のE2Eが通過した。
 
 ## 再確認条件
 

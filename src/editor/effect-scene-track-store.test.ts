@@ -95,7 +95,7 @@ describe("effect scene track foundation", () => {
     });
     it.each([
         ["vignette", "weight", 4], ["sharpen", "edge", 4], ["chromatic", "amount", 200],
-        ["edgeBlur", "strength", 3], ["distortion", "influence", 1],
+        ["edgeBlur", "strength", 3], ["distortion", "influence", 1], ["lut", "intensity", 1], ["luminous", "intensity", 4],
     ] as const)("round-trips independent %s keys and interpolates only their scalar", (id: EffectId, field, max) => {
         const store = new EffectSceneTrackStore();
         const from = makeEffectPayload(id, { enabled: true, [field]: max });

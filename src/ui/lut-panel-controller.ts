@@ -126,7 +126,16 @@ export class LutPanelController {
         }
         this.elements = elements;
 
-        const applyLut = (): void => {
+        const applyLut = (event?: Event): void => {
+            if (this.mmdManager.isPlaying) return;
+            if (this.mmdManager.hasEffectSceneTrack("lut") && (event?.target === elements.enabledInput || event?.target === elements.intensityInput)) {
+                const value = this.mmdManager.captureCurrentEffectKeyframePayload("lut").value;
+                this.mmdManager.setEffectScenePreview("lut", event.target === elements.enabledInput
+                    ? { ...value, enabled: elements.enabledInput.checked }
+                    : { ...value, intensity: Number(elements.intensityInput.value) / 100 });
+                this.refreshKeyframeUi();
+                return;
+            }
             if (!this.dispatchAction?.({ type: "effect.applyLut", source: "panel" })) {
                 this.applyLutFromPanel();
             }
@@ -149,7 +158,7 @@ export class LutPanelController {
             Math.max(0, Math.min(100, Math.round(this.mmdManager.postEffectLutIntensity * 100))),
         );
 
-        applyLut();
+        this.refreshKeyframeUi();
 
         elements.sourceSelect.addEventListener("change", applyLut);
         elements.fileButton.addEventListener("click", () => {
@@ -162,6 +171,21 @@ export class LutPanelController {
         elements.intensityInput.addEventListener("input", applyLut);
 
         return true;
+    }
+
+    public refreshKeyframeUi(): void {
+        const elements = this.elements;
+        if (!elements) return;
+        const enabled = this.mmdManager.postEffectLutEnabled;
+        const intensity = this.mmdManager.postEffectLutIntensity;
+        elements.enabledInput.checked = enabled;
+        elements.intensityInput.value = String(Math.round(intensity * 100));
+        elements.enabledValue.textContent = enabled ? this.mmdManager.postEffectLutPreset : t("status.off");
+        elements.intensityValue.textContent = intensity.toFixed(2);
+        elements.sourceValue.textContent = lutModeToLabel(this.mmdManager.postEffectLutSourceMode);
+        elements.fileValue.textContent = this.mmdManager.postEffectLutExternalPath
+            ? this.getBaseNameForRenderer(this.mmdManager.postEffectLutExternalPath) : t("option.none");
+        for (const input of [elements.enabledInput, elements.intensityInput, elements.sourceSelect, elements.presetSelect, elements.fileButton]) input.disabled = this.mmdManager.isPlaying;
     }
 
     public async chooseExternalLut(): Promise<void> {
@@ -217,12 +241,14 @@ export class LutPanelController {
         }
 
         this.mmdManager.postEffectLutSourceMode = selectedMode;
-        this.mmdManager.postEffectLutIntensity = Number(elements.intensityInput.value) / 100;
-        this.mmdManager.postEffectLutEnabled = elements.enabledInput.checked
-            && hasLutSource
-            && this.mmdManager.postEffectLutIntensity > 0.000001;
+        if (!this.mmdManager.hasEffectSceneTrack("lut")) {
+            this.mmdManager.postEffectLutIntensity = Number(elements.intensityInput.value) / 100;
+            this.mmdManager.postEffectLutEnabled = elements.enabledInput.checked
+                && hasLutSource && this.mmdManager.postEffectLutIntensity > 0.000001;
+        }
 
-        elements.intensityInput.disabled = !elements.enabledInput.checked || !hasLutSource;
+        this.refreshKeyframeUi();
+        elements.intensityInput.disabled = this.mmdManager.isPlaying || !hasLutSource;
         elements.sourceValue.textContent = lutModeToLabel(selectedMode);
         elements.fileValue.textContent = this.postFxLutExternalPath
             ? this.getBaseNameForRenderer(this.postFxLutExternalPath)

@@ -298,6 +298,14 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("keeps LUT and luminous static settings separate from evaluated keys", () => {
+        const project = exportProjectState({
+            ...createHost(), postEffectLutEnabled: true, postEffectLutIntensity: 0.5,
+            postEffectGlowEnabled: true, postEffectGlowIntensity: 3,
+            getStaticResourcePostEffects: () => ({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5 }),
+        });
+        expect(project.effects).toMatchObject({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5 });
+    });
     it("keeps static scalar effect settings separate from evaluated key values", () => {
         const project = exportProjectState({
             ...createHost(),

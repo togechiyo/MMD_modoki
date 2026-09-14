@@ -70,6 +70,7 @@ export class EffectKeyframeController {
             output.value = `${position}%`;
         }
         this.state.textContent = suspended ? t("timeline.effectSuspended") : "";
-        this.scope.textContent = payload.effectId === "bloom" ? t("timeline.bloomFixedSettings") : "";
+        const scopeKey = getEffectDefinition(payload.effectId).fixedSettingsLabelKey;
+        this.scope.textContent = scopeKey ? t(scopeKey) : payload.effectId === "bloom" ? t("timeline.bloomFixedSettings") : "";
     }
 }

@@ -255,6 +255,7 @@ type ProjectExportHost = {
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
     getSerializedEffectSceneTracks?: () => import("../editor/effect-scene-track-store").SerializedEffectAnimations;
+    getStaticResourcePostEffects?: () => { lutEnabled: boolean; lutIntensity: number; glowEnabled: boolean; glowIntensity: number };
     getStaticScalarPostEffects?: () => { vignetteEnabled: boolean; postEffectVignetteWeight: number; postEffectSharpenEdge: number; postEffectChromaticAberration: number; dofLensEdgeBlur: number; dofLensDistortionInfluence: number; };
     getStaticPostEffectGamma?: () => number;
     getStaticPostEffectBloom?: () => { enabled: boolean; weight: number; threshold: number };
@@ -565,16 +566,16 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             colorCurvesDensity: host.postEffectColorCurvesDensity,
             colorCurvesSaturation: host.postEffectColorCurvesSaturation,
             colorCurvesExposure: host.postEffectColorCurvesExposure,
-            glowEnabled: host.postEffectGlowEnabled,
-            glowIntensity: host.postEffectGlowIntensity,
+            glowEnabled: host.getStaticResourcePostEffects?.().glowEnabled ?? host.postEffectGlowEnabled,
+            glowIntensity: host.getStaticResourcePostEffects?.().glowIntensity ?? host.postEffectGlowIntensity,
             glowThreshold: host.postEffectGlowThreshold,
             glowKernel: host.postEffectGlowKernel,
             glowGlareCount: host.postEffectGlowGlareCount,
             glowGlareLength: host.postEffectGlowGlareLength,
             glowGlareAngle: host.postEffectGlowGlareAngle,
             glowGlarePower: host.postEffectGlowGlarePower,
-            lutEnabled: host.postEffectLutEnabled,
-            lutIntensity: host.postEffectLutIntensity,
+            lutEnabled: host.getStaticResourcePostEffects?.().lutEnabled ?? host.postEffectLutEnabled,
+            lutIntensity: host.getStaticResourcePostEffects?.().lutIntensity ?? host.postEffectLutIntensity,
             lutPreset: host.postEffectLutPreset,
             lutSourceMode: host.postEffectLutSourceMode,
             lutExternalPath: host.postEffectLutExternalPath,

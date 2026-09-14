@@ -9,6 +9,8 @@ export type EffectValueById = {
     chromatic: { enabled: boolean; amount: number };
     edgeBlur: { enabled: boolean; strength: number };
     distortion: { enabled: boolean; influence: number };
+    lut: { enabled: boolean; intensity: number };
+    luminous: { enabled: boolean; intensity: number };
 };
 export type EffectId = keyof EffectValueById;
 export type EffectKeyframePayload = {
@@ -21,6 +23,7 @@ export type EffectDefinition = {
     id: EffectId;
     fields: Readonly<Record<string, Field>>;
     sliders: readonly EffectSlider[];
+    fixedSettingsLabelKey?: string;
 };
 export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
     { id: "gamma", fields: { enabled: { kind: "step", default: false }, gamma: { kind: "log", default: 1, min: 0.25, max: 4 } },
@@ -42,6 +45,10 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
         sliders: [{ field: "strength", panelField: "edgeBlur", min: 0, max: 300, toValue: position => position / 100, toPosition: value => value * 100 }] },
     { id: "distortion", fields: { enabled: { kind: "step", default: false }, influence: { kind: "linear", default: 0, min: 0, max: 1 } },
         sliders: [{ field: "influence", panelField: "distortion", labelKey: "effect.frameGraphPost.controls.influence", min: 0, max: 100, toValue: position => position * 1 / 100, toPosition: value => value / 1 * 100 }] },
+    { id: "lut", fixedSettingsLabelKey: "timeline.lutFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 1, min: 0, max: 1 } },
+        sliders: [{ field: "intensity", panelField: "lutIntensity", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 }] },
+    { id: "luminous", fixedSettingsLabelKey: "timeline.luminousFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0.5, min: 0, max: 4 } },
+        sliders: [{ field: "intensity", panelField: "luminousIntensity", min: 0, max: 400, toValue: position => position / 100, toPosition: value => value * 100 }] },
 ];
 export function isEffectId(id: string): id is EffectId {
     return EFFECT_KEYFRAME_DEFINITIONS.some(definition => definition.id === id);
@@ -71,7 +78,7 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
+    kind: z.literal("effect"), effectId: z.enum(["gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
 }).strict().superRefine((payload, context) => {
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });

@@ -615,6 +615,8 @@
     "effect.frameGraphPost.effects.bloom":  "블룸",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "효과",
+    "timeline.lutFixedSettings": "LUT 선택과 파일은 고정 설정입니다",
+    "timeline.luminousFixedSettings": "발광 대상, 임계값, 흐림, 광선은 고정 설정입니다",
     "timeline.bloomFixedSettings": "커널과 색상은 고정 설정",
     "timeline.effectSuspended": "효과 스택에서 제외됨",
     "timeline.gamma": "감마",

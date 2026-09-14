@@ -3,7 +3,7 @@ import type { MmdManager } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
 
 const LUMINOUS_GLOW_DEFAULT_KERNEL = 20;
-const LUMINOUS_GLOW_SLIDER_MAX = 100;
+const LUMINOUS_GLOW_SLIDER_MAX = 400;
 
 type BloomToneMapElements = {
     toneMappingTypeSelect: HTMLSelectElement;
@@ -161,12 +161,14 @@ export class BloomToneMapController {
         elements.toneMappingTypeSelect.value = this.mmdManager.postEffectToneMappingEnabled
             ? String(this.mmdManager.postEffectToneMappingType)
             : "-1";
+        elements.glowIntensityInput.max = "400";
+        elements.glowIntensityInput.disabled = this.mmdManager.isPlaying;
         elements.glowIntensityInput.value = String(
             Math.max(
                 0,
                 Math.min(
                     LUMINOUS_GLOW_SLIDER_MAX,
-                    Math.round((this.mmdManager.postEffectGlowEnabled ? this.mmdManager.postEffectGlowIntensity : 0) * 100),
+                    Math.round((this.mmdManager.hasEffectSceneTrack("luminous") || this.mmdManager.postEffectGlowEnabled ? this.mmdManager.postEffectGlowIntensity : 0) * 100),
                 ),
             ),
         );
@@ -249,9 +251,11 @@ export class BloomToneMapController {
     }
 
     public setGlowIntensityPercent(percent: number): void {
-        this.mmdManager.postEffectGlowIntensity = Math.max(0, Math.min(1, percent / 100));
-        this.mmdManager.postEffectGlowKernel = LUMINOUS_GLOW_DEFAULT_KERNEL;
-        this.mmdManager.postEffectGlowEnabled = this.mmdManager.postEffectGlowIntensity > 0.000001;
+        this.mmdManager.postEffectGlowIntensity = Math.max(0, Math.min(4, percent / 100));
+        if (!this.mmdManager.hasEffectSceneTrack("luminous")) {
+            this.mmdManager.postEffectGlowKernel = LUMINOUS_GLOW_DEFAULT_KERNEL;
+            this.mmdManager.postEffectGlowEnabled = this.mmdManager.postEffectGlowIntensity > 0.000001;
+        }
         this.refreshGlowUi();
     }
 
@@ -335,15 +339,17 @@ export class BloomToneMapController {
         );
     }
 
-    private refreshGlowUi(): void {
+    public refreshGlowUi(): void {
         const elements = this.elements;
         if (!elements) return;
+        elements.glowIntensityInput.max = "400";
+        elements.glowIntensityInput.disabled = this.mmdManager.isPlaying;
         elements.glowIntensityInput.value = String(
             Math.max(
                 0,
                 Math.min(
                     LUMINOUS_GLOW_SLIDER_MAX,
-                    Math.round((this.mmdManager.postEffectGlowEnabled ? this.mmdManager.postEffectGlowIntensity : 0) * 100),
+                    Math.round((this.mmdManager.hasEffectSceneTrack("luminous") || this.mmdManager.postEffectGlowEnabled ? this.mmdManager.postEffectGlowIntensity : 0) * 100),
                 ),
             ),
         );

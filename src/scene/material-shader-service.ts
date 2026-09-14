@@ -147,6 +147,9 @@ type MaterialShaderHost = Record<string, unknown> & {
     luminousGlowModelByMesh?: WeakMap<object, object>;
     skinSssPrePassMaterials?: Set<object>;
     defaultRenderingPipeline?: { glowLayerEnabled: boolean; bloomEnabled: boolean; bloomWeight: number; bloomThreshold: number; bloomKernel: number } | null;
+    hasEffectSceneTrack?(id: "luminous"): boolean;
+    isEffectKeyframePrepared?(id: "luminous"): boolean;
+    getEffectScalarRenderValue?(id: "luminous", field: string, fallback: number): number;
     postEffectGlowEnabledValue?: boolean;
     postEffectGlowIntensityValue?: number;
     postEffectGlowKernelValue?: number;
@@ -963,7 +966,8 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
     const baseAlpha = Number.isFinite(Number(material.alpha))
         ? Math.max(0, Math.min(1, Number(material.alpha)))
         : 1;
-    const manualGlow = Boolean(host.postEffectGlowEnabledValue) && Number(host.postEffectGlowIntensityValue) > 1e-6;
+    const manualGlow = host.hasEffectSceneTrack?.("luminous") ? host.isEffectKeyframePrepared?.("luminous") === true
+        : Boolean(host.postEffectGlowEnabledValue) && Number(host.postEffectGlowIntensityValue) > 1e-6;
     const presetLuminous = isLuminousGlowPresetMaterial(host, material);
     const allowHeuristicGlow = options?.allowManualHeuristic ?? manualGlow;
     const specularColor = readMaterialColor(material, ["specularColor", "reflectivityColor"]);
@@ -1049,6 +1053,12 @@ function getManagedLuminousGlowIntensity(baseIntensity: number, kind: "core" | "
         return baseIntensity * LUMINOUS_GLOW_CORE_INTENSITY_RATIO;
     }
     return baseIntensity * LUMINOUS_GLOW_HALO_INTENSITY_RATIO;
+}
+
+/** Update only existing layers; preparation and material classification happen separately. */
+export function applyLuminousKeyframeIntensity(halo: Pick<GlowLayer, "intensity"> | null, core: Pick<GlowLayer, "intensity"> | null, intensity: number): void {
+    if (halo) halo.intensity = getManagedLuminousGlowIntensity(intensity, "halo");
+    if (core) core.intensity = getManagedLuminousGlowIntensity(intensity, "core");
 }
 
 function getManagedLuminousGlowDepthEdgeStrength(kind: "core" | "halo"): number {
@@ -1490,10 +1500,11 @@ export function syncLuminousGlowLayer(host: MaterialShaderHost): void {
         return;
     }
 
-    const manualGlow = Boolean(host.postEffectGlowEnabledValue) && Number(host.postEffectGlowIntensityValue) > 1e-6;
-    const autoGlow = hasLuminousMaterials;
+    const manualGlow = host.hasEffectSceneTrack?.("luminous") ? host.isEffectKeyframePrepared?.("luminous") === true
+        : Boolean(host.postEffectGlowEnabledValue) && Number(host.postEffectGlowIntensityValue) > 1e-6;
+    const autoGlow = !host.hasEffectSceneTrack?.("luminous") && hasLuminousMaterials;
     const manualBloom = host.postEffectBackend !== "frameGraph" && Boolean(host.postEffectBloomEnabledValue);
-    const glowBaseIntensity = manualGlow
+    const glowBaseIntensity = host.hasEffectSceneTrack?.("luminous") ? (host.getEffectScalarRenderValue?.("luminous", "intensity", 0) ?? 0) : manualGlow
         ? Number(host.postEffectGlowIntensityValue)
         : Math.max(0.000001, Number(host.postEffectGlowIntensityValue) || 0.5);
     const glowBaseKernel = Math.max(1, Math.round(Number(host.postEffectGlowKernelValue) || GlowLayer.DefaultBlurKernelSize));

@@ -203,6 +203,7 @@ import {
     setExternalWgslToonShaderForModel as setExternalWgslToonShaderForModelImpl,
     setWgslMaterialShaderPreset as setWgslMaterialShaderPresetImpl,
     syncLuminousGlowLayer as syncLuminousGlowLayerImpl,
+    applyLuminousKeyframeIntensity,
     syncSkinSssPrePass as syncSkinSssPrePassImpl,
     WGSL_SKIN_SSS_DIFFUSION_PROFILE_RGB,
 } from "./scene/material-shader-service";
@@ -6388,6 +6389,8 @@ ${beforeFogAppendBlock}
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
+        if (id === "lut") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectLutEnabledValue, intensity: this.postEffectLutIntensityValue };
+        if (id === "luminous") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectGlowEnabledValue, intensity: this.postEffectGlowIntensityValue };
         if (id === "vignette") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectVignetteEnabledValue, weight: this.postEffectVignetteWeightValue };
         if (id === "sharpen") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectSharpenEdgeValue > 0), edge: this.postEffectSharpenEdgeValue };
         if (id === "chromatic") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectChromaticAberrationValue > 0), amount: this.postEffectChromaticAberrationValue };
@@ -6462,6 +6465,10 @@ ${beforeFogAppendBlock}
             this.getEffectScalarRenderValue("distortion", "influence", this.dofLensDistortionInfluenceValue),
             this.dofLensDistortionMinTeleFovDeg, this.dofLensDistortionNeutralFovDeg, this.dofLensDistortionMaxWideFovDeg);
     }
+    public getStaticResourcePostEffects() {
+        return { lutEnabled: this.postEffectLutEnabledValue, lutIntensity: this.postEffectLutIntensityValue,
+            glowEnabled: this.postEffectGlowEnabledValue, glowIntensity: this.postEffectGlowIntensityValue };
+    }
     public getStaticScalarPostEffects() {
         return {
             vignetteEnabled: this.postEffectVignetteEnabledValue,
@@ -6497,6 +6504,8 @@ ${beforeFogAppendBlock}
             this.standaloneBloomEffect.threshold = this.effectRenderState.bloomThreshold;
         }
         if (this.postEffectBackend === "classic") {
+            if (this.effectSceneTracks.has("luminous")) applyLuminousKeyframeIntensity(this.luminousGlowLayer, this.luminousGlowCoreLayer, this.getEffectScalarRenderValue("luminous", "intensity", this.postEffectGlowIntensityValue));
+            if (this.postEffectLutTexture) this.postEffectLutTexture.level = this.getEffectScalarRenderValue("lut", "intensity", Math.min(1, this.postEffectLutIntensityValue));
             const pipeline = this.defaultRenderingPipeline;
             if (pipeline?.sharpen) pipeline.sharpen.edgeAmount = this.getEffectScalarRenderValue("sharpen", "edge", this.postEffectSharpenEdgeValue);
             if (pipeline?.chromaticAberration) pipeline.chromaticAberration.aberrationAmount = this.getEffectScalarRenderValue("chromatic", "amount", this.postEffectChromaticAberrationValue);
@@ -11135,8 +11144,9 @@ ${beforeFogAppendBlock}
             dofEffectiveFStop: this.dofFStopValue,
             dofLensSize: this.dofLensSizeValue,
             dofFocalLength: this.dofFocalLengthValue,
-            luminousEnabled: this.isFrameGraphPostEffectActive("luminous"),
-            luminousIntensity: this.postEffectGlowIntensityValue,
+            luminousEnabled: this.effectSceneTracks.has("luminous") ? this.isEffectKeyframePrepared("luminous") : this.isFrameGraphPostEffectActive("luminous"),
+            luminousPrepared: this.isEffectKeyframePrepared("luminous"),
+            luminousIntensity: this.getEffectScalarRenderValue("luminous", "intensity", this.postEffectGlowIntensityValue),
             luminousThreshold: this.postEffectGlowThresholdValue,
             luminousRadius: this.postEffectGlowKernelValue,
             luminousGlareCount: this.postEffectGlowGlareCountValue,
@@ -11215,8 +11225,8 @@ ${beforeFogAppendBlock}
             directionalLightShaftsPhaseG: this.postEffectDirectionalLightShaftsPhaseGValue,
             directionalLightShaftsLightColor: this.getPostEffectDirectionalLightShaftsLightColor(),
             directionalLightShaftsShadowColor: this.getPostEffectDirectionalLightShaftsShadowColor(),
-            lutEnabled: this.isFrameGraphPostEffectActive("lut") && isLutSourceReadyImpl(this),
-            lutIntensity: this.postEffectLutIntensityValue,
+            lutEnabled: (this.effectSceneTracks.has("lut") ? this.isEffectKeyframePrepared("lut") : this.isFrameGraphPostEffectActive("lut")) && isLutSourceReadyImpl(this),
+            lutIntensity: this.getEffectScalarRenderValue("lut", "intensity", this.postEffectLutIntensityValue),
             lutRuntimeText: this.getFrameGraphPostEffectLutRuntimeText(),
             lutTextureKey: this.getFrameGraphPostEffectLutTextureKey(),
             motionBlurEnabled: this.isFrameGraphPostEffectActive("motionBlur"),
@@ -11236,7 +11246,7 @@ ${beforeFogAppendBlock}
     }
 
     private getFrameGraphPostEffectLutRuntimeText(): string | null {
-        if (!this.isFrameGraphPostEffectActive("lut") || !isLutSourceReadyImpl(this)) {
+        if (!(this.isEffectKeyframePrepared("lut") || this.isFrameGraphPostEffectActive("lut")) || !isLutSourceReadyImpl(this)) {
             return null;
         }
         if (this.postEffectLutSourceModeValue === "builtin") {
@@ -11246,7 +11256,7 @@ ${beforeFogAppendBlock}
     }
 
     private getFrameGraphPostEffectLutTextureKey(): string | null {
-        if (!this.isFrameGraphPostEffectActive("lut") || !isLutSourceReadyImpl(this)) {
+        if (!(this.isEffectKeyframePrepared("lut") || this.isFrameGraphPostEffectActive("lut")) || !isLutSourceReadyImpl(this)) {
             return null;
         }
         if (this.postEffectLutSourceModeValue === "builtin") {
@@ -12669,9 +12679,10 @@ ${beforeFogAppendBlock}
 
     /** LuminousGlow enabled state. */
     get postEffectGlowEnabled(): boolean {
-        return this.postEffectGlowEnabledValue;
+        return this.effectSceneTracks.evaluate("luminous", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectGlowEnabledValue;
     }
     set postEffectGlowEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("luminous")) { this.setEffectScenePreview("luminous", { ...this.captureCurrentEffectKeyframePayload("luminous").value, enabled: Boolean(v) }); return; }
         const next = Boolean(v);
         const changed = this.postEffectGlowEnabledValue !== next;
         this.postEffectGlowEnabledValue = next;
@@ -12683,9 +12694,10 @@ ${beforeFogAppendBlock}
 
     /** LuminousGlow intensity (0..4). */
     get postEffectGlowIntensity(): number {
-        return this.postEffectGlowIntensityValue;
+        return Number(this.effectSceneTracks.evaluate("luminous", this._currentFrame, !this.isPlaying)?.intensity ?? this.postEffectGlowIntensityValue);
     }
     set postEffectGlowIntensity(v: number) {
+        if (this.effectSceneTracks.has("luminous")) { this.setEffectScenePreview("luminous", { ...this.captureCurrentEffectKeyframePayload("luminous").value, intensity: v }); return; }
         this.postEffectGlowIntensityValue = Math.max(0, Math.min(4, v));
         this.applyDefaultPipelinePostProcessSettings();
     }
@@ -12766,18 +12778,20 @@ ${beforeFogAppendBlock}
 
     /** LUT enabled state. */
     get postEffectLutEnabled(): boolean {
-        return this.postEffectLutEnabledValue;
+        return this.effectSceneTracks.evaluate("lut", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectLutEnabledValue;
     }
     set postEffectLutEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("lut")) { this.setEffectScenePreview("lut", { ...this.captureCurrentEffectKeyframePayload("lut").value, enabled: Boolean(v) }); return; }
         this.postEffectLutEnabledValue = Boolean(v);
         this.applyImageProcessingSettings();
     }
 
     /** LUT intensity (0..2). */
     get postEffectLutIntensity(): number {
-        return this.postEffectLutIntensityValue;
+        return Number(this.effectSceneTracks.evaluate("lut", this._currentFrame, !this.isPlaying)?.intensity ?? this.postEffectLutIntensityValue);
     }
     set postEffectLutIntensity(v: number) {
+        if (this.effectSceneTracks.has("lut")) { this.setEffectScenePreview("lut", { ...this.captureCurrentEffectKeyframePayload("lut").value, intensity: v }); return; }
         this.postEffectLutIntensityValue = Math.max(0, Math.min(2, v));
         this.applyImageProcessingSettings();
     }
@@ -15786,11 +15800,13 @@ ${beforeFogAppendBlock}
     }
 
     public isPostEffectBackendReadyForCapture(): boolean {
+        if (this.postEffectBackend === "classic" && this.isEffectKeyframePrepared("lut")
+            && this.isLutSourceReady() && !this.postEffectLutTexture?.isReady()) return false;
         if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) {
             return !this.frameGraphPostEffectsRebuildPending
                 && !this.frameGraphPostEffectsRebuildScheduled;
         }
-        return this.frameGraphPostEffectsController?.isReady() === true
+        return this.frameGraphPostEffectsController?.isReadyForCapture() === true
             && !this.frameGraphPostEffectsRebuildPending
             && !this.frameGraphPostEffectsRebuildScheduled;
     }

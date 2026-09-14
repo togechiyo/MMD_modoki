@@ -18,7 +18,7 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     bloomWeight: { actualMin: 0, actualMax: 2 },
     bloomThreshold: { actualMin: 0, actualMax: 2 },
     bloomKernel: { actualMin: 1, actualMax: 256, actualStep: 1 },
-    luminousIntensity: { actualMin: 0, actualMax: 2 },
+    luminousIntensity: { actualMin: 0, actualMax: 4 },
     luminousThreshold: { actualMin: 0, actualMax: 1.5 },
     luminousRadius: { actualMin: 1, actualMax: 128, actualStep: 1 },
     dofFocusOffset: { actualMin: -20_000, actualMax: 20_000, actualStep: 100 },

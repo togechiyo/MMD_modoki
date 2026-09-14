@@ -5429,10 +5429,10 @@ export class UIController {
                 this.mmdManager.dofEnabled = true;
                 break;
             case "luminous":
-                this.mmdManager.postEffectGlowEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("luminous")) this.mmdManager.postEffectGlowEnabled = true;
                 break;
             case "lut":
-                this.mmdManager.postEffectLutEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("lut")) this.mmdManager.postEffectLutEnabled = true;
                 break;
             case "gamma":
                 break;
@@ -8210,6 +8210,8 @@ export class UIController {
         this.colorPostFxController?.refreshGammaUi();
         this.colorPostFxController?.refreshGrainUi();
         this.bloomToneMapController?.refreshBloomUi();
+        this.bloomToneMapController?.refreshGlowUi();
+        this.lutPanelController?.refreshKeyframeUi();
         this.refreshLensEffectKeyframeUi?.();
         this.lensEffectController?.refresh();
         this.colorPostFxController?.refreshVignetteUi();
@@ -8223,6 +8225,12 @@ export class UIController {
             const fields: Record<string, number> = Object.fromEntries(definition.sliders
                 .filter(slider => slider.panelField)
                 .map(slider => [slider.panelField, Number((value.value as Record<string, number | boolean>)[slider.field])]));
+            row?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
+                "input[data-effect-stack-control], select[data-effect-stack-control], button[data-effect-stack-action]",
+            ).forEach(control => {
+                const field = control.dataset.effectStackControl ?? "";
+                control.disabled = this.mmdManager.isPlaying || (!(field in fields) && !value.value.enabled);
+            });
             row?.querySelectorAll<HTMLInputElement>("input[data-effect-stack-control]").forEach(input => {
                 const field = input.dataset.effectStackControl ?? "";
                 if (!(field in fields) || !isFrameGraphEffectSliderField(field)) return;

@@ -127,6 +127,18 @@ describe("effect scene track foundation", () => {
         store.apply("bloom", 20, makeEffectPayload("bloom", { enabled: false, weight: 0, threshold: 2, kernel: 256 }), {});
         expect(store.evaluate("bloom", 10)).toEqual({ enabled: true, weight: 1, threshold: 1, kernel: 128.5 });
     });
+    it("round-trips aerial distance keys and keeps OFF separate from interpolated shape", () => {
+        const store = new EffectSceneTrackStore();
+        const base = { enabled: false, strength: 0.18, start: 55, range: 180 };
+        store.apply("aerialPerspective", 0, makeEffectPayload("aerialPerspective", { enabled: false, strength: 0, start: 0, range: 20 }), base);
+        store.apply("aerialPerspective", 20, makeEffectPayload("aerialPerspective", { enabled: true, strength: 0.6, start: 500, range: 1000 }), base);
+        expect(store.evaluate("aerialPerspective", 10)).toEqual({ enabled: false, strength: 0.3, start: 250, range: 510 });
+        const restored = new EffectSceneTrackStore();
+        restored.restore(store.serialize());
+        expect(restored.evaluate("aerialPerspective", 20)).toEqual({ enabled: true, strength: 0.6, start: 500, range: 1000 });
+        expect(restored.evaluate("aerialPerspective", 10)).toEqual(store.evaluate("aerialPerspective", 10));
+        expect(effectKeyframePayloadSchema.safeParse(restored.read("aerialPerspective", 20)).success).toBe(true);
+    });
     it("validates automation values against the same field definitions", () => {
         expect(effectKeyframePayloadSchema.safeParse(makeEffectPayload("grain", { enabled: true, intensity: 20 })).success).toBe(true);
         expect(effectKeyframePayloadSchema.safeParse({ kind: "effect", effectId: "gamma", value: { enabled: true, intensity: 20 } }).success).toBe(false);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export type EffectValueById = {
+    aerialPerspective: { enabled: boolean; strength: number; start: number; range: number };
     gamma: { enabled: boolean; gamma: number };
     grain: { enabled: boolean; intensity: number };
     bloom: { enabled: boolean; weight: number; threshold: number; kernel: number };
@@ -54,6 +55,14 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
             { field: "threshold", panelField: "luminousThreshold", labelKey: "effect.frameGraphPost.controls.threshold", min: 0, max: 150, toValue: position => position / 100, toPosition: value => value * 100 },
             { field: "radius", panelField: "luminousRadius", labelKey: "effect.frameGraphPost.controls.radius", min: 0, max: 100, toValue: position => 1 + position * 127 / 100, toPosition: value => (value - 1) / 127 * 100 },
         ] },
+    { id: "aerialPerspective", fixedSettingsLabelKey: "timeline.aerialPerspectiveFixedSettings", fields: {
+        enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0.18, min: 0, max: 0.6 },
+        start: { kind: "linear", default: 55, min: 0, max: 2000 }, range: { kind: "linear", default: 180, min: 1, max: 4000 },
+    }, sliders: [
+        { field: "strength", panelField: "aerialPerspectiveStrength", labelKey: "effect.frameGraphPost.controls.strength", min: 0, max: 100, toValue: position => position * 0.6 / 100, toPosition: value => value / 0.6 * 100 },
+        { field: "start", panelField: "aerialPerspectiveStart", labelKey: "effect.frameGraphPost.controls.startDistance", min: 0, max: 100, toValue: position => position * 5, toPosition: value => value / 5 },
+        { field: "range", panelField: "aerialPerspectiveRange", labelKey: "effect.frameGraphPost.controls.transitionRange", min: 0, max: 100, toValue: position => Math.round(20 * 50 ** (position / 100)), toPosition: value => Math.log(value / 20) / Math.log(50) * 100 },
+    ] },
 ];
 export function isEffectId(id: string): id is EffectId {
     return EFFECT_KEYFRAME_DEFINITIONS.some(definition => definition.id === id);
@@ -83,7 +92,7 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
+    kind: z.literal("effect"), effectId: z.enum(["aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
 }).strict().superRefine((payload, context) => {
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });

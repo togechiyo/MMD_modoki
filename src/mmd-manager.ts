@@ -6390,6 +6390,7 @@ ${beforeFogAppendBlock}
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
+        if (id === "aerialPerspective") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? false, ...this.getStaticAerialPerspective() };
         if (id === "lut") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectLutEnabledValue, intensity: this.postEffectLutIntensityValue };
         if (id === "luminous") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectGlowEnabledValue, intensity: this.postEffectGlowIntensityValue, threshold: this.postEffectGlowThresholdValue, radius: this.postEffectGlowKernelValue };
         if (id === "vignette") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectVignetteEnabledValue, weight: this.postEffectVignetteWeightValue };
@@ -6469,6 +6470,9 @@ ${beforeFogAppendBlock}
         return lensDistortionForFov(this.camera.fov,
             this.getEffectScalarRenderValue("distortion", "influence", this.dofLensDistortionInfluenceValue),
             this.dofLensDistortionMinTeleFovDeg, this.dofLensDistortionNeutralFovDeg, this.dofLensDistortionMaxWideFovDeg);
+    }
+    public getStaticAerialPerspective() {
+        return { strength: this.postEffectAerialPerspectiveStrengthValue, start: this.postEffectAerialPerspectiveStartValue, range: this.postEffectAerialPerspectiveRangeValue };
     }
     public getStaticResourcePostEffects() {
         return { lutEnabled: this.postEffectLutEnabledValue, lutIntensity: this.postEffectLutIntensityValue,
@@ -11221,10 +11225,11 @@ ${beforeFogAppendBlock}
             oceanLightDirection: this.getLightDirection(),
             oceanLightColor: this.getLightColor(),
             oceanLightIntensity: this.dirLight?.intensity ?? 1,
-            aerialPerspectiveEnabled: this.isFrameGraphPostEffectActive("aerialPerspective"),
-            aerialPerspectiveStrength: this.postEffectAerialPerspectiveStrengthValue,
-            aerialPerspectiveStart: this.postEffectAerialPerspectiveStartValue,
-            aerialPerspectiveRange: this.postEffectAerialPerspectiveRangeValue,
+            // Keep depth and the pass prepared while OFF; only strength becomes neutral.
+            aerialPerspectiveEnabled: this.effectSceneTracks.has("aerialPerspective") ? this.isEffectKeyframePrepared("aerialPerspective") : this.isFrameGraphPostEffectActive("aerialPerspective"),
+            aerialPerspectiveStrength: this.getEffectScalarRenderValue("aerialPerspective", "strength", this.postEffectAerialPerspectiveStrengthValue),
+            aerialPerspectiveStart: this.getEffectParameterRenderValue("aerialPerspective", "start", this.postEffectAerialPerspectiveStartValue),
+            aerialPerspectiveRange: this.getEffectParameterRenderValue("aerialPerspective", "range", this.postEffectAerialPerspectiveRangeValue),
             aerialPerspectiveColor: this.getPostEffectAerialPerspectiveColor(),
             aerialPerspectiveLightColor: this.getLightColor(),
             aerialPerspectiveLightIntensity: this.dirLight?.intensity ?? 1,
@@ -12994,9 +12999,10 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectAerialPerspectiveStrength(): number {
-        return this.postEffectAerialPerspectiveStrengthValue;
+        return Number(this.effectSceneTracks.evaluate("aerialPerspective", this._currentFrame, !this.isPlaying)?.strength ?? this.postEffectAerialPerspectiveStrengthValue);
     }
     set postEffectAerialPerspectiveStrength(v: number) {
+        if (this.effectSceneTracks.has("aerialPerspective")) { this.setEffectScenePreview("aerialPerspective", { ...this.captureCurrentEffectKeyframePayload("aerialPerspective").value, strength: v }); return; }
         const value = Number(v);
         this.postEffectAerialPerspectiveStrengthValue = Number.isFinite(value)
             ? Math.max(0, Math.min(0.6, value))
@@ -13004,9 +13010,10 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectAerialPerspectiveStart(): number {
-        return this.postEffectAerialPerspectiveStartValue;
+        return Number(this.effectSceneTracks.evaluate("aerialPerspective", this._currentFrame, !this.isPlaying)?.start ?? this.postEffectAerialPerspectiveStartValue);
     }
     set postEffectAerialPerspectiveStart(v: number) {
+        if (this.effectSceneTracks.has("aerialPerspective")) { this.setEffectScenePreview("aerialPerspective", { ...this.captureCurrentEffectKeyframePayload("aerialPerspective").value, start: v }); return; }
         const value = Number(v);
         this.postEffectAerialPerspectiveStartValue = Number.isFinite(value)
             ? Math.max(0, Math.min(2000, value))
@@ -13014,9 +13021,10 @@ ${beforeFogAppendBlock}
     }
 
     get postEffectAerialPerspectiveRange(): number {
-        return this.postEffectAerialPerspectiveRangeValue;
+        return Number(this.effectSceneTracks.evaluate("aerialPerspective", this._currentFrame, !this.isPlaying)?.range ?? this.postEffectAerialPerspectiveRangeValue);
     }
     set postEffectAerialPerspectiveRange(v: number) {
+        if (this.effectSceneTracks.has("aerialPerspective")) { this.setEffectScenePreview("aerialPerspective", { ...this.captureCurrentEffectKeyframePayload("aerialPerspective").value, range: v }); return; }
         const value = Number(v);
         this.postEffectAerialPerspectiveRangeValue = Number.isFinite(value)
             ? Math.max(1, Math.min(4000, value))

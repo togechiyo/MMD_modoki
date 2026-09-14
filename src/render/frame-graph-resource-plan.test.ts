@@ -46,6 +46,15 @@ function createSettings(
 }
 
 describe("buildFrameGraphResourcePlan", () => {
+    it("retains aerial view depth when a prepared keyed effect is neutralized", () => {
+        // The manager keeps enabled true for a prepared track and changes strength only.
+        const neutral = { ...createSettings({ aerialPerspectiveEnabled: true }), aerialPerspectiveStrength: 0 };
+        const visible = { ...neutral, aerialPerspectiveStrength: 0.6 };
+        const plan = buildFrameGraphResourcePlan(neutral);
+        expect(plan.requirementKeys).toContain("viewDepth");
+        expect(plan.needsGeometryRenderer).toBe(true);
+        expect(canReuseFrameGraphForActivation(plan, buildFrameGraphResourcePlan(visible), ["aerialPerspective"])).toBe(true);
+    });
     it("allocates the luminous mask even when the initial keyed intensity is zero", () => {
         const off = buildFrameGraphResourcePlan(createSettings({ luminousEnabled: true, luminousPrepared: true, luminousIntensity: 0 }));
         const on = buildFrameGraphResourcePlan(createSettings({ luminousEnabled: true, luminousPrepared: true, luminousIntensity: 2 }));

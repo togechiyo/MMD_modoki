@@ -308,6 +308,13 @@ describe("exportProjectState", () => {
         });
         expect(project.effects).toMatchObject({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5, glowThreshold: 0.7, glowKernel: 42, bloomKernel: 37 });
     });
+    it("saves static aerial settings instead of the current key or preview", () => {
+        const project = exportProjectState({
+            ...createHost(), postEffectAerialPerspectiveStrength: 0.6, postEffectAerialPerspectiveStart: 0, postEffectAerialPerspectiveRange: 20,
+            getStaticAerialPerspective: () => ({ strength: 0.18, start: 55, range: 180 }),
+        });
+        expect(project.effects).toMatchObject({ aerialPerspectiveStrength: 0.18, aerialPerspectiveStart: 55, aerialPerspectiveRange: 180 });
+    });
     it("keeps static scalar effect settings separate from evaluated key values", () => {
         const project = exportProjectState({
             ...createHost(),

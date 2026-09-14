@@ -616,6 +616,7 @@
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "效果",
     "timeline.lutFixedSettings": "LUT 选择与文件为固定设置",
+    "timeline.aerialPerspectiveFixedSettings": "在 Frame Graph 中渲染。颜色保持为固定设置。",
     "timeline.luminousFixedSettings": "发光对象与光芒为固定设置",
     "timeline.bloomFixedSettings": "颜色为固定设置",
     "timeline.effectSuspended": "已移出效果堆栈",

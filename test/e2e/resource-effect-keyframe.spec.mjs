@@ -3,6 +3,7 @@ import { existsSync, readFileSync, mkdirSync, statSync, writeFileSync } from "no
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyAerialShapeKeys } from "./aerial-shape-checks.mjs";
 import { verifyEffectShapeKeys } from "./effect-shape-checks.mjs";
 import { launchMmdModoki } from "./electron-app.mjs";
 
@@ -37,13 +38,16 @@ async function selectEffect(page, id) {
 
 
 const cases = [
+  { id: "aerialPerspective", field: "strength", panel: "aerialPerspectiveStrength", max: 0.6, position: 100, static: "aerialPerspectiveStrength", defaults: { start: 0, range: 20 } },
   { id: "lut", field: "intensity", panel: "lutIntensity", max: 1, position: 100, static: "lutIntensity" },
   { id: "luminous", field: "intensity", panel: "luminousIntensity", max: 4, position: 400, static: "glowIntensity" },
 ];
 for (const backend of ["frameGraph", "classic"]) {
 for (const config of cases) {
+if (config.id === "aerialPerspective" && backend === "classic") continue; // Existing effect renders only in Frame Graph.
 test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output", async ({}, testInfo) => {
   const effectId = config.id;
+  const shapeDefaults = config.defaults ?? (effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {});
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -76,6 +80,12 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
       await input.fill(String(value)); await input.press("Enter");
     }
     await selectEffect(page, effectId);
+    if (effectId === "aerialPerspective") {
+      for (const field of ["start", "range"]) {
+        const input = page.locator('[data-effect-key-field="' + field + '"]');
+        await input.fill("0"); await input.dispatchEvent("input");
+      }
+    }
     const enabled = page.locator("#effect-key-enabled");
     const slider = page.locator("#effect-key-value");
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
@@ -84,6 +94,9 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     await enabled.uncheck();
     await slider.fill(String(config.position)); await slider.dispatchEvent("input");
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+    if (effectId === "aerialPerspective") {
+      expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().stack)).toContain("aerialPerspective");
+    }
     if (effectId === "luminous" && backend === "frameGraph") {
       expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().stack)).toContain("luminous");
     }
@@ -112,9 +125,9 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     await add(20, false, config.position / 2);
     await add(40, true, 0);
     const expectedKeys = [
-      { frame: 0, value: { ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: true, [config.field]: config.max } },
-      { frame: 20, value: { ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: false, [config.field]: config.max / 2 } },
-      { frame: 40, value: { ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: true, [config.field]: 0 } },
+      { frame: 0, value: { ...shapeDefaults, enabled: true, [config.field]: config.max } },
+      { frame: 20, value: { ...shapeDefaults, enabled: false, [config.field]: config.max / 2 } },
+      { frame: 40, value: { ...shapeDefaults, enabled: true, [config.field]: 0 } },
     ];
     expect((await savedKeys()).keys).toEqual(expectedKeys);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
@@ -143,7 +156,7 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
       await control.fill("25"); await control.dispatchEvent("input");
       await expect(enabled).not.toBeChecked();
       await expect(slider).toHaveValue(String(config.position / 4));
-      expect((await savedKeys()).preview.value).toEqual({ ...(effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {}), enabled: false, [config.field]: config.max / 4 });
+      expect((await savedKeys()).preview.value).toEqual({ ...shapeDefaults, enabled: false, [config.field]: config.max / 4 });
       await seek(page, 0);
     }
 
@@ -270,6 +283,7 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
         PNG.sync.write({ width: 640, height: 360, data: Buffer.from(videoFrames[index]) }));
     }
     for (const item of report) expect(item.matchingPngDifference).toBeLessThan(item.oppositePngDifference);
+    if (effectId === "aerialPerspective") await verifyAerialShapeKeys(page, launched.app, testInfo, selectEffect);
     if (effectId === "luminous") await verifyEffectShapeKeys(page, launched.app, testInfo, effectId, selectEffect);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });
     expect(errors).toEqual([]);

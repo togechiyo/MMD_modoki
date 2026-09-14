@@ -255,6 +255,7 @@ type ProjectExportHost = {
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
     getSerializedEffectSceneTracks?: () => import("../editor/effect-scene-track-store").SerializedEffectAnimations;
+    getStaticAerialPerspective?: () => { strength: number; start: number; range: number };
     getStaticResourcePostEffects?: () => { lutEnabled: boolean; lutIntensity: number; glowEnabled: boolean; glowIntensity: number; glowThreshold?: number; glowKernel?: number };
     getStaticScalarPostEffects?: () => { vignetteEnabled: boolean; postEffectVignetteWeight: number; postEffectSharpenEdge: number; postEffectChromaticAberration: number; dofLensEdgeBlur: number; dofLensDistortionInfluence: number; };
     getStaticPostEffectGamma?: () => number;
@@ -594,9 +595,9 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             oceanClarity: host.postEffectOceanClarity,
             oceanCausticsStrength: host.postEffectOceanCausticsStrength,
             oceanVolumeStrength: host.postEffectOceanVolumeStrength,
-            aerialPerspectiveStrength: host.postEffectAerialPerspectiveStrength,
-            aerialPerspectiveStart: host.postEffectAerialPerspectiveStart,
-            aerialPerspectiveRange: host.postEffectAerialPerspectiveRange,
+            aerialPerspectiveStrength: host.getStaticAerialPerspective?.().strength ?? host.postEffectAerialPerspectiveStrength,
+            aerialPerspectiveStart: host.getStaticAerialPerspective?.().start ?? host.postEffectAerialPerspectiveStart,
+            aerialPerspectiveRange: host.getStaticAerialPerspective?.().range ?? host.postEffectAerialPerspectiveRange,
             aerialPerspectiveColor: host.getPostEffectAerialPerspectiveColor(),
             directionalLightShaftsStrength: host.postEffectDirectionalLightShaftsStrength,
             directionalLightShaftsPhaseG: host.postEffectDirectionalLightShaftsPhaseG,

@@ -614,6 +614,7 @@
     "effect.frameGraphPost.effects.luminous":  "루미너스",
     "effect.frameGraphPost.effects.bloom":  "블룸",
     "effect.frameGraphPost.effects.lut":  "LUT",
+    "timeline.gamma": "감마",
     "effect.frameGraphPost.effects.gamma":  "감마",
     "effect.frameGraphPost.effects.motionBlur":  "모션 블러",
     "effect.frameGraphPost.effects.sharpen":  "샤프닝",

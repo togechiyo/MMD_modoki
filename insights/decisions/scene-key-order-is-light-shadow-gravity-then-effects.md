@@ -3,16 +3,17 @@ id: scene-key-order-is-light-shadow-gravity-then-effects
 status: decision
 scope: roadmap/scene-keys
 confidence: high
-last_verified: 2026-08-23
+last_verified: 2026-09-14
 decision_owner: project-owner
 decision: adopted
-decided_on: 2026-08-23
+decided_on: 2026-09-14
 evidence:
   - conversation-explicit-instruction
   - conversation-owner-confirmation
   - roadmap-document
 source_docs:
   - ../../docs/v0.2.3-timeline-scene-key-editing-plan.md
+  - ../../docs/gamma-timeline-key-experiment-2026-09-14.md
 superseded_by: null
 ---
 
@@ -25,6 +26,8 @@ modoki-owned trackの実装順を決めるとき。
 ## 判断
 
 最初はMMD照明に対応しやすい色RGBと方向XYZ。次に既存UIの影欄、gravityを扱い、effect keyは安定した少数値の実験へ限定する。影欄キーは影色、Toon影響度、影描画範囲、照度を対象にし、MMDのself-shadow modeは採用しない。gravityキーは下パネルに表示している加速度と方向XYZだけを対象にする。
+
+2026-09-14、最初のeffect key実験はガンマだけとする指定を受けた。カメラモードのtimelineへ「ガンマ」行を追加し、ON / OFFとスライダー値を同じキーへ登録する。その他effectのキー化はこの指定から採用済みと推定しない。
 
 ## 避けること
 
@@ -41,3 +44,4 @@ modoki-owned trackの実装順を決めるとき。
 ## 再確認条件
 
 light track完了後にrelease boundaryを再評価するとき。
+ガンマ実験の検証結果が出たとき、または対象effect・操作範囲の追加指定があったとき。

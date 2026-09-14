@@ -320,7 +320,7 @@ export class ColorPostFxController {
         }
     }
 
-    private refreshGammaUi(): void {
+    public refreshGammaUi(): void {
         const elements = this.elements;
         if (!elements) return;
         const roundedOffset = Math.round(-Math.log2(this.mmdManager.postEffectGamma) * 100);

@@ -189,7 +189,7 @@
 - [x] エフェクト数値と DoF 対象切替のキー化可能範囲、FrameGraph rebuild 境界、段階案を事前調査（[事前検討](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)）
 - [x] dropdownだけで使える DoF autofocus を調査し、人物 / 中央 / 手前優先、subject lock、切替抑制、seek / 出力再現性の設計候補を整理（[事前検討](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)）
 - [x] DoF `オートフォーカス`（人物優先）を新規sceneの既定として実装（頭 / 首 / 上半身系boneを持つmodelのみ、中央score、25%切替hysteresis、camera target fallback、project round-trip、focused E2E）
-- [ ] エフェクトキーは安定した1〜2パラメータに限定して Experimental PoC を行う（v0.2.3対象外として後続へ保留）
+- [x] エフェクトキーの最小PoCとして、カメラモードへガンマのON / OFF・スライダー値のキーを追加。保存・Undo / Redo・Classic / FrameGraph・PNG / WebMを確認（[実験メモ](./gamma-timeline-key-experiment-2026-09-14.md)、2026-09-14）。他エフェクトへの展開は後続で判断する。
 
 詳細: [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)
 

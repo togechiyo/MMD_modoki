@@ -209,6 +209,7 @@ describe("timeline edit service model animation tracks", () => {
             { name: "Light", category: "light", frames: [5] },
             { name: "Shadow", category: "shadow", frames: [10, 20] },
             { name: "Gravity", category: "gravity", frames: [15, 30] },
+            { name: "Gamma", category: "gamma", frames: [] },
         ]);
         expect(applyTimelineKeyframePayload(editableHost, { name: "Shadow", category: "shadow" }, 12, {
             kind: "shadow",

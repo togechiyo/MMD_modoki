@@ -146,7 +146,10 @@ import {
     type RuntimeReloadProjectState,
 } from "./project/runtime-reload-project-state";
 
+import { GammaKeyframeControls } from "./ui/gamma-keyframe-controls";
+
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
+
 type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory" | "light" | "shadow" | "gravity";
 type NumericArrayLike = ArrayLike<number> | null | undefined;
 const FIXED_DOF_FSTOP = 2.0;
@@ -573,6 +576,7 @@ export class UIController {
     private bloomToneMapController: BloomToneMapController | null = null;
     private cameraPanelController: CameraPanelController | null = null;
     private colorPostFxController: ColorPostFxController | null = null;
+    private gammaKeyframeControls: GammaKeyframeControls | null = null;
     private dofPanelController: DofPanelController | null = null;
     private effectPanelShellController: EffectPanelShellController | null = null;
     private experimentalPostFxController: ExperimentalPostFxController | null = null;
@@ -651,6 +655,11 @@ export class UIController {
         });
         this.modelCommentNoticeController = new ModelCommentNoticeController();
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
+        this.gammaKeyframeControls = new GammaKeyframeControls(getRequiredElement("gamma-key-controls"), value => {
+            if (this.mmdManager.isPlaying) return;
+            this.mmdManager.setGammaScenePreview(value.enabled, value.gamma);
+            this.colorPostFxController?.refreshGammaUi();
+        });
         this.btnKeyframeCopy = document.getElementById("btn-kf-copy") as HTMLButtonElement;
         this.btnKeyframePaste = document.getElementById("btn-kf-paste") as HTMLButtonElement;
         this.btnKeyframeMirrorPaste = document.getElementById("btn-kf-mirror-paste") as HTMLButtonElement;
@@ -1784,6 +1793,7 @@ export class UIController {
             }
 
             if (this.mmdManager.isPlaying) {
+                this.refreshGammaKeyframeUi();
                 this.refreshPlaybackFrameBar();
                 const { startFrame, endFrame } = this.getPlaybackFrameRange();
                 if (this.isPlaybackFrameStopEnabled() && frame >= endFrame) {
@@ -1916,7 +1926,9 @@ export class UIController {
                     this.syncTimelineBoneSelectionFromBottomPanel(selectedBone);
                 }
             } else if (timelineTarget === "camera") {
-                this.timeline.selectTrackByNameAndCategory("Camera", ["camera"]);
+                if (selectionScopeChanged || !this.timeline.getSelectedTrack()) {
+                    this.timeline.selectTrackByNameAndCategory("Camera", ["camera"]);
+                }
             } else if (tracks[0]) {
                 this.timeline.selectTrackByNameAndCategory(tracks[0].name, ["accessory"]);
             }
@@ -7949,6 +7961,8 @@ export class UIController {
                 return "影";
             case "gravity":
                 return "重力";
+            case "gamma":
+                return t("timeline.gamma");
             case "morph":
                 return "Morph";
             case "root":
@@ -8153,7 +8167,18 @@ export class UIController {
         };
     }
 
+    private refreshGammaKeyframeUi(): void {
+        this.gammaKeyframeControls?.refresh(
+            this.getSelectedTimelineTrack()?.category === "gamma",
+            this.mmdManager.isPlaying,
+            this.mmdManager.captureCurrentGammaKeyframePayload(),
+        );
+        this.colorPostFxController?.refreshGammaUi();
+        if (this.getSelectedTimelineTrack()?.category === "gamma") this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying;
+    }
+
     private updateTimelineEditState(): void {
+        this.refreshGammaKeyframeUi();
         this.updateScenePlaybackControlLocks();
         const track = this.getSelectedTimelineTrack();
         const selectedFrame = this.timeline.getSelectedFrame();
@@ -8213,7 +8238,7 @@ export class UIController {
         } else {
             this.updateInterpolationPreview(track, interpolationFrame);
         }
-        this.btnKeyframeAdd.disabled = false;
+        this.btnKeyframeAdd.disabled = track.category === "gamma" && this.mmdManager.isPlaying;
 
         const hasCurrentFrameKey = this.mmdManager.hasTimelineKeyframe(track, currentFrame);
         const canDelete = selectedFrame !== null || hasCurrentFrameKey;
@@ -8554,6 +8579,7 @@ export class UIController {
         if (track.category === "light") return this.mmdManager.captureCurrentLightKeyframePayload();
         if (track.category === "shadow") return this.mmdManager.captureCurrentShadowKeyframePayload();
         if (track.category === "gravity") return this.mmdManager.captureCurrentGravityKeyframePayload();
+        if (track.category === "gamma") return this.mmdManager.captureCurrentGammaKeyframePayload();
         if (track.category === "accessory") {
             const index = this.mmdManager.getActiveTimelineAccessoryIndex();
             const value = index === null ? null : this.mmdManager.captureAccessoryTransformKeyframeValue(index);
@@ -9487,6 +9513,9 @@ export class UIController {
 
     private buildInterpolationPreviewFromRuntime(track: KeyframeTrack, frame: number): TimelineInterpolationPreview {
         this.interpolationChannelBindings.clear();
+        if (track.category === "gamma") {
+            return { source: "none", frame: Math.max(0, Math.floor(frame)), hasKeyframe: this.mmdManager.hasTimelineKeyframe(track, frame), hasCurveData: false, channels: [] };
+        }
         const normalizedFrame = Math.max(0, Math.floor(frame));
         const managerInternal = this.mmdManager as unknown as Partial<MmdManagerInternalView>;
         const linear = this.createLinearCurve();
@@ -10410,6 +10439,19 @@ export class UIController {
         this.showToast(before ? `Frame ${frame} gravity keyframe updated` : `Frame ${frame}: gravity keyframe added`, "success");
     }
 
+    private registerGammaKeyframeAtCurrentFrame(): void {
+        if (this.mmdManager.isPlaying) return;
+        const track = { name: "Gamma", category: "gamma" as const };
+        const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
+        const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
+        const after = this.mmdManager.captureCurrentGammaKeyframePayload();
+        if (this.getKeyframeRegistrationDecision(before, after) !== "proceed") return;
+        const command = this.createKeyframePasteCommand(track, frame, before, after, `Register gamma keyframe at frame ${frame}`);
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) return;
+        this.commandHistory.push(command);
+        this.updateTimelineEditState();
+    }
+
     private addKeyframeAtCurrentFrame(
         poseSnapshotOverride: SelectedBonePoseSnapshot | null = null,
         source: ActionSource = "system",
@@ -10429,6 +10471,10 @@ export class UIController {
         }
         if (track.category === "gravity") {
             this.registerGravityKeyframeAtCurrentFrame();
+            return;
+        }
+        if (track.category === "gamma") {
+            this.registerGammaKeyframeAtCurrentFrame();
             return;
         }
         if (track.category === "accessory") {
@@ -11836,6 +11882,8 @@ export class UIController {
                 return track.category === "shadow";
             case "gravity":
                 return track.category === "gravity";
+            case "gamma":
+                return track.category === "gamma";
             case "morph":
                 return track.category === "morph";
             case "property":
@@ -11914,6 +11962,8 @@ export class UIController {
                     maxZ: payload.maxZ,
                     lightIntensity: payload.lightIntensity,
                 };
+            case "gamma":
+                return { kind: "gamma", enabled: payload.enabled, gamma: payload.gamma };
             case "gravity":
                 return {
                     kind: "gravity",
@@ -12361,6 +12411,7 @@ export class UIController {
             this.mmdManager.seekTo(startFrame);
         }
         this.mmdManager.play();
+        this.refreshGammaKeyframeUi();
         this.updateScenePlaybackControlLocks();
         this.updateSectionKeyframeButtons();
         this.btnPlay.style.display = "none";

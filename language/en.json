@@ -614,6 +614,7 @@
     "effect.frameGraphPost.effects.luminous":  "Luminous",
     "effect.frameGraphPost.effects.bloom":  "Bloom",
     "effect.frameGraphPost.effects.lut":  "LUT",
+    "timeline.gamma": "Gamma",
     "effect.frameGraphPost.effects.gamma":  "Gamma",
     "effect.frameGraphPost.effects.motionBlur":  "Motion Blur",
     "effect.frameGraphPost.effects.sharpen":  "Sharpen",

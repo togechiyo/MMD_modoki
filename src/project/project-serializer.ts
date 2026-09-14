@@ -254,6 +254,7 @@ type ProjectExportHost = {
     getSerializedLightSceneTrack?: () => ProjectSerializedLightSceneTrack | null;
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
+    getSerializedGammaSceneTrack?: () => import("../editor/gamma-scene-track").SerializedGammaSceneTrack | null;
     getDofFocusMode?: () => "camera-target" | "person-auto" | "model-target";
     getDofFocusTargetModelPath?: () => string | null;
     getDofFocusTargetModelInstanceId?: () => string | null;
@@ -352,6 +353,8 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
     if (shadowAnimation) {
         keyframes.shadowAnimation = shadowAnimation;
     }
+    const gammaAnimation = host.getSerializedGammaSceneTrack?.() ?? null;
+    if (gammaAnimation) keyframes.gammaAnimation = gammaAnimation;
     const gravityAnimation = host.getSerializedGravitySceneTrack?.() ?? null;
     if (gravityAnimation) {
         keyframes.gravityAnimation = gravityAnimation;

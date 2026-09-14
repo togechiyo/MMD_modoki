@@ -614,6 +614,7 @@
     "effect.frameGraphPost.effects.luminous":  "輝光",
     "effect.frameGraphPost.effects.bloom":  "泛光",
     "effect.frameGraphPost.effects.lut":  "LUT",
+    "timeline.gamma": "伽瑪",
     "effect.frameGraphPost.effects.gamma":  "伽瑪",
     "effect.frameGraphPost.effects.motionBlur":  "動態模糊",
     "effect.frameGraphPost.effects.sharpen":  "銳化",

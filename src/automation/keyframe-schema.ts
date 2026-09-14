@@ -21,6 +21,7 @@ export const keyframePayloadSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("property"), visible: z.boolean(), ikStates: z.array(z.object({ boneName: name, enabled: z.boolean() }).strict()).max(256) }).strict(),
     z.object({ kind: z.literal("light"), color, direction: vector }).strict(),
     z.object({ kind: z.literal("shadow"), color, toonInfluence: z.number().min(0).max(1), maxZ: z.number().min(0).max(100000), lightIntensity: z.number().min(0).max(10) }).strict(),
+    z.object({ kind: z.literal("gamma"), enabled: z.boolean(), gamma: z.number().min(0.25).max(4) }).strict(),
     z.object({ kind: z.literal("gravity"), acceleration: z.number().min(0).max(1000), direction: vector }).strict(),
     z.object({ kind: z.literal("accessory"), position: vector, rotationDeg: vector, scale: z.number().min(0.001).max(10000) }).strict(),
 ]);
@@ -29,7 +30,7 @@ export const timelineScopeSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("model"), modelInstanceId: name }).strict(),
     z.object({ kind: z.literal("accessory"), accessoryIndex: z.number().int().nonnegative() }).strict(),
 ]);
-export const automationTrackSchema = z.object({ category: z.enum(["root", "camera", "accessory", "light", "shadow", "gravity", "property", "semi-standard", "bone", "morph"]), name }).strict();
+export const automationTrackSchema = z.object({ category: z.enum(["root", "camera", "accessory", "light", "shadow", "gravity", "gamma", "property", "semi-standard", "bone", "morph"]), name }).strict();
 const track = automationTrackSchema;
 const frame = z.number().int().min(0).max(1000000);
 export const keyframeOperationSchema = z.discriminatedUnion("action", [

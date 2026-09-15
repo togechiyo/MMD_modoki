@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { menuControls } from "./menu-controls";
 import type { MmdManager } from "../mmd-manager";
 import { AutomationError } from "./diagnostics";
 import { FRAME_GRAPH_POST_EFFECT_IDS } from "../shared/frame-graph-post-effect-stack";
@@ -6,7 +7,7 @@ import { FRAME_GRAPH_EFFECT_SLIDER_SPECS, type FrameGraphEffectSliderField } fro
 
 type NumericKey = { [K in keyof MmdManager]: MmdManager[K] extends number ? K : never }[keyof MmdManager];
 type BooleanKey = { [K in keyof MmdManager]: MmdManager[K] extends boolean ? K : never }[keyof MmdManager];
-type Control = { id: string; unit: string; schema: z.ZodType; read: (manager: MmdManager) => unknown;
+export type Control = { id: string; unit: string; schema: z.ZodType; read: (manager: MmdManager) => unknown;
     write: (manager: MmdManager, value: unknown) => void; available: (manager: MmdManager) => boolean };
 const available = () => true;
 const frameGraph = (m: MmdManager) => m.getPostEffectBackend() === "frameGraph";
@@ -63,6 +64,7 @@ const ringNumbers = [["count", "ringParticleCount"], ["density", "ringParticleDe
 
 /** Explicit allowlist. These are the same runtime setters used by the GUI; no reflection-based method execution. */
 export const automationControls: readonly Control[] = [
+    ...menuControls,
     ...panelNumbers.map(([id, field, key]) => panelNumber(id, field, key)),
     ...ringNumbers.map(([key, field]): Control => {
         const spec = FRAME_GRAPH_EFFECT_SLIDER_SPECS[field];

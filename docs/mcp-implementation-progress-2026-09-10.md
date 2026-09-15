@@ -1,5 +1,7 @@
 # MCPアプリ操作の実装状況
 
+2026-09-15追記: [メニューバー対応](./mcp-menu-bar-coverage-2026-09-15.md)として公開87項目の検索・対応tool一覧、視点/前後キー/全選択/全モーション削除とUndo/描画順/空リセット、19設定、新規ウィンドウ作成を追加。Classic / Frame GraphのGUI E2Eで確認。物理runtime/backend切替と実験設定の一部は手動のままで、全UI対応完了ではない。
+
 2026-09-11修正後: [実用テスト後の修正・再検証](./mcp-practical-fixes-2026-09-11.md)で配布版WebM、モデルコメントのユーザー待ち、snapshot、照明色、復旧案内・VMD警告を修正。Aliciaの通常VP8/PBR VP9の6秒動画と、新設の配布exe E2Eを確認した。
 
 2026-09-11実機検証: [パッケージ版の実用操作テスト](./mcp-packaged-practical-test-2026-09-11.md)でAliciaの6秒モーション・通常/PBR・効果・保存復元・PNG連番を確認。WebMは出力windowでVideoEncoderが存在せず失敗。モデルコメント待機、撮影timeout、照明色の読書き不一致等も修正候補。接続済みであることとパッケージ版の実機合格は区別する。

@@ -88,6 +88,7 @@ import { saveAutomationBytes, assertAutomationPermission } from "./automation/fi
 import type { AutomationUiOperation, AutomationPermission } from "./automation/ui-operation-schema";
 import { AutomationError } from "./automation/diagnostics";
 import type { AutomationEditorOptions } from "./automation/editor-options";
+import { menuKeyCategories, moveMenuModelRenderOrder, type MenuAction } from "./automation/menu-actions";
 import type { AutomationMaterialTarget } from "./automation/material-schema";
 import { runMaterialBatch, type MaterialBatch } from "./automation/material-batch";
 import type { AutomationJobContext } from "./automation/ui-jobs";
@@ -8707,7 +8708,51 @@ export class UIController {
         this.refreshLightingUiFromRuntime();
         this.refreshCameraUiFromRuntime();
         this.refreshShaderPanel();
+        this.sceneEnvironmentUiController?.refresh();
+        this.runtimeFeatureUiController?.refresh();
         return result;
+    }
+
+    public executeAutomationMenuAction(action: MenuAction, editId: string): Record<string, unknown> {
+        const manager = this.mmdManager;
+        switch (action.kind) {
+            case "cameraView": {
+                const before = manager.getCameraKeyframePose();
+                manager.setCameraView(action.view);
+                const after = manager.getCameraKeyframePose();
+                this.refreshCameraUiFromRuntime();
+                return { changed: !keyframeValuesEqual(before, after), undoable: false, camera: after, keyframesRegistered: false };
+            }
+            case "adjacentKey": {
+                const before = manager.currentFrame;
+                this.seekToAdjacentKeyframePoint(action.direction);
+                return { changed: before !== manager.currentFrame, frame: manager.currentFrame, undoable: false };
+            }
+            case "selectAllKeys": {
+                const before = this.getAutomationKeySelection();
+                this.timeline.selectAllKeysByCategories([...menuKeyCategories[action.category]]);
+                const after = this.getAutomationKeySelection();
+                return { changed: !keyframeValuesEqual(before, after), selectedKeyCount: after.length, undoable: false };
+            }
+            case "clearModelMotion": {
+                const scope = this.getAutomationTimelineScope();
+                if (scope?.kind !== "model" || scope.modelInstanceId !== action.modelInstanceId) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+                if (action.dryRun) return { changed: false, wouldChange: manager.canClearActiveModelMotion(), dryRun: true, undoable: false };
+                const command = manager.buildClearActiveModelMotionCommand();
+                if (!command) return { changed: false, undoable: false };
+                command.id = editId;
+                if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) throw new AutomationError("OPERATION_FAILED");
+                this.commandHistory.push(command);
+                return { changed: true, undoable: true, modelInstanceId: action.modelInstanceId };
+            }
+            case "moveModelRenderOrder": return moveMenuModelRenderOrder(manager, action.modelInstanceId, action.direction);
+            case "resetSky": {
+                const before = manager.getSkydomeBackgroundStyle();
+                manager.resetSkydomeBackgroundStyle();
+                const after = manager.getSkydomeBackgroundStyle();
+                return { changed: !keyframeValuesEqual(before, after), applied: after, undoable: false };
+            }
+        }
     }
 
     public selectAutomationBones(modelInstanceId: string, boneNames: readonly string[]): void {
@@ -8957,6 +9002,11 @@ export class UIController {
         } else if (diff.type === "edit.boneTransform") {
             const current = this.captureBoneTransformCommandSnapshot(diff.boneName, diff.modelInstanceId);
             if (!current || diff.frame !== this.mmdManager.currentFrame || buildBoneTransformCommand({ modelInstanceId: diff.modelInstanceId, boneName: diff.boneName, frame: diff.frame, before: direction === "revert" ? diff.after : diff.before, after: current })) return false;
+        } else if (diff.type === "edit.modelMotionClear") {
+            const scope = this.getAutomationTimelineScope();
+            if (scope?.kind !== "model" || scope.modelInstanceId !== diff.modelInstanceId) return false;
+            const current = this.mmdManager.buildClearActiveModelMotionCommand();
+            if (direction === "revert" ? current !== null : current?.diff.type !== "edit.modelMotionClear" || !keyframeValuesEqual(current.diff.before, diff.before)) return false;
         } else if (diff.type !== "keyframe.transaction" && diff.type !== "edit.morphWeight" && diff.type !== "edit.morphWeightBatch" && diff.type !== "edit.objectState" && diff.type !== "edit.bonePoseBatch") return false;
         if (!executeCommand(command, direction, this.createCommandExecutionContext({ seekToFrame: false }))) return false;
         if (direction === "revert") this.commandHistory.undo(); else this.commandHistory.redo();

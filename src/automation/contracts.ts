@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { menuActionSchema } from "./menu-actions";
 import { bonePoseSchema } from "./bone-pose";
 import { morphBatchSchema } from "./morph-batch";
 import { keyframeSearchSchema } from "./keyframe-search";
@@ -23,6 +24,8 @@ const query = { target };
 const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(100) };
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
+    mmd_list_menu_items: { description: "公開メニューバーを名前・IDで検索。対応tool、部分引数の雛形、ユーザー操作が必要な項目を返す。不足引数はtool schemaから補う。", edit: false, schema: z.object({ ...query, query: z.string().max(100).default("") }).strict() },
+    mmd_execute_menu_action: { description: "視点・前後キー移動・カテゴリ全選択・全モーション削除・描画順・空リセット。型付き操作だけを実行。scopeは現在値を照合。削除はdryRun既定true・共有Undo。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema.nullable(), action: menuActionSchema }).strict() },
     mmd_wait_for_render: { description: "停止中の指定revisionでscene/効果の準備後の実engine frameを2回待機（最大8秒）。競合・busyは拒否。物理収束やGPU全処理完了を保証しない。viewport-comparisonヘルプ参照。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative() }).strict() },
     mmd_capture_snapshot: { description: "停止中の指定revisionのviewportを撮影し画像IDで一時保持。画像とframe/revisionを返す。最大8枚、古い画像は破棄。シーン・許可変更で失効。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative(), label: z.string().max(100).default("") }).strict() },
     mmd_list_snapshots: { description: "現在の許可・シーンで保持中の比較画像IDと撮影条件を一覧。画像本文は返さない。", edit: false, schema: z.object(query).strict() },
@@ -48,7 +51,7 @@ export const automationTools = {
     mmd_get_editor_options: { description: "自動キー・再生範囲・出力設定・言語・UI倍率・選択ボーンの現在状態。", edit: false, schema: z.object(query).strict() },
     mmd_set_editor_options: { description: "自動キー・再生範囲・出力設定・言語・UI倍率・全画面をUIと共通の処理で変更。Undo対象外。MCP previewは自動キーに関係なく明示登録。", edit: true, schema: z.object({ ...edit, options: editorOptionsSchema }).strict() },
     mmd_select_bones: { description: "選択中モデルのボーンを名前で複数選択。GUI選択とVPD出力対象を同期。ポーズは変更しない。", edit: true, schema: z.object({ ...edit, modelInstanceId: z.string().min(1).max(200), boneNames: z.array(z.string().min(1).max(200)).min(1).max(200).refine(values => new Set(values).size === values.length, "Duplicate bone") }).strict() },
-    mmd_start_ui_operation: { description: "ローカル素材読込・project保存/読込・出力・通常/PBR切替・最適化/リターゲットの一括変換を開始。mmd_get_operationで結果照会。受付は完了ではない。モデルバイナリを返さない。", edit: true, schema: z.object({ ...edit, operation: uiOperationSchema }).strict() },
+    mmd_start_ui_operation: { description: "新規ウィンドウ作成・ローカル素材読込・project保存/読込・出力・通常/PBR切替・最適化/リターゲットの一括変換を開始。mmd_get_operationで結果照会。受付は完了ではない。モデルバイナリを返さない。", edit: true, schema: z.object({ ...edit, operation: uiOperationSchema }).strict() },
     mmd_list_controls: { description: "対応済みUI設定の検索。設定ID・現在値・値schema・単位・利用可否を返す。値は保持設定で描画完了を保証しない。", edit: false, schema: z.object({ ...query, ...paging, query: z.string().max(100).default(""), expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
     mmd_set_control: { description: "mmd_list_controlsの設定1項目を変更。UIと共通のsetterを使い適用値を返す。Undo対象外。", edit: true, schema: z.object({ ...edit, control: automationControlSchema }).strict() },
     mmd_get_context: { description: "公開ウィンドウとシーン概要。モデル本体は返しません。", edit: false, schema: z.object({ target: target.optional() }).strict() },

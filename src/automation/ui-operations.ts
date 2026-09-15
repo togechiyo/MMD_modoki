@@ -32,6 +32,12 @@ export async function runAutomationUiOperation(host: UiOperationHost, operation:
     if (operation.kind === "fileTools") return runFileToolBatch(operation.items, operation.continueOnError,
         item => runFileTool(host.manager, item, host.permission), () => assertAutomationPermission(host.permission), context);
     const m = host.manager;
+    if (operation.kind === "newProjectWindow") {
+        await assertAutomationPermission(host.permission);
+        const webContentsId = await window.electronAPI.openNewProjectWindow();
+        if (webContentsId === null) throw new AutomationError("OPERATION_FAILED");
+        return { webContentsId, mcpEnabled: false, userActionRequired: "enable_mcp_in_new_window" };
+    }
     if (operation.kind === "materialMode") {
         await host.materialMode(operation.pbr);
         if (m.getMmdMaterialPipelinePreset() !== (operation.pbr ? "pbr-standard" : "mmd-standard")) throw new AutomationError("OPERATION_FAILED");

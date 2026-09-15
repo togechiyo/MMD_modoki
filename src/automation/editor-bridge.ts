@@ -21,6 +21,8 @@ import { buildClipboardOperations, buildSelectionOperations } from "./keyframe-s
 import type { AutomationKeyframeOperation } from "./keyframe-schema";
 import { searchKeyframes } from "./keyframe-search";
 import { automationUserAction } from "./user-action";
+import { readMenuItems } from "./menu-catalog";
+import { t } from "../i18n";
 
 export function connectAutomationEditor(manager: MmdManager, ui: UIController, timeline: Timeline): void {
     let state: AutomationState | null = null;
@@ -118,6 +120,10 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         if (args.target && (args.target.editorSessionId !== state.sessionId || (request.tool !== "mmd_get_context" && args.target.sceneGeneration !== sceneGeneration))) throw new AutomationError("SCENE_CHANGED");
         if (request.tool === "mmd_get_context") return { data: before };
         if (!args.target) throw new AutomationError("TARGET_REQUIRED");
+        if (request.tool === "mmd_list_menu_items") {
+            const input = automationTools.mmd_list_menu_items.schema.parse(args);
+            return { data: { ...readMenuItems(input.query, t), editRevision: revision } };
+        }
         if (request.tool === "mmd_search_keyframes") {
             const input = automationTools.mmd_search_keyframes.schema.parse(args);
             if (busy()) throw new AutomationError("EDITOR_BUSY");
@@ -446,6 +452,12 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_set_material_preset.schema.parse(args);
             controlResult = ui.setAutomationMaterialPreset(input.subject, input.materialKey, input.presetId);
+        } else if (request.tool === "mmd_execute_menu_action") {
+            if (manager.isPlaying) throw new AutomationError("PLAYING");
+            const input = automationTools.mmd_execute_menu_action.schema.parse(args);
+            if (!keyframeValuesEqual(input.scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
+            controlResult = ui.executeAutomationMenuAction(input.action, editId);
+            changed = controlResult.changed === true;
         } else if (request.tool === "mmd_set_editor_options") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_set_editor_options.schema.parse(args);
@@ -543,6 +555,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         const result = { operationId: args.operationId, status: changed ? "applied" : "no-change", beforeRevision: before.editRevision, afterRevision: after.editRevision,
             ...(controlResult ? { control: controlResult } : {}),
             editId: request.tool === "mmd_redo" && "editId" in args ? args.editId : changed && ["mmd_set_morphs", "mmd_correct_body_motion", "mmd_paste_keyframes", "mmd_edit_keyframe_selection", "mmd_set_pose", "mmd_set_camera", "mmd_set_bone", "mmd_set_morph", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_register_keyframes", "mmd_edit_external_parent", "mmd_set_object_state"].includes(request.tool) ? editId : null, frame: manager.currentFrame, playing: manager.isPlaying };
+        if (request.tool === "mmd_execute_menu_action" && changed && controlResult?.undoable === true) result.editId = editId;
         operations.set(args.operationId, { input: inputKey, result });
         if (operations.size > 100) { const oldest = operations.keys().next().value; if (oldest) operations.delete(oldest); }
         return { data: result };

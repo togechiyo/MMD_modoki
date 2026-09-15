@@ -15,6 +15,7 @@ export const fileToolItemSchema = z.discriminatedUnion("kind", [
 ]);
 export type AutomationFileToolItem = z.infer<typeof fileToolItemSchema>;
 export const uiOperationSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("newProjectWindow") }).strict(),
     z.object({ kind: z.literal("fileTools"), items: z.array(fileToolItemSchema).min(1).max(20), continueOnError: z.boolean() }).strict(),
     z.object({ kind: z.literal("materialMode"), pbr: z.boolean() }).strict(),
     z.object({ kind: z.literal("loadAsset"), filePath: automationLocalPathSchema,

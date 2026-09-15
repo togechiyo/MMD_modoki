@@ -255,6 +255,7 @@ type ProjectExportHost = {
     getSerializedShadowSceneTrack?: () => ProjectSerializedShadowSceneTrack | null;
     getSerializedGravitySceneTrack?: () => ProjectSerializedGravitySceneTrack | null;
     getSerializedEffectSceneTracks?: () => import("../editor/effect-scene-track-store").SerializedEffectAnimations;
+    getStaticScreenSpacePostEffects?: () => import("../editor/effect-keyframe-definitions").ScreenSpaceEffectValues;
     getStaticDepthPostEffects?: () => import("../editor/effect-keyframe-definitions").DepthEffectValues;
     getStaticAerialPerspective?: () => { strength: number; start: number; range: number };
     getStaticResourcePostEffects?: () => { lutEnabled: boolean; lutIntensity: number; glowEnabled: boolean; glowIntensity: number; glowThreshold?: number; glowKernel?: number };
@@ -535,9 +536,9 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             chromaticAberration: host.getStaticScalarPostEffects?.().postEffectChromaticAberration ?? host.postEffectChromaticAberration,
             grainIntensity: host.getStaticPostEffectGrainIntensity?.() ?? host.postEffectGrainIntensity,
             sharpenEdge: host.getStaticScalarPostEffects?.().postEffectSharpenEdge ?? host.postEffectSharpenEdge,
-            ssaoEnabled: host.postEffectSsaoEnabled,
-            ssaoStrength: host.postEffectSsaoStrength,
-            ssaoRadius: host.postEffectSsaoRadius,
+            ssaoEnabled: host.getStaticScreenSpacePostEffects?.().ssao.enabled ?? host.postEffectSsaoEnabled,
+            ssaoStrength: host.getStaticScreenSpacePostEffects?.().ssao.strength ?? host.postEffectSsaoStrength,
+            ssaoRadius: host.getStaticScreenSpacePostEffects?.().ssao.radius ?? host.postEffectSsaoRadius,
             ssaoFadeEnd: host.postEffectSsaoFadeEnd,
             ssaoDebugView: host.postEffectSsaoDebugView,
             offsetShadowEnabled: host.getStaticDepthPostEffects?.().offsetShadow.enabled ?? host.postEffectOffsetShadowEnabled,
@@ -585,11 +586,11 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             motionBlurEnabled: host.postEffectMotionBlurEnabled,
             motionBlurStrength: host.postEffectMotionBlurStrength,
             motionBlurSamples: host.postEffectMotionBlurSamples,
-            ssrEnabled: host.postEffectSsrEnabled,
-            ssrStrength: host.postEffectSsrStrength,
-            ssrStep: host.postEffectSsrStep,
-            ssgiStrength: host.postEffectSsgiStrength,
-            ssgiSampleRadius: host.postEffectSsgiSampleRadius,
+            ssrEnabled: host.getStaticScreenSpacePostEffects?.().ssr.enabled ?? host.postEffectSsrEnabled,
+            ssrStrength: host.getStaticScreenSpacePostEffects?.().ssr.strength ?? host.postEffectSsrStrength,
+            ssrStep: host.getStaticScreenSpacePostEffects?.().ssr.step ?? host.postEffectSsrStep,
+            ssgiStrength: host.getStaticScreenSpacePostEffects?.().ssgi.strength ?? host.postEffectSsgiStrength,
+            ssgiSampleRadius: host.getStaticScreenSpacePostEffects?.().ssgi.sampleRadius ?? host.postEffectSsgiSampleRadius,
             ssgiBlendMode: "softLight",
             oceanWaterHeight: host.getWaterSurfaceSettings().height,
             oceanWaveStrength: host.postEffectOceanWaveStrength,

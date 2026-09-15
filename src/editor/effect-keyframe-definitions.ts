@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 export type EffectValueById = {
+    ssao: { enabled: boolean; strength: number; radius: number };
+    ssgi: { enabled: boolean; strength: number; sampleRadius: number };
+    ssr: { enabled: boolean; strength: number; step: number };
     directionalLightShafts: { enabled: boolean; strength: number; phaseG: number };
     offsetShadow: { enabled: boolean; strength: number; offsetX: number; offsetY: number; depthBias: number; maxDepth: number; depthScale: number };
     offsetHighlight: { enabled: boolean; strength: number; offsetX: number; offsetY: number; depthScale: number };
@@ -17,6 +20,7 @@ export type EffectValueById = {
     luminous: { enabled: boolean; intensity: number; threshold: number; radius: number };
 };
 export type EffectId = keyof EffectValueById;
+export type ScreenSpaceEffectValues = Pick<EffectValueById, "ssao" | "ssgi" | "ssr">;
 export type DepthEffectValues = Pick<EffectValueById, "directionalLightShafts" | "offsetShadow" | "offsetHighlight">;
 export type EffectKeyframePayload = {
     [K in EffectId]: { kind: "effect"; effectId: K; value: EffectValueById[K] }
@@ -111,6 +115,30 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
         linearSlider("offsetY", "offsetHighlightOffsetY", "offsetY", -256, 256, 1),
         linearSlider("depthScale", "offsetHighlightDepthScale", "depthScale", 0, 1),
     ] },
+    { id: "ssao", fixedSettingsLabelKey: "timeline.screenSpaceFixedSettings", fields: {
+        enabled: { kind: "step", default: false },
+        strength: { kind: "linear", default: 0.5, min: 0, max: 1 },
+        radius: { kind: "linear", default: 3, min: 0.01, max: 5 },
+    }, sliders: [
+        linearSlider("strength", "ssaoStrength", "strength", 0, 1),
+        linearSlider("radius", "ssaoRadius", "radius", 0.01, 5, 0.01),
+    ] },
+    { id: "ssgi", fixedSettingsLabelKey: "timeline.screenSpaceFixedSettings", fields: {
+        enabled: { kind: "step", default: false },
+        strength: { kind: "linear", default: 0.3, min: 0, max: 1 },
+        sampleRadius: { kind: "linear", default: 64, min: 1, max: 256 },
+    }, sliders: [
+        linearSlider("strength", "ssgiStrength", "strength", 0, 1),
+        linearSlider("sampleRadius", "ssgiSampleRadius", "radius", 1, 256, 1),
+    ] },
+    { id: "ssr", fixedSettingsLabelKey: "timeline.screenSpaceFixedSettings", fields: {
+        enabled: { kind: "step", default: false },
+        strength: { kind: "linear", default: 0.3, min: 0, max: 2 },
+        step: { kind: "linear", default: 4, min: 1, max: 8 },
+    }, sliders: [
+        linearSlider("strength", "ssrStrength", "strength", 0, 2),
+        linearSlider("step", "ssrStep", "step", 1, 8, 1),
+    ] },
 ];
 export function isEffectId(id: string): id is EffectId {
     return EFFECT_KEYFRAME_DEFINITIONS.some(definition => definition.id === id);
@@ -140,7 +168,7 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
+    kind: z.literal("effect"), effectId: z.enum(["ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
 }).strict().superRefine((payload, context) => {
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });

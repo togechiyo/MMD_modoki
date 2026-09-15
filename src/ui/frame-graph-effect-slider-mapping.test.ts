@@ -9,7 +9,7 @@ import {
     toFrameGraphEffectSliderValue,
 } from "./frame-graph-effect-slider-mapping";
 
-describe.each(["directionalLightShafts", "offsetShadow", "offsetHighlight"] as const)("%s key and panel mappings", id => {
+describe.each(["directionalLightShafts", "offsetShadow", "offsetHighlight", "ssao", "ssgi", "ssr"] as const)("%s key and panel mappings", id => {
     it("uses the same public ranges and input quantization", () => {
         for (const slider of getEffectDefinition(id).sliders) {
             const field = slider.panelField as Parameters<typeof fromFrameGraphEffectSliderValue>[0];

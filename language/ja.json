@@ -616,6 +616,7 @@
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "エフェクト",
     "timeline.lutFixedSettings": "LUTの選択・ファイルは固定設定です",
+    "timeline.screenSpaceFixedSettings": "この効果のタイムライン再生はFrame Graphで有効です。",
     "timeline.depthEffectFixedSettings": "描画はFrame Graphで有効。色は固定設定です。",
     "timeline.aerialPerspectiveFixedSettings": "描画はFrame Graphで有効。色は固定設定です。",
     "timeline.luminousFixedSettings": "発光対象・光条は固定設定です",

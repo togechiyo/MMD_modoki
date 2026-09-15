@@ -616,6 +616,7 @@
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "Effect",
     "timeline.lutFixedSettings": "LUT selection and file are fixed settings",
+    "timeline.screenSpaceFixedSettings": "Timeline playback for this effect is available in Frame Graph.",
     "timeline.depthEffectFixedSettings": "Rendered with Frame Graph. Colors remain static settings.",
     "timeline.aerialPerspectiveFixedSettings": "Rendered with Frame Graph. Color remains a static setting.",
     "timeline.luminousFixedSettings": "Emission targets and glare are fixed settings",

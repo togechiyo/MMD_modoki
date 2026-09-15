@@ -508,7 +508,7 @@ import {
     type SerializedShadowSceneTrack,
 } from "./editor/scene-keyframe-track";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
-import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue, type DepthEffectValues } from "./editor/effect-keyframe-definitions";
+import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue, type DepthEffectValues, type ScreenSpaceEffectValues } from "./editor/effect-keyframe-definitions";
 import { applyClassicKeyframedBloomBlur } from "./render/keyframed-bloom-blur";
 import { effectRenderValues, scalarEffectRenderValue, lensDistortionForFov } from "./render/effect-keyframe-runtime";
 import { EffectPlaybackPreparation } from "./render/effect-playback-preparation";
@@ -6390,6 +6390,10 @@ ${beforeFogAppendBlock}
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
+        if (id === "ssao" || id === "ssgi" || id === "ssr") {
+            const value = this.getStaticScreenSpacePostEffects()[id];
+            return { ...value, enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? value.enabled };
+        }
         if (id === "directionalLightShafts" || id === "offsetShadow" || id === "offsetHighlight") {
             const value = this.getStaticDepthPostEffects()[id];
             return { ...value, enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? value.enabled };
@@ -6474,6 +6478,13 @@ ${beforeFogAppendBlock}
         return lensDistortionForFov(this.camera.fov,
             this.getEffectScalarRenderValue("distortion", "influence", this.dofLensDistortionInfluenceValue),
             this.dofLensDistortionMinTeleFovDeg, this.dofLensDistortionNeutralFovDeg, this.dofLensDistortionMaxWideFovDeg);
+    }
+    public getStaticScreenSpacePostEffects(): ScreenSpaceEffectValues {
+        return {
+            ssao: { enabled: this.postEffectSsaoEnabledValue, strength: this.postEffectSsaoStrengthValue, radius: this.postEffectSsaoRadiusValue },
+            ssgi: { enabled: this.frameGraphPostEffectStackEnabledValue.get("ssgi") ?? false, strength: this.postEffectSsgiStrengthValue, sampleRadius: this.postEffectSsgiSampleRadiusValue },
+            ssr: { enabled: this.postEffectSsrEnabledValue, strength: this.postEffectSsrStrengthValue, step: this.postEffectSsrStepValue },
+        };
     }
     public getStaticDepthPostEffects(): DepthEffectValues {
         return {
@@ -11189,9 +11200,10 @@ ${beforeFogAppendBlock}
             chromaticAberration: this.getEffectScalarRenderValue("chromatic", "amount", this.isFrameGraphPostEffectActive("chromatic") ? this.postEffectChromaticAberrationValue : 0),
             grainIntensity: this.effectSceneTracks.has("grain") ? this.effectRenderState.grainIntensity : this.isFrameGraphPostEffectActive("grain") ? this.postEffectGrainIntensityValue : 0,
             sharpenEdge: this.getEffectScalarRenderValue("sharpen", "edge", this.isFrameGraphPostEffectActive("sharpen") ? this.postEffectSharpenEdgeValue : 0),
-            ssaoEnabled: this.isFrameGraphPostEffectActive("ssao"),
-            ssaoStrength: this.postEffectSsaoStrengthValue,
-            ssaoRadius: this.postEffectSsaoRadiusValue,
+            ssaoEnabled: (this.effectSceneTracks.has("ssao") ? this.isEffectKeyframePrepared("ssao") : this.isFrameGraphPostEffectActive("ssao")),
+            ssaoPrepared: this.isEffectKeyframePrepared("ssao"),
+            ssaoStrength: this.getEffectScalarRenderValue("ssao", "strength", this.postEffectSsaoStrengthValue),
+            ssaoRadius: this.getEffectParameterRenderValue("ssao", "radius", this.postEffectSsaoRadiusValue),
             ssaoShadowColor: { r: 0.5, g: 0.5, b: 0.5 },
             ssaoToonInfluence: 1,
             offsetShadowEnabled: this.effectSceneTracks.has("offsetShadow") ? this.isEffectKeyframePrepared("offsetShadow") : this.isFrameGraphPostEffectActive("offsetShadow"),
@@ -11219,14 +11231,15 @@ ${beforeFogAppendBlock}
             offsetHighlightDepthScale: this.getEffectParameterRenderValue("offsetHighlight", "depthScale", this.postEffectOffsetHighlightDepthScaleValue),
             offsetHighlightColor: this.getPostEffectOffsetHighlightColor(),
             offsetHighlightDebugView: this.postEffectOffsetHighlightDebugViewValue,
-            ssrEnabled: this.isFrameGraphPostEffectActive("ssr"),
-            ssrStrength: this.postEffectSsrStrengthValue,
-            ssrStep: this.postEffectSsrStepValue,
-            ssgiEnabled: this.isFrameGraphPostEffectActive("ssgi")
+            ssrEnabled: (this.effectSceneTracks.has("ssr") ? this.isEffectKeyframePrepared("ssr") : this.isFrameGraphPostEffectActive("ssr")),
+            ssrPrepared: this.isEffectKeyframePrepared("ssr"),
+            ssrStrength: this.getEffectScalarRenderValue("ssr", "strength", this.postEffectSsrStrengthValue),
+            ssrStep: this.getEffectParameterRenderValue("ssr", "step", this.postEffectSsrStepValue),
+            ssgiEnabled: (this.effectSceneTracks.has("ssgi") ? this.isEffectKeyframePrepared("ssgi") : this.isFrameGraphPostEffectActive("ssgi"))
                 && this.isWebGpuEngine()
                 && this.engine.getCaps().supportComputeShaders,
-            ssgiStrength: this.postEffectSsgiStrengthValue,
-            ssgiSampleRadius: this.postEffectSsgiSampleRadiusValue,
+            ssgiStrength: this.getEffectScalarRenderValue("ssgi", "strength", this.postEffectSsgiStrengthValue),
+            ssgiSampleRadius: this.getEffectParameterRenderValue("ssgi", "sampleRadius", this.postEffectSsgiSampleRadiusValue),
             ssgiBlendMode: "softLight",
             oceanEnabled: this.isFrameGraphPostEffectActive("ocean"),
             oceanWaterHeight: this.waterSurfaceSettingsValue.height,
@@ -12412,9 +12425,10 @@ ${beforeFogAppendBlock}
     }
     /** SSAO2 enabled state. */
     get postEffectSsaoEnabled(): boolean {
-        return this.postEffectSsaoEnabledValue;
+        return this.effectSceneTracks.evaluate("ssao", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectSsaoEnabledValue;
     }
     set postEffectSsaoEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("ssao")) { this.setEffectScenePreview("ssao", { ...this.captureCurrentEffectKeyframePayload("ssao").value, enabled: v }); return; }
         this.postEffectSsaoEnabledValue = Boolean(v);
         if (this.postEffectSsaoEnabledValue && this.modelEdgeWidthValue > 0.0001) {
             this.modelEdgeWidthValue = 0;
@@ -12424,17 +12438,19 @@ ${beforeFogAppendBlock}
     }
     /** SSAO2 intensity (0.0..1.0). */
     get postEffectSsaoStrength(): number {
-        return this.postEffectSsaoStrengthValue;
+        return Number(this.effectSceneTracks.evaluate("ssao", this._currentFrame, !this.isPlaying)?.strength ?? this.postEffectSsaoStrengthValue);
     }
     set postEffectSsaoStrength(v: number) {
+        if (this.effectSceneTracks.has("ssao")) { this.setEffectScenePreview("ssao", { ...this.captureCurrentEffectKeyframePayload("ssao").value, strength: v }); return; }
         this.postEffectSsaoStrengthValue = Math.max(0, Math.min(1, v));
         this.applySsaoSettings();
     }
     /** SSAO2 sampling radius (0.01..5.0). */
     get postEffectSsaoRadius(): number {
-        return this.postEffectSsaoRadiusValue;
+        return Number(this.effectSceneTracks.evaluate("ssao", this._currentFrame, !this.isPlaying)?.radius ?? this.postEffectSsaoRadiusValue);
     }
     set postEffectSsaoRadius(v: number) {
+        if (this.effectSceneTracks.has("ssao")) { this.setEffectScenePreview("ssao", { ...this.captureCurrentEffectKeyframePayload("ssao").value, radius: v }); return; }
         this.postEffectSsaoRadiusValue = Math.max(0.01, Math.min(5, v));
         this.applySsaoSettings();
     }
@@ -12916,33 +12932,37 @@ ${beforeFogAppendBlock}
 
     /** SSR enabled state. */
     get postEffectSsrEnabled(): boolean {
-        return getPostEffectSsrEnabledImpl(this);
+        return this.effectSceneTracks.evaluate("ssr", this._currentFrame, !this.isPlaying)?.enabled ?? getPostEffectSsrEnabledImpl(this);
     }
     set postEffectSsrEnabled(v: boolean) {
+        if (this.effectSceneTracks.has("ssr")) { this.setEffectScenePreview("ssr", { ...this.captureCurrentEffectKeyframePayload("ssr").value, enabled: v }); return; }
         setPostEffectSsrEnabledImpl(this, v);
     }
 
     /** SSR reflection strength (0..2). */
     get postEffectSsrStrength(): number {
-        return getPostEffectSsrStrengthImpl(this);
+        return Number(this.effectSceneTracks.evaluate("ssr", this._currentFrame, !this.isPlaying)?.strength ?? getPostEffectSsrStrengthImpl(this));
     }
     set postEffectSsrStrength(v: number) {
+        if (this.effectSceneTracks.has("ssr")) { this.setEffectScenePreview("ssr", { ...this.captureCurrentEffectKeyframePayload("ssr").value, strength: v }); return; }
         setPostEffectSsrStrengthImpl(this, v);
     }
 
     /** SSR step size (1..8). */
     get postEffectSsrStep(): number {
-        return getPostEffectSsrStepImpl(this);
+        return Number(this.effectSceneTracks.evaluate("ssr", this._currentFrame, !this.isPlaying)?.step ?? getPostEffectSsrStepImpl(this));
     }
     set postEffectSsrStep(v: number) {
+        if (this.effectSceneTracks.has("ssr")) { this.setEffectScenePreview("ssr", { ...this.captureCurrentEffectKeyframePayload("ssr").value, step: v }); return; }
         setPostEffectSsrStepImpl(this, v);
     }
 
     /** Single-frame SSGI contribution strength (0..1). */
     get postEffectSsgiStrength(): number {
-        return this.postEffectSsgiStrengthValue;
+        return Number(this.effectSceneTracks.evaluate("ssgi", this._currentFrame, !this.isPlaying)?.strength ?? this.postEffectSsgiStrengthValue);
     }
     set postEffectSsgiStrength(v: number) {
+        if (this.effectSceneTracks.has("ssgi")) { this.setEffectScenePreview("ssgi", { ...this.captureCurrentEffectKeyframePayload("ssgi").value, strength: v }); return; }
         const value = Number(v);
         this.postEffectSsgiStrengthValue = Number.isFinite(value)
             ? Math.max(0, Math.min(1, value))
@@ -12951,9 +12971,10 @@ ${beforeFogAppendBlock}
 
     /** Single-frame SSGI sample radius in full-resolution pixels (1..256). */
     get postEffectSsgiSampleRadius(): number {
-        return this.postEffectSsgiSampleRadiusValue;
+        return Number(this.effectSceneTracks.evaluate("ssgi", this._currentFrame, !this.isPlaying)?.sampleRadius ?? this.postEffectSsgiSampleRadiusValue);
     }
     set postEffectSsgiSampleRadius(v: number) {
+        if (this.effectSceneTracks.has("ssgi")) { this.setEffectScenePreview("ssgi", { ...this.captureCurrentEffectKeyframePayload("ssgi").value, sampleRadius: v }); return; }
         const value = Number(v);
         this.postEffectSsgiSampleRadiusValue = Number.isFinite(value)
             ? Math.max(1, Math.min(256, value))
@@ -13998,7 +14019,11 @@ ${beforeFogAppendBlock}
     }
 
         private applyDefaultPipelinePostProcessSettings(): void {
-        return applyDefaultPipelinePostProcessSettingsImpl(this);
+        applyDefaultPipelinePostProcessSettingsImpl(this);
+        // These timeline adapters render in FrameGraph. Drop any legacy pass
+        // created while static project settings were restored before the tracks.
+        if (this.effectSceneTracks.has("ssao")) this.applySsaoSettings();
+        if (this.effectSceneTracks.has("ssr")) this.applySsrSettings();
     }
 
         private syncShaderContactAoState(): void {

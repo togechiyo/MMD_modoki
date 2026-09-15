@@ -109,7 +109,7 @@ export class ExperimentalPostFxController {
             ? this.mmdManager.postEffectSsrStrength.toFixed(2) : t("status.off");
         elements.vlsExposureValue.textContent = this.mmdManager.postEffectVlsEnabled
             ? this.mmdManager.postEffectVlsExposure.toFixed(2) : t("status.off");
-        if (this.mmdManager.getPostEffectBackend() !== "frameGraph") {
+        if (this.mmdManager.getPostEffectBackend() !== "frameGraph" && !this.mmdManager.hasEffectSceneTrack("ssr")) {
             this.setSsrStrengthPercent(0);
         }
 
@@ -165,7 +165,7 @@ export class ExperimentalPostFxController {
     }
 
     private disableSsao(): void {
-        if (this.mmdManager.getPostEffectBackend() === "frameGraph") {
+        if (this.mmdManager.getPostEffectBackend() === "frameGraph" || this.mmdManager.hasEffectSceneTrack("ssao")) {
             return;
         }
         this.mmdManager.postEffectSsaoStrength = 0;

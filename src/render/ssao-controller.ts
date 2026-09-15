@@ -27,6 +27,7 @@ type SsaoSceneModel = {
 
 type SsaoHost = {
     constructor: unknown;
+    hasEffectSceneTrack?(id: "ssao"): boolean;
     scene: Scene;
     camera: Camera & {
         radius: number;
@@ -97,7 +98,7 @@ export function syncShaderContactAoState(host: SsaoHost): void {
 
 export function applySsaoSettings(host: SsaoHost): void {
     const hostStatics = getSsaoHostStatics(host);
-    if (host.postEffectBackend === "frameGraph") {
+    if (host.postEffectBackend === "frameGraph" || host.hasEffectSceneTrack?.("ssao")) {
         const previousEnabled = hostStatics.toonContactAoEnabled;
         hostStatics.toonContactAoEnabled = false;
         hostStatics.toonContactAoStrength = 0;

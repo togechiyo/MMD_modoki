@@ -5437,7 +5437,7 @@ export class UIController {
             case "gamma":
                 break;
             case "ssao":
-                this.mmdManager.postEffectSsaoEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("ssao")) this.mmdManager.postEffectSsaoEnabled = true;
                 break;
             case "offsetShadow":
                 if (!this.mmdManager.hasEffectSceneTrack("offsetShadow")) this.mmdManager.postEffectOffsetShadowEnabled = true;
@@ -5446,7 +5446,7 @@ export class UIController {
                 if (!this.mmdManager.hasEffectSceneTrack("offsetHighlight")) this.mmdManager.postEffectOffsetHighlightEnabled = true;
                 break;
             case "ssr":
-                this.mmdManager.postEffectSsrEnabled = true;
+                if (!this.mmdManager.hasEffectSceneTrack("ssr")) this.mmdManager.postEffectSsrEnabled = true;
                 break;
             case "ssgi":
                 break;

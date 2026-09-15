@@ -44,6 +44,9 @@ async function selectEffect(page, id) {
 
 
 const cases = [
+  { id: "ssao", field: "strength", panel: "ssaoStrength", max: 1, position: 100, static: "ssaoStrength", screenSpace: true, frameGraphOnly: true, defaults: { radius: 3 } },
+  { id: "ssgi", field: "strength", panel: "ssgiStrength", max: 1, position: 100, static: "ssgiStrength", screenSpace: true, frameGraphOnly: true, defaults: { sampleRadius: 64 } },
+  { id: "ssr", field: "strength", panel: "ssrStrength", max: 2, position: 100, static: "ssrStrength", screenSpace: true, frameGraphOnly: true, defaults: { step: 4 } },
   { id: "directionalLightShafts", field: "strength", panel: "directionalLightShaftsStrength", max: 0.16, position: 100, static: "directionalLightShaftsStrength", frameGraphOnly: true, defaults: { phaseG: 0 } },
   { id: "offsetShadow", field: "strength", panel: "offsetShadowStrength", max: 2, position: 100, static: "offsetShadowStrength", frameGraphOnly: true, defaults: { offsetX: 0, offsetY: -30, depthBias: 0.2, maxDepth: 2, depthScale: 1 } },
   { id: "offsetHighlight", field: "strength", panel: "offsetHighlightStrength", max: 1, position: 100, static: "offsetHighlightStrength", frameGraphOnly: true, defaults: { offsetX: 0, offsetY: -100, depthScale: 1 } },
@@ -73,16 +76,16 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
       await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     }
     let fixturePath = modelPath;
-    if (effectId === "offsetHighlight" || effectId === "offsetShadow") {
+    if (config.screenSpace || effectId === "offsetHighlight" || effectId === "offsetShadow") {
       mkdirSync(testInfo.outputPath(), { recursive: true });
       fixturePath = testInfo.outputPath("offset-fixture.pmx");
-      writeFileSync(fixturePath, effectId === "offsetShadow" ? createOffsetDepthFixture() : createDimLuminousFixture());
+      writeFileSync(fixturePath, effectId === "offsetShadow" || config.screenSpace ? createOffsetDepthFixture() : createDimLuminousFixture());
     }
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixturePath);
     await page.locator("#btn-toggle-shader-panel").click();
-    if (effectId === "luminous") {
+    if (effectId === "luminous" || effectId === "ssr") {
       await page.locator('[data-effect-tab="materials"]').click();
-      await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous");
+      await page.locator("#shader-preset-select").selectOption(effectId === "ssr" ? "wgsl-ssr-reflective" : "wgsl-autoluminous");
       await page.locator("#btn-shader-apply-all").click();
     }
     await page.locator('[data-effect-tab="post"]').click();
@@ -162,6 +165,7 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
     // Saving at an evaluated frame must retain the initial static parameter.
     expect((await state()).effects[config.static]).toBe(initial.effects[config.static]);
+    if (config.screenSpace) expect((await state()).effects.modelEdgeWidth).toBe(initial.effects.modelEdgeWidth);
 
     if (backend === "frameGraph") {
       const control = page.locator('[data-effect-stack-control="' + config.panel + '"]');
@@ -197,7 +201,16 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
     const previewCapture = await capture("preview");
     await expect(slider).toHaveValue("17");
     await seek(page, 11); await seek(page, 10);
-    expect((await capture("authored")).equals(previewCapture)).toBe(true);
+    const authoredCapture = await capture("authored");
+    if (effectId === "ssao" && backend === "frameGraph") {
+      // Resizing for separate exports recreates Babylon's random AO texture.
+      // Permit only sub-byte average sampling noise, not a different strength.
+      let sum = 0;
+      for (let i = 0; i < authoredCapture.length; i++) if (i % 4 !== 3) sum += Math.abs(authoredCapture[i] - previewCapture[i]);
+      const difference = sum / (authoredCapture.length * 0.75);
+      writeFileSync(testInfo.outputPath("ssao-preview-noise.json"), JSON.stringify({ difference }));
+      expect(difference).toBeLessThan(0.2);
+    } else expect(authoredCapture.equals(previewCapture)).toBe(true);
     await seek(page, 0);
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeDisabled();
@@ -305,7 +318,7 @@ test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output
         PNG.sync.write({ width: 640, height: 360, data: Buffer.from(videoFrames[index]) }));
     }
     for (const item of report) expect(item.matchingPngDifference).toBeLessThan(item.oppositePngDifference);
-    if (config.frameGraphOnly) await verifyDepthEffectKeys(page, launched.app, testInfo, config, selectEffect);
+    if (config.frameGraphOnly || (config.screenSpace && backend === "frameGraph")) await verifyDepthEffectKeys(page, launched.app, testInfo, config, selectEffect);
     if (effectId === "aerialPerspective") await verifyAerialShapeKeys(page, launched.app, testInfo, selectEffect);
     if (effectId === "luminous") await verifyEffectShapeKeys(page, launched.app, testInfo, effectId, selectEffect);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });

@@ -224,6 +224,7 @@ export type FrameGraphPostEffectsSettings = {
     chromaticAberration: number;
     grainIntensity: number;
     sharpenEdge: number;
+    ssaoPrepared?: boolean;
     ssaoEnabled: boolean;
     ssaoStrength: number;
     ssaoRadius: number;
@@ -254,6 +255,7 @@ export type FrameGraphPostEffectsSettings = {
     offsetHighlightDepthScale: number;
     offsetHighlightColor: { r: number; g: number; b: number };
     offsetHighlightDebugView: boolean;
+    ssrPrepared?: boolean;
     ssrEnabled: boolean;
     ssrStrength: number;
     ssrStep: number;
@@ -2390,7 +2392,10 @@ export class FrameGraphPostEffectsController {
                 { doNotChangeAspectRatio: true },
             );
             const objectList = new FrameGraphObjectList();
-            if (resourcePlan.activeEffects.some(id => id === "ssgi" || id === "ssr")) {
+            // Key preparation bypasses static enable setters; keep the shared
+            // depth/normal capture free of outlines without changing model edges.
+            const keyedSsao = initialSettings.ssaoPrepared === true && resourcePlan.activeEffects.includes("ssao");
+            if (keyedSsao || resourcePlan.activeEffects.some(id => id === "ssgi" || id === "ssr")) {
                 // Babylon's enableOutlineRendering controls its own mesh outlines,
                 // not babylon-mmd's material-based after-mesh stage. Guard this
                 // task instance only, preserving its rendering order and cleanup.
@@ -3342,10 +3347,10 @@ export class FrameGraphPostEffectsController {
             this.geometryRendererTask.disabled = !resourcePlan.needsGeometryRenderer;
         }
         if (this.ssrTask) {
-            this.ssrTask.disabled = !this.isPostEffectActive(settings, "ssr");
+            this.ssrTask.disabled = !this.isPostEffectActive(settings, "ssr") || settings.ssrStrength <= 0.00001;
             this.applySsrSettings(this.ssrTask, settings);
         }
-        const ssgiDisabled = !this.isPostEffectActive(settings, "ssgi");
+        const ssgiDisabled = !this.isPostEffectActive(settings, "ssgi") || settings.ssgiStrength <= 0.00001;
         if (this.ssgiGatherTask) {
             this.ssgiGatherTask.disabled = ssgiDisabled;
         }
@@ -3356,11 +3361,11 @@ export class FrameGraphPostEffectsController {
             this.ssgiCompositeTask.disabled = ssgiDisabled;
         }
         if (this.ssaoTask) {
-            this.ssaoTask.disabled = !this.isPostEffectActive(settings, "ssao");
+            this.ssaoTask.disabled = !this.isPostEffectActive(settings, "ssao") || settings.ssaoStrength <= 0.00001;
             this.applySsaoSettings(this.ssaoTask, settings, this.ssaoTask.camera);
         }
         if (this.ssaoToonCompositeTask) {
-            this.ssaoToonCompositeTask.disabled = !this.isPostEffectActive(settings, "ssao");
+            this.ssaoToonCompositeTask.disabled = !this.isPostEffectActive(settings, "ssao") || settings.ssaoStrength <= 0.00001;
         }
         if (this.oceanTask) {
             this.oceanTask.disabled = !this.isPostEffectActive(settings, "ocean");
@@ -3823,7 +3828,7 @@ export class FrameGraphPostEffectsController {
         settings: FrameGraphPostEffectsSettings,
         camera: Camera,
     ): void {
-        ssaoTask.ssao.samples = 16;
+        if (ssaoTask.ssao.samples !== 16) ssaoTask.ssao.samples = 16;
         ssaoTask.ssao.expensiveBlur = true;
         ssaoTask.ssao.bilateralSamples = 8;
         ssaoTask.ssao.bilateralSoften = 0.25;
@@ -3841,7 +3846,7 @@ export class FrameGraphPostEffectsController {
         settings: FrameGraphPostEffectsSettings,
     ): void {
         ssrTask.ssr.strength = Math.max(0, settings.ssrStrength);
-        ssrTask.ssr.step = 4;
+        ssrTask.ssr.step = Math.max(1, Math.min(8, settings.ssrStep));
         ssrTask.ssr.maxDistance = 1000;
         ssrTask.ssr.maxSteps = 192;
         ssrTask.ssr.thickness = 0.22;

@@ -111,6 +111,7 @@ type PostProcessHost = {
     postEffectBloomThresholdValue: number;
     postEffectBloomKernelValue: number;
     effectKeyframeGrainPrepared?: boolean;
+    hasEffectSceneTrack?(id: "ssr"): boolean;
     isEffectKeyframePrepared?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion" | "lut"): boolean;
     getEffectScalarRenderValue?(id: "vignette" | "sharpen" | "chromatic" | "edgeBlur" | "distortion" | "lut", field: string, fallback: number): number;
     getEffectRenderLensDistortion?(): number;
@@ -1598,7 +1599,7 @@ export function applyDefaultPipelinePostProcessSettings(host: PostProcessHost): 
 }
 
 export function applySsrSettings(host: PostProcessHost): void {
-    if (host.postEffectBackend === "frameGraph") {
+    if (host.postEffectBackend === "frameGraph" || host.hasEffectSceneTrack?.("ssr")) {
         if (host.ssrRenderingPipeline) {
             host.ssrRenderingPipeline.dispose(false);
             host.ssrRenderingPipeline = null;

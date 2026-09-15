@@ -298,6 +298,17 @@ describe("buildFrameGraphResourcePlan", () => {
         expect(plan.requirementKeys).not.toContain("viewDepth");
     });
 
+    it.each(["ssao", "ssr"] as const)("prepares %s geometry at an initial OFF key without reallocating on seek", id => {
+        const off = createSettings({ [id + "Enabled"]: true, [id + "Prepared"]: true, [id + "Strength"]: 0 });
+        const plan = buildFrameGraphResourcePlan(off, [id]);
+        expect(plan.activeEffects).toEqual([id]);
+        expect(plan.requirementKeys).toContain("viewDepth");
+        expect(plan.requirementKeys).toContain("viewNormal");
+        const on = buildFrameGraphResourcePlan({ ...off, [id + "Strength"]: 1 }, [id]);
+        expect(on.requirementKeys).toEqual(plan.requirementKeys);
+        expect(canReuseFrameGraphForActivation(plan, on, [id])).toBe(true);
+    });
+
     it("ignores zero-strength effects and appends active effects to the runtime order", () => {
         const plan = buildFrameGraphResourcePlan(createSettings({
             luminousEnabled: true,

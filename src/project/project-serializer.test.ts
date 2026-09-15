@@ -308,6 +308,20 @@ describe("exportProjectState", () => {
         });
         expect(project.effects).toMatchObject({ lutEnabled: false, lutIntensity: 1, glowEnabled: false, glowIntensity: 0.5, glowThreshold: 0.7, glowKernel: 42, bloomKernel: 37 });
     });
+    it("saves screen-space static settings independently of evaluated keys", () => {
+        const project = exportProjectState({
+            ...createHost(), postEffectSsaoEnabled: true, postEffectSsaoStrength: 1, postEffectSsaoRadius: 5,
+            postEffectSsrEnabled: true, postEffectSsrStrength: 2, postEffectSsrStep: 8,
+            postEffectSsgiStrength: 1, postEffectSsgiSampleRadius: 256,
+            getStaticScreenSpacePostEffects: () => ({
+                ssao: { enabled: false, strength: 0.5, radius: 3 },
+                ssgi: { enabled: false, strength: 0.3, sampleRadius: 64 },
+                ssr: { enabled: false, strength: 0.3, step: 4 },
+            }),
+        });
+        expect(project.effects).toMatchObject({ ssaoEnabled: false, ssaoStrength: 0.5, ssaoRadius: 3,
+            ssgiStrength: 0.3, ssgiSampleRadius: 64, ssrEnabled: false, ssrStrength: 0.3, ssrStep: 4 });
+    });
     it("saves public depth-effect settings separately from keyed UI values", () => {
         const project = exportProjectState({
             ...createHost(), postEffectDirectionalLightShaftsStrength: 0.16, postEffectDirectionalLightShaftsPhaseG: 0.9,

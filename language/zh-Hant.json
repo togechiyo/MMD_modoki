@@ -616,6 +616,7 @@
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "效果",
     "timeline.lutFixedSettings": "LUT 選擇與檔案為固定設定",
+    "timeline.screenSpaceFixedSettings": "此效果的時間軸播放在 Frame Graph 中生效。",
     "timeline.depthEffectFixedSettings": "在 Frame Graph 中算繪。色彩維持為固定設定。",
     "timeline.aerialPerspectiveFixedSettings": "在 Frame Graph 中算繪。色彩維持為固定設定。",
     "timeline.luminousFixedSettings": "發光對象與光芒為固定設定",

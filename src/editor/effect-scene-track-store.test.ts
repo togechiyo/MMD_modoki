@@ -139,7 +139,7 @@ describe("effect scene track foundation", () => {
         expect(restored.evaluate("aerialPerspective", 10)).toEqual(store.evaluate("aerialPerspective", 10));
         expect(effectKeyframePayloadSchema.safeParse(restored.read("aerialPerspective", 20)).success).toBe(true);
     });
-    it.each(["directionalLightShafts", "offsetShadow", "offsetHighlight"] as const)("round-trips every public slider of %s and preserves fractional interpolation", id => {
+    it.each(["directionalLightShafts", "offsetShadow", "offsetHighlight", "ssao", "ssgi", "ssr"] as const)("round-trips every public slider of %s and preserves fractional interpolation", id => {
         const definition = getEffectDefinition(id);
         const from = makeEffectPayload(id, { enabled: false });
         const to = makeEffectPayload(id, { enabled: true });

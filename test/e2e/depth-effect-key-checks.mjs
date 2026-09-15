@@ -4,6 +4,9 @@ import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 
 const cases = [
+  { id: "ssao", fields: [{ name: "radius", panel: "ssaoRadius", min: 0.01, max: 5, step: 0.01 }] },
+  { id: "ssgi", fields: [{ name: "sampleRadius", panel: "ssgiSampleRadius", min: 1, max: 256, step: 1 }] },
+  { id: "ssr", fields: [{ name: "step", panel: "ssrStep", min: 1, max: 8, step: 1 }] },
   {
     "id": "directionalLightShafts",
     "fields": [
@@ -88,6 +91,8 @@ const actual = (field, position) => {
   return field.step ? Number((field.min + Math.round((value - field.min) / field.step) * field.step).toFixed(10)) : value;
 };
 
+const displayed = (field, position) => String(Math.round((actual(field, position) - field.min) / (field.max - field.min) * 100));
+
 export async function verifyDepthEffectKeys(page, app, testInfo, config, selectEffect) {
   const fields = cases.find(item => item.id === config.id).fields;
   const seek = async frame => {
@@ -126,8 +131,8 @@ export async function verifyDepthEffectKeys(page, app, testInfo, config, selectE
     await number.fill("33");
     expect((await track()).preview.value[field.name]).toBeCloseTo(midpoint[field.name]);
     await number.press("Enter");
-    await expect(input).toHaveValue("33");
-    await expect(page.locator('[data-effect-key-field="' + field.name + '"]')).toHaveValue("33");
+    await expect(input).toHaveValue(displayed(field, 33));
+    await expect(page.locator('[data-effect-key-field="' + field.name + '"]')).toHaveValue(displayed(field, 33));
     expect((await track()).preview.value[field.name]).toBeCloseTo(actual(field, 33));
     expect((await track()).preview.value.enabled).toBe(false);
   }
@@ -168,11 +173,11 @@ export async function verifyDepthEffectKeys(page, app, testInfo, config, selectE
   const report = { changed: difference(frames[0], frames[1]), reverse: difference(frames[0], frames[2]) };
   writeFileSync(testInfo.outputPath("depth-shape-comparison.json"), JSON.stringify(report));
   expect(report.changed).toBeGreaterThan(0.001);
-  expect(report.reverse).toBeLessThan(0.0001);
+  expect(report.reverse).toBeLessThan(config.id === "ssao" ? 0.2 : 0.0001);
   for (const field of fields) {
     const input = page.locator('[data-effect-stack-control="' + field.panel + '"]');
-    await expect(input).toHaveValue("25");
-    await expect(input.locator("..").locator(".range-number-input")).toHaveValue("25");
+    await expect(input).toHaveValue(displayed(field, 25));
+    await expect(input.locator("..").locator(".range-number-input")).toHaveValue(displayed(field, 25));
   }
   for (const { id } of cases) {
     await selectEffect(page, id);

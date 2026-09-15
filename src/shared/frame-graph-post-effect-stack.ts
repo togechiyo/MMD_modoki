@@ -47,6 +47,7 @@ export type FrameGraphPostEffectActivationSettings = {
     edgeBlurStrength: number;
     lensDistortionEnabled: boolean;
     lensDistortion: number;
+    ssaoPrepared?: boolean;
     ssaoEnabled: boolean;
     ssaoStrength: number;
     offsetShadowEnabled: boolean;
@@ -55,6 +56,7 @@ export type FrameGraphPostEffectActivationSettings = {
     offsetHighlightEnabled: boolean;
     offsetHighlightPrepared?: boolean;
     offsetHighlightStrength: number;
+    ssrPrepared?: boolean;
     ssrEnabled: boolean;
     ssrStrength: number;
     ssgiEnabled: boolean;
@@ -141,11 +143,11 @@ export function isFrameGraphPostEffectActiveInSettings(
     }
     switch (id) {
         case "ssr":
-            return settings.ssrEnabled && settings.ssrStrength > 0.00001;
+            return settings.ssrEnabled && (settings.ssrPrepared === true || settings.ssrStrength > 0.00001);
         case "ssgi":
             return settings.ssgiEnabled;
         case "ssao":
-            return settings.ssaoEnabled && settings.ssaoStrength > 0.00001;
+            return settings.ssaoEnabled && (settings.ssaoPrepared === true || settings.ssaoStrength > 0.00001);
         case "ocean":
             // The visible surface is a scene-space Babylon WaterMaterial. The
             // FrameGraph entry still owns the legacy underwater absorption and

@@ -869,6 +869,7 @@
     "menu.view.fpsUnlimited": "Unlimited FPS",
     "menu.view.fps60": "Limit to 60 FPS",
     "menu.view.fps30": "Limit to 30 FPS",
+    "menu.view.focusSelectedBones": "Focus Selected Bones",
     "menu.view.camera.front": "Front",
     "menu.view.camera.back": "Back",
     "menu.view.camera.left": "Left",

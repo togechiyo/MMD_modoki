@@ -13,6 +13,7 @@ const register = (command: string) => item(command, [route("mmd_register_keyfram
 
 /** Partial argument templates for explicit tools, never an arbitrary command dispatcher. */
 export const menuItems: readonly MenuItem[] = [
+    action("view.focusSelectedBones", { kind: "focusSelectedBones" }, "現在の選択ボーンの中心を注視。mmd_select_bonesで対象選択。角度・距離を保持し共有Undo対応。自動キー登録なし。"),
     operation("file.openFile", { kind: "loadAsset" }, "assetKindとローカル絶対filePathを指定する。"),
     ...(["Model", "Motion", "CameraMotion", "Audio"] as const).map(name => operation("file.open" + name,
         { kind: "loadAsset", assetKind: name[0].toLowerCase() + name.slice(1) }, "filePath必須。モデルモーションは対象modelInstanceIdも指定。")),

@@ -869,6 +869,7 @@
     "menu.view.fpsUnlimited": "不限制 FPS",
     "menu.view.fps60": "限制為 60 FPS",
     "menu.view.fps30": "限制為 30 FPS",
+    "menu.view.focusSelectedBones": "注視選取骨骼",
     "menu.view.camera.front": "正面",
     "menu.view.camera.back": "背面",
     "menu.view.camera.left": "左面",

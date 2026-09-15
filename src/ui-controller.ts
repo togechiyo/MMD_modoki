@@ -783,6 +783,7 @@ export class UIController {
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
         });
         this.appMenuController = new AppMenuController({
+            canFocusSelectedBones: () => this.canFocusSelectedBones(),
             switchExperimentalPbr: enabled => this.switchExperimentalPbr(enabled),
             mmdManager: this.mmdManager,
             dispatchAction: (action) => this.actionDispatcher.dispatch(action),
@@ -2247,6 +2248,13 @@ export class UIController {
 
             const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
 
+            if (!hasModifier && !e.shiftKey && !e.repeat && !e.isComposing && lowerKey === "f"
+                && !Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).some(dialog => dialog.getClientRects().length > 0)) {
+                e.preventDefault();
+                this.actionDispatcher.dispatch({ type: "camera.focusSelectedBones", source: "shortcut" });
+                return;
+            }
+
             if (!hasModifier && e.key === "Escape" && this.timeline.getSelectedKeys().length > 0) {
                 e.preventDefault();
                 this.timeline.clearSelectedKeys({ keepActiveTrack: true });
@@ -2738,6 +2746,9 @@ export class UIController {
         });
         this.actionDispatcher.register("camera.setViewPreset", (action) => {
             this.cameraPanelController?.setCameraViewPreset(action.view);
+        });
+        this.actionDispatcher.register("camera.focusSelectedBones", () => {
+            this.focusSelectedBones();
         });
         this.actionDispatcher.register("camera.setExternalParent", () => {
             if (!this.cameraPanelController?.setExternalParentFromPanel(false)) return;
@@ -8713,9 +8724,35 @@ export class UIController {
         return result;
     }
 
+    private canFocusSelectedBones(): boolean {
+        return !this.mmdManager.isPlaying && !this.mmdManager.isMaterialModeSwitching() && !this.isAutomationBusy()
+            && this.mmdManager.getTimelineTarget() === "model" && this.timeline.getSelectedBoneTracks().length > 0;
+    }
+
+    private focusSelectedBones(editId?: string): boolean {
+        if (!this.canFocusSelectedBones()) return false;
+        const boneNames = this.timeline.getSelectedBoneTracks().map(track => track.trackName);
+        const after = this.mmdManager.getCameraPoseFocusedOnBones(boneNames);
+        if (!after) return false;
+        const command = buildCameraTransformCommand({ frame: this.mmdManager.currentFrame,
+            before: this.captureCameraTransformCommandSnapshot(), after });
+        if (!command) return false;
+        if (editId) command.id = editId;
+        command.label = t("menu.view.focusSelectedBones");
+        delete command.mergeKey;
+        if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) return false;
+        this.commandHistory.push(command);
+        return true;
+    }
+
     public executeAutomationMenuAction(action: MenuAction, editId: string): Record<string, unknown> {
         const manager = this.mmdManager;
         switch (action.kind) {
+            case "focusSelectedBones": {
+                if (!this.canFocusSelectedBones()) throw new AutomationError("BONE_NOT_SELECTED");
+                return { changed: this.focusSelectedBones(editId), undoable: true, keyframesRegistered: false,
+                    camera: manager.getCameraKeyframePose() };
+            }
             case "cameraView": {
                 const before = manager.getCameraKeyframePose();
                 manager.setCameraView(action.view);

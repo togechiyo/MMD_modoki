@@ -1,4 +1,5 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { cameraPoseFocusedOnPoints } from "./shared/camera-focus";
 import { ExternalWgslService, type LiveEffectTarget } from "./external-wgsl/service";
 import { checkProjectEffectCount } from "./external-wgsl/limits";
 import type { EffectAsset, EffectAssignment, EffectChange, EffectTarget } from "./external-wgsl/contract";
@@ -14780,6 +14781,22 @@ ${beforeFogAppendBlock}
     getCameraPosition(): { x: number; y: number; z: number } {
         const pos = this.camera.position;
         return { x: pos.x, y: pos.y, z: pos.z };
+    }
+
+    getCameraPoseFocusedOnBones(boneNames: readonly string[]) {
+        if (this.isPlaying || this.getTimelineTarget() !== "model" || !this.currentModel) return null;
+        const points: Vector3[] = [];
+        for (const name of new Set(boneNames)) {
+            const bone = this.getRuntimeBoneByNameFromModel(this.currentModel, name);
+            if (!bone) return null;
+            const matrix = Matrix.Identity();
+            bone.getWorldMatrixToRef(matrix);
+            points.push(matrix.getTranslation());
+        }
+        const parent = Matrix.Identity();
+        if (this.cameraExternalParentModelIndex !== null && !this.getCameraExternalParentMatrixToRef(parent)) return null;
+        return cameraPoseFocusedOnPoints(this.getCameraKeyframePose(), points,
+            this.cameraExternalParentModelIndex !== null ? parent : null);
     }
 
     getCameraTarget(): { x: number; y: number; z: number } {

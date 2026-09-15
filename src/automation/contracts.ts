@@ -25,7 +25,7 @@ const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit:
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
     mmd_list_menu_items: { description: "公開メニューバーを名前・IDで検索。対応tool、部分引数の雛形、ユーザー操作が必要な項目を返す。不足引数はtool schemaから補う。", edit: false, schema: z.object({ ...query, query: z.string().max(100).default("") }).strict() },
-    mmd_execute_menu_action: { description: "視点・前後キー移動・カテゴリ全選択・全モーション削除・描画順・空リセット。型付き操作だけを実行。scopeは現在値を照合。削除はdryRun既定true・共有Undo。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema.nullable(), action: menuActionSchema }).strict() },
+    mmd_execute_menu_action: { description: "選択ボーン注視・視点・前後キー移動・カテゴリ全選択・全モーション削除・描画順・空リセット。型付き操作だけを実行。scopeは現在値を照合。削除はdryRun既定true・共有Undo。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema.nullable(), action: menuActionSchema }).strict() },
     mmd_wait_for_render: { description: "停止中の指定revisionでscene/効果の準備後の実engine frameを2回待機（最大8秒）。競合・busyは拒否。物理収束やGPU全処理完了を保証しない。viewport-comparisonヘルプ参照。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative() }).strict() },
     mmd_capture_snapshot: { description: "停止中の指定revisionのviewportを撮影し画像IDで一時保持。画像とframe/revisionを返す。最大8枚、古い画像は破棄。シーン・許可変更で失効。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative(), label: z.string().max(100).default("") }).strict() },
     mmd_list_snapshots: { description: "現在の許可・シーンで保持中の比較画像IDと撮影条件を一覧。画像本文は返さない。", edit: false, schema: z.object(query).strict() },

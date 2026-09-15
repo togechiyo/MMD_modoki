@@ -34,6 +34,7 @@ import type { TrackCategory } from "../types";
 type ToastType = "success" | "error" | "info";
 
 type AppMenuControllerDeps = {
+    canFocusSelectedBones: () => boolean;
     switchExperimentalPbr: (enabled: boolean) => Promise<void>;
     mmdManager: MmdManager;
     dispatchAction: (action: EditorAction) => boolean;
@@ -76,6 +77,7 @@ function resolveElements(): AppMenuElements {
 }
 
 export class AppMenuController {
+    private readonly canFocusSelectedBones: () => boolean;
     private readonly switchExperimentalPbr: (enabled: boolean) => Promise<void>;
     private readonly elements: AppMenuElements;
     private readonly mmdManager: MmdManager;
@@ -99,6 +101,7 @@ export class AppMenuController {
     private openGroup: HTMLElement | null = null;
 
     constructor(deps: AppMenuControllerDeps) {
+        this.canFocusSelectedBones = deps.canFocusSelectedBones;
         this.switchExperimentalPbr = deps.switchExperimentalPbr;
         this.elements = resolveElements();
         this.mmdManager = deps.mmdManager;
@@ -252,6 +255,8 @@ export class AppMenuController {
     private resolveCommandDisabled(command: string): boolean | null {
         const timelineTarget = this.mmdManager.getTimelineTarget();
         switch (command) {
+            case "view.focusSelectedBones":
+                return !this.canFocusSelectedBones();
             case "edit.clearModelMotion":
                 return !this.mmdManager.canClearActiveModelMotion();
             case "edit.selectAllCameraKeys":
@@ -594,6 +599,9 @@ export class AppMenuController {
                 return;
             case "view.camera.front":
                 this.dispatchAction({ type: "camera.setViewPreset", source: "menu", view: "front" });
+                return;
+            case "view.focusSelectedBones":
+                this.dispatchAction({ type: "camera.focusSelectedBones", source: "menu" });
                 return;
             case "view.camera.back":
                 this.dispatchAction({ type: "camera.setViewPreset", source: "menu", view: "back" });

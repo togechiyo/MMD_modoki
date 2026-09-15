@@ -154,6 +154,7 @@ export function canExecuteEditorAction(
         case "accessory.setShadow":
         case "accessory.deleteSelected":
         case "camera.setViewPreset":
+        case "camera.focusSelectedBones":
         case "camera.setExternalParent":
         case "camera.setMirroringFloorEnabled":
         case "camera.setMirroringFloorResolution":

@@ -3,6 +3,7 @@ import type { MmdManager } from "../mmd-manager";
 import { AutomationError } from "./diagnostics";
 
 export const menuActionSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("focusSelectedBones") }).strict(),
     z.object({ kind: z.literal("cameraView"), view: z.enum(["front", "back", "left", "right", "top", "bottom"]) }).strict(),
     z.object({ kind: z.literal("adjacentKey"), direction: z.union([z.literal(-1), z.literal(1)]) }).strict(),
     z.object({ kind: z.literal("selectAllKeys"), category: z.enum(["camera", "light", "shadow", "gravity", "bone", "morph"]) }).strict(),

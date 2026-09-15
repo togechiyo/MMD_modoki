@@ -869,6 +869,7 @@
     "menu.view.fpsUnlimited": "FPS 제한 없음",
     "menu.view.fps60": "60 FPS로 제한",
     "menu.view.fps30": "30 FPS로 제한",
+    "menu.view.focusSelectedBones": "선택한 본 주시",
     "menu.view.camera.front": "정면",
     "menu.view.camera.back": "후면",
     "menu.view.camera.left": "왼쪽",

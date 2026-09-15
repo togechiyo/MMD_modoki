@@ -869,6 +869,7 @@
     "menu.view.fpsUnlimited": "fps無制限",
     "menu.view.fps60": "60fps制限",
     "menu.view.fps30": "30fps制限",
+    "menu.view.focusSelectedBones": "選択ボーンを注視",
     "menu.view.camera.front": "正面",
     "menu.view.camera.back": "背面",
     "menu.view.camera.left": "左面",

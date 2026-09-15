@@ -19,7 +19,7 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR external WGSL ${backe
         await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 0.4, y: 2, z: -7 }, { x: 0, y: 1.5, z: 0 }));
         const dialog = page.locator('[data-popup-id="experimental-settings"]');
         const open = async () => {
-            await page.locator('[data-i18n="menu.tools"]').click();
+            await page.locator('[data-i18n="menu.window"]').click();
             await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
         };
         const mode = async enabled => {

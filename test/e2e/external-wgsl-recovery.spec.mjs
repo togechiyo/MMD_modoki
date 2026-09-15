@@ -25,7 +25,7 @@ for (const backend of ["classic", "frameGraph"]) test(`external WGSL ${backend}:
         let settings = page.locator('[data-popup-id="experimental-settings"]');
         let permission = settings.getByLabel("外部WGSL材質を有効にする", { exact: true });
         const openSettings = async () => {
-            await page.locator('[data-i18n="menu.tools"]').click();
+            await page.locator('[data-i18n="menu.window"]').click();
             await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
         };
         const enable = async () => {

@@ -35,7 +35,7 @@ test("material mode round trips preserve runtime, unregistered edits, history an
     expect(history.undoCount).toBeGreaterThan(0);
     const keys = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().keyframes);
     const toggle = async enabled => {
-      await page.locator('[data-i18n="menu.tools"]').click();
+      await page.locator('[data-i18n="menu.window"]').click();
       await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
       const dialog = page.locator('[data-popup-id="experimental-settings"]');
       const checkbox = dialog.getByLabel("PBRモード", { exact: true });
@@ -115,7 +115,7 @@ test("missing second source leaves both live models and physics intact", async (
     await page.evaluate(() => window.mmdModokiE2e.setAutoRenderEnabled(false));
     const before = await page.evaluate(() => window.mmdModokiE2e.getMaterialModeRuntimeState());
     await unlink(second);
-    await page.locator('[data-i18n="menu.tools"]').click();
+    await page.locator('[data-i18n="menu.window"]').click();
     await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
     const dialog = page.locator('[data-popup-id="experimental-settings"]');
     const pbr = dialog.getByLabel("PBRモード", { exact: true });

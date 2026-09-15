@@ -23,7 +23,7 @@ test("experimental settings persist PBR imports and expose environment and log o
       shell.openPath = async path => { globalThis.experimentOpenedPaths.push(path); return ""; };
     });
     const open = async () => {
-      await page.locator('[data-i18n="menu.tools"]').click();
+      await page.locator('[data-i18n="menu.window"]').click();
       await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
       await expect(page.locator('[data-popup-id="experimental-settings"]')).toBeVisible();
     };

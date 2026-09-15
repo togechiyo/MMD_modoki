@@ -13,7 +13,7 @@ test("environment cubemaps load through GUI, survive project restore, and return
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     const open = async () => {
-      await page.locator('[data-i18n="menu.tools"]').click();
+      await page.locator('[data-i18n="menu.window"]').click();
       await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
     };
     const dialog = page.locator('[data-popup-id="experimental-settings"]');

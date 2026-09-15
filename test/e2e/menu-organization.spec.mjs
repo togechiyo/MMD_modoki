@@ -25,7 +25,6 @@ test("omits empty help entries and ends with Physics, Window, Tools", async () =
     )).toEqual([
       "tools.mmdOptimizedFormat",
       "tools.vmdRetarget",
-      "tools.openLogFolder",
     ]);
     await expect(page.locator('[data-menu-command="dialog.shortcuts"]')).toHaveCount(0);
     await expect(page.locator('[data-menu-command="dialog.about"]')).toHaveCount(0);

@@ -53,7 +53,7 @@ for (const pipeline of ["mmd-standard", "pbr-standard"]) {
       });
       expect(await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath)).not.toBeNull();
       if (pipeline === "pbr-standard") {
-        await page.locator('[data-i18n="menu.tools"]').click();
+        await page.locator('[data-i18n="menu.window"]').click();
         await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
         const dialog = page.locator('[data-popup-id="experimental-settings"]');
         await dialog.getByLabel("PBRモード", { exact: true }).check();
@@ -125,7 +125,7 @@ for (const pipeline of ["mmd-standard", "pbr-standard"]) {
         await capture("preset-off");
       }
       for (const enabled of [pipeline !== "pbr-standard", pipeline === "pbr-standard"]) {
-        await page.locator('[data-i18n="menu.tools"]').click();
+        await page.locator('[data-i18n="menu.window"]').click();
         await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
         const dialog = page.locator('[data-popup-id="experimental-settings"]');
         await dialog.getByLabel("PBRモード", { exact: true }).setChecked(enabled);

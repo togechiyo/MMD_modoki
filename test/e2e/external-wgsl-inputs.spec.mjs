@@ -61,7 +61,7 @@ for (const backend of ["classic", "frameGraph"]) test(`MME-style WGSL inputs ${b
         await page.reload(); await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
         await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/sss-reference.pmx"));
         await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 0.4, y: 2, z: -7 }, { x: 0, y: 1.5, z: 0 }));
-        await page.locator('[data-i18n="menu.tools"]').click();
+        await page.locator('[data-i18n="menu.window"]').click();
         await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
         const dialog = page.locator('[data-popup-id="experimental-settings"]');
         const permission = dialog.getByLabel("外部WGSL材質を有効にする", { exact: true });

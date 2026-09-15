@@ -20,7 +20,7 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/sss-reference.pmx"));
     const open = async () => {
-      await page.locator('[data-i18n="menu.tools"]').click();
+      await page.locator('[data-i18n="menu.window"]').click();
       await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
     };
     await open();

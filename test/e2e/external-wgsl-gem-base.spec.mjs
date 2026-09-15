@@ -40,7 +40,7 @@ for (const mode of ["mmd", "pbr"]) test(`gem coatings retain the model colour an
         const blue = tintedFixture(testInfo, "blue", [0.025, 0.085, 0.55]);
         await page.evaluate(path => window.mmdModokiE2e.loadModel(path), red);
         await page.evaluate(() => window.mmdModokiE2e.setCameraPose({ x: 0.4, y: 2, z: -7 }, { x: 0, y: 1.5, z: 0 }));
-        await page.locator('[data-i18n="menu.tools"]').click();
+        await page.locator('[data-i18n="menu.window"]').click();
         await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
         const dialog = page.locator('[data-popup-id="experimental-settings"]');
         if (mode === "pbr") {

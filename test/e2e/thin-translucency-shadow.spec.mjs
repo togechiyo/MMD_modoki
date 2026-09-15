@@ -15,7 +15,7 @@ for (const backend of ["classic", "frameGraph"]) for (const mode of ["cascaded",
     await page.reload();
     await page.waitForFunction(()=>Boolean(window.mmdModokiE2e));
     await page.evaluate(path=>window.mmdModokiE2e.loadModel(path),resolve(root,"test/fixtures/external-parent/sss-reference.pmx"));
-    await page.locator('[data-i18n="menu.tools"]').click();
+    await page.locator('[data-i18n="menu.window"]').click();
     await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
     const dialog=page.locator('[data-popup-id="experimental-settings"]');
     await dialog.getByLabel("PBRモード",{exact:true}).check();

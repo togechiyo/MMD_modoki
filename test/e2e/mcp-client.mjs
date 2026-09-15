@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 
 export async function settings(page) {
-    await page.locator('[data-i18n="menu.tools"]').click();
+    await page.locator('[data-i18n="menu.window"]').click();
     await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
     return page.locator('[data-popup-id="experimental-settings"]');
 }

@@ -83,7 +83,7 @@
     "toolbar.gi.title.loading":  "グローバルイルミネーション: 読み込み中...",
     "toolbar.gi.title.on":  "グローバルイルミネーション: ON (クリックでOFF)",
     "toolbar.gi.title.off":  "グローバルイルミネーション: OFF (クリックでON)",
-    "toolbar.fx.short":  "効果",
+    "toolbar.fx.short":  "Effect",
     "toolbar.fx.title.on":  "エフェクト欄: 表示中 (クリックで非表示)",
     "toolbar.fx.title.off":  "エフェクト欄: 非表示 (クリックで表示)",
     "toolbar.mode.ariaLabel":  "編集対象",

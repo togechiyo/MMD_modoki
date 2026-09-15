@@ -83,7 +83,7 @@
     "toolbar.gi.title.loading":  "전역 조명: 로딩 중...",
     "toolbar.gi.title.on":  "전역 조명: 켜짐 (클릭하면 끔)",
     "toolbar.gi.title.off":  "전역 조명: 꺼짐 (클릭하면 켬)",
-    "toolbar.fx.short":  "효과",
+    "toolbar.fx.short":  "Effect",
     "toolbar.fx.title.on":  "효과 패널: 표시 중 (클릭하면 숨김)",
     "toolbar.fx.title.off":  "효과 패널: 숨김 (클릭하면 표시)",
     "toolbar.mode.ariaLabel":  "편집 대상",

@@ -83,7 +83,7 @@
     "toolbar.gi.title.loading":  "全局光照：加载中...",
     "toolbar.gi.title.on":  "全局光照：开（点击关闭）",
     "toolbar.gi.title.off":  "全局光照：关（点击开启）",
-    "toolbar.fx.short":  "效果",
+    "toolbar.fx.short":  "Effect",
     "toolbar.fx.title.on":  "效果面板：已显示（点击隐藏）",
     "toolbar.fx.title.off":  "效果面板：已隐藏（点击显示）",
     "toolbar.mode.ariaLabel":  "编辑目标",

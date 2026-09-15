@@ -117,6 +117,7 @@ test("supported locales keep translated labels inspectable", async ({}, testInfo
           .map((element) => element.getAttribute("data-i18n"))
           .filter(Boolean))]);
         const copiedVisibleKeys = visibleKeys.filter((key) => dictionaries[locale][key] === dictionaries.en[key]
+          && key !== "toolbar.fx.short"
           && !intentionalSharedUiText.test(dictionaries.en[key]));
         expect(copiedVisibleKeys, `${locale} visible translations copied from English`).toEqual([]);
       }

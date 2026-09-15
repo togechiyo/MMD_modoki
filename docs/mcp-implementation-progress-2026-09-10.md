@@ -10,7 +10,7 @@
 
 ## 使い方
 
-1. アプリを再起動し、「ウィンドウ → 実験設定… → AI連携（MCP）」を開く。
+1. アプリを再起動し、「設定 → 実験設定… → AI連携（MCP）」を開く。
 2. 「MCPを有効にする」をON。操作を任せる場合は「AIからの編集も許可」をON。
 3. 「接続設定を表示」のHTTP設定例をクライアントへ登録する。クライアントに応じてURLとAuthorizationヘッダーを設定する。他アプリの設定ファイルは自動変更しない。
 4. AIは `mmd_get_context` で対象・revisionを取得してから各toolを使う。preview編集とキー登録は別操作。現在値を登録する場合は `mmd_register_keyframes`、値を直接指定する場合は `mmd_edit_keyframes`、対応一覧は `mmd_help(topicId:ui-coverage)` を使う。

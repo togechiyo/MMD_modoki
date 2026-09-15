@@ -876,7 +876,7 @@
     "menu.view.camera.top": "上面",
     "menu.view.camera.bottom": "下面",
     "menu.view.toggleActiveModel": "選択モデルを表示",
-    "menu.window": "ウィンドウ",
+    "menu.window": "設定",
     "menu.window.showUi": "UIを表示",
     "menu.window.uiScale": "UI倍率",
     "menu.background": "背景",

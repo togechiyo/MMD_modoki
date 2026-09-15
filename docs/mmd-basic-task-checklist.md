@@ -439,7 +439,7 @@
 - [ ] 必要な設計書の棚卸し（scene / timeline / material / physics / input / logging など）
 - [ ] 既知バグ一覧の整備
 - [ ] 実験機能フラグ管理
-- [x] ウィンドウの実験設定にPBRの明示的ON/OFF、環境ライト詳細、ログ操作を集約（IBL影は凍結理由の表示のみ、[実装メモ](./experimental-settings-popup-2026-09-08.md)）
+- [x] 設定メニューの実験設定にPBRの明示的ON/OFF、環境ライト詳細、ログ操作を集約（IBL影は凍結理由の表示のみ、[実装メモ](./experimental-settings-popup-2026-09-08.md)）
 - [x] 通常MMD/PBRをproject全体で往復し、未登録ポーズ・runtime・物理・履歴を維持。モード別材質プリセットをproject保存へ含める（[設計・検証](./project-material-mode-design-2026-09-08.md)）
 - [ ] パフォーマンス計測基盤の整備
 - [ ] 責務分離を意識したリファクタリング

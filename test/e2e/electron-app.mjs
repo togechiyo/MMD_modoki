@@ -18,14 +18,16 @@ const pluginConfig = {
   ],
 };
 
-export async function launchMmdModoki(repoRoot) {
+export async function launchMmdModoki(repoRoot, { effectTimeline = false } = {}) {
   const tempDir = mkdtempSync(join(tmpdir(), "mmd-modoki-e2e-"));
   const devServers = [];
   const generator = new ViteConfigGenerator(pluginConfig, repoRoot, false);
 
   try {
     for (const config of await generator.getRendererConfig()) {
-      const server = await vite.createServer({ configFile: false, ...config });
+      const server = await vite.createServer({ configFile: false, ...config,
+        define: { ...config.define, "import.meta.env.VITE_MMD_EFFECT_TIMELINE": JSON.stringify(effectTimeline ? "1" : "0") },
+      });
       await server.listen();
       devServers.push(server);
     }

@@ -3,15 +3,16 @@ id: scene-key-order-is-light-shadow-gravity-then-effects
 status: decision
 scope: roadmap/scene-keys
 confidence: high
-last_verified: 2026-09-14
+last_verified: 2026-09-15
 decision_owner: project-owner
 decision: adopted
-decided_on: 2026-09-14
+decided_on: 2026-09-15
 evidence:
   - conversation-explicit-instruction
   - conversation-owner-confirmation
   - roadmap-document
 source_docs:
+  - ../../docs/effect-timeline-shelving-2026-09-15.md
   - ../../docs/v0.2.3-timeline-scene-key-editing-plan.md
   - ../../docs/gamma-timeline-key-experiment-2026-09-14.md
   - ../../docs/effect-timeline-common-foundation-design-2026-09-14.md
@@ -29,6 +30,8 @@ superseded_by: null
 modoki-owned trackの実装順を決めるとき。
 
 ## 判断
+
+2026-09-15の最新指定: 所有者は次バージョンの範囲が重くなることを懸念し、エフェクトキー機能を「いったんしまう」と指定した。従来の追加依頼よりこの一時休止を優先する。照明・影・重力は維持し、エフェクトキーの標準公開・追加拡張を再開済みと扱わない。実装と既存データの保管、標準OFF・開発用opt-inの具体的な方式は休止メモを参照する。
 
 最初はMMD照明に対応しやすい色RGBと方向XYZ。次に既存UIの影欄、gravityを扱い、effect keyは安定した少数値の実験へ限定する。影欄キーは影色、Toon影響度、影描画範囲、照度を対象にし、MMDのself-shadow modeは採用しない。gravityキーは下パネルに表示している加速度と方向XYZだけを対象にする。
 
@@ -52,6 +55,9 @@ modoki-owned trackの実装順を決めるとき。
 
 ## 避けること
 
+- 過去の継続依頼を理由に、休止中のエフェクトキーを次版で標準ONへ戻す。
+- UIを隠すだけでキーの評価や通常スライダーへの介入を残す、または保存済みキーを削除する。
+
 - effect keyをlightより先に進める。
 - MMDのself-shadow modeを影欄trackへ持ち込む。
 - 非表示のshadow品質、bias、cascade、PostFXを影欄trackへ混ぜる。
@@ -63,6 +69,8 @@ modoki-owned trackの実装順を決めるとき。
 所有者が照明、影、重力、effectのkey登録を挙げ、timelineを主題にする順序を承認した。影については、既存の影欄をタイムラインで動かす意図であり、MMDのself-shadow modeはMMD_modokiで採用しないと明示した。重力についても下パネルのUIに出している分だけでよいと明示し、照明・影欄・重力の初期実装後に現在の範囲でよいことを確認した。
 
 ## 再確認条件
+
+所有者がエフェクトキーの再開・標準公開を改めて指定したとき。
 
 light track完了後にrelease boundaryを再評価するとき。
 ガンマ実験の検証結果が出たとき、または対象effect・操作範囲の追加指定があったとき。

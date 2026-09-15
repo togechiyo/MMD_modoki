@@ -4,6 +4,32 @@ import { effectKeyframePayloadSchema, getEffectDefinition, interpolateEffectValu
 
 const base = { enabled: false, gamma: 1 };
 describe("effect scene track foundation", () => {
+    it("shelves keys and previews verbatim without ownership, evaluation, or edits", () => {
+        const raw = { version: 1, extra: "retain", tracks: [{ effectId: "gamma", valueVersion: 1,
+            base: { enabled: false, gamma: 1 }, keys: [{ frame: 0, value: { enabled: true, gamma: 0.5 } }],
+            preview: { frame: 10, value: { enabled: true, gamma: 2 } }, future: { field: 7 },
+        }] };
+        const store = new EffectSceneTrackStore(false);
+        store.restore(raw);
+        expect(store.has("gamma")).toBe(false);
+        expect(store.ids()).toEqual([]);
+        expect([...store.frames("gamma")]).toEqual([]);
+        expect(store.read("gamma", 0)).toBeNull();
+        expect(store.evaluate("gamma", 10, true)).toBeNull();
+        store.preview("gamma", 0, { enabled: true, gamma: 4 }, base);
+        expect(store.apply("gamma", 0, makeEffectPayload("gamma", base), base)).toBe(false);
+        expect(store.move("gamma", 0, 20)).toBe(false);
+        expect(store.remove("gamma", [0])).toBe(false);
+        store.clearPreviews(); store.clearPreviewsOutside(20);
+        expect(store.serialize()).toEqual(raw);
+        const exported = store.serialize(); exported.tracks.length = 0;
+        expect(store.serialize()).toEqual(raw);
+        const resumed = new EffectSceneTrackStore(); resumed.restore(store.serialize());
+        expect(resumed.evaluate("gamma", 0)?.gamma).toBe(0.5);
+        expect(resumed.evaluate("gamma", 10, true)?.gamma).toBe(2);
+        store.restore(null);
+        expect(store.serialize()).toEqual({ version: 1, tracks: [] });
+    });
     it("evaluates step enabled and logarithmic gamma in either seek direction without changing authored values", () => {
         const store = new EffectSceneTrackStore();
         store.apply("gamma", 10, makeEffectPayload("gamma", { enabled: true, gamma: 0.5 }), base);

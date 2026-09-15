@@ -60,7 +60,7 @@ if ((config.frameGraphOnly || config.id === "aerialPerspective") && backend === 
 test("resource " + config.id + " keys: " + backend + " GUI, roundtrip and output", async ({}, testInfo) => {
   const effectId = config.id;
   const shapeDefaults = config.defaults ?? (effectId === "luminous" ? { threshold: 0.5, radius: 20 } : {});
-  const launched = await launchMmdModoki(repoRoot);
+  const launched = await launchMmdModoki(repoRoot, { effectTimeline: true });
   try {
     const page = await launched.app.firstWindow();
     const errors = [];

@@ -191,6 +191,7 @@
 - [x] DoF `オートフォーカス`（人物優先）を新規sceneの既定として実装（頭 / 首 / 上半身系boneを持つmodelのみ、中央score、25%切替hysteresis、camera target fallback、project round-trip、focused E2E）
 - [x] エフェクトキーの最小PoCとして、カメラモードへガンマのON / OFF・スライダー値のキーを追加。保存・Undo / Redo・Classic / FrameGraph・PNG / WebMを確認（[実験メモ](./gamma-timeline-key-experiment-2026-09-14.md)、2026-09-14）。他エフェクトへの展開は後続で判断する。
 - [x] 海を除く1エフェクト1行の共通基盤について、状態・新形式保存・UI・描画adapter・作業分解を設計。所有者指定により未配布の旧ガンマキー互換を外し、下準備10〜18h（予備込み14〜24h）へ改定（[設計・見積もり](./effect-timeline-common-foundation-design-2026-09-14.md)、2026-09-14）。
+- [x] 所有者指定でエフェクトキーを次版から一時退避。標準のUI・キー再生をOFFにし、実装と保存済みキーを保管。通常のエフェクト調整と照明・影・重力キーは継続。開発用opt-inで再開可能（[休止・再開方法](./effect-timeline-shelving-2026-09-15.md)、2026-09-15）。
 - [x] SSAO・SSGI・SSRのON / OFFと現行UIの6スライダーをキー化。初期OFF準備、半径/ステップ補間、保存・PNG/WebM・Classic往復でキー保持を確認。Frame Graphの対応は合計17種、残りは被写界深度・モーションブラー・パーティクル（[実装・検証](./screen-space-effects-timeline-2026-09-15.md)、2026-09-15）。
 - [x] パラフレア・オフセット影・オフセットリムのON / OFFと現行UIの12スライダーをキー化。初期OFFの深度準備、補間・保存・数値入力同期・PNG/WebMを確認し、対応は合計14種（[実装・検証](./depth-effects-timeline-2026-09-14.md)、2026-09-14）。
 - [x] 空気遠近のON / OFF・強度・開始距離・広がりをキー化。初期OFFで深度を準備し、Frame Graphの補間・保存・PNG/WebM、Classic往復でキー保持を確認。対応は合計11種（[実装・次候補](./aerial-perspective-timeline-2026-09-14.md)、2026-09-14）。

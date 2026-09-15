@@ -146,6 +146,7 @@ import {
     type RuntimeReloadProjectState,
 } from "./project/runtime-reload-project-state";
 
+import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { EffectKeyframeController } from "./ui/effect-keyframe-controller";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
 
@@ -657,7 +658,7 @@ export class UIController {
         });
         this.modelCommentNoticeController = new ModelCommentNoticeController();
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
-        this.effectKeyframeController = new EffectKeyframeController(getRequiredElement("effect-key-controls"), (id, value) => {
+        if (EFFECT_TIMELINE_ENABLED) this.effectKeyframeController = new EffectKeyframeController(getRequiredElement("effect-key-controls"), (id, value) => {
             const first = !this.mmdManager.hasEffectSceneTrack(id);
             this.mmdManager.setEffectScenePreview(id, value);
             if (first) this.refreshFrameGraphPostAddUi();
@@ -8203,6 +8204,7 @@ export class UIController {
     }
 
     private refreshEffectKeyframeUi(): void {
+        if (!EFFECT_TIMELINE_ENABLED) return;
         const track = this.getSelectedTimelineTrack();
         const id = track?.category === "effect" && isEffectId(track.name) ? track.name : null;
         const payload = id ? this.mmdManager.captureCurrentEffectKeyframePayload(id) : null;

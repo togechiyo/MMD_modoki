@@ -11,11 +11,14 @@ export class EffectSceneTrackStore {
     private unknownTracks: unknown[] = [];
     private unknownBlock: SerializedEffectAnimations | null = null;
 
+    constructor(private readonly enabled = true) {}
+
     has(id: EffectId): boolean { return this.entries.has(id); }
     ids(): EffectId[] { return [...this.entries.keys()]; }
     frames(id: EffectId): Uint32Array { return new Uint32Array(this.entries.get(id)?.track.keyframes.map(key => key.frame) ?? []); }
     base(id: EffectId): EffectValue | null { const value = this.entries.get(id)?.track.baseValue; return value ? { ...value } : null; }
     ensure(id: EffectId, base: unknown): void {
+        if (!this.enabled) return;
         if (this.unknownBlock) throw new Error("This project uses a newer effect animation format");
         if (!this.entries.has(id)) this.entries.set(id, { track: { id, interpolation: "linear", baseValue: normalizeEffectValue(getEffectDefinition(id), base), keyframes: [] }, revision: 0 });
     }
@@ -101,7 +104,9 @@ export class EffectSceneTrackStore {
         if (!data || typeof data !== "object") return;
         const block = data as SerializedEffectAnimations;
         if (!Array.isArray(block.tracks)) return;
-        if (block.version !== 1) { this.unknownBlock = structuredClone(block); return; }
+        // Disabled features retain the original block verbatim without evaluating
+        // or normalizing its keys, previews, or future fields.
+        if (!this.enabled || block.version !== 1) { this.unknownBlock = structuredClone(block); return; }
         for (const raw of block.tracks) {
             if (!raw || typeof raw !== "object") continue;
             const item = raw as { effectId?: string; valueVersion?: number; base?: unknown; keys?: Array<{ frame: number; value: unknown }>; preview?: { frame: number; value: unknown } };

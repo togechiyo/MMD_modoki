@@ -36,7 +36,7 @@ async function selectEffect(page, id) {
 
 
 test("shared vignette and edge blur keep independent keys and one prepared composite", async ({}, testInfo) => {
-  const launched = await launchMmdModoki(repoRoot);
+  const launched = await launchMmdModoki(repoRoot, { effectTimeline: true });
   try {
     const page = await launched.app.firstWindow();
     const errors = [];
@@ -113,7 +113,7 @@ for (const backend of ["frameGraph", "classic"]) {
 for (const config of cases) {
 test("scalar " + config.id + " keys: " + backend + " GUI, roundtrip and output", async ({}, testInfo) => {
   const effectId = config.id;
-  const launched = await launchMmdModoki(repoRoot);
+  const launched = await launchMmdModoki(repoRoot, { effectTimeline: true });
   try {
     const page = await launched.app.firstWindow();
     const errors = [];

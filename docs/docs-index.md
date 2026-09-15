@@ -170,6 +170,7 @@
 - [エフェクト単位のタイムライン共通基盤：設計・見積もり 2026-09-14](./effect-timeline-common-foundation-design-2026-09-14.md)
 - [ブルーム幅・ルミナス形状のキーとLUT選択の後続設計 2026-09-14](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)
 - [空気遠近のタイムラインキー 2026-09-14](./aerial-perspective-timeline-2026-09-14.md)
+- [エフェクトキー機能の一時休止 2026-09-15](./effect-timeline-shelving-2026-09-15.md)
 - [SSAO・SSGI・SSRのタイムラインキー 2026-09-15](./screen-space-effects-timeline-2026-09-15.md)
 - [パラフレア・オフセット影・オフセットリムのキー 2026-09-14](./depth-effects-timeline-2026-09-14.md)
 - [LUT・ルミナスのタイムラインキー 2026-09-14](./resource-effect-timeline-2026-09-14.md)

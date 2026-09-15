@@ -33,7 +33,7 @@ async function selectEffect(page, id) {
 for (const backend of ["frameGraph", "classic"]) {
 for (const effectId of ["gamma", "grain", "bloom"]) {
 test(`camera ${effectId} keys: ${backend} registration, playback, save and output`, async ({}, testInfo) => {
-  const launched = await launchMmdModoki(repoRoot);
+  const launched = await launchMmdModoki(repoRoot, { effectTimeline: true });
   try {
     const page = await launched.app.firstWindow();
     const errors = [];

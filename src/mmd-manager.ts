@@ -507,6 +507,7 @@ import {
     type SerializedGravitySceneTrack,
     type SerializedShadowSceneTrack,
 } from "./editor/scene-keyframe-track";
+import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue, type DepthEffectValues, type ScreenSpaceEffectValues } from "./editor/effect-keyframe-definitions";
 import { applyClassicKeyframedBloomBlur } from "./render/keyframed-bloom-blur";
@@ -1963,7 +1964,7 @@ ${beforeFogAppendBlock}
     private gravitySceneTrack: SceneKeyframeTrack<GravitySceneKeyframeValue> | null = null;
     private lastEvaluatedGravitySceneFrame: number | null = null;
     public onEffectKeyframePreviewChanged: (() => void) | null = null;
-    private readonly effectSceneTracks = new EffectSceneTrackStore();
+    private readonly effectSceneTracks = new EffectSceneTrackStore(EFFECT_TIMELINE_ENABLED);
     private effectCaptureDepth = 0;
     private readonly effectPlaybackPreparation = new EffectPlaybackPreparation();
     private effectRenderState = { gammaPower: 1, grainIntensity: 0, grainPrepared: false, bloomWeight: 1, bloomThreshold: 1 };
@@ -6386,6 +6387,7 @@ ${beforeFogAppendBlock}
         return new Uint32Array([...new Set(this.effectSceneTracks.ids().flatMap(effect => [...this.effectSceneTracks.frames(effect)]))].sort((a, b) => a - b));
     }
     public getEffectTimelineTracks(): KeyframeTrack[] {
+        if (!EFFECT_TIMELINE_ENABLED) return [];
         return EFFECT_KEYFRAME_DEFINITIONS
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
     }
@@ -6419,6 +6421,7 @@ ${beforeFogAppendBlock}
         return isEffectId(id) && this.effectSceneTracks.has(id) && !this.getFrameGraphPostEffectStackIds().includes(id);
     }
     public setEffectScenePreview(id: EffectId, value: unknown): void {
+        if (!EFFECT_TIMELINE_ENABLED) return;
         if (this.isPlaying) return;
         const first = !this.effectSceneTracks.has(id);
         this.effectSceneTracks.preview(id, this._currentFrame, value, this.getStaticEffectValue(id));
@@ -6459,6 +6462,7 @@ ${beforeFogAppendBlock}
     public getSerializedEffectSceneTracks(): SerializedEffectAnimations { return this.effectSceneTracks.serialize(); }
     public setSerializedEffectSceneTracks(data: unknown): void {
         this.effectSceneTracks.restore(data, id => this.getStaticEffectValue(id));
+        if (!EFFECT_TIMELINE_ENABLED) return;
         this.applyDefaultPipelinePostProcessSettings();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
         this.effectSceneTracksChanged();

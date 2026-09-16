@@ -8,6 +8,7 @@
 
 次をUTF-8の`my-tint.wgsl`として保存してください。
 
+<!-- authoring-tint:start -->
 ```wgsl
 // ---- ここを編集 ----
 // RGB倍率。vec3f(1.0)で元の色。
@@ -22,6 +23,7 @@ fn effectSurface(s: ModokiSurface) -> ModokiSurfaceOutput {
     return ModokiSurfaceOutput(s.baseColor * TINT, s.diffuseColor, s.normalWS);
 }
 ```
+<!-- authoring-tint:end -->
 
 1. 設定 → 実験機能 →「外部WGSL材質を有効にする」をON。
 2. モデルを選び、Effectパネルの「材質」を開く。
@@ -42,7 +44,23 @@ const STRENGTH: f32 = 0.5;
 
 通常のconstにはWGSLの式・bool・ベクトル・行列も使えます。アプリが値を別設定へコピーしたり範囲補正したりすることはありません。必要なら本文でclampします。
 
+### 編集するときの記法
+
+| 書き方 | 用途・例 |
+| --- | --- |
+| `const 名前: 型 = 値;` | ファイル全体で使う調整定数。`const STRENGTH: f32 = 0.5;` |
+| `f32` | 小数を使う数値。強さや秒数など。`0.5`、`1.0` |
+| `u32` | 負にならない整数。モード番号など。`0u`、`4u` |
+| `vec3f` | 3個の数値。RGBなら`vec3f(1.0, 0.8, 0.8)`。`vec3f(1.0)`は3成分とも1 |
+| `let 名前 = 式;` | 関数内で計算結果に名前を付ける。再代入しない |
+| `var 名前 = 式;` | 関数内で後から値を更新する変数 |
+| `// 説明` | 行末までのコメント。調整用の説明は日本語でもよい |
+
+宣言の末尾は`;`、structのフィールド間は`,`です。入力名は大文字・小文字を区別します。調整定数を大文字にするのはサンプルの読みやすさのためで、作者の定数名まで固定しているわけではありません。
+
 `MODOKI_API_VERSION: u32 = 2u`だけは必須の接続情報です。作品の版を残したければMODOKI_EFFECT_VERSIONを使います。これらの予約定数はliteralで宣言し、計算式にしません。UVが必須なら`const MODOKI_REQUIRE_UV0: bool = true;`を追加します。
+
+API版はアプリとの接続規則、作品版は自作シェーダーの版です。色を調整してもAPI版は`2u`のままです。作品版を上げなくても編集内容は再読込で認識され、作品版が大きいファイルへ自動更新されることもありません。
 
 旧JSON混在形式と旧snapshotの互換はありません。旧ファイルはこの構造へ手で書き直します。
 
@@ -60,24 +78,35 @@ fn effectFinalColor(s: ModokiFinalColor) -> vec3f {
 }
 ```
 
+これは関数部分の差し替え例です。上の`STRENGTH`と必須のAPI版を同じファイルへ置いて使います。同じ名前のhookを2個置かず、既存の関数があれば本文を編集してください。
+
 加算は光向け、乗算は暗く着色する用途です。`mix(s.color, replacement, strength)`は置換で、強さ1では元の模様も消えます。5方式の具体例は[blend-modes.wgsl](./blend-modes.wgsl)。モデルの透明度は変更しません。
 
 ## 時間・カメラ・ライトなどを受け取る
 
-必要な項目をEffectInputsに宣言します。
+必要な項目をEffectInputsに宣言します。次は全体を`my-pulse.wgsl`として保存し、そのまま読み込める例です。1秒に1回、元の色の明るさを変えます。
 
+<!-- authoring-pulse:start -->
 ```wgsl
+// 暗くなる量。目安0〜1、0で変化なし。
+const STRENGTH: f32 = 0.3;
+// 1秒あたりの周期数。0で静止。
+const SPEED: f32 = 1.0;
+
+const MODOKI_API_VERSION: u32 = 2u;
+
 struct EffectInputs {
     TIME: f32,
-    CAMERA_POSITION: vec3f,
 };
 var<uniform> effectInputs: EffectInputs;
 
 fn effectFinalColor(s: ModokiFinalColor) -> vec3f {
-    let wave = 0.5 + 0.5 * sin(effectInputs.TIME * 6.2831853);
-    return s.color * (0.7 + 0.3 * wave);
+    let wave = 0.5 + 0.5 * sin(effectInputs.TIME * SPEED * 6.2831853);
+    let amount = clamp(STRENGTH, 0.0, 1.0);
+    return s.color * (1.0 - amount + amount * wave);
 }
 ```
+<!-- authoring-pulse:end -->
 
 TIMEはタイムライン秒数です。停止中も進めるならTIME_UNSYNCEDへ宣言と参照を変更します。PNGや動画の出力中はどちらも出力時刻に固定します。
 
@@ -105,6 +134,7 @@ MMDとPBRでは照明・色空間が異なるため、同じRGB計算でも同�
 - 独自の`@group`／`@binding`、EffectInputs以外のuniform／storage／workgroupのresource宣言、外部テクスチャ・sampler入力。
 - `discard`やalpha変更、頂点変形、ボーン・モーフを参照する`CONTROLOBJECT`。
 - `#include`等のプリプロセッサ指示。
+- `enable`／`requires`／`diagnostic`のmodule directiveや、module宣言に付ける属性。
 
 元モデルのテクスチャを含む**評価後の色**は使えますが、textureそのものを受け取って別UVでsampleするAPIはありません。
 
@@ -120,7 +150,7 @@ MMEの`.fx`やBabylon.js Node Material Editorの出力を、そのまま読み�
 | 関数が見つからない | effectSurface／effectFinalColorの名前と引数・戻り型が正しいか。 |
 | 入力が非対応 | EffectInputsの固定名・型、PBRでのPhong入力。 |
 | 読めたのに見た目が変わらない | 割当ボタンを押したか、対象材質・モードが合っているか、強さが0でないか。 |
-| 元の模様が消える | `finalColor`で固定色だけを返していないか。下地に`input.color`を使っているか。 |
+| 元の模様が消える | `effectFinalColor`で固定色だけを返していないか。引数名が`s`なら下地に`s.color`を使っているか。 |
 | 直したのに古い表示になる | ファイルを再読込・再割当したか。エラーで前の正常な割当へ戻っていないか。 |
 
 読込・コンパイルエラーはPMX読込エラーと同様、ビューポート上に表示されます。詳細は通知の「ログを開く」から確認できます。GPUコンパイルエラーの行番号は生成されたシェーダー側なので、自分のファイルの同じ行とは限りません。
@@ -136,6 +166,23 @@ MMEの`.fx`やBabylon.js Node Material Editorの出力を、そのまま読み�
 シェーダー単体を渡すときは、作成した`.wgsl`を渡します。必要なコメント・ライセンス・説明も通常のコメントとして自由に書けます。このフォルダへ置くだけでは一覧へ自動登録されないので、受け取った人も読込と割当を行います。
 
 プロジェクト保存では、適用済みのソースをsnapshotとして保存します。GUI保存の`<プロジェクト名>.assets`フォルダもプロジェクトと一緒に移してください。元WGSLの後日の編集・削除は、保存済みsnapshotを自動更新しません。内部保存用の`effect.json`は必要なデータで、撤去した旧JSON版サンプルとは別物です。
+
+## 旧JSON混在形式から書き直す場合
+
+自動変換や旧形式の読み込みは行いません。新しい[template.wgsl](./template.wgsl)を起点に計算を移す場合の対応表です。
+
+| 旧形式の記述 | 新形式での書き方 |
+| --- | --- |
+| 冒頭のJSON設定コメント | 削除し、`const MODOKI_API_VERSION: u32 = 2u;`を宣言 |
+| `name`／`description` | 名前はファイル名へ、説明は通常コメントへ |
+| `parameters`の既定値とUI情報 | 調整用`const`と用途・範囲のコメントへ。参照も定数名へ変更 |
+| 任意名の入力と`semantic`／`annotations` | [固定入力名](./REFERENCE.md#inputs)を`EffectInputs`へ宣言し、`effectInputs.入力名`で参照 |
+| `hooks`に登録していた任意の関数名 | 実際の関数を`effectSurface`／`effectFinalColor`へ改名 |
+| UVが必須という指定 | `const MODOKI_REQUIRE_UV0: bool = true;` |
+
+例として、旧`modokiInputs.Strength`が調整値なら新しい`STRENGTH`定数、旧`modokiInputs.CameraPosition`がCameraのPOSITION入力なら`effectInputs.CAMERA_POSITION`へ直します。単純にすべての`modokiInputs`を`effectInputs`へ置換する方法では移行できません。
+
+旧projectを開いたときはモデル・モーション等の読み込みを継続し、旧WGSLは通知して適用しません。書き直したファイルを読み込み、材質へ割り当ててからprojectを保存してください。
 
 ## 改造元を選ぶ
 

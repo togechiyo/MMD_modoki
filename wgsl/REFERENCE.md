@@ -4,6 +4,8 @@
 
 [作成ガイド](./AUTHORING.md)は入門、[README](./README.md)はサンプル一覧です。UTF-8の単一WGSLファイルへ定数・入力struct・関数を記述します。JSONや機械解釈する設定コメントはありません。既存材質へ差し込む関数なので、単独のWebGPU shader moduleではありません。
 
+すぐ引く項目: [固定構造体](#interfaces)・[hook](#hooks)・[入力名](#inputs)・[行列](#matrices)・[時刻](#time)・[入力宣言](#declarations)・[制限とエラー](#errors)。そのまま保存できるファイル全体の例は[作成ガイド](./AUTHORING.md)を参照してください。
+
 ## 1. 名前と宣言
 
 | 区分 | 規約 |
@@ -20,6 +22,22 @@
 接続版は型`u32`と値`2u`、作品版は3個の10進u32 literal、UV条件はbool literalに限定します。これらはmodule直下に1回だけ置き、式・override・別名・ローカル宣言は使いません。作品版の型とconstructorは`vec3<u32>`表記も使えます。未知の`MODOKI_`宣言はエラーです。
 
 調整値は冒頭へ集め、用途・単位・目安・無効値を通常コメントに書いてください。範囲の強制が必要ならWGSL本文でclampします。アプリは値を抽出・補正せず、専用スライダーも生成しません。`const`変更は再読込・再割当による再コンパイルです。
+
+作品版は作者の版情報です。互換性判定にはAPI版を使い、保存内容の識別にはソースと内部descriptorのhashを使います。作品版による新旧の優先選択・自動更新はありません。コメント変更も保存するソースの変更として扱います。
+
+### 宣言readerが受け付ける範囲
+
+| 場所 | 受け付ける記述 |
+| --- | --- |
+| module直下（関数の外） | `const`、`override`、`var`、`alias`、`struct`、`fn`。接続用の予約宣言は上記の固定形に限定 |
+| 通常の調整const | WGSLの定数式。動的入力を読んだ値はconstにできないため、関数内の`let`等で計算 |
+| EffectInputs | 対応表の固定名と型だけ。型alias・配列・入れ子・field属性は不可 |
+| hook | 固定名・単一の引数・固定の引数型と戻り型。これらを型aliasへ置換しない |
+| 関数本体・補助関数 | 計算をそのまま渡し、型や式の最終検証はWebGPUで行う。材質profileの禁止事項は適用される |
+
+`override`の値をアプリから指定する機能はありません。テキストで変更する調整値には`const`を使ってください。module直下の`let`、`enable`／`requires`／`diagnostic`のdirective、module宣言の属性はreaderの対象外です。Babylonの短縮形`uniform TIME: f32;`も受け付けず、`EffectInputs`と`var<uniform> effectInputs: EffectInputs;`を使います。
+
+UTF-8 BOMとCRLF／LF、`//`行コメント、入れ子の`/* ... */`コメントを扱います。`#include`による別ファイル結合や作者ファイルへのJSON設定は使いません。アプリ提供の`ModokiSurface`等を作者側で再定義しないでください。
 
 <a id="interfaces"></a>
 
@@ -83,7 +101,9 @@ UVを必要条件にする場合は`const MODOKI_REQUIRE_UV0: bool = true;`を�
 ## 3. 呼出規約
 
 ```wgsl
-fn effectSurface(s: ModokiSurface) -> ModokiSurfaceOutput { /* 色2つと法線を返す */ }
+fn effectSurface(s: ModokiSurface) -> ModokiSurfaceOutput {
+    return ModokiSurfaceOutput(s.baseColor, s.diffuseColor, s.normalWS);
+}
 fn effectFinalColor(s: ModokiFinalColor) -> vec3f { return s.color; }
 ```
 
@@ -197,7 +217,7 @@ WORLDINVERSEで戻せるのはmeshのworld変換です。スキニングやモ�
 
 ## 7. 入力宣言をコピーする
 
-全37項目の辞書です。必要な行だけ残してください。PBRではGEOMETRY_SPECULARとGEOMETRY_SPECULARPOWERを必ず除きます。入力不要ならstructとuniform宣言の両方を省略します。空structは使いません。
+全37項目の辞書であり、ファイル全体ではありません。必要な行だけ残し、API版とhookを同じファイルに置いてください。宣言した入力は本文で未使用でも供給・検査の対象になります。PBRではGEOMETRY_SPECULARとGEOMETRY_SPECULARPOWERを必ず除きます。入力不要ならstructとuniform宣言の両方を省略します。空structは使いません。
 
 <!-- reference-inputs:start -->
 ```wgsl
@@ -271,6 +291,8 @@ texture／sampler、独立pass、背景depth、影係数、全ライト配列、
 ## 9. 実装と検証
 
 [リファレンス検証テスト](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/reference.test.ts)で全37入力・固定構造体・行列・PBR差を照合します。GPU描画は別のElectron E2Eで確認します。
+
+2026-09-16のv2実装確認では、全配布サンプルの読込、通常MMD／PBR、Classic／Frame Graph、保存復元・失敗時復帰に加え、入力宣言順を変えたPNGの一致、PNGメニューからの出力、30／60fpsのWebM先頭frameの時刻を確認しました。任意モデル・GPU・全frameの一致を保証するものではありません。詳しい範囲は下記の設計・検証記録を参照してください。
 
 - [宣言の読み取り](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/author-declarations.ts)
 - [入力対応表](https://github.com/togechiyo/MMD_modoki/blob/main/src/external-wgsl/input-registry.ts)

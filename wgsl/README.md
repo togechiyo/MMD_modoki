@@ -1,10 +1,19 @@
 # 外部WGSL材質サンプル（API v2）
 
+更新: 2026-09-16。サンプル11本・作成ガイド・リファレンスはJSONを使わないv2形式に対応しています。
+
 このフォルダは、外部WGSL読込で実際に選べる単一ファイルのサンプルです。**`prismatic-fire.wgsl`** などを選びます。JSONを使わず、冒頭の`const`で調整値、`EffectInputs`で動的入力、所定の関数で処理を宣言します。旧JSON混在形式との互換はありません。
 
 自分で作成・改造する場合は **[カスタムWGSLシェーダーの作り方](./AUTHORING.md)** を参照してください。最小コード、入力一覧、MMD／PBRの違い、色の合成、読込・エラー確認を説明しています。
 
 開発時の型・変数名・入力宣言・座標・時刻の正確な仕様は **[カスタムWGSL開発リファレンス](./REFERENCE.md)** にまとめています。固定の入力名と作者が命名する調整定数を分け、行列24種とコピー用の入力辞書を掲載しています。
+
+| やりたいこと | 読む場所 |
+| --- | --- |
+| コピーして最初の1本を作る | [作成ガイド](./AUTHORING.md)の色乗算・時間アニメーションの完全な例 |
+| サンプルの見た目を変える | このREADMEの調整表と、各ファイル冒頭の`const` |
+| 入力名・型・座標を調べる | [開発リファレンス](./REFERENCE.md#inputs) |
+| 旧JSON混在形式を書き直す | [作成ガイドの移行手順](./AUTHORING.md#旧json混在形式から書き直す場合) |
 
 ## 配布アプリでの場所
 
@@ -37,6 +46,25 @@
 
 MME風の自動入力を学ぶ場合は [入力サンプルの解説](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-mme-inputs-examples.md) から始めてください。材質・ライトの教材は入力を単独表示するため、強さ1では元の材質の照明・テクスチャを置き換えます。
 
+## 最初に編集する定数
+
+定数名をテキストエディタで検索して値を変更します。`MODOKI_API_VERSION`は`2u`のままにしてください。型・末尾の`;`を残し、保存→再読込→再割当で反映します。
+
+| ファイル | 主な調整値 | 元の描画へ戻す値 |
+| --- | --- | --- |
+| `template.wgsl` | `TINT`: RGB倍率 | `TINT = vec3f(1.0)` |
+| `soft-pastel.wgsl` | `STRENGTH`: 色調補正の量 | `STRENGTH = 0.0` |
+| `blend-modes.wgsl` | `BLEND_MODE`: 方式、`LAYER_COLOR`: 重ね色、`OPACITY`: 混合量 | `OPACITY = 0.0` |
+| `aurora-opal.wgsl` | `PATTERN_SCALE`: 細かさ、`SPEED`: 速さ、`RIM_COLOR`／`GLOW`: 縁の光 | `COATING = 0.0` |
+| `moonstone-schiller.wgsl` | `LAYER_TILT`: 光る位置、`SHEEN_WIDTH`: 広がり、`SHEEN_STRENGTH`: 光量 | `COATING = 0.0` |
+| `white-opal.wgsl`／`black-opal.wgsl` | `FLAKE_SCALE`: 細かさ、`FLASH_WIDTH`: 光る角度幅、`COLOR_STRENGTH`: 色の強さ | `COATING = 0.0` |
+| `prismatic-fire.wgsl` | `FACET_SCALE`: 細かさ、`FIRE_SPREAD`: 色分かれ、`SHARPNESS`: 鋭さ | `COATING = 0.0` |
+| `mme-light-material.wgsl` | `DISPLAY_MODE`: 入力の表示方式、`RIM_STRENGTH`: 縁の光 | `BLEND = 0.0` |
+| `mme-space-grid.wgsl` | `DISPLAY_MODE`: 座標の比較、`OBJECT_SPACING`／`PIXEL_SPACING`: 格子間隔 | `STRENGTH = 0.0` |
+| `mme-time-scan.wgsl` | `DISPLAY_MODE`: 時間入力の比較、`SPEED`: 速さ | `STRENGTH = 0.0` |
+
+表の値は既存宣言の右辺を書き換える目安です。同名の`const`を追加する必要はありません。モード値の意味・推奨範囲・0以外の無効値は各ファイルのコメントを参照してください。
+
 ## 宝石の下地と効果（2026-09-13）
 
 宝石5種はモデルのテクスチャ・材質色・陰影を含む`input.color`を下地にします。固定の`BodyColor`は撤去しました。COATING=1でも下地を参照し、0なら元の描画色へ戻ります。
@@ -66,10 +94,10 @@ White Opal・Aurora Opal・Moonstone Schiller・Prismatic Fireは`input.color + 
 ## Aurora Opalの調整
 
 - タイムラインを再生するか、0 → 90フレームへ移動すると模様が流れます。停止中は静止し、同じフレームへ戻ると同じ模様になります。
-- `模様の細かさ`を上げると細かくなります。既定値0.65は数MMD単位の形状向け。大きいモデルで細かすぎる場合は0.1〜0.3程度から調整。
-- `流れる速さ`を0にすると静止。負数は逆方向。
-- `コーティングの強さ`が0なら元の最終色、1なら元の色に効果を全量加算。顔全体より衣装・小物の一部から試すと調整しやすいです。
-- `発光色`、`発光の強さ`で印象を調整。
+- `PATTERN_SCALE`（模様の細かさ）を上げると細かくなります。既定値0.65は数MMD単位の形状向け。大きいモデルで細かすぎる場合は0.1〜0.3程度から調整。
+- `SPEED`（流れる速さ）を0にすると静止。負数は逆方向。
+- `COATING`（コーティングの強さ）が0なら元の最終色、1なら元の色に効果を全量加算。顔全体より衣装・小物の一部から試すと調整しやすいです。
+- `RIM_COLOR`（発光色）、`GLOW`（発光の強さ）で印象を調整。
 
 3段の固定noiseによる連続した色の変化、簡易干渉色、Fresnel風の縁取りとハイライトを重ねています。周期的な縞・細い発光帯と`RibbonWidth`は撤去しました。物理的な薄膜・屈折・SSSではなく、透明度や形状は変更しません。発光は表面への色加算で、周囲の空間へ光をにじませる処理は含みません。
 
@@ -79,13 +107,19 @@ White Opal・Aurora Opal・Moonstone Schiller・Prismatic Fireは`input.color + 
 
 Moonstone Schiller / White Opal / Black Opal / Prismatic Fireは見た目を優先した近似です。カメラを回したりライトの向きを変えると光が移ります。TIMEを使わないため、モデル・カメラ・ライトが静止したまま時間だけ進めても変化しません。
 
-- **シラー**: `光の層の傾き`で光る位置、`シラーの広がり`でぼかし、`シラーの強さ`で青い光の量を調整。
-- **遊色**: `かけらの細かさ`で模様の大きさ、`光る角度の広さ`で点灯範囲、`遊色の強さ`で鮮やかさを調整。
-- **分散風**: `色の分かれ幅`でRGBのきらめきの間隔、`きらめきの鋭さ`で光る角度の狭さ、`色のきらめきの強さ`で色の量を調整。幅0なら色分かれなし、強さ0なら通常の無彩色寄りの光沢になります。
+- **シラー**: `LAYER_TILT`で光る位置、`SHEEN_WIDTH`でぼかし、`SHEEN_STRENGTH`で青い光の量を調整。
+- **遊色**: `FLAKE_SCALE`で模様の細かさ、`FLASH_WIDTH`で点灯範囲、`COLOR_STRENGTH`で鮮やかさを調整。
+- **分散風**: `FIRE_SPREAD`でRGBのきらめきの間隔、`SHARPNESS`できらめきの鋭さ、`FIRE_STRENGTH`で色の量を調整。幅0なら色分かれなし、強さ0なら通常の無彩色寄りの光沢になります。
 
 遊色・分散風の細かさの既定値は小さな比較fixture向けです。大きな衣装へ適用して細かすぎる場合は0.3〜1程度から調整してください。27個の近傍候補を使う固定回数の3D区画計算を行います。追加の画像や描画passは不要ですが、最小テンプレートよりfragment計算量は増えます。遠景の細かな模様・鋭いきらめきはちらつくことがあるため、模様を粗くし、鋭さを下げて調整します。
 
 シラーは表面への色加算、遊色は区画ごとの角度応答、分散風はRGBの光沢方向をずらした表現です。内部構造・波長別屈折・背景の歪み・床への虹色投影は計算しません。透明度は元の材質のままで、透明な宝石へ自動変換するものではありません。
+
+## v2の確認結果（2026-09-16）
+
+配布11本をJSONなしの形式へ書き換え、GUI読込・再編集・適用を確認しました。WGSL関連E2Eは計16件が通過し、通常MMD／PBR、Classic／Frame Graph、保存復元、PNG出力、30／60fpsのWebM先頭frame、エラーからの復帰を確認しています。Phong入力を使う教材の通常MMD専用という制約は維持しています。
+
+詳しい確認範囲は[v2仕様・検証記録](https://github.com/togechiyo/MMD_modoki/blob/main/docs/external-wgsl-authoring-v2-design-2026-09-16.md)を参照してください。以下はv1当時の整理・描画調整の履歴です。
 
 ## 旧サンプルの整理（2026-09-12の履歴）
 

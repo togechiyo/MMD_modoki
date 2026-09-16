@@ -4,6 +4,7 @@ import { ExternalWgslService, type LiveEffectTarget } from "./external-wgsl/serv
 import { checkProjectEffectCount } from "./external-wgsl/limits";
 import type { EffectAsset, EffectAssignment, EffectChange, EffectTarget } from "./external-wgsl/contract";
 import { externalParentOmissionCount } from "./export/external-parent-warning";
+import { seekVideoFrame } from "./export/seek-video-frame";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
 import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
@@ -6954,6 +6955,7 @@ ${beforeFogAppendBlock}
     }
 
     private syncBackgroundMediaVisibility(): void {
+        this.syncBackgroundMediaRenderTargets();
         const visible = this.backgroundMediaVisible
             && !this.exportTransparentBackgroundEnabled;
         if (this.backgroundImageLayer) {
@@ -6962,6 +6964,15 @@ ${beforeFogAppendBlock}
         if (this.backgroundVideoLayer) {
             this.backgroundVideoLayer.isEnabled = visible;
         }
+    }
+
+    private syncBackgroundMediaRenderTargets(): void {
+        // Babylon Layers opt in to each RTT. Keep media in the scene-color input,
+        // never the depth/normal/luminous-mask targets or a post-effect overlay.
+        const targets = [this.frameGraphPostEffectsSceneColorTarget, this.exportRenderSurface?.renderTarget]
+            .filter((target): target is RenderTargetTexture => target != null);
+        if (this.backgroundImageLayer) this.backgroundImageLayer.renderTargetTextures = targets;
+        if (this.backgroundVideoLayer) this.backgroundVideoLayer.renderTargetTextures = targets;
     }
 
     public setExportTransparentBackgroundEnabled(enabled: boolean): void {
@@ -7243,6 +7254,17 @@ ${beforeFogAppendBlock}
         this.setSkydomeVisible(false);
     }
 
+    public async prepareBackgroundVideoFrameForCapture(signal?: AbortSignal): Promise<void> {
+        const video = this.backgroundVideoElement;
+        if (!video || !this.isBackgroundMediaVisible() || this.exportTransparentBackgroundEnabled) return;
+        const duration = Number.isFinite(video.duration) ? video.duration : Number.POSITIVE_INFINITY;
+        const target = Math.max(0, Math.min(this._currentFrame / 30, Math.max(0, duration - 0.001)));
+        await seekVideoFrame(video, target, signal);
+        if (this.backgroundVideoElement !== video) throw new Error("Background video changed during capture");
+        this.backgroundVideoLastSyncedTime = target;
+        this.drawBackgroundVideoFrame(true);
+    }
+
     private syncBackgroundVideoFrame(force = false): void {
         const texture = this.backgroundVideoTexture;
         const video = this.backgroundVideoElement;
@@ -7271,7 +7293,9 @@ ${beforeFogAppendBlock}
             if (!video.paused) {
                 video.pause();
             }
-            if (force || Math.abs(clampedTarget - this.backgroundVideoLastSyncedTime) >= (1 / 120)) {
+            if (!Number.isFinite(this.backgroundVideoLastSyncedTime)
+                || Math.abs(clampedTarget - this.backgroundVideoLastSyncedTime) >= (1 / 120)
+                || (force && Math.abs(video.currentTime - clampedTarget) >= (1 / 120))) {
                 this.backgroundVideoLastSyncedTime = clampedTarget;
                 try {
                     video.currentTime = clampedTarget;
@@ -7280,7 +7304,16 @@ ${beforeFogAppendBlock}
                 }
             }
         }
-        if (video.readyState < video.HAVE_CURRENT_DATA) return;
+        this.drawBackgroundVideoFrame(force);
+    }
+
+    private drawBackgroundVideoFrame(force = false): void {
+        const texture = this.backgroundVideoTexture;
+        const video = this.backgroundVideoElement;
+        const canvas = this.backgroundVideoCanvas;
+        // currentTime changes before decoded pixels do. Never cache old pixels
+        // under the new time while a seek is pending.
+        if (!texture || !video || !canvas || video.seeking || video.readyState < video.HAVE_CURRENT_DATA) return;
 
         const width = Math.max(1, video.videoWidth || canvas.width || 1);
         const height = Math.max(1, video.videoHeight || canvas.height || 1);
@@ -11346,6 +11379,7 @@ ${beforeFogAppendBlock}
         renderTarget.skipInitialClear = false;
         this.installRenderTargetPerformanceHook(renderTarget, "frameGraphSceneColorRenderTarget");
         this.frameGraphPostEffectsSceneColorTarget = renderTarget;
+        this.syncBackgroundMediaRenderTargets();
         this.syncFrameGraphRenderTargetState();
         return renderTarget;
     }
@@ -11541,6 +11575,7 @@ ${beforeFogAppendBlock}
         }
         this.frameGraphPostEffectsSceneColorTarget.dispose();
         this.frameGraphPostEffectsSceneColorTarget = null;
+        this.syncBackgroundMediaRenderTargets();
         // RenderTargetTexture.dispose() owns and disposes attached post-processes.
         this.frameGraphPostEffectsSceneColorPrePassActivationPass = null;
     }
@@ -12209,6 +12244,7 @@ ${beforeFogAppendBlock}
             if (!postEffectReady) {
                 throw new Error("Post effects were not ready for PNG capture");
             }
+            await this.prepareBackgroundVideoFrameForCapture();
             this.renderOnceForCapture(0);
             const renderedFrame = await this.readExportRenderFrameAsync(
                 options.transparentBackground === true ? "straight" : "opaque",
@@ -14419,6 +14455,7 @@ ${beforeFogAppendBlock}
     }
 
     private syncExportRenderSurfaceTarget(): void {
+        this.syncBackgroundMediaRenderTargets();
         const surface = this.exportRenderSurface;
         if (!surface) {
             return;
@@ -15992,6 +16029,7 @@ ${beforeFogAppendBlock}
         }
         surface.dispose();
         this.exportRenderSurface = null;
+        this.syncBackgroundMediaRenderTargets();
         if (rebuildFrameGraph) {
             this.initializePostEffectBackend();
         }

@@ -140,6 +140,7 @@ type ProjectImportHost = {
     setWaterSurfaceSettings: (settings: WaterSurfaceSettings) => WaterSurfaceSettings;
     setBackgroundVideoFromPath(path: string): Promise<void>;
     setBackgroundImageFromPath(path: string): Promise<void>;
+    setBackgroundMediaVisible?: (visible: boolean) => boolean;
     clearBackgroundMedia(): void;
     lightIntensity: number;
     ambientIntensity: number;
@@ -958,6 +959,8 @@ export async function importProjectState(
     } else {
         host.clearBackgroundMedia();
     }
+    // Loading media makes it visible; restore the saved flag only after loading finishes.
+    host.setBackgroundMediaVisible?.(data.viewport.backgroundMediaVisible !== false);
 
     if (lightDirectionX !== null && lightDirectionY !== null && lightDirectionZ !== null) {
         host.setLightDirection(lightDirectionX, lightDirectionY, lightDirectionZ);

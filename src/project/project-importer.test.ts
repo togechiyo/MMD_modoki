@@ -201,6 +201,27 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it.each(["backgroundImagePath", "backgroundVideoPath"] as const)("restores hidden media after loading %s", async (key) => {
+        let visible = true;
+        const host = { ...createHost(), setBackgroundMediaVisible: vi.fn((value: boolean) => { visible = value; return value; }) };
+        host.setBackgroundImageFromPath.mockImplementation(async () => { visible = true; });
+        host.setBackgroundVideoFromPath.mockImplementation(async () => { visible = true; });
+        const project = createProject();
+        project.viewport[key] = "fixture";
+        project.viewport.backgroundMediaVisible = false;
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(visible).toBe(false);
+    });
+
+    it.each([undefined, true])("defaults legacy background media to visible (%s)", async (visible) => {
+        const host = { ...createHost(), setBackgroundMediaVisible: vi.fn() };
+        const project = createProject();
+        project.viewport.backgroundImagePath = "fixture.png";
+        project.viewport.backgroundMediaVisible = visible;
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(host.setBackgroundMediaVisible).toHaveBeenCalledWith(true);
+    });
+
     it("keeps banks separate for duplicate legacy paths and applies the whole-project mode", async () => {
         const host = { ...createHost(), setMmdMaterialPipelinePreset: vi.fn(value => value) };
         host.loadPMX.mockImplementation(async (path: string) => {

@@ -641,6 +641,7 @@ export interface ProjectViewportState {
     waterSurface?: import("./scene/water-surface-settings").WaterSurfaceSettings;
     backgroundImagePath?: string | null;
     backgroundVideoPath?: string | null;
+    backgroundMediaVisible?: boolean;
 }
 
 export type MirroringFloorShape = "square" | "circle";

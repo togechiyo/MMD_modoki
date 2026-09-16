@@ -269,6 +269,7 @@ type ProjectExportHost = {
     getDofFocusTargetBoneName?: () => string | null;
     getBackgroundImagePath: () => string | null;
     getBackgroundVideoPath: () => string | null;
+    isBackgroundMediaVisible?: () => boolean;
     getSkydomeBackgroundStyle?: () => SkydomeBackgroundStyle;
     getExternalWgslToonShaderPath: () => string | null;
     getPostEffectFogColor: () => { r: number; g: number; b: number };
@@ -489,6 +490,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             waterSurface: host.getWaterSurfaceSettings(),
             backgroundImagePath: host.getBackgroundImagePath(),
             backgroundVideoPath: host.getBackgroundVideoPath(),
+            backgroundMediaVisible: host.isBackgroundMediaVisible?.() ?? true,
         },
         physics: {
             enabled: host.getPhysicsEnabled(),

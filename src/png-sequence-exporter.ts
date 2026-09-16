@@ -252,6 +252,7 @@ export async function runPngSequenceExportJob(
                 seekMsTotal += performance.now() - seekStartedAt;
 
                 const captureStartedAt = performance.now();
+                await mmdManager.prepareBackgroundVideoFrameForCapture();
                 mmdManager.renderOnceForCapture(0);
                 const capturedFrame = await mmdManager.readExportRenderFrameAsync(
                     request.transparentBackground === true ? "straight" : "opaque",

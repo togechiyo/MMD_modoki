@@ -781,6 +781,7 @@ export async function runWebmExportJob(
                 throw new Error("FrameGraph post effects were not ready for WebM capture");
             }
         }
+        await mmdManager.prepareBackgroundVideoFrameForCapture(signal);
         if (captureMode === "readpixels") {
             mmdManager.renderOnce(0);
         } else {
@@ -1040,6 +1041,7 @@ export async function runWebmExportJob(
                     mmdManager.setExternalPlaybackFrame(frame);
                     mmdManager.getExternalWgslService().setOutput(1 / fps, startFrame + outputFrameIndex * TIMELINE_FPS / fps);
                     const renderStartedAt = performance.now();
+                    await mmdManager.prepareBackgroundVideoFrameForCapture(signal);
                     if (!playbackStarted) {
                         if (captureMode === "readpixels") {
                             mmdManager.renderOnce(0);

@@ -298,6 +298,15 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it.each([true, false])("preserves background media visibility (%s) independently of its path", (visible) => {
+        const project = exportProjectState({
+            ...createHost(),
+            getBackgroundImagePath: () => "fixture.png",
+            isBackgroundMediaVisible: () => visible,
+        });
+        expect(project.viewport).toMatchObject({ backgroundImagePath: "fixture.png", backgroundMediaVisible: visible });
+    });
+
     it("keeps LUT and luminous static settings separate from evaluated keys", () => {
         const project = exportProjectState({
             ...createHost(), postEffectLutEnabled: true, postEffectLutIntensity: 0.5,

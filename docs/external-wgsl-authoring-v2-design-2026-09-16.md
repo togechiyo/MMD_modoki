@@ -6,7 +6,7 @@
 
 所有者は、作者ファイルへのJSON混在をなくし、テキストエディタで調整箇所を分かりやすくし、Babylon.jsのWGSL処理から離れない方針で仕様再検討を指示した。スライダー用の情報は不要。
 
-この文書を新しい作者形式の設計正本とする。具体的な識別子・API番号・移行手順は以下の提案であり、所有者が個別に指定した名前ではない。現在動作する形式は[現行の使い方](./external-wgsl-material-usage.md)、以前の設計は[v1設計](./external-wgsl-material-api-v1-design.md)。この設計更新だけで現行`.wgsl`や保存済みprojectを無効にしない。
+この文書を新しい作者形式の設計正本とする。具体的な識別子・API番号は以下の提案であり、所有者が個別に指定した名前ではない。現在動作する形式は[現行の使い方](./external-wgsl-material-usage.md)、以前の設計は[v1設計](./external-wgsl-material-api-v1-design.md)。所有者は同日、旧WGSL形式はRelease未収録のため互換不要と指定した。実装時は新形式へ一本化し、旧ファイル・旧snapshotの互換adapterや自動変換は設けない。今回は設計変更のみで、現行ローダーの挙動はまだ変更していない。
 
 **推奨案: 調整値と接続バージョンを`const`、動的入力を独自uniform bufferの`struct`、呼出箇所を所定の関数名で宣言する。JSON・設定用コメント・独自attributeを作者形式へ入れない。**
 
@@ -113,7 +113,7 @@ var<uniform> effectInputs: EffectInputs;
 | `MODOKI_FRAME` | `f32` | 現在の評価frame、小数を保持 |
 | `VIEWPORTPIXELSIZE` | `vec2f` | 作品viewport / 出力の幅・高さ。中間RTのサイズとは別 |
 
-MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの任意名+semantic宣言や既存fxとの互換は保証しない。`TIME`はv2で編集同期ありと明示し、MMEの既定値と混同しない。v1からの移行ではSyncInEditModeのtrue / falseを上記二組へ対応させ、動きを変えない。
+MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの任意名+semantic宣言や既存fxとの互換は保証しない。`TIME`はv2で編集同期ありと明示し、MMEの既定値と混同しない。リポジトリ内の作例を書き直す際は、従来のSyncInEditModeのtrue / falseに対応する入力を選ぶ。旧形式を実行時に変換する互換機構は設けない。
 
 色・座標・行列の定義とPBRでの差は[入力の現行設計](./external-wgsl-material-api-v1-design.md#4-入力semantic)、[PBR接続](./external-wgsl-pbr-adapter.md)を引き継ぐ。行列は`matrix * vector`、world込み行列へworld位置を二重適用しない。時間は同一frame / 複数passで更新し直さず、30 / 60fps出力と小数frameを再現する。
 
@@ -139,14 +139,15 @@ MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの
 
 宣言エラーは作者ファイルの行・列を示す。GPU診断は作者sourceのoffset対応を持ち、対応不能な生成箇所を作者の行番号として誤表示しない。ライセンス・調整コメント込みの原文を保存し、GPU用のコメント除去済みsourceとは区別する。
 
-## 7. 保存と旧形式の移行
+## 7. 新形式への一本化と保存
 
-- 新規作者形式をv2とし、単独JSONも`/* @modoki { ... } */`も新規形式として受け付けない。旧形式検出時は移行方法を案内し、未知形式をv1 / v2へ推測変換しない。
-- **保存済みprojectのv1 snapshotとparameter上書きは互換adapterで保持する。** 今回の指示を既存project破棄へ広げない。再保存でv1 assetを無条件にv2へ書き換えない。
+- 所有者判断: 旧WGSL形式はReleaseへ載せていないため、**旧形式との互換は不要**。新形式だけを実装・保守する。v1専用parser・描画adapter・parameter上書き復元・混在実行・自動変換は維持しない。
+- 単独JSONも`/* @modoki { ... } */`も受け付けない。旧形式検出時は新形式での書き直しが必要な旨を診断する。変換ツールの提供を必須作業にしない。
+- 保存済みprojectの旧WGSL snapshotも復元対象外。旧WGSLの割当を適用せず、対象を通知してモデル・モーション等の読込を継続する。旧パラメーターの再現は保証しない。これはWGSL部分に限った扱いで、project全体の旧版互換を廃止する指示ではない。
 - 新規v2 assetには作者source、作者形式/APIの識別、表示用の元ファイル名、content revisionを持たせる。内部JSON/sidecarは継続利用可能。既存manifest apiVersion=1とは別に識別し、復元時もv2宣言検査を通す。
-- v2の調整値の正本はsourceの`const`。新しいassignmentにUI用parametersを二重保存しない。既存v1では同一assetに材質別parameter差があり得るため、移行時は実効値ごとにsource/revisionを分ける。旧既定値だけへ戻す変換をしない。
-- 移行は旧parameters → `const`、旧入力 →対応field、旧hook名 → 所定hookへのwrapper、`requires.uv0` →予約bool、name →ファイル名/通常コメントへ変換する。名前衝突・制約不足で機械変換できない場合は箇所を列挙して止める。勝手なsource上書きはしない。
-- v2のlive reload / Undo / 複製 / mode bank切替もrevisionとsource単位で扱う。元ファイル削除後もsnapshotから復元する。既存v1と混在したprojectの両backend・PNG / WebM一致を移行の受入条件にする。
+- v2の調整値の正本はsourceの`const`。新しいassignmentにUI用parametersを二重保存しない。旧材質別parameter値の移行処理は作らない。
+- リポジトリ管理の作例・説明書・fixtureは新宣言へ書き直す。旧runtime互換の維持とは分けて扱い、ユーザーの外部ファイルは自動上書きしない。
+- v2のlive reload / Undo / 複製 / mode bank切替もrevisionとsource単位で扱う。元ファイル削除後も新形式snapshotから復元する。新形式の両backend・PNG / WebM一致を受入条件にする。
 
 ## 8. 確認したこと・実装時の検証
 
@@ -162,8 +163,8 @@ MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの
 
 1. 宣言reader / 内部descriptor: コメント・改行・重複・scope・未知version・入力名と型・hook署名のunit。調整用constの任意式は保持する。
 2. plugin接続: no-input / scalar + vec3 + mat4 / 異なるfield順・layoutでGPU compileと実値を確認。候補失敗時の元buffer保持、繰り返し解除での解放を確認。
-3. 保存互換: v1上書き値が材質ごとに異なるproject、v2混在、元ファイル欠落、Undo / Redo、MMD / PBR往復を確認。
+3. 保存復元: 新形式の材質別割当、元ファイル欠落、Undo / Redo、MMD / PBR往復を確認。旧WGSLファイルを明示拒否し、旧snapshotを含むprojectではWGSLを適用せず他のデータを読み込めることを確認する。旧描画の再現・混在実行は受入条件に含めない。
 4. 作者資料: 全配布sampleの先頭へ調整定数と日本語説明を揃え、読込・再編集・失敗通知・最終GUI表示をローカルElectron E2Eで確認してから移行する。
 5. 出力: Classic / Frame Graph、PNG / WebM、30 / 60fps、時間同期あり/なし、行列・画面サイズで同frameの結果を比較する。lint・unit・critical型検査、起動/IPC変更時のsmokeも実施する。
 
-宣言readerに使う既存parserの適合性（ライセンス、対応WGSL版、source位置保持）と、v1変換の提供方法は実装前の調査事項。CPU probeだけを根拠に全WGSL parserを新規自作しない。API番号・識別子の具体案はこの検証で必要があれば調整する。
+宣言readerに使う既存parserの適合性（ライセンス、対応WGSL版、source位置保持）は実装前の調査事項。旧形式の変換・互換層は調査・実装対象から外す。CPU probeだけを根拠に全WGSL parserを新規自作しない。API番号・識別子の具体案はこの検証で必要があれば調整する。

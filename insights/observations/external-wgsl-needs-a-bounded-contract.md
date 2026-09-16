@@ -31,7 +31,7 @@ MME風のユーザー shader、材質snippet、画面後段effectを外部ファ
 
 ## 判断
 
-2026-09-16の作者形式見直しでは、[v2設計](../../docs/external-wgsl-authoring-v2-design-2026-09-16.md)に従ってJSONをWGSLの定数・struct・関数へ移す案を整理した。Babylonのcustom UBO宣言処理はCPU probeで確認したが、ローダー・GPU統合は未検証。以下のmanifest + sourceはv1の実装履歴であり、JSONを新形式の必須要件としない。
+2026-09-16の作者形式見直しでは、[v2設計](../../docs/external-wgsl-authoring-v2-design-2026-09-16.md)に従ってJSONをWGSLの定数・struct・関数へ移す案を整理した。Babylonのcustom UBO宣言処理はCPU probeで確認したが、ローダー・GPU統合は未検証。所有者はRelease未収録の旧形式との互換を不要と指定しており、以下のmanifest + sourceはv1の実装履歴。JSONや旧snapshot互換を新形式の必須要件としない。
 
 入力、resource、適用対象、保存、compile失敗時の復帰をアプリ側で規定し、段階的に検証する。初期のMaterial Snippet案は実装順の候補であり、用途の恒久的な制限ではない。2026-09-12の[所有者方針](../decisions/external-wgsl-follows-mme-concepts.md)に従い、MMEの名前と用途を参考に公開APIを検討する。
 

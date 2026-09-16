@@ -49,7 +49,7 @@
 | adopted | [実体のないヘルプ項目は表示しない](./decisions/omit-empty-help-menu-items.md) | 上位メニュー、ショートカット、ログ、Aboutの導線を変更する |
 | adopted | [キー登録の上書き確認は出さない](./decisions/key-registration-overwrites-without-confirmation.md) | キー登録、同一フレーム上書き、Auto Key、Undo導線を変更する |
 | adopted | [作業の区切りで commit・push する](./decisions/commit-and-push-at-verified-work-boundaries.md) | 通常作業のcommit・push時期、検証、対象差分を判断する |
-| adopted | [上級者向け外部WGSLはMMEの名前と用途を参考にする](./decisions/external-wgsl-follows-mme-concepts.md) | JSON混合を廃止する作者形式へ再設計。調整箇所をテキストで明示し、BabylonのWGSL処理に沿う。通常MMD/PBR、単一WGSL・共通割当・読込1ボタン・sample同梱・viewport通知と復旧導線を維持。具体的なv2宣言は設計案 |
+| adopted | [上級者向け外部WGSLはMMEの名前と用途を参考にする](./decisions/external-wgsl-follows-mme-concepts.md) | JSON混合を廃止し新形式へ一本化。Release未収録の旧形式・snapshot互換は不要。調整箇所をテキストで明示し、BabylonのWGSL処理に沿う。通常MMD/PBR、単一WGSL・共通割当・読込1ボタン・sample同梱・viewport通知と復旧導線を維持。具体的なv2宣言は設計案 |
 | adopted | [宝石WGSLサンプルは見た目の近似を優先する](./decisions/gemstone-samples-prioritize-visual-approximation.md) | モデル色・模様を下地に光学効果を重ね、シラー・遊色・分散を見た目で近似する |
 
 ## 却下

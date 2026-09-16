@@ -19,6 +19,7 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | --- | --- | --- |
 | policy | [キーフレーム編集の正本は source animation とする](./policies/source-animation-is-editor-canonical-state.md) | キー編集、保存値、runtime preview を変更する |
 | policy | [UI 設定は状態ライフサイクル全体を実装する](./policies/ui-state-must-complete-its-lifecycle.md) | 設定 UI、保存、backend 同期を追加する |
+| verified | [外部親カメラは初期化済みのボーン行列だけを適用する](./verified/camera-external-parent-requires-initialized-bone-matrix.md) | 外部親の復元や出力だけの暗転を調査する |
 | policy | [数値入力は Enter で確定する](./policies/numeric-inputs-use-explicit-commit.md) | 数値入力欄を追加・変更する |
 | verified | [タイムラインは更新頻度ごとに描画レイヤーを分ける](./verified/timeline-static-and-dynamic-layers.md) | 再生時の timeline 更新を変更する |
 

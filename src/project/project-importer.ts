@@ -679,6 +679,37 @@ export async function importProjectState(
         if (!loaded) warnings.push(`Camera motion load failed: ${data.assets.cameraVmdPath}`);
     }
 
+    const cameraExternalParentTrack = data.keyframes?.cameraExternalParents ?? null;
+    if (cameraExternalParentTrack) {
+        host.setCameraExternalParentKeyframes?.(cameraExternalParentTrack);
+    }
+
+    const cameraExternalParent = cameraExternalParentTrack ? null : data.camera?.externalParent ?? null;
+    if (cameraExternalParent && typeof cameraExternalParent === "object") {
+        let parentModelIndex: number | null = null;
+        if (cameraExternalParent.modelInstanceId || cameraExternalParent.modelPath) {
+            parentModelIndex = findLoadedModelIndex(
+                cameraExternalParent.modelInstanceId,
+                cameraExternalParent.modelPath,
+            );
+            if (parentModelIndex < 0) {
+                warnings.push(
+                    `Camera external parent model not found: ${cameraExternalParent.modelInstanceId ?? cameraExternalParent.modelPath}`,
+                );
+                parentModelIndex = null;
+            }
+        }
+        if (parentModelIndex !== null) {
+            host.setCameraExternalParent?.(
+                parentModelIndex,
+                typeof cameraExternalParent.boneName === "string" && cameraExternalParent.boneName.length > 0
+                    ? cameraExternalParent.boneName
+                    : null,
+            );
+        }
+    }
+
+    // Parent registration resets the local camera pose. Restore the saved pose after it.
     if (
         !restoredEmbeddedCamera &&
         data.camera &&
@@ -727,36 +758,6 @@ export async function importProjectState(
             fallbackDistance,
             fallbackFov,
         );
-    }
-
-    const cameraExternalParentTrack = data.keyframes?.cameraExternalParents ?? null;
-    if (cameraExternalParentTrack) {
-        host.setCameraExternalParentKeyframes?.(cameraExternalParentTrack);
-    }
-
-    const cameraExternalParent = cameraExternalParentTrack ? null : data.camera?.externalParent ?? null;
-    if (cameraExternalParent && typeof cameraExternalParent === "object") {
-        let parentModelIndex: number | null = null;
-        if (cameraExternalParent.modelInstanceId || cameraExternalParent.modelPath) {
-            parentModelIndex = findLoadedModelIndex(
-                cameraExternalParent.modelInstanceId,
-                cameraExternalParent.modelPath,
-            );
-            if (parentModelIndex < 0) {
-                warnings.push(
-                    `Camera external parent model not found: ${cameraExternalParent.modelInstanceId ?? cameraExternalParent.modelPath}`,
-                );
-                parentModelIndex = null;
-            }
-        }
-        if (parentModelIndex !== null) {
-            host.setCameraExternalParent?.(
-                parentModelIndex,
-                typeof cameraExternalParent.boneName === "string" && cameraExternalParent.boneName.length > 0
-                    ? cameraExternalParent.boneName
-                    : null,
-            );
-        }
     }
 
     if (data.assets.audioPath) {

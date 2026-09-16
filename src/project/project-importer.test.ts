@@ -1162,7 +1162,7 @@ describe("importProjectState", () => {
         expect(Array.from(animation.cameraTrack.frameNumbers)).toEqual([0]);
     });
 
-    it("restores camera external parent after loading models", async () => {
+    it.each([false, true])("restores camera external parent before the saved pose (forExport=%s)", async (forExport) => {
         const host = createHost();
         host.loadPMX.mockImplementation(async (path: string, _pipeline, _renderOrder, requestedInstanceId) => {
             const instanceId = requestedInstanceId ?? `model-${host.sceneModels.length + 1}`;
@@ -1192,9 +1192,12 @@ describe("importProjectState", () => {
             },
         });
 
-        await importProjectState(host, project);
+        await importProjectState(host, project, { forExport });
 
         expect(host.setCameraExternalParent).toHaveBeenCalledWith(0, "頭");
+        // Setting a parent resets the local pose; restore saved XYZ/rotation afterwards.
+        expect(host.setCameraExternalParent.mock.invocationCallOrder[0])
+            .toBeLessThan(host.applyCameraTrackPose.mock.invocationCallOrder[0]);
     });
 
     it("restores camera external parent keyframes before legacy camera parent", async () => {

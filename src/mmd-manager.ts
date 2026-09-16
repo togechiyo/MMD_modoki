@@ -10409,6 +10409,7 @@ ${beforeFogAppendBlock}
         this.cameraKeyframeFrames = EMPTY_KEYFRAME_FRAMES;
         this.cameraMotionPath = null;
         this.cameraSourceAnimation = null;
+        this.setCameraExternalParentKeyframes(null);
         this.lightSceneTrack = null;
         this.lastEvaluatedLightSceneFrame = null;
         this.shadowSceneTrack = null;
@@ -15312,10 +15313,12 @@ ${beforeFogAppendBlock}
             this.cameraExternalParentTarget.copyFrom(this.mmdCamera.target);
         }
         this.cameraExternalParentUp.copyFrom(rotatedUp);
-        this.applyCameraExternalParentToViewportVectors();
+        if (!this.applyCameraExternalParentToViewportVectors()) return;
         this.camera.upVector = this.cameraExternalParentUp.clone();
         this.camera.setPosition(this.cameraExternalParentPosition);
-        this.camera.setTarget(this.cameraExternalParentTarget);
+        // ArcRotateCamera retains the target by reference. Keep the scratch vector
+        // separate so preparing a deferred parent pose cannot mutate the live view.
+        this.camera.setTarget(this.cameraExternalParentTarget.clone());
         this.camera.fov = this.mmdCamera.fov;
         this.cameraRotationEulerDeg.set(
             (this.mmdCamera.rotation.x * 180) / Math.PI,
@@ -15401,10 +15404,11 @@ ${beforeFogAppendBlock}
         this.cameraExternalParentBoneName = normalizedBoneName;
     }
 
-    private applyCameraExternalParentToViewportVectors(): void {
-        if (!this.getCameraExternalParentMatrixToRef(this.cameraExternalParentMatrix)) return;
+    private applyCameraExternalParentToViewportVectors(): boolean {
+        if (this.cameraExternalParentModelIndex === null) return true;
+        if (!this.getCameraExternalParentMatrixToRef(this.cameraExternalParentMatrix)) return false;
 
-        transformCameraExternalParentVectorsToRef(
+        return transformCameraExternalParentVectorsToRef(
             this.cameraExternalParentMatrix,
             this.cameraExternalParentPosition,
             this.cameraExternalParentTarget,

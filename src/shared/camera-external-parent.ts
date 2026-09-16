@@ -82,9 +82,16 @@ export function transformCameraExternalParentVectorsToRef(
     position: Vector3,
     target: Vector3,
     up: Vector3,
-): void {
+): boolean {
+    // A newly loaded runtime bone can still expose its zero-filled world matrix
+    // until its first after-physics evaluation. Transforming coordinates through
+    // it divides by zero and permanently poisons ArcRotateCamera's angle cache.
+    for (const value of parentMatrix.m) if (!Number.isFinite(value)) return false;
+    const determinant = parentMatrix.determinant();
+    if (!Number.isFinite(determinant) || determinant === 0) return false;
     Vector3.TransformCoordinatesToRef(position, parentMatrix, position);
     Vector3.TransformCoordinatesToRef(target, parentMatrix, target);
     Vector3.TransformNormalToRef(up, parentMatrix, up);
     up.normalize();
+    return true;
 }

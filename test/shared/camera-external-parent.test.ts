@@ -9,6 +9,20 @@ import {
     upsertCameraExternalParentKeyframe,
 } from "../../src/shared/camera-external-parent";
 
+describe("external parent initialization", () => {
+    it("rejects the uninitialized zero bone matrix without corrupting camera vectors", () => {
+        const position = new Vector3(0, 3, -20);
+        const target = new Vector3(0, 3, -19);
+        const up = Vector3.Up();
+        expect(transformCameraExternalParentVectorsToRef(Matrix.Zero(), position, target, up)).toBe(false);
+        expect(position.asArray()).toEqual([0, 3, -20]);
+        expect(target.asArray()).toEqual([0, 3, -19]);
+        expect(up.asArray()).toEqual([0, 1, 0]);
+        expect(transformCameraExternalParentVectorsToRef(Matrix.Translation(40, 0, 0), position, target, up)).toBe(true);
+        expect(position.asArray()).toEqual([40, 3, -20]);
+    });
+});
+
 describe("camera external parent keyframes", () => {
     const keyframes = [
         { frame: 5, modelPath: "model-a.pmx", boneName: "head" },

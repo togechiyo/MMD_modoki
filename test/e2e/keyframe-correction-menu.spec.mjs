@@ -46,7 +46,7 @@ const cameraAnimation = {
   ],
 };
 
-test("編集メニューからカメラキーを全選択し、位置と回転を補正してUndoできる", async () => {
+test("カメラキーの位置・回転・距離を補正し、Undo・Redo・再読込できる", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -97,12 +97,14 @@ test("編集メニューからカメラキーを全選択し、位置と回転�
     await dialog.locator('[data-correction-channel="center-x"][data-correction-operation="multiply"]').fill("2");
     await dialog.locator('[data-correction-channel="center-x"][data-correction-operation="add"]').fill("1");
     await dialog.locator('[data-correction-channel="rotation-z"][data-correction-operation="add"]').fill("15");
+    await dialog.locator('[data-correction-channel="distance"][data-correction-operation="add"]').fill("5");
     await expect(dialog.getByText("対象 2 キー / 変更 2 キー", { exact: false })).toBeVisible();
     await dialog.getByRole("button", { name: "適用" }).click();
     await expect(dialog).toBeHidden();
 
     const corrected = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().keyframes.cameraAnimation);
     expectNumbersClose(corrected.positions, [3, 2, 3, 9, 5, 6]);
+    expectNumbersClose(corrected.distances, [-35, -50]);
     const expectedRotations = unpackNumbers(beforeCorrection.rotations);
     expectedRotations[2] += 15 * Math.PI / 180;
     expectedRotations[5] += 15 * Math.PI / 180;
@@ -115,6 +117,19 @@ test("編集メニューからカメラキーを全選択し、位置と回転�
     const reverted = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().keyframes.cameraAnimation);
     expectNumbersClose(reverted.positions, unpackNumbers(beforeCorrection.positions));
     expectNumbersClose(reverted.rotations, unpackNumbers(beforeCorrection.rotations));
+    expectNumbersClose(reverted.distances, [-30, -45]);
+
+    await editMenu.click();
+    await page.locator('.app-menu-item[data-menu-command="edit.redo"]').click();
+    expectNumbersClose(await page.evaluate(() => (
+      window.mmdModokiE2e.exportProjectState().keyframes.cameraAnimation.distances
+    )), [-35, -50]);
+    await page.evaluate(async () => {
+      await window.mmdModokiE2e.importProjectState(window.mmdModokiE2e.exportProjectState());
+      window.mmdModokiE2e.seekTo(0);
+    });
+    await page.locator("#info-model-select").selectOption("__camera__");
+    await expect.poll(async () => Number(await page.locator('#bone-controls input[data-control-key="camDistance"]').inputValue())).toBeCloseTo(35, 4);
     expect(pageErrors).toEqual([]);
   } finally {
     await launched.close();

@@ -202,11 +202,40 @@ describe("keyframe value correction", () => {
                 0.4,
                 -0.3,
             ],
-            distances: [-40],
+            distances: [-50],
             fovs: [50],
         });
         expect(payload.distances).toEqual([-45]);
         expect(payload.fovs).toEqual([30]);
+    });
+
+    it.each([
+        [-45, 1, -5, -40],
+        [-45, 2, 5, -95],
+        [-45, 1, -50, 5],
+        [45, 1, 0, 45],
+        [45, 1, 5, 40],
+        [-45, -1, 0, 45],
+        [0, 1, 5, -5],
+    ])("corrects signed camera distance %s with multiply %s and add %s to %s", (source, multiply, add, expected) => {
+        const payload: CameraKeyframePayload = {
+            kind: "camera",
+            positions: [0, 0, 0], positionInterpolations: [],
+            rotations: [0, 0, 0], rotationInterpolations: [],
+            distances: [source], distanceInterpolations: [],
+            fovs: [30], fovInterpolations: [],
+            externalParent: { modelPath: null, boneName: null },
+        };
+        const correction: KeyframeValueCorrection = {
+            kind: "camera", center: identityXyzCorrection, rotation: identityXyzCorrection,
+            distance: { multiply, add }, fov: { multiply: 1, add: 0 },
+        };
+        expect(applyKeyframeValueCorrection(payload, correction)).toEqual({ ...payload, distances: [expected] });
+        const preview = createKeyframeValueCorrectionPreview([payload], correction);
+        expect(preview.beforeMin).toBe(Math.min(0, -source));
+        expect(preview.beforeMax).toBe(Math.max(30, -source));
+        expect(preview.afterMin).toBe(Math.min(0, -expected));
+        expect(preview.afterMax).toBe(Math.max(30, -expected));
     });
 
     it("corrects morph weights without clamping MMD values", () => {

@@ -225,7 +225,7 @@ function getSourceValues(payload: TimelineKeyframePayload, kind: KeyframeValueCo
                 ? [
                     ...payload.positions.slice(0, 3),
                     ...payload.rotations.slice(0, 3).map((value) => value * 180 / Math.PI),
-                    payload.distances[0] ?? 0,
+                    -(payload.distances[0] ?? 0),
                     payload.fovs[0] ?? 0,
                 ]
                 : null;
@@ -289,7 +289,9 @@ export function applyKeyframeValueCorrection(
             const camera = payload as CameraKeyframePayload;
             const positions = applyVector3(camera.positions, correction.center);
             const rotations = applyCameraEulerRotation(camera.rotations, correction.rotation);
-            const distance = applyScalar(camera.distances[0] ?? 0, correction.distance);
+            // Source/VMD distance has the opposite sign to the camera editing axis.
+            // Keep it signed so identity corrections and crossings through zero remain lossless.
+            const distance = -applyScalar(-(camera.distances[0] ?? 0), correction.distance);
             const fov = applyScalar(camera.fovs[0] ?? 0, correction.fov);
             if (!areFinite([...positions, ...rotations, distance, fov])) return null;
             return {

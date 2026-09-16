@@ -90,7 +90,7 @@ cameraのsource値は注視点xyz、Euler radians xyz、**負のdistance**、deg
 - `mmd_register_keyframes`: 同じscope、`tracks:[{category,name}]`、`collision:"reject"|"replace"`を指定。現在frameの整数部分へ最大100トラックの現在値を1履歴で登録。カメラ/ボーンは既存GUIの単位変換・補間・物理キー入力モードを使い、AI側でquaternionや負のカメラ距離へ変換する必要はない。モーフ・property・light・shadow・gravity・accessoryも既存capture関数を使う。補間値取得に伴うpanel bindingの変更は復元する。
 - `mmd_transform_keyframes`: 同じscopeと`operation`を指定。列操作は `{action:"insertFrames"|"deleteFrames",frame,count}`。その対象の全トラックを処理し、挿入はframe以降を後ろへ移動、削除は `[frame,frame+count)` を除去して後続を前へ移動する。countは1..10000、frame上限1000000、影響する既存sourceキーは最大1000。仮想表示キーは変更しない。
 - ミラーは `{action:"mirror",keys:[{track,frame}],frameOffset,collision}`。既存の左右名解決と反転計算を使い、相手側トラックの実categoryへコピーする。キー最大100。
-- 補正は `{action:"correct",keys:[{track,frame}],correction}`。kindはbone/camera/morph。各成分 `{multiply,add}` で `値*multiply+add`、ベクトルはxyz成分。角度補正は度、camera distance補正は**負のsource値**に適用する。変更しない成分はmultiply:1/add:0。不適切なpayload種別や範囲外は全変更前に拒否し、上限で黙ってclampしない。
+- 補正は `{action:"correct",keys:[{track,frame}],correction}`。kindはbone/camera/morph。各成分 `{multiply,add}` で `値*multiply+add`、ベクトルはxyz成分。角度補正は度。camera distanceは2026-09-16にGUIと同じ符号変換へ変更し、sourceの符号を反転して補正後に戻す（source -45へadd:5で-50、通常のカメラでは遠ざかる）。変更しない成分はmultiply:1/add:0。不適切なpayload種別や範囲外は全変更前に拒否し、上限で黙ってclampしない。GUI helperはゼロ通過を許すが、MCPは既存schemaのsource距離範囲-100000..0を維持する。
 - 列・ミラー・補正も `keyframe.transaction` に集約し、対象変更やsource競合をGUI/MCP双方のUndo/Redoで検査する。操作のためにGUI選択範囲やクリップボードを変更しない。
 - `mmd_redo`: contextのredoIdまたは元のeditIdを指定し、Redo要求自体には新しいoperationIdを使う。手動編集を飛び越えず、失敗時に履歴を進めない。キーUndoによる再評価でpreview値が変わった場合、それ以前のpreview Undoは競合として拒否することがある。
 

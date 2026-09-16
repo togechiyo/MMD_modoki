@@ -185,6 +185,7 @@
 - [x] 空フレーム挿入 / フレーム列削除を batch key edit として実装
 - [x] 選択キーの位置 XYZ 補正を1操作単位で実装
 - [x] カメラ距離 / FoV 補正を実装
+- [x] 距離の正の加算で遠ざかるよう符号を修正し、preview・Undo / Redo・保存復元を確認（[V022-070対応](./keyframe-value-correction-implementation-2026-08-24.md#カメラ距離の符号)）
 - [x] 回転 XYZ 補正の Euler / Quaternion 整合を調査・実装
 - [x] 読み込み済み PMX の静止姿勢を比較し、センター系・足IK移動キーを体格比で一括補正（プレビュー、undo / redo対応）
 - [x] 既存 UI の影色 RGB / Toon 影響度 / 影描画範囲 / 照度キーを project 独自トラックとして実装（MMD のセルフ影 mode は不採用）

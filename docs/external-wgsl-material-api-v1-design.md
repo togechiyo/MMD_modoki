@@ -2,7 +2,7 @@
 
 更新: 2026-09-12 / 状態: Aの初期実装を追加。B以降と未検証項目は設計案
 
-2026-09-16 設計更新: 作者形式は[JSONを使わないv2再設計](./external-wgsl-authoring-v2-design-2026-09-16.md)を新しい正本とする。以下のJSON設定・parameters・任意hook名はv1の記録であり、新規実装の目標にしない。入力の意味・材質内の処理位置・復帰の要件はv2でも参照する。現行ローダーはまだv1で、v2の実装・GPU検証は未実施。
+2026-09-16 更新: 作者形式は[JSONを使わないv2仕様](./external-wgsl-authoring-v2-design-2026-09-16.md)を正本とする。以下のJSON設定・parameters・任意hook名はv1の実装履歴。現行ローダーと配布サンプルはv2へ移行済みで、旧形式の互換は維持しない。入力の意味・材質内の処理位置・復帰の要件はv2でも参照する。検証範囲はv2仕様の第9節に記録した。
 
 現在の使い方・実装差分・確認範囲は [外部WGSL材質の使い方](./external-wgsl-material-usage.md)を参照する。以下は拡張も含めた設計であり、全項目が実装済みという意味ではない。
 
@@ -20,7 +20,7 @@
 
 配布・読込は `effect.wgsl` などの単一ファイルへ統一する。先頭に `/* @modoki` とJSON設定を置き、`*/` の後へ計算・struct・helper関数を書く。旧JSON定義の直接読込は撤去する（2026-09-12の所有者指定）。
 
-設定が入力型・semantic・parameter既定値・entry関数の正本。書式は [使い方](./external-wgsl-material-usage.md#単一wgslの書式)、[実例](./examples/external-material-effect-v1/effect.wgsl)、[設定のSchema案](./schemas/external-material-effect-v1.schema.json)を参照する。schemaのB向けfieldはruntime未対応。
+旧形式では設定が入力型・semantic・parameter既定値・entry関数の正本だった。[旧設定のSchema案](./schemas/external-material-effect-v1.schema.json)は履歴として保持する。現行の書式と実例は[使い方](./external-wgsl-material-usage.md)と[v2実例](./examples/external-material-effect-v2/effect.wgsl)を参照する。
 
 - UTF-8。BOMと先頭空白は許可する。設定ブロックは先頭に1つのみ。
 - 設定JSONへ `sources` は指定しない。全関数を同じファイル内に置く。複数ソース参照・独自include・ネットワーク取得は行わない。

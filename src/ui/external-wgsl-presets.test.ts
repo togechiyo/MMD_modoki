@@ -3,7 +3,7 @@ import type { EffectAsset } from "../external-wgsl/contract";
 import { externalEffectPresetId } from "./external-wgsl-presets";
 
 function asset(revision: string, originPath?: string): EffectAsset {
-    return { revision, originPath, manifest: { apiVersion: 1, kind: "mmd-material", name: "same label", sources: ["main.wgsl"], hooks: {} }, sources: [] };
+    return { revision, originPath, manifest: { apiVersion: 2, kind: "mmd-material", name: "same label", sources: ["main.wgsl"], hooks: {}, inputs: {}, inputOrder: [] }, sources: [] };
 }
 describe("external WGSL preset identity", () => {
     it("replaces a Windows file after editing without duplicating the list entry", () => {

@@ -35,21 +35,21 @@ export class ExternalWgslMaterialPlugin extends MaterialPluginBase {
         this.generation = asset ? nextRevision++ : 0;
         const fields = this.fields();
         if (fields.length) {
-            const buffer = new UniformBuffer(this._material.getScene().getEngine(), undefined, true, "modokiInputs");
+            const buffer = new UniformBuffer(this._material.getScene().getEngine(), undefined, true, "effectInputs");
             for (const [name, field] of fields) buffer.addUniform(name, field.type === "mat4x4f" ? 16 : field.type.startsWith("vec") ? Number(field.type[3]) : 1);
             buffer.create(); this.buffer = buffer;
         }
         this.markAllDefinesAsDirty();
         this._material.resetDrawCache();
     }
-    private fields() { return Object.entries({ ...this.asset?.manifest.inputs, ...this.asset?.manifest.parameters }).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0); }
+    private fields() { const asset = this.asset; return asset ? asset.manifest.inputOrder.map(name => [name, asset.manifest.inputs[name]] as const) : []; }
     public prepareDefines(defines: MaterialDefines, _scene: Scene, mesh: AbstractMesh): void {
         Object.assign(defines, { MODOKI_EFFECT_REV: this.generation, MODOKI_HAS_UV: Boolean(this.asset && mesh.isVerticesDataPresent("uv")) });
     }
     public getAttributes(attributes: string[], _scene: Scene, mesh: AbstractMesh): void {
         if (this.asset && mesh.isVerticesDataPresent("uv") && !attributes.includes("uv")) attributes.push("uv");
     }
-    public getUniformBuffersNames(names: string[]): void { names.push("modokiInputs"); }
+    public getUniformBuffersNames(names: string[]): void { names.push("effectInputs"); }
     public hardBindForSubMesh(_buffer: UniformBuffer, _scene: Scene, _engine: unknown, subMesh: SubMesh): void {
         if (!this.asset || !this.assignment || !this.buffer || !subMesh.effect) return;
         try {
@@ -62,7 +62,7 @@ export class ExternalWgslMaterialPlugin extends MaterialPluginBase {
             }
             this.buffer.update();
             const data = this.buffer.getBuffer();
-            if (data) subMesh.effect.bindUniformBuffer(data, "modokiInputs");
+            if (data) subMesh.effect.bindUniformBuffer(data, "effectInputs");
         } catch (error) {
             this.configure(null, this.assignment);
             this.failure = error instanceof Error ? error.message : String(error);
@@ -70,9 +70,7 @@ export class ExternalWgslMaterialPlugin extends MaterialPluginBase {
     }
     public generatedSource(): string {
         if (!this.asset) return "";
-        const fields = this.fields();
-        return interfaces + (fields.length ? `struct ModokiEffectInputs {\n${fields.map(([name, field]) => `    ${name}: ${field.type},`).join("\n")}\n};\nvar<uniform> modokiInputs: ModokiEffectInputs;\n` : "")
-            + this.asset.sources.map(s => `\n// Source: ${s.path}\n${s.text}\n`).join("");
+        return interfaces + this.asset.sources.map(s => `\n// Source: ${s.path}\n${s.text}\n`).join("");
     }
     public getCustomCode(shaderType: string): Record<string, string> {
         // Always register the same injection points, including before an effect is selected.

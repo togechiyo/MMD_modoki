@@ -28,7 +28,7 @@ for (const backend of ["classic", "frameGraph"]) test(`external WGSL ${backend}:
         await page.locator('[data-effect-tab="materials"]').click();
         const editor = wgslFixtureEditor(app.app, page, testInfo, root);
         const folder = testInfo.outputPath("effect");
-        cpSync(resolve(root, "docs/examples/external-material-effect-v1"), folder, { recursive: true });
+        cpSync(resolve(root, "docs/examples/external-material-effect-v2"), folder, { recursive: true });
         const sourcePath = resolve(folder, "effect.wgsl");
         const originalSource = readFileSync(sourcePath, "utf8");
         const select = page.locator("#shader-preset-select");
@@ -43,7 +43,7 @@ for (const backend of ["classic", "frameGraph"]) test(`external WGSL ${backend}:
         const externalCount = async () => (await state()).scene.models[0]?.materialShaders?.filter(item => item.externalEffect).length ?? 0;
         const id = await editor.importFile(sourcePath);
         expect(id).toMatch(/^external-effect::/);
-        await expect(select.locator("option:checked")).toContainText("タイムライン連動の色調整");
+        await expect(select.locator("option:checked")).toContainText("WGSL: effect");
         await expect(page.locator("#external-wgsl-panel, [data-wgsl-parameter], [data-wgsl-color], [data-wgsl-range]")).toHaveCount(0);
         await expect(page.locator('[id^="external-wgsl-"]')).toHaveCount(1);
         expect(await externalCount()).toBe(0);
@@ -68,7 +68,7 @@ for (const backend of ["classic", "frameGraph"]) test(`external WGSL ${backend}:
         await errorCard.locator(".viewport-runtime-status__action--quiet").click();
         writeFileSync(sourcePath, "/* @modoki\n{broken}\n*/\n");
         await editor.importFile(sourcePath);
-        await expect(errorCard).toContainText("metadata JSON");
+        await expect(errorCard).toContainText("MODOKI_API_VERSION");
         expect((await state()).scene.models[0].materialShaders).toEqual(saved.scene.models[0].materialShaders);
         await errorCard.locator(".viewport-runtime-status__action--quiet").click();
         const oldPath = resolve(folder, "effect.modoki.json");
@@ -82,7 +82,7 @@ for (const backend of ["classic", "frameGraph"]) test(`external WGSL ${backend}:
 
         editWgslParameter(sourcePath, "Strength", 0.7);
         await editor.importFile(sourcePath); await editor.apply(false);
-        expect((await state()).scene.models[0].materialShaders.some(item => item.externalEffect?.parameters.Strength === 0.7)).toBe(true);
+        expect((await state()).externalEffects.some(asset => asset.sources?.some(source => source.text.includes("const STRENGTH: f32 = 0.7;")))).toBe(true);
         await select.selectOption("wgsl-mmd-standard"); await page.locator("#btn-shader-apply-selected").click();
         await expect.poll(externalCount).toBe(1);
         await expect(page.locator(".shader-material-item.active .shader-material-preset")).not.toContainText("WGSL:");
@@ -115,7 +115,7 @@ for (const backend of ["classic", "frameGraph"]) test(`external WGSL ${backend}:
         await openSettings(); await permission.check(); await expect(permission).toBeEnabled();
         await dialog.locator(".app-menu-dialog-close").click();
         await expect(select.locator('option[value^="external-effect::"]')).not.toHaveCount(0);
-        expect((await state()).scene.models[0].materialShaders.some(item => item.externalEffect?.parameters.Strength === 0.7)).toBe(true);
+        expect((await state()).externalEffects.some(asset => asset.sources?.some(source => source.text.includes("const STRENGTH: f32 = 0.7;")))).toBe(true);
         await openSettings(); await dialog.getByLabel("PBRモード", { exact: true }).check();
         await expect(dialog.getByLabel("PBRモード", { exact: true })).toBeEnabled({ timeout: 25000 });
         expect((await state()).scene.models[0].materialShaders.every(item => !item.externalEffect)).toBe(true);

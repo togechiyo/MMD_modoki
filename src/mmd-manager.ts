@@ -2,7 +2,8 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { cameraPoseFocusedOnPoints } from "./shared/camera-focus";
 import { ExternalWgslService, type LiveEffectTarget } from "./external-wgsl/service";
 import { checkProjectEffectCount } from "./external-wgsl/limits";
-import type { EffectAsset, EffectAssignment, EffectChange, EffectTarget } from "./external-wgsl/contract";
+import type { EffectAsset, EffectChange, EffectTarget } from "./external-wgsl/contract";
+import { withoutLegacyWgsl } from "./external-wgsl/project-format";
 import { externalParentOmissionCount } from "./export/external-parent-warning";
 import { seekVideoFrame } from "./export/seek-video-frame";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
@@ -1072,9 +1073,9 @@ export class MmdManager {
         });
         return this.externalWgslService;
     }
-    public async applyExternalWgsl(targets: EffectTarget[], asset: EffectAsset | null, parameters?: EffectAssignment["parameters"]): Promise<EffectChange[]> {
+    public async applyExternalWgsl(targets: EffectTarget[], asset: EffectAsset | null): Promise<EffectChange[]> {
         if (this.materialModeSwitching) throw new Error("Material mode switch in progress");
-        return this.getExternalWgslService().apply(targets, asset, parameters);
+        return this.getExternalWgslService().apply(targets, asset);
     }
     public restoreExternalWgsl(changes: EffectChange[], direction: "apply" | "revert"): boolean {
         if (this.materialModeSwitching || this.externalWgslService?.busy) return false;
@@ -10492,14 +10493,15 @@ ${beforeFogAppendBlock}
         if (this.materialModeSwitching) throw new Error("Wait for the material mode switch before loading a project");
         if (this.externalWgslService?.busy) throw new Error("Wait for WGSL compilation before loading a project");
         if (!this.isProjectFileV1(data)) throw new Error("Invalid project file format or version");
-        const project = data as Partial<MmdModokiProjectFileV1> | null;
-        if (Array.isArray(project?.externalEffects)) checkProjectEffectCount(project.externalEffects);
+        const original = data as MmdModokiProjectFileV1;
+        if (Array.isArray(original.externalEffects)) checkProjectEffectCount(original.externalEffects);
+        const { project, warnings: formatWarnings } = withoutLegacyWgsl(original);
         const service = this.getExternalWgslService();
-        const result = await importProjectStateImpl(this, data, options);
+        const result = await importProjectStateImpl(this, project, options);
         const warnings = await service.importAssets(Array.isArray(project?.externalEffects) ? project.externalEffects : []);
         service.setOutput(options.forExport ? 0 : null);
         await service.reconcile();
-        result.warnings.push(...warnings, ...(service.diagnostic ? [service.diagnostic] : []));
+        result.warnings.push(...formatWarnings, ...warnings, ...(service.diagnostic ? [service.diagnostic] : []));
         return result;
     }
 

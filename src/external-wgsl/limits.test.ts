@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { checkMetadataBudget, checkProjectEffectCount, checkTextBudget, WGSL_SOURCE_BYTES } from "./limits";
 import { parseEffectFile } from "./single-file";
-import { parseEffectManifest, validateEffectSources } from "./contract";
 
-const metadata = { apiVersion: 1, kind: "mmd-material", name: "Test", hooks: { finalColor: "shade" } };
+
 describe("WGSL resource budgets", () => {
     it("bounds the number of project assets before sidecar IO", () => {
         expect(() => checkProjectEffectCount(Array(128).fill(null))).not.toThrow();
@@ -20,12 +19,9 @@ describe("WGSL resource budgets", () => {
         const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
         expect(() => checkMetadataBudget(cyclic)).toThrow(/nesting/);
         expect(() => checkMetadataBudget(Array.from({ length: 4097 }, () => 1))).toThrow(/entries/);
-        expect(() => parseEffectFile(`/* @modoki\n${JSON.stringify({ ...metadata, description: "x".repeat(65536) })}\n*/`)).toThrow(/metadata.*exceeds/);
+        expect(() => checkMetadataBudget({ name: "x".repeat(65536) })).toThrow(/metadata.*exceeds/);
     });
-    it("bounds the combined uniform layout and normalized legacy sources", () => {
-        const parameters = Object.fromEntries(Array.from({ length: 129 }, (_, i) => ["P" + i, { type: "f32", default: 0 }]));
-        expect(() => parseEffectManifest({ ...metadata, sources: ["a"], parameters })).toThrow(/128/);
-        const manifest = parseEffectManifest({ ...metadata, sources: ["a", "b"] });
-        expect(() => validateEffectSources(manifest, [{ path: "a", text: " ".repeat(600000) }, { path: "b", text: " ".repeat(600000) }])).toThrow(/combined/);
+    it("requires a material hook even for a version-only source", () => {
+        expect(() => parseEffectFile("const MODOKI_API_VERSION: u32 = 2u;")).toThrow(/hook/);
     });
 });

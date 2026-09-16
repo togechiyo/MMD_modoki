@@ -272,8 +272,8 @@
 - [x] MME風の自動入力を実際に使う教材3種を追加。材質・ライト・視点、行列・viewport、TIME・ELAPSEDTIME・frameを解説付きで比較（[入力サンプル](./external-wgsl-mme-inputs-examples.md)）
 - [x] 外部WGSLの専用編集UIを撤去。読込1ボタンから既存プリセット一覧・割当ボタンへ統合し、テキスト編集・保存復元・解除を確認（[現行の使い方](./external-wgsl-material-usage.md)）
 - [x] 外部WGSLを冒頭設定コメント付きの単一ファイルへ統一。JSON読込を撤去し、9作例・作者例を移行。両描画経路で読込・再編集・失敗復帰・元ファイル削除後の保存復元を確認（[単一WGSL書式](./external-wgsl-material-usage.md#単一wgslの書式)）
-- [x] 2026-09-16: JSONを廃止する作者形式の仕様を再検討。調整用const・入力UBO・固定hook、編集例と検証条件を整理。所有者指定によりRelease未収録の旧WGSL形式・snapshot互換は不要、新形式へ一本化する。Babylon 9.2.0のCPU宣言probe成功、ローダー実装・GPU検証は未実施（[v2設計](./external-wgsl-authoring-v2-design-2026-09-16.md)）
-  - [ ] v2の宣言reader・材質接続・新snapshot保存復元・配布sample書換を実装し、旧形式の拒否とGUI / PNG / WebMを検証する
+- [x] 2026-09-16: JSONを廃止し、調整用const・入力UBO・固定hookのv2作者形式へ一本化。所有者指定によりRelease未収録の旧WGSL形式・snapshot互換は維持しない（[v2仕様・検証](./external-wgsl-authoring-v2-design-2026-09-16.md)）
+  - [x] 宣言reader・材質接続・新snapshot保存復元・配布11sample書換を実装。Classic / Frame Graph、通常MMD / PBR、GUI / PNG / WebM、旧形式の拒否とproject読込継続を検証
 - [ ] 外部WGSL材質B以降：light hook・texture・CONTROL入力、全variant検証とsource位置の逆変換（入力の意味は[v1設計](./external-wgsl-material-api-v1-design.md)、新作者形式は[v2設計](./external-wgsl-authoring-v2-design-2026-09-16.md)）
 - [ ] 主要エフェクトの WGSL 化
 - [ ] WebGL2 vs WebGPU 性能比較

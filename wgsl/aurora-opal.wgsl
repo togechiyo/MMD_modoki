@@ -1,27 +1,32 @@
-/* @modoki
-{
-  "apiVersion": 1,
-  "kind": "mmd-material",
-  "name": "Aurora Opal",
-  "description": "モデルの色・模様・陰影を下地に、ゆっくり移り変わる柔らかな虹色のグラデーションを重ねる。",
-  "hooks": { "finalColor": "shadeOpal" },
-  "inputs": {
-    "Time": { "type": "f32", "semantic": "TIME", "annotations": { "SyncInEditMode": true } },
-    "WorldInverse": { "type": "mat4x4f", "semantic": "WORLDINVERSE", "annotations": { "Object": "Geometry" } },
-    "CameraPosition": { "type": "vec3f", "semantic": "POSITION", "annotations": { "Object": "Camera" } },
-    "LightDirection": { "type": "vec3f", "semantic": "DIRECTION", "annotations": { "Object": "Light" } }
-  },
-  "parameters": {
-    "RimColor": { "type": "vec3f", "default": [0.25, 0.95, 0.85], "ui": { "label": "発光色", "control": "color", "min": 0, "max": 1 } },
-    "PatternScale": { "type": "f32", "default": 0.65, "ui": { "label": "模様の細かさ", "min": 0.02, "max": 8, "step": 0.02 } },
-    "Speed": { "type": "f32", "default": 0.35, "ui": { "label": "流れる速さ", "min": -2, "max": 2, "step": 0.05 } },
-    "Glow": { "type": "f32", "default": 0.7, "ui": { "label": "発光の強さ", "min": 0, "max": 2, "step": 0.05 } },
-    "Coating": { "type": "f32", "default": 0.92, "ui": { "label": "コーティングの強さ", "min": 0, "max": 1, "step": 0.01 } }
-  }
-}
-*/
+// Aurora Opal
+// モデルの色・模様・陰影を下地に、ゆっくり移り変わる柔らかな虹色のグラデーションを重ねる。
 
-// External material API v1. The host supplies the declared inputs and hook interfaces.
+// ---- ここを編集: 見た目の調整 ----
+// 発光色。目安0〜1。縁へ加算するRGB。vec3f(0.0)で縁の発光なし。
+const RIM_COLOR: vec3f = vec3f(0.25, 0.95, 0.85);
+// 模様の細かさ。目安0.02〜8。座標への倍率。大きいほど細かい。
+const PATTERN_SCALE: f32 = 0.65;
+// 流れる速さ。目安-2〜2。秒あたりの位相量。0で停止、負数で逆方向。
+const SPEED: f32 = 0.35;
+// 発光の強さ。目安0〜2。縁への加算倍率。0で縁の発光なし。模様は残る。
+const GLOW: f32 = 0.7;
+// コーティングの強さ。目安0〜1。0で効果なし。1で元の照明済みRGBに効果を全量合成。
+const COATING: f32 = 0.92;
+
+// ---- 接続仕様: 通常は変更しない ----
+const MODOKI_API_VERSION: u32 = 2u;
+const MODOKI_EFFECT_VERSION: vec3u = vec3u(1u, 0u, 0u);
+
+// ---- アプリから受け取る入力（必要な項目だけ宣言） ----
+struct EffectInputs {
+    TIME: f32,
+    WORLDINVERSE: mat4x4f,
+    CAMERA_POSITION: vec3f,
+    LIGHT_DIRECTION: vec3f,
+};
+var<uniform> effectInputs: EffectInputs;
+
+// ---- 計算処理 ----
 // All patterns are evaluated from position; no UVs, textures, or extra passes.
 
 fn opalHash(point: vec3f) -> f32 {
@@ -56,19 +61,19 @@ fn opalSpectrum(phase: f32) -> vec3f {
     return vec3f(0.52) + 0.48 * cos(6.2831853 * (vec3f(phase) + vec3f(0.05, 0.32, 0.58)));
 }
 
-fn shadeOpal(input: ModokiFinalColor) -> vec3f {
+fn effectFinalColor(input: ModokiFinalColor) -> vec3f {
     let surface = input.surface;
     // Remove the mesh world transform so moving the model does not slide the pattern.
     // This is posed mesh space, not undeformed skinning/rest space.
-    let local = (modokiInputs.WorldInverse * vec4f(surface.positionWS, 1.0)).xyz;
-    let p = local * modokiInputs.PatternScale;
-    let time = modokiInputs.Time * modokiInputs.Speed;
+    let local = (effectInputs.WORLDINVERSE * vec4f(surface.positionWS, 1.0)).xyz;
+    let p = local * PATTERN_SCALE;
+    let time = effectInputs.TIME * SPEED;
     let drift = vec3f(time * 0.17, -time * 0.23, time * 0.11);
     let cloud = opalCloud(p + drift);
 
     let normal = opalUnit(surface.normalWS);
-    let view = opalUnit(modokiInputs.CameraPosition - surface.positionWS);
-    let light = opalUnit(-modokiInputs.LightDirection);
+    let view = opalUnit(effectInputs.CAMERA_POSITION - surface.positionWS);
+    let light = opalUnit(-effectInputs.LIGHT_DIRECTION);
     let facing = clamp(abs(dot(normal, view)), 0.0, 1.0);
     let rim = pow(1.0 - facing, 2.6);
     let ndl = max(dot(normal, light), 0.0);
@@ -80,10 +85,10 @@ fn shadeOpal(input: ModokiFinalColor) -> vec3f {
     // Broad continuous gradients: no repeated stripe phase or narrow threshold bands.
     let softness = mix(0.35, 0.85, cloud);
     let film = spectrum * softness * 0.24 * (0.2 + 0.8 * ndl);
-    let emission = mix(spectrum, modokiInputs.RimColor, 0.65)
-        * (softness * 0.18 + rim * 0.35) * modokiInputs.Glow;
+    let emission = mix(spectrum, RIM_COLOR, 0.65)
+        * (softness * 0.18 + rim * 0.35) * GLOW;
     let effect = film + emission + mix(vec3f(1.0), spectrum, 0.25) * glint * 0.3;
     // input.color retains texture, material colour and lighting at every coating strength.
     // Alpha is owned by the host. Coating=0 is exactly the original final colour.
-    return input.color + effect * modokiInputs.Coating;
+    return input.color + effect * COATING;
 }

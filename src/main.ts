@@ -436,6 +436,7 @@ const sanitizePngSequenceExportRequest = (request: PngSequenceExportRequest): Pn
   return {
     project: request.project,
     externalLut: sanitizeExportExternalLut(request.externalLut),
+    externalWgslEnabled: request.externalWgslEnabled === true,
     outputDirectoryPath: request.outputDirectoryPath,
     startFrame,
     endFrame,

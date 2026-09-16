@@ -39,7 +39,7 @@ export function validateEffectAsset(value: EffectAsset): EffectAsset {
     return { revision, manifest, sources: value.sources, ...(value.originPath ? { originPath: value.originPath } : {}) };
 }
 export async function readEffectPackage(filePath: string): Promise<EffectAsset> {
-    if (path.extname(filePath).toLowerCase() !== ".wgsl") throw new Error("Select a .wgsl file with @modoki metadata; JSON import is no longer supported");
+    if (path.extname(filePath).toLowerCase() !== ".wgsl") throw new Error("Select a .wgsl file with MODOKI_API_VERSION = 2u; JSON import is no longer supported");
     const { manifest, sources } = parseEffectFile(await readBounded(filePath, WGSL_SOURCE_BYTES), path.basename(filePath));
     const revision = createHash("sha256").update(canonicalEffectContent({ manifest, sources })).digest("hex");
     return { revision, manifest, sources, originPath: filePath };
@@ -82,7 +82,13 @@ export async function readTextWithEffects(file: string): Promise<string> {
     const assets: ProjectWithEffects["externalEffects"] = [];
     // Sequential IO bounds peak sidecar buffers; each asset is validated before IPC.
     for (const value of project.externalEffects) {
-        if ("manifest" in value) { assets.push(validateEffectAsset(value)); continue; }
+        if ("manifest" in value) {
+            // Keep only a bounded unresolved reference for diagnostics, never unchecked source over IPC.
+            try { assets.push(validateEffectAsset(value)); }
+            catch { assets.push({ revision: typeof value.revision === "string" ? value.revision.slice(0, 64) : "",
+                path: "Unsupported or invalid inline WGSL snapshot (API v2 required)" }); }
+            continue;
+        }
         try {
             const resolved = await containedFile(path.dirname(file), value.path);
             const asset = validateEffectAsset(JSON.parse(await readBounded(resolved, WGSL_SIDECAR_BYTES)));

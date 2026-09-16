@@ -38,7 +38,7 @@ export class ExternalWgslPresets {
         return new Map([...this.manager.getExternalWgslService().getAssets().map(asset => [externalEffectPresetId(asset), asset] as const), ...this.imported]);
     }
     public catalog() {
-        return [...this.assets()].map(([id, asset]) => ({ id, label: `WGSL: ${asset.manifest.name}`, description: asset.manifest.description ?? "" }));
+        return [...this.assets()].map(([id, asset]) => ({ id, label: `WGSL: ${asset.manifest.name}`, description: "" }));
     }
     public static isExternal(id: string): boolean { return id.startsWith(prefix); }
     public assigned(target: EffectTarget): { id: string; label: string } | null {

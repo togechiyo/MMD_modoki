@@ -519,6 +519,7 @@ export class ExportUiController {
         this.setStatus("Launching high-resolution PNG export...", true);
         const result = await window.electronAPI.startPngSequenceExportWindow({
             project,
+            externalWgslEnabled: this.mmdManager.getExternalWgslService().enabled,
             externalLut,
             outputDirectoryPath: saveTarget.directoryPath,
             startFrame: frame,
@@ -591,6 +592,7 @@ export class ExportUiController {
         this.setStatus("Launching PNG sequence export window...", true);
         const result = await window.electronAPI.startPngSequenceExportWindow({
             project,
+            externalWgslEnabled: this.mmdManager.getExternalWgslService().enabled,
             externalLut,
             outputDirectoryPath,
             startFrame,

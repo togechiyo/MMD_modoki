@@ -10,10 +10,22 @@ async function fixture() {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "modoki-effect-test-")); directories.push(directory);
     const manifest = { apiVersion: 1, kind: "mmd-material", name: "色", hooks: { finalColor: "shade" } };
     const file = path.join(directory, "effect.wgsl");
-    await fs.writeFile(file, `/* @modoki\n${JSON.stringify(manifest)}\n*/\nfn shade(s: ModokiFinalColor) -> vec3f { return s.color; }`);
+    await fs.writeFile(file, "const MODOKI_API_VERSION: u32 = 2u;\nfn effectFinalColor(s: ModokiFinalColor) -> vec3f { return s.color; }");
     return { directory, file, manifest };
 }
 describe("WGSL package and project IO", () => {
+    it("preserves project data but does not send invalid inline source over IPC", async () => {
+        const f = await fixture(); const asset = await readEffectPackage(f.file);
+        const project = path.join(f.directory, "old.mmdproj");
+        const scene = { models: [{ path: "fixture.pmx" }] };
+        for (const invalid of [{ ...asset, manifest: { ...asset.manifest, apiVersion: 1 } },
+            { ...asset, sources: [{ path: "effect.wgsl", text: "x".repeat(1024 * 1024 + 1) }] }]) {
+            await fs.writeFile(project, JSON.stringify({ format: "mmd_modoki_project", version: 1, scene, externalEffects: [invalid] }));
+            const restored = JSON.parse(await readTextWithEffects(project));
+            expect(restored.scene).toEqual(scene);
+            expect(restored.externalEffects).toEqual([{ revision: asset.revision, path: "Unsupported or invalid inline WGSL snapshot (API v2 required)" }]);
+        }
+    });
     it("rejects oversized author files before parsing and keeps oversized sidecars unresolved", async () => {
         const f = await fixture(); const asset = await readEffectPackage(f.file);
         await fs.writeFile(f.file, " ".repeat(1024 * 1024 + 1));

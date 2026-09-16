@@ -1,36 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { parseEffectManifest, validateEffectSources, maskWgslComments, canonicalEffectContent, validateParameter } from "./contract";
+import { parseEffectManifest, validateEffectSources, maskWgslComments, canonicalEffectContent, defaultEffectAssignment, setEffectAssignment } from "./contract";
+import { parseEffectFile } from "./single-file";
 
-const manifest = () => ({ apiVersion: 1, kind: "mmd-material", name: "色", sources: ["main.wgsl"], hooks: { finalColor: "shade" }, inputs: { Time: { type: "f32", semantic: "TIME", annotations: { SyncInEditMode: true } } } });
-describe("external material contract", () => {
-    it("accepts function return and ignores nested comments when checking declarations", () => {
-        const m = parseEffectManifest(manifest());
-        expect(() => validateEffectSources(m, [{ path: "main.wgsl", text: "/* @fragment /* discard */ */\nfn shade(s: ModokiFinalColor) -> vec3f { return s.color; }" }])).not.toThrow();
+const source = "const MODOKI_API_VERSION: u32 = 2u;\nstruct EffectInputs { TIME: f32, WORLD: mat4x4f, }\nvar<uniform> effectInputs: EffectInputs;\nfn effectFinalColor(s: ModokiFinalColor) -> vec3f { return s.color; }";
+describe("external material snapshot contract", () => {
+    it("ignores nested comments while preserving lines", () => {
         expect(maskWgslComments("/* a\nb */x")).toBe("    \n    x");
-    });
-    it.each(["../main.wgsl", "/main.wgsl", "C:/main.wgsl", "https://example/main.wgsl", "a\\b.wgsl"])("rejects package escape %s", path => {
-        expect(() => parseEffectManifest({ ...manifest(), sources: [path] })).toThrow();
-    });
-    it("rejects missing time policy, unknown inputs and unsupported hooks", () => {
-        expect(() => parseEffectManifest({ ...manifest(), inputs: { Time: { type: "f32", semantic: "TIME" } } })).toThrow();
-        expect(() => parseEffectManifest({ ...manifest(), inputs: { X: { type: "f32", semantic: "TYPO" } } })).toThrow();
-        expect(() => parseEffectManifest({ ...manifest(), hooks: { light: "shade" } })).toThrow();
-    });
-    it("rejects resource declarations and incomplete comments", () => {
-        expect(() => validateEffectSources(parseEffectManifest(manifest()), [{ path: "main.wgsl", text: "var<uniform> x: f32;" }])).toThrow(/main.wgsl:1/);
         expect(() => maskWgslComments("/* nested /* */")).toThrow();
     });
-    it("checks vector shape, ranges and finite GPU values", () => {
-        const p = { type: "vec3f", default: [1, 1, 1], ui: { min: 0, max: 1 } } as const;
-        expect(() => validateParameter({ ...p, default: [...p.default] }, [1, 1])).toThrow();
-        expect(() => validateParameter({ ...p, default: [...p.default] }, [1, 2, 1])).toThrow();
-        expect(() => validateParameter({ type: "f32", default: 0 }, 1e100)).toThrow();
+    it.each(["../main.wgsl", "/main.wgsl", "C:/main.wgsl", "https://example/main.wgsl", "a\\b.wgsl"])("rejects package escape %s", path => {
+        expect(() => parseEffectFile(source, path)).toThrow();
     });
-    it("canonicalizes field order without changing source order or Unicode", () => {
-        const m = parseEffectManifest(manifest());
-        const a = { manifest: m, sources: [{ path: "main.wgsl", text: "日本語" }] };
-        const b = { sources: a.sources, manifest: { ...m, name: "色" } };
+    it("rejects v1 snapshots and parameter-bearing assignments", () => {
+        const { manifest } = parseEffectFile(source);
+        expect(() => parseEffectManifest({ ...manifest, apiVersion: 1 })).toThrow();
+        expect(() => setEffectAssignment({}, { effectRevision: "a".repeat(64), enabled: true, parameters: {} } as never)).toThrow();
+        expect(defaultEffectAssignment({ ...parseEffectFile(source), revision: "a".repeat(64) })).toEqual({ effectRevision: "a".repeat(64), enabled: true });
+    });
+    it("checks snapshot descriptor against source including uniform order and hooks", () => {
+        const { manifest, sources } = parseEffectFile(source);
+        expect(() => validateEffectSources(manifest, sources)).not.toThrow();
+        expect(() => validateEffectSources({ ...manifest, inputOrder: ["WORLD", "TIME"] }, sources)).toThrow(/does not match/);
+        expect(() => validateEffectSources({ ...manifest, name: "fake" }, sources)).toThrow(/does not match/);
+        expect(() => validateEffectSources(manifest, [{ ...sources[0], text: source.replace("TIME: f32", "TIME: vec3f") }])).toThrow(/requires f32/);
+        expect(() => parseEffectManifest({ ...manifest, inputOrder: ["TIME", "TIME"] })).toThrow(/order/);
+    });
+    it("canonicalizes object keys but preserves semantic array/source order and Unicode", () => {
+        const a = parseEffectFile(source, "色.wgsl");
+        const b = { sources: a.sources, manifest: { ...a.manifest, inputs: { WORLD: a.manifest.inputs.WORLD, TIME: a.manifest.inputs.TIME } } };
         expect(canonicalEffectContent(a)).toBe(canonicalEffectContent(b));
-        expect(canonicalEffectContent(a)).toContain("日本語");
+        expect(canonicalEffectContent(a)).toContain("色");
+        expect(canonicalEffectContent(a)).not.toBe(canonicalEffectContent({ ...a, manifest: { ...a.manifest, inputOrder: ["WORLD", "TIME"] } }));
     });
 });

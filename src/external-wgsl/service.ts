@@ -8,7 +8,7 @@ import { checkProjectEffectCount } from "./limits";
 import { isWgslRecoveryBlocked, setWgslRecoveryBlocked, wgslPermissionKey as permissionKey, wgslRecoveryApi } from "./recovery";
 import { t } from "../i18n";
 import { EffectClock, resolveEffectInputs, validateEffectMaterialInputs, type EffectTime, type EffectMaterial } from "./inputs";
-import { canonicalEffectContent, defaultEffectAssignment, getEffectAssignment, parseEffectManifest, setEffectAssignment, validateEffectSources, validateParameter,
+import { canonicalEffectContent, defaultEffectAssignment, getEffectAssignment, parseEffectManifest, setEffectAssignment, validateEffectSources,
     type EffectAsset, type EffectAssetReference, type EffectAssignment, type EffectChange, type EffectTarget } from "./contract";
 
 export type LiveEffectTarget = { target: EffectTarget; material: EffectMaterial; meshes: AbstractMesh[] };
@@ -146,14 +146,13 @@ export class ExternalWgslService {
         return { assignment, name: asset?.manifest.name ?? "",
             status: !this.enabled || assignment?.enabled === false ? "disabled" : !this.host.available() ? "unsupported" : this.busy ? "compiling" : failure ? "error" : assignment && !asset ? "unresolved" : assignment ? "ready" : "none" };
     }
-    public async apply(targets: EffectTarget[], asset: EffectAsset | null, parameters?: EffectAssignment["parameters"]): Promise<EffectChange[]> {
+    public async apply(targets: EffectTarget[], asset: EffectAsset | null): Promise<EffectChange[]> {
         if (!targets.length) throw new Error("No WGSL target selected");
         const alreadyStored = asset ? this.assets.has(asset.revision) : false;
         if (asset) await this.addAsset(asset);
         const changes = targets.map(target => {
             const item = this.find(target); if (!item) throw new Error("WGSL target no longer exists");
             const after = asset ? defaultEffectAssignment(asset) : null;
-            if (after && parameters) after.parameters = structuredClone(parameters);
             return { target: { ...target, materialMode: item.target.materialMode ?? "mmd-standard" }, before: getEffectAssignment(item.material), after };
         });
         try { await this.transaction(changes, Boolean(asset), true); }
@@ -201,7 +200,6 @@ export class ExternalWgslService {
             if (change.after && !asset) throw new Error("Unresolved WGSL asset: " + change.after.effectRevision);
             if (asset && change.after) {
                 validateEffectMaterialInputs(asset, item.material);
-                for (const [name, parameter] of Object.entries(asset.manifest.parameters ?? {})) validateParameter(parameter, change.after.parameters[name]);
                 if (asset.manifest.requires?.includes("uv0") && item.meshes.some(mesh => !mesh.isVerticesDataPresent("uv"))) throw new Error("Target has no UV0");
             }
             return { item, change, asset, oldHotSwap: item.material.allowShaderHotSwapping };

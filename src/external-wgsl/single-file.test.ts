@@ -1,34 +1,84 @@
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseEffectFile } from "./single-file";
 
-const metadata = { apiVersion: 1, kind: "mmd-material", name: "Sample", hooks: { finalColor: "shade" } };
-const body = "fn shade(s: ModokiFinalColor) -> vec3f { return s.color; }";
-const file = (value: unknown = metadata) => `/* @modoki\n${JSON.stringify(value)}\n*/\n${body}`;
+const version = "const MODOKI_API_VERSION: u32 = 2u;";
+const hook = "fn effectFinalColor(s: ModokiFinalColor) -> vec3f { return s.color; }";
+const file = (declarations = "") => version + "\n" + declarations + "\n" + hook;
 
-describe("single-file WGSL", () => {
-    it("extracts metadata and preserves source line numbers with BOM and CRLF", () => {
-        const source = "\uFEFF" + file().replace(/\n/g, "\r\n");
-        const parsed = parseEffectFile(source, "sample.wgsl");
-        expect(parsed.manifest).toEqual({ ...metadata, sources: ["sample.wgsl"] });
-        expect(parsed.sources[0].text.split("\n")[3]).toBe(body);
-        expect(parsed.sources[0].text).not.toContain("@modoki");
+describe("WGSL v2 author declarations", () => {
+    it("keeps BOM/CRLF source locations and derives the label from the filename", () => {
+        const source = "\uFEFF" + file("/* nested /* var<storage> */ comment */").replace(/\n/g, "\r\n");
+        const parsed = parseEffectFile(source, "色.WGSL");
+        expect(parsed.manifest.name).toBe("色");
+        expect(parsed.sources[0].text).toBe(source.slice(1));
+        expect(parsed.manifest.hooks).toEqual({ finalColor: "effectFinalColor" });
     });
-    it.each([body, JSON.stringify(metadata), `// header\n${file()}`])("requires an initial metadata block", source => {
-        expect(() => parseEffectFile(source, "sample.wgsl")).toThrow(/sample.wgsl.*@modoki/);
+    it("accepts ordinary constant expressions without interpreting or clamping them", () => {
+        expect(() => parseEffectFile(file("const GAIN = 2.0 * 8.0; const ENABLED: bool = true;"))).not.toThrow();
     });
-    it("reports malformed and unterminated metadata", () => {
-        expect(() => parseEffectFile("/* @modoki\n{bad}\n*/\n" + body)).toThrow(/metadata/);
-        expect(() => parseEffectFile("/* @modoki\n{}\n")).toThrow(/Unterminated/);
+    it("recognizes versions, UV requirement, generic types and both hooks", () => {
+        const source = file(`const MODOKI_EFFECT_VERSION: vec3<u32> = vec3<u32>(1u, 2u, 3u);
+const MODOKI_REQUIRE_UV0: bool = true;
+struct EffectInputs { TIME: f32, CAMERA_POSITION: vec3<f32>, WORLD: mat4x4<f32>, }
+var<uniform> effectInputs: EffectInputs;
+fn effectSurface(s: ModokiSurface,) -> ModokiSurfaceOutput { return ModokiSurfaceOutput(s.baseColor, s.diffuseColor, s.normalWS); }`);
+        const m = parseEffectFile(source).manifest;
+        expect(m.effectVersion).toEqual([1, 2, 3]); expect(m.requires).toEqual(["uv0"]);
+        expect(m.inputOrder).toEqual(["TIME", "CAMERA_POSITION", "WORLD"]);
+        expect(m.inputs.CAMERA_POSITION.type).toBe("vec3f");
+        expect(m.hooks.surface).toBe("effectSurface");
     });
-    it("rejects external source lists and duplicate metadata blocks", () => {
-        expect(() => parseEffectFile(file({ ...metadata, sources: ["other.wgsl"] }))).toThrow(/sources/);
-        expect(() => parseEffectFile(file() + "\n" + file())).toThrow(/Duplicate/);
+    it.each([
+        ["const MODOKI_API_VERSION: u32 = 1u;", /old WGSL/],
+        ["const MODOKI_API_VERSION: u32 = 1u + 1u;", /must be u32/],
+        ["override MODOKI_API_VERSION: u32 = 2u;", /module const/],
+        ["/* @modoki { \"apiVersion\": 1 } */", /Missing const/],
+        ["", /Missing const/],
+    ])("rejects unsupported contract declaration %s", (source, error) => {
+        expect(() => parseEffectFile(source + "\n" + hook)).toThrow(error);
     });
-    it("keeps semantic and hook validation", () => {
-        expect(() => parseEffectFile(file({ ...metadata, hooks: { finalColor: "missing" } }))).toThrow(/Missing hook/);
-        expect(() => parseEffectFile(file({ ...metadata, inputs: { T: { type: "f32", semantic: "UNKNOWN" } } }))).toThrow(/Unsupported semantic/);
+    it.each([
+        ["const MODOKI_API_VERSION: u32 = 2u;", /Duplicate/],
+        ["const MODOKI_REQUIRE_UV0: bool = 1;", /bool literal/],
+        ["const MODOKI_EFFECT_VERSION: vec3u = vec3u(1u);", /requires vec3u/],
+        ["const MODOKI_EFFECT_VERSION: vec3u = vec3u(4294967296u, 0u, 0u);", /requires vec3u/],
+        ["struct EffectInputs { TIME: f32, }", /together/],
+        ["var<uniform> effectInputs: EffectInputs;", /together/],
+        ["struct EffectInputs {} var<uniform> effectInputs: EffectInputs;", /empty/],
+        ["struct EffectInputs { Typo: f32, } var<uniform> effectInputs: EffectInputs;", /Unknown/],
+        ["struct EffectInputs { TIME: vec3f, } var<uniform> effectInputs: EffectInputs;", /requires f32/],
+        ["struct EffectInputs { TIME: f32, TIME: f32, } var<uniform> effectInputs: EffectInputs;", /Duplicate input/],
+        ["struct EffectInputs { @align(16) TIME: f32, } var<uniform> effectInputs: EffectInputs;", /Unknown/],
+        ["alias Seconds = f32; struct EffectInputs { TIME: Seconds, } var<uniform> effectInputs: EffectInputs;", /requires f32/],
+        ["fn helper() { const MODOKI_REQUIRE_UV0: bool = true; }", /module scope/],
+        ["var<uniform> other: f32;", /Only var/],
+        ["var<storage, read> other: f32;", /resource/],
+        ["@group(0) var<uniform> effectInputs: EffectInputs;", /Unsupported/],
+        ["@fragment fn entry() {}", /Unsupported/],
+        ["fn helper() { discard; }", /Unsupported/],
+        ["const modokiPrivate = 1.0;", /Reserved identifier/],
+        ["const MODOKI_TYPO = 1.0;", /Unknown reserved/],
+        ["fn effectSurface(s: ModokiSurface) -> vec3f { return s.baseColor; }", /Invalid signature/],
+    ])("reports rejected declarations with file and position: %s", (source, error) => {
+        expect(() => parseEffectFile(file(source), "sample.wgsl")).toThrow(error);
+        expect(() => parseEffectFile(file(source), "sample.wgsl")).toThrow(/sample.wgsl:\d+:\d+:/);
     });
-    it("reports forbidden WGSL declarations at their original file line", () => {
-        expect(() => parseEffectFile(file() + "\nvar<uniform> forbidden: f32;", "sample.wgsl")).toThrow("sample.wgsl:5:");
+    it("does not mistake function calls or commented hooks for declarations", () => {
+        expect(() => parseEffectFile(version + "\n// " + hook + "\nfn helper() { effectFinalColor(); }")).toThrow(/At least one/);
+    });
+    it("rejects unclosed comments and bodies", () => {
+        expect(() => parseEffectFile(file("/*"))).toThrow(/Unterminated/);
+        expect(() => parseEffectFile(file() + "\nfn helper() {")).toThrow(/Unclosed/);
+    });
+    it("loads every shipped sample without metadata or runtime parameter copies", () => {
+        const directory = new URL("../../wgsl/", import.meta.url);
+        for (const name of readdirSync(directory).filter(name => name.endsWith(".wgsl"))) {
+            const source = readFileSync(new URL(name, directory), "utf8");
+            const parsed = parseEffectFile(source, name);
+            expect(parsed.manifest.apiVersion).toBe(2);
+            expect(source).not.toMatch(/@modoki|modokiInputs/);
+            expect(parsed.manifest).not.toHaveProperty("parameters");
+        }
     });
 });

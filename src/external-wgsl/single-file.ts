@@ -1,27 +1,9 @@
-import { parseEffectManifest, validateEffectSources, type EffectAsset } from "./contract";
-import { checkTextBudget, WGSL_METADATA_BYTES, WGSL_SOURCE_BYTES } from "./limits";
+import { parseEffectManifest, type EffectAsset } from "./contract";
+import { readAuthorDeclarations } from "./author-declarations";
 
-/** Read the authoring format; project assets keep their existing normalized representation. */
+/** The author source is the sole authority for constants, hooks and input layout. */
 export function parseEffectFile(source: string, sourceName = "main.wgsl"): Pick<EffectAsset, "manifest" | "sources"> {
-    checkTextBudget(source, WGSL_SOURCE_BYTES, sourceName);
     const text = source.replace(/^\uFEFF/, "");
-    const opening = /^\s*\/\*\s*@modoki\b/.exec(text);
-    if (!opening) throw new Error(sourceName + ": expected /* @modoki metadata at the start of the WGSL file");
-    const end = text.indexOf("*/", opening[0].length);
-    if (end < 0) throw new Error(sourceName + ": Unterminated @modoki metadata comment");
-    const header = text.slice(opening[0].length, end);
-    checkTextBudget(header, WGSL_METADATA_BYTES, "WGSL metadata");
-    let metadata: unknown;
-    try { metadata = JSON.parse(header); }
-    catch (error) { throw new Error(sourceName + ": Invalid @modoki metadata JSON: " + (error instanceof Error ? error.message : String(error))); }
-    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) throw new Error(sourceName + ": metadata must be an object");
-    if ("sources" in metadata) throw new Error(sourceName + ": sources is not supported; put all WGSL in this file");
-    // Nested WGSL comment delimiters in JSON strings must use JSON's \/ escape.
-    if (header.includes("/*")) throw new Error(sourceName + ": escape comment delimiters in metadata strings");
-    const body = text.slice(end + 2);
-    if (/\/\*\s*@modoki\b/.test(body)) throw new Error(sourceName + ": Duplicate @modoki metadata block");
-    const manifest = parseEffectManifest({ ...metadata, sources: [sourceName] });
-    const sources = [{ path: sourceName, text: text.slice(0, end + 2).replace(/[^\r\n]/g, " ") + body }];
-    validateEffectSources(manifest, sources);
-    return { manifest, sources };
+    const manifest = parseEffectManifest(readAuthorDeclarations(text, sourceName));
+    return { manifest, sources: [{ path: sourceName, text }] };
 }

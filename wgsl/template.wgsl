@@ -1,20 +1,18 @@
-/* @modoki
-{
-  "apiVersion": 1,
-  "kind": "mmd-material",
-  "name": "Template",
-  "hooks": { "surface": "tintSurface" },
-  "parameters": {
-    "Tint": { "type": "vec3f", "default": [1, 1, 1], "ui": { "label": "色", "control": "color", "min": 0, "max": 1 } }
-  }
-}
-*/
+// Template
+// 元の材質に色を乗算する最小テンプレート。
 
-// Minimal external material API v1 surface hook. Default values preserve the material.
-// The host provides ModokiSurface, ModokiSurfaceOutput and modokiInputs.
-fn tintSurface(surface: ModokiSurface) -> ModokiSurfaceOutput {
+// ---- ここを編集: 見た目の調整 ----
+// 色。目安0〜1。RGB倍率。vec3f(1.0)で元の色。
+const TINT: vec3f = vec3f(1.0, 1.0, 1.0);
+
+// ---- 接続仕様: 通常は変更しない ----
+const MODOKI_API_VERSION: u32 = 2u;
+const MODOKI_EFFECT_VERSION: vec3u = vec3u(1u, 0u, 0u);
+
+// ---- 計算処理 ----
+fn effectSurface(surface: ModokiSurface) -> ModokiSurfaceOutput {
     return ModokiSurfaceOutput(
-        surface.baseColor * modokiInputs.Tint,
+        surface.baseColor * TINT,
         surface.diffuseColor,
         surface.normalWS
     );

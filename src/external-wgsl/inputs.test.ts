@@ -13,11 +13,11 @@ describe("PBR WGSL inputs", () => {
             const material = new PBRMaterial("pbr", scene); const mesh = new Mesh("mesh", scene);
             material.albedoColor.set(0.2, 0.3, 0.4); material.alpha = 0.6;
             material.ambientColor.set(0.1, 0.2, 0.3); material.roughness = 0.75; material.metallic = 0.8;
-            const asset: EffectAsset = { revision: "a".repeat(64), sources: [], manifest: { apiVersion: 1, kind: "mmd-material", name: "test", sources: [], hooks: {}, inputs: {
+            const asset: EffectAsset = { revision: "a".repeat(64), sources: [], manifest: { apiVersion: 2, kind: "mmd-material", name: "test", sources: [], hooks: {}, inputOrder: ["Color", "Ambient"], inputs: {
                 Color: { type: "vec4f", semantic: "DIFFUSE", annotations: { Object: "Geometry" } },
                 Ambient: { type: "vec3f", semantic: "AMBIENT", annotations: { Object: "Geometry" } },
             } } };
-            const evaluate = () => resolveEffectInputs(asset, { effectRevision: asset.revision, enabled: true, parameters: {} }, material, mesh,
+            const evaluate = () => resolveEffectInputs(asset, { effectRevision: asset.revision, enabled: true }, material, mesh,
                 { frame: 0, time: 0, elapsed: 0, asyncTime: 0, asyncElapsed: 0 }, { width: 640, height: 360 });
             expect(evaluate()).toEqual({ Color: [0.2, 0.3, 0.4, 0.6], Ambient: [0.1, 0.2, 0.3] });
             material.albedoColor.set(0.7, 0.8, 0.9);

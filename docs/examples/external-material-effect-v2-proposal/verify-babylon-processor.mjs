@@ -28,4 +28,4 @@ for (const [label, source, expectedBuffers] of [
     }
     console.log(`PASS: ${label}`);
 }
-console.log("CPU declaration probe passed; GPU compilation and material integration remain unverified.");
+console.log("CPU declaration probe passed; this probe does not test GPU compilation or material integration.");

@@ -65,13 +65,13 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR external WGSL ${backe
         }
         // Verify a surface hook, Geometry DIFFUSE, and finalColor in the same PBR shader.
         const file = testInfo.outputPath("surface.wgsl");
-        const source = `/* @modoki
-{"apiVersion":1,"kind":"mmd-material","name":"PBR Surface Test","hooks":{"surface":"surfaceTest","finalColor":"finishTest"},"inputs":{"Tint":{"type":"vec4f","semantic":"DIFFUSE","annotations":{"Object":"Geometry"}}}}
-*/
-fn surfaceTest(s: ModokiSurface) -> ModokiSurfaceOutput {
+        const source = `const MODOKI_API_VERSION: u32 = 2u;
+struct EffectInputs { GEOMETRY_DIFFUSE: vec4f, }
+var<uniform> effectInputs: EffectInputs;
+fn effectSurface(s: ModokiSurface) -> ModokiSurfaceOutput {
     return ModokiSurfaceOutput(vec3f(0.05, 0.9, 0.15), vec3f(1.0), normalize(s.normalWS + vec3f(0.3, 0.0, 0.0)));
 }
-fn finishTest(s: ModokiFinalColor) -> vec3f { return s.color * (vec3f(0.8) + modokiInputs.Tint.rgb * 0.2); }
+fn effectFinalColor(s: ModokiFinalColor) -> vec3f { return s.color * (vec3f(0.8) + effectInputs.GEOMETRY_DIFFUSE.rgb * 0.2); }
 `;
         writeFileSync(file, source); await editor.importFile(file); await editor.apply();
         expect(await changed(baseline, await capture("surface-and-final"))).toBeGreaterThan(1000);

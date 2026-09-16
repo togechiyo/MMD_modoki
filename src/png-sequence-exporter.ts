@@ -88,6 +88,9 @@ export async function runPngSequenceExportJob(
 
     try {
         callbacks.onStatus?.("Loading project into export renderer...");
+        // PNG uses an isolated storage partition. Forward only this job's editor permission;
+        // setEnabled(false persistence) still respects recovery/forced-disable state.
+        await mmdManager.getExternalWgslService().setEnabled(request.externalWgslEnabled === true, false);
         const importResult = await mmdManager.importProjectState(request.project, { forExport: true });
         if (request.externalLut) {
             mmdManager.setPostEffectExternalLut(

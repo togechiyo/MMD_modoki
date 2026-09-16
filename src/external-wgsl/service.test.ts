@@ -22,7 +22,7 @@ vi.mock("@babylonjs/core/Engines/webgpuEngine", () => ({ WebGPUEngine: class {} 
 vi.mock("../i18n", () => ({ t: (key: string) => key }));
 
 function asset(name: string): EffectAsset {
-    const parsed = parseEffectFile(`/* @modoki\n${JSON.stringify({ apiVersion: 1, kind: "mmd-material", name, hooks: { finalColor: "shade" } })}\n*/\nfn shade(s: ModokiFinalColor) -> vec3f { return s.color; }`);
+    const parsed = parseEffectFile("const MODOKI_API_VERSION: u32 = 2u;\nfn effectFinalColor(s: ModokiFinalColor) -> vec3f { return s.color; }", name + ".wgsl");
     return { ...parsed, revision: createHash("sha256").update(canonicalEffectContent(parsed)).digest("hex") };
 }
 function fixture() {

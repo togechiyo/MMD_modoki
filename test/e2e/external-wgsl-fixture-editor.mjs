@@ -2,16 +2,24 @@ import { expect } from "@playwright/test";
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-export function readWgslMetadata(path) {
+const constantName = name => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toUpperCase();
+function readWgslConstant(path, name) {
     const text = readFileSync(path, "utf8");
-    const match = /^\s*\/\*\s*@modoki\b([\s\S]*?)\*\//.exec(text);
-    if (!match) throw new Error("Fixture is missing WGSL metadata: " + path);
-    return { text, match, metadata: JSON.parse(match[1]) };
+    const pattern = new RegExp("(const " + constantName(name) + ": (\\w+) = )([^;]+);");
+    const match = pattern.exec(text);
+    if (!match) throw new Error("Missing sample constant: " + name);
+    return { text, pattern, type: match[2], value: match[3] };
 }
 export function editWgslParameter(path, name, value) {
-    const { text, match, metadata } = readWgslMetadata(path);
-    metadata.parameters[name].default = value;
-    writeFileSync(path, `/* @modoki\n${JSON.stringify(metadata, null, 2)}\n*/` + text.slice(match[0].length));
+    const { text, pattern, type } = readWgslConstant(path, name);
+    const scalar = n => type === "u32" ? n + "u" : Number.isInteger(n) ? n + ".0" : String(n);
+    const literal = Array.isArray(value) ? type + "(" + value.map(scalar).join(", ") + ")" : scalar(value);
+    writeFileSync(path, text.replace(pattern, (_match, prefix) => prefix + literal + ";"));
+}
+function readConstantValue(path, name) {
+    const { type, value } = readWgslConstant(path, name);
+    if (type.startsWith("vec")) return value.slice(value.indexOf("(") + 1, -1).split(",").map(Number);
+    return Number(value.replace(/[ui]$/, ""));
 }
 
 // Edit temporary copies of redistributable files as an author would in a text editor.
@@ -41,6 +49,6 @@ export function wgslFixtureEditor(app, page, testInfo, root) {
             editWgslParameter(sourcePath, name, value);
             await this.importFile(sourcePath); await this.apply(false);
         },
-        parameterValue(name) { return readWgslMetadata(sourcePath).metadata.parameters[name].default; },
+        parameterValue(name) { return readConstantValue(sourcePath, name); },
     };
 }

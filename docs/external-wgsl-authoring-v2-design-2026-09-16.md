@@ -1,14 +1,14 @@
 # 外部WGSL作者形式 v2 再設計 — JSONを使わない宣言
 
-更新: 2026-09-16 / 状態: 仕様提案。ローダー・材質への実装は未変更。
+更新: 2026-09-16 / 状態: ローダー・材質接続・配布サンプルへ実装済み。確認範囲は第9節。
 
 ## 1. 今回の方針と位置づけ
 
 所有者は、作者ファイルへのJSON混在をなくし、テキストエディタで調整箇所を分かりやすくし、Babylon.jsのWGSL処理から離れない方針で仕様再検討を指示した。スライダー用の情報は不要。
 
-この文書を新しい作者形式の設計正本とする。具体的な識別子・API番号は以下の提案であり、所有者が個別に指定した名前ではない。現在動作する形式は[現行の使い方](./external-wgsl-material-usage.md)、以前の設計は[v1設計](./external-wgsl-material-api-v1-design.md)。所有者は同日、旧WGSL形式はRelease未収録のため互換不要と指定した。実装時は新形式へ一本化し、旧ファイル・旧snapshotの互換adapterや自動変換は設けない。今回は設計変更のみで、現行ローダーの挙動はまだ変更していない。
+この文書を新しい作者形式の設計正本とする。具体的な識別子・API番号は以下の実装仕様であり、所有者が個別に指定した名前ではない。現在の操作は[現行の使い方](./external-wgsl-material-usage.md)、以前の設計は[v1設計](./external-wgsl-material-api-v1-design.md)。所有者は同日、旧WGSL形式はRelease未収録のため互換不要と指定した。実装時は新形式へ一本化し、旧ファイル・旧snapshotの互換adapterや自動変換は設けない。後続依頼により、新形式のローダーと配布サンプルも同日実装した。
 
-**推奨案: 調整値と接続バージョンを`const`、動的入力を独自uniform bufferの`struct`、呼出箇所を所定の関数名で宣言する。JSON・設定用コメント・独自attributeを作者形式へ入れない。**
+**採用した構成: 調整値と接続バージョンを`const`、動的入力を独自uniform bufferの`struct`、呼出箇所を所定の関数名で宣言する。JSON・設定用コメント・独自attributeを作者形式へ入れない。**
 
 単一`.wgsl`、通常MMD / PBRへの材質別割当、既存一覧と割当ボタン、Undo / Redo、実験許可、compile失敗時の復帰を維持する。project内部のJSON保存まで廃止する意味ではない。
 
@@ -59,7 +59,7 @@ fn effectSurface(s: ModokiSurface) -> ModokiSurfaceOutput {
 }
 ```
 
-全文の作者例: [色味](./examples/external-material-effect-v2-proposal/tint.wgsl)、[時間による明るさ](./examples/external-material-effect-v2-proposal/pulse.wgsl)。現行アプリへ読み込むための配布サンプルではなく、設計検討用。動作中の`wgsl/`は実装と検証が揃った段階で移行する。
+全文の作者例: [色味](./examples/external-material-effect-v2-proposal/tint.wgsl)、[時間による明るさ](./examples/external-material-effect-v2-proposal/pulse.wgsl)。設計検討用に作成した例だが現行ローダーでも読める。配布用の11本は[wgsl/](../wgsl/README.md)にあり、全てv2へ移行済み。
 
 ### 調整値の書き方
 
@@ -71,7 +71,7 @@ fn effectSurface(s: ModokiSurface) -> ModokiSurfaceOutput {
 
 ## 4. バージョン・関数・必要条件
 
-| 宣言 | 意味・提案する受理条件 |
+| 宣言 | 意味・受理条件 |
 | --- | --- |
 | `MODOKI_API_VERSION: u32` | 必須。アプリ接続契約のmajor。WGSL言語版やアプリ版とは別。v2では`2u` |
 | `MODOKI_EFFECT_VERSION: vec3u` | 任意。作品自身のmajor / minor / patch。省略可能、revision hashや互換判定の代わりにはしない |
@@ -122,7 +122,7 @@ MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの
 - この段階では`EffectInputs` + `effectInputs`を1組、または両方省略。空struct、重複field、未知field、不正な型、同名宣言の衝突を診断する。宣言したfieldを本文で使わなくても必要入力として検証する。
 - field型は対応表のscalar / vector / mat4x4に限定。等価な`vec3<f32>`等も正規化して受理する。入力struct内の配列・nested struct・型alias・独自alignment指定は初期対象外で、黙って推測しない。通常の計算用structまで制限しない。
 - `@group` / `@binding`を作者に書かせない。宣言はそのままBabylon processorへ通す。`effectInputs`という変数名でpluginの`getUniformBuffersNames`と描画時のbindを接続する。
-- **CPUのbuffer配置は作者のfield宣言順を保持する。** 現行のアルファベット順ソートをそのまま流用しない。WGSL alignment / paddingとUniformBufferのoffsetを照合する。型・順序変更は新layoutとして候補bufferを作り、compile成功後に交換する。
+- **CPUのbuffer配置は作者のfield宣言順を保持する。** v1のアルファベット順ソートを流用しない。WGSL alignment / paddingとUniformBufferのoffsetを照合する。型・順序変更は新layoutとして候補bufferを作る。適用中は描画を止め、compile成功後に割当を確定する。失敗時は前revisionのbufferを再生成して復帰する。
 - 入力を使わないshaderにbufferを作らない。材質本体の既存UBOへ可変fieldを追加せず、effect専用bufferを使う。異なるlayoutの交互描画・再読込・clone・解除でbindingと寿命を検証する。
 
 ## 6. ローダー・描画の実装境界
@@ -137,7 +137,7 @@ MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの
 
 作者による`#include` / `#define`、独立stage、追加texture / storage buffer、discardは初期材質profileで引き続き未対応。Babylonが扱えることと、このアプリが値・passを接続できることを区別する。texture・CONTROL・light hook・別profileは後続のresource契約で設計し、文字列を数値配列へ隠すような代替設定言語を作らない。
 
-宣言エラーは作者ファイルの行・列を示す。GPU診断は作者sourceのoffset対応を持ち、対応不能な生成箇所を作者の行番号として誤表示しない。ライセンス・調整コメント込みの原文を保存し、GPU用のコメント除去済みsourceとは区別する。
+宣言エラーは作者ファイルの行・列を示す。GPU診断は生成shader側の位置として表示する。作者sourceへの厳密な逆変換は後続課題で、対応不能な生成箇所を作者の行番号として誤表示しない。ライセンス・調整コメント込みの原文を保存し、GPU用のコメント除去済みsourceとは区別する。
 
 ## 7. 新形式への一本化と保存
 
@@ -151,11 +151,11 @@ MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの
 
 ## 8. 確認したこと・実装時の検証
 
-### 今回の確認
+### 設計時の確認（実装前）
 
 - 公式説明と導入済み`webgpuShaderProcessorsWGSL.js`の`_processCustomBuffers`を照合。bufferはstruct名ではなく変数名で登録される。
 - [CPU probe](./examples/external-material-effect-v2-proposal/verify-babylon-processor.mjs)で、調整定数のみ / TIME入力 / field順・型の異なる入力の3ケースが成功。Babylonがgroup / bindingを追加し、定数・関数・struct本文は変えず、専用bufferとして認識した。
-- これは宣言処理の確認に限定する。完全な構文解析、GPU compile、UBOの実値・padding、実アプリの読込・描画は未検証。新形式のGPU対応が完了したとは扱わない。
+- このprobe単体は宣言処理の確認に限定する。GPU compile・実アプリの検証は第9節に分離する。
 
 再実行: `node docs/examples/external-material-effect-v2-proposal/verify-babylon-processor.mjs`
 
@@ -167,4 +167,20 @@ MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの
 4. 作者資料: 全配布sampleの先頭へ調整定数と日本語説明を揃え、読込・再編集・失敗通知・最終GUI表示をローカルElectron E2Eで確認してから移行する。
 5. 出力: Classic / Frame Graph、PNG / WebM、30 / 60fps、時間同期あり/なし、行列・画面サイズで同frameの結果を比較する。lint・unit・critical型検査、起動/IPC変更時のsmokeも実施する。
 
-宣言readerに使う既存parserの適合性（ライセンス、対応WGSL版、source位置保持）は実装前の調査事項。旧形式の変換・互換層は調査・実装対象から外す。CPU probeだけを根拠に全WGSL parserを新規自作しない。API番号・識別子の具体案はこの検証で必要があれば調整する。
+導入済み依存にはWGSL AST parserはなく、Babylonのprocessorはbinding補完が担当である。追加parser依存は導入せず、位置付きtoken列から接続定数・入力struct・hook署名だけを読む小さなreaderを実装した。計算式・関数本体を解釈・書換するWGSLコンパイラは作らず、最終検証をWebGPUへ委ねる。module直下の対象はconst・override・var・alias・struct・fn。enable/requires/diagnostic等のdirectiveとmodule attributeは初期readerの対象外。旧形式の互換・変換層は作らない。
+
+## 9. 実装・確認記録（2026-09-16）
+
+- `author-declarations.ts`でコメント・scope・重複・予約名・hook署名・入力型を検査。`input-registry.ts`に37項目を固定。作者の入力順をdescriptorの`inputOrder`へ保存し、hash正規化のキーソートで失わない。
+- pluginは作者のstructをそのまま使い、同じ順でCPU bufferを作る。無入力ではbuffer不要。調整constはソースだけに保持し、割当のparametersと旧UI metadataを撤去した。
+- snapshot復元でもソースから宣言を読み直してdescriptorと照合する。旧WGSL割当はactive／inactive mode bankの両方から除外して通知し、モデル・モーション等の読込を継続。旧sourceを新sourceへ変換しない。
+- 配布11本と説明用1本を移行。計算式と初期値を維持し、冒頭へconst・用途・推奨範囲・無効値を配置した。説明用は`docs/examples/external-material-effect-v2/effect.wgsl`へ移動。
+- ローカルElectron E2E 14件が通過。Classic／Frame Graph、通常MMD／PBR、全サンプルのGUI読込とPNG、同一frameの再現、ライト・格子・時間入力、テキスト再編集、compile失敗復帰、Undo、許可OFF、異常時停止、元ファイル削除後のsidecar復元を確認。
+- 単体915件が通過。拒否したinline snapshotの巨大ソースをIPCへ流さず、診断用の小さい未解決参照だけ渡す回帰テストを含む。
+- 追加E2E 2件が通過。両backendでscalar / vec3 / mat4の入力順変更前後のPNG一致、30 / 60fpsのWebM先頭frameと固定時刻PNGの一致（同期あり / なし）、旧WGSL projectのGUI読込継続を確認。WebMは圧縮差を許容して比較し、全frame一致の検証ではない。
+- PNG専用windowは別session partitionのためWGSL許可を継承していなかった。現在のeditorの許可を出力jobへ渡し、保存projectからは有効化しない。安全起動による強制停止も維持する。
+- PNGは専用windowへの連番jobに加え、実際のメニュー・サイズ欄のEnter確定・出力ボタンを通した単画像も確認。初回のGUIテスト失敗はテスト用保存先の取り違えとEnter未確定によるもので、操作を修正後に両backendで通過した。
+- 通常型検査は既存系542件で、今回の外部WGSL変更箇所に診断なし。critical gateはTS2304／TS2552なし。
+- lint、insights構造検証、変更文書のローカルリンク確認、差分の空白検査が通過。`smoke:launch`は`engine=WebGPU`到達と安定起動を確認。
+
+任意GPU・任意モデル・全shader variantの検証を済ませた意味ではない。GPU診断の作者sourceへの厳密な逆変換と追加resourceは後続課題。

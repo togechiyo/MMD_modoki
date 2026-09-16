@@ -1,5 +1,7 @@
 # 外部WGSLのPBR接続
 
+2026-09-16: 作者形式は[JSONを使わないAPI v2](./external-wgsl-authoring-v2-design-2026-09-16.md)へ移行した。以下の材質接続と入力の意味を維持し、作者のhookは`effectSurface` / `effectFinalColor`、入力は`EffectInputs`で宣言する。`kind`等のdescriptorはアプリ内部で生成する。
+
 2026-09-13、所有者の依頼で既存の外部材質APIをPBRへ接続する。独立したShaderMaterialへ交換せず、既存PBR材質のpluginとして実行する。
 
 - 既存の単一WGSL・`kind: mmd-material`・`surface` / `finalColor`を共用する。kindはモデル材質用APIの識別子として維持する。

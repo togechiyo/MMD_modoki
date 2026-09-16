@@ -1,22 +1,22 @@
 # 外部WGSL材質の使い方と初期実装範囲
 
-更新: 2026-09-12
+更新: 2026-09-16
 
-2026-09-16: JSONを含めず、WGSLの定数・入力struct・所定関数で記述する[v2の仕様案](./external-wgsl-authoring-v2-design-2026-09-16.md)を作成した。以下は引き続き**現行v1の操作説明**。v2は未実装であり、配布sampleや既存projectはまだ変更しない。
+2026-09-16: 作者形式をJSONなしのAPI v2へ統一。現行の書式は[作成ガイド](../wgsl/AUTHORING.md)と[開発リファレンス](../wgsl/REFERENCE.md)、設計の根拠は[v2設計](./external-wgsl-authoring-v2-design-2026-09-16.md)を参照。旧WGSL形式との互換は設けない。
 
 ## 読み込みと適用
 
-1. ツール → 実験機能 →「外部WGSL材質を有効にする」をONにする。初期値はOFF。許可はアプリ設定で、プロジェクトが勝手にONにはしない。
+1. 設定 → 実験機能 →「外部WGSL材質を有効にする」をONにする。初期値はOFF。許可はアプリ設定で、プロジェクトが勝手にONにはしない。
 2. モデルを選び、エフェクトパネルの「材質」を開く。
-3. 「外部WGSL読込…」で `.wgsl` を選ぶ。冒頭コメントに設定を持つ単一ファイル形式。「種類」の既存プリセット一覧に `WGSL: 名前` が追加・選択される。旧JSON定義の直接読込は撤去した。
+3. 「外部WGSL読込…」で `.wgsl` を選ぶ。const・入力struct・所定関数を持つ単一ファイル形式。「種類」の既存プリセット一覧に `WGSL: 拡張子を除くファイル名` が追加・選択される。旧JSON定義の直接読込は撤去した。
 4. 材質行を選んで既存の「選択へ割り当て」、または「全材質へ割り当て」を使う。読込だけでは描画を変更しない。材質行は組込プリセットと同じ1行で、左に材質名・右にWGSL名を表示する。長いWGSL名は省略し、hoverで全文を確認できる。
-5. 値はテキストエディタでWGSL本文または冒頭設定の`parameters.変数名.default`を編集する。同じ「外部WGSL読込…」で読み直し、共通ボタンで再適用する。同じファイルは一覧で重複しない。
+5. 値はテキストエディタでWGSL本文または冒頭の`const`を編集する。同じ「外部WGSL読込…」で読み直し、共通ボタンで再適用する。同じファイルは一覧で重複しない。
 
-追加UIは読込ボタン1つ。色・数値・スライダー・専用適用ボタン・専用診断欄は設けない。`parameters`の値と型・範囲検証、保存互換は維持するが、manifestの`ui`情報から編集欄を生成しない。再適用時は読み込んだ定義の既定値を使う。
+追加UIは読込ボタン1つ。色・数値・スライダー・専用適用ボタン・専用診断欄は設けない。調整値はソースのconstだけに保存し、材質割当へ重複保存しない。
 
 読込のみの候補はセッション内で保持する。プロジェクトには実際に割り当てたsnapshotを保存し、再起動後もそのsnapshotから一覧を復元する。候補一覧自体をユーザー共通の永続プリセット集として保存する機能ではない。
 
-[effect.wgsl](./examples/external-material-effect-v1/effect.wgsl) 単独で試せる。材質の色味と、タイムラインに連動する明るさを変更するサンプル。
+[effect.wgsl](./examples/external-material-effect-v2/effect.wgsl) 単独で試せる。材質の色味と、タイムラインに連動する明るさを変更するサンプル。
 
 追加の作例は [wgslサンプル一覧](../wgsl/README.md)。テクスチャ不要の「Aurora Opal」、シラー・遊色・分散風の宝石3種、パステル仕上げ、最小テンプレートを収録している。`wgsl/prismatic-fire.wgsl` などのファイルを選ぶ。
 
@@ -38,50 +38,28 @@
 
 無効化後にソースを直しても、保存済みの割り当ては以前のsnapshotのまま。再許可時にはそのsnapshotも適用されるため、問題の割り当てを組込プリセットへ変更してから再許可し、修正したWGSLを読み直す。
 
-上限はWGSLファイル全体1 MiB（UTF-8）、冒頭設定64 KiB、設定の深さ16・要素4096、入力とパラメーター合計128。保存形式も設定・ソースを検証し、内部sources合計1 MiB／16ファイル、sidecar JSON 8 MiB、1プロジェクト128 assetを上限とする。loopや表現用途を一律には禁止しない。
+上限はWGSLファイル全体1 MiB（UTF-8）、入力37種、1 assetは1ソース、sidecar JSON 8 MiB、1プロジェクト128 asset。内部descriptorは64 KiB・深さ16・要素4096で検査する。loopや表現用途を一律には禁止しない。
 
 期限で打ち切れるのはアプリ側の待機であり、実行中のGPU命令を確実に強制停止するものではない。GPU driverやOS全体の停止を完全には防げない。[保護範囲と制約](./external-wgsl-security-review-2026-09-12.md)を参照。
 
 ## 単一WGSLの書式
 
-UTF-8の `.wgsl` の先頭に、次の専用ブロックコメントを1つ置く。BOMと先頭空白は許可する。設定部分はJSONで、末尾カンマやJSON内コメントは不可。ライセンス等の通常コメントは設定ブロックの後へ置く。
-
 ```wgsl
-/* @modoki
-{
-  "apiVersion": 1,
-  "kind": "mmd-material",
-  "name": "Tint",
-  "hooks": { "finalColor": "shade" },
-  "parameters": { "Gain": { "type": "f32", "default": 0.8 } }
-}
-*/
-fn shade(s: ModokiFinalColor) -> vec3f {
-    return s.color * modokiInputs.Gain;
+// 明るさの倍率。1で元の色。
+const GAIN: f32 = 0.8;
+const MODOKI_API_VERSION: u32 = 2u;
+fn effectFinalColor(s: ModokiFinalColor) -> vec3f {
+    return s.color * GAIN;
 }
 ```
 
-`sources`は指定しない。関数・helperは同じファイル内へ置き、外部WGSLファイルの参照・includeは受け付けない。設定ブロックの欠落・重複・不正JSONは読込時に診断する。文字列へコメント区切りを含めたい場合はJSONのスラッシュエスケープ（`\u002f`等）を使う。設定部分を空白化してから既存処理へ渡すため、宣言検査のファイル内行番号は維持される。GPUコンパイル診断の行番号は従来どおり生成コード側。
+コメントは通常の説明として自由に置ける。constは調整値、EffectInputsは動的入力、effectSurface／effectFinalColorは固定の呼出関数。入力structは作者が宣言し、group・binding番号だけBabylonが補完する。詳細・型・全37入力は[開発リファレンス](../wgsl/REFERENCE.md)。
 
-内部では設定をmanifest、本文をsourceとして正規化する。既存プロジェクトに保存済みのsnapshotとsidecar JSONはそのまま復元可能。これは外部JSONファイルの読込対応とは別の保存形式で、元JSONを再読込する入口はない。旧形式の作者データは、JSONから`$schema`・`sources`を除いて冒頭コメントへ移し、WGSL本文をその後へ結合する。
+通常MMDとPBRの両方に対応する。PBRのsurface.baseColorは評価済みalbedo、diffuseColorは白で、返却した2色の積を照明へ渡す。Phong専用のGEOMETRY_SPECULAR／GEOMETRY_SPECULARPOWERを使うサンプルは通常MMD専用。alpha・粗さ・金属度は変更しない。色空間の自動変換は行わない。
 
-## 作者が指定できるもの
+TIME／ELAPSEDTIMEはタイムライン同期、_UNSYNCED付きは編集停止中も実時間で進む。PNGではframe/30・elapsed=0、動画では出力fpsのschedulerへ両時計を固定する。モデル姿勢評価方式は変更しない。
 
-- `surface`：照明前のbaseColor、diffuseColor、world法線。
-- `finalColor`：照明・既存材質補正後、fog前のRGB。alphaは保持。
-- 入力：材質DIFFUSE/AMBIENT/SPECULAR/SPECULARPOWER、主方向ライトのDIFFUSE/DIRECTION、Camera POSITION、行列、TIME/ELAPSEDTIME、VIEWPORTPIXELSIZE、MODOKI_FRAME。
-- パラメーター：f32/i32/u32/vec2f/vec3f/vec4f。型、既定値、範囲を検証する。
-- UV0が必須なら `requires: ["uv0"]`。
-
-Object注釈・型・行列規約は [詳細設計](./external-wgsl-material-api-v1-design.md)を参照。WGSLからは `modokiInputs.Time` のように読み、宣言・binding番号はアプリとBabylonが生成する。MMD材質・モーフへの参照を保持し、別のShaderMaterialへ交換しない。
-
-WGSL関数、helper、struct、return、分岐・ループを利用できる。旧Toon snippet用の「return禁止」「diffuseBaseへの加算必須」は新形式にはない。コメントを除いた宣言検査と実WebGPUのコンパイル診断を行う。
-
-**通常MMD・PBRの両モード**で同じ単一WGSLを読み込み、共通一覧・割当ボタンから適用できる。宝石サンプルのsurface/finalColorも共用できる。PBRではsurfaceのbaseColorが評価済みalbedo、diffuseColorは白で、出力2色を乗算してPBR照明へ渡す。finalColorは照明・反射の合成後、fog・画像処理前に実行する。詳細は[PBR接続仕様](./external-wgsl-pbr-adapter.md)を参照。
-
-PBRではGeometry DIFFUSEがalbedoColorとalpha、AMBIENTがambientColorとなる。Phong固有のSPECULAR / SPECULARPOWERは非対応のため、これらを読む`mme-light-material.wgsl`は通常MMD専用。粗さ・金属度・alphaは元のPBR材質が保持する。light hook、テクスチャ入力、CONTROLOBJECT、独立vertex/fragment、post effectは未対応。未知入力を0で埋めず診断する。NME生成shaderの無加工読込は未対応で、計算部分を上記hook・入力へ移植する。
-
-色は既存MMD shaderの値で、線形sRGBとの一致は保証しない。時間入力は `SyncInEditMode` 必須。静止画は現在frame/30・elapsed=0、動画のWGSL時間は出力fpsのschedulerに固定する。動画の既存モデル姿勢評価方式は変更していない。
+旧JSON混在WGSL・旧snapshotは適用しない。旧projectのモデル・モーション等は読み込みを継続し、非対応WGSLを通知する。変換adapter・自動移行は設けない。保存用JSONは作者ファイルとは別で、引き続き使用する。
 
 ## 保存・モード切替
 
@@ -99,7 +77,7 @@ GUI保存では共有snapshotを `<project名>.assets/effects/<revision>/effect.
 
 材質cloneでモーフ参照や組込presetを取りこぼさないよう、適用時だけscene描画を一時停止し、実対象submeshで候補を準備する。BabylonのisReadyに加え、WebGPU ShaderModuleのgetCompilationInfoとvalidation error scopeで診断し、全対象成功後に割当を確定する。通常の失敗でengine全体のeffectを解放しない。
 
-専用UBOはlayout変更時だけ交換し、値の編集ではshaderを再生成しない。古いGPU effectはBabylonのdraw cache解放経路を使う。CPU側revisionは現行割当・mode bank・Undo/Redoが参照するものを保持し、WGSL操作確定時に不要なものを回収する。保存先の未参照sidecarは自動削除しない。
+専用UBOはsource revision変更時に交換する。constの編集も新revisionとなりshaderを再生成する。入力の宣言順を保存し、復元時にソースとdescriptorの一致を再検査する。古いGPU effectはBabylonのdraw cache解放経路を使う。CPU側revisionは現行割当・mode bank・Undo/Redoが参照するものを保持し、WGSL操作確定時に不要なものを回収する。保存先の未参照sidecarは自動削除しない。
 
 コンパイル失敗の詳細と生成コードはapp logへ記録する。GPUの行番号は生成shader側の位置で、作者fileへの正確な逆変換は未実装。Babylonの準備待機は15秒で終了するが、GPU上の無限loopを安全に停止する仕組みではない。
 
@@ -107,7 +85,7 @@ GUI保存では共有snapshotを `<project名>.assets/effects/<revision>/effect.
 
 後から描画条件が変わる全variantの事前検証、透過・頂点変更の別pass対応、一般resource契約は後続課題。現在未対応のresource/stage宣言で回避することはできない。
 
-## 初期実装の確認履歴
+## 初期実装の確認履歴（以下はv1当時）
 
 - 全単体テスト774件通過。manifest、コメント処理、入力型、時間、共有保存・欠落・hash不一致等を含む。
 - lintはエラー・warningなし。typecheck:criticalはTS2304/TS2552なし。通常typecheckは既存baselineの非criticalエラー545件が残る。HEADのTypeScript sourceを仮想CompilerHostで読み分けて比較し、新規診断0件を確認。

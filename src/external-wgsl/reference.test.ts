@@ -21,9 +21,7 @@ function section(name: string, language: string): string {
     return found[1];
 }
 function asset(): EffectAsset {
-    const metadata = { apiVersion: 1, kind: "mmd-material", name: "Reference", hooks: { finalColor: "shade" },
-        inputs: JSON.parse(section("inputs", "json")) };
-    return { revision: "a".repeat(64), ...parseEffectFile(`/* @modoki\n${JSON.stringify(metadata)}\n*/\nfn shade(s: ModokiFinalColor) -> vec3f { return s.color; }`) };
+    return { revision: "a".repeat(64), ...parseEffectFile("const MODOKI_API_VERSION: u32 = 2u;\n" + section("inputs", "wgsl") + "\nfn effectFinalColor(s: ModokiFinalColor) -> vec3f { return s.color; }") };
 }
 // NullEngine does not select WebGPU; only exercise source generation, never GPU compilation.
 class WgslReferenceMaterial extends StandardMaterial {
@@ -64,7 +62,7 @@ describe("published WGSL reference", () => {
         const compact = (text: string) => text.replace(/\s/g, "");
         expect(compact(generated)).toContain(compact(section("interfaces", "wgsl")));
         for (const [name, input] of Object.entries(data.manifest.inputs ?? {})) expect(generated).toContain(`${name}: ${input.type},`);
-        expect(generated).toContain("var<uniform> modokiInputs: ModokiEffectInputs;");
+        expect(generated).toContain("var<uniform> effectInputs: EffectInputs;");
         plugin.dispose();
     }));
 
@@ -73,13 +71,13 @@ describe("published WGSL reference", () => {
         material.ambientColor.set(0.3, 0.2, 0.1); material.specularColor.set(0.4, 0.5, 0.6); material.specularPower = 32;
         const data = asset(); const assignment = defaultEffectAssignment(data);
         const evaluate = () => resolveEffectInputs(data, assignment, material, mesh, time, { width: 640, height: 360 });
-        expect(evaluate()).toMatchObject({ MaterialDiffuse: [0.1, 0.2, 0.3, 0.4], MaterialAmbient: [0.3, 0.2, 0.1],
-            MaterialSpecular: [0.4, 0.5, 0.6], MaterialSpecularPower: 32,
-            LightDiffuse: [0.2, 0.4, 0.8], CameraPosition: [2, 3, -6],
-            Time: 1.5, ElapsedTime: -0.5, FreeTime: 3, FreeElapsedTime: 0.02, Frame: 45, ViewportSize: [640, 360] });
-        expect(evaluate().LightDirection).toEqual([0, expect.closeTo(-0.6, 8), 0.8]);
+        expect(evaluate()).toMatchObject({ GEOMETRY_DIFFUSE: [0.1, 0.2, 0.3, 0.4], GEOMETRY_AMBIENT: [0.3, 0.2, 0.1],
+            GEOMETRY_SPECULAR: [0.4, 0.5, 0.6], GEOMETRY_SPECULARPOWER: 32,
+            LIGHT_DIFFUSE: [0.2, 0.4, 0.8], CAMERA_POSITION: [2, 3, -6],
+            TIME: 1.5, ELAPSEDTIME: -0.5, TIME_UNSYNCED: 3, ELAPSEDTIME_UNSYNCED: 0.02, MODOKI_FRAME: 45, VIEWPORTPIXELSIZE: [640, 360] });
+        expect(evaluate().LIGHT_DIRECTION).toEqual([0, expect.closeTo(-0.6, 8), 0.8]);
         material.diffuseColor.set(0.7, 0.8, 0.9);
-        expect(evaluate().MaterialDiffuse).toEqual([0.7, 0.8, 0.9, 0.4]);
+        expect(evaluate().GEOMETRY_DIFFUSE).toEqual([0.7, 0.8, 0.9, 0.4]);
         for (const light of [...scene.lights]) light.dispose();
         expect(evaluate).toThrow("Directional light unavailable");
     }));
@@ -91,13 +89,13 @@ describe("published WGSL reference", () => {
         const close = (actual: number[], expected: number[]) => actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 4));
         const point = [0.3, 0.8, -0.4, 1];
         const w = mesh.getWorldMatrix().asArray(), v = scene.getViewMatrix().asArray(), p = scene.getProjectionMatrix().asArray();
-        close(apply(values.WorldView as number[], point), apply(v, apply(w, point)));
-        close(apply(values.ViewProjection as number[], point), apply(p, apply(v, point)));
-        close(apply(values.WorldViewProjection as number[], point), apply(p, apply(v, apply(w, point))));
-        for (const name of ["World", "View", "Projection", "WorldView", "ViewProjection", "WorldViewProjection"]) {
-            const base = values[name] as number[]; const inverse = values[name + "Inverse"] as number[];
+        close(apply(values.WORLDVIEW as number[], point), apply(v, apply(w, point)));
+        close(apply(values.VIEWPROJECTION as number[], point), apply(p, apply(v, point)));
+        close(apply(values.WORLDVIEWPROJECTION as number[], point), apply(p, apply(v, apply(w, point))));
+        for (const name of ["WORLD", "VIEW", "PROJECTION", "WORLDVIEW", "VIEWPROJECTION", "WORLDVIEWPROJECTION"]) {
+            const base = values[name] as number[]; const inverse = values[name + "INVERSE"] as number[];
             close(apply(inverse, apply(base, point)), point);
-            for (const [source, target] of [[base, values[name + "Transpose"] as number[]], [inverse, values[name + "InverseTranspose"] as number[]]]) {
+            for (const [source, target] of [[base, values[name + "TRANSPOSE"] as number[]], [inverse, values[name + "INVERSETRANSPOSE"] as number[]]]) {
                 for (let row = 0; row < 4; row++) for (let column = 0; column < 4; column++) expect(target[column * 4 + row]).toBeCloseTo(source[row * 4 + column], 5);
             }
         }
@@ -108,13 +106,13 @@ describe("published WGSL reference", () => {
     it("rejects Phong declarations on PBR and accepts the other 35 inputs", () => withScene((scene, _material, mesh) => {
         const material = new PBRMaterial("pbr", scene); material.albedoColor.set(0.7, 0.6, 0.5); material.alpha = 0.8;
         const data = asset();
-        expect(() => validateEffectMaterialInputs(data, material)).toThrow("MaterialSpecular");
+        expect(() => validateEffectMaterialInputs(data, material)).toThrow("GEOMETRY_SPECULAR");
         const inputs = data.manifest.inputs ?? {};
-        delete inputs.MaterialSpecular;
-        expect(() => validateEffectMaterialInputs(data, material)).toThrow("MaterialSpecularPower");
-        delete inputs.MaterialSpecularPower;
+        delete inputs.GEOMETRY_SPECULAR;
+        expect(() => validateEffectMaterialInputs(data, material)).toThrow("GEOMETRY_SPECULARPOWER");
+        delete inputs.GEOMETRY_SPECULARPOWER;
         const values = resolveEffectInputs(data, defaultEffectAssignment(data), material, mesh, time, { width: 640, height: 360 });
         expect(Object.keys(values)).toHaveLength(35);
-        expect(values.MaterialDiffuse).toEqual([0.7, 0.6, 0.5, 0.8]);
+        expect(values.GEOMETRY_DIFFUSE).toEqual([0.7, 0.6, 0.5, 0.8]);
     }));
 });

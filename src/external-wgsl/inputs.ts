@@ -12,7 +12,7 @@ export function validateEffectMaterialInputs(asset: EffectAsset, material: Effec
     if (!(material instanceof PBRMaterial)) return;
     for (const [name, input] of Object.entries(asset.manifest.inputs ?? {})) {
         if (input.annotations?.Object === "Geometry" && ["SPECULAR", "SPECULARPOWER"].includes(input.semantic)) {
-            throw new Error(`PBR does not support Phong input ${name} (${input.semantic}); use a shader parameter instead`);
+            throw new Error(`PBR does not support Phong input ${name} (${input.semantic}); use a shader const instead`);
         }
     }
 }
@@ -28,10 +28,10 @@ export class EffectClock {
             asyncElapsed: output || playing ? elapsed : previous ? now - previous.now : 0 };
     }
 }
-export function resolveEffectInputs(asset: EffectAsset, assignment: EffectAssignment, material: EffectMaterial, mesh: AbstractMesh, time: EffectTime, viewportSize: { width: number; height: number }): Record<string, EffectValue> {
+export function resolveEffectInputs(asset: EffectAsset, _assignment: EffectAssignment, material: EffectMaterial, mesh: AbstractMesh, time: EffectTime, viewportSize: { width: number; height: number }): Record<string, EffectValue> {
     validateEffectMaterialInputs(asset, material);
     const scene = material.getScene();
-    const values: Record<string, EffectValue> = { ...assignment.parameters };
+    const values: Record<string, EffectValue> = {};
     const light = scene.lights.find(item => item instanceof DirectionalLight) as DirectionalLight | undefined;
     for (const [name, input] of Object.entries(asset.manifest.inputs ?? {})) {
         const matrix = matrixSemantic(input.semantic);

@@ -1,31 +1,20 @@
 # MME風の自動入力を使うWGSLサンプル
 
-更新: 2026-09-12
+更新: 2026-09-16 / API v2
 
-アプリが現在の材質・ライト・カメラ・時間から更新する値を、冒頭設定の`inputs`で受け取る教材。値を手で設定する`parameters`と区別して使う。外部材質API v1向けで、テクスチャ入力は不要。行列・時間の教材は通常MMD・PBR共通、Phongの光沢値を読む材質・ライトの教材は通常MMD専用。
+材質・ライト・カメラ・時間をEffectInputsから受け取る教材。手で変更するconstと動的入力を区別する。格子・時間の教材は通常MMD／PBR共通、Phongを使う材質・ライト教材は通常MMD専用。
 
-以下の「表示」「時計」「格子」等の切替は、テキストエディタで冒頭設定の`parameters.DisplayMode.default`、`parameters.Clock.default`等を書き換え、「外部WGSL読込…」から再読込して共通ボタンで割り当てる。専用の色・数値入力UIは設けない。照明方向などアプリ本体の操作は従来どおりGUIを使う。
+表示は冒頭のDISPLAY_MODE、時計はCLOCKを書き換え、再読込・再割当する。照明等はアプリ本体のGUIで操作する。
 
-## 変数名・semantic・Objectの関係
-
-```json
-"inputs": {
-  "MaterialDiffuse": {
-    "type": "vec4f",
-    "semantic": "DIFFUSE",
-    "annotations": { "Object": "Geometry" }
-  },
-  "LightDiffuse": {
-    "type": "vec3f",
-    "semantic": "DIFFUSE",
-    "annotations": { "Object": "Light" }
-  }
-}
+```wgsl
+struct EffectInputs {
+    GEOMETRY_DIFFUSE: vec4f,
+    LIGHT_DIFFUSE: vec3f,
+};
+var<uniform> effectInputs: EffectInputs;
 ```
 
-WGSLでは`modokiInputs.MaterialDiffuse.rgb`、`modokiInputs.LightDiffuse`として読む。作者が決める変数名は`MaterialDiffuse`の部分。アプリが何を渡すかは`semantic`と`annotations.Object`で決まり、同じ`DIFFUSE`でも材質とライトで値・型が違う。予約名以外なら変数名を変更できるが、WGSL内の参照も揃える。
-
-この教材の名前はMMEの概念に寄せた独自APIの名前であり、`.fx`本文やHLSLの宣言をそのまま読む機能ではない。binding番号、uniform構造体、エントリーポイントはアプリが用意する。
+材質色はeffectInputs.GEOMETRY_DIFFUSE.rgb、ライト色はeffectInputs.LIGHT_DIFFUSE。名前と型は固定。MMEに近い概念の独自APIで、.fxやHLSLを直接読み込むものではない。group・binding番号はBabylonに任せる。
 
 ## 1. 材質・ライト・視点
 
@@ -33,13 +22,13 @@ WGSLでは`modokiInputs.MaterialDiffuse.rgb`、`modokiInputs.LightDiffuse`とし
 
 | 変数 | semantic / Object | 実際に使うところ |
 | --- | --- | --- |
-| MaterialDiffuse | DIFFUSE / Geometry | 材質自身のRGBを簡易拡散色にする。RGBAのalphaはhost側で保持 |
-| MaterialAmbient | AMBIENT / Geometry | 材質の環境色を暗部へ加える |
-| MaterialSpecular | SPECULAR / Geometry | 光沢の色 |
-| MaterialSpecularPower | SPECULARPOWER / Geometry | ハイライトの鋭さ |
-| LightDiffuse | DIFFUSE / Light | 主方向ライトの現在色 |
-| LightDirection | DIRECTION / Light | 法線との内積による受光量 |
-| CameraPosition | POSITION / Camera | 視線ベクトル、ハイライト、リム |
+| GEOMETRY_DIFFUSE | DIFFUSE / Geometry | 材質自身のRGBを簡易拡散色にする。RGBAのalphaはhost側で保持 |
+| GEOMETRY_AMBIENT | AMBIENT / Geometry | 材質の環境色を暗部へ加える |
+| GEOMETRY_SPECULAR | SPECULAR / Geometry | 光沢の色 |
+| GEOMETRY_SPECULARPOWER | SPECULARPOWER / Geometry | ハイライトの鋭さ |
+| LIGHT_DIFFUSE | DIFFUSE / Light | 主方向ライトの現在色 |
+| LIGHT_DIRECTION | DIRECTION / Light | 法線との内積による受光量 |
+| CAMERA_POSITION | POSITION / Camera | 視線ベクトル、ハイライト、リム |
 
 「表示」を0〜4へ変えると、合成した簡易照明／材質色／ライト色／光沢／リムを個別に見られる。アプリのカメラ編に切り替え、照明欄で方向X・Y・Zや照明R・G・Bを変えると再読込なしで反映される。材質色は読み込んだ材質の値に従い、カメラを回すとハイライト・リムが変わる。教材パラメーターを編集するときはモデルを選び直し、必要ならエフェクトパネルの材質タブを開く。
 
@@ -53,14 +42,14 @@ WGSLでは`modokiInputs.MaterialDiffuse.rgb`、`modokiInputs.LightDiffuse`とし
 
 | 変数 | semantic / Object | 実際に使うところ |
 | --- | --- | --- |
-| World | WORLD / Geometry | transpose(World)でworld法線をlocal側へ戻す |
-| WorldInverse | WORLDINVERSE / Geometry | hookのworld位置をmesh側へ戻す |
-| WorldViewProjection | WORLDVIEWPROJECTION / Geometry | mesh側の位置をclip座標へ投影 |
-| ViewportSize | VIEWPORTPIXELSIZE / 指定なし | 正規化した画面座標を描画pixelへ変換 |
+| WORLD | WORLD / Geometry | transpose(WORLD)でworld法線をlocal側へ戻す |
+| WORLDINVERSE | WORLDINVERSE / Geometry | hookのworld位置をmesh側へ戻す |
+| WORLDVIEWPROJECTION | WORLDVIEWPROJECTION / Geometry | mesh側の位置をclip座標へ投影 |
+| VIEWPORTPIXELSIZE | VIEWPORTPIXELSIZE / 指定なし | 正規化した画面座標を描画pixelへ変換 |
 
 既定は左右比較。左半分に青緑の物体格子、右半分に橙の画面格子を重ねる。「格子」0なら全体を物体格子、1なら全体を画面格子にする。カメラを回したり拡大すると、物体に付いた模様と画面に固定された模様の違いが分かる。物体格子は面の向きに応じて投影軸を切り替えるため、その境界で向きも切り替わる。
 
-WGSLの計算順は`matrix * vector`。`WorldViewProjection`へはlocal位置を入れる。`positionWS`を直接入れるとWORLDを二重に適用してしまう。mesh側へ戻してもスキニング前のrest座標を復元するわけではない。
+WGSLの計算順は`matrix * vector`。`WORLDVIEWPROJECTION`へはlocal位置を入れる。`positionWS`を直接入れるとWORLDを二重に適用してしまう。mesh側へ戻してもスキニング前のrest座標を復元するわけではない。
 
 `VIEWPORTPIXELSIZE`は幅・高さで、逆数ではない。格子の間隔32pixelはPNG出力でもその出力画像のpixel基準になる。線幅の計算には微分`fwidth`を使う。画面の左右判定をする前に、微分を含む両方の格子を評価している。
 
@@ -70,11 +59,11 @@ WGSLの計算順は`matrix * vector`。`WorldViewProjection`へはlocal位置を
 
 | 変数 | semantic / 指定 | 実際に使うところ |
 | --- | --- | --- |
-| TimelineTime | TIME / SyncInEditMode=true | タイムラインに同期する走査線 |
-| PreviewTime | TIME / SyncInEditMode=false | 停止中も進む走査線 |
-| TimelineDelta | ELAPSEDTIME / SyncInEditMode=true | 編集frameの変化量を色にする |
-| PreviewDelta | ELAPSEDTIME / SyncInEditMode=false | 停止中の実時間更新量を色にする |
-| Frame | MODOKI_FRAME | 1frameずつ進む縞。MME互換名ではなく独自拡張 |
+| TIME | TIME / SyncInEditMode=true | タイムラインに同期する走査線 |
+| TIME_UNSYNCED | TIME / SyncInEditMode=false | 停止中も進む走査線 |
+| ELAPSEDTIME | ELAPSEDTIME / SyncInEditMode=true | 編集frameの変化量を色にする |
+| ELAPSEDTIME_UNSYNCED | ELAPSEDTIME / SyncInEditMode=false | 停止中の実時間更新量を色にする |
+| MODOKI_FRAME | MODOKI_FRAME | 1frameずつ進む縞。MME互換名ではなく独自拡張 |
 
 「時計」0では停止中に静止し、0 → 15 → 0フレームで模様が変化・復帰する。「時計」1では停止していてもviewportの走査線が進む。再生時はどちらもタイムラインに従う。
 
@@ -90,13 +79,13 @@ API全体は [使い方・実装範囲](./external-wgsl-material-usage.md)、他
 
 `VIEWPORTPIXELSIZE`を描画時の`engine.getRenderWidth()/getRenderHeight()`で取得すると、PNG出力先とは異なる中間バッファ寸法を返す場合があった。ローカルのBabylon.js 9.2.0では640×360出力中にも1152×648が渡り、32pixel指定の格子が約18pixelになっていた。
 
-作品を描く寸法というAPI v1の契約に合わせ、hostが保持するexport surfaceの幅・高さを優先し、通常viewportではcanvas寸法を渡すように修正した。Classic / Frame Graph共通で、出力終了後はviewportへ戻る。カメラのoutputRenderTargetだけではFrame Graphの出力先を表せないため、host側で選択する。
+作品を描く寸法というAPI v1の契約に合わせ、hostが保持するexport surfaceの幅・高さを優先し、通常viewportではcanvas寸法を渡すように修正した。Classic / MODOKI_FRAME Graph共通で、出力終了後はviewportへ戻る。カメラのoutputRenderTargetだけではMODOKI_FRAME Graphの出力先を表せないため、host側で選択する。
 
 一次情報: [Babylon.js WebGPUEngine API](https://doc.babylonjs.com/typedoc/classes/BABYLON.WebGPUEngine#getrenderwidth)。導入済み`node_modules/@babylonjs/core/Engines/webgpuEngine.js`の同メソッドも照合し、`useScreen=false`は現在のRT、`true`はcanvasを返すことを確認した。
 
-## 確認結果（2026-09-12）
+## 確認結果（v1当時・2026-09-12）
 
-自作fixture `test/fixtures/external-parent/sss-reference.pmx`を使い、Classic / Frame GraphのローカルElectron E2Eで3本をGUIから読み込み・適用した。
+自作fixture `test/fixtures/external-parent/sss-reference.pmx`を使い、Classic / MODOKI_FRAME GraphのローカルElectron E2Eで3本をGUIから読み込み・適用した。
 
 - 照明方向・照明RのGUI変更、材質DIFFUSE／ライトDIFFUSEの切替による画像変化。
 - 物体格子／画面格子の切替。960×640と640×360のPNGで画面格子の間隔が32pixel（画像測定の許容差±1pixel）。

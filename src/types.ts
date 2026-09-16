@@ -978,6 +978,8 @@ export interface MmdModokiProjectFileV1 {
 
 export interface PngSequenceExportRequest {
     project: MmdModokiProjectFileV1;
+    /** Current editor permission, outside the untrusted project snapshot. Not persisted by the exporter. */
+    externalWgslEnabled?: boolean;
     externalLut?: ExportExternalLutAsset | null;
     outputDirectoryPath: string;
     startFrame: number;

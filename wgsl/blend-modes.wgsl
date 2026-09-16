@@ -1,18 +1,19 @@
-/* @modoki
-{
-  "apiVersion": 1,
-  "kind": "mmd-material",
-  "name": "Blend Modes",
-  "description": "元の材質・テクスチャ・陰影を下地に、通常・加算・乗算・スクリーン・オーバーレイを比較する教材。",
-  "hooks": { "finalColor": "shadeBlendModes" },
-  "parameters": {
-    "BlendMode": { "type": "u32", "default": 4, "ui": { "min": 0, "max": 4 } },
-    "LayerColor": { "type": "vec3f", "default": [0.25, 0.7, 0.9], "ui": { "min": 0, "max": 1 } },
-    "Opacity": { "type": "f32", "default": 0.5, "ui": { "min": 0, "max": 1 } }
-  }
-}
-*/
+// Blend Modes
+// 元の材質・テクスチャ・陰影を下地に、通常・加算・乗算・スクリーン・オーバーレイを比較する教材。
 
+// ---- ここを編集: 見た目の調整 ----
+// BlendMode。目安0〜4。0u:通常、1u:加算、2u:乗算、3u:スクリーン、4u:オーバーレイ。
+const BLEND_MODE: u32 = 4u;
+// LayerColor。目安0〜1。合成するRGB。加算は黒、乗算は白で変化なし。
+const LAYER_COLOR: vec3f = vec3f(0.25, 0.7, 0.9);
+// Opacity。目安0〜1。0で元の色。モデルの透明度は変えない。
+const OPACITY: f32 = 0.5;
+
+// ---- 接続仕様: 通常は変更しない ----
+const MODOKI_API_VERSION: u32 = 2u;
+const MODOKI_EFFECT_VERSION: vec3u = vec3u(1u, 0u, 0u);
+
+// ---- 計算処理 ----
 // 下地 base = 元のテクスチャ・材質色・照明を含む input.color。
 // 重ねる色 layer は、この例では単色。模様や宝石の効果色へ置き換えて使える。
 // Opacity は色を混ぜる量であり、モデルの透明度ではない。alphaはホストが保持する。
@@ -63,6 +64,6 @@ fn blendLayer(base: vec3f, layer: vec3f, mode: u32, opacity: f32) -> vec3f {
     return mix(base, blended, clamp(opacity, 0.0, 1.0));
 }
 
-fn shadeBlendModes(input: ModokiFinalColor) -> vec3f {
-    return blendLayer(input.color, modokiInputs.LayerColor, modokiInputs.BlendMode, modokiInputs.Opacity);
+fn effectFinalColor(input: ModokiFinalColor) -> vec3f {
+    return blendLayer(input.color, LAYER_COLOR, BLEND_MODE, OPACITY);
 }

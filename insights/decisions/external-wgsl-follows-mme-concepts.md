@@ -4,13 +4,14 @@ status: decision
 priority: normal
 scope: experiments/shaders
 confidence: high
-last_verified: 2026-09-14
+last_verified: 2026-09-16
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-09-12
 evidence:
   - conversation-explicit-instruction
 source_docs:
+  - ../../docs/external-wgsl-authoring-v2-design-2026-09-16.md
   - ../../docs/external-wgsl-mme-semantics-design-2026-09-12.md
   - ../../docs/external-wgsl-material-api-v1-design.md
   - ../../docs/external-wgsl-material-usage.md
@@ -37,7 +38,9 @@ WGSLのコンパイル・読込エラーは、PMX読込エラーと同じビュ�
 
 外部WGSLの色・数値等の編集UIは設けず、値は利用者がテキストエディタで変更する。読み込んだ外部定義を既存プリセットと同じ一覧に追加し、割り当ても既存ボタンへ統合する。追加UIは外部WGSL読込ボタン1つに留める。
 
-作者向け配布・読込は、冒頭コメントに設定を埋め込んだ単一WGSLへ統一する。旧JSON定義の直接読込は残さない。サンプル名は日本語併記を外して短くする。
+作者向け配布・読込は単一WGSLとする。2026-09-16、所有者はJSON混合をなくす設計へ変更し、Babylon.jsのWGSL処理に近い記法と、テキストエディタで調整箇所が分かる説明を重視すると指定した。スライダー用の設定情報は不要。冒頭JSONコメントという2026-09-12の方式は新規設計の目標から外し、履歴・現行実装として区別する。
+
+具体的なconst名、入力struct、hook名、API番号、旧snapshotの移行方式は[v2設計](../../docs/external-wgsl-authoring-v2-design-2026-09-16.md)の実装提案であり、所有者が個別指定した仕様とは扱わない。新しい作者形式の方針から、project内部JSONの廃止や保存済みshaderの破棄は推定しない。サンプル名は引き続き短くし、調整値には用途・単位・推奨範囲等を分かりやすく説明する。
 
 2026-09-14、所有者はWGSLフォルダをビルド後のアプリにも添付するよう求めた。サンプルと作成ガイド・開発リファレンスを配布に含める。`app.asar`外への配置は、利用者がコピーして編集できるようにする実装判断とする。
 
@@ -50,6 +53,7 @@ WGSLの失敗がアプリ全体の操作不能につながる事態に備え、�
 - 初期Toon snippet実装を根拠に、外部WGSLを恒久的にToon用途へ限定する。
 - MMEを参考にする指示を、fx互換実装や全機能の一括実装の確約とみなす。
 - 提案段階のJSON形式・既定値・対応semanticを所有者採用済みとして扱う。
+- 廃止したJSONを別の設定用コメント言語へ置き換えただけで、WGSL記法へ統一したと説明する。
 
 ## 根拠
 
@@ -64,6 +68,8 @@ WGSLの失敗がアプリ全体の操作不能につながる事態に備え、�
 2026-09-12、所有者はサンプル名の併記削除を指定し、その後「単一WGSLにしちゃおう。既存のJson読込はなくしちゃっていい」と明示した。これは外部読込形式の判断であり、既存プロジェクト内の保存snapshot破棄を求めたものではない。
 
 2026-09-12、所有者は「シェーダーが失敗してアプリごとフリーズは避けたいものね。そのあたりの備えと実装もおねがい」と明示した。
+
+2026-09-16の指定: 「json混合やなのでなくす設計に修正したい」「テキストエディタとかで編集するためにいじるといいとこはできるだけわかりやすくしたい」「Babylon.jsのWGSLの扱いからあまり離れたくもない」。今回の依頼は仕様再検討で、実装完了の報告ではない。
 
 ## 再確認条件
 

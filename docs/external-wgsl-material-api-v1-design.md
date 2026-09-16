@@ -2,6 +2,8 @@
 
 更新: 2026-09-12 / 状態: Aの初期実装を追加。B以降と未検証項目は設計案
 
+2026-09-16 設計更新: 作者形式は[JSONを使わないv2再設計](./external-wgsl-authoring-v2-design-2026-09-16.md)を新しい正本とする。以下のJSON設定・parameters・任意hook名はv1の記録であり、新規実装の目標にしない。入力の意味・材質内の処理位置・復帰の要件はv2でも参照する。現行ローダーはまだv1で、v2の実装・GPU検証は未実施。
+
 現在の使い方・実装差分・確認範囲は [外部WGSL材質の使い方](./external-wgsl-material-usage.md)を参照する。以下は拡張も含めた設計であり、全項目が実装済みという意味ではない。
 
 2026-09-13追記: 所有者のPBR接続依頼により、初期案で別profile候補としていたPBRは、既存surface/finalColor契約のadapterとして対応する。下記の「PBR切替で外部処理を実行しない」は初期段階の制限で、現在は各mode bankの割当を実行する。[PBR接続仕様](./external-wgsl-pbr-adapter.md)を優先する。

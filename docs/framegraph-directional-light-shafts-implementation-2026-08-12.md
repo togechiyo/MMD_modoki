@@ -149,7 +149,7 @@ diagnostics 0 件を確認した。
 
 ### 現行パラフレア実装の要点
 
-- 方向光を view space へ変換し、画面上の光方向を `vec2(lightViewDirection.x, -lightViewDirection.y)` として使う。初期試作で上下左右が反転していたため、投影ベクトルを全面的に反転して補正した。
+- 方向光をview spaceへ変換し、画面上の光源側を `vec2(-lightViewDirection.x, -lightViewDirection.y)` として使う。2026-09-17にX符号を修正した。8月の初期実装はXが正で、方向追従のchecksum差だけを確認しており、左右の光源側一致を確認できていなかった。
 - 光側は白を加算し、影側は黒へ乗算する。無彩色を初期値にすることで、ステージや照明色を選ばず使いやすくした。2色はUIから独立して変更できる。
 - 強度のruntime範囲は `0.0〜0.16`。従来上限 `0.08` の見え方をUI中央の50に置き、50〜100をより強い演出用として追加した。
 - グラデーション偏りのruntime範囲は `-0.9〜0.9`。偏りなしの `0.0` をUI中央の50に置く。
@@ -167,6 +167,20 @@ diagnostics 0 件を確認した。
 - WebGPU validation diagnostics は 0 件
 
 ## 制約と次段階
+
+### 2026-09-17 左右反転の修正
+
+所有者の2枚の画像では、方向Xを+1から-1へ反転すると、パラフレアの赤い光側がモデルの受光側と反対へ移動していた。配布可能な豆腐PMXとFrame Graphの単独パラフレアで再現した。
+
+Babylon.js 9.2.0のDirectionalLight.directionは光線の進行方向であり、光源へ向かう方向はその逆。現行taskは進行方向をそのままview空間へ変換して送るが、shaderの横軸も同符号だった。このため左右が逆だった。画面UVの縦軸変換は既に合っていたため、shaderのX成分だけ反転する。方向光本体・PBR・影設定・保存形式・既定値は変更しない。
+
+追加E2Eは光側を赤、影側を白（乗算の中立色）にし、左/右/上/下/背面cameraの5条件で画面端の赤成分を比較する。方向は照明欄GUIから操作し、viewport screenshotと640×360 PNGの両方を確認する。修正前は左右と背面cameraの計6assertが逆符号（約-22）、上下は成功。修正後は全条件で光源側が高い（約+22〜+26）ことを確認し、画像も目視確認した。
+
+- 既存の色・強度・方向追従E2Eと新規方向一致E2E: 2件成功、WebGPU validation error 0。
+- 関連unit: shader / settingsの2ファイル5件成功。
+- lint、typecheck:critical成功。通常typecheckの既存非criticalエラーは残る。
+- 修正前後の画像と測定JSON: ignoredな`local-references/para-flare-direction-2026-09-17/`へ保管。
+- 起動初期化は変更せず、追加smokeは省略。元の私有model、Bloom併用、動画ファイル、macOSは今回未検証。
 
 現行は screen-space 近似であり、真の volumetric shadow ではない。
 

@@ -71,4 +71,6 @@ caster 4、各model receiver 3、CSM 3分割、WebGPU filter none、shadow sampl
 
 スクリーンショットとaudit JSONは`local-references/pbr-light-shadow-audit-2026-09-17/`へ保管。利用したのは配布可能fixtureのみ。ユーザーの現在project・私有model、macOS、WebGL、動画出力は今回未検証。
 
-修正候補はMMD Likeの独自maskを光RGBから分離すること。影色と半球下色の設定分離はUIと保存互換を伴う別論点。所有者は今回は確認を依頼しているため、いずれも実装採用とはしない。
+修正候補はMMD Likeの独自maskを光RGBから分離すること。影色と半球下色の設定分離はUIと保存互換を伴う別論点。
+
+調査後、所有者は「影の薄さ」を忘れていたと確認し、続けて「変更なしでいい」と明示した。この報告を理由とするPBR照明・影色mask・半球光の変更は行わない。独自maskの技術的所見は残すが、実装採用と混同しない。別件のパラフレア方向反転はこの判断の対象外。

@@ -13,7 +13,7 @@ describe("directional para flare shader", () => {
         expect(shader).toContain("multiplied + lightTint * additiveAmount");
         expect(shader).toContain("viewDepthTexture");
         expect(shader).toContain("reconstructViewDistance");
-        expect(shader).toContain("vec2f(uniforms.lightViewDirection.x, -uniforms.lightViewDirection.y)");
+        expect(shader).toContain("vec2f(-uniforms.lightViewDirection.x, -uniforms.lightViewDirection.y)");
         expect(shader).not.toContain("for (var index");
         expect(shader).not.toContain("noise");
         expect(shader).not.toContain("fract(");

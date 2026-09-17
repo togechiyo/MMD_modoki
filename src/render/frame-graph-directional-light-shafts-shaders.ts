@@ -35,7 +35,10 @@ fn main(input: FragmentInputs)->FragmentOutputs {
         return fragmentOutputs;
     }
 
-    let projected = vec2f(uniforms.lightViewDirection.x, -uniforms.lightViewDirection.y);
+    // DirectionalLight.direction points along the rays, away from their source.
+    // Convert the source direction to this fullscreen pass's UV axes; positive
+    // view Y and positive UV Y point to opposite screen sides.
+    let projected = vec2f(-uniforms.lightViewDirection.x, -uniforms.lightViewDirection.y);
     let projectedLength = length(projected);
     let lightAxis = select(normalize(vec2f(0.35, -1.0)), projected / max(projectedLength, 0.0001), projectedLength > 0.0001);
     let centeredUv = input.vUV - vec2f(0.5);

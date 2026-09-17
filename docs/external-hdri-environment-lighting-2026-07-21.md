@@ -1,5 +1,16 @@
 # IBL / 外部 HDRI 現行仕様・調査記録 2026-07-21
 
+## 2026-09-17 水平回転
+
+- `設定 → 実験設定… → PBR → 環境ライト・IBL影の詳細`へ「環境の水平回転」を追加。0〜360°、1°刻みのスライダーで一周できる。360°は右端に保持し、描画上は0°と同じ向きになる。
+- 環境ライトとHDRI背景をY軸回りに同時に回す。初期値は0°。背景非表示・環境ライトOFFでも角度は保持し、PBR OFF時は既存fieldsetとともに操作不可になる。
+- 内蔵HDR・外部HDR / ENV / DDS・背景用cloneへ同じ角度を適用。操作中にテクスチャを再読込・再生成せず、PBR（freeze済みを含む）と背景の材質bindingを更新する。
+- localStorageの`mmd_modoki.environmentLightingRotationDegrees`とprojectの`lighting.environmentLightingRotationDegrees`へ保存する。project読込は保存値を優先し、旧project・非数値・非有限値は0°、範囲外は0〜360°へclampする。別window出力も共通project復元経路を使う。
+- Babylon.jsの[公式HDR環境ドキュメント](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/materials/using/HDREnvironment.md)とinstalled 9.2.0の`cubeTexture.js` / `envCubeTexture.js`を確認。`rotationY`はradianでreflection matrixを更新する。背景用cloneにも明示適用し、角度変更後は材質bindingを更新する。
+- IBL影は既存どおり凍結中。方向ライト、影generator、cascade等の設定は変更しない。
+
+検証: unit 158 files / 917 tests、lint、critical gate、WebGPU / Bullet MPR smokeと環境ライトprobe成功。typecheckは作業前後とも542件で、file別error code件数の増加なし。`environment-rotation.spec.mjs`で一周、背景とのmatrix一致、PBR切替、project復元、旧project fallback、Classic / Frame Graphでの再起動復元を確認。`environment-cube-source.spec.mjs`で外部ENV / DDS切替・project復元・内蔵HDR復帰後の角度保持を確認。既存`experimental-settings.spec.mjs`も成功。90°と360°のGUI screenshotで背景の向きの変化を目視確認した。任意モデルの見え方と回転操作の手触りは所有者実機での確認対象。
+
 ## 2026-09-08 ENV / DDS追加
 
 - 内蔵環境ライトはCC0のTrueHDRIを維持する。BabylonのStudio素材への置換は行わない。
@@ -272,7 +283,5 @@ IBL強度を標準`1.0`へ戻す。
 
 - 材質別PBR MMD Likeでtoon補正のみ / SSSのみ / 両方を段階的に再導入して比較
 - 材質別PBR MMD Likeを再調整する場合のIBL強度応答と白飛びの確認
-- HDRIのY回転
-- `.env`の外部読込
 - 外部HDRパスの相対化またはプロジェクト同梱方針
 - diffuse / specular IBLを個別表示する診断機能

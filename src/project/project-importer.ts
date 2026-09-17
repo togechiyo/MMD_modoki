@@ -1,3 +1,4 @@
+import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
 import type {
     MmdModokiProjectFileV1,
     ProjectAccessoryState,
@@ -174,6 +175,7 @@ type ProjectImportHost = {
     iblShadowsEnabled: boolean;
     environmentLightingEnabled: boolean;
     environmentLightingIntensity: number;
+    environmentLightingRotationDegrees: number;
     environmentBackgroundVisible: boolean;
     environmentBackgroundIntensity: number;
     setEnvironmentLightingSourcePath(path: string | null): Promise<boolean>;
@@ -1066,6 +1068,7 @@ export async function importProjectState(
         && Number.isFinite(data.lighting.environmentLightingIntensity)
         ? data.lighting.environmentLightingIntensity
         : 1;
+    host.environmentLightingRotationDegrees = normalizeEnvironmentLightingRotation(data.lighting.environmentLightingRotationDegrees);
     host.characterContactShadowOpacity = typeof data.lighting.characterContactShadowOpacity === "number" && Number.isFinite(data.lighting.characterContactShadowOpacity)
         ? data.lighting.characterContactShadowOpacity
         : 0.5;

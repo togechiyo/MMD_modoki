@@ -20,6 +20,18 @@ test("environment cubemaps load through GUI, survive project restore, and return
     const diagnostics = () => page.evaluate(() => window.mmdModokiE2e.getEnvironmentLightingDiagnostics());
     await open();
     await dialog.getByLabel("PBRモード", { exact: true }).check();
+    const rotation = dialog.getByRole("slider", { name: "環境の水平回転", exact: true });
+    await rotation.focus();
+    await rotation.press("Home");
+    for (let step = 0; step < 90; step++) await rotation.press("ArrowRight");
+    const checkRotation = async () => {
+      await expect(rotation).toHaveValue("90");
+      const state = await diagnostics();
+      expect(state.rotationDegrees).toBe(90);
+      expect(state.reflectionMatrix[0]).toBeCloseTo(0, 5);
+      expect(state.reflectionMatrix[2]).toBeCloseTo(-1, 5);
+      if (state.backgroundVisible) expect(state.backgroundReflectionMatrix).toEqual(state.reflectionMatrix);
+    };
     for (const source of sources) {
       await launched.app.evaluate(({ dialog }, path) => {
         dialog.showOpenDialog = async options => {
@@ -32,6 +44,7 @@ test("environment cubemaps load through GUI, survive project restore, and return
       await expect.poll(async () => (await diagnostics()).textureReady).toBe(true);
       expect((await diagnostics()).backgroundTextureReady).toBe(true);
       expect((await diagnostics()).hasSphericalPolynomial).toBe(true);
+      await checkRotation();
       const probe = await page.evaluate(() => window.mmdModokiE2e.runEnvironmentLightingDiagnosticProbe());
       expect(probe.passed).toBe(true);
       const filters = await launched.app.evaluate(() => globalThis.environmentFilters);
@@ -44,6 +57,7 @@ test("environment cubemaps load through GUI, survive project restore, and return
       await expect(dialog).toContainText(source.split(/[\\/]/).at(-1));
       expect((await diagnostics()).sourcePath).toBe(source.replace(/\\/g, "/"));
       expect((await diagnostics()).textureReady).toBe(true);
+      await checkRotation();
     }
     await launched.app.evaluate(({ dialog }, path) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
@@ -62,6 +76,7 @@ test("environment cubemaps load through GUI, survive project restore, and return
     await dialog.getByRole("button", { name: "クリア", exact: true }).click();
     await expect.poll(async () => (await diagnostics()).source).toBe("bundled");
     expect((await diagnostics()).sourcePath).toBeNull();
+    await checkRotation();
     expect((await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).count).toBe(0);
   } finally {
     await launched.close();

@@ -447,6 +447,7 @@ import {
     isBmpTexturePath,
 } from "./scene/bmp-texture-compat";
 import { GlobalIlluminationController } from "./render/global-illumination-controller";
+import { normalizeEnvironmentLightingRotation } from "./shared/environment-lighting-rotation";
 import {
     applyEnvironmentLightingIntensity,
     calculateEnvironmentTextureLevel,
@@ -1130,6 +1131,7 @@ export class MmdManager {
     private static readonly MMD_COPLANAR_DEPTH_BIAS_STRENGTH_STORAGE_KEY = "mmd_modoki.render.coplanarDepthBiasStrength";
     private static readonly ENVIRONMENT_LIGHTING_STORAGE_KEY = "mmd_modoki.environmentLighting";
     private static readonly ENVIRONMENT_LIGHTING_INTENSITY_STORAGE_KEY = "mmd_modoki.environmentLightingIntensity";
+    private static readonly ENVIRONMENT_LIGHTING_ROTATION_STORAGE_KEY = "mmd_modoki.environmentLightingRotationDegrees";
     private static readonly ENVIRONMENT_BACKGROUND_STORAGE_KEY = "mmd_modoki.environmentBackground";
     private static readonly ENVIRONMENT_BACKGROUND_INTENSITY_STORAGE_KEY = "mmd_modoki.environmentBackgroundIntensity";
     private static readonly MAX_ENVIRONMENT_LIGHTING_INTENSITY = 4;
@@ -1895,7 +1897,7 @@ ${beforeFogAppendBlock}
     private skydome: Mesh | null = null;
     private skydomeMaterial: BackgroundMaterial | null = null;
     private skydomeGradientTexture: DynamicTexture | null = null;
-    private environmentSkyboxTexture: BaseTexture | null = null;
+    private environmentSkyboxTexture: HDRCubeTexture | CubeTexture | null = null;
     private skydomeVisibleValue = true;
     private skydomeBackgroundStyleValue = normalizeSkydomeBackgroundStyle(DEFAULT_SKYDOME_BACKGROUND_STYLE);
     private backgroundImageLayer: Layer | null = null;
@@ -1937,6 +1939,9 @@ ${beforeFogAppendBlock}
         true,
     );
     private environmentLightingIntensityValue = MmdManager.readEnvironmentLightingIntensityLocalStorage();
+    private environmentLightingRotationDegreesValue = MmdManager.readNumberLocalStorage(
+        MmdManager.ENVIRONMENT_LIGHTING_ROTATION_STORAGE_KEY, 0, 0, 360,
+    );
     private environmentBackgroundVisibleValue = MmdManager.readBooleanLocalStorage(
         MmdManager.ENVIRONMENT_BACKGROUND_STORAGE_KEY,
         false,
@@ -3652,6 +3657,9 @@ ${beforeFogAppendBlock}
         pbrMaterialCount: number;
         iblIntensity: number;
         environmentIntensity: number;
+        rotationDegrees: number;
+        reflectionMatrix: number[] | null;
+        backgroundReflectionMatrix: number[] | null;
     } {
         const environmentTexture = this.scene.environmentTexture;
         const availableTexture = environmentTexture ?? this.environmentLightingSuppressedTexture;
@@ -3681,6 +3689,10 @@ ${beforeFogAppendBlock}
             ).length,
             iblIntensity: this.scene.iblIntensity,
             environmentIntensity: this.scene.environmentIntensity,
+            rotationDegrees: this.environmentLightingRotationDegreesValue,
+            reflectionMatrix: environmentTexture ? Array.from(environmentTexture.getReflectionTextureMatrix().m) : null,
+            backgroundReflectionMatrix: this.environmentSkyboxTexture
+                ? Array.from(this.environmentSkyboxTexture.getReflectionTextureMatrix().m) : null,
         };
     }
 
@@ -3825,6 +3837,30 @@ ${beforeFogAppendBlock}
         return this.environmentLightingSourcePathValue;
     }
 
+    public get environmentLightingRotationDegrees(): number {
+        return this.environmentLightingRotationDegreesValue;
+    }
+
+    public set environmentLightingRotationDegrees(value: number) {
+        this.environmentLightingRotationDegreesValue = normalizeEnvironmentLightingRotation(value);
+        this.applyEnvironmentLightingRotation();
+        MmdManager.writeNumberLocalStorage(
+            MmdManager.ENVIRONMENT_LIGHTING_ROTATION_STORAGE_KEY,
+            this.environmentLightingRotationDegreesValue,
+        );
+    }
+
+    private applyEnvironmentLightingRotation(): void {
+        const radians = this.environmentLightingRotationDegreesValue * Math.PI / 180;
+        for (const texture of [this.bundledEnvironmentTexture, this.externalEnvironmentTexture,
+            this.iblFallbackEnvironmentTexture, this.environmentSkyboxTexture]) {
+            if (texture) texture.rotationY = radians;
+        }
+        // Frozen PBR materials must refresh their reflection matrix bindings too.
+        this.applyCurrentEnvironmentLightingIntensity();
+        this.skydomeMaterial?.markDirty();
+    }
+
     public canShowEnvironmentBackground(): boolean {
         return this.getEnvironmentBackgroundSourceTexture() !== null;
     }
@@ -3948,6 +3984,7 @@ ${beforeFogAppendBlock}
         this.scene.environmentTexture = nextTexture;
         this.environmentLightingSuppressedTexture = null;
         this.setEnvironmentBackgroundVisible(true);
+        this.applyEnvironmentLightingRotation();
         if (previousTexture && previousTexture !== nextTexture) {
             previousTexture.dispose();
         }
@@ -5295,6 +5332,7 @@ ${beforeFogAppendBlock}
         } else {
             this.ensureFallbackIblEnvironmentTexture();
         }
+        this.applyEnvironmentLightingRotation();
     }
 
     private applyCurrentEnvironmentLightingIntensity(): EnvironmentLightingIntensityResult {
@@ -5328,6 +5366,7 @@ ${beforeFogAppendBlock}
                 skyboxTexture.name = `${sourceTexture.name}:skybox`;
                 skyboxTexture.coordinatesMode = Texture.SKYBOX_MODE;
                 skyboxTexture.gammaSpace = false;
+                skyboxTexture.rotationY = this.environmentLightingRotationDegreesValue * Math.PI / 180;
                 this.environmentSkyboxTexture = skyboxTexture;
                 this.skydomeMaterial.reflectionTexture = skyboxTexture;
                 this.applyEnvironmentBackgroundIntensity();

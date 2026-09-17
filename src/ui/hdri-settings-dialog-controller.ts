@@ -100,6 +100,20 @@ export class HdriSettingsDialogController implements PopupContentController {
             createPopupFormRange(intensity, intensityValue),
         ));
 
+        const rotation = document.createElement("input");
+        rotation.type = "range";
+        rotation.className = "popup-form-control popup-form-range";
+        rotation.min = "0";
+        rotation.max = "360";
+        rotation.step = "1";
+        rotation.setAttribute("aria-label", t("dialog.hdri.rotation"));
+        rotation.value = String(this.mmdManager.environmentLightingRotationDegrees);
+        const rotationValue = createPopupFormValueText(`${rotation.value}°`);
+        grid.appendChild(createPopupFormField(
+            t("dialog.hdri.rotation"),
+            createPopupFormRange(rotation, rotationValue),
+        ));
+
         const loadButton = createPopupFormButton(t("dialog.hdri.load"), "secondary");
         const clearButton = createPopupFormButton(t("dialog.hdri.clear"), "secondary");
         clearButton.disabled = sourcePath === null;
@@ -131,6 +145,8 @@ export class HdriSettingsDialogController implements PopupContentController {
             intensity.disabled = !lightingEnabled.checked;
             intensity.value = String(Math.round(this.mmdManager.getEnvironmentLightingIntensity() * 100));
             intensityValue.textContent = this.mmdManager.getEnvironmentLightingIntensity().toFixed(2);
+            rotation.value = String(this.mmdManager.environmentLightingRotationDegrees);
+            rotationValue.textContent = `${rotation.value}°`;
         };
 
         backgroundVisible.addEventListener("change", () => {
@@ -153,6 +169,11 @@ export class HdriSettingsDialogController implements PopupContentController {
         intensity.addEventListener("input", () => {
             const applied = this.mmdManager.setEnvironmentLightingIntensity(Number(intensity.value) / 100);
             intensityValue.textContent = applied.toFixed(2);
+            this.refreshUi();
+        });
+        rotation.addEventListener("input", () => {
+            this.mmdManager.environmentLightingRotationDegrees = Number(rotation.value);
+            rotationValue.textContent = `${this.mmdManager.environmentLightingRotationDegrees}°`;
             this.refreshUi();
         });
         loadButton.addEventListener("click", () => {

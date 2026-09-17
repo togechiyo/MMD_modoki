@@ -589,6 +589,7 @@ export interface ProjectLightingState {
     ambientIntensity: number;
     environmentLightingEnabled?: boolean;
     environmentLightingIntensity?: number;
+    environmentLightingRotationDegrees?: number;
     environmentLightingSourcePath?: string | null;
     environmentBackgroundVisible?: boolean;
     environmentBackgroundIntensity?: number;

@@ -508,6 +508,7 @@
 - [x] Thin Translucentの逆光縞を解消。低深度biasのMultiMaterial波面で再現し、光線方向＋shadow texel幅に応じたThin限定補正を追加。8条件E2E成功、所有者実機で「きれい。OK」と確認（2026-09-09）。
 
 - [x] 外部ENV / DDSキューブマップの環境ライト読込、GUI操作とプロジェクト復元を追加（2026-09-08、内蔵TrueHDRIは維持）
+- [x] 実験設定の環境ライトを0〜360°水平回転し、HDRI背景・project保存・再起動復元へ同期（2026-09-17、[仕様](./external-hdri-environment-lighting-2026-07-21.md)）
 
 - [x] 外部 `.hdr` を環境ライティングへ読み込む
 - [x] IBL ON / OFF と強度を HDRI 詳細 popup から操作する

@@ -114,6 +114,7 @@ function createHost() {
         transparentShadowEnabled: true,
         environmentLightingEnabled: false,
         environmentLightingIntensity: 1,
+        environmentLightingRotationDegrees: 0,
         environmentBackgroundVisible: false,
         environmentBackgroundIntensity: 0.03,
         setEnvironmentLightingSourcePath: vi.fn(async () => true),
@@ -576,6 +577,7 @@ describe("importProjectState", () => {
                 ...createProject().lighting,
                 environmentLightingEnabled: true,
                 environmentLightingIntensity: 2.25,
+                environmentLightingRotationDegrees: 270,
                 environmentLightingSourcePath: "C:/hdr/studio.hdr",
                 environmentBackgroundVisible: true,
                 environmentBackgroundIntensity: 0.08,
@@ -591,6 +593,7 @@ describe("importProjectState", () => {
         expect(host.setPbrMaterialShaderPreset).toHaveBeenCalledWith(0, null, "pbr-mmd-like");
         expect(host.environmentLightingEnabled).toBe(true);
         expect(host.environmentLightingIntensity).toBe(2.25);
+        expect(host.environmentLightingRotationDegrees).toBe(270);
         expect(host.environmentBackgroundVisible).toBe(true);
         expect(host.environmentBackgroundIntensity).toBe(0.08);
         expect(host.setEnvironmentLightingSourcePath).toHaveBeenCalledWith("C:/hdr/studio.hdr");
@@ -646,6 +649,7 @@ describe("importProjectState", () => {
 
     it("uses MMD Standard and disabled environment lighting for legacy projects", async () => {
         const host = createHost();
+        host.environmentLightingRotationDegrees = 270;
         const project = createProject({
             scene: {
                 ...createProject().scene,
@@ -665,6 +669,7 @@ describe("importProjectState", () => {
         );
         expect(host.environmentLightingEnabled).toBe(false);
         expect(host.environmentLightingIntensity).toBe(1);
+        expect(host.environmentLightingRotationDegrees).toBe(0);
         expect(host.environmentBackgroundVisible).toBe(false);
         expect(host.environmentBackgroundIntensity).toBe(0.03);
         expect(host.setEnvironmentLightingSourcePath).toHaveBeenCalledWith(null);

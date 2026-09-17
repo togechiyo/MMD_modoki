@@ -86,6 +86,7 @@ type ProjectExportHost = {
     iblShadowsEnabled: boolean;
     environmentLightingEnabled: boolean;
     environmentLightingIntensity: number;
+    environmentLightingRotationDegrees: number;
     environmentLightingSourcePath: string | null;
     environmentBackgroundVisible: boolean;
     environmentBackgroundIntensity: number;
@@ -438,6 +439,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             ambientIntensity: host.ambientIntensity,
             environmentLightingEnabled: host.environmentLightingEnabled,
             environmentLightingIntensity: host.environmentLightingIntensity,
+            environmentLightingRotationDegrees: host.environmentLightingRotationDegrees,
             environmentLightingSourcePath: host.environmentLightingSourcePath,
             environmentBackgroundVisible: host.environmentBackgroundVisible,
             environmentBackgroundIntensity: host.environmentBackgroundIntensity,

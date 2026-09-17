@@ -3530,6 +3530,9 @@ ${beforeFogAppendBlock}
             return [{
                 name: mesh.name,
                 gpuSkinning: mesh.computeBonesUsingShaders,
+                numMaxInfluencers: manager.numMaxInfluencers,
+                numInfluencers: manager.numInfluencers,
+                usesTexture: manager.isUsingTextureForTargets,
                 base: Array.from(mesh.getVerticesData("position") ?? []),
                 morphed: Array.from(mesh.getPositionData(false, true) ?? []),
                 targets: Array.from({ length: manager.numTargets }, (_, index) => {

@@ -12,7 +12,7 @@ const skin = process.env.MMD_MORPH_SKIN === "1";
 test("local authorized model: two vertex morph visual audit", async () => {
     test.skip(!model || !existsSync(model), "Set MMD_MORPH_LOCAL_MODEL to an explicitly authorized local model");
     test.setTimeout(180000);
-    const output = resolve(root, "local-references/multiple-morph-audit-2026-09-17", [pbr ? "pbr" : "mmd", cpuFallback && "cpu-fallback", wasm && "wasm", skin && "skin"].filter(Boolean).join("-"));
+    const output = resolve(root, "local-references/multiple-morph-audit-2026-09-17", [pbr ? "pbr" : "mmd", cpuFallback && "cpu-fallback", wasm && "wasm", skin && "skin", "register-first"].filter(Boolean).join("-"));
     mkdirSync(output, { recursive: true });
     const launched = await launchMmdModoki(root);
     const report = { requested: { pbr, cpuFallback, wasm, skin }, states: {}, errors: [] };
@@ -74,6 +74,7 @@ test("local authorized model: two vertex morph visual audit", async () => {
                             maxDelta = Math.max(maxDelta, Math.abs(value - mesh.base[i]));
                         }
                         return { name: mesh.name, gpuSkinning: mesh.gpuSkinning, vertices: mesh.base.length / 3,
+                            numMaxInfluencers: mesh.numMaxInfluencers, numInfluencers: mesh.numInfluencers, usesTexture: mesh.usesTexture,
                             targets: mesh.targets.length, active: mesh.targets.filter(target => target.weight !== 0), nonFinite, maxDelta, min, max };
                     }),
                 };
@@ -82,8 +83,9 @@ test("local authorized model: two vertex morph visual audit", async () => {
         };
         await capture("00-neutral");
         await set("あ", 1); await capture("01-a-preview");
-        await set("口角上げ", 1); await capture("02-both-preview");
         await page.getByRole("button", { name: "あ keyframe", exact: true }).click();
+        await capture("01b-a-registered");
+        await set("口角上げ", 0.61); await capture("02-both-preview");
         await page.getByRole("button", { name: "口角上げ keyframe", exact: true }).click();
         await capture("03-both-registered");
         await page.evaluate(() => window.mmdModokiE2e.seekTo(15));

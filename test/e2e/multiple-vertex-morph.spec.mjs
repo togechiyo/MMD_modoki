@@ -5,7 +5,7 @@ import { createTofuModel, writePmx } from "../../scripts/generate-external-paren
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-for (const pbr of [false, true]) test(`multiple vertex morph registration and groups (PBR=${pbr})`, async ({}, testInfo) => {
+for (const pbr of [false, true]) test(`CPU vertex morph geometry through registration and groups (PBR=${pbr})`, async ({}, testInfo) => {
     test.setTimeout(180000);
     const launched = await launchMmdModoki(root);
     try {
@@ -60,6 +60,13 @@ for (const pbr of [false, true]) test(`multiple vertex morph registration and gr
             await slider.fill("0.7"); await slider.dispatchEvent("input");
             weights[index] = 0.7;
             await check(weights);
+            if (index === 1) {
+                // CPU positions alone do not prove that the GPU shader can handle this preview.
+                await testInfo.attach("second-preview-capacity", { body: JSON.stringify((await geometry()).map(mesh => ({
+                    name: mesh.name, active: mesh.numInfluencers, capacity: mesh.numMaxInfluencers,
+                }))), contentType: "application/json" });
+                await page.screenshot({ path: testInfo.outputPath("second-unregistered-preview.png") });
+            }
             await page.getByRole("button", { name: `${name} keyframe`, exact: true }).click();
             await check(weights);
         }

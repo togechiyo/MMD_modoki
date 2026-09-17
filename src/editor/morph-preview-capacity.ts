@@ -1,16 +1,35 @@
 import type { MorphTargetManager } from "@babylonjs/core/Morph/morphTargetManager";
 
-type PreviewMorphTargetManager = Pick<MorphTargetManager, "isUsingTextureForTargets" | "numMaxInfluencers">;
+type PreviewMorphTargetManager = Pick<MorphTargetManager,
+    "isUsingTextureForTargets" | "numMaxInfluencers" | "numInfluencers">;
+type PreviewModel = {
+    readonly currentAnimation: object | null;
+    readonly morph: { readonly morphTargetManagers: readonly PreviewMorphTargetManager[] };
+};
 
-/** Allow unregistered vertex/UV/group targets in a manually edited model. */
-export function enableDynamicMorphCapacityForPreview(managers: readonly PreviewMorphTargetManager[]): void {
-    for (const manager of managers) {
-        // babylon-mmd sizes a fixed capacity from the bound animation's tracks.
-        // Preview can introduce other targets. Babylon's default (0) follows the
-        // actual active count, including targets evaluated later by WASM.
-        // The next animation bind restores the normal playback optimization.
-        if (manager.isUsingTextureForTargets && manager.numMaxInfluencers > 0) {
-            manager.numMaxInfluencers = 0;
+/** Keep preview headroom without recompiling on every active-count change. */
+export class MorphPreviewCapacityController {
+    private readonly states = new WeakMap<PreviewMorphTargetManager, { animation: object | null; capacity: number }>();
+
+    public update(model: PreviewModel | null): void {
+        if (!model) return;
+        for (const manager of model.morph.morphTargetManagers) {
+            if (!manager.isUsingTextureForTargets) continue;
+            let state = this.states.get(manager);
+            if (!state || state.animation !== model.currentAnimation) {
+                // On bind, babylon-mmd sets this to the animation's target union,
+                // including group/UV targets. Read it once; never add slack to slack.
+                const registered = model.currentAnimation ? manager.numMaxInfluencers : 0;
+                state = { animation: model.currentAnimation, capacity: Math.max(8, registered + 4) };
+                this.states.set(manager, state);
+            }
+            // Run after runtime evaluation too: WASM applies preview targets later
+            // than the input event, and one group can activate many targets at once.
+            const active = manager.numInfluencers;
+            if (active > state.capacity) state.capacity = active + 4;
+            if (manager.numMaxInfluencers !== state.capacity) {
+                manager.numMaxInfluencers = state.capacity;
+            }
         }
     }
 }

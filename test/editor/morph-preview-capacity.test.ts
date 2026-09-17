@@ -1,42 +1,80 @@
 import { describe, expect, it, vi } from "vitest";
-import { enableDynamicMorphCapacityForPreview } from "../../src/editor/morph-preview-capacity";
+import { MorphPreviewCapacityController } from "../../src/editor/morph-preview-capacity";
 
-function manager(capacity: number, texture = true) {
+function model(registered = 0, texture = true) {
+    let capacity = registered;
     const setCapacity = vi.fn((value: number) => { capacity = value; });
-    return {
-        isUsingTextureForTargets: texture,
+    const manager = {
+        isUsingTextureForTargets: texture, numInfluencers: 0,
         get numMaxInfluencers() { return capacity; },
         set numMaxInfluencers(value: number) { setCapacity(value); },
-        setCapacity,
     };
+    return { currentAnimation: (registered ? {} : null) as object | null,
+        morph: { morphTargetManagers: [manager] }, manager, setCapacity };
 }
 
-describe("manual morph preview capacity", () => {
-    it("releases animation-only limits before targets have been evaluated", () => {
-        const face = manager(1);
-        const eyes = manager(3);
-        const otherModel = manager(1);
-        enableDynamicMorphCapacityForPreview([face, eyes]);
-        expect([face.numMaxInfluencers, eyes.numMaxInfluencers]).toEqual([0, 0]);
-        expect(otherModel.setCapacity).not.toHaveBeenCalled();
+describe("morph preview reserved capacity", () => {
+    it.each([[0, 8], [2, 8], [6, 10], [12, 16]])("reserves registered %i plus slack as %i", (registered, expected) => {
+        const target = model(registered);
+        new MorphPreviewCapacityController().update(target);
+        expect(target.manager.numMaxInfluencers).toBe(expected);
     });
 
-    it("does not resynchronize an already dynamic manager or attribute targets", () => {
-        const dynamic = manager(0);
-        const attribute = manager(2, false);
-        enableDynamicMorphCapacityForPreview([dynamic, attribute]);
-        expect(dynamic.setCapacity).not.toHaveBeenCalled();
-        expect(attribute.setCapacity).not.toHaveBeenCalled();
+    it("holds capacity across active-count changes, growing only on overflow", () => {
+        const controller = new MorphPreviewCapacityController();
+        const target = model(1);
+        controller.update(target);
+        for (const active of [1, 8, 0, 7]) {
+            target.manager.numInfluencers = active;
+            controller.update(target);
+        }
+        expect(target.setCapacity).toHaveBeenCalledTimes(1);
+        target.manager.numInfluencers = 13; // a group expands vertex and UV targets
+        controller.update(target);
+        expect(target.manager.numMaxInfluencers).toBe(17);
+        target.manager.numInfluencers = 0;
+        controller.update(target);
+        expect(target.manager.numMaxInfluencers).toBe(17);
+        expect(target.setCapacity).toHaveBeenCalledTimes(2);
     });
 
-    it("releases a newly rebound animation's limit on the next edit only", () => {
-        const face = manager(1);
-        enableDynamicMorphCapacityForPreview([face]);
-        enableDynamicMorphCapacityForPreview([face]);
-        expect(face.setCapacity).toHaveBeenCalledTimes(1);
-        face.numMaxInfluencers = 2; // registration, motion load or project restore
-        expect(face.numMaxInfluencers).toBe(2);
-        enableDynamicMorphCapacityForPreview([face]);
-        expect(face.numMaxInfluencers).toBe(0);
+    it("reads a new binding once and can shrink only on rebind", () => {
+        const controller = new MorphPreviewCapacityController();
+        const target = model(12);
+        controller.update(target);
+        target.currentAnimation = {};
+        target.manager.numMaxInfluencers = 2;
+        controller.update(target);
+        expect(target.manager.numMaxInfluencers).toBe(8);
+        // A newly bound count can equal our old capacity: identity still matters.
+        target.currentAnimation = {};
+        target.manager.numMaxInfluencers = 8;
+        controller.update(target);
+        expect(target.manager.numMaxInfluencers).toBe(12);
+        controller.update(target);
+        expect(target.manager.numMaxInfluencers).toBe(12);
+    });
+
+    it("covers delayed evaluation, no animation, and independent models", () => {
+        const controller = new MorphPreviewCapacityController();
+        const first = model();
+        const second = model(6);
+        controller.update(first);
+        controller.update(second);
+        first.manager.numInfluencers = 9; // WASM's later evaluation before drawing
+        controller.update(first);
+        expect(first.manager.numMaxInfluencers).toBe(13);
+        expect(second.manager.numMaxInfluencers).toBe(10);
+        second.currentAnimation = null;
+        controller.update(second);
+        expect(second.manager.numMaxInfluencers).toBe(8);
+    });
+
+    it("does not change vertex attribute managers or require a model", () => {
+        const target = model(2, false);
+        const controller = new MorphPreviewCapacityController();
+        controller.update(target);
+        controller.update(null);
+        expect(target.setCapacity).not.toHaveBeenCalled();
     });
 });

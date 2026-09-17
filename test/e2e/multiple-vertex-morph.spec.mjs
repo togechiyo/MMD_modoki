@@ -39,6 +39,8 @@ for (const pbr of [false, true]) test(`vertex morph preview capacity and geometr
             await input.fill(String(frame)); await input.press("Enter");
         };
         const check = async (weights, group = 0) => {
+            await expect.poll(async () => (await geometry()).every(mesh => !mesh.usesTexture
+                || (mesh.numMaxInfluencers >= 8 && mesh.numMaxInfluencers >= mesh.numInfluencers))).toBe(true);
             const effective = weights.map((weight, i) => weight + (i === 0 ? group * 0.5 : i === 1 ? group : 0));
             await expect.poll(async () => (await geometry()).map(mesh => mesh.targets.map(target => target.weight)))
                 .toEqual((await geometry()).map(mesh => mesh.targets.map(target => expect.closeTo(effective[Number(target.name.split(" ")[1]) - 1], 5))));
@@ -72,6 +74,8 @@ for (const pbr of [false, true]) test(`vertex morph preview capacity and geometr
             }
             await page.getByRole("button", { name: `${name} keyframe`, exact: true }).click();
             await check(weights);
+            await expect.poll(async () => (await geometry()).every(mesh =>
+                mesh.numMaxInfluencers === Math.max(8, index + 1 + 4))).toBe(true);
         }
         const groupSlider = sliderFor("Group");
         await groupSlider.fill("0.8"); await groupSlider.dispatchEvent("input");

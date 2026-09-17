@@ -1,5 +1,7 @@
 # 複数モーフ登録時の顔消失調査
 
+現在の方式は末尾「最低8・登録済み＋4の予約容量」を参照。初期修正の動的容量方式から、所有者の希望で余裕を持たせる方式へ変更した。
+
 ## 報告と確認範囲
 
 2026-09-17、所有者から「モーフを複数登録すると顔面が溶けて消えることがある」と報告された（V022-087）。続報でlocal-referencesのアリシアと「あ」「口角上げ」が指定され、当該モデルの利用許可を受けた。21:06の画像と登録順序の追加情報に従い、顔消失を再現した。原因は登録済みanimationに合わせたGPUモーフ数の上限と、未登録previewを含む有効モーフ数の不一致。後続の修正依頼を受け、手動編集時だけ固定上限を解除し、同じ手順で顔が残ることを確認した。以下は調査経緯で、修正内容と検証は末尾にまとめる。
@@ -93,7 +95,7 @@ npm.cmd run test:e2e -- local-multiple-morph.spec.mjs
 
 修正対象は、登録済みanimationの上限を編集previewでも固定利用する境界。未登録モーフも含めた容量の確保、または編集時の動的上限の利用を検討する。通常/グループ/UVモーフ、motion読込、project復元、runtime切替、登録後の再bindを確認し、モデル名への分岐やweight合計の正規化では回避しない。shader再コンパイル頻度への影響も確認する。今回の調査は実装修正の完了ではない。
 
-## 修正と影響範囲
+## 初期修正と影響範囲（動的容量方式）
 
 所有者から「修正入れてほしい。影響範囲の把握きをつけてね」と依頼を受け、`editor/morph-preview-capacity.ts` を追加。名前/index指定どちらの手動編集も通る `refreshCurrentModelAfterMorphEdit` で、対象モデルのtexture方式の `MorphTargetManager.numMaxInfluencers` を非0から0（Babylon標準の動的上限）へ戻す。
 
@@ -114,3 +116,29 @@ npm.cmd run test:e2e -- local-multiple-morph.spec.mjs
 - 初期化経路は変更していないためsmokeは再実行せず、ローカルElectron / WebGPU E2Eで起動と操作を確認。PMD実モデル、動画ファイルへの書き出し、全PostFX組合せは今回の実描画検証には含まない。
 
 修正はローカルで確認済み。報告者の通常環境でも「あ登録 → 口角上げを動かす」の再確認を待つため、台帳は `needs retest` とする。
+
+## 最低8・登録済み＋4の予約容量
+
+所有者の追加依頼を受け、初期修正の動的容量（0指定）を以下へ置き換えた。単位は各meshのMorphTargetManagerで実際に使うtarget数であり、スライダー数ではない。
+
+- 初期表示とanimation再bind時: `max(8, 登録済みanimationに必要なtarget数 + 4)`。
+- preview等で有効数が確保済み容量を超えたとき: `有効数 + 4` に拡張。
+- 同じanimationの編集中は縮小せず、登録・読込・履歴復元で新しいruntime animationへ再bindされた時だけ見直す。
+
+`MorphPreviewCapacityController` がmanagerごとにruntime animationのidentityと予約容量をWeakMapで保持する。ライブラリがbind時に算出したgroup/UV展開後のtarget集合の数を一度だけ読み、余裕分へさらに4を加え続けることを防ぐ。同じ数の新しいanimationでもidentityで見直しを判定する。
+
+手動編集直後に加え、既存の `onBeforeActiveMeshesEvaluationObservable` 内で全MMDモデルの容量を確認する。これは通常/WASM runtimeの評価後、meshの描画評価前であり、WASMで遅れて反映されるモーフや、1回のgroup操作で8枠を一気に超える場合を拾う。定常時はmanagerごとの状態・有効数を比較するだけで、値が変わるときだけsetterを呼ぶ。カメラ、アクセサリ、vertex attribute方式には適用しない。
+
+影響はtexture方式のMMDモーフ描画容量に限定するが、初期修正と異なり手動編集前のモデルにも最低8枠を予約する。shader容量を少し多く確保する代わりに、範囲内の有効数増減では容量を書き換えない。モーフ値、保存形式、材質alpha、影設定、runtimeのモーフ合成処理は変更しない。性能の定量比較は未実施。
+
+前提はBabylon.js 9.2.0 / babylon-mmd 1.2.0の導入済み実装で確認。全モデルbind箇所は新しいruntime animationを作ってから設定している。既存の同じanimation instanceだけを再設定する経路、`ConstantTargetCountForTextureMode` のglobal override、active mesh評価を飛ばすfreeze/snapshot描画を導入する場合は再確認が必要。
+
+検証:
+
+- unit: 0/2/6/12登録時の8/8/10/16枠、余裕内ではsetter再呼出なし、13有効時に17枠へ拡張、編集中の縮小なし、再bind時だけ縮小、容量と登録数が偶然同じケース、別モデルとattribute方式の分離を確認。全160ファイル・931件成功。
+- 最小PMXの標準/PBRで、5登録時9枠・8登録時12枠、group、補間、project復元、Undo/Redoを確認。
+- VMDのGUI読込とproject復元、通常→WASM→通常のGUI切替で、8枠→groupによる13有効時17枠→値を戻しても17枠→再bindで8枠を確認。UV単独編集も確認。
+- アリシアは標準/通常runtimeとPBR/WASMの両方で同一手順を成功。全撮影状態が8枠で、口角上げの未登録previewでも顔が残ることを画像確認。private画像はignoredな `*-reserved-capacity` へ保存。
+- 初回の最小PMXテストはmeshを1個と仮定したassertが、実際の2個に対して失敗。各meshを確認するassertへ訂正して標準/PBRとも成功。容量計算の失敗ではない。
+- lintとcritical型検査成功。通常型検査は既存と同じ542件。WebGPU validation errorは各E2Eで0。動画ファイル出力、PMD実モデル、全PostFX組合せの検証は追加していない。
+- 描画前observerへの追加に伴いsmokeを再実行。WebGPU / Bullet MPRの初期化、安定性監視、環境光probeが成功。Insightsの所有者判断カード・索引もvalidatorで確認した。

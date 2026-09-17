@@ -9,11 +9,11 @@ test("unregistered group/UV preview after motion load, project restore and runti
     const launched = await launchMmdModoki(resolve(import.meta.dirname, "../.."));
     try {
         const model = createTofuModel();
-        model.vertexMorphs = ["Vertex 1", "Vertex 2"].map(name => ({
+        model.vertexMorphs = Array.from({ length: 12 }, (_, i) => `Vertex ${i + 1}`).map(name => ({
             name, offsets: [{ index: 0, offset: [0.05, 0, 0] }],
         }));
         model.uvMorphs = [{ name: "UV Test", offsets: [{ index: 0, offset: [0.1, 0.1, 0, 0] }] }];
-        model.groupMorphs = [{ name: "Group", elements: [{ index: 1, ratio: 1 }, { index: 2, ratio: 1 }] }];
+        model.groupMorphs = [{ name: "Group", elements: Array.from({ length: 12 }, (_, i) => ({ index: i + 1, ratio: 1 })) }];
         const modelPath = join(launched.tempDir, "preview-rebind.pmx");
         await writeFile(modelPath, writePmx(model));
         // Original minimal VMD: one vertex morph key at frame 0, no other tracks.
@@ -44,21 +44,21 @@ test("unregistered group/UV preview after motion load, project restore and runti
         };
         const checkPreview = async () => {
             await set("Group", 0.6);
-            await expect.poll(async () => (await geometry())[0].numInfluencers).toBe(3);
-            expect((await geometry())[0].numMaxInfluencers).toBe(0);
+            await expect.poll(async () => (await geometry())[0].numInfluencers).toBe(13);
+            await expect.poll(async () => (await geometry())[0].numMaxInfluencers).toBe(17);
             await set("Group", 0);
             await set("UV Test", 0.4);
             await expect.poll(async () => (await geometry())[0].numInfluencers).toBe(2);
-            expect((await geometry())[0].numMaxInfluencers).toBe(0);
+            expect((await geometry())[0].numMaxInfluencers).toBe(17); // no shrinking during editing
             expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
             await set("UV Test", 0);
         };
-        await expect.poll(async () => (await geometry())[0].numMaxInfluencers).toBe(1);
+        await expect.poll(async () => (await geometry())[0].numMaxInfluencers).toBe(8);
         const project = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
         await checkPreview();
         await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), project);
         await page.evaluate(() => window.mmdModokiE2e.seekTo(0));
-        await expect.poll(async () => (await geometry())[0].numMaxInfluencers).toBe(1);
+        await expect.poll(async () => (await geometry())[0].numMaxInfluencers).toBe(8);
         await checkPreview();
         for (const mode of ["wasm", "classic"]) {
             await page.locator('[data-i18n="menu.physics"]').click();
@@ -71,7 +71,7 @@ test("unregistered group/UV preview after motion load, project restore and runti
             ]);
             await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
             await expect(page.locator("#toolbar-runtime-mode-select")).toHaveValue(mode);
-            await expect.poll(async () => (await geometry())[0]?.numMaxInfluencers).toBe(1);
+            await expect.poll(async () => (await geometry())[0]?.numMaxInfluencers).toBe(8);
             await checkPreview();
         }
         expect(errors).toEqual([]);

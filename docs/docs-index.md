@@ -35,6 +35,7 @@
 - [MCPの対象指定による詳細診断と提供許可](./mcp-detailed-diagnostics-2026-09-10.md)
 - [MCPの2026年最新動向とMMD_modokiへの影響](./mcp-2026-latest-findings-2026-09-10.md)
 - [PBR材質プリセットの役割整理 2026-09-08](./pbr-material-presets-2026-09-08.md)
+- [PBR方向光・遮蔽・影色の比較調査 2026-09-17](./pbr-directional-shadow-color-audit-2026-09-17.md)
 - [プロジェクト全体の材質モードと設定退避 2026-09-08](./project-material-mode-design-2026-09-08.md)
 - [FrameGraph 個別切替と全体ON/OFF 2026-09-08](./framegraph-master-toggle-2026-09-08.md)
 - [光色100%超過時のv0.2.0比較 2026-09-08](./light-color-above-default-history-2026-09-08.md)

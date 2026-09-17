@@ -12,7 +12,7 @@ const skin = process.env.MMD_MORPH_SKIN === "1";
 test("local authorized model: two vertex morph visual audit", async () => {
     test.skip(!model || !existsSync(model), "Set MMD_MORPH_LOCAL_MODEL to an explicitly authorized local model");
     test.setTimeout(180000);
-    const output = resolve(root, "local-references/multiple-morph-audit-2026-09-17", [pbr ? "pbr" : "mmd", cpuFallback && "cpu-fallback", wasm && "wasm", skin && "skin", "register-first"].filter(Boolean).join("-"));
+    const output = resolve(root, "local-references/multiple-morph-audit-2026-09-17", [pbr ? "pbr" : "mmd", cpuFallback && "cpu-fallback", wasm && "wasm", skin && "skin", "register-first-fixed"].filter(Boolean).join("-"));
     mkdirSync(output, { recursive: true });
     const launched = await launchMmdModoki(root);
     const report = { requested: { pbr, cpuFallback, wasm, skin }, states: {}, errors: [] };
@@ -95,6 +95,11 @@ test("local authorized model: two vertex morph visual audit", async () => {
         for (const state of Object.values(report.states)) {
             expect(state.validation.count).toBe(0);
             expect(state.meshes.every(mesh => mesh.nonFinite === 0)).toBe(true);
+            for (const mesh of state.meshes) {
+                if (mesh.usesTexture && mesh.numMaxInfluencers > 0) {
+                    expect(mesh.numMaxInfluencers, mesh.name).toBeGreaterThanOrEqual(mesh.numInfluencers);
+                }
+            }
         }
         expect(report.errors).toEqual([]);
     } finally {

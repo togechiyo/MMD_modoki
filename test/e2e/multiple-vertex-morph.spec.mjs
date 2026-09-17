@@ -5,7 +5,7 @@ import { createTofuModel, writePmx } from "../../scripts/generate-external-paren
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-for (const pbr of [false, true]) test(`CPU vertex morph geometry through registration and groups (PBR=${pbr})`, async ({}, testInfo) => {
+for (const pbr of [false, true]) test(`vertex morph preview capacity and geometry through registration (PBR=${pbr})`, async ({}, testInfo) => {
     test.setTimeout(180000);
     const launched = await launchMmdModoki(root);
     try {
@@ -46,6 +46,9 @@ for (const pbr of [false, true]) test(`CPU vertex morph geometry through registr
             expect(meshes.length).toBeGreaterThan(0);
             for (const mesh of meshes) {
                 expect(mesh.gpuSkinning).toBe(true);
+                if (mesh.usesTexture && mesh.numMaxInfluencers > 0) {
+                    expect(mesh.numMaxInfluencers, `${mesh.name}: preview exceeds shader capacity`).toBeGreaterThanOrEqual(mesh.numInfluencers);
+                }
                 for (let i = 0; i < mesh.base.length; i++) {
                     const delta = model.vertexMorphs.reduce((sum, morph, j) => sum + morph.offsets[0].offset[i % 3] * effective[j], 0);
                     expect(mesh.morphed[i]).toBeCloseTo(mesh.base[i] + delta, 4);

@@ -466,7 +466,7 @@
 ## 2026-04-18 メモ
 
 - [ ] WebGPU 重量モデルでの顔モーフ崩れは、現行版比較と共有可能な最小再現ができるまで既知制限として扱う → [webgpu-heavy-model-face-morph-limit-2026-04-18.md](./webgpu-heavy-model-face-morph-limit-2026-04-18.md)
-- [ ] 複数モーフ登録時の顔消失（V022-087）。アリシアで「あ=1を登録 → 口角上げをpreview」の順序で再現済み。GPU上限1に対して有効数2となる不一致を確認。描画容量の修正と登録前previewの回帰確認が残る → [調査メモ](./multiple-morph-registration-investigation-2026-09-17.md)
+- [x] 複数モーフ登録時の顔消失（V022-087）。手動編集モデルのGPU固定上限を解除し未登録previewも描画。アリシアの同一手順、標準/PBR、project復元・runtime往復切替後のgroup/UV編集を確認。報告者環境は再確認待ち → [調査メモ](./multiple-morph-registration-investigation-2026-09-17.md)
 
 - [mmd-project-positioning-note.md](./mmd-project-positioning-note.md)
 - [glb-loading-investigation-2026-04-01.md](./glb-loading-investigation-2026-04-01.md)

@@ -525,6 +525,7 @@ import {
 import { resolveVisibleBoneNames } from "./editor/physics-bone-visibility";
 import { upsertBoneKey, type EditorBoneTrackKind } from "./editor/motion-document";
 import { bindModelAnimationToRuntime } from "./editor/runtime-animation-binder";
+import { enableDynamicMorphCapacityForPreview } from "./editor/morph-preview-capacity";
 import {
     disposeBoneGizmoSystem as disposeBoneGizmoSystemImpl,
     handleBoneGizmoBeforeRender as handleBoneGizmoBeforeRenderImpl,
@@ -14583,6 +14584,9 @@ ${beforeFogAppendBlock}
 
     private refreshCurrentModelAfterMorphEdit(): void {
         this.luminousGlowMorphRevision += 1;
+        if (this.currentModel) {
+            enableDynamicMorphCapacityForPreview(this.currentModel.morph.morphTargetManagers);
+        }
         this.recomputeCurrentModelPoseAfterManualEdit();
         this.currentMesh?.computeWorldMatrix(true);
         this.currentMesh?.metadata?.skeleton?.computeAbsoluteMatrices(true);

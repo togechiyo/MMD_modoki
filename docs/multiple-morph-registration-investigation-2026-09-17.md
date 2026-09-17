@@ -2,7 +2,7 @@
 
 ## 報告と確認範囲
 
-2026-09-17、所有者から「モーフを複数登録すると顔面が溶けて消えることがある」と報告された（V022-087）。続報でlocal-referencesのアリシアと「あ」「口角上げ」が指定され、当該モデルの利用許可を受けた。21:06の画像と登録順序の追加情報に従い、顔消失を再現した。原因は登録済みanimationに合わせたGPUモーフ数の上限と、未登録previewを含む有効モーフ数の不一致が最有力。描画処理は未修正。
+2026-09-17、所有者から「モーフを複数登録すると顔面が溶けて消えることがある」と報告された（V022-087）。続報でlocal-referencesのアリシアと「あ」「口角上げ」が指定され、当該モデルの利用許可を受けた。21:06の画像と登録順序の追加情報に従い、顔消失を再現した。原因は登録済みanimationに合わせたGPUモーフ数の上限と、未登録previewを含む有効モーフ数の不一致。後続の修正依頼を受け、手動編集時だけ固定上限を解除し、同じ手順で顔が残ることを確認した。以下は調査経緯で、修正内容と検証は末尾にまとめる。
 
 初回はユーザー所有モデルを扱わず、既存MITの豆腐fixture生成器を拡張し、8個の頂点モーフと、それらのうち2個を参照するグループモーフを持つ小さいPMXを一時生成するE2Eを追加した。アプリの変更はtest modeから呼ぶ読取専用の形状観測hookのみで、モーフの保存・評価・描画処理は変更していない。
 
@@ -83,7 +83,7 @@ npm.cmd run test:e2e -- local-multiple-morph.spec.mjs
 
 参照した導入済みファイルは `Runtime/mmdModel.js`、`Runtime/Animation/Common/induceMmdStandardMaterialRecompile.js`（babylon-mmd）、`Materials/materialHelper.functions.js`、`Morph/morphTargetManager.js`（Babylon.js）。[公式runtime animation資料](https://noname0310.github.io/babylon-mmd/docs/reference/runtime/animation/mmd-animation/)も参照。Babylonのtypedocは取得結果に本文がなかったため、上限の契約は導入済みソースと実測に基づく。
 
-## 再現テストの訂正と残る修正範囲
+## 再現テストの訂正（修正前）
 
 - `local-multiple-morph.spec.mjs` を上記の順序へ変更し、最初の登録直後も撮影。画像と容量の推移をignoredな `mmd-register-first` 出力へ保存した。2回の実行で同じ顔消失と登録後の復帰を確認。
 - 読取専用hookに描画上限・有効数・texture使用有無を追加した。
@@ -92,3 +92,25 @@ npm.cmd run test:e2e -- local-multiple-morph.spec.mjs
 - 診断項目追加後のlintと `typecheck:critical` は成功。後者が実行する通常typecheckには非criticalエラーが残る。初期化処理・純ロジックの変更はないため、今回の追試では全unitとsmokeを再実行していない。
 
 修正対象は、登録済みanimationの上限を編集previewでも固定利用する境界。未登録モーフも含めた容量の確保、または編集時の動的上限の利用を検討する。通常/グループ/UVモーフ、motion読込、project復元、runtime切替、登録後の再bindを確認し、モデル名への分岐やweight合計の正規化では回避しない。shader再コンパイル頻度への影響も確認する。今回の調査は実装修正の完了ではない。
+
+## 修正と影響範囲
+
+所有者から「修正入れてほしい。影響範囲の把握きをつけてね」と依頼を受け、`editor/morph-preview-capacity.ts` を追加。名前/index指定どちらの手動編集も通る `refreshCurrentModelAfterMorphEdit` で、対象モデルのtexture方式の `MorphTargetManager.numMaxInfluencers` を非0から0（Babylon標準の動的上限）へ戻す。
+
+- 変更対象は手動編集したモデルの描画容量のみ。weight、キー保存形式、モーフ合成式、材質alpha、影設定、カメラanimationには変更なし。
+- グループ展開とUVを含め、実際に有効になったtarget数でshaderを生成する。通常runtimeの同期評価より前に解除するため、次の更新で評価されるWASMも同じ入口で処理できる。
+- 0のmanagerと頂点attribute方式には書き込まない。毎回のslider入力でtexture再同期を起こさない。
+- `setRuntimeAnimation` の全モデル呼出箇所（managerの登録/履歴、runtime binder、VMD/BVMD/VPD読込、project importer）を確認した。これらは従来どおりanimationに応じた固定上限を設定する。再bind後の次の手動編集で再び解除するため、各loaderへ分散修正しない。
+- 通常再生だけのモデルや別モデルは変更しない。手動編集後は次の再bindまで動的上限が残るため、編集中やその後の再生で有効target数が変わるとshader再コンパイルが起こり得る。キー再登録やmotion再bindで従来の固定上限へ戻る。全target数を一律確保する方式や、全bindを動的にする方式は採らなかった。速度の定量比較は未実施。
+- Babylonのglobalな `ConstantTargetCountForTextureMode` はアプリ内で設定されていない。このglobal overrideを将来導入する場合は、今回の0指定が無効になるため再確認が必要。
+
+## 修正後の検証
+
+- 最小fixtureのE2Eに容量整合assertを追加。修正前に「上限1 / 有効数2」で失敗し、修正後は標準/PBRの2件が成功。8頂点モーフ、group、登録、補間、project復元、0復帰、Undo/Redoを確認。
+- アリシアの同一手順を標準材質＋通常runtimeとPBR＋WASMで各1件実行。「あ=1登録後、口角上げ=0.61未登録」の画像で顔が残ることを目視確認。未登録previewの容量は0、両方登録後は2。画像・診断JSONはignoredな `*-register-first-fixed` に保存。
+- 新しい `morph-preview-rebind.spec.mjs` がVMDのGUI読込、project復元、物理設定ダイアログで通常→WASM→通常の往復切替を確認。各再bindで上限1、グループ経由で頂点/UVを追加すると動的上限で3target、UV単独追加で2targetとなる。通常UI経由の操作後もWebGPU validation errorは0。
+- 初回の切替テストは非表示の旧toolbar selectを操作しようとしてtimeoutした。実際の物理設定ダイアログへ修正して成功。アプリ側の回帰ではない。
+- 全unit 160ファイル・926件、lint、`typecheck:critical`、差分の空白検査が成功。通常typecheckは既存と同じ542件の非criticalエラー。今回のhelper/呼出部分のエラーは0。
+- 初期化経路は変更していないためsmokeは再実行せず、ローカルElectron / WebGPU E2Eで起動と操作を確認。PMD実モデル、動画ファイルへの書き出し、全PostFX組合せは今回の実描画検証には含まない。
+
+修正はローカルで確認済み。報告者の通常環境でも「あ登録 → 口角上げを動かす」の再確認を待つため、台帳は `needs retest` とする。

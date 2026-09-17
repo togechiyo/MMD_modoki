@@ -510,6 +510,7 @@
 - [x] 外部ENV / DDSキューブマップの環境ライト読込、GUI操作とプロジェクト復元を追加（2026-09-08、内蔵TrueHDRIは維持）
 - [x] 実験設定の環境ライトを0〜360°水平回転し、HDRI背景・project保存・再起動復元へ同期（2026-09-17、[仕様](./external-hdri-environment-lighting-2026-07-21.md)）
 - [x] 内蔵HDRのcube faceを128から1024へ上げ、2K素材のまま背景の粗さを改善（2026-09-17、[仕様](./external-hdri-environment-lighting-2026-07-21.md)）
+- [x] 雪原・昼・夜のTrueHDRIを2K同梱プリセットにし、選択・保存復元・外部素材との切替を追加（2026-09-17、[仕様](./external-hdri-environment-lighting-2026-07-21.md)）
 
 - [x] 外部 `.hdr` を環境ライティングへ読み込む
 - [x] IBL ON / OFF と強度を HDRI 詳細 popup から操作する
@@ -518,7 +519,7 @@
 - [x] 背景メニュー、通常ファイル読込、ドラッグ＆ドロップから `.hdr` を読み込む
 - [x] Git 管理外の実 HDR で Electron / WebGPU smoke を通す
 - [x] 外部 HDRI を背景へ表示し、背景メニュー / 詳細 popup から ON / OFF する
-- [ ] HDRI の回転
+- [x] HDRI の水平回転（2026-09-17）
 - 詳細: [IBL / 外部 HDRI 現行仕様・調査記録 2026-07-21](./external-hdri-environment-lighting-2026-07-21.md)
 
 ## 2026-06-25 キー登録 v0.2 リリース前集中メモ

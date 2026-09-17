@@ -1,4 +1,5 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
+import { normalizeEnvironmentLightingPreset, type EnvironmentLightingPresetId } from "../shared/environment-lighting-presets";
 import type {
     MmdModokiProjectFileV1,
     ProjectAccessoryState,
@@ -179,6 +180,7 @@ type ProjectImportHost = {
     environmentBackgroundVisible: boolean;
     environmentBackgroundIntensity: number;
     setEnvironmentLightingSourcePath(path: string | null): Promise<boolean>;
+    setEnvironmentLightingPreset(preset: EnvironmentLightingPresetId, activate?: boolean): Promise<boolean>;
     characterContactShadowOpacity: number;
     characterContactShadowScale: number;
     characterContactShadowEnabled: boolean;
@@ -1047,6 +1049,10 @@ export async function importProjectState(
     host.iblShadowsEnabled = typeof data.lighting.iblShadowsEnabled === "boolean"
         ? data.lighting.iblShadowsEnabled
         : false;
+    const environmentPreset = normalizeEnvironmentLightingPreset(data.lighting.environmentLightingPreset);
+    if (!await host.setEnvironmentLightingPreset(environmentPreset, false)) {
+        warnings.push(`Environment preset load failed: ${environmentPreset}`);
+    }
     const environmentLightingSourcePath = typeof data.lighting.environmentLightingSourcePath === "string"
         && data.lighting.environmentLightingSourcePath.trim().length > 0
         ? data.lighting.environmentLightingSourcePath

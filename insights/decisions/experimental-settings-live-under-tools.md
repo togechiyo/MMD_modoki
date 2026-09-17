@@ -3,10 +3,11 @@ id: experimental-settings-live-under-tools
 status: decision
 scope: ui/experimental-settings
 confidence: high
-last_verified: 2026-09-15
+last_verified: 2026-09-17
 evidence:
   - project-owner-directive
 source_docs:
+  - ../../docs/external-hdri-environment-lighting-2026-07-21.md
   - ../../docs/experimental-settings-popup-2026-09-08.md
   - ../../docs/mcp-integration-design-investigation-2026-09-10.md
   - ../../docs/mcp-editor-integration-design-2026-09-10.md
@@ -63,6 +64,8 @@ decided_on: 2026-09-08
 後続指定「PBRモードになったときは環境ライトを自動でオンにして。暗く見える」により、PBRへ切替時の環境ライト自動ONを採用する。強度の変更や常時ON固定を要求したものではない。
 
 2026-09-08の環境素材検討では、所有者は内蔵TrueHDRIの維持と、外部ENV / DDS読込の追加を指定した。Babylon Texture Libraryの素材は動作確認用途に使ってよいが、内蔵素材の置換を承認したものではない。詳細は[環境ライト仕様](../../docs/external-hdri-environment-lighting-2026-07-21.md)を参照する。
+
+2026-09-17には、所有者が昼・夜のTrueHDRIを用意し、「雪原と同じくサイズ小さくしてこの3種をプリセットとして同梱」と希望した。同梱対象はYamagataField_20181231_1137、EitaiBridge_20190111_1215、MifuneBridge_20190311_2140の縮小版とする。原本16Kの同梱や、将来のHDR素材の無制限な追加を意味しない。
 
 2026-09-11、所有者はUIのMCP対応を「AIが操作するに当たって重要そうな順」に進めるよう指定した。項目数を埋めるだけの順序にせず、編集ワークフローでの重要性を優先する。個別機能の順位は実装判断であり、全UI対応の範囲を狭める指示ではない。
 

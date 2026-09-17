@@ -59,6 +59,7 @@ function createHost() {
         environmentLightingIntensity: 1,
         environmentLightingRotationDegrees: 0,
         environmentLightingSourcePath: null,
+        environmentLightingPreset: "yamagata-field" as const,
         environmentBackgroundVisible: false,
         environmentBackgroundIntensity: 0.03,
         iblShadowOpacity: 0.25,
@@ -430,6 +431,7 @@ describe("exportProjectState", () => {
             environmentLightingEnabled: true,
             environmentLightingIntensity: 2.25,
             environmentLightingRotationDegrees: 270,
+            environmentLightingPreset: "mifune-bridge",
             environmentLightingSourcePath: "C:/hdr/studio.hdr",
             environmentBackgroundVisible: true,
             environmentBackgroundIntensity: 0.08,
@@ -448,6 +450,7 @@ describe("exportProjectState", () => {
         expect(project.lighting.environmentLightingEnabled).toBe(true);
         expect(project.lighting.environmentLightingIntensity).toBe(2.25);
         expect(project.lighting.environmentLightingRotationDegrees).toBe(270);
+        expect(project.lighting.environmentLightingPreset).toBe("mifune-bridge");
         expect(project.lighting.environmentLightingSourcePath).toBe("C:/hdr/studio.hdr");
         expect(project.lighting.environmentBackgroundVisible).toBe(true);
         expect(project.lighting.environmentBackgroundIntensity).toBe(0.08);

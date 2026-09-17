@@ -867,6 +867,11 @@ import twgslWasmUrl from "@babylonjs/core/assets/twgsl/twgsl.wasm?url";
 // eslint-disable-next-line import/no-unresolved
 import bundledEnvironmentTextureUrl from "./assets/ibl-shadows/yamagata-field-20181231-1137-2k.hdr?url";
 // eslint-disable-next-line import/no-unresolved
+import eitaiEnvironmentTextureUrl from "./assets/ibl-shadows/eitai-bridge-20190111-1215-2k.hdr?url";
+// eslint-disable-next-line import/no-unresolved
+import mifuneEnvironmentTextureUrl from "./assets/ibl-shadows/mifune-bridge-20190311-2140-2k.hdr?url";
+import { normalizeEnvironmentLightingPreset, type EnvironmentLightingPresetId } from "./shared/environment-lighting-presets";
+// eslint-disable-next-line import/no-unresolved
 import blobShadowTextureUrl from "./assets/blob-shadows/BlobShadow.png?url";
 import type { Skeleton } from "@babylonjs/core/Bones/skeleton";
 // eslint-disable-next-line import/no-unresolved
@@ -885,6 +890,12 @@ import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
 import type { MmdRuntimeAnimationHandle } from "babylon-mmd/esm/Runtime/mmdRuntimeAnimationHandle";
 
 RegisterDxBmpTextureLoader();
+
+const environmentPresetUrls: Record<EnvironmentLightingPresetId, string> = {
+    "yamagata-field": bundledEnvironmentTextureUrl,
+    "eitai-bridge": eitaiEnvironmentTextureUrl,
+    "mifune-bridge": mifuneEnvironmentTextureUrl,
+};
 
 // IBL Shadows is intentionally frozen: Babylon.js 9.2 WebGPU validation issues
 // and dynamic/skinned mesh costs made it unsuitable for MMD contact shadows.
@@ -1132,6 +1143,7 @@ export class MmdManager {
     private static readonly ENVIRONMENT_LIGHTING_STORAGE_KEY = "mmd_modoki.environmentLighting";
     private static readonly ENVIRONMENT_LIGHTING_INTENSITY_STORAGE_KEY = "mmd_modoki.environmentLightingIntensity";
     private static readonly ENVIRONMENT_LIGHTING_ROTATION_STORAGE_KEY = "mmd_modoki.environmentLightingRotationDegrees";
+    private static readonly ENVIRONMENT_LIGHTING_PRESET_STORAGE_KEY = "mmd_modoki.environmentLightingPreset";
     private static readonly ENVIRONMENT_BACKGROUND_STORAGE_KEY = "mmd_modoki.environmentBackground";
     private static readonly ENVIRONMENT_BACKGROUND_INTENSITY_STORAGE_KEY = "mmd_modoki.environmentBackgroundIntensity";
     private static readonly MAX_ENVIRONMENT_LIGHTING_INTENSITY = 4;
@@ -1928,6 +1940,7 @@ ${beforeFogAppendBlock}
     private iblFallbackEnvironmentTexture: RawCubeTexture | null = null;
     private environmentLightingSuppressedTexture: BaseTexture | null = null;
     private bundledEnvironmentTexture: HDRCubeTexture | null = null;
+    private environmentLightingPresetValue = MmdManager.readEnvironmentLightingPresetLocalStorage();
     private externalEnvironmentTexture: HDRCubeTexture | CubeTexture | null = null;
     private environmentLightingSourcePathValue: string | null = null;
     private environmentLightingLoadGeneration = 0;
@@ -3644,6 +3657,7 @@ ${beforeFogAppendBlock}
         enabled: boolean;
         source: "external" | "bundled" | "fallback" | "none";
         sourcePath: string | null;
+        preset: EnvironmentLightingPresetId;
         textureName: string | null;
         textureReady: boolean;
         hasSphericalPolynomial: boolean;
@@ -3674,6 +3688,7 @@ ${beforeFogAppendBlock}
             enabled: this.environmentLightingEnabledValue,
             source,
             sourcePath: this.environmentLightingSourcePathValue,
+            preset: this.environmentLightingPresetValue,
             textureName: environmentTexture?.name ?? null,
             textureReady: environmentTexture?.isReady() ?? false,
             hasSphericalPolynomial: environmentTexture?.sphericalPolynomial != null,
@@ -3993,6 +4008,60 @@ ${beforeFogAppendBlock}
             path: normalizedPath,
             ...this.getEnvironmentLightingDiagnostics(),
         });
+        return true;
+    }
+
+    public get environmentLightingPreset(): EnvironmentLightingPresetId {
+        return this.environmentLightingPresetValue;
+    }
+
+    public async setEnvironmentLightingPreset(value: EnvironmentLightingPresetId, activate = true): Promise<boolean> {
+        const preset = normalizeEnvironmentLightingPreset(value);
+        const generation = ++this.environmentLightingLoadGeneration;
+        const previous = this.bundledEnvironmentTexture;
+        let next = previous;
+        if (preset !== this.environmentLightingPresetValue || !next?.isReady()) {
+            try {
+                next = await new Promise<HDRCubeTexture>((resolve, reject) => {
+                    const texture = new HDRCubeTexture(
+                        environmentPresetUrls[preset], this.scene, MmdManager.ENVIRONMENT_CUBE_FACE_SIZE,
+                        false, true, false, true,
+                        () => resolve(texture),
+                        (message, exception) => {
+                            texture.dispose();
+                            reject(exception instanceof Error ? exception : new Error(message ?? "HDR load failed"));
+                        },
+                        false, false, false, 64,
+                    );
+                    texture.name = `mmdModokiBundledEnvironment:${preset}`;
+                    texture.gammaSpace = false;
+                    texture.coordinatesMode = Texture.CUBIC_MODE;
+                });
+            } catch (error: unknown) {
+                logWarn("render", "bundled environment preset load failed", {
+                    preset, message: error instanceof Error ? error.message : String(error),
+                });
+                return false;
+            }
+            if (generation !== this.environmentLightingLoadGeneration) {
+                next.dispose();
+                return false;
+            }
+            next.level = calculateEnvironmentTextureLevel(next.sphericalPolynomial);
+        }
+        const previousExternal = activate ? this.externalEnvironmentTexture : null;
+        if (activate) {
+            this.externalEnvironmentTexture = null;
+            this.environmentLightingSourcePathValue = null;
+        }
+        this.bundledEnvironmentTexture = next;
+        this.environmentLightingPresetValue = preset;
+        this.syncEnvironmentLightingTexture();
+        this.syncEnvironmentSkybox();
+        this.applyCurrentEnvironmentLightingIntensity();
+        if (previous !== next) previous?.dispose();
+        previousExternal?.dispose();
+        MmdManager.writeStringLocalStorage(MmdManager.ENVIRONMENT_LIGHTING_PRESET_STORAGE_KEY, preset);
         return true;
     }
 
@@ -5388,8 +5457,9 @@ ${beforeFogAppendBlock}
         if (this.scene.environmentTexture) return;
 
         try {
+            const url = environmentPresetUrls[this.environmentLightingPresetValue];
             const environmentTexture = new HDRCubeTexture(
-                bundledEnvironmentTextureUrl,
+                url,
                 this.scene,
                 MmdManager.ENVIRONMENT_CUBE_FACE_SIZE,
                 false,
@@ -5397,6 +5467,7 @@ ${beforeFogAppendBlock}
                 false,
                 true,
                 () => {
+                    if (this.bundledEnvironmentTexture !== environmentTexture) return;
                     environmentTexture.level = calculateEnvironmentTextureLevel(
                         environmentTexture.sphericalPolynomial,
                     );
@@ -5404,7 +5475,7 @@ ${beforeFogAppendBlock}
                         this.syncEnvironmentSkybox();
                     }
                     logInfo("render", "bundled IBL environment texture loaded", {
-                        url: bundledEnvironmentTextureUrl,
+                        url,
                         name: environmentTexture.name,
                         ready: environmentTexture.isReady(),
                         hasSphericalPolynomial: environmentTexture.sphericalPolynomial != null,
@@ -5412,6 +5483,7 @@ ${beforeFogAppendBlock}
                     });
                 },
                 (message, exception) => {
+                    if (this.bundledEnvironmentTexture !== environmentTexture) return;
                     logWarn("render", "bundled IBL environment texture failed; using neutral fallback", {
                         message: message ?? "unknown",
                         exception: exception instanceof Error ? exception.message : String(exception ?? ""),
@@ -5429,7 +5501,7 @@ ${beforeFogAppendBlock}
                     this.ensureFallbackIblEnvironmentTexture();
                 },
             );
-            environmentTexture.name = "mmdModokiBundledEnvironment";
+            environmentTexture.name = `mmdModokiBundledEnvironment:${this.environmentLightingPresetValue}`;
             environmentTexture.gammaSpace = false;
             environmentTexture.coordinatesMode = Texture.CUBIC_MODE;
             this.bundledEnvironmentTexture = environmentTexture;
@@ -7785,6 +7857,17 @@ ${beforeFogAppendBlock}
             );
         } catch {
             return DEFAULT_MMD_MATERIAL_PIPELINE_PRESET;
+        }
+    }
+
+    private static readEnvironmentLightingPresetLocalStorage(): EnvironmentLightingPresetId {
+        try {
+            return normalizeEnvironmentLightingPreset(
+                globalThis.localStorage?.getItem(MmdManager.ENVIRONMENT_LIGHTING_PRESET_STORAGE_KEY),
+            );
+        } catch {
+            // Optional local preference; a project can still restore its own preset.
+            return "yamagata-field";
         }
     }
 

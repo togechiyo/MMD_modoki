@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [, , sourceArgument, outputArgument, widthArgument = "2048"] = process.argv;
+const [, , sourceArgument, outputArgument, widthArgument = "2048",
+    assetName = "YamagataField_20181231_1137",
+    sourceUrl = "https://www.bandainamcostudios.com/projects/truehdri/library/16878"] = process.argv;
 
 if (!sourceArgument || !outputArgument) {
     throw new Error(
-        "Usage: node scripts/resize-radiance-hdr.mjs <source.hdr> <output.hdr> [width]",
+        "Usage: node scripts/resize-radiance-hdr.mjs <source.hdr> <output.hdr> [width] [assetName] [sourceUrl]",
     );
 }
 
@@ -174,12 +176,12 @@ const toRgbe = (red, green, blue) => {
 const outputChunks = [];
 const outputHeader = [
     "#?RADIANCE",
-    "# Derived from Bandai Namco Studios TrueHDRI YamagataField_20181231_1137",
+    `# Derived from Bandai Namco Studios TrueHDRI ${assetName}`,
     "SOFTWARE=MMD_modoki Radiance HDR resize script",
     "AUTHOR=Bandai Namco Studios Inc.",
     "CREDIT=Copyright Bandai Namco Studios Inc.",
     "LICENSE=CC0-1.0",
-    "SOURCE_URL=https://www.bandainamcostudios.com/projects/truehdri/library/16878",
+    `SOURCE_URL=${sourceUrl}`,
     `MODIFICATIONS=Linear box downsample from ${sourceWidth}x${sourceHeight} to ${targetWidth}x${targetHeight}`,
     "FORMAT=32-bit_rle_rgbe",
     "EXPOSURE=1.000000",

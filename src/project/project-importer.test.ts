@@ -118,6 +118,7 @@ function createHost() {
         environmentBackgroundVisible: false,
         environmentBackgroundIntensity: 0.03,
         setEnvironmentLightingSourcePath: vi.fn(async () => true),
+        setEnvironmentLightingPreset: vi.fn(async () => true),
         setPhysicsSimulationRateHz: vi.fn(),
         setPhysicsGravityAcceleration: vi.fn(),
         setPhysicsGravityDirection: vi.fn(),
@@ -578,6 +579,7 @@ describe("importProjectState", () => {
                 environmentLightingEnabled: true,
                 environmentLightingIntensity: 2.25,
                 environmentLightingRotationDegrees: 270,
+                environmentLightingPreset: "mifune-bridge",
                 environmentLightingSourcePath: "C:/hdr/studio.hdr",
                 environmentBackgroundVisible: true,
                 environmentBackgroundIntensity: 0.08,
@@ -594,6 +596,7 @@ describe("importProjectState", () => {
         expect(host.environmentLightingEnabled).toBe(true);
         expect(host.environmentLightingIntensity).toBe(2.25);
         expect(host.environmentLightingRotationDegrees).toBe(270);
+        expect(host.setEnvironmentLightingPreset).toHaveBeenCalledWith("mifune-bridge", false);
         expect(host.environmentBackgroundVisible).toBe(true);
         expect(host.environmentBackgroundIntensity).toBe(0.08);
         expect(host.setEnvironmentLightingSourcePath).toHaveBeenCalledWith("C:/hdr/studio.hdr");
@@ -673,6 +676,7 @@ describe("importProjectState", () => {
         expect(host.environmentBackgroundVisible).toBe(false);
         expect(host.environmentBackgroundIntensity).toBe(0.03);
         expect(host.setEnvironmentLightingSourcePath).toHaveBeenCalledWith(null);
+        expect(host.setEnvironmentLightingPreset).toHaveBeenCalledWith("yamagata-field", false);
     });
 
     it("restores SSGI tuning with fixed Soft Light blending", async () => {

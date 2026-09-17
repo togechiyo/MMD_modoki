@@ -1,5 +1,6 @@
 import type { MmdManager } from "../mmd-manager";
 import { t } from "../i18n";
+import { ENVIRONMENT_LIGHTING_PRESET_IDS, normalizeEnvironmentLightingPreset } from "../shared/environment-lighting-presets";
 import type { PopupContentController } from "./popup-dialog-controller";
 import {
     createPopupFormButton,
@@ -51,6 +52,18 @@ export class HdriSettingsDialogController implements PopupContentController {
         sourceValue.textContent = sourcePath ? getBaseName(sourcePath) : t("dialog.hdri.bundled");
         sourceValue.title = sourcePath ?? "";
         grid.appendChild(createPopupFormField(t("dialog.hdri.current"), sourceValue, "div"));
+
+        const preset = document.createElement("select");
+        preset.className = "popup-form-control";
+        preset.setAttribute("aria-label", t("dialog.hdri.preset"));
+        for (const id of ENVIRONMENT_LIGHTING_PRESET_IDS) {
+            preset.add(new Option(t(`dialog.hdri.preset.${id}`), id));
+        }
+        const externalOption = new Option(t("dialog.hdri.external"), "external");
+        externalOption.disabled = true;
+        preset.add(externalOption);
+        grid.appendChild(createPopupFormField(t("dialog.hdri.preset"), preset));
+        let busy = false;
 
         const backgroundVisible = document.createElement("input");
         backgroundVisible.type = "checkbox";
@@ -130,14 +143,36 @@ export class HdriSettingsDialogController implements PopupContentController {
 
         const refreshSource = (): void => {
             const path = this.mmdManager.getEnvironmentLightingSourcePath();
-            sourceValue.textContent = path ? getBaseName(path) : t("dialog.hdri.bundled");
+            sourceValue.textContent = path ? getBaseName(path)
+                : `${t("dialog.hdri.bundled")}: ${t(`dialog.hdri.preset.${this.mmdManager.environmentLightingPreset}`)}`;
             sourceValue.title = path ?? "";
-            clearButton.disabled = path === null;
+            preset.value = path ? "external" : this.mmdManager.environmentLightingPreset;
+            externalOption.hidden = path === null;
+            preset.disabled = busy;
+            loadButton.disabled = busy;
+            clearButton.disabled = busy || path === null;
             backgroundVisible.disabled = !this.mmdManager.canShowEnvironmentBackground();
             backgroundVisible.checked = this.mmdManager.isEnvironmentBackgroundVisible();
             backgroundIntensity.disabled = !this.mmdManager.canShowEnvironmentBackground()
                 || !backgroundVisible.checked;
         };
+        refreshSource();
+
+        preset.addEventListener("change", () => {
+            const selected = normalizeEnvironmentLightingPreset(preset.value);
+            busy = true;
+            refreshSource();
+            this.setStatus(t("dialog.hdri.loading"), true);
+            void this.mmdManager.setEnvironmentLightingPreset(selected).then(loaded => {
+                const message = t(loaded ? "dialog.hdri.loaded" : "dialog.hdri.loadFailed");
+                this.setStatus(message, false);
+                this.showToast(message, loaded ? "success" : "error");
+            }).finally(() => {
+                busy = false;
+                refreshSource();
+                this.refreshUi();
+            });
+        });
 
         this.refreshState = () => {
             refreshSource();
@@ -184,11 +219,11 @@ export class HdriSettingsDialogController implements PopupContentController {
                 ]);
                 if (!filePath) return;
 
-                loadButton.disabled = true;
-                clearButton.disabled = true;
+                busy = true;
+                refreshSource();
                 this.setStatus(t("dialog.hdri.loading"), true);
                 const loaded = await this.mmdManager.setEnvironmentLightingSourcePath(filePath);
-                loadButton.disabled = false;
+                busy = false;
                 if (loaded) {
                     backgroundVisible.checked = true;
                     backgroundVisible.disabled = false;

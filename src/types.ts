@@ -1,4 +1,5 @@
 import type { FrameGraphPostEffectStackEntry } from "./shared/frame-graph-post-effect-stack";
+import type { EnvironmentLightingPresetId } from "./shared/environment-lighting-presets";
 import type { MmdMaterialPipelinePreset } from "./shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "./shared/mmd-render-order";
 import type { MmdModelHeaderPreview } from "./shared/mmd-model-header";
@@ -591,6 +592,7 @@ export interface ProjectLightingState {
     environmentLightingIntensity?: number;
     environmentLightingRotationDegrees?: number;
     environmentLightingSourcePath?: string | null;
+    environmentLightingPreset?: EnvironmentLightingPresetId;
     environmentBackgroundVisible?: boolean;
     environmentBackgroundIntensity?: number;
     temperatureKelvin: number;

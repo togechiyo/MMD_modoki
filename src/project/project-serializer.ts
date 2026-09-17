@@ -15,6 +15,7 @@ import type {
     TimelineTarget,
 } from "../types";
 import type { FrameGraphPostEffectStackEntry } from "../shared/frame-graph-post-effect-stack";
+import type { EnvironmentLightingPresetId } from "../shared/environment-lighting-presets";
 import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "../shared/mmd-render-order";
 import type { BackgroundDisplayMode } from "../shared/background-display-mode";
@@ -88,6 +89,7 @@ type ProjectExportHost = {
     environmentLightingIntensity: number;
     environmentLightingRotationDegrees: number;
     environmentLightingSourcePath: string | null;
+    environmentLightingPreset: EnvironmentLightingPresetId;
     environmentBackgroundVisible: boolean;
     environmentBackgroundIntensity: number;
     iblShadowOpacity: number;
@@ -441,6 +443,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             environmentLightingIntensity: host.environmentLightingIntensity,
             environmentLightingRotationDegrees: host.environmentLightingRotationDegrees,
             environmentLightingSourcePath: host.environmentLightingSourcePath,
+            environmentLightingPreset: host.environmentLightingPreset,
             environmentBackgroundVisible: host.environmentBackgroundVisible,
             environmentBackgroundIntensity: host.environmentBackgroundIntensity,
             temperatureKelvin: host.lightColorTemperature,

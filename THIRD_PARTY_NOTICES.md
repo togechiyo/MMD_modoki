@@ -52,6 +52,8 @@ Last updated: 2026-08-27
 | Asset | Modification | License | Credit | Source |
 | --- | --- | --- | --- | --- |
 | `YamagataField_20181231_1137` TrueHDRI | Linear box downsample from 16384×8192 Radiance HDR to 2048×1024 | CC0-1.0 | ©Bandai Namco Studios Inc. | https://www.bandainamcostudios.com/projects/truehdri/library/16878 |
+| `EitaiBridge_20190111_1215` TrueHDRI | Linear box downsample from 16384×8192 Radiance HDR to 2048×1024 | CC0-1.0 | ©Bandai Namco Studios Inc. | https://www.bandainamcostudios.com/projects/truehdri/library/eitaibridge_20190111_1215 |
+| `MifuneBridge_20190311_2140` TrueHDRI | Linear box downsample from 16384×8192 Radiance HDR to 2048×1024 | CC0-1.0 | ©Bandai Namco Studios Inc. | https://www.bandainamcostudios.com/projects/truehdri/library/mifunebridge_20190311_2140 |
 | `waterbump.png` | Unmodified local copy | CC-BY-4.0 | BabylonJS | https://github.com/BabylonJS/Assets/blob/master/textures/waterbump.png |
 
 ## Notes

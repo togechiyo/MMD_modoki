@@ -45,6 +45,37 @@ node scripts/verify-radiance-hdr.mjs src/assets/ibl-shadows/yamagata-field-20181
 
 元の16Kファイルは `local-references/` にのみ置き、Gitへ追加しない。
 
+## 昼・夜の同梱プリセット（2026-09-17）
+
+雪原と同じ `Clipped / sRGB / Radiance HDR` の原本を、線形HDR値の8×8ボックス平均で
+`16384×8192`から`2048×1024`へ縮小する。露出は焼き込まない。実行時cube faceは3種とも1024。
+公式ページの記載解像度と差があるため、変換では実ファイルのRadianceヘッダーを正とした。
+
+| プリセット | 同梱ファイル | bytes | 配布元 |
+| --- | --- | ---: | --- |
+| 雪原 | `yamagata-field-20181231-1137-2k.hdr` | 5,736,210 | 上記 |
+| 昼 | `eitai-bridge-20190111-1215-2k.hdr` | 6,527,544 | [EitaiBridge_20190111_1215](https://www.bandainamcostudios.com/projects/truehdri/library/eitaibridge_20190111_1215) |
+| 夜 | `mifune-bridge-20190311-2140-2k.hdr` | 7,060,073 | [MifuneBridge_20190311_2140](https://www.bandainamcostudios.com/projects/truehdri/library/mifunebridge_20190311_2140) |
+
+合計19,323,827 bytes、追加分13,587,617 bytes。圧縮前の素材容量であり配布ZIPの差分ではない。
+昼・夜とも作者はBandai Namco Studios Inc.、ライセンスはCC0-1.0。
+2026-09-17に各公式配布ページの改変・再配布・製品組込許可を確認した。
+任意クレジットをHDRヘッダーと`THIRD_PARTY_NOTICES.md`に記載する。
+
+原本SHA-256:
+
+- Eitai: `a5c739e2c29db6a74c8e9cbb7f0b192984569ed84b8540cdc229c283822978fa`
+- Mifune: `c2508f39b4626fea2d5d0ecd3b9dcb26049aa29d844741778ba571a7ceadb855`
+
+再生成と検証（原本はGitへ追加しない）:
+
+```powershell
+node scripts/resize-radiance-hdr.mjs local-references/hdri/002131/TrueHDRI_EitaiBridge_20190111_1215_L1000_Clipped_sRGB.hdr src/assets/ibl-shadows/eitai-bridge-20190111-1215-2k.hdr 2048 EitaiBridge_20190111_1215 https://www.bandainamcostudios.com/projects/truehdri/library/eitaibridge_20190111_1215
+node scripts/resize-radiance-hdr.mjs local-references/hdri/003131/TrueHDRI_MifuneBridge_20190311_2140_L1000_Clipped_sRGB.hdr src/assets/ibl-shadows/mifune-bridge-20190311-2140-2k.hdr 2048 MifuneBridge_20190311_2140 https://www.bandainamcostudios.com/projects/truehdri/library/mifunebridge_20190311_2140
+node scripts/verify-radiance-hdr.mjs src/assets/ibl-shadows/eitai-bridge-20190111-1215-2k.hdr
+node scripts/verify-radiance-hdr.mjs src/assets/ibl-shadows/mifune-bridge-20190311-2140-2k.hdr
+```
+
 ## `white.hdr`
 
 方向性や中立色の比較に使う手続き生成の診断用IBL。既定環境ライトには使用しない。

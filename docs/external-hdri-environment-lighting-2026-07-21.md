@@ -1,5 +1,24 @@
 # IBL / 外部 HDRI 現行仕様・調査記録 2026-07-21
 
+## 2026-09-17 雪原・昼・夜の内蔵プリセット
+
+「雪原と同じくサイズを小さくして3種を同梱」という所有者の希望に合わせ、既存の雪原に
+`EitaiBridge_20190111_1215`（昼）と`MifuneBridge_20190311_2140`（夜）を追加。
+3種とも2K panorama・1024px cube face。容量・出典・再生成手順は
+[アセットREADME](../src/assets/ibl-shadows/README.md)を参照。実行時の外部ネットワーク取得はない。
+
+- `設定 → 実験設定… → PBR`の内蔵プリセットで選ぶ。既定は従来の雪原。
+- 明るさ、環境ライトON/OFF、背景表示、回転は切替時に保持する。夜は元の輝度が低いため、背景が暗い場合は背景の明るさを上げて比較する。照明の自動露出変更は追加しない。
+- `lighting.environmentLightingPreset`とlocalStorageへ安定IDを保存。旧projectや不明IDは雪原へ戻す。
+- 外部HDR / ENV / DDS使用中も最後の内蔵選択を保持し、クリア時に復帰する。プリセットを選ぶことでも外部素材から切り替えられる。
+- 読込完了までは前の環境を維持。失敗や後続操作による取消では選択を書き換えず、古い非同期結果が新しい選択を上書きしない。置換後は不要なtextureを解放する。
+
+検証: 追加HDR2種をBabylonのCPU decoderで検証し、2048×1024のRGBEとして読込成功。
+`environment-presets.spec.mjs`で3種のGUI切替、明るさ・回転保持、読込失敗時の保持、project復元、旧projectの雪原復元、Classic / Frame Graph再起動、PBR ON/OFF、外部HDRからの復帰を確認。
+既存の回転・ENV/DDS・実験設定と合わせE2E 4件成功、GPU validation errorなし。
+unit 159 files / 919 tests、lint、WebGPU / Bullet MPR smoke成功。typecheckは既知の542件、critical未定義名エラーなし。
+背景のGUI screenshotも確認した。明るさ1.0では昼が白飛びし、夜は建物が暗く見えるため、同じ背景強度が3種の見た目を揃えるものではない。モデルの美観・各素材の照明品質全般をこのテストで保証しない。
+
 ## 2026-09-17 内蔵HDR背景の解像度
 
 内蔵HDRのcube faceを128×128から1024×1024へ引き上げ、外部HDRと共通の定数を使う。背景は環境textureのcloneなので、照明・反射と背景の双方に同じ解像度が適用される。従来は同梱の2K panoramaを読み込む際に128px／面へ変換しており、背景表示の細部を失っていた。

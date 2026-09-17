@@ -17,6 +17,7 @@ Babylon.jsの `HDRCubeTexture` で読み込み、harmonicsとPBR反射用プリ�
 
 - 元解像度: `16384 x 8192`
 - 同梱解像度: `2048 x 1024`
+- 実行時cube face: `1024 x 1024`（環境ライト・HDRI背景共通。2026-09-17に128から引き上げ）
 - 元バリアント: Light Clip `Clipped`、gamut `sRGB`、Radiance RGBE（`.hdr`）
 - 撮影日時: `2018-12-31 11:37`
 - ホワイトバランス: `6500K`

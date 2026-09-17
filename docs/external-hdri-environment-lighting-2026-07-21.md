@@ -1,5 +1,13 @@
 # IBL / 外部 HDRI 現行仕様・調査記録 2026-07-21
 
+## 2026-09-17 内蔵HDR背景の解像度
+
+内蔵HDRのcube faceを128×128から1024×1024へ引き上げ、外部HDRと共通の定数を使う。背景は環境textureのcloneなので、照明・反射と背景の双方に同じ解像度が適用される。従来は同梱の2K panoramaを読み込む際に128px／面へ変換しており、背景表示の細部を失っていた。
+
+同梱HDRは従来の2048×1024（5,736,210 bytes）を維持する。配布asset容量は増えないが、cubeの画素数は64倍になるため、GPUメモリと初回変換・prefilterの負荷は増える。元の2Kを超える細部は復元できない。HDRの種類追加・4K同梱は今回の範囲に含めない。
+
+検証: `environment-rotation.spec.mjs`でClassic / Frame Graph・project復元後を含め、環境textureと背景cloneが1024×1024になることを確認。同じ360°のGUI screenshotを変更前と比較し、建物の輪郭・雪原の細部が改善したことを目視確認。`environment-cube-source.spec.mjs`、環境ライトunit 8件、lint、critical gate、WebGPU / Bullet MPR smoke成功。typecheckは従来同様542件。smokeのPBR probe輝度は旧0.179105から0.179289で、明暗応答を維持。高解像度化後も既存の起動timeout内で完了したが、厳密な起動時間・GPUメモリの比較計測は行っていない。
+
 ## 2026-09-17 水平回転
 
 - `設定 → 実験設定… → PBR → 環境ライト・IBL影の詳細`へ「環境の水平回転」を追加。0〜360°、1°刻みのスライダーで一周できる。360°は右端に保持し、描画上は0°と同じ向きになる。
@@ -130,7 +138,7 @@ HDRI背景表示はOFFのままとし、デフォルト空の見た目とPBRへ�
 
 ## Babylon.js設定
 
-外部HDRは次の条件で生成する。
+内蔵・外部HDRは次の条件で生成する（内蔵も2026-09-17から同じface size）。
 
 - cube face size: `1024 x 1024`
 - `generateHarmonics = true`

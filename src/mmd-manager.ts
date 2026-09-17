@@ -1137,9 +1137,9 @@ export class MmdManager {
     private static readonly MAX_ENVIRONMENT_LIGHTING_INTENSITY = 4;
     private static readonly MAX_ENVIRONMENT_BACKGROUND_INTENSITY = 1;
     private static readonly DEFAULT_ENVIRONMENT_BACKGROUND_INTENSITY = 0.03;
-    // External HDR is also displayed directly in the viewport. 256px faces
-    // visibly pixelate a 16K panorama at ordinary editor viewport sizes.
-    private static readonly EXTERNAL_ENVIRONMENT_CUBE_FACE_SIZE = 1024;
+    // Both HDR sources also supply the visible background. Small cube faces
+    // discard panorama detail at ordinary editor viewport sizes.
+    private static readonly ENVIRONMENT_CUBE_FACE_SIZE = 1024;
     private static readonly FRAME_PERFORMANCE_LOG_INTERVAL_MS = 10_000;
     private static readonly DEFAULT_WGSL_MATERIAL_SHADER_PRESET: WgslMaterialShaderPresetId = "wgsl-mmd-standard";
     private static readonly WGSL_MATERIAL_SHADER_PRESETS: readonly WgslMaterialShaderPresetInfo[] = [
@@ -3928,7 +3928,7 @@ ${beforeFogAppendBlock}
                 const texture = new HDRCubeTexture(
                     localPathToFileUrl(normalizedPath),
                     this.scene,
-                    MmdManager.EXTERNAL_ENVIRONMENT_CUBE_FACE_SIZE,
+                    MmdManager.ENVIRONMENT_CUBE_FACE_SIZE,
                     false,
                     true,
                     false,
@@ -5391,7 +5391,7 @@ ${beforeFogAppendBlock}
             const environmentTexture = new HDRCubeTexture(
                 bundledEnvironmentTextureUrl,
                 this.scene,
-                128,
+                MmdManager.ENVIRONMENT_CUBE_FACE_SIZE,
                 false,
                 true,
                 false,

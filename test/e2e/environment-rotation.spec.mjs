@@ -23,6 +23,8 @@ test("environment makes a full turn and restores its orientation with the backgr
       await expect(rotation).toHaveValue(String(degrees));
       await expect.poll(async () => (await diagnostics()).rotationDegrees).toBe(degrees);
       const state = await diagnostics();
+      expect(state.environmentTextureSize).toEqual({ width: 1024, height: 1024 });
+      expect(state.backgroundTextureSize).toEqual(state.environmentTextureSize);
       const radians = degrees * Math.PI / 180;
       for (const matrix of [state.reflectionMatrix, state.backgroundReflectionMatrix]) {
         expect(matrix).not.toBeNull();

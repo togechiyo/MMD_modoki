@@ -24,7 +24,7 @@ export const keyframePayloadSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("shadow"), color, toonInfluence: z.number().min(0).max(1), maxZ: z.number().min(0).max(100000), lightIntensity: z.number().min(0).max(10) }).strict(),
     effectKeyframePayloadSchema,
     z.object({ kind: z.literal("gravity"), acceleration: z.number().min(0).max(1000), direction: vector }).strict(),
-    z.object({ kind: z.literal("accessory"), position: vector, rotationDeg: vector, scale: z.number().min(0.001).max(10000) }).strict(),
+    z.object({ kind: z.literal("accessory"), position: vector, rotationDeg: vector, scale: z.number().min(0.001).max(10000), visible: z.boolean() }).strict(),
 ]);
 export const timelineScopeSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("camera") }).strict(),

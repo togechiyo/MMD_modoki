@@ -8,6 +8,19 @@ const track = { category: "morph" as const, name: "smile" };
 const owner: KeyframeScope = { kind: "model", modelInstanceId: "model-1" };
 const value = (weight: number): TimelineKeyframePayload => ({ kind: "morph", weights: [weight] });
 describe("MCP keyframe transaction", () => {
+    it("preserves accessory visibility through schema, set, and copy transactions", () => {
+        const accessoryTrack = { category: "accessory" as const, name: "prop [OBJ]" };
+        const accessoryOwner: KeyframeScope = { kind: "accessory", accessoryIndex: 0 };
+        const operation = keyframeOperationSchema.parse({ action: "set", track: accessoryTrack, frame: 10,
+            payload: { kind: "accessory", position: { x: 0, y: 0, z: 0 },
+                rotationDeg: { x: 0, y: 0, z: 0 }, scale: 1, visible: false } });
+        const set = buildAutomationKeyframeEdit(accessoryOwner, [operation], "reject", () => null);
+        expect(set.items[0].after).toMatchObject({ kind: "accessory", visible: false });
+        const copied = buildAutomationKeyframeEdit(accessoryOwner,
+            [{ action: "copy", track: accessoryTrack, frame: 10, toFrame: 20 }], "reject",
+            (_track, frame) => frame === 10 ? set.items[0].after : null);
+        expect(copied.items[0].after).toMatchObject({ kind: "accessory", visible: false });
+    });
     it("moves overlapping keys from original snapshots and undoes them as one batch", () => {
         const keys = new Map<number, TimelineKeyframePayload>([[0, value(0.1)], [10, value(0.2)]]);
         const read = (_track: unknown, frame: number) => keys.get(frame) ?? null;

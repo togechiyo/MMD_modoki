@@ -1826,9 +1826,9 @@ export class UIController {
                 this.refreshLightingUiFromRuntime();
                 this.runtimeFeatureUiController?.refreshGravityControls();
                 this.modelInfoPanelController?.updateActionButtons();
-                if (this.mmdManager.getTimelineTarget() === "accessory") {
-                    this.accessoryPanelController?.refreshSelectedTransform();
-                }
+            }
+            if (this.mmdManager.getTimelineTarget() === "accessory") {
+                this.accessoryPanelController?.refreshSelectedTransform();
             }
             this.updateTimelineEditState();
             const sourcePose = this.getDisplayBonePoseSnapshot(frame);
@@ -8645,7 +8645,7 @@ export class UIController {
                 this.modelInfoPanelController?.refresh();
                 this.runtimeFeatureUiController?.refreshRigidBodies();
             } else {
-                if (diff.after.kind === "accessory" && diff.after.transform !== undefined) this.markSectionKeyframeDirty("accessory", this.getAccessoryKeyframeContextKey(diff.subject.accessoryIndex));
+                if (diff.after.kind === "accessory" && (diff.after.transform !== undefined || diff.after.visible !== undefined)) this.markSectionKeyframeDirty("accessory", this.getAccessoryKeyframeContextKey(diff.subject.accessoryIndex));
                 this.accessoryPanelController?.refresh();
             }
             this.updateSectionKeyframeButtons();
@@ -10010,6 +10010,9 @@ export class UIController {
     private refreshRuntimeAnimationForTrack(): void {
         this.mmdManager.refreshActiveRuntimeAnimationHandles();
         this.mmdManager.seekToBoundary(this.mmdManager.currentFrame);
+        if (this.mmdManager.getTimelineTarget() === "accessory") {
+            this.accessoryPanelController?.refreshSelectedTransform();
+        }
     }
 
     private clampInterpolationValue(value: number, fallback: number): number {
@@ -12062,6 +12065,7 @@ export class UIController {
                     position: { ...payload.position },
                     rotationDeg: { ...payload.rotationDeg },
                     scale: payload.scale,
+                    visible: payload.visible,
                 };
             case "camera":
                 return {

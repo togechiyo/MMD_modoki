@@ -1,6 +1,6 @@
 # アクセサリ・タイムライン仕様
 
-更新日: 2026-08-25
+更新日: 2026-09-17
 状態: v0.2.3 現行実装
 
 ## 1. 目的と対象
@@ -13,7 +13,7 @@ MMD_modoki で読み込んだアクセサリの選択、変形、キー編集、
 - `.obj`
 - `.glb`
 
-`.x` と OBJ は fixture を使った Electron E2E まで確認済みである。GLB も同じアクセサリ変形トラック実装を共有するが、2026-08-25 時点では同等のタイムライン fixture E2E を実施していない。
+`.x` と OBJ は通常読込に対応する。GLBは通常読込UIが無効だが、既存projectの復元経路があり、同じキー処理を共有する。未対応の拡張子を今回新しく有効化するものではない。
 
 アクセサリの読み込み、材質、表示、影、外部親全般の構想は [アクセサリ対象セレクタ・形式拡張構想](./accessory-target-selector-and-format-expansion-concept-2026-08-04.md) を参照する。タイムライン全体の選択・描画・編集仕様は [タイムライン仕様](./timeline-spec.md) を正本とする。
 
@@ -46,6 +46,7 @@ MMD_modoki で読み込んだアクセサリの選択、変形、キー編集、
 | 位置 | `position.x/y/z` | 親に対するローカル位置 |
 | 回転 | `rotationDeg.x/y/z` | Euler角、度 |
 | スケール | `scale` | 読み込み時サイズを `1` とする等倍スケール |
+| 表示 | `visible` | ON/OFF。キーのフレームで即時切替 |
 
 読み込み形式ごとの内部補正倍率はキー値へ露出しない。たとえば `.x` の読み込み補正を含む実スケールに対し、パネルとキーでは `1` を基準値として扱う。
 
@@ -61,13 +62,13 @@ name: <アクセサリ名> [<形式>]
 frames: 昇順 Uint32Array
 ```
 
-1キーに位置・回転・スケールの全チャンネルを登録する。チャンネル別に独立した行やキーを持たない。
+1キーに位置・回転・スケール・表示の全チャンネルを登録する。表示チェック変更は現在フレームのプレビューとして扱い、登録ボタンでキーへ確定する。チャンネル別に独立した行やキーを持たない。
 
 キー登録は情報欄の登録ボタン、または選択トラックに対する共通の現フレーム登録操作から行う。同じフレームにキーがある場合は、確認を挟まず全チャンネルを現在値で上書きし、取り消しはUndoで行う。
 
 ## 5. 補間とフレーム外の値
 
-位置、Euler回転、スケールはいずれもフレーム間を線形補間する。
+位置、Euler回転、スケールはいずれもフレーム間を線形補間する。表示は前のキー値を維持し、次のキーのフレームで切り替える。
 
 ```text
 value = previous + (next - previous) * t
@@ -81,7 +82,7 @@ t = (currentFrame - previousFrame) / (nextFrame - previousFrame)
 - キー間: 前後キーを線形補間する。
 - 最後のキー以後: 最後のキー値を保持する。
 - 同じフレームの継続描画: 再評価せず、停止中のパネル／ビューポート入力を直前のキー値へ戻さない。
-- フレーム変更・シーク・再生: 対象フレームを再評価する。
+- フレーム変更・再生: 対象フレームを再評価する。明示シークは同じフレームでも再評価し、project復元後の評価キャッシュで表示が固定されることを防ぐ。
 
 回転はEuler角を成分ごとに線形補間する。角度境界をまたぐ最短経路補間、Quaternion補間、MMDのBezier補間カーブには未対応である。
 
@@ -104,6 +105,7 @@ payload は次の論理構造を持つ。
   position: { x: number; y: number; z: number };
   rotationDeg: { x: number; y: number; z: number };
   scale: number;
+  visible: boolean;
 }
 ```
 
@@ -135,9 +137,13 @@ keyframes.accessoryTransformAnimations[index]
   positions
   rotations
   scales
+  visibles
+  baseVisible
 ```
 
 `accessoryTransformAnimations` は `accessories` と同じ配列順で対応する。各数値列は既存 project codec の packed array 形式で保存する。
+`visibles`はu8 packed array、`baseVisible`は最初のキーより前の表示値を保持するboolean。
+旧projectの`visibles`未保存時は、全キーへ静的な`accessories[index].visible`を引き継ぐ。過去に保存されなかった表示切替は復元できない。
 
 復元順は次のとおり。
 
@@ -151,9 +157,8 @@ keyframes.accessoryTransformAnimations[index]
 
 ## 9. キー化しないアクセサリ状態
 
-2026-08-25 時点で、次の項目はprojectへ静的保存するがタイムラインではキー化しない。
+2026-09-17 時点で、次の項目はprojectへ静的保存するがタイムラインではキー化しない。
 
-- 表示ON/OFF
 - 影を落とすON/OFF
 - 親モデル、親ボーン
 - 材質preset、材質表示
@@ -168,7 +173,7 @@ keyframes.accessoryTransformAnimations[index]
 - 回転の角度ラップや最短経路を考慮しない。
 - スケールはXYZ共通で、非等方スケールに対応しない。
 - project内のアクセサリ識別は永続IDではなく配列順を使用する。
-- GLBは共通実装を通るが、`.x` / OBJ と同じタイムラインfixture回帰テストは未実施である。
+- GLBは通常読込UIが無効。今回の最小fixtureでも描画用replacement meshが0件となり、動画の画素検証は未成立。キー保存・復元の共通修正と描画対応を混同しない。
 - アクセサリのVMD互換トラックは持たない。
 
 ## 11. 検証
@@ -177,7 +182,22 @@ keyframes.accessoryTransformAnimations[index]
 
 - 純ロジック、補間、packed array round-trip: `src/editor/accessory-transform-keyframe-track.test.ts`
 - timeline row、payload、移動、削除のrouting: `test/editor/timeline-edit-service.test.ts`
-- X / OBJ のGUI登録、10フレーム補間、undo / redo、project round-trip: `test/e2e/accessory-timeline.spec.mjs`
+- X / OBJ / GLB のGUI登録、表示のみの上書き、undo / redo、copy / paste、project round-trip: `test/e2e/accessory-timeline.spec.mjs`
+- X / OBJ の実PNG / WebM出力と表示切替・座標移動: `test/e2e/accessory-keyframe-output.spec.mjs`（GLB描画ケースは上記の既存制約を明記してskip）
+- 自動操作APIの表示キー入力とコピー: `test/automation/keyframe-edit.test.ts`。accessory payloadには表示値も必須。
+
+2026-09-17の途中検証では、XのPNG先頭フレームのみ明画素0となる事象を1回観測した。後続の2回では先頭を含め正常。原因は未確定であり、表示キー修正で解消したとは断定しない。
+GLB fixtureは外部assetを使わず、[Khronos glTF 2.0仕様](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#glb-file-format-specification)に沿う最小索引付きquadを生成する。索引なしのケースでは描画pipelineのarrayStrideエラーも観測しており、GLB読込再開時の調査対象とする。
+
+最終確認（2026-09-17）:
+
+- X / OBJ / GLBのGUI登録・表示のみの上書き・copy / paste・Undo/Redo・project往復の3件成功。
+- X 30fps、OBJ 60fpsの実WebMとPNGで、0・10フレーム表示／15・20フレーム非表示／30フレーム再表示を確認。表示時のPNG/WebM重心差は約0.5px以内。
+- OBJ動画は一括試験で1回`VIDEO_EXPORT_FAILED`となり、同じ実装・設定の単独実行で成功。恒常的な回帰とは判定していないが、原因確定・解消とも扱わない。今後の失敗で原因を追えるよう出力テストにログ添付を追加。
+- GLBはキー・GUIの試験のみ成功。実画像の試験は既存の描画用mesh生成不具合によりskipし、描画対応済みとはしない。
+- PMX / PMD / BPMXはアクセサリではなくモデルのPropertyキー経路を共有する。既存PMX fixtureの表示・IK・保存往復E2Eも成功。
+- unit全159ファイル923件、lint、WebGPU起動smoke、insight validatorが成功。
+- `typecheck:critical`は成功。通常typecheckは既存の非critical 542件、TS2304 / TS2552は0件。
 - 既存のアクセサリ情報欄、変形、表示、影、重力欄の回帰: `test/e2e/accessory-info-gravity.spec.mjs`
 
 ## 12. 実装参照

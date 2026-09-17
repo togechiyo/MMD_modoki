@@ -10103,6 +10103,8 @@ ${beforeFogAppendBlock}
         }
         this._currentFrame = targetFrame;
         this.effectSceneTracks.clearPreviewsOutside(targetFrame);
+        // Explicit seeks restore keys even if project loading changed the scene at this frame.
+        this.evaluateAccessoryTransformKeyframes(this._currentFrame, true);
         this.evaluateSceneTracksAtFrame(this._currentFrame);
         this.mmdRuntime.seekAnimation(this._currentFrame, true);
         this.applyActiveModelPropertyPreview(this._currentFrame);

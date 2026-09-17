@@ -8,6 +8,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
+| adopted | [アクセサリの表示キーを形式によらず共通で扱う](./decisions/accessory-visibility-keys-cover-all-supported-formats.md) | アクセサリの形式追加、キー登録、保存、出力を変更する |
 | confirmed | [プレビュー周囲の色は現状を維持する](./decisions/keep-current-viewport-surround-color.md) | V022-073のグレー化要望を再検討する |
 | adopted | [選択ボーンへカメラの注視点を合わせる](./decisions/focus-camera-on-selected-bones.md) | 編集対象へカメラを合わせる操作・カメラ追従を検討する |
 | adopted | [右上のエフェクト開閉ボタンは全言語でEffect表記にする](./decisions/effect-toggle-label-is-shared-across-locales.md) | toolbar.fx.shortの翻訳や右上のボタン文言を変更する |

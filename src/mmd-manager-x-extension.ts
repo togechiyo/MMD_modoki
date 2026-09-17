@@ -99,7 +99,7 @@ declare module "./mmd-manager" {
         applyAccessoryTransformKeyframeValue(index: number, frame: number, value: AccessoryTransformKeyframeValue | null): boolean;
         removeAccessoryTransformKeyframeValues(index: number, frames: readonly number[]): boolean;
         moveAccessoryTransformKeyframeValue(index: number, fromFrame: number, toFrame: number): boolean;
-        evaluateAccessoryTransformKeyframes(frame: number): void;
+        evaluateAccessoryTransformKeyframes(frame: number, force?: boolean): void;
         getAccessoryTransformKeyframes(index: number): ProjectSerializedAccessoryTransformTrack | null;
         setAccessoryTransformKeyframes(index: number, track: ProjectSerializedAccessoryTransformTrack | null): boolean;
         getModelBoneNames(modelIndex: number): string[];
@@ -1045,6 +1045,7 @@ function createAccessoryEntryFromImport(
                 z: toDegrees(initialRotation.z),
             },
             scale: 1,
+            visible: true,
         }),
         lastEvaluatedTransformFrame: null,
     };
@@ -1272,7 +1273,7 @@ const mmdManagerProto = MmdManager.prototype as unknown as {
     applyAccessoryTransformKeyframeValue?: (index: number, frame: number, value: AccessoryTransformKeyframeValue | null) => boolean;
     removeAccessoryTransformKeyframeValues?: (index: number, frames: readonly number[]) => boolean;
     moveAccessoryTransformKeyframeValue?: (index: number, fromFrame: number, toFrame: number) => boolean;
-    evaluateAccessoryTransformKeyframes?: (frame: number) => void;
+    evaluateAccessoryTransformKeyframes?: (frame: number, force?: boolean) => void;
     getAccessoryTransformKeyframes?: (index: number) => ProjectSerializedAccessoryTransformTrack | null;
     setAccessoryTransformKeyframes?: (index: number, track: ProjectSerializedAccessoryTransformTrack | null) => boolean;
     getModelBoneNames?: (modelIndex: number) => string[];
@@ -1553,6 +1554,9 @@ if (!mmdManagerProto.setAccessoryVisibility) {
         const entry = entries[index];
         if (!entry) return false;
         setAccessoryVisible(entry, visible);
+        if (entry.transformKeyframes.keyframes.length === 0) {
+            entry.transformKeyframes.baseValue.visible = visible;
+        }
         (this as unknown as XLoadHost).syncIblShadowsScene?.();
         return isAccessoryVisible(entry);
     };
@@ -1565,6 +1569,9 @@ if (!mmdManagerProto.toggleAccessoryVisibility) {
         if (!entry) return false;
         const next = !isAccessoryVisible(entry);
         setAccessoryVisible(entry, next);
+        if (entry.transformKeyframes.keyframes.length === 0) {
+            entry.transformKeyframes.baseValue.visible = next;
+        }
         (this as unknown as XLoadHost).syncIblShadowsScene?.();
         return next;
     };
@@ -1632,6 +1639,7 @@ function getAccessoryTransformValue(entry: AccessoryEntry): AccessoryTransformKe
             z: toDegrees(rotation.z),
         },
         scale: getAccessoryRelativeScale(entry),
+        visible: isAccessoryVisible(entry),
     };
 }
 
@@ -1667,6 +1675,9 @@ function applyAccessoryTransformValue(
     }
 
     entry.offset.computeWorldMatrix(true);
+    if (typeof transform.visible === "boolean" && transform.visible !== isAccessoryVisible(entry)) {
+        setAccessoryVisible(entry, transform.visible);
+    }
     if (syncIblShadows) host.syncIblShadowsScene?.();
 }
 
@@ -1676,7 +1687,8 @@ if (!mmdManagerProto.getAccessoryTransform) {
         const entry = entries[index];
         if (!entry) return null;
 
-        return getAccessoryTransformValue(entry);
+        const value = getAccessoryTransformValue(entry);
+        return { position: value.position, rotationDeg: value.rotationDeg, scale: value.scale };
     };
 }
 
@@ -1878,12 +1890,12 @@ if (!mmdManagerProto.moveAccessoryTransformKeyframeValue) {
 }
 
 if (!mmdManagerProto.evaluateAccessoryTransformKeyframes) {
-    mmdManagerProto.evaluateAccessoryTransformKeyframes = function(frame: number): void {
+    mmdManagerProto.evaluateAccessoryTransformKeyframes = function(frame: number, force = false): void {
         const host = this as unknown as XLoadHost;
         const normalizedFrame = Math.max(0, Math.floor(frame));
         for (const entry of getAccessoryEntries(this as unknown as object)) {
             if (entry.transformKeyframes.keyframes.length === 0) continue;
-            if (entry.lastEvaluatedTransformFrame === normalizedFrame) continue;
+            if (!force && entry.lastEvaluatedTransformFrame === normalizedFrame) continue;
             entry.lastEvaluatedTransformFrame = normalizedFrame;
             applyAccessoryTransformValue(
                 host,

@@ -1,7 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { resolve } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { loadAccessoryFixture } from "./accessory-fixtures.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -41,8 +42,9 @@ async function centroid(page, path, time = null) {
   }, { path, time });
 }
 
-for (const fps of [30, 60]) {
-  test(`X accessory later keys match viewport, PNG and WebM (${fps} fps)`, async ({}, testInfo) => {
+for (const [kind, fps] of [["x", 30], ["obj", 60], ["glb", 30]]) {
+  test(`${kind} accessory visibility and position keys match viewport, PNG and WebM (${fps} fps)`, async ({}, testInfo) => {
+    test.skip(kind === "glb", "GLB import UI is disabled; its existing renderer creates no managed meshes for this fixture. See docs/accessory-timeline-spec.md.");
     test.setTimeout(180000);
     const launched = await launchMmdModoki(root);
     mkdirSync(testInfo.outputDir, { recursive: true });
@@ -60,8 +62,7 @@ for (const fps of [30, 60]) {
       page.on("pageerror", error => errors.push(error.message));
       await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
       await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
-      expect(await page.evaluate(path => window.mmdModokiE2e.loadAccessory(path),
-        resolve(root, "test/fixtures/accessory/tofu.x"))).toBe(true);
+      expect(await loadAccessoryFixture(page, kind, root, launched.tempDir)).toBe(true);
       await page.evaluate(async () => {
         const project = window.mmdModokiE2e.exportProjectState();
         Object.assign(project.viewport, { groundVisible: false, skydomeVisible: false, backgroundDisplayMode: "black" });
@@ -82,19 +83,22 @@ for (const fps of [30, 60]) {
         const input = page.locator("#accessory-pos-x");
         await input.fill(String(x));
         await input.press("Enter");
+        await page.locator("#chk-accessory-visibility").setChecked(frame !== 15);
         await page.locator("#btn-info-keyframe").click();
         await expect.poll(() => page.evaluate(frame => window.mmdModokiE2e.getAccessoryTransformKeyframe(0, frame)?.position.x, frame)).toBeCloseTo(x, 4);
       }
       const project = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
       const previews = [];
-      for (const frame of [0, 15, 30]) {
+      const sampleFrames = [0, 10, 15, 20, 30];
+      for (const frame of sampleFrames) {
         await seek(frame);
-        await expect(page.locator("#accessory-pos-x")).toHaveValue(String(frame / 15 - 1) + ".0");
+        await expect(page.locator("#accessory-pos-x")).toHaveValue((frame / 15 - 1).toFixed(1));
+        await expect(page.locator("#chk-accessory-visibility")).toBeChecked({ checked: frame < 15 || frame >= 30 });
         const captured = await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 320, 180), launched.tempDir);
         previews.push(await centroid(page, captured.path));
       }
-      expect(Math.abs(previews[2].x - previews[0].x)).toBeGreaterThan(20);
       console.log("accessory preview", previews);
+      expect(Math.abs(previews[4].x - previews[0].x)).toBeGreaterThan(20);
       // Use real output windows and decode the completed files, not only runtime state.
       for (const video of [true, false]) {
         console.log("starting accessory output", { video, fps });
@@ -109,20 +113,31 @@ for (const fps of [30, 60]) {
           try {
             const request = { project, startFrame: 0, endFrame: 30, fps, outputWidth: 320, outputHeight: 180,
               ...(video ? { outputFilePath: directory + "/accessory.webm", includeAudio: false, preferredVideoCodec: "vp8", captureMode: "rgba-surface" }
-                : { outputDirectoryPath: directory, prefix: "accessory", step: 15, precision: 1, transparentBackground: false }) };
+                : { outputDirectoryPath: directory, prefix: "accessory", step: 5, precision: 1, transparentBackground: false }) };
             const started = await (video ? api.startWebmExportWindow : api.startPngSequenceExportWindow)(request);
             if (!started?.jobId) throw new Error("Export did not start");
             return await finished;
           } finally { remove(); }
         }, { project, directory: testInfo.outputDir, video, fps });
+        if (result.status !== "completed") {
+          const log = await page.evaluate(() => window.electronAPI.getLogFileInfo());
+          const contents = readFileSync(log.path, "utf8");
+          await testInfo.attach("export-failure-log", { body: contents, contentType: "text/plain" });
+          console.log("export failure log", contents.slice(-12000));
+        }
         expect(result.status, JSON.stringify(result)).toBe("completed");
         await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/);
       }
       const samples = [];
-      for (const [index, frame] of [0, 15, 30].entries()) {
+      for (const [index, frame] of sampleFrames.entries()) {
         const png = await centroid(page, testInfo.outputPath(`accessory_${String(frame).padStart(4, "0")}.png`));
         const webm = await centroid(page, testInfo.outputPath("accessory.webm"), frame / 30 + 0.001);
+        console.log("decoded accessory frame", { kind, fps, frame, png, webm });
         samples.push({ frame, preview: previews[index], png, webm });
+        if (frame >= 15 && frame < 30) {
+          for (const output of [previews[index], png, webm]) expect(output.count).toBe(0);
+          continue;
+        }
         for (const output of [png, webm]) {
           expect(output.count).toBeGreaterThan(50);
         }
@@ -132,9 +147,9 @@ for (const fps of [30, 60]) {
       // Viewport framing and output framing can differ; compare the key motion
       // within each image sequence and use PNG as the video pixel reference.
       for (const source of ["preview", "png", "webm"]) {
-        const [first, middle, last] = samples.map(sample => sample[source].x);
+        const [first, middle, last] = samples.filter(sample => sample.frame < 15 || sample.frame >= 30).map(sample => sample[source].x);
         expect(last - first).toBeGreaterThan(20);
-        expect((middle - first) / (last - first)).toBeCloseTo(0.5, 1);
+        expect((middle - first) / (last - first)).toBeCloseTo(1 / 3, 1);
       }
       console.log("accessory keyframe output", JSON.stringify({ fps, samples }));
       await testInfo.attach("centroids", { body: JSON.stringify({ fps, samples }, null, 2), contentType: "application/json" });

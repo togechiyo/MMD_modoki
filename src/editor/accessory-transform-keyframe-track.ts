@@ -2,9 +2,11 @@ import type { ProjectSerializedAccessoryTransformTrack } from "../types";
 import {
     copyProjectArrayToFloat32,
     copyProjectArrayToUint32,
+    copyProjectArrayToUint8,
     getProjectArrayLength,
     packFloat32Array,
     packFrameNumbers,
+    packUint8Array,
 } from "../project/project-codec";
 import {
     evaluateSceneKeyframeTrack,
@@ -18,6 +20,7 @@ export type AccessoryTransformKeyframeValue = {
     position: { x: number; y: number; z: number };
     rotationDeg: { x: number; y: number; z: number };
     scale: number;
+    visible: boolean;
 };
 
 export type AccessoryTransformKeyframeTrack = SceneKeyframeTrack<AccessoryTransformKeyframeValue>;
@@ -43,6 +46,7 @@ export function cloneAccessoryTransformValue(
             z: finiteOr(value.rotationDeg.z, 0),
         },
         scale: Math.max(0.001, finiteOr(value.scale, 1)),
+        visible: value.visible !== false,
     };
 }
 
@@ -79,6 +83,7 @@ export function interpolateAccessoryTransformValue(
             z: lerp(from.rotationDeg.z, to.rotationDeg.z, amount),
         },
         scale: Math.max(0.001, lerp(from.scale, to.scale, amount)),
+        visible: (amount >= 1 ? to.visible : from.visible) !== false,
     };
 }
 
@@ -141,6 +146,7 @@ export function serializeAccessoryTransformKeyframeTrack(
     const positions = new Float32Array(track.keyframes.length * 3);
     const rotations = new Float32Array(track.keyframes.length * 3);
     const scales = new Float32Array(track.keyframes.length);
+    const visibles = new Uint8Array(track.keyframes.length);
 
     track.keyframes.forEach((keyframe, index) => {
         frameNumbers[index] = keyframe.frame;
@@ -155,6 +161,7 @@ export function serializeAccessoryTransformKeyframeTrack(
             keyframe.value.rotationDeg.z,
         ], index * 3);
         scales[index] = keyframe.value.scale;
+        visibles[index] = keyframe.value.visible ? 1 : 0;
     });
 
     return {
@@ -162,6 +169,8 @@ export function serializeAccessoryTransformKeyframeTrack(
         positions: packFloat32Array(positions),
         rotations: packFloat32Array(rotations),
         scales: packFloat32Array(scales),
+        visibles: packUint8Array(visibles),
+        baseVisible: track.baseValue.visible,
     };
 }
 
@@ -169,7 +178,10 @@ export function deserializeAccessoryTransformKeyframeTrack(
     data: ProjectSerializedAccessoryTransformTrack | null | undefined,
     baseValue: AccessoryTransformKeyframeValue,
 ): AccessoryTransformKeyframeTrack {
-    let track = createAccessoryTransformKeyframeTrack(baseValue);
+    let track = createAccessoryTransformKeyframeTrack({
+        ...baseValue,
+        visible: typeof data?.baseVisible === "boolean" ? data.baseVisible : baseValue.visible,
+    });
     if (!data) return track;
 
     const frameCount = Math.max(0, getProjectArrayLength(data.frameNumbers));
@@ -177,10 +189,13 @@ export function deserializeAccessoryTransformKeyframeTrack(
     const positions = new Float32Array(frameCount * 3);
     const rotations = new Float32Array(frameCount * 3);
     const scales = new Float32Array(frameCount);
+    // Old projects have only one static visibility value. Preserve it for every key.
+    const visibles = new Uint8Array(frameCount).fill(baseValue.visible !== false ? 1 : 0);
     copyProjectArrayToUint32(data.frameNumbers, frameNumbers);
     copyProjectArrayToFloat32(data.positions, positions);
     copyProjectArrayToFloat32(data.rotations, rotations);
     copyProjectArrayToFloat32(data.scales, scales);
+    copyProjectArrayToUint8(data.visibles, visibles);
 
     for (let index = 0; index < frameCount; index += 1) {
         track = upsertAccessoryTransformKeyframe(track, frameNumbers[index], {
@@ -195,6 +210,7 @@ export function deserializeAccessoryTransformKeyframeTrack(
                 z: rotations[index * 3 + 2],
             },
             scale: scales[index],
+            visible: visibles[index] !== 0,
         });
     }
     return track;

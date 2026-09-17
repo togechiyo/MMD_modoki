@@ -543,6 +543,7 @@ describe("timeline edit service accessory tracks", () => {
             position: { x: 1, y: 2, z: 3 },
             rotationDeg: { x: 10, y: 20, z: 30 },
             scale: 1.5,
+            visible: false,
         };
         const apply = vi.fn(() => true);
         const move = vi.fn(() => true);

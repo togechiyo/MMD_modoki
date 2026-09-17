@@ -824,6 +824,8 @@ export interface ProjectSerializedAccessoryTransformTrack {
     positions: ProjectNumberArray;
     rotations: ProjectNumberArray;
     scales: ProjectNumberArray;
+    visibles?: ProjectNumberArray;
+    baseVisible?: boolean;
 }
 
 export interface ProjectSerializedBoneTrack {

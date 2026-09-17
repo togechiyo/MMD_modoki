@@ -94,6 +94,7 @@ export class AccessoryPanelController {
 
     public refreshSelectedTransform(): void {
         this.syncTransformSlidersFromSelection();
+        this.updateActionButtons();
     }
 
     public selectAccessory(index: number | null): void {
@@ -138,6 +139,7 @@ export class AccessoryPanelController {
         const selectedIndex = this.getSelectedAccessoryIndex();
         if (selectedIndex === null) return;
         const appliedVisible = this.mmdManager.setAccessoryVisibility(selectedIndex, visible);
+        this.onAccessoryTransformChanged(selectedIndex);
         this.updateActionButtons();
         this.showToast(appliedVisible ? "Accessory visible" : "Accessory hidden", "info");
     }

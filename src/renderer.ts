@@ -364,6 +364,7 @@ async function initializeApp(): Promise<void> {
         getAccessoryTransformKeyframe: (index, frame) => mmdManager.readAccessoryTransformKeyframeValue(index, frame),
         getCommandHistoryState: () => uiController.getCommandHistoryStateForE2e(),
         getMaterialModeRuntimeState: () => mmdManager.getMaterialModeRuntimeState(),
+        getMorphGeometryForE2e: () => mmdManager.getMorphGeometryForE2e(),
         getEnvironmentLightingDiagnostics: () => mmdManager.getEnvironmentLightingDiagnostics(),
         runEnvironmentLightingDiagnosticProbe: () => mmdManager.runEnvironmentLightingDiagnosticProbe(),
         nudgeTimelineSelection: (deltaFrames) => uiController.nudgeTimelineSelectionForE2e(deltaFrames),

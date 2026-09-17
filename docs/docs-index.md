@@ -274,6 +274,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [WebGPU / WGSL 実現可能性メモ](./webgpu-wgsl-feasibility.md)
 - [WebGPU fixed light shadow status](./wgsl-fixed-light-shadow-status-2026-03-13.md)
 - [WebGPU 重量モデル顔モーフ既知制限メモ](./webgpu-heavy-model-face-morph-limit-2026-04-18.md)
+- [複数モーフ登録時の顔消失調査 2026-09-17](./multiple-morph-registration-investigation-2026-09-17.md)
 - [WGSL シェーダーでできること / できないこと](./wgsl-shader-capabilities.md)
 - [LUT / WGSL 外部ファイル運用仕様](./lut-wgsl-file-handling.md)
 - [LUT cube implementation note](./lut-cube-implementation-note.md)

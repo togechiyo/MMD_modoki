@@ -260,6 +260,7 @@ declare global {
             getAccessoryTransformKeyframe: (index: number, frame: number) => ProjectAccessoryState["transform"] | null;
             getCommandHistoryState: () => { undoCount: number; redoCount: number };
             getMaterialModeRuntimeState: () => unknown;
+            getMorphGeometryForE2e: () => unknown;
             getEnvironmentLightingDiagnostics: () => unknown;
             runEnvironmentLightingDiagnosticProbe: () => Promise<unknown>;
             nudgeTimelineSelection: (deltaFrames: -1 | 1) => void;

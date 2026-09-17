@@ -466,6 +466,7 @@
 ## 2026-04-18 メモ
 
 - [ ] WebGPU 重量モデルでの顔モーフ崩れは、現行版比較と共有可能な最小再現ができるまで既知制限として扱う → [webgpu-heavy-model-face-morph-limit-2026-04-18.md](./webgpu-heavy-model-face-morph-limit-2026-04-18.md)
+- [ ] 複数モーフ登録時の顔消失（V022-087）を元の条件で再現する。頂点8個＋groupの合成PMXで登録・評価の確認を追加。形式・値・登録順の特定は継続 → [調査メモ](./multiple-morph-registration-investigation-2026-09-17.md)
 
 - [mmd-project-positioning-note.md](./mmd-project-positioning-note.md)
 - [glb-loading-investigation-2026-04-01.md](./glb-loading-investigation-2026-04-01.md)

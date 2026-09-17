@@ -449,7 +449,9 @@ export function writePmx(model) {
         }
     }
 
-    writer.int32(model.expressionMorphs ? 2 : model.materialSwitchMorph ? 1 : 0);
+    const vertexMorphs = model.vertexMorphs ?? [];
+    const groupMorphs = model.groupMorphs ?? [];
+    writer.int32((model.expressionMorphs ? 2 : model.materialSwitchMorph ? 1 : 0) + vertexMorphs.length + groupMorphs.length);
     if (model.materialSwitchMorph) {
         writer.text("材質テスト"); writer.text("Material Test");
         writer.uint8(4); writer.uint8(8); writer.int32(1);
@@ -467,6 +469,24 @@ export function writePmx(model) {
         writer.vector([0, 0, 0]); writer.float32(0);
         writer.vector([0, 0, 0]); writer.vector([0, 0, 0, 0]); writer.float32(0);
         writer.vector([0, 0, 0, 0]); writer.vector([0, 0, 0, 0]); writer.vector([0, 0, 0, 0]);
+    }
+    for (const morph of vertexMorphs) {
+        writer.text(morph.name); writer.text(morph.name);
+        writer.uint8(4); writer.uint8(1); // other panel, vertex morph
+        writer.int32(morph.offsets.length);
+        for (const { index, offset } of morph.offsets) {
+            if (vertexIndexSize === 1) writer.uint8(index);
+            else writer.uint16(index);
+            writer.vector(offset);
+        }
+    }
+    for (const morph of groupMorphs) {
+        writer.text(morph.name); writer.text(morph.name);
+        writer.uint8(4); writer.uint8(0); // other panel, group morph
+        writer.int32(morph.elements.length);
+        for (const { index, ratio } of morph.elements) {
+            writer.int8(index); writer.float32(ratio);
+        }
     }
     writer.int32(1); // display frames
     writer.text("Root");

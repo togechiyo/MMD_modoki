@@ -3523,6 +3523,23 @@ ${beforeFogAppendBlock}
 
     private readonly materialModeRuntimeIds = new WeakMap<object, number>();
     private materialModeRuntimeIdCounter = 0;
+    public getMorphGeometryForE2e() {
+        return this.sceneModels.flatMap(entry => entry.renderMeshes.flatMap(mesh => {
+            const manager = mesh.morphTargetManager;
+            if (!manager) return [];
+            return [{
+                name: mesh.name,
+                gpuSkinning: mesh.computeBonesUsingShaders,
+                base: Array.from(mesh.getVerticesData("position") ?? []),
+                morphed: Array.from(mesh.getPositionData(false, true) ?? []),
+                targets: Array.from({ length: manager.numTargets }, (_, index) => {
+                    const target = manager.getTarget(index);
+                    return { name: target.name, weight: target.influence };
+                }),
+            }];
+        }));
+    }
+
     public getMaterialModeRuntimeState() {
         const id = (object: object): number => {
             let value = this.materialModeRuntimeIds.get(object);

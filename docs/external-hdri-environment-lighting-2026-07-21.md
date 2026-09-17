@@ -12,6 +12,7 @@
 - `lighting.environmentLightingPreset`とlocalStorageへ安定IDを保存。旧projectや不明IDは雪原へ戻す。
 - 外部HDR / ENV / DDS使用中も最後の内蔵選択を保持し、クリア時に復帰する。プリセットを選ぶことでも外部素材から切り替えられる。
 - 読込完了までは前の環境を維持。失敗や後続操作による取消では選択を書き換えず、古い非同期結果が新しい選択を上書きしない。置換後は不要なtextureを解放する。
+- 同じプリセットのtextureが起動時に読込中なら、そのinstanceを再利用する。出力rendererのproject復元で重複生成するとWebGPUのcache通知待ちが完了しないため。詳細は[後続調査](./x-accessory-keyframe-output-investigation-2026-09-17.md)。
 
 検証: 追加HDR2種をBabylonのCPU decoderで検証し、2048×1024のRGBEとして読込成功。
 `environment-presets.spec.mjs`で3種のGUI切替、明るさ・回転保持、読込失敗時の保持、project復元、旧projectの雪原復元、Classic / Frame Graph再起動、PBR ON/OFF、外部HDRからの復帰を確認。

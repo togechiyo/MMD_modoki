@@ -4020,7 +4020,9 @@ ${beforeFogAppendBlock}
         const generation = ++this.environmentLightingLoadGeneration;
         const previous = this.bundledEnvironmentTexture;
         let next = previous;
-        if (preset !== this.environmentLightingPresetValue || !next?.isReady()) {
+        // Reuse the startup texture while it loads. A second HDRCubeTexture for
+        // the same pending WebGPU resource can wait indefinitely on its cache.
+        if (preset !== this.environmentLightingPresetValue || !next) {
             try {
                 next = await new Promise<HDRCubeTexture>((resolve, reject) => {
                     const texture = new HDRCubeTexture(

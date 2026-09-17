@@ -511,6 +511,7 @@
 - [x] 実験設定の環境ライトを0〜360°水平回転し、HDRI背景・project保存・再起動復元へ同期（2026-09-17、[仕様](./external-hdri-environment-lighting-2026-07-21.md)）
 - [x] 内蔵HDRのcube faceを128から1024へ上げ、2K素材のまま背景の粗さを改善（2026-09-17、[仕様](./external-hdri-environment-lighting-2026-07-21.md)）
 - [x] 雪原・昼・夜のTrueHDRIを2K同梱プリセットにし、選択・保存復元・外部素材との切替を追加（2026-09-17、[仕様](./external-hdri-environment-lighting-2026-07-21.md)）
+- [x] 出力rendererのプリセット復元で読込途中の同一HDRを重複生成しない（2026-09-17、[調査](./x-accessory-keyframe-output-investigation-2026-09-17.md)）
 
 - [x] 外部 `.hdr` を環境ライティングへ読み込む
 - [x] IBL ON / OFF と強度を HDRI 詳細 popup から操作する

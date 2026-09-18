@@ -909,6 +909,7 @@
     "menu.runtime.wasm": "Runtime: WASM",
     "menu.toast.unhandled": "This menu item is not ready yet",
     "menu.toast.newProjectWindowFailed": "Failed to open a new project window",
+    "menu.toast.dropOneProject": "Drop one project file at a time, without other files",
     "menu.toast.hdriNotReady": "HDRI background display is not ready yet",
     "menu.toast.logFolderOpened": "Opened log folder",
     "menu.toast.logFolderFailed": "Failed to open log folder",

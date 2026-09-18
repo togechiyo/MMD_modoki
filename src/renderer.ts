@@ -332,6 +332,8 @@ async function initializeApp(): Promise<void> {
 
     const uiController = new UIController(mmdManager, timeline, bottomPanel);
     await uiController.restoreProjectAfterRuntimeModeReload();
+    const initialProjectPath = await window.electronAPI.takeInitialProjectPath();
+    if (initialProjectPath) await uiController.openProjectFile(initialProjectPath);
     if (wgslRecovered) mmdManager.onError?.(t("wgsl.recovered"));
     connectAutomationEditor(mmdManager, uiController, timeline);
     if (new URLSearchParams(window.location.search).get("e2e") === "1") {

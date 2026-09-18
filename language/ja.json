@@ -909,6 +909,7 @@
     "menu.runtime.wasm": "Runtime: WASM",
     "menu.toast.unhandled": "このメニュー項目はまだ準備中です",
     "menu.toast.newProjectWindowFailed": "新しいプロジェクトウィンドウを開けませんでした",
+    "menu.toast.dropOneProject": "プロジェクトファイルは他のファイルと混ぜず、1つずつドロップしてください",
     "menu.toast.hdriNotReady": "HDRI背景表示はまだ準備中です",
     "menu.toast.logFolderOpened": "ログフォルダを開きました",
     "menu.toast.logFolderFailed": "ログフォルダを開けませんでした",

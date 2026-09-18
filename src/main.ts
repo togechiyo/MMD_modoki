@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, session, shell, type IpcMainEvent } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import { isProjectFilePath } from './project/project-drop';
 import { readEffectPackage, readTextWithEffects, writeTextWithEffects } from './external-wgsl/file-store';
 import { installWgslRecovery } from './main/wgsl-recovery';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -992,7 +993,8 @@ const showRendererFailureDialog = async (
 
 const automationBridge = installAutomationAppBridge((code, data) => writeAppLog('warn', 'main', code, data));
 const wgslRecovery = installWgslRecovery((message, error) => writeAppLog('warn', 'main', message, error ? createLogErrorData(error) : undefined));
-const createWindow = (): BrowserWindow => {
+const initialProjectPaths = new Map<number, string>();
+const createWindow = (projectFilePath?: string): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: MAIN_WINDOW_DEFAULT_WIDTH,
     height: MAIN_WINDOW_DEFAULT_HEIGHT,
@@ -1010,6 +1012,9 @@ const createWindow = (): BrowserWindow => {
     },
   });
   mainWindow.setMenuBarVisibility(false);
+  if (projectFilePath) initialProjectPaths.set(mainWindow.webContents.id, projectFilePath);
+  const editorId = mainWindow.webContents.id;
+  mainWindow.on('closed', () => { initialProjectPaths.delete(editorId); });
   automationBridge.register(mainWindow);
   snapWindowContentAspect(mainWindow, MAIN_WINDOW_ASPECT_RATIO);
   writeAppLog('info', 'main', 'main window created', {
@@ -1273,12 +1278,22 @@ ipcMain.handle('window:setZoomFactor', async (event, zoomFactor: number) => {
   return event.sender.getZoomFactor();
 });
 
-ipcMain.handle('window:openNewProject', async (event): Promise<number | null> => {
+ipcMain.handle('window:takeInitialProjectPath', (event): string | null => {
+  const filePath = initialProjectPaths.get(event.sender.id) ?? null;
+  initialProjectPaths.delete(event.sender.id);
+  return filePath;
+});
+
+ipcMain.handle('window:openNewProject', async (event, projectFilePath?: unknown): Promise<number | null> => {
   const ownerWindow = BrowserWindow.fromWebContents(event.sender);
   if (!ownerWindow || ownerWindow.isDestroyed()) return null;
 
   try {
-    const newWindow = createWindow();
+    if (projectFilePath !== undefined && (
+      typeof projectFilePath !== 'string' || !path.isAbsolute(projectFilePath)
+      || !isProjectFilePath(projectFilePath) || !fs.statSync(projectFilePath).isFile()
+    )) return null;
+    const newWindow = createWindow(projectFilePath as string | undefined);
     writeAppLog('info', 'ipc', 'opened new project window', {
       ownerWebContentsId: event.sender.id,
       newWebContentsId: newWindow.webContents.id,

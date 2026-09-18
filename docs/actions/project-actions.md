@@ -1,6 +1,6 @@
 # Project Actions
 
-更新日: 2026-08-27
+更新日: 2026-09-18
 
 ファイル読み込み、保存、書き出しのAction仕様。
 
@@ -54,8 +54,10 @@
   - `payload`: `filePaths`
 - 出力:
   - ファイル種別に応じてmodel / motion / audio / backgroundなどが読み込まれる。
+  - `.modoki.json` / `.json` / `.mmdproj` はprojectとして開く。初期状態の空ウィンドウならその場で、それ以外は新規ウィンドウへ読み込む。
 - 副作用:
   - 複数ファイルの順序付き読み込みが発生する。
+  - projectは1回のdropにつき1ファイル。他のassetとの混在や複数projectの同時dropは、全件を読み込まず通知する。
 - canExecute:
   - `filePaths` が空ではない。
 - undo:
@@ -63,6 +65,23 @@
 - テスト観点:
   - 空配列では実行されない。
   - drop由来の読み込みsourceが維持される。
+  - 空ウィンドウの再利用、読み込み済みproject・未保存の照明編集・モデルの保持、連続drop、不正JSON、混在dropをGUIから確認する。カメラだけの変更も空扱いしないことをunitで確認する。
+
+#### Project dropの空判定と受け渡し（2026-09-18）
+
+UI初期化完了時のproject保存値と現在値を比較する。毎回生成される`savedAt`だけを比較から除外する。モデルがなくても、カメラ・照明・音声・出力設定などが異なれば空として扱わない。既存保存先、編集履歴のrevision、読み込みや再生中の状態も確認し、判断に迷う状態は別ウィンドウへ送る。Undoで初期値へ戻しても履歴があれば別ウィンドウにする。runtime/backend再起動で復元したprojectも保持する。
+
+その場でのproject読込は、最初の非同期IOより前に予約する。読込完了前の次のproject dropは別ウィンドウに送り、二重読込による置換を防ぐ。通常のモデル・モーション等のasset dropは従来どおり。
+
+main processは新ウィンドウの`webContents.id`に読込パスを紐づける。rendererがUIとruntimeを初期化してから`takeInitialProjectPath`で一度だけ取得し、通常のproject importerへ渡す。読込要求を取り逃すpush通知や、reloadで再度読み込むURL queryにはしない。閉じたウィンドウの未取得要求も削除する。
+
+JSONはLUT等へ作用する前にprojectのformat/versionとmodels配列を確認する。任意JSONをprojectとして適用しない。起動先の読込失敗はそのウィンドウで通知し、元ウィンドウの状態・履歴・保存先には触れない。
+
+公式APIは[ipcMain.handle](https://www.electronjs.org/docs/latest/api/ipc-main#ipcmainhandlechannel-listener)と[webUtils.getPathForFile](https://www.electronjs.org/docs/latest/api/web-utils#webutilsgetpathforfilefile)を確認。Electron 40.4.1で使用する。E2Eでは実ファイルを持つ`File`だけをOS境界で供給し、通常のDOM dropイベントから最終UIとproject stateを検証する。
+
+検証: `project-drop.test.ts`の9件を含むunit 950件、lint、`typecheck:critical`を通過。通常typecheckは既知の非criticalエラーが残るが、今回変更したファイルにはエラーなし。ローカルElectron E2Eの`project-drop.spec.mjs`はClassic / Frame Graphとも通過し、既存`new-project-window.spec.mjs`も通過した。`smoke:launch`はWebGPU / Bullet MPRで初期化と安定監視を通過した。
+
+起動性能の観測: 検証済みウィンドウを残して3枚目を起動した試行では、project読込より前のWebGPU初期化に約29秒かかり、30秒のready待ちを超えた。E2Eは各ケースの編集元と読込先の2ウィンドウで検証した。多数ウィンドウでの起動速度改善はこの変更に含めていない。
 
 ### `project.openEnvironmentHdr`
 

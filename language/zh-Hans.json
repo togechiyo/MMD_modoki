@@ -909,6 +909,7 @@
     "menu.runtime.wasm": "运行环境：WASM",
     "menu.toast.unhandled": "此菜单项尚未完成",
     "menu.toast.newProjectWindowFailed": "无法打开新的项目窗口",
+    "menu.toast.dropOneProject": "请每次只拖放一个项目文件，不要混入其他文件",
     "menu.toast.hdriNotReady": "HDRI 背景显示尚未完成",
     "menu.toast.logFolderOpened": "已打开日志文件夹",
     "menu.toast.logFolderFailed": "无法打开日志文件夹",

@@ -146,6 +146,7 @@ import {
     RUNTIME_RELOAD_PROJECT_STORAGE_KEY,
     type RuntimeReloadProjectState,
 } from "./project/runtime-reload-project-state";
+import { canReuseProjectWindow, classifyProjectDrop, projectDropSnapshot } from "./project/project-drop";
 
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { EffectKeyframeController } from "./ui/effect-keyframe-controller";
@@ -604,6 +605,8 @@ export class UIController {
     private postFxWgslToonPath: string | null = null;
     private postFxWgslToonText: string | null = null;
     private currentProjectFilePath: string | null = null;
+    private initialProjectDropSnapshot = "";
+    private projectDropPending = false;
     private lastModelSideTargetValue: string | null = null;
     private suppressNextModelLoadErrorToast = false;
     private readonly onLocaleChanged = (): void => {
@@ -1121,6 +1124,7 @@ export class UIController {
         this.shortcutEdgeWidthRestore = Math.max(0.01, this.mmdManager.modelEdgeWidth || 1);
         this.applyLocalizedUiState();
         this.refreshViewportBottomBar();
+        this.initialProjectDropSnapshot = projectDropSnapshot(this.buildProjectStateForPersistence());
         document.addEventListener("app:locale-changed", this.onLocaleChanged as EventListener);
 
         window.addEventListener("beforeunload", (event) => {
@@ -2194,6 +2198,32 @@ export class UIController {
     private async loadDroppedFiles(filePaths: readonly string[]): Promise<void> {
         if (this.hasBackgroundExportActive()) {
             this.showToast("Cannot load files during background export", "error");
+            return;
+        }
+
+        const dropKind = classifyProjectDrop(filePaths);
+        if (dropKind === "mixed") {
+            this.showToast(t("menu.toast.dropOneProject"), "error");
+            return;
+        }
+        if (dropKind === "project") {
+            const reuseWindow = canReuseProjectWindow({
+                initialSnapshot: this.initialProjectDropSnapshot,
+                getCurrentProject: () => this.buildProjectStateForPersistence(),
+                filePath: this.currentProjectFilePath,
+                historyRevision: this.commandHistory.getRevision(),
+                busy: this.projectDropPending || this.isAutomationBusy() || this.mmdManager.isPlaying,
+            });
+            if (reuseWindow) {
+                this.projectDropPending = true;
+                try {
+                    await this.openProjectFile(filePaths[0]);
+                } finally {
+                    this.projectDropPending = false;
+                }
+            } else {
+                await this.openNewProjectWindow(filePaths[0]);
+            }
             return;
         }
 
@@ -3482,9 +3512,9 @@ export class UIController {
         }
     }
 
-    private async openNewProjectWindow(): Promise<void> {
+    private async openNewProjectWindow(projectFilePath?: string): Promise<void> {
         try {
-            const webContentsId = await window.electronAPI.openNewProjectWindow();
+            const webContentsId = await window.electronAPI.openNewProjectWindow(projectFilePath);
             if (webContentsId !== null) return;
             this.showToast(t("menu.toast.newProjectWindowFailed"), "error");
         } catch (err: unknown) {
@@ -3581,7 +3611,11 @@ export class UIController {
         }
     }
 
-    private async loadProject(automationPath?: string, permission?: AutomationPermission): Promise<Record<string, unknown> | void> {
+    public async openProjectFile(filePath: string): Promise<void> {
+        await this.loadProject(filePath, undefined, false);
+    }
+
+    private async loadProject(automationPath?: string, permission?: AutomationPermission, propagateError = Boolean(automationPath)): Promise<Record<string, unknown> | void> {
         const filePath = automationPath ?? await window.electronAPI.openFileDialog([
             { name: "MMD Modoki Project", extensions: ["mmdproj", "json"] },
             { name: "All files", extensions: ["*"] },
@@ -3594,7 +3628,7 @@ export class UIController {
             if (!text) {
                 this.setStatus("Project load failed", false);
                 this.showToast("Failed to read project file", "error");
-                if (automationPath) throw new AutomationError("ASSET_LOAD_FAILED");
+                if (propagateError) throw new AutomationError("ASSET_LOAD_FAILED");
                 return;
             }
 
@@ -3604,12 +3638,14 @@ export class UIController {
             } catch {
                 this.setStatus("Project load failed", false);
                 this.showToast("Project JSON parse failed", "error");
-                if (automationPath) throw new AutomationError("INVALID_PROJECT");
+                if (propagateError) throw new AutomationError("INVALID_PROJECT");
                 return;
             }
 
             if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new AutomationError("INVALID_PROJECT");
             const parsedProject = parsed as Partial<MmdModokiProjectFileV1>;
+            if (parsedProject.format !== "mmd_modoki_project" || parsedProject.version !== 1
+                || !Array.isArray(parsedProject.scene?.models)) throw new AutomationError("INVALID_PROJECT");
             if (permission) await assertAutomationPermission(permission);
             const requestedLutMode = parsedProject.effects?.lutSourceMode;
             const requestedLutPath = parsedProject.effects?.lutExternalPath;
@@ -3710,7 +3746,7 @@ export class UIController {
             const message = err instanceof Error ? err.message : String(err);
             this.setStatus("Project load failed", false);
             this.showToast(`Project load error: ${message}`, "error");
-            if (automationPath) throw err;
+            if (propagateError) throw err;
         }
     }
 

@@ -91,7 +91,7 @@ fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     #endif
     if (uniforms.ownedSssProfile.z > 0.5) { transmissionTint = toLinearSpaceVec3(${SKIN_TINT}); }
     let lightGain = select(1.0, ${SKIN_LIGHT_GAIN}, uniforms.ownedSssProfile.z > 0.5);
-    return uniforms.ownedSssLightColor.rgb * lightGain * transmissionTint * transmission / max(entryWeight, 0.0001) * back * valid * 0.75;
+    return uniforms.ownedSssLightColor.rgb * lightGain * transmissionTint * transmission / max(entryWeight, 0.0001) * back * valid * 0.375;
 }
 fn ownedSssDiffuse(p: vec3f, n: vec3f, localSignal: vec3f) -> vec3f {
     let clip = uniforms.ownedSssViewMatrix * vec4f(p, 1.0);

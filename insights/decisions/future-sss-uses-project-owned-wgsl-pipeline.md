@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/material-shader-presets
 confidence: high
-last_verified: 2026-09-07
+last_verified: 2026-09-18
 evidence:
   - project-owner-directive
   - user-device-confirmation
@@ -31,6 +31,8 @@ decided_on: 2026-08-27
 Babylon.jsのSSSアルゴリズムへ処理を委ねることは区別する。
 
 2026-09-07に所有者が独自Skin / Waxの最終ルックを採用した。以後の調整ではこの採用済みの見た目を比較基準にする。Skinは固定赤み・照明120相当・受光1.0、WaxはモデルToon色・受光1.2、共通の拡散半径0.20・SSS合成100%とする。遮蔽影も曲面の陰と同じ拡散に含める。詳細な数値と検証範囲は実装・比較記録を参照する。
+
+2026-09-18、最大照明での過剰な発光感を受け、所有者が逆光の透過を約半分へ抑えるよう指定した。自前SSS共通の透過係数を0.75から0.375へ変更し、通常の表面照明・拡散・色の設定は維持する。調整時は標準照明だけでなくRGB255・強度200も比較する。半減値での実モデルの見た目は所有者確認待ち。
 
 ## 避けること
 

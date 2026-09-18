@@ -46,6 +46,14 @@ test("MCP recovers an occupied saved port and shows the replacement connection",
         expect(JSON.parse(await readFile(registrationPath, "utf8")).port).toBe(newPort);
 
         await closeSettings(dialog);
+        for (const locale of ["en", "zh-Hant", "zh-Hans", "ko"]) {
+            const strings = JSON.parse((await readFile(resolve(import.meta.dirname, `../../language/${locale}.json`), "utf8")).replace(/^\uFEFF/, ""));
+            await page.locator("#toolbar-locale-select").selectOption(locale);
+            dialog = await settings(page);
+            await expect(status()).toContainText(strings["experiment.mcp.portChanged"].replace("{previousPort}", String(oldPort)).replace("{port}", String(newPort)));
+            await closeSettings(dialog);
+        }
+        await page.locator("#toolbar-locale-select").selectOption("ja");
         dialog = await settings(page);
         await expect(status()).toContainText(`空きポート ${newPort} に変更`);
         await enable().click();

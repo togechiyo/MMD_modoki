@@ -87,7 +87,7 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP detailed diagnostics 
             await expect(dialog.getByLabel(label, { exact: true })).toBeChecked();
             await dialog.getByRole("button", { name: "詳細情報の提供履歴を更新" }).click();
             await expect(dialog.getByRole("list", { name: "詳細情報の提供履歴" }).locator("li")).toHaveCount(pbr ? 10 : 5);
-            await expect(dialog.getByRole("list", { name: "詳細情報の提供履歴" })).toContainText("rigidBody[0]");
+            await expect(dialog.getByRole("list", { name: "詳細情報の提供履歴" })).toContainText("剛体[0]");
             await closeSettings(dialog);
         }
         dialog = await settings(page);

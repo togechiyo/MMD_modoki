@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -119,11 +120,32 @@ test("experimental settings persist PBR imports and expose environment and log o
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
     expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).scene.models.at(-1).materialPipeline).toBe("pbr-standard");
     for (const locale of ["en", "ko", "zh-Hans", "zh-Hant", "ja"]) {
-      await page.evaluate(locale => window.mmdI18n.setLocale(locale), locale);
+      const strings = JSON.parse((await readFile(resolve(root, `language/${locale}.json`), "utf8")).replace(/^\uFEFF/, ""));
+      await page.locator("#toolbar-locale-select").selectOption(locale);
       await open();
       await expect(dialog).not.toContainText("experiment.");
+      for (const key of ["experiment.pbrNote", "wgsl.safetyNote", "dialog.hdri.backgroundVisible", "dialog.hdri.lightingEnabled", "dialog.hdri.load", "dialog.hdri.note", "experiment.mcp.title", "experiment.mcp.sharingNote", "experiment.mcp.detailNote", "experiment.mcp.permissions", "experiment.mcp.diagnostics", "experiment.mcp.historyNote"]) {
+        await expect(dialog).toContainText(strings[key]);
+      }
+      const mcp = dialog.getByLabel(strings["experiment.mcp.enabled"], { exact: true });
+      const mcpStatus = dialog.locator("[data-mcp-status]");
+      await expect(mcpStatus).toHaveText(strings["experiment.mcp.status.off"]);
+      await expect(dialog.getByRole("list", { name: strings["experiment.mcp.historyLabel"] })).toHaveText(strings["experiment.mcp.historyEmpty"]);
+      await mcp.click();
+      await expect(mcpStatus).toHaveText(strings["experiment.mcp.status.readOnly"] + strings["experiment.mcp.status.detailsOff"]);
+      await dialog.getByLabel(strings["experiment.mcp.editable"], { exact: true }).click();
+      await expect(mcpStatus).toHaveText(strings["experiment.mcp.status.editable"] + strings["experiment.mcp.status.detailsOff"]);
+      await dialog.getByLabel(strings["experiment.mcp.detailed"], { exact: true }).click();
+      await expect(mcpStatus).toHaveText(strings["experiment.mcp.status.editable"] + strings["experiment.mcp.status.detailsOn"]);
+      await dialog.getByLabel(strings["experiment.mcp.editable"], { exact: true }).click();
+      await expect(mcpStatus).toHaveText(strings["experiment.mcp.status.readOnly"] + strings["experiment.mcp.status.detailsOn"]);
+      await mcp.click();
+      await expect(mcpStatus).toHaveText(strings["experiment.mcp.status.off"]);
       expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await sections.nth(0).scrollIntoViewIfNeeded();
       await dialog.screenshot({ path: testInfo.outputPath(`experimental-settings-${locale}.png`) });
+      await sections.nth(2).evaluate(element => element.scrollIntoView({ block: "start" }));
+      await dialog.screenshot({ path: testInfo.outputPath(`experimental-settings-mcp-${locale}.png`) });
       await dialog.locator(".app-menu-dialog-close").click();
     }
     expect(errors).toEqual([]);

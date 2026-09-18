@@ -20,7 +20,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
     const pending = new Map<string, { owner: number; resolve: (result: AutomationResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
     let listener: AutomationListener | undefined;
     let registration: { token: string; port: number } | undefined;
-    let connectionNotice: string | undefined;
+    let connectionNotice: AutomationState["connectionNotice"];
     let controlQueue: Promise<unknown> = Promise.resolve();
     const publishState = (entry: PublishedWindow): AutomationState => {
         if (!entry.window.isDestroyed()) entry.window.webContents.send("automation:state", entry.state);
@@ -242,7 +242,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                         listener = started;
                         saved.port = port;
                         if (started.previousPort !== undefined) {
-                            connectionNotice = `以前のポート ${started.previousPort} が使用中のため、空きポート ${port} に変更しました。「接続設定を表示」から接続先URLを確認し、MCPクライアント側の設定を更新してください。`;
+                            connectionNotice = { previousPort: started.previousPort, port };
                         }
                     }
                     if (epoch === entry.state.grant && !entry.window.isDestroyed()) {
@@ -255,7 +255,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 entry.state.error = undefined;
             } catch {
                 report("MCP_CONFIGURATION_FAILED");
-                entry.state.error = "MCP設定に失敗しました。ローカル接続の利用可否または資格情報の保存状態を確認してください。";
+                entry.state.error = "MCP_CONFIGURATION_FAILED";
             }
             await closeIfUnused();
             return publishState(entry);

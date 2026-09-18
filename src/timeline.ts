@@ -12,7 +12,7 @@
  * Performance:
  *   - Static canvas (#timeline-canvas): redraws ONLY on setKeyframeTracks / resize / scroll
  *   - Overlay canvas (#timeline-overlay-canvas): redraws on setCurrentFrame (ruler + playhead)
- *   - Label canvas (#timeline-label-canvas): redraws on setKeyframeTracks / resize
+ *   - Label canvas (#timeline-label-canvas): redraws on setKeyframeTracks / resize / locale change
  *   - Bidirectional scroll sync: labelsEl ↔ trackScrollEl
  */
 import type { KeyframeTrack, TimelineRotationOverlay, TrackCategory } from "./types";
@@ -105,15 +105,15 @@ const CAT = {
 export function getTimelineTrackDisplayName(track: Pick<KeyframeTrack, "name" | "category">): string {
     switch (track.category) {
         case "camera":
-            return "カメラ";
+            return t("toolbar.mode.camera");
         case "accessory":
             return track.name;
         case "light":
-            return "照明";
+            return t("section.lighting");
         case "shadow":
-            return "影";
+            return t("section.shadow");
         case "gravity":
-            return "重力";
+            return t("section.gravity");
         case "effect":
             return t(`effect.frameGraphPost.effects.${track.name}`);
         case "property":
@@ -478,6 +478,10 @@ export class Timeline {
         this.scheduleOverlay();
         this.scheduleStatic();
         this.scheduleWaveform();
+    }
+
+    refreshLocale(): void {
+        this.scheduleLabel();
     }
 
     setWaveformPeaks(peaks: Float32Array | null): void {

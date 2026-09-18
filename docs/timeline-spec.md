@@ -44,6 +44,9 @@
 - `setCurrentFrame`: overlay + static
 - `setKeyframeTracks`: static + label (+ resize)
 - スクロール: static
+- UI言語変更: labelのみ
+
+固定のカメラ・照明・影・重力ラベルはUI言語に合わせ、カメラは既存のカメラ表記、ほか3項目は下部パネル見出しと同じ翻訳を使用する。内部名とキー参照は `Camera` / `Light` / `Shadow` / `Gravity` のまま保持し、ボーン・モーフ・アクセサリの固有名は翻訳しない（2026-09-18）。5言語の描画文字・幅と、言語切替前後のトラック・選択状態の一致をローカルElectron E2Eで確認した。単体955件、lint、typecheck:criticalも通過。通常typecheckは既存の非critical診断が残るが、変更モジュールの診断はない。
 
 左ラベルのクリック座標は、固定された上20pxをviewport座標で判定し、各行は `scrollTop` を加えたcontent座標で判定する。これにより、縦スクロール後も左上セルのクリック（全解除）とダブルクリック（全キー選択）を維持する。
 

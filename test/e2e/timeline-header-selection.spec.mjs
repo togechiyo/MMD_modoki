@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -46,7 +47,7 @@ async function rowHeaderPosition(page, trackName) {
   throw new Error(`unknown scene track: ${trackName}`);
 }
 
-test("selects row or frame headers and converts them to key selection on double click", async () => {
+test("selects row or frame headers and converts them to key selection on double click", async ({}, testInfo) => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -69,6 +70,30 @@ test("selects row or frame headers and converts them to key selection on double 
         rows: [{ trackCategory: "light", trackName: "Light" }],
         frames: [],
       });
+
+    const tracksBeforeLocale = await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks());
+    const selectionBeforeLocale = await page.evaluate(() => window.mmdModokiE2e.getTimelineSelection());
+    // Observe text sent to the real label canvas; all input remains through the GUI.
+    await labels.evaluate(canvas => {
+      const context = canvas.getContext("2d");
+      const fillText = context.fillText.bind(context);
+      window.timelineLabelDraws = [];
+      context.fillText = (text, ...args) => {
+        window.timelineLabelDraws.push({ text, width: context.measureText(text).width });
+        fillText(text, ...args);
+      };
+    });
+    for (const locale of ["en", "zh-Hant", "zh-Hans", "ko", "ja"]) {
+      const strings = JSON.parse((await readFile(resolve(repoRoot, `language/${locale}.json`), "utf8")).replace(/^\uFEFF/, ""));
+      const expected = ["toolbar.mode.camera", "section.lighting", "section.shadow", "section.gravity"].map(key => strings[key]);
+      await page.evaluate(() => { window.timelineLabelDraws = []; });
+      await page.locator("#toolbar-locale-select").selectOption(locale);
+      await expect.poll(() => page.evaluate(() => window.timelineLabelDraws.slice(-4).map(item => item.text))).toEqual(expected);
+      expect(await labels.evaluate(canvas => window.timelineLabelDraws.slice(-4).every(item => item.width <= canvas.clientWidth - 6))).toBe(true);
+      expect(await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks())).toEqual(tracksBeforeLocale);
+      expect(await page.evaluate(() => window.mmdModokiE2e.getTimelineSelection())).toEqual(selectionBeforeLocale);
+      if (locale === "en") await page.locator("#timeline-container").screenshot({ path: testInfo.outputPath("timeline-english-labels.png") });
+    }
 
     const panStart = await page.evaluate(() => {
       const scroll = document.getElementById("timeline-tracks-scroll");

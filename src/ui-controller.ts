@@ -611,6 +611,7 @@ export class UIController {
     private suppressNextModelLoadErrorToast = false;
     private readonly onLocaleChanged = (): void => {
         this.applyLocalizedUiState();
+        this.timeline.refreshLocale();
         this.viewportSeekBarController?.refreshLocale();
         this.viewportTopBarController?.refreshLocale();
         this.modelCommentNoticeController.refreshLocale();

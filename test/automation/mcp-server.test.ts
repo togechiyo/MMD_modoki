@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { request as httpRequest } from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { request as httpRequest, Server } from "node:http";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { startAutomationListener, type AutomationListener } from "../../src/main/automation/mcp-server";
 import { automationTools, AutomationError } from "../../src/automation/contracts";
@@ -160,8 +160,32 @@ describe("MCP HTTP foundation", () => {
         expect(result.json.result.tools[0].name).toBe("mmd_help");
     });
 
-    it("reports a port conflict instead of silently choosing a different endpoint", async () => {
+    it("retries a busy port and reports the previous port while keeping authentication", async () => {
         const connection = await start();
-        await expect(start(Number(new URL(connection.endpoint).port))).rejects.toMatchObject({ code: "EADDRINUSE" });
+        const port = Number(new URL(connection.endpoint).port);
+        const recovered = await start(port);
+        expect(recovered.previousPort).toBe(port);
+        expect(recovered.endpoint).not.toBe(connection.endpoint);
+        expect(new URL(recovered.endpoint).hostname).toBe("127.0.0.1");
+        expect((await rpc(recovered, "tools/list")).status).toBe(200);
+        expect((await fetch(recovered.endpoint, { method: "POST" })).status).toBe(401);
+        expect((await rpc(connection, "tools/list")).status).toBe(200);
+    });
+
+    it.each([[12345, "EACCES", 1], [12345, "EADDRINUSE", 2], [0, "EADDRINUSE", 1]] as const)(
+        "bounds retries for port %s and error %s", async (port, code, attempts) => {
+            const listen = vi.spyOn(Server.prototype, "listen").mockImplementation(function () {
+                queueMicrotask(() => this.emit("error", Object.assign(new Error(code), { code })));
+                return this;
+            });
+            try {
+                await expect(start(port)).rejects.toMatchObject({ code });
+                expect(listen).toHaveBeenCalledTimes(attempts);
+            } finally { listen.mockRestore(); }
+        },
+    );
+
+    it("does not report a port change on first allocation", async () => {
+        expect((await start()).previousPort).toBeUndefined();
     });
 });

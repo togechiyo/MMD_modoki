@@ -81,7 +81,7 @@ export type AutomationTarget = z.infer<typeof target>;
 export type AutomationRequest = { requestId: string; sessionId: string; grant: number; tool: AutomationToolName; args: unknown };
 export type AutomationResult = { data: Record<string, unknown>; image?: { data: string; mimeType: "image/png" }; images?: { data: string; mimeType: "image/png" }[] };
 export type AutomationReply = { requestId: string; result?: AutomationResult; error?: string; failure?: AutomationFailure };
-export type AutomationState = { enabled: boolean; editable: boolean; detailedDiagnostics: boolean; sessionId: string; grant: number; endpoint: string | null; error?: string };
+export type AutomationState = { enabled: boolean; editable: boolean; detailedDiagnostics: boolean; sessionId: string; grant: number; endpoint: string | null; connectionNotice?: string; error?: string };
 export type AutomationApi = {
     saveMotion(input: { filePath: string; overwrite: boolean; format: "vmd" | "vpd"; document: unknown }, permission: AutomationPermission): Promise<AutomationOutputResult & { warningCodes?: string[] }>;
     writeOutput(input: AutomationOutput, permission: AutomationPermission): Promise<AutomationOutputResult>;

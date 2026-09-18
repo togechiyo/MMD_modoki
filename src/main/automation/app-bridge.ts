@@ -18,6 +18,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
     const pending = new Map<string, { owner: number; resolve: (result: AutomationResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
     let listener: AutomationListener | undefined;
     let registration: { token: string; port: number } | undefined;
+    let connectionNotice: string | undefined;
     let controlQueue: Promise<unknown> = Promise.resolve();
     const publishState = (entry: PublishedWindow): AutomationState => {
         if (!entry.window.isDestroyed()) entry.window.webContents.send("automation:state", entry.state);
@@ -35,6 +36,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         entry.state.detailedDiagnostics = false;
         entry.state.grant++;
         entry.state.endpoint = null;
+        entry.state.connectionNotice = undefined;
         for (const [id, item] of pending) if (item.owner === entry.window.webContents.id) {
             clearTimeout(item.timer); pending.delete(id); item.reject(new AutomationError("ACCESS_REVOKED"));
         }
@@ -210,21 +212,32 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 if (enabled && epoch === entry.state.grant && !entry.window.isDestroyed()) {
                     const saved = await credentials();
                     if (!listener) {
-                        listener = await startAutomationListener({ port: saved.port, token: saved.token, appVersion: app.getVersion(), onError: report, dispatch });
-                        saved.port = Number(new URL(listener.endpoint).port);
-                        await mkdir(app.getPath("userData"), { recursive: true });
-                        await writeFile(path.join(app.getPath("userData"), "mcp-registration.json"), JSON.stringify({ port: saved.port, encryptedToken: safeStorage.encryptString(saved.token).toString("base64") }), { mode: 0o600 });
+                        const started = await startAutomationListener({ port: saved.port, token: saved.token, appVersion: app.getVersion(), onError: report, dispatch });
+                        const port = Number(new URL(started.endpoint).port);
+                        try {
+                            await mkdir(app.getPath("userData"), { recursive: true });
+                            await writeFile(path.join(app.getPath("userData"), "mcp-registration.json"), JSON.stringify({ port, encryptedToken: safeStorage.encryptString(saved.token).toString("base64") }), { mode: 0o600 });
+                        } catch (error) {
+                            await started.close();
+                            throw error;
+                        }
+                        listener = started;
+                        saved.port = port;
+                        if (started.previousPort !== undefined) {
+                            connectionNotice = `以前のポート ${started.previousPort} が使用中のため、空きポート ${port} に変更しました。「接続設定を表示」から接続先URLを確認し、MCPクライアント側の設定を更新してください。`;
+                        }
                     }
                     if (epoch === entry.state.grant && !entry.window.isDestroyed()) {
                         entry.state.enabled = true;
                         entry.state.detailedDiagnostics = detailedDiagnostics;
                         entry.state.endpoint = listener.endpoint;
+                        entry.state.connectionNotice = connectionNotice;
                     }
                 }
                 entry.state.error = undefined;
             } catch {
                 report("MCP_CONFIGURATION_FAILED");
-                entry.state.error = "MCP設定に失敗しました。ポート競合または資格情報の保存状態を確認してください。";
+                entry.state.error = "MCP設定に失敗しました。ローカル接続の利用可否または資格情報の保存状態を確認してください。";
             }
             await closeIfUnused();
             return publishState(entry);

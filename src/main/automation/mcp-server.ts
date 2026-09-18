@@ -73,6 +73,7 @@ export type AutomationListenerOptions = {
 
 export type AutomationListener = {
     endpoint: string;
+    previousPort?: number;
     close(): Promise<void>;
 };
 
@@ -135,6 +136,9 @@ export async function startAutomationListener(options: AutomationListenerOptions
     } catch (error) {
         enabled = false;
         await handler.close();
+        if (options.port !== 0 && (error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+            return { ...await startAutomationListener({ ...options, port: 0 }), previousPort: options.port };
+        }
         throw error;
     }
     const address = http.address();

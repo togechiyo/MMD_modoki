@@ -54,6 +54,7 @@ export function mountAutomationSettings(container: HTMLElement): () => void {
         connection.disabled = !state.enabled;
         status.textContent = configuring ? "設定変更中…" : state.error ?? (state.enabled ? (state.editable ? "公開中：参照・編集を許可" : "公開中：参照のみ") : "OFF：公開していません");
         if (state.enabled && !configuring && !state.error) status.textContent += state.detailedDiagnostics ? "／詳細診断：許可" : "／詳細診断：OFF";
+        if (state.enabled && !configuring && !state.error && state.connectionNotice) status.textContent += ` — ${state.connectionNotice}`;
         if (!state.enabled) { config.value = ""; config.hidden = true; }
     };
     const unsubscribe = window.electronAPI.automation.onState(render);

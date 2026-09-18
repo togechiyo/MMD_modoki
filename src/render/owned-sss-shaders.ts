@@ -27,7 +27,10 @@ export const OWNED_SSS_LIGHTING = `// @apply-without-toon
     // Dark Toon colors retain their brightness; a white Toon texel must not
     // flatten the whole surface into full illumination. Preserve its hue.
     let shadowPeak = max(shadowTint.r, max(shadowTint.g, shadowTint.b));
-    let shadowBand = shadowTint * min(1.0, 0.65 / max(shadowPeak, 0.0001));
+    var shadowBand = shadowTint * min(1.0, 0.65 / max(shadowPeak, 0.0001));
+    #ifdef OWNED_SSS
+    if (uniforms.ownedSssProfile.z > 0.5) { shadowBand *= ownedSssShadowLightScale(); }
+    #endif
     // Ease middle tones without boosting the fully illuminated endpoint.
     let softLit = lit * (1.35 - 0.35 * lit);
     let surface = mix(shadowBand, vec3f(1.0), softLit);
@@ -48,12 +51,21 @@ var ownedSssNormalSampler: sampler;
 var ownedSssNormal: texture_2d<f32>;
 var ownedSssEntrySampler: sampler;
 var ownedSssEntry: texture_2d<f32>;
+// Skin's unlit color is an artistic fill, not direct illumination. Keep its
+// existing response through unit light, then preserve hue without amplifying
+// that fill with HDR backlights. Lit surfaces and transmission keep full energy.
+fn ownedSssShadowLightScale() -> f32 {
+    let light = uniforms.ownedSssLightColor.rgb;
+    return 1.0 / max(1.0, max(light.r, max(light.g, light.b)));
+}
 // Same warm endpoint and angular easing as normal-mode Skin above.
 fn ownedSssSkinSurface(ndl: f32, shadow: f32) -> vec3f {
     let angular = clamp(ndl, 0.0, 1.0);
     let lit = clamp(angular * (2.0 - angular) * shadow, 0.0, 1.0);
     let softLit = lit * (1.35 - 0.35 * lit);
-    return mix(${SKIN_TINT} * 0.65, vec3f(1.0), softLit);
+    // This helper returns gamma-space color; the PBR caller converts to linear.
+    let shadowScale = toGammaSpaceVec3(vec3f(ownedSssShadowLightScale()));
+    return mix(${SKIN_TINT} * 0.65 * shadowScale, vec3f(1.0), softLit);
 }
 fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     let clip = uniforms.ownedSssLightMatrix * vec4f(p, 1.0);

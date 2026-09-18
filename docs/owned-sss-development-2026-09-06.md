@@ -340,3 +340,5 @@ Alicia Playwright E2E・lint成功、正面近接PNGを目視確認。型検査�
 比較用E2Eは`owned-sss-transmission-strength.spec.mjs`。配布可能な`sss-reference.pmx`でSkin / Wax、通常MMD / PBR、順光 / 逆光、標準（RGB128・強度100）/ 最大（RGB255・強度200）を確認する。`MMD_SSS_COMPARISON_PHASE=before`と`after`で撮影すると、ignoredな`local-references/sss-transmission-2026-09-18/`へ比較PNGと集計を保存する。所有者のモデル本体は使用せず、報告画像と同じ外観の改善度は実機確認を待つ。
 
 検証結果: Classic / FrameGraphの比較E2E 2件（計32条件）、lint、insights検証が成功。順光16条件は変更前後のRGB平均差が全画素0、逆光16条件はすべて画像全体のRGB平均合計が低下した。最大照明では赤成分が飽和するため、単一チャンネルでなくRGB平均を比較している。PNGの目視でもPBR Skinの逆光時の発光感と薄い耳の白さが弱まることを確認した。ページ例外・WebGPU検証エラーは0件。変更はWGSL内の係数のみで、型検査・全単体テスト・起動smokeは今回の追加確認に含めない。
+
+続くAlicia実モデル確認では、透過を切っても顔全面の白さが残り、陰側の固定色の増幅とPBR環境光との加算を切り分けた。Skinの陰側の光増幅に対する局所補正と確認範囲は[強い逆光の調査](./sss-strong-backlight-2026-09-18.md)を参照する。

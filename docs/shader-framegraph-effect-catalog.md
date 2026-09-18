@@ -9,7 +9,7 @@
 - 通常の MMD 材質は `MmdStandardMaterial` と WGSL 材質プリセットを使う。
 - 描画 backend は WebGPU-first。WebGPU が使えない場合は WebGL2 へ fallback する。
 - WGSL 材質プリセットの割り当ては WebGPU 経路が主対象。
-- PBR 材質経路は実装とプロジェクト互換を残しているが、現在は通常 UI から隠している実験機能。
+- PBR 材質経路は「設定 → 実験設定」の全体PBRモードから有効にする実験機能。
 - ポストエフェクトは Classic / Frame Graph / Experimental の backend を混在させず、選択中の経路だけを適用する。
 
 関連する入口:
@@ -26,7 +26,7 @@
 | ID | 一言概要 |
 | --- | --- |
 | `mmd-standard` | 通常の MMD Standard 材質を使う既定経路。下記の WGSL プリセットを材質単位で割り当てる。 |
-| `pbr-standard` | Babylon.js PBRMaterial へ変換する実験経路。実装は残しているが現在の通常 UI では選択できない。 |
+| `pbr-standard` | Babylon.js PBRMaterial へ変換する実験経路。「設定 → 実験設定」から有効化できる。 |
 
 ## WGSL 材質シェーダープリセット
 
@@ -50,8 +50,6 @@
 | `wgsl-unlit` | Unlit Flat | lighting を無効にして、フラットな色で描画する。 |
 | `wgsl-soft-lit` | Soft Lit | highlight を抑え、弱い emissive lift を加えた柔らかい照明。 |
 | `wgsl-full-light-add` | Full Light Add | light slider を直接読み、toon flag に依存しない加算光を足す。 |
-| `wgsl-sss-standard` | SSS Standard | 安定した direct light を基準に、toon 色で影側を持ち上げる。 |
-| `wgsl-sss-skin` | SSS Skin | 固定の肌向け拡散 profile と簡易 backlight を使う SSS 表現。 |
 | `wgsl-gloss-highlight` | Gloss Highlight | 細く強い光沢 highlight を加える。 |
 | `wgsl-semi-matte-highlight` | Semi Matte Highlight | 広がりと強度を中間にした半光沢 highlight。 |
 | `wgsl-matte-highlight` | Matte Highlight | 広く弱い、マット材質向けの highlight。 |
@@ -65,13 +63,15 @@
 | `wgsl-mono-flat` | Mono Flat | lighting を切ったモノクロのフラット描画。 |
 | `wgsl-debug-white` | Debug White | toon と shadow の状態を白基調で確認する診断表示。 |
 
+通常モードの旧SSSと自前SSS Skin / Waxは材質選択UIから外しています。既存プロジェクトの割り当ては読み込み互換として保持し、PBR側のSkin / Skin Face / SSS Waxは引き続き選択できます。
+
 ### 外部 WGSL
 
 組み込みプリセットとは別に、ローカルの WGSL fragment shader をモデルまたは材質へ割り当てられます。ファイルは Main Process 経由で読み込み、Renderer の材質設定へ渡します。アクセサリへの外部 WGSL 割り当ては現在未対応です。
 
 外部 WGSL は組み込みプリセットIDではなく、プロジェクト内ではファイル参照と材質割り当てとして扱います。配布アプリの通常実行を外部ネットワークへ依存させないため、remote shader や CDN は前提にしません。
 
-## PBR 材質プリセット（実験・通常UI非公開）
+## PBR 材質プリセット（実験設定から有効化）
 
 PBR 経路は「設定 → 実験設定」の全体PBRモードを有効にすると材質パネルから選択できます。詳細は[PBRプリセットの役割整理](./pbr-material-presets-2026-09-08.md)を参照してください。
 

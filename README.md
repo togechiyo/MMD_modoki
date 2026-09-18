@@ -2,12 +2,15 @@
 
 MMD modoki is a local editing tool inspired by MMD, built on Babylon.js and `babylon-mmd`.
 
-Current public builds can:
+The v0.2.4 release is in preparation. See the [release notes](./docs/v0.2.4-release-note.md) for changes and known limitations. Published downloads are listed on [GitHub Releases](https://github.com/togechiyo/MMD_modoki/releases).
 
-- Load PMX/PMD models, `.x` / OBJ accessories, VMD motion, camera VMD, and audio
-- Edit bones, morphs, camera, lighting, post effects, and accessory transforms on a timeline
+The current source can:
+
+- Load PMX/PMD/BPMX models, `.x` / OBJ accessories, VMD/BVMD motion, camera motion, and audio
+- Edit bones, morphs, camera, lighting, shadows, gravity, and accessory transforms on a timeline; adjust post effects separately
 - Import built-in and external LUT files (`.3dl`, `.cube`)
-- Export model/camera VMD (beta), VPD poses, still images, numbered PNG sequences, and WebM videos
+- Export model/camera VMD (beta) and BVMD, VPD poses, still images, numbered PNG sequences, and WebM videos
+- Enable experimental PBR materials, external WGSL materials, and local MCP integration from Settings
 - Switch the UI language between English, Japanese, Traditional Chinese, Simplified Chinese, and Korean
 
 ## Release

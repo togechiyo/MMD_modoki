@@ -54,6 +54,8 @@
 
 ## 運用 / 品質 / リリース
 
+- [v0.2.4 リリースノート（準備中）](./v0.2.4-release-note.md)
+- [v0.2.4 リリース前確認 2026-09-18](./v0.2.4-release-preflight-2026-09-18.md)
 - [Codex Agent Skills 調査・初回導入メモ 2026-08-20](./codex-agent-skills-adoption-note-2026-08-20.md)
 - [手動テストチェックリスト](./manual-test-checklist.md)
 - [テスト導入提案](./testing-strategy-proposal.md)

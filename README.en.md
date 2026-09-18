@@ -6,6 +6,8 @@ It is being developed as a practical alternative for environments where the orig
 
 ## Download
 
+The v0.2.4 release is in preparation. This README describes the source prepared for v0.2.4. See the [release notes](./docs/v0.2.4-release-note.md) for changes; published downloads are listed on GitHub Releases.
+
 - Releases: https://github.com/togechiyo/MMD_modoki/releases
 
 Distributed builds are provided as OS-specific zip archives and an Apple Silicon macOS DMG. `<version>` is replaced with the release version.
@@ -52,38 +54,40 @@ Linux:
 
 ## Features
 
-- Load PMX/PMD models
+- Load PMX/PMD/BPMX models
 - Load `.x` / OBJ accessories
-- Load VMD motions, camera VMD data, and VPD poses
+- Load VMD/BVMD model and camera motions, and VPD poses
 - Load MP3/WAV audio for timeline preview
-- Edit bones, morphs, camera, lighting, post effects, and accessory transforms on a timeline
+- Edit bones, morphs, camera, lighting, shadows, gravity, and accessory transforms on a timeline
 - Save and reload project files
 - Import built-in and external LUT files (`.3dl`, `.cube`) from the LUT picker or by drag and drop
 - Adjust post effects such as DoF, Bloom, LUT, SSR, fog, and lens distortion
 - Use material shader presets including `AlphaCutOff` and `Luminous`
 - Export PNG images, numbered PNG sequences, and WebM videos
-- Export model/camera VMD files (beta) and selected-bone VPD poses
+- Export model/camera VMD files (beta), BVMD files, and selected-bone VPD poses
+- Convert PMX/PMD models to BPMX and VMD motions to BVMD
+- Enable experimental PBR materials, external WGSL materials, and local MCP integration from Settings → Experimental settings
 
 Notes:
 
 - `.vmd` files are routed as model motion or camera motion depending on their contents.
 - `.x` files are expected to be text-format DirectX X files.
-- SSAO is currently kept disabled in public builds to reduce load.
-- Anti-aliasing uses `MSAA x4 + FXAA`.
+- Adjust expensive effects such as SSAO to suit your GPU and resolution.
+- Post-effect keyframe editing is restricted to a development opt-in and is not available in the normal UI.
 
 ## Supported File Types
 
 Available through normal open operations or drag and drop:
 
-- Models: `.pmx` `.pmd`
+- Models: `.pmx` `.pmd` `.bpmx`
 - Accessories: `.x` `.obj`
-- Motion / pose: `.vmd` `.vpd`
-- Camera motion: `.vmd`
+- Motion / pose: `.vmd` `.bvmd` `.vpd`
+- Camera motion: `.vmd` `.bvmd`
 - Audio: `.mp3` `.wav`
+- Projects: `.mmdproj` / project-format `.json`. Dropping a project opens it in the current window if empty, or in a new window if work is already present.
 
 Available from dedicated UI:
 
-- Project: `.json` (default file name pattern: `*.modoki.json`)
 - LUT: `.3dl` `.cube`
 - Image output: `.png`
 - Video output: `.webm`
@@ -110,7 +114,7 @@ Mouse:
 
 Requirements:
 
-- Node.js 18 or later
+- Node.js 22 (used by release CI)
 - npm
 
 Setup:

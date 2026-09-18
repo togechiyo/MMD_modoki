@@ -39,6 +39,8 @@ Babylon.jsのSSSアルゴリズムへ処理を委ねることは区別する。
 
 その後の実機評価は「明暗はいいが色むらが気になる」で、材質はPBR Skin Faceと確認した。明暗の改善は確認されたが、顔の透過むらの追加調整を含めた最終ルックの採用は未確認。調整時はこの明暗差を比較基準として維持する。
 
+2026-09-18の追加実機確認でPBRのSSSは「いい感じ」と評価された。一方、通常モードのSSSは暗すぎるとの評価を受け、所有者が通常モードのSSS Skin / WaxをUIから外すよう明示した。`wgsl-owned-sss-skin` / `wgsl-owned-sss-wax`は新規選択から外し、保存IDとruntimeは既存projectの互換用に残す。PBR Skin / Skin Face / Waxは継続する。通常モードへの再公開には所有者の再指示を要する。
+
 ## 避けること
 
 - `SubSurfaceConfiguration`、標準SSS PrePass契約、`SubSurfaceScatteringPostProcess`へ再接続する。

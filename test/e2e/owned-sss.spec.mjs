@@ -4,6 +4,7 @@ import { PNG } from "playwright-core/lib/utilsBundle";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { restoreLegacyOwnedSss } from "./helpers/legacy-owned-sss-project.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const alicia = resolve(root, "local-references/model/Alicia/MMD/Alicia_solid.pmx");
@@ -64,6 +65,10 @@ async function isolateTransmission(page) {
 async function applyPreset(page, preset) {
   await page.locator("#info-model-select").selectOption("0");
   await page.locator('[data-effect-tab="materials"]').click();
+  if (preset.startsWith("wgsl-owned-sss")) {
+    await restoreLegacyOwnedSss(page, preset, useAlicia ? ["body", "hand", "face"] : null);
+    return;
+  }
   await page.locator("#shader-preset-select").selectOption(preset);
   if (useAlicia && preset !== "wgsl-mmd-standard") {
     for (const materialName of ["body", "hand", "face"]) {

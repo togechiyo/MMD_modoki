@@ -64,6 +64,8 @@ const HIDDEN_SHADER_PRESET_IDS = new Set<WgslMaterialShaderPresetId>([
     "wgsl-black-key-cutout",
     "wgsl-sss-standard",
     "wgsl-sss-skin",
+    "wgsl-owned-sss-skin",
+    "wgsl-owned-sss-wax",
 ]);
 
 function resolveShaderPanelElements(): ShaderPanelElements {

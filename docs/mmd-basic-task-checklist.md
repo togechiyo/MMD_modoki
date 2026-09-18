@@ -508,6 +508,7 @@
 ## 2026-07-21 外部 HDRI
 
 - [x] PBRプリセットの役割を整理し、Skin/Faceへ自前SSSを接続、旧Skin SSSを移行（[現仕様](./pbr-material-presets-2026-09-08.md)、2026-09-08）
+- [x] 通常モードのSSS Skin / WaxをUIから外し、PBR側と保存済みproject互換を維持（[判断と経緯](./sss-strong-backlight-2026-09-18.md)、2026-09-18）
 - [x] PBRのMetal Polished / Metal Satin / Plastic Glossy / Clay Whiteを追加し、保存復元を確認（2026-09-08）
 - [x] PBRのCotton / Satin / Velvet / Leatherを追加し、描画・保存復元を確認（2026-09-08）
 - [x] PBRのEmissive / Candy Coat / Pearl / Auroraを追加し、描画・保存復元を確認（2026-09-09）。Thin Translucentは後回し。

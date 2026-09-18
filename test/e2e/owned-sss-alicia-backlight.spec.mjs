@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { resolve } from "node:path";
 import { existsSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { restoreLegacyOwnedSss } from "./helpers/legacy-owned-sss-project.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const model = resolve(root, "local-references/model/Alicia/MMD/Alicia_solid.pmx");
@@ -45,6 +46,10 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
         const apply = async preset => {
             await page.locator("#info-model-select").selectOption("0");
             await page.locator('[data-effect-tab="materials"]').click();
+            if (preset.startsWith("wgsl-owned-sss")) {
+                await restoreLegacyOwnedSss(page, preset, ["body", "hand", "face"]);
+                return;
+            }
             for (const name of ["body", "hand", "face"]) {
                 const materialPreset = name === "face" && preset === "pbr-skin" && process.env.MMD_SSS_FACE_PRESET === "1" ? "pbr-skin-face" : preset;
                 await page.locator(".shader-material-item").filter({ has: page.locator(".shader-material-name", { hasText: new RegExp(`^${name}$`) }) }).click();

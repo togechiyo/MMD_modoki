@@ -69,3 +69,11 @@ Skinの陰側の色に`mix(0.5, 1.0, smoothstep(-1, 0, signed N·L))`を追加�
 検証: 報告条件のAlicia比較、配布fixtureのClassic / FrameGraph（従来32条件＋Faceの順逆光・標準最大8条件）成功。閉じた厚い頭部と厚さ0.12の耳を持つfixtureのSSS照度bufferでは、透過ON/OFF差の平均が頭0.00562、耳0.69612で、薄部の透過が残ることを両backendで検査した。ページ例外・WebGPU検証エラー0件、lint・診断/E2Eスクリプト構文検査成功。WGSLの局所変更のため全単体テスト・型検査・単独smokeは追加していない。
 
 追加でFaceを指定したAliciaの4方向・標準/最大照明も成功し、順光の通常照明と最大逆光の比較画像を目視確認した（`face-thickness-continuity-angles/`）。最終変更後のE2Eは報告条件1件、配布fixture2件、方向比較1件の計4件。
+
+## 通常モードのSSSを選択肢から外す
+
+2026-09-18、所有者は調整後のPBR SSSを「いい感じ」と評価し、通常モードは暗くなりすぎるため「通常モードでのSSS SkinとSSS WAXをUIから外して」と指示した。通常モードの`SSS Diffusion Skin` / `SSS Diffusion Wax`を非表示プリセットへ追加した。通常の材質セレクターと、その選択肢に合わせるautomation catalogから外れる。PBR Skin / Skin Face / Waxは従来どおり選択できる。
+
+WGSL保存ID、runtime、保存済みprojectの復元と材質一覧のラベル表示は残す。旧projectがこれらを使用していても、セレクターを開くことやPBRモードを切り替えることだけで別材質へ置換しない。互換描画の診断E2Eは、非表示項目をUIへ戻さず、保存projectのfixture供給経路から適用する。
+
+検証は`sss-shader-presets.spec.mjs`と`owned-sss-transmission-strength.spec.mjs`の計3件成功。通常の非表示、旧形式の保存ID維持・一覧表示、標準材質への戻し、PBR Skin / Face / Waxの適用とモード切替、現行mode bank形式の互換描画を確認した。lint・insights検証・構文検査・diff check成功。既存の旧形式テストは新形式の空のmode bankが旧材質配列より優先されるfixture不整合で一度失敗し、旧形式の再現ではbankを除去、現行形式の診断helperではbankも同期して修正した。

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { mkdirSync, readFileSync, copyFileSync, writeFileSync } from "node:fs";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { restoreLegacyOwnedSss } from "./helpers/legacy-owned-sss-project.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const phase = process.env.MMD_SSS_COMPARISON_PHASE;
@@ -42,8 +43,11 @@ for (const backend of ["frameGraph", "classic"]) test(`SSS transmission at norma
                 await page.locator("#info-model-select").selectOption("0");
                 await page.locator('[data-effect-tab="materials"]').click();
                 const preset = pbr ? (profile.startsWith("skin") ? `pbr-${profile}` : "pbr-sss-wax") : `wgsl-owned-sss-${profile}`;
-                await page.locator("#shader-preset-select").selectOption(preset);
-                await page.locator("#btn-shader-apply-all").click();
+                if (!pbr) await restoreLegacyOwnedSss(page, preset);
+                else {
+                    await page.locator("#shader-preset-select").selectOption(preset);
+                    await page.locator("#btn-shader-apply-all").click();
+                }
                 await page.locator("#info-model-select").selectOption("__camera__");
                 for (const [direction, z] of [["front", 1], ["back", -1]]) {
                     for (const [axis, value] of [["x", 0], ["y", 0], ["z", z]]) {

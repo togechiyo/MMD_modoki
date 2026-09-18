@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { restoreLegacyOwnedSss } from "./helpers/legacy-owned-sss-project.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const regression = process.env.MMD_SSS_OUTLINE_REGRESSION === "1";
@@ -63,15 +64,18 @@ for (const backend of ["framegraph", "classic"]) for (const model of ["tofu", "a
       await page.locator("#info-model-select").selectOption("0");
       await page.locator('[data-effect-tab="materials"]').click();
       const catalog = await page.locator("#shader-preset-select option").evaluateAll(options => options.map(option => ({ id: option.value, name: option.textContent })).filter(option => option.id.startsWith("wgsl-")));
-      const presets = regression ? catalog.filter(preset => preset.id.startsWith("wgsl-owned-sss")) : catalog;
+      const presets = regression ? ["wgsl-owned-sss-skin", "wgsl-owned-sss-wax"].map(id => ({ id, name: id })) : catalog;
       const runtime = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState());
       expect(runtime.backend).toBe(backend === "framegraph" ? "frameGraph" : "classic");
       await probe(page);
       for (const preset of presets) {
         current = preset.id;
         await edge(page, 0);
-        await page.locator("#shader-preset-select").selectOption(preset.id);
-        await page.locator("#btn-shader-apply-all").click();
+        if (regression) await restoreLegacyOwnedSss(page, preset.id);
+        else {
+          await page.locator("#shader-preset-select").selectOption(preset.id);
+          await page.locator("#btn-shader-apply-all").click();
+        }
         const off = await probe(page);
         if (preset.id.startsWith("wgsl-owned-sss")) await page.waitForFunction(async () => (await import("/src/render/owned-sss.ts")).isOwnedSssReady(), null, { timeout: 15000 });
         await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15000 });

@@ -21,6 +21,7 @@
 - [MMD_modoki MCP操作・情報取得・ヘルプ設計](./mcp-editor-integration-design-2026-09-10.md)
 - [MCPアプリ操作の実装状況・使い方](./mcp-implementation-progress-2026-09-10.md)
 - [MCPのポート競合時の自動復旧](./mcp-port-recovery-2026-09-18.md)
+- [MCPの短時間ビューポート連続取得](./mcp-viewport-sequence-2026-09-18.md)
 - [MCPのUI対応拡張と残件](./mcp-ui-coverage-expansion-2026-09-10.md)
 - [MCPの動画出力と素材の指定削除](./mcp-video-and-asset-removal-2026-09-11.md)
 - [MCPからの外部親編集](./mcp-external-parent-2026-09-11.md)

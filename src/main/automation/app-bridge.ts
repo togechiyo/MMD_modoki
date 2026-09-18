@@ -11,6 +11,8 @@ import type { AutomationOutput, AutomationPermission } from "../../automation/ui
 import { serializeVmd } from "../../export/vmd-serializer";
 import { serializeVpd } from "../../export/vpd-serializer";
 import { ViewportSnapshots, snapshotCameraSchema } from "../../automation/viewport-snapshots";
+import { captureViewportSequence } from "../../automation/viewport-sequence";
+import { captureViewportImage, type ViewportRect } from "./viewport-capture";
 
 type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[]; snapshots: ViewportSnapshots };
 export function installAutomationAppBridge(report: (code: string, data?: Record<string, string>) => void): { register(window: BrowserWindow): void; canEdit(owner: number, permission: AutomationPermission): boolean } {
@@ -94,29 +96,45 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             const input = automationTools.mmd_compare_snapshots.schema.parse(args);
             return entry.snapshots.compare(input.snapshotIds);
         }
-        if (tool !== "mmd_capture_viewport" && tool !== "mmd_capture_snapshot") return requestEditor(entry, tool, args);
+        if (tool !== "mmd_capture_viewport" && tool !== "mmd_capture_snapshot" && tool !== "mmd_capture_viewport_sequence") return requestEditor(entry, tool, args);
         const owner = entry.window.webContents.id;
         if (capturing.has(owner)) throw new AutomationError("CAPTURE_BUSY");
         capturing.add(owner);
         try {
+            if (tool === "mmd_capture_viewport_sequence") {
+                const input = automationTools.mmd_capture_viewport_sequence.schema.parse(args);
+                const validate = (): void => {
+                    if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
+                    if (entry.window.isDestroyed() || entry.window.isMinimized() || !entry.window.isVisible()) throw new AutomationError("CAPTURE_UNAVAILABLE");
+                };
+                const result = await captureViewportSequence(input, {
+                    validate, now: () => performance.now(), wait: ms => new Promise(resolve => setTimeout(resolve, ms)),
+                    capture: async () => {
+                        const before = await requestEditor(entry, "mmd_capture_viewport", { target: input.target });
+                        validate();
+                        const picture = await captureViewportImage(entry.window, before.data.rect as ViewportRect, input.maxEdge);
+                        const capturedAt = new Date().toISOString();
+                        const jpeg = picture.toJPEG(80);
+                        if (jpeg.length > 4 * 1024 * 1024) throw new AutomationError("CAPTURE_TOO_LARGE");
+                        const after = await requestEditor(entry, "mmd_get_context", { target: input.target });
+                        validate();
+                        if ((after.data.target as { sceneGeneration: number }).sceneGeneration !== input.target.sceneGeneration) throw new AutomationError("SCENE_CHANGED");
+                        return { data: { capturedAt, ...picture.getSize(), frameBefore: before.data.frame, frameAfter: after.data.frame,
+                            editRevisionBefore: before.data.editRevision, editRevisionAfter: after.data.editRevision,
+                            playingBefore: before.data.playing, playingAfter: after.data.playing,
+                            materialMode: after.data.materialMode, backend: after.data.backend },
+                        image: { data: jpeg.toString("base64"), mimeType: "image/jpeg" } };
+                    },
+                });
+                return { ...result, data: { ...result.data, target: input.target, maxEdge: input.maxEdge, jpegQuality: 80 } };
+            }
             if (entry.window.isMinimized() || !entry.window.isVisible()) throw new AutomationError("CAPTURE_UNAVAILABLE");
             const before = await requestEditor(entry, tool, args);
-            const rect = before.data.rect as { x: number; y: number; width: number; height: number };
-            const zoom = entry.window.webContents.getZoomFactor();
-            const [width, height] = entry.window.getContentSize();
-            const x = Math.max(0, Math.round(rect.x * zoom));
-            const y = Math.max(0, Math.round(rect.y * zoom));
-            const w = Math.min(width - x, Math.round(rect.width * zoom));
-            const h = Math.min(height - y, Math.round(rect.height * zoom));
-            if (![x, y, w, h].every(Number.isFinite) || w < 1 || h < 1) throw new AutomationError("CAPTURE_UNAVAILABLE");
             // Renderer already observed ready engine frames. A second subscription waits for a
             // future compositor change, which need not occur in a static viewport. capturePage
             // requests the current surface directly; the state is revalidated below.
             if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
-            let picture = await entry.window.webContents.capturePage({ x, y, width: w, height: h });
-            if (picture.isEmpty()) throw new AutomationError("CAPTURE_UNAVAILABLE");
-            const dimensions = picture.getSize();
-            if (Math.max(dimensions.width, dimensions.height) > 1280) picture = picture.resize(dimensions.width >= dimensions.height ? { width: 1280 } : { height: 1280 });
+            const picture = await captureViewportImage(entry.window, before.data.rect as ViewportRect, 1280);
             const png = picture.toPNG();
             if (png.length > 4 * 1024 * 1024) throw new AutomationError("CAPTURE_TOO_LARGE");
             const after = await requestEditor(entry, "mmd_get_context", { target: args.target });

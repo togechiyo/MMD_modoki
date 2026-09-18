@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { viewportSequenceOptions } from "./viewport-sequence";
 import { menuActionSchema } from "./menu-actions";
 import { bonePoseSchema } from "./bone-pose";
 import { morphBatchSchema } from "./morph-batch";
@@ -24,6 +25,7 @@ const query = { target };
 const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(100) };
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
+    mmd_capture_viewport_sequence: { description: "現在のviewportを短時間連続撮影し、時刻順のJPEG画像をまとめて返す。既定3秒×2fps・長辺640px。1〜5秒、1〜4fps、最大12枚。再生/seek/保存は行わない。実時刻と欠落数を返す。viewport-sequenceヘルプ参照。", edit: false, schema: z.object({ ...query, ...viewportSequenceOptions }).strict().refine(value => value.durationSeconds * value.fps <= 12, "Maximum 12 frames") },
     mmd_list_menu_items: { description: "公開メニューバーを名前・IDで検索。対応tool、部分引数の雛形、ユーザー操作が必要な項目を返す。不足引数はtool schemaから補う。", edit: false, schema: z.object({ ...query, query: z.string().max(100).default("") }).strict() },
     mmd_execute_menu_action: { description: "選択ボーン注視・視点・前後キー移動・カテゴリ全選択・全モーション削除・描画順・空リセット。型付き操作だけを実行。scopeは現在値を照合。削除はdryRun既定true・共有Undo。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema.nullable(), action: menuActionSchema }).strict() },
     mmd_wait_for_render: { description: "停止中の指定revisionでscene/効果の準備後の実engine frameを2回待機（最大8秒）。競合・busyは拒否。物理収束やGPU全処理完了を保証しない。viewport-comparisonヘルプ参照。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative() }).strict() },
@@ -79,7 +81,7 @@ export const automationTools = {
 export type AutomationToolName = keyof typeof automationTools;
 export type AutomationTarget = z.infer<typeof target>;
 export type AutomationRequest = { requestId: string; sessionId: string; grant: number; tool: AutomationToolName; args: unknown };
-export type AutomationResult = { data: Record<string, unknown>; image?: { data: string; mimeType: "image/png" }; images?: { data: string; mimeType: "image/png" }[] };
+export type AutomationResult = { data: Record<string, unknown>; image?: { data: string; mimeType: "image/png" }; images?: { data: string; mimeType: "image/png" | "image/jpeg" }[] };
 export type AutomationReply = { requestId: string; result?: AutomationResult; error?: string; failure?: AutomationFailure };
 export type AutomationState = { enabled: boolean; editable: boolean; detailedDiagnostics: boolean; sessionId: string; grant: number; endpoint: string | null; connectionNotice?: string; error?: string };
 export type AutomationApi = {

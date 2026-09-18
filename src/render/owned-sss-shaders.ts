@@ -29,7 +29,10 @@ export const OWNED_SSS_LIGHTING = `// @apply-without-toon
     let shadowPeak = max(shadowTint.r, max(shadowTint.g, shadowTint.b));
     var shadowBand = shadowTint * min(1.0, 0.65 / max(shadowPeak, 0.0001));
     #ifdef OWNED_SSS
-    if (uniforms.ownedSssProfile.z > 0.5) { shadowBand *= ownedSssShadowLightScale(); }
+    if (uniforms.ownedSssProfile.z > 0.5) {
+        let signedNdl = -dot(normalW, uniforms.ownedSssLight.xyz);
+        shadowBand *= ownedSssSkinBacklightFill(signedNdl) * ownedSssShadowLightScale();
+    }
     #endif
     // Ease middle tones without boosting the fully illuminated endpoint.
     let softLit = lit * (1.35 - 0.35 * lit);
@@ -58,6 +61,12 @@ fn ownedSssShadowLightScale() -> f32 {
     let light = uniforms.ownedSssLightColor.rgb;
     return 1.0 / max(1.0, max(light.r, max(light.g, light.b)));
 }
+// Keep the lit hemisphere and its cast-shadow color unchanged. On the unlit
+// hemisphere, gradually halve the artistic fill toward full backlighting so
+// curved surfaces retain variation. Thin-part transmission is added separately.
+fn ownedSssSkinBacklightFill(signedNdl: f32) -> f32 {
+    return mix(0.5, 1.0, smoothstep(-1.0, 0.0, signedNdl));
+}
 // Same warm endpoint and angular easing as normal-mode Skin above.
 fn ownedSssSkinSurface(ndl: f32, shadow: f32) -> vec3f {
     let angular = clamp(ndl, 0.0, 1.0);
@@ -65,7 +74,8 @@ fn ownedSssSkinSurface(ndl: f32, shadow: f32) -> vec3f {
     let softLit = lit * (1.35 - 0.35 * lit);
     // This helper returns gamma-space color; the PBR caller converts to linear.
     let shadowScale = toGammaSpaceVec3(vec3f(ownedSssShadowLightScale()));
-    return mix(${SKIN_TINT} * 0.65 * shadowScale, vec3f(1.0), softLit);
+    let shadowBand = ${SKIN_TINT} * 0.65 * ownedSssSkinBacklightFill(ndl) * shadowScale;
+    return mix(shadowBand, vec3f(1.0), softLit);
 }
 fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     let clip = uniforms.ownedSssLightMatrix * vec4f(p, 1.0);

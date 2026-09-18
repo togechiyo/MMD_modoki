@@ -58,7 +58,7 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
                 await expect(dialog).toBeHidden();
             }
             const mode = pbr ? "pbr" : "mmd";
-            for (const [angle, direction] of [["back", [0.56, -0.74, -0.65]], ["direct-back", [0, 0, -1]], ["front", [0.3, -0.3, 0.9]]]) {
+            for (const [angle, direction] of [["back", [0.56, -0.74, -0.65]], ["direct-back", [0, 0, -1]], ["front", [0.3, -0.3, 0.9]], ["high-back", [0.2, -1, -0.37]]]) {
                 for (const [level, rgb, intensity] of [["normal", 128, 100], ["maximum", 255, 200]]) {
                     await page.locator("#info-model-select").selectOption("__camera__");
                     for (const [axis, value] of direction.entries()) await slider(`light-direction-${["x", "y", "z"][axis]}`, value);

@@ -6016,7 +6016,8 @@ body.bottom-panel-resizing {
    Lighting Controls
    ============================================ */
 
-.lighting-controls {
+.lighting-controls,
+.gravity-controls {
   --scene-slider-accent: #e0717b;
   --scene-slider-glow: rgba(224, 113, 123, 0.5);
   display: flex;
@@ -6027,6 +6028,7 @@ body.bottom-panel-resizing {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .shadow-controls .light-slider {
@@ -6052,17 +6054,20 @@ body.bottom-panel-resizing {
   overflow-y: auto;
 }
 
-.lighting-controls::-webkit-scrollbar {
+.lighting-controls::-webkit-scrollbar,
+.gravity-controls::-webkit-scrollbar {
   width: 4px;
 }
 
-.lighting-controls::-webkit-scrollbar-thumb {
+.lighting-controls::-webkit-scrollbar-thumb,
+.gravity-controls::-webkit-scrollbar-thumb {
   background: var(--bg-hover);
   border-radius: 2px;
 }
 
 .light-row {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: 56px minmax(0, 1fr) 48px;
   align-items: center;
   gap: 7px;
@@ -6188,26 +6193,6 @@ body.bottom-panel-resizing {
 /* ============================================
    Shadow Controls
    ============================================ */
-
-.shadow-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.shadow-controls::-webkit-scrollbar {
-  width: 4px;
-}
-
-.shadow-controls::-webkit-scrollbar-thumb {
-  background: var(--bg-hover);
-  border-radius: 2px;
-}
 
 .shadow-row {
   display: grid;
@@ -6529,14 +6514,6 @@ body.bottom-panel-resizing {
 .gravity-controls {
   --scene-slider-accent: #d98fb7;
   --scene-slider-glow: rgba(217, 143, 183, 0.5);
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--bottom-panel-content-pad-y) var(--bottom-panel-content-pad-x);
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .accessory-row.range-has-number {
@@ -7061,11 +7038,7 @@ body.bottom-panel-resizing {
     padding: 10px;
   }
 
-  .lighting-controls {
-    gap: 0;
-    padding: 10px;
-  }
-
+  .lighting-controls,
   .gravity-controls {
     gap: 0;
     padding: 10px;
@@ -7153,7 +7126,6 @@ body.bottom-panel-resizing {
     margin-bottom: 5px;
   }
 
-  .shadow-controls,
   .camera-controls,
   .physics-controls {
     gap: 8px;

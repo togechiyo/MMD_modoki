@@ -643,6 +643,7 @@
 - [x] 「ウィンドウ」メニューへ既存の UI 表示切替を移動
 - [x] UI倍率 75 / 100 / 125 / 150% を Electron zoom で実装
 - [x] UI倍率をアプリ設定として保存し、プロジェクト設定から分離
+- [x] 照明・影・重力の行高・行間・余白を共通化し、大画面時の影だけの間延びを修正。1440×810 / 1920×1080 / 2400×1300のElectron GUIで寸法比較と数値入力を確認（2026-09-18）。
 - [x] PNG連番出力用ウィンドウを専用session・100%固定にし、WebMはcodec互換のため既定session + RGBA surface寸法を維持
 - [x] UI非表示時の Tab / Esc 復帰を追加
 - [ ] 75 / 125 / 150% で viewport、timeline hit test、bone picking、各popupを実機確認

@@ -77,6 +77,17 @@ fn ownedSssSkinSurface(ndl: f32, shadow: f32) -> vec3f {
     let shadowBand = ${SKIN_TINT} * 0.65 * ownedSssSkinBacklightFill(ndl) * shadowScale;
     return mix(shadowBand, vec3f(1.0), softLit);
 }
+fn ownedSssContinuityNormal(p: vec3f, shadingNormal: vec3f) -> vec3f {
+    #ifdef PBR_SKIN_FACE_NORMAL
+    // Artistic face normals are not the tangent plane of the actual surface.
+    let geometric = cross(dpdx(p), dpdy(p));
+    let lengthSquared = dot(geometric, geometric);
+    return select(shadingNormal, geometric * inverseSqrt(max(lengthSquared, 0.000000000001))
+        * select(-1.0, 1.0, dot(geometric, shadingNormal) >= 0.0), lengthSquared > 0.000000000001);
+    #else
+    return shadingNormal;
+    #endif
+}
 fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     let clip = uniforms.ownedSssLightMatrix * vec4f(p, 1.0);
     // Babylon's offscreen WebGPU render targets use positive projected Y.
@@ -89,6 +100,12 @@ fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     var entryWeight = 0.0;
     let wax = uniforms.ownedSssProfile.y;
     let extinctionWidth = mix(vec3f(1.0, 0.38, 0.18), vec3f(1.0), wax);
+    var transmissionDistance = uniforms.ownedSssParams.z;
+    #ifdef PBR_SKIN_FACE_NORMAL
+    // Face needs a shorter transmission distance: thin ears can transmit,
+    // while mouth cavities and thicker cheek surfaces must not glow as islands.
+    transmissionDistance *= 0.3;
+    #endif
     for (var y = 0; y < 2; y++) {
         for (var x = 0; x < 2; x++) {
             let sample = textureLoad(ownedSssEntry, clamp(base + vec2i(x, y), vec2i(0), dimensions - 1), 0);
@@ -96,7 +113,7 @@ fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
             // Filter transmittance, not depth: averaging unrelated entry surfaces
             // manufactures a false thickness across silhouettes and open cavities.
             let thickness = max(0.0, dot(p, uniforms.ownedSssLight.xyz) - sample.r - 0.005);
-            transmission += exp(-thickness / (uniforms.ownedSssParams.z * extinctionWidth)) * weight;
+            transmission += exp(-thickness / (transmissionDistance * extinctionWidth)) * weight;
             entryWeight += weight;
         }
     }
@@ -116,6 +133,7 @@ fn ownedSssTransmission(p: vec3f, n: vec3f) -> vec3f {
     return uniforms.ownedSssLightColor.rgb * lightGain * transmissionTint * transmission / max(entryWeight, 0.0001) * back * valid * 0.375;
 }
 fn ownedSssDiffuse(p: vec3f, n: vec3f, localSignal: vec3f) -> vec3f {
+    let continuityNormal = ownedSssContinuityNormal(p, n);
     let clip = uniforms.ownedSssViewMatrix * vec4f(p, 1.0);
     let uv = clip.xy / clip.w * 0.5 + 0.5;
     let size = vec2i(textureDimensions(ownedSssPosition));
@@ -131,7 +149,7 @@ fn ownedSssDiffuse(p: vec3f, n: vec3f, localSignal: vec3f) -> vec3f {
             let sampleNormal = textureLoad(ownedSssNormal, coord, 0).xyz;
             let delta = position.xyz - p;
             let accept = abs(position.a - uniforms.ownedSssParams.w) < 0.1 && length(delta) < uniforms.ownedSssParams.y * 2.5
-                && abs(dot(delta, n + sampleNormal)) * 0.5 < uniforms.ownedSssParams.y * 0.25 && dot(n, sampleNormal) > 0.0;
+                && abs(dot(delta, continuityNormal + sampleNormal)) * 0.5 < uniforms.ownedSssParams.y * 0.25 && dot(continuityNormal, sampleNormal) > 0.0;
             let weight = select(1.0 - fraction.x, fraction.x, x == 1) * select(1.0 - fraction.y, fraction.y, y == 1) * select(0.0, 1.0, accept);
             total += textureLoad(ownedSssSignal, coord, 0).rgb * weight;
             weights += weight;
@@ -192,7 +210,7 @@ export const OWNED_SSS_CAPTURE_EARLY = `
 #if !defined(ALPHATEST) || !defined(ALPHATEST_AFTERALLALPHACOMPUTATIONS)
 if (uniforms.ownedSssParams.x > 1.5) {
     if (uniforms.ownedSssParams.x > 3.5) {
-        fragmentOutputs.color = vec4f(normalW, 1.0);
+        fragmentOutputs.color = vec4f(ownedSssContinuityNormal(fragmentInputs.vPositionW, normalW), 1.0);
     } else if (uniforms.ownedSssParams.x > 2.5) {
         #ifdef NORMAL
         if (dot(normalize(fragmentInputs.vNormalW), uniforms.ownedSssLight.xyz) >= 0.0) { discard; }
@@ -210,7 +228,7 @@ if (uniforms.ownedSssParams.x > 1.5) {
 export const OWNED_SSS_CAPTURE = `
 #ifdef OWNED_SSS
 if (uniforms.ownedSssParams.x > 3.5) {
-    color = vec4f(normalW, 1.0);
+    color = vec4f(ownedSssContinuityNormal(fragmentInputs.vPositionW, normalW), 1.0);
 } else if (uniforms.ownedSssParams.x > 2.5) {
     // An exit surface viewed through an open mesh must not masquerade as an entry.
     #ifdef NORMAL

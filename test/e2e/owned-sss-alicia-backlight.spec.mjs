@@ -5,6 +5,7 @@ import { launchMmdModoki } from "./electron-app.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const model = resolve(root, "local-references/model/Alicia/MMD/Alicia_solid.pmx");
+const reportedMottle = process.env.MMD_SSS_REPORTED_MOTTLE === "1";
 const output = resolve(root, "local-references/sss-alicia-backlight-2026-09-18", process.env.MMD_SSS_CAPTURE_LABEL ?? "baseline");
 test.skip(process.env.MMD_MODOKI_SSS_ALICIA !== "1" || !existsSync(model), "Owner-authorized local Alicia comparison is opt-in");
 
@@ -19,7 +20,9 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
         await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
         await page.evaluate(path => window.mmdModokiE2e.loadModel(path), model);
         await page.locator("#info-model-select").selectOption("__camera__");
-        for (const [key, value] of Object.entries({ tx: 0, ty: 16.5, tz: 0, rx: 0, ry: -12, rz: 0, camDistance: 12 })) {
+        const camera = reportedMottle ? { tx: 0.37, ty: 17.18, tz: -0.45, rx: 2.7, ry: -29.2, rz: 0, camDistance: 10.4 }
+            : { tx: 0, ty: 16.5, tz: 0, rx: 0, ry: -12, rz: 0, camDistance: 12 };
+        for (const [key, value] of Object.entries(camera)) {
             const field = page.locator(`#bone-controls input[data-control-key='${key}']`);
             await field.fill(String(value)); await field.press("Enter");
         }
@@ -28,6 +31,9 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
             await field.fill(String(value)); await field.press("Enter");
             await expect(page.locator(`#${id}`)).toHaveValue(String(value));
         };
+        if (reportedMottle) {
+            for (const [id, value] of [["light-shadow-color-r", 128], ["light-shadow-color-g", 94], ["light-shadow-color-b", 128], ["light-toon-shadow-influence", 100]]) await slider(id, value);
+        }
         await page.locator("#btn-toggle-shader-panel").click();
         const capture = async name => {
             await page.waitForFunction(async () => (await import("/src/render/owned-sss.ts")).isOwnedSssReady());
@@ -40,10 +46,11 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
             await page.locator("#info-model-select").selectOption("0");
             await page.locator('[data-effect-tab="materials"]').click();
             for (const name of ["body", "hand", "face"]) {
+                const materialPreset = name === "face" && preset === "pbr-skin" && process.env.MMD_SSS_FACE_PRESET === "1" ? "pbr-skin-face" : preset;
                 await page.locator(".shader-material-item").filter({ has: page.locator(".shader-material-name", { hasText: new RegExp(`^${name}$`) }) }).click();
-                await page.locator("#shader-preset-select").selectOption(preset);
+                await page.locator("#shader-preset-select").selectOption(materialPreset);
                 await page.locator("#btn-shader-apply-selected").click();
-                await expect(page.locator("#shader-preset-select")).toHaveValue(preset);
+                await expect(page.locator("#shader-preset-select")).toHaveValue(materialPreset);
             }
         };
         for (const pbr of [false, true]) {
@@ -58,8 +65,11 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
                 await expect(dialog).toBeHidden();
             }
             const mode = pbr ? "pbr" : "mmd";
-            for (const [angle, direction] of [["back", [0.56, -0.74, -0.65]], ["direct-back", [0, 0, -1]], ["front", [0.3, -0.3, 0.9]], ["high-back", [0.2, -1, -0.37]]]) {
+            const directions = reportedMottle ? [["reported", [0.28, -0.28, -1]]]
+                : [["back", [0.56, -0.74, -0.65]], ["direct-back", [0, 0, -1]], ["front", [0.3, -0.3, 0.9]], ["high-back", [0.2, -1, -0.37]]];
+            for (const [angle, direction] of directions) {
                 for (const [level, rgb, intensity] of [["normal", 128, 100], ["maximum", 255, 200]]) {
+                    if (reportedMottle && level !== "maximum") continue;
                     await page.locator("#info-model-select").selectOption("__camera__");
                     for (const [axis, value] of direction.entries()) await slider(`light-direction-${["x", "y", "z"][axis]}`, value);
                     for (const channel of ["r", "g", "b"]) await slider(`light-color-${channel}`, rgb);
@@ -69,16 +79,18 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
                         const name = `${mode}-${angle}-${level}-${kind}`;
                         await capture(name);
                         if (kind !== "skin") continue;
-                        const diagnostics = await page.evaluate(async () => {
+                        const diagnostics = await page.evaluate(async reported => {
                             const { inspectBacklight } = await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs");
-                            return inspectBacklight();
-                        });
+                            const regions = reported ? [["mouth", 539, 333, 41, 32], ["cheek", 474, 335, 26, 13], ["ear", 375, 250, 38, 53]]
+                                .map(([name, x, y, w, h]) => [name, x / 1152, y / 648, w / 1152, h / 648]) : [];
+                            return inspectBacklight(regions);
+                        }, reportedMottle);
                         writeFileSync(resolve(output, `${name}.json`), JSON.stringify(diagnostics, null, 2));
                         if (pbr && angle === "direct-back" && level === "maximum") {
                             const shader = await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-pbr-shader-probe.mjs")).readPbrShader());
                             writeFileSync(resolve(output, "skin.wgsl"), shader);
                         }
-                        if (pbr && angle === "back" && level === "maximum") {
+                        if (pbr && (angle === "back" || reportedMottle) && level === "maximum") {
                             await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs")).isolatePbrDiffuse(true, "environment-quarter"));
                             try { await capture(`${name}-environment-quarter`); }
                             finally { await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs")).isolatePbrDiffuse(false)); }
@@ -86,6 +98,11 @@ test("Alicia maximum backlight: separate transmission and surface lighting", asy
                         await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs")).setTransmissionCapture(false));
                         try {
                             await capture(`${name}-no-transmission`);
+                            if (pbr && reportedMottle) {
+                                await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs")).isolatePbrDiffuse(true, "environment-quarter"));
+                                try { await capture(`${name}-no-transmission-environment-quarter`); }
+                                finally { await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs")).isolatePbrDiffuse(false)); }
+                            }
                             if (pbr && angle === "back") {
                                 for (const component of ["specular", "environment", "both"]) {
                                     await page.evaluate(async component => (await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs")).isolatePbrDiffuse(true, component), component);

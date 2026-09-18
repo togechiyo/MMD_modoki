@@ -38,10 +38,10 @@ for (const backend of ["frameGraph", "classic"]) test(`SSS transmission at norma
                 await expect(dialog.getByLabel("PBRモード", { exact: true })).toBeEnabled();
                 await dialog.locator(".app-menu-dialog-close").click();
             }
-            for (const profile of ["skin", "wax"]) {
+            for (const profile of pbr && !phase ? ["skin", "skin-face", "wax"] : ["skin", "wax"]) {
                 await page.locator("#info-model-select").selectOption("0");
                 await page.locator('[data-effect-tab="materials"]').click();
-                const preset = pbr ? (profile === "skin" ? "pbr-skin" : "pbr-sss-wax") : `wgsl-owned-sss-${profile}`;
+                const preset = pbr ? (profile.startsWith("skin") ? `pbr-${profile}` : "pbr-sss-wax") : `wgsl-owned-sss-${profile}`;
                 await page.locator("#shader-preset-select").selectOption(preset);
                 await page.locator("#btn-shader-apply-all").click();
                 await page.locator("#info-model-select").selectOption("__camera__");
@@ -63,6 +63,13 @@ for (const backend of ["frameGraph", "classic"]) test(`SSS transmission at norma
                         const result = await page.evaluate(directory => window.mmdModokiE2e.captureSinglePngSurfaceToPath(directory, 1152, 648), directory);
                         const png = PNG.sync.read(readFileSync(result.path));
                         expect(png.width).toBe(1152);
+                        if (profile === "skin-face" && direction === "back" && level === "maximum") {
+                            const transmission = await page.evaluate(async () => (await import("/test/e2e/helpers/owned-sss-backlight-probe.mjs")).probeTransmissionByMaterial());
+                            expect(transmission["耳"].pixels).toBeGreaterThan(100);
+                            expect(transmission["耳"].mean).toBeGreaterThan(0.02);
+                            expect(transmission["耳"].mean).toBeGreaterThan(transmission["頭"].mean * 5);
+                            console.log(JSON.stringify({ backend, faceTransmission: transmission }));
+                        }
                         if (phase) {
                             const target = resolve(comparisonRoot, phase, backend);
                             mkdirSync(target, { recursive: true });

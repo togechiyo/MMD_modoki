@@ -56,6 +56,7 @@
 | confirmed | [今回の色干渉報告ではPBR照明を変更しない](./decisions/keep-current-pbr-light-shadow-color-behavior.md) | 影の薄さ再確認後の維持判断。MMD Likeのmaskや半球下色を調査だけで変更しない |
 | adopted | [保存済みMCPポートが使用中なら空きポートを再取得する](./decisions/recover-busy-mcp-port.md) | MCP起動時のポート競合、自動再取得、接続先の案内を変更する |
 | adopted | [MCPの連続取得は数秒分の画像をまとめて動きを評価する](./decisions/mcp-sequences-return-short-image-batches.md) | VLM向け連続画像の用途・batchとライブ配信の範囲を決める |
+| adopted | [書き出しメニューは形式名から始める](./decisions/export-menu-labels-start-with-format.md) | VMD・BVMD・VPD・PNG・WebMの書き出し表記を変更する |
 
 ## 却下
 

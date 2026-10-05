@@ -1,8 +1,18 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import { automationControlSchema, automationControls } from "../../src/automation/controls";
 import { automationLocalPathSchema, uiOperationSchema } from "../../src/automation/ui-operation-schema";
 
 describe("UI MCP input boundary", () => {
+    it("keeps the control catalog compact while preserving each ID's validator", () => {
+        expect(JSON.stringify(z.toJSONSchema(automationControlSchema)).length).toBeLessThan(18000);
+        const candidates = [null, true, false, "model-target", "0.5", -100, -1, 0, 0.005, 0.5, 1, 4, 30, 100, 500, Infinity,
+            { r: 0, g: 0.5, b: 1 }, { r: 3, g: 1, b: 1 }, { r: 1, g: 1, b: 1, extra: true },
+            [], [{ id: "bloom", enabled: true }, { id: "bloom", enabled: false }]];
+        for (const control of automationControls) for (const value of candidates) {
+            expect(automationControlSchema.safeParse({ id: control.id, value }).success, control.id).toBe(control.schema.safeParse(value).success);
+        }
+    });
     it("exposes public effect parameters with bounded values and excludes hidden ocean controls", () => {
         for (const value of [{ id: "ssgi.radius", value: 50 }, { id: "luminous.intensity", value: 0.5 },
             { id: "dof.focusMode", value: "model-target" }]) {

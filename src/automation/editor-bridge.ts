@@ -122,7 +122,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         if (!args.target) throw new AutomationError("TARGET_REQUIRED");
         if (request.tool === "mmd_list_menu_items") {
             const input = automationTools.mmd_list_menu_items.schema.parse(args);
-            return { data: { ...readMenuItems(input.query, t), editRevision: revision } };
+            return { data: { ...readMenuItems(input.query, t, input.offset, input.limit), editRevision: revision } };
         }
         if (request.tool === "mmd_search_keyframes") {
             const input = automationTools.mmd_search_keyframes.schema.parse(args);

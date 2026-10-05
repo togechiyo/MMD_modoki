@@ -17,7 +17,12 @@ export const helpInputSchema = z.object({
 
 function createHelpServer(version: string, dispatch?: AutomationListenerOptions["dispatch"]): McpServer {
     const server = new McpServer({ name: "mmd-modoki", version }, {
-        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
+        cacheHints: {
+            "tools/list": { ttlMs: 300000, cacheScope: "private" },
+            "resources/list": { ttlMs: 300000, cacheScope: "private" },
+            "resources/read": { ttlMs: 300000, cacheScope: "private" },
+        },
+        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Query catalogs narrowly; pages default to 20 items, follow nextOffset. For long jobs use mmd_get_operation(waitMs:30000); repeat only while running. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
     });
     server.registerTool("mmd_help", {
         title: "MMD_modokiの機能ヘルプ",
@@ -46,9 +51,9 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
         server.registerTool(name, {
             description: definition.description, inputSchema: definition.schema,
             annotations: { readOnlyHint: !definition.edit, destructiveHint: false, openWorldHint: false },
-        }, async args => {
+        }, async (args, context) => {
             try {
-                const result = await dispatch(name as AutomationToolName, args);
+                const result = await dispatch(name as AutomationToolName, args, context.mcpReq.signal);
                 return { structuredContent: result.data, content: [
                     { type: "text" as const, text: JSON.stringify(result.data) },
                     ...(result.image ? [{ type: "image" as const, ...result.image }] : []),
@@ -68,7 +73,7 @@ export type AutomationListenerOptions = {
     token: string;
     appVersion: string;
     onError: (code: "MCP_TRANSPORT_ERROR") => void;
-    dispatch?: (tool: AutomationToolName, args: unknown) => Promise<AutomationResult>;
+    dispatch?: (tool: AutomationToolName, args: unknown, signal?: AbortSignal) => Promise<AutomationResult>;
 };
 
 export type AutomationListener = {

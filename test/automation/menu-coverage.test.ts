@@ -7,6 +7,25 @@ import { applyAutomationControl } from "../../src/automation/controls";
 import type { MmdManager } from "../../src/mmd-manager";
 
 describe("MCP menu coverage", () => {
+    it("pages menu search with a small default and retains every route across pages", () => {
+        const target = { editorSessionId: "11111111-1111-4111-8111-111111111111", sceneGeneration: 0 };
+        expect(automationTools.mmd_list_menu_items.schema.parse({ target }).limit).toBe(20);
+        expect(automationTools.mmd_inspect.schema.parse({ target, kind: "bones" }).limit).toBe(20);
+        const first = readMenuItems("", key => key);
+        expect(first.items).toHaveLength(20);
+        expect(first.totalCount).toBe(menuItems.length);
+        expect(first.nextOffset).toBe(20);
+        const items = [...first.items];
+        let offset = first.nextOffset;
+        while (offset !== null) {
+            const page = readMenuItems("", key => key, offset, 20);
+            items.push(...page.items);
+            offset = page.nextOffset;
+        }
+        expect(items.map(item => item.command)).toEqual(menuItems.map(item => item.command));
+        expect(readMenuItems("view.camera.front", key => key, 0, 20).items).toHaveLength(1);
+        expect(readMenuItems("", key => key, menuItems.length, 20).items).toEqual([]);
+    });
     it("accounts for every visible menu command without exposing hidden entries", () => {
         const html = readFileSync("index.html", "utf8").split("</nav>")[0];
         const buttons = [...html.matchAll(/<button\b[^>]*data-menu-command="([^"]+)"[^>]*>/g)];
@@ -28,7 +47,7 @@ describe("MCP menu coverage", () => {
     it("resolves actual menu labels in all five locales and searches localized names", () => {
         for (const locale of ["ja", "en", "zh-Hant", "zh-Hans", "ko"]) {
             const dictionary = JSON.parse(readFileSync(`language/${locale}.json`, "utf8").replace(/^\uFEFF/, ""));
-            const items = readMenuItems("", key => dictionary[key] ?? key).items;
+            const items = readMenuItems("", key => dictionary[key] ?? key, 0, 200).items;
             for (const entry of items) {
                 expect(entry.label).not.toMatch(/^menu\./);
                 expect(entry.group).not.toMatch(/^menu\./);

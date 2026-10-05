@@ -11,12 +11,19 @@ export type Control = { id: string; unit: string; schema: z.ZodType; read: (mana
     write: (manager: MmdManager, value: unknown) => void; available: (manager: MmdManager) => boolean };
 const available = () => true;
 const frameGraph = (m: MmdManager) => m.getPostEffectBackend() === "frameGraph";
+const booleanValue = z.boolean();
+const numericValues = new Map<string, z.ZodNumber>();
 function numeric<K extends NumericKey>(id: string, key: K, min: number, max: number, unit = "scalar", integer = false, enabled: Control["available"] = available): Control {
-    const schema = integer ? z.number().int().min(min).max(max) : z.number().finite().min(min).max(max);
+    const schemaKey = JSON.stringify([min, max, integer]);
+    let schema = numericValues.get(schemaKey);
+    if (!schema) {
+        schema = integer ? z.number().int().min(min).max(max) : z.number().finite().min(min).max(max);
+        numericValues.set(schemaKey, schema);
+    }
     return { id, unit, schema, available: enabled, read: m => m[key], write: (m, value) => { m[key] = schema.parse(value) as MmdManager[K]; } };
 }
 function flag<K extends BooleanKey>(id: string, key: K, enabled: Control["available"] = available): Control {
-    return { id, unit: "boolean", schema: z.boolean(), available: enabled, read: m => m[key], write: (m, value) => { m[key] = z.boolean().parse(value) as MmdManager[K]; } };
+    return { id, unit: "boolean", schema: booleanValue, available: enabled, read: m => m[key], write: (m, value) => { m[key] = booleanValue.parse(value) as MmdManager[K]; } };
 }
 const rgb = z.object({ r: z.number().min(0).max(1), g: z.number().min(0).max(1), b: z.number().min(0).max(1) }).strict();
 const stack = z.array(z.object({ id: z.enum(FRAME_GRAPH_POST_EFFECT_IDS), enabled: z.boolean() }).strict()).max(FRAME_GRAPH_POST_EFFECT_IDS.length)
@@ -155,7 +162,14 @@ export const automationControls: readonly Control[] = [
     { id: "physics.fullyDampedCorrection", unit: "boolean", schema: z.boolean(), available: m => m.isPhysicsAvailable(), read: m => m.getFullyDampedRigidBodyCorrectionEnabled(), write: (m, v) => { m.setFullyDampedRigidBodyCorrectionEnabled(z.boolean().parse(v)); } },
 ];
 const byId = new Map(automationControls.map(control => [control.id, control]));
-const [first, ...rest] = automationControls.map(control => z.object({ id: z.literal(control.id), value: control.schema }).strict());
+// Share only the exact validator instance, so refinements and ID/value constraints stay intact.
+const schemaGroups = new Map<z.ZodType, { ids: [string, ...string[]]; schema: z.ZodType }>();
+for (const control of automationControls) {
+    const group = schemaGroups.get(control.schema);
+    if (group) group.ids.push(control.id);
+    else schemaGroups.set(control.schema, { ids: [control.id], schema: control.schema });
+}
+const [first, ...rest] = [...schemaGroups.values()].map(group => z.object({ id: z.enum(group.ids), value: group.schema }).strict());
 if (!first) throw new Error("Control catalog must not be empty");
 export const automationControlSchema = z.discriminatedUnion("id", [first, ...rest]);
 export type AutomationControl = z.infer<typeof automationControlSchema>;

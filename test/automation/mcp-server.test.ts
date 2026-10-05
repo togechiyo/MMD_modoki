@@ -37,7 +37,7 @@ async function rpc(connection: TestConnection, method: string, params: Record<st
     const json = raw.startsWith("event:") || raw.startsWith("data:")
         ? JSON.parse(raw.split("\n").find(line => line.startsWith("data: "))?.slice(6) ?? "null")
         : JSON.parse(raw);
-    return { status: response.status, json };
+    return { status: response.status, json, raw };
 }
 
 describe("MCP HTTP foundation", () => {
@@ -68,6 +68,11 @@ describe("MCP HTTP foundation", () => {
         const connected = { ...connection, token };
         const list = await rpc(connected, "tools/list");
         expect(list.json.result.tools.map((item: { name: string }) => item.name).sort()).toEqual(["mmd_help", ...Object.keys(automationTools)].sort());
+        expect(Buffer.byteLength(list.raw)).toBeLessThan(126000);
+        expect(list.json.result).toMatchObject({ ttlMs: 300000, cacheScope: "private" });
+        const legacyList = await rpc(connected, "tools/list", {}, false);
+        expect(legacyList.json.result.ttlMs).toBeUndefined();
+        expect(legacyList.json.result.cacheScope).toBeUndefined();
         const target = { editorSessionId: "38b81a97-d939-4efa-8a10-aefc4ce5bdba", sceneGeneration: 1 };
         for (const request of [
             { name: "file:readBinary", arguments: { path: "fixture.pmx" } },
@@ -85,6 +90,23 @@ describe("MCP HTTP foundation", () => {
         const allowed = await rpc(connected, "tools/call", { name: "mmd_list_assets", arguments: { target } });
         expect(allowed.json.result.structuredContent.modelContentShared).toBe(false);
         expect(calls).toBe(1);
+    });
+    it.each([true, false])("forwards bounded operation waits and the request abort signal to dispatch (modern=%s)", async modern => {
+        const token = randomBytes(32).toString("base64url");
+        const dispatch = vi.fn(async (_tool, _args, signal) => {
+            expect(signal).toBeInstanceOf(AbortSignal);
+            return { data: { status: "completed", output: { savedFiles: 3 } } };
+        });
+        const listener = await startAutomationListener({ port: 0, token, appVersion: "test", onError: () => undefined, dispatch });
+        listeners.push(listener);
+        const target = { editorSessionId: "11111111-1111-4111-8111-111111111111", sceneGeneration: 0 };
+        const argumentsValue = { target, operationId: "22222222-2222-4222-8222-222222222222", waitMs: 30000 };
+        const result = await rpc({ ...listener, token }, "tools/call", { name: "mmd_get_operation", arguments: argumentsValue }, modern);
+        expect(result.json.result.structuredContent).toMatchObject({ status: "completed", output: { savedFiles: 3 } });
+        expect(dispatch).toHaveBeenCalledWith("mmd_get_operation", argumentsValue, expect.any(AbortSignal));
+        dispatch.mockClear();
+        await rpc({ ...listener, token }, "tools/call", { name: "mmd_get_operation", arguments: { ...argumentsValue, waitMs: 30001 } }, modern);
+        expect(dispatch).not.toHaveBeenCalled();
     });
     it.each([true, false])("serves help and resources through the SDK (modern=%s)", async modern => {
         const connection = await start();

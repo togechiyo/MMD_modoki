@@ -13,6 +13,7 @@ import { serializeVpd } from "../../export/vpd-serializer";
 import { ViewportSnapshots, snapshotCameraSchema } from "../../automation/viewport-snapshots";
 import { captureViewportSequence } from "../../automation/viewport-sequence";
 import { captureViewportImage, type ViewportRect } from "./viewport-capture";
+import { waitForAutomationOperation } from "./operation-wait";
 
 type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[]; snapshots: ViewportSnapshots };
 export function installAutomationAppBridge(report: (code: string, data?: Record<string, string>) => void): { register(window: BrowserWindow): void; canEdit(owner: number, permission: AutomationPermission): boolean } {
@@ -76,7 +77,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         });
     }
     const capturing = new Set<number>();
-    async function dispatchRequest(tool: AutomationToolName, rawArgs: unknown): Promise<AutomationResult> {
+    async function dispatchRequest(tool: AutomationToolName, rawArgs: unknown, signal?: AbortSignal): Promise<AutomationResult> {
         const args = automationTools[tool].schema.parse(rawArgs);
         const published = [...windows.values()].filter(entry => entry.state.enabled);
         const targetId = args.target?.editorSessionId;
@@ -86,6 +87,15 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         if (requiresDetailedDiagnostics(tool) && !entry.state.detailedDiagnostics) throw new AutomationError("DETAILED_DIAGNOSTICS_DISABLED");
         if (automationTools[tool].edit && !entry.state.editable) throw new AutomationError("READ_ONLY");
         const grant = entry.state.grant;
+        if (tool === "mmd_get_operation") {
+            const input = automationTools.mmd_get_operation.schema.parse(args);
+            return waitForAutomationOperation(async () => {
+                if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
+                const result = await requestEditor(entry, tool, args);
+                if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
+                return result;
+            }, input.waitMs, signal);
+        }
         if (tool === "mmd_list_snapshots" || tool === "mmd_compare_snapshots") {
             const current = await requestEditor(entry, "mmd_get_context", { target: args.target });
             if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
@@ -158,14 +168,14 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 ...picture.getSize(), materialMode: after.data.materialMode, backend: after.data.backend }, image: { data: png.toString("base64"), mimeType: "image/png" } };
         } finally { capturing.delete(owner); }
     }
-    async function dispatch(tool: AutomationToolName, rawArgs: unknown): Promise<AutomationResult> {
+    async function dispatch(tool: AutomationToolName, rawArgs: unknown, signal?: AbortSignal): Promise<AutomationResult> {
         const args = automationTools[tool].schema.parse(rawArgs);
         const published = [...windows.values()].filter(entry => entry.state.enabled);
         const entry = args.target ? published.find(candidate => candidate.state.sessionId === args.target?.editorSessionId) : published.length === 1 ? published[0] : undefined;
         const grant = entry?.state.grant;
         const operationId = "operationId" in args && typeof args.operationId === "string" ? args.operationId : null;
         try {
-            const result = await dispatchRequest(tool, args);
+            const result = await dispatchRequest(tool, args, signal);
             if (requiresDetailedDiagnostics(tool)) {
                 if (!entry?.state.enabled || !entry.state.detailedDiagnostics || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
                 if (tool === "mmd_inspect_detail") {

@@ -10,6 +10,11 @@ export type AutomationHelpTopic = {
 // Only bundled, trusted documentation belongs here. Asset names and paths are data.
 export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
+        id: "communication", title: "一覧の軽量取得と出力完了待機", aliases: ["communication", "waitMs", "pagination", "軽量化", "完了待機"],
+        status: "implemented", summary: "一覧は既定20件ずつ。長い出力は1回の結果照会で最大30秒待てる。",
+        body: "一覧はquery/filterで対象を絞り、offset/limitとnextOffsetを使う。共通limitは既定20・最大200、メニューも同じ。totalCountは全件数であり、itemsだけが1ページ。全件を1ページと思わない。mmd_list_controlsのvalueSchemaで範囲を確認して設定する。長いUI出力は受付operationIdとtargetを保持し、mmd_get_operationへwaitMs:30000を指定。既定0は従来の即時照会。completed/failed/canceled/unknownはすぐ返し、runningでもphase:waiting_for_userならすぐ返す。runningかつwaitTimedOut:trueなら同じoperationIdで待機を繰り返す。待機は出力の完了を保証する期限ではない。HTTP/MCP呼出しを取り消しても出力jobは継続し、出力自体の取消はmmd_cancel_operation。OFF・権限変更・reloadで元の許可が失効した待機は終了する。待機中も他の照会・取消操作は可能。これは呼出し中の結果待機であり、切断後の自動通知やCloud向けMCP Eventsではない。tool/help一覧とhelp本文はMCP 2026-07-28のprivateキャッシュ情報を5分付与する。実際のキャッシュ利用はクライアント次第。画像は必要時だけ取得する。",
+    },
+    {
         id: "viewport-sequence", title: "動きを見るための短時間連続撮影", aliases: ["video", "VLM", "sequence", "burst", "連続画像", "連続取得", "動き", "動画解析"],
         status: "implemented", summary: "数秒分のviewportを間引き撮影し、時刻順のJPEG画像を一度に返す。",
         body: "mmd_get_contextでtargetを取得し、mmd_capture_viewport_sequence(target,durationSeconds?,fps?,maxEdge?)を呼ぶ。既定3秒・2fps・長辺640px。期間1..5秒、fps1..4、durationSeconds×fpsは最大12枚、長辺320..1280pxで拡大なし。JPEG品質80。再生中・停止中とも参照許可で使える。撮影tool自体は再生/停止/seekせず、音声・動画ファイルは返さない。動きを撮る場合はGUIで再生するか、編集許可があれば別途mmd_set_playback(action:play)を呼ぶ。要求区間は半開区間で3秒×2fpsは0,0.5,...2.5秒を計画する。structuredContent.framesのimageIndexで画像Contentと対応し、sampleIndex/scheduledOffsetMs/startedOffsetMs/completedOffsetMs/captureMs/capturedAt/frameBefore/frameAfter/editRevisionBefore/editRevisionAfter/playingBefore/playingAfterを読む。描画待機を含むため固定fpsや厳密なframe一致は保証しない。遅れた枠は飛ばし、droppedFramesで通知する。全画像はbase64合計12MiB以内、disk保存・snapshotキャッシュ登録なし。CAPTURE_BUSYなら別の撮影終了を待つ。同じwindowでは単発撮影も含め1件だけ。ウィンドウ表示必須。OFF・権限変更・reload・scene変更は中止し、途中の画像も返さない。比較目的の高画質PNGはmmd_capture_snapshotを使う。",

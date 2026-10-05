@@ -44,8 +44,17 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP menu actions and sett
             return result.output;
         };
         const listing = (await rpc("mmd_list_menu_items", { target: (await context()).target })).structuredContent;
+        expect(listing.items).toHaveLength(20);
+        expect(listing.nextOffset).toBe(20);
+        const menuEntries = [...listing.items];
+        let offset = listing.nextOffset;
+        while (offset !== null) {
+            const next = (await rpc("mmd_list_menu_items", { target: (await context()).target, offset })).structuredContent;
+            menuEntries.push(...next.items);
+            offset = next.nextOffset;
+        }
         const visible = await page.locator('#app-menu-bar [data-menu-command]:not([hidden])').evaluateAll(elements => [...new Set(elements.map(element => element.dataset.menuCommand))].sort());
-        expect(listing.items.map(item => item.command).sort()).toEqual(visible);
+        expect(menuEntries.map(item => item.command).sort()).toEqual(visible);
 
         await set("viewport.backgroundMode", "black");
         await set("runtime.fpsLimit", 30);

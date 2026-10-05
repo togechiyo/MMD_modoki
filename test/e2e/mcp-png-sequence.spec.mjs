@@ -22,10 +22,10 @@ for (const pbr of [false, true]) test(`MCP PNG sequence completion and cancellat
             return { input, result: response.structuredContent };
         };
         const start = operation => edit("mmd_start_ui_operation", { operation });
-        const getJob = async job => (await rpc("mmd_get_operation", { target: job.input.target, operationId: job.input.operationId })).structuredContent;
+        const getJob = async (job, waitMs = 0) => (await rpc("mmd_get_operation", { target: job.input.target, operationId: job.input.operationId, waitMs })).structuredContent;
         const finish = async job => {
             let result;
-            await expect.poll(async () => { result = await getJob(job); return result.status; }, { timeout: 120000 }).not.toBe("running");
+            await expect.poll(async () => { result = await getJob(job, 30000); return result.status; }, { timeout: 120000 }).not.toBe("running");
             return result;
         };
         expect((await finish(await start({ kind: "materialMode", pbr }))).status).toBe("completed");
@@ -56,8 +56,10 @@ for (const pbr of [false, true]) test(`MCP PNG sequence completion and cancellat
         const pending = await start({ kind: "exportPngSequence", outputDirectoryPath: canceledDirectory });
         await expect.poll(async () => (await getJob(pending)).progress?.savedFiles ?? 0, { timeout: 120000 }).toBeGreaterThan(0);
         await expect(page.locator("#app")).toHaveClass(/ui-export-lock/);
+        const completion = getJob(pending, 30000);
         await edit("mmd_cancel_operation", { jobOperationId: pending.input.operationId });
-        const canceled = await finish(pending);
+        const cancellationResult = await completion;
+        const canceled = cancellationResult.status === "running" ? await finish(pending) : cancellationResult;
         expect(canceled, JSON.stringify(canceled)).toMatchObject({ status: "canceled", progress: { partialOutput: true, outputDirectoryPath: canceledDirectory, totalFiles: 301 } });
         const partial = await readdir(canceledDirectory);
         expect(partial.length).toBe(canceled.progress.savedFiles);

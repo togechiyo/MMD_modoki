@@ -69,11 +69,13 @@ export const menuItems: readonly MenuItem[] = [
     operation("tools.vmdRetarget", { kind: "fileTools" }, "itemsにretargetMotionと明示path・options・overwriteを指定。"),
 ];
 
-export function readMenuItems(query: string, translate: (key: string) => string) {
+export function readMenuItems(query: string, translate: (key: string) => string, offset = 0, limit = 20) {
     const normalized = query.normalize("NFKC").toLowerCase();
     const items = menuItems.map(entry => ({ ...entry,
         label: entry.command.startsWith("window.uiScale.") ? entry.command.slice("window.uiScale.".length) + "%" : translate(entry.command === "window.toggleUi" ? "menu.window.showUi" : entry.labelKey),
         group: translate(entry.groupKey),
     })).filter(entry => JSON.stringify(entry).normalize("NFKC").toLowerCase().includes(normalized));
-    return { items, totalCount: items.length, argumentTemplates: "partial; add target/revision/operationId and required values from tool schema", modelContentShared: false };
+    return { items: items.slice(offset, offset + limit), totalCount: items.length,
+        nextOffset: offset + limit < items.length ? offset + limit : null,
+        argumentTemplates: "partial; add target/revision/operationId and required values from tool schema", modelContentShared: false };
 }

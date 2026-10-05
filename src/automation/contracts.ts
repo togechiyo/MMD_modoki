@@ -22,11 +22,11 @@ const vector = z.object({ x: z.number().finite().min(-100000).max(100000), y: z.
 export const cameraSchema = z.object({ target: vector, rotation: vector, distance: z.number().min(0).max(100000), fov: z.number().min(10).max(120) }).strict();
 const target = z.object({ editorSessionId: z.string().uuid(), sceneGeneration: z.number().int().nonnegative() }).strict();
 const query = { target };
-const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(100) };
+const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(20) };
 const edit = { target, expectedEditRevision: z.number().int().nonnegative(), operationId: z.string().uuid() };
 export const automationTools = {
     mmd_capture_viewport_sequence: { description: "現在のviewportを短時間連続撮影し、時刻順のJPEG画像をまとめて返す。既定3秒×2fps・長辺640px。1〜5秒、1〜4fps、最大12枚。再生/seek/保存は行わない。実時刻と欠落数を返す。viewport-sequenceヘルプ参照。", edit: false, schema: z.object({ ...query, ...viewportSequenceOptions }).strict().refine(value => value.durationSeconds * value.fps <= 12, "Maximum 12 frames") },
-    mmd_list_menu_items: { description: "公開メニューバーを名前・IDで検索。対応tool、部分引数の雛形、ユーザー操作が必要な項目を返す。不足引数はtool schemaから補う。", edit: false, schema: z.object({ ...query, query: z.string().max(100).default("") }).strict() },
+    mmd_list_menu_items: { description: "公開メニューを名前・IDで検索しページ取得。対応tool、部分引数の雛形、ユーザー操作が必要な項目を返す。不足引数はtool schemaから補う。", edit: false, schema: z.object({ ...query, ...paging, query: z.string().max(100).default("") }).strict() },
     mmd_execute_menu_action: { description: "選択ボーン注視・視点・前後キー移動・カテゴリ全選択・全モーション削除・描画順・空リセット。型付き操作だけを実行。scopeは現在値を照合。削除はdryRun既定true・共有Undo。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema.nullable(), action: menuActionSchema }).strict() },
     mmd_wait_for_render: { description: "停止中の指定revisionでscene/効果の準備後の実engine frameを2回待機（最大8秒）。競合・busyは拒否。物理収束やGPU全処理完了を保証しない。viewport-comparisonヘルプ参照。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative() }).strict() },
     mmd_capture_snapshot: { description: "停止中の指定revisionのviewportを撮影し画像IDで一時保持。画像とframe/revisionを返す。最大8枚、古い画像は破棄。シーン・許可変更で失効。", edit: false, schema: z.object({ ...query, expectedEditRevision: z.number().int().nonnegative(), label: z.string().max(100).default("") }).strict() },
@@ -76,7 +76,7 @@ export const automationTools = {
     mmd_undo: { description: "指定AI編集が共有履歴の末尾の場合だけUndo。手動編集を巻き戻しません。", edit: true, schema: z.object({ ...edit, editId: z.string().max(200) }).strict() },
     mmd_redo: { description: "指定AI編集がRedo履歴の先頭にあり、対象と変更前の値が一致する場合だけ再適用。", edit: true, schema: z.object({ ...edit, editId: z.string().max(200) }).strict() },
     mmd_set_morph: { description: "選択中モデルの単一モーフの未登録編集。weightは0..1。共有Undo/Redoに対応し、キー登録は行いません。", edit: true, schema: z.object({ ...edit, modelInstanceId: z.string().min(1).max(200), morphName: z.string().min(1).max(200), weight: z.number().min(0).max(1), mode: z.literal("preview"), playbackPolicy: z.enum(["pause", "reject"]) }).strict() },
-    mmd_get_operation: { description: "操作の結果を照会。unknownなら再実行せず状況を再取得。", edit: false, schema: z.object({ ...query, operationId: z.string().uuid() }).strict() },
+    mmd_get_operation: { description: "操作結果を照会。waitMsで最大30秒、完了・失敗・取消まで待機。待機取消は出力を止めない。unknownなら再実行せず状況を再取得。", edit: false, schema: z.object({ ...query, operationId: z.string().uuid(), waitMs: z.number().int().min(0).max(30000).default(0) }).strict() },
 } as const;
 export type AutomationToolName = keyof typeof automationTools;
 export type AutomationTarget = z.infer<typeof target>;

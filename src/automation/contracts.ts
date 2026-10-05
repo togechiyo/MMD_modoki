@@ -13,6 +13,7 @@ import { automationSettingSchema } from "./settings";
 import type { AutomationFailure } from "./diagnostics";
 import { diagnosticKindSchema, diagnosticSelectorSchema, type DetailAccessRecord } from "./model-detail";
 import { automationControlSchema } from "./controls";
+import type { AutomationOperationNotice } from "./operation-notifications";
 import { editorOptionsSchema } from "./editor-options";
 import { automationMaterialTargetSchema } from "./material-schema";
 import { uiOperationSchema, type AutomationOutput, type AutomationOutputResult, type AutomationPermission } from "./ui-operation-schema";
@@ -53,7 +54,7 @@ export const automationTools = {
     mmd_get_editor_options: { description: "自動キー・再生範囲・出力設定・言語・UI倍率・選択ボーンの現在状態。", edit: false, schema: z.object(query).strict() },
     mmd_set_editor_options: { description: "自動キー・再生範囲・出力設定・言語・UI倍率・全画面をUIと共通の処理で変更。Undo対象外。MCP previewは自動キーに関係なく明示登録。", edit: true, schema: z.object({ ...edit, options: editorOptionsSchema }).strict() },
     mmd_select_bones: { description: "選択中モデルのボーンを名前で複数選択。GUI選択とVPD出力対象を同期。ポーズは変更しない。", edit: true, schema: z.object({ ...edit, modelInstanceId: z.string().min(1).max(200), boneNames: z.array(z.string().min(1).max(200)).min(1).max(200).refine(values => new Set(values).size === values.length, "Duplicate bone") }).strict() },
-    mmd_start_ui_operation: { description: "新規ウィンドウ作成・ローカル素材読込・project保存/読込・出力・通常/PBR切替・最適化/リターゲットの一括変換を開始。mmd_get_operationで結果照会。受付は完了ではない。モデルバイナリを返さない。", edit: true, schema: z.object({ ...edit, operation: uiOperationSchema }).strict() },
+    mmd_start_ui_operation: { description: "新規ウィンドウ作成・ローカル素材読込・project保存/読込・出力・通常/PBR切替・最適化/リターゲットの一括変換を開始。completionUriを購読し完了通知、詳細はmmd_get_operation。受付は完了ではない。モデルバイナリを返さない。", edit: true, schema: z.object({ ...edit, operation: uiOperationSchema }).strict() },
     mmd_list_controls: { description: "対応済みUI設定の検索。設定ID・現在値・値schema・単位・利用可否を返す。値は保持設定で描画完了を保証しない。", edit: false, schema: z.object({ ...query, ...paging, query: z.string().max(100).default(""), expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
     mmd_set_control: { description: "mmd_list_controlsの設定1項目を変更。UIと共通のsetterを使い適用値を返す。Undo対象外。", edit: true, schema: z.object({ ...edit, control: automationControlSchema }).strict() },
     mmd_get_context: { description: "公開ウィンドウとシーン概要。モデル本体は返しません。", edit: false, schema: z.object({ target: target.optional() }).strict() },
@@ -94,5 +95,6 @@ export type AutomationApi = {
     onState(callback: (state: AutomationState) => void): () => void;
     onRequest(callback: (request: AutomationRequest) => void): () => void;
     reply(reply: AutomationReply): void;
+    operationCompleted(notice: AutomationOperationNotice): void;
 };
 export type AutomationAsset = { assetId: string; kind: string; modelInstanceId: string | null; recordedPath: string; usageRole: "unknown"; frame: number | null; availability: "unchecked" };

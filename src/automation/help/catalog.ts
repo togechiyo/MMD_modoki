@@ -10,6 +10,11 @@ export type AutomationHelpTopic = {
 // Only bundled, trusted documentation belongs here. Asset names and paths are data.
 export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
+        id: "completion-notifications", title: "出力・操作の完了通知", aliases: ["notification", "subscription", "completionUri", "完了通知", "購読"],
+        status: "implemented", summary: "MCP 2026-07-28の購読でUI jobの完了・失敗・取消を受信。通知はURIだけ。",
+        body: "mmd_start_ui_operationのcompletionUriを保存する。MCP 2026-07-28対応clientはsubscriptions/listenへnotifications:{resourceSubscriptions:[completionUri]}を指定し、notifications/subscriptions/acknowledgedを受けてからresources/read(uri:completionUri)。開始直後の完了も最初の本文で確認する。status:runningならnotifications/resources/updatedのparams.uriを待ち、resources/readで状態を再取得する。本文はoperationId/status/completedAt/errorCodeのみ。completed/failed/canceledを確認後、mmd_get_operationを一度呼びoutputやdiagnosticを取得する。fileTools等はcompletedでも個別結果の失敗があり得るので詳細を読む。通知を受けただけで成功と判断しない。通信切断後の再接続でも購読ack後に本文を読み、再送イベントを前提にしない。購読は最大8接続、終了後に切断する。購読切断はjobを取消しない。出力取消はmmd_cancel_operation。状態要約は各window最新100件のメモリ保持、キャッシュTTLは0。OFF・許可変更・reload・window終了で古いURIと該当購読は失効。待機中のユーザー操作要求や進捗は通知対象外でmmd_get_operationを必要時に読む。旧clientや購読未対応clientはcommunicationのwaitMs:30000を使う。通知によるAI再開や画面表示はclientの対応次第。ローカル接続を維持して受信する方式で、Cloud向けMCP Eventsのwebhookや切断中の配送は含まない。",
+    },
+    {
         id: "communication", title: "一覧の軽量取得と出力完了待機", aliases: ["communication", "waitMs", "pagination", "軽量化", "完了待機"],
         status: "implemented", summary: "一覧は既定20件ずつ。長い出力は1回の結果照会で最大30秒待てる。",
         body: "一覧はquery/filterで対象を絞り、offset/limitとnextOffsetを使う。共通limitは既定20・最大200、メニューも同じ。totalCountは全件数であり、itemsだけが1ページ。全件を1ページと思わない。mmd_list_controlsのvalueSchemaで範囲を確認して設定する。長いUI出力は受付operationIdとtargetを保持し、mmd_get_operationへwaitMs:30000を指定。既定0は従来の即時照会。completed/failed/canceled/unknownはすぐ返し、runningでもphase:waiting_for_userならすぐ返す。runningかつwaitTimedOut:trueなら同じoperationIdで待機を繰り返す。待機は出力の完了を保証する期限ではない。HTTP/MCP呼出しを取り消しても出力jobは継続し、出力自体の取消はmmd_cancel_operation。OFF・権限変更・reloadで元の許可が失効した待機は終了する。待機中も他の照会・取消操作は可能。これは呼出し中の結果待機であり、切断後の自動通知やCloud向けMCP Eventsではない。tool/help一覧とhelp本文はMCP 2026-07-28のprivateキャッシュ情報を5分付与する。実際のキャッシュ利用はクライアント次第。画像は必要時だけ取得する。",

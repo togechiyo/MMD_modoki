@@ -32,6 +32,7 @@ const automation: AutomationApi = {
         return () => { ipcRenderer.removeListener('automation:request', handler); };
     },
     reply: reply => { ipcRenderer.send('automation:reply', reply); },
+    operationCompleted: notice => { ipcRenderer.send('automation:operationCompleted', notice); },
 };
 contextBridge.exposeInMainWorld('electronAPI', {
     automation,

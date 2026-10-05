@@ -34,7 +34,12 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
     let lastAssets = "";
     let lastSignature = "";
     let lastHistoryGeneration = -1;
-    const uiJobs = new AutomationUiJobs();
+    const uiJobs = new AutomationUiJobs({
+        complete: completion => {
+            if (state?.enabled && state.editable) window.electronAPI.automation.operationCompleted({ ...completion, sessionId: state.sessionId, grant: state.grant });
+        },
+        failed: () => window.electronAPI.logError("ui", "MCP completion notification delivery failed", { code: "MCP_COMPLETION_NOTIFICATION_FAILED" }),
+    });
     const operations = new Map<string, { input: string; result: Record<string, unknown> }>();
     const disposers: (() => void)[] = [];
     const listen = (name: string, callback: EventListener): void => {

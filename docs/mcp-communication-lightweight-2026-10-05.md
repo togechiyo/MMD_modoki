@@ -49,11 +49,11 @@
 
 ## 完了通知との関係
 
-今回はローカル接続で使える結果待機。切断後やAIが別の作業をしている間に届く自動通知は未実装。
+この段階で追加したのはローカル接続で使える結果待機。その後、同日の[完了通知実装](./mcp-operation-completion-notifications-2026-10-05.md)で、接続中の購読へ完了・失敗・取消を送る経路を追加した。切断中の配送は含まない。
 
 [OpenAI MCP Events](https://developers.openai.com/plugins/build/mcp-events)はChatGPT Workのweb / desktop Cloud等に向けたwebhook連携。現行のloopback接続とは到達性・外部HTTPS callback・購読管理の条件が異なる。利用クライアントが未確認のため、外部通信の追加やCloud向けEventsの採用決定はしていない。[仕様・SDK・Eventsの調査](./mcp-2026-latest-findings-2026-09-10.md)も参照する。
 
-ローカル接続で自動通知を進める場合も、Tasks等の拡張について対象clientと採用SDKの対応をそれぞれ確認する。現在のjob ID・grant・結果保持を通知adapterから分離して使う。
+後続実装は導入SDK 2.0.0のresource購読を使用した。対象clientの購読維持やAI再開の対応は別途確認する。Cloud向けwebhookやTasksの採用は含まない。
 
 公式仕様の根拠: [MCP caching](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching)、[SDKのrequest cancellation](https://ts.sdk.modelcontextprotocol.io/v2/servers/logging-progress-cancellation)。`cacheHints` と `context.mcpReq.signal` はインストール済みSDK 2.0.0の型・HTTP実挙動でも確認した。
 
@@ -70,5 +70,5 @@
 
 - 利用者のクライアントと、cache利用・LLM入力に載る定義量・30秒の呼出し待機対応を実接続で確認する。
 - PNG以外の数分かかる出力で待機を使う運用確認。共通job状態を使うが、今回追加したGUI試験はPNG連番。
-- 作業中でなくても届く完了通知の方式選定と実装。Cloud向けEventsとローカルclientの通知拡張を混同しない。
+- 完了通知は後続実装済み。利用者clientの購読維持と通知処理を確認する。Cloud向けEventsとローカルclientの通知拡張を混同しない。
 - 大きいキー編集schema、画像の既定容量、必要時だけ取得する詳細一覧の追加軽量化を実測で検討する。

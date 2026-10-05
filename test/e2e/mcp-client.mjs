@@ -7,18 +7,19 @@ export async function settings(page) {
 }
 export async function closeSettings(dialog) { await dialog.locator(".app-menu-dialog-close").click(); }
 export function client(connection) {
-    return async (name, args = {}, method = "tools/call") => {
-        const params = method === "tools/call" ? { name, arguments: args } : args;
-        const response = await fetch(connection.url, {
-            method: "POST", headers: { ...connection.headers, "Content-Type": "application/json", Accept: "application/json, text/event-stream",
-                "Mcp-Method": method, "MCP-Protocol-Version": "2026-07-28", ...(method === "tools/call" ? { "Mcp-Name": name } : {}),
-                ...(method === "resources/read" ? { "Mcp-Name": args.uri } : {}),
+    const request = (method, params, signal) => fetch(connection.url, {
+            method: "POST", signal, headers: { ...connection.headers, "Content-Type": "application/json", Accept: "application/json, text/event-stream",
+                "Mcp-Method": method, "MCP-Protocol-Version": "2026-07-28", ...(method === "tools/call" ? { "Mcp-Name": params.name } : {}),
+                ...(typeof params.uri === "string" ? { "Mcp-Name": params.uri } : {}),
             },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: {
                 "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {},
                 "io.modelcontextprotocol/clientInfo": { name: "mmd-e2e", version: "1" },
             } } }),
         });
+    const rpc = async (name, args = {}, method = "tools/call") => {
+        const params = method === "tools/call" ? { name, arguments: args } : args;
+        const response = await request(method, params);
         const result = await response.json();
         if (method === "resources/read" && args.uri?.startsWith("file:")) {
             expect(result.error).toBeTruthy();
@@ -27,6 +28,35 @@ export function client(connection) {
         expect(result.error, JSON.stringify(result)).toBeUndefined();
         return result.result;
     };
+    rpc.subscribe = async uri => {
+        const controller = new AbortController();
+        const response = await request("subscriptions/listen", { notifications: { resourceSubscriptions: [uri] } },
+            AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]));
+        expect(response.headers.get("content-type")).toContain("text/event-stream");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const subscription = { close: () => controller.abort(), next: async () => {
+            for (;;) {
+                const end = buffer.indexOf("\n\n");
+                if (end >= 0) {
+                    const packet = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+                    const data = packet.split("\n").find(line => line.startsWith("data: "));
+                    if (data) return JSON.parse(data.slice(6));
+                    continue;
+                }
+                const chunk = await reader.read();
+                if (chunk.done) throw new Error("Subscription closed");
+                buffer += decoder.decode(chunk.value, { stream: true });
+            }
+        } };
+        try {
+            expect(await subscription.next()).toMatchObject({ method: "notifications/subscriptions/acknowledged",
+                params: { notifications: { resourceSubscriptions: [uri] } } });
+            return subscription;
+        } catch (error) { subscription.close(); throw error; }
+    };
+    return rpc;
 }
 
 export async function enableMcpEditing(page) {

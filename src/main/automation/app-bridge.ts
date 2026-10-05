@@ -14,8 +14,9 @@ import { ViewportSnapshots, snapshotCameraSchema } from "../../automation/viewpo
 import { captureViewportSequence } from "../../automation/viewport-sequence";
 import { captureViewportImage, type ViewportRect } from "./viewport-capture";
 import { waitForAutomationOperation } from "./operation-wait";
+import { AutomationOperationNotifications, operationNoticeSchema, operationResourceScope, parseOperationResource } from "../../automation/operation-notifications";
 
-type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[]; snapshots: ViewportSnapshots };
+type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[]; snapshots: ViewportSnapshots; notifications: AutomationOperationNotifications };
 export function installAutomationAppBridge(report: (code: string, data?: Record<string, string>) => void): { register(window: BrowserWindow): void; canEdit(owner: number, permission: AutomationPermission): boolean } {
     const windows = new Map<number, PublishedWindow>();
     const pending = new Map<string, { owner: number; resolve: (result: AutomationResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -33,6 +34,8 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         return entry;
     };
     function revoke(entry: PublishedWindow): void {
+        listener?.invalidateResourceSubscriptions(operationResourceScope({ sessionId: entry.state.sessionId, grant: entry.state.grant }));
+        entry.notifications.clear();
         entry.snapshots.clear();
         entry.diagnostics.clear();
         entry.state.enabled = false;
@@ -50,6 +53,13 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         const previous = listener;
         listener = undefined;
         await previous?.close();
+    }
+    function readOperationResource(uri: string) {
+        const scope = parseOperationResource(uri);
+        if (!scope) return undefined;
+        const entry = [...windows.values()].find(candidate => candidate.state.sessionId === scope.sessionId);
+        if (!entry?.state.enabled || entry.state.grant !== scope.grant || entry.window.isDestroyed()) return undefined;
+        return entry.notifications.read(uri);
     }
     async function credentials(): Promise<{ token: string; port: number }> {
         if (registration) return registration;
@@ -176,6 +186,10 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         const operationId = "operationId" in args && typeof args.operationId === "string" ? args.operationId : null;
         try {
             const result = await dispatchRequest(tool, args, signal);
+            if (entry && tool === "mmd_start_ui_operation" && operationId && result.data.operationId === operationId) {
+                if (!entry.state.enabled || entry.state.grant !== grant || entry.window.isDestroyed()) throw new AutomationError("ACCESS_REVOKED");
+                result.data = { ...result.data, completionUri: entry.notifications.register({ sessionId: entry.state.sessionId, grant: entry.state.grant }, operationId) };
+            }
             if (requiresDetailedDiagnostics(tool)) {
                 if (!entry?.state.enabled || !entry.state.detailedDiagnostics || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
                 if (tool === "mmd_inspect_detail") {
@@ -240,7 +254,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 if (enabled && epoch === entry.state.grant && !entry.window.isDestroyed()) {
                     const saved = await credentials();
                     if (!listener) {
-                        const started = await startAutomationListener({ port: saved.port, token: saved.token, appVersion: app.getVersion(), onError: report, dispatch });
+                        const started = await startAutomationListener({ port: saved.port, token: saved.token, appVersion: app.getVersion(), onError: report, dispatch, readOperationResource });
                         const port = Number(new URL(started.endpoint).port);
                         try {
                             await mkdir(app.getPath("userData"), { recursive: true });
@@ -290,9 +304,18 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         else if (reply.result && JSON.stringify(reply.result).length < 2 * 1024 * 1024) item.resolve(reply.result);
         else item.reject(new AutomationError("INVALID_REPLY"));
     });
+    ipcMain.on("automation:operationCompleted", (event, notice: unknown) => {
+        const entry = windows.get(event.sender.id);
+        const parsed = operationNoticeSchema.safeParse(notice);
+        if (!entry || event.senderFrame !== event.sender.mainFrame || !parsed.success || !entry.state.enabled || !entry.state.editable
+            || entry.state.sessionId !== parsed.data.sessionId || entry.state.grant !== parsed.data.grant) return;
+        const { sessionId, grant, ...completion } = parsed.data;
+        const uri = entry.notifications.complete({ sessionId, grant }, completion);
+        if (uri) listener?.resourceUpdated(uri);
+    });
     return { canEdit(owner, permission) { const entry = windows.get(owner); return Boolean(entry && hasPermission(entry, permission)); }, register(window) {
         const owner = window.webContents.id;
-        const entry: PublishedWindow = { window, diagnostics: new AutomationDiagnosticHistory(), detailAccess: [], snapshots: new ViewportSnapshots(), state: { enabled: false, editable: false, detailedDiagnostics: false, sessionId: randomUUID(), grant: 0, endpoint: null } };
+        const entry: PublishedWindow = { window, diagnostics: new AutomationDiagnosticHistory(), detailAccess: [], snapshots: new ViewportSnapshots(), notifications: new AutomationOperationNotifications(), state: { enabled: false, editable: false, detailedDiagnostics: false, sessionId: randomUUID(), grant: 0, endpoint: null } };
         windows.set(owner, entry);
         window.webContents.on("render-process-gone", () => {
             revoke(entry);
@@ -306,6 +329,8 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             controlQueue = controlQueue.then(closeIfUnused, closeIfUnused).catch(() => report("MCP_CLOSE_FAILED"));
         });
         window.on("closed", () => {
+            listener?.invalidateResourceSubscriptions(operationResourceScope({ sessionId: entry.state.sessionId, grant: entry.state.grant }));
+            entry.notifications.clear();
             windows.delete(owner);
             for (const [id, item] of pending) if (item.owner === owner) { clearTimeout(item.timer); pending.delete(id); item.reject(new AutomationError("TARGET_UNAVAILABLE")); }
             controlQueue = controlQueue.then(closeIfUnused, closeIfUnused).catch(() => report("MCP_CLOSE_FAILED"));

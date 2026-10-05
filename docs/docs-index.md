@@ -23,6 +23,7 @@
 - [MCPのポート競合時の自動復旧](./mcp-port-recovery-2026-09-18.md)
 - [MCPの短時間ビューポート連続取得](./mcp-viewport-sequence-2026-09-18.md)
 - [MCP通信の軽量化と長時間出力の結果待機](./mcp-communication-lightweight-2026-10-05.md)
+- [MCP出力・操作の完了通知](./mcp-operation-completion-notifications-2026-10-05.md)
 - [MCPのUI対応拡張と残件](./mcp-ui-coverage-expansion-2026-09-10.md)
 - [MCPの動画出力と素材の指定削除](./mcp-video-and-asset-removal-2026-09-11.md)
 - [MCPからの外部親編集](./mcp-external-parent-2026-09-11.md)

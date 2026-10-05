@@ -3,6 +3,39 @@ import { AutomationUiJobs } from "../../src/automation/ui-jobs";
 import { AutomationError } from "../../src/automation/diagnostics";
 
 describe("UI operation lifecycle", () => {
+    it.each(["completed", "failed", "canceled"])("pushes a %s summary once after unlocking, without output/progress data", async status => {
+        const complete = vi.fn();
+        const failed = vi.fn();
+        const jobs = new AutomationUiJobs({ complete, failed });
+        jobs.start("one", "input", async context => {
+            context.report({ privatePath: "PRIVATE" });
+            if (status !== "completed") throw new AutomationError(status === "canceled" ? "OPERATION_CANCELED" : "OUTPUT_EXISTS");
+            return { filePath: "PRIVATE" };
+        }, () => true);
+        await vi.waitFor(() => expect(jobs.busy).toBe(false));
+        expect(complete).toHaveBeenCalledTimes(1);
+        expect(complete.mock.calls[0][0]).toMatchObject({ operationId: "one", status, completedAt: expect.any(String) });
+        expect(JSON.stringify(complete.mock.calls)).not.toContain("PRIVATE");
+        jobs.start("one", "input", async () => ({}), () => true);
+        expect(complete).toHaveBeenCalledTimes(1);
+        expect(failed).not.toHaveBeenCalled();
+    });
+    it("does not publish after clear/revocation and preserves completed work if notification delivery fails", async () => {
+        const complete = vi.fn(() => { throw new Error("notification transport closed"); });
+        const failed = vi.fn();
+        const jobs = new AutomationUiJobs({ complete, failed });
+        jobs.start("cleared", "input", async () => ({}), () => true);
+        jobs.clear();
+        await vi.waitFor(() => expect(jobs.busy).toBe(false));
+        expect(complete).not.toHaveBeenCalled();
+        jobs.start("revoked", "input", async () => ({}), () => false);
+        await vi.waitFor(() => expect(jobs.busy).toBe(false));
+        expect(complete).not.toHaveBeenCalled();
+        jobs.start("done", "input", async () => ({}), () => true);
+        await vi.waitFor(() => expect(jobs.busy).toBe(false));
+        expect(jobs.get("done")?.status).toBe("completed");
+        expect(failed).toHaveBeenCalledTimes(1);
+    });
     it("returns running, deduplicates while pending, and keeps completion after scene changes", async () => {
         const jobs = new AutomationUiJobs();
         let finish: (value: Record<string, unknown>) => void = () => undefined;

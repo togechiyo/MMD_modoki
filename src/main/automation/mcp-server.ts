@@ -1,11 +1,12 @@
 import { createServer, type Server as HttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
+import { createMcpHandler, McpServer, ResourceTemplate, ResourceNotFoundError } from "@modelcontextprotocol/server";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { z } from "zod";
 import { automationHelpTopics, searchAutomationHelp } from "../../automation/help/catalog";
 import { automationTools, type AutomationToolName, type AutomationResult, AutomationError } from "../../automation/contracts";
 import { describeAutomationFailure, toAutomationFailure } from "../../automation/diagnostics";
+import { operationResourceTemplate, type AutomationOperationSummary } from "../../automation/operation-notifications";
 
 export const helpInputSchema = z.object({
     query: z.string().trim().min(1).max(200).optional(),
@@ -15,14 +16,15 @@ export const helpInputSchema = z.object({
     message: "queryとtopicIdは同時指定できません。",
 });
 
-function createHelpServer(version: string, dispatch?: AutomationListenerOptions["dispatch"]): McpServer {
+function createHelpServer(version: string, dispatch?: AutomationListenerOptions["dispatch"], readOperationResource?: AutomationListenerOptions["readOperationResource"]): McpServer {
     const server = new McpServer({ name: "mmd-modoki", version }, {
+        ...(readOperationResource ? { capabilities: { resources: { subscribe: true } } } : {}),
         cacheHints: {
             "tools/list": { ttlMs: 300000, cacheScope: "private" },
             "resources/list": { ttlMs: 300000, cacheScope: "private" },
             "resources/read": { ttlMs: 300000, cacheScope: "private" },
         },
-        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Query catalogs narrowly; pages default to 20 items, follow nextOffset. For long jobs use mmd_get_operation(waitMs:30000); repeat only while running. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
+        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Query catalogs narrowly; pages default to 20 items, follow nextOffset. UI jobs return completionUri: subscribe, await acknowledgement, then resources/read to avoid missing early completion; read again on resources/updated. Fetch full job result once via mmd_get_operation. Without subscriptions use waitMs:30000, repeat while running. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
     });
     server.registerTool("mmd_help", {
         title: "MMD_modokiの機能ヘルプ",
@@ -47,6 +49,15 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
             title: topic.title, description: topic.summary, mimeType: "text/plain",
         }, uri => ({ contents: [{ uri: uri.href, mimeType: "text/plain", text: `[${topic.status}] ${topic.title}\n${topic.body}` }] }));
     }
+    if (readOperationResource) server.registerResource("operation-completion", new ResourceTemplate(operationResourceTemplate, { list: undefined }), {
+        title: "MMD出力・操作の完了状態", mimeType: "application/json",
+        description: "開始結果のcompletionUriを購読すると完了・失敗・取消時に更新通知。本文は状態の要約のみ。詳細はmmd_get_operation。",
+        cacheHint: { ttlMs: 0, cacheScope: "private" },
+    }, uri => {
+        const summary = readOperationResource(uri.href);
+        if (!summary) throw new ResourceNotFoundError(uri.href, "Operation resource unavailable");
+        return { contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(summary) }] };
+    });
     if (dispatch) for (const [name, definition] of Object.entries(automationTools)) {
         server.registerTool(name, {
             description: definition.description, inputSchema: definition.schema,
@@ -74,11 +85,14 @@ export type AutomationListenerOptions = {
     appVersion: string;
     onError: (code: "MCP_TRANSPORT_ERROR") => void;
     dispatch?: (tool: AutomationToolName, args: unknown, signal?: AbortSignal) => Promise<AutomationResult>;
+    readOperationResource?: (uri: string) => AutomationOperationSummary | undefined;
 };
 
 export type AutomationListener = {
     endpoint: string;
     previousPort?: number;
+    resourceUpdated(uri: string): void;
+    invalidateResourceSubscriptions(scopePrefix: string): void;
     close(): Promise<void>;
 };
 
@@ -89,9 +103,13 @@ export async function startAutomationListener(options: AutomationListenerOptions
     const expected = Buffer.from(`Bearer ${options.token}`);
     let enabled = true;
     const reportError = (): void => options.onError("MCP_TRANSPORT_ERROR");
-    const handler = createMcpHandler(() => createHelpServer(options.appVersion, options.dispatch), {
-        legacy: "stateless", responseMode: "auto", maxSubscriptions: 0, onerror: reportError,
+    const handler = createMcpHandler(() => createHelpServer(options.appVersion, options.dispatch, options.readOperationResource), {
+        legacy: "stateless", responseMode: "auto", maxSubscriptions: options.readOperationResource ? 8 : 0, onerror: reportError,
     });
+    const subscriptions = new Map<ServerResponse, string[]>();
+    const subscriptionInput = z.object({ method: z.literal("subscriptions/listen"), params: z.object({
+        notifications: z.object({ resourceSubscriptions: z.array(z.string().max(300)).max(100).optional() }).passthrough(),
+    }).passthrough() }).passthrough();
     const serve = toNodeHandler(handler, { onerror: reportError });
     const http = createServer((request, response) => {
         void acceptRequest(request, response).catch(() => {
@@ -128,6 +146,17 @@ export async function startAutomationListener(options: AutomationListenerOptions
         let body: unknown;
         try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
         catch { return reject(response, 400); }
+        const listen = subscriptionInput.safeParse(body);
+        if (listen.success) {
+            const uris = listen.data.params.notifications.resourceSubscriptions ?? [];
+            for (const uri of uris) {
+                if (options.readOperationResource?.(uri)) continue;
+                if (automationHelpTopics.some(topic => uri === `mmd://help/${topic.id}`)) continue;
+                return reject(response, 403);
+            }
+            subscriptions.set(response, uris);
+            response.once("close", () => subscriptions.delete(response));
+        } else if (body && typeof body === "object" && "method" in body && body.method === "subscriptions/listen") return reject(response, 400);
         await serve(request, response, body);
     }
     try {
@@ -153,6 +182,10 @@ export async function startAutomationListener(options: AutomationListenerOptions
     let closing: Promise<void> | undefined;
     return {
         endpoint,
+        resourceUpdated: uri => { if (enabled && options.readOperationResource?.(uri)) handler.notify.resourceUpdated(uri); },
+        invalidateResourceSubscriptions: scopePrefix => {
+            for (const [response, uris] of subscriptions) if (uris.some(uri => uri.startsWith(scopePrefix))) response.destroy();
+        },
         close: () => {
             enabled = false;
             closing ??= Promise.all([handler.close(), closeHttp(http)]).then(() => undefined);

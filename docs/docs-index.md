@@ -35,7 +35,7 @@
 - [MCP実用テスト後の修正とパッケージ再検証](./mcp-practical-fixes-2026-09-11.md)
 - [MCPのAI向け操作・診断機能の候補](./mcp-ai-ergonomics-proposals-2026-09-10.md)
 - [MCPの対象指定による詳細診断と提供許可](./mcp-detailed-diagnostics-2026-09-10.md)
-- [MCPの2026年最新動向とMMD_modokiへの影響](./mcp-2026-latest-findings-2026-09-10.md)
+- [MCPの2026年最新動向とMMD_modokiへの影響](./mcp-2026-latest-findings-2026-09-10.md)（2026-10-05再確認: 最新仕様・SDK・情報量）
 - [PBR材質プリセットの役割整理 2026-09-08](./pbr-material-presets-2026-09-08.md)
 - [PBR方向光・遮蔽・影色の比較調査 2026-09-17](./pbr-directional-shadow-color-audit-2026-09-17.md)
 - [プロジェクト全体の材質モードと設定退避 2026-09-08](./project-material-mode-design-2026-09-08.md)

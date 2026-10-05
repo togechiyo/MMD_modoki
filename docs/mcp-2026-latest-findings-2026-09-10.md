@@ -4,6 +4,31 @@
 
 後続の操作API・ユーザー体験の具体案は[MCP操作・情報取得・ヘルプ設計](./mcp-editor-integration-design-2026-09-10.md)を参照する。
 
+## 2026-10-05 再確認: 最新仕様・SDKと情報量
+
+以下は公式情報の再検索と現行コードの読取・HTTP計測による追記。後続の2026-09-10時点の記録と区別する。依存更新やAPI変更の採用決定ではない。
+
+- **最新の正式仕様は引き続き `2026-07-28`**。公式の `specification/latest` がこの版へ転送されることを確認した。現行modokiは `createMcpHandler` で新方式と `legacy: "stateless"` の旧方式を扱っており、今回新しい日付版へ移行する必要があるとは判断していない。[最新仕様](https://modelcontextprotocol.io/specification/latest)、[正式版の変更点](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
+- **TypeScript SDKの最新stable releaseは `v2.3.0`**。公式releaseのpackage表は `@modelcontextprotocol/server` が `2.3.0`、`@modelcontextprotocol/node` が `2.1.1`。現行 `package.json` は両方 `2.0.0` 固定であり、packageごとの版を照合する必要がある。[公式release](https://github.com/modelcontextprotocol/typescript-sdk/releases/tag/v2.3.0)
+- SDK 2.3.0には、要求ごとにserverを作る場合に `registerTool` が全schemaを先行変換しない改善がある。modokiのfactory構成に関係するが、これはserver側の変換コスト削減。公式PRは **`tools/list` の応答bytesは変わらない** と明示しており、更新だけでAIへ渡る定義量が減るとは扱わない。大きなSSEの受信改善はclient側の更新にも依存する。[schema変換の公式修正](https://github.com/modelcontextprotocol/typescript-sdk/pull/2889)
+- 正式仕様には `ttlMs` / `cacheScope` と一覧の決定的な順序によるキャッシュ支援がある。`ttlMs: 0` は直ちにstaleとみなし、必要時に毎回再取得してよいというhintで、保存自体の禁止ではない。再取得削減と、取得済み情報をLLM入力へ何度載せるかは別問題であり、後者は利用clientの挙動も確認する。[キャッシュ仕様](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching)
+- 全カタログを最初に取り込まず必要な機能を段階的に発見する **Progressive discovery** と、`content` / `structuredContent` の結果形状整理は、今回確認した公式roadmapでは将来の検討項目。現行の正式仕様に全client共通の解決策が入ったとは扱わない。接続中の操作を契機に、その接続だけの `tools/list` を増減させる方式も現行仕様と混同しない。[公式roadmap](https://modelcontextprotocol.io/development/roadmap)
+- **Skills over MCP** の公式拡張資料も確認。`skills/list` / `skills/get` でmetadataを取得し、本文は `resources/read` で必要時に読む構成。拡張対応の宣言とhost側のskill読込対応が必要であり、既存tool schemaの段階的発見を直接代替するものではない。[公式Skills資料](https://modelcontextprotocol.io/extensions/skills/overview)
+
+### 現行HTTP応答の確認
+
+既存 `src/main/automation/mcp-server.ts` をメモリ内でbundleし、インストール済みSDK `2.0.0` と一時的なloopback listenerで `2026-07-28` の `tools/list` を呼んだ。dispatchは調査用stubで、Electron、実scene、モデルasset、ユーザーのMCP設定は使用していない。listenerは計測後に閉じた。
+
+| 観測項目 | 結果 |
+| --- | --- |
+| HTTP / result | `200` / `resultType: "complete"` |
+| 公開tool | 53件（52操作と `mmd_help`） |
+| HTTP応答本文 | 134,271 bytes（この調査用server名・版でのJSON応答） |
+| MCPキャッシュhint | `ttlMs: 0`、`cacheScope: "private"` |
+| HTTP Cache-Control | `no-store` |
+
+これは通信bytesの実測であり、LLMのtoken数・会話への投入回数・利用者の報告原因を測定したものではない。現行clientでのtoken化やschemaの遅延読込は未確認。SDK更新、適切なprivate cache寿命と失効条件、tool定義の重複削減、検索と小さな一覧応答をそれぞれ検討し、単独の対策で解決したと断言しない。
+
 ## 調査結果
 
 **標準MCP / Streamable HTTPを第一候補とする提案は維持する。ただしSDK v2を使うだけでは2026年仕様にならず、新旧両方を処理する入口を明示的に選ぶ必要がある。** WebMCPは実利用例があるが、現在のElectronへの接続が成立するかは別の確認になる。長時間処理とチャット内UIは、Tasks / MCP Appsという別の拡張として検討する。

@@ -15,6 +15,14 @@
 - 全カタログを最初に取り込まず必要な機能を段階的に発見する **Progressive discovery** と、`content` / `structuredContent` の結果形状整理は、今回確認した公式roadmapでは将来の検討項目。現行の正式仕様に全client共通の解決策が入ったとは扱わない。接続中の操作を契機に、その接続だけの `tools/list` を増減させる方式も現行仕様と混同しない。[公式roadmap](https://modelcontextprotocol.io/development/roadmap)
 - **Skills over MCP** の公式拡張資料も確認。`skills/list` / `skills/get` でmetadataを取得し、本文は `resources/read` で必要時に読む構成。拡張対応の宣言とhost側のskill読込対応が必要であり、既存tool schemaの段階的発見を直接代替するものではない。[公式Skills資料](https://modelcontextprotocol.io/extensions/skills/overview)
 
+### OpenAI MCP Eventsの追加確認
+
+所有者が提示した [OpenAI公式MCP Events資料](https://developers.openai.com/plugins/build/mcp-events) を確認。ChatGPT Workのweb / desktop Cloudとdotsでは、draft Events設計のwebhook配信・callback検証に対応する。前提はMCP `2026-07-28`、購読の永続保存、callbackへの外向きHTTPS通信。汎用clientの対応やcore仕様の新しい日付版を示すものではない。
+
+modokiでは長時間jobの完了・失敗を通知し、`mmd_get_operation` の繰返し照会を減らす用途が候補。ただし実clientの照会頻度は未計測で、tool定義・一覧・画像そのものの情報量は別途削減する必要がある。公式資料の「大きな記録は概要を通知し、詳細はread toolで取得」という方針は参考になる。
+
+現行serverに `events/list` / `events/subscribe` / `events/unsubscribe` は未実装。`maxSubscriptions: 0` は標準の購読stream設定で、このwebhook機能の実装とは別。loopback限定の接続経路、アプリ終了時の購読寿命、外部通信を明示採用する条件を検討してから扱う。今回は調査のみで、Eventsの採用決定や外部通信追加は行っていない。
+
 ### 現行HTTP応答の確認
 
 既存 `src/main/automation/mcp-server.ts` をメモリ内でbundleし、インストール済みSDK `2.0.0` と一時的なloopback listenerで `2026-07-28` の `tools/list` を呼んだ。dispatchは調査用stubで、Electron、実scene、モデルasset、ユーザーのMCP設定は使用していない。listenerは計測後に閉じた。

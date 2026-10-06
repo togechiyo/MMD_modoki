@@ -13,6 +13,7 @@ import { requiresDetailedDiagnostics } from "./model-detail";
 import { readAutomationControls } from "./controls";
 import { AutomationUiJobs } from "./ui-jobs";
 import { cameraRevisionValues } from "./camera-revision";
+import { summarizeAutomationContext } from "./context-summary";
 import { assetRemovalInfo } from "./asset-removal";
 import { buildExternalParentEdit } from "./external-parent-edit";
 import { readObjectState, normalizeObjectPatch } from "./object-state";
@@ -73,7 +74,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         ...(Array.from(document.querySelectorAll('[aria-modal="true"]')).some(element => element.getClientRects().length > 0) ? ["modal"] : []),
     ];
     const busy = (): boolean => busyReasons().length > 0;
-    function context(): Record<string, unknown> {
+    function context() {
         const assets = manager.getAutomationAssetReferences();
         const assetsSignature = JSON.stringify(assets);
         const history = ui.getAutomationHistoryState();
@@ -123,7 +124,10 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             if (prior) return { data: prior };
         }
         if (args.target && (args.target.editorSessionId !== state.sessionId || (request.tool !== "mmd_get_context" && args.target.sceneGeneration !== sceneGeneration))) throw new AutomationError("SCENE_CHANGED");
-        if (request.tool === "mmd_get_context") return { data: before };
+        if (request.tool === "mmd_get_context") {
+            const input = automationTools.mmd_get_context.schema.parse(args);
+            return { data: input.detail === "summary" ? summarizeAutomationContext(before) : before };
+        }
         if (!args.target) throw new AutomationError("TARGET_REQUIRED");
         if (request.tool === "mmd_list_menu_items") {
             const input = automationTools.mmd_list_menu_items.schema.parse(args);

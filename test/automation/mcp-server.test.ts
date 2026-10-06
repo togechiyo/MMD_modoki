@@ -68,11 +68,25 @@ describe("MCP HTTP foundation", () => {
         const connected = { ...connection, token };
         const list = await rpc(connected, "tools/list");
         expect(list.json.result.tools.map((item: { name: string }) => item.name).sort()).toEqual(["mmd_help", ...Object.keys(automationTools)].sort());
-        expect(Buffer.byteLength(list.raw)).toBeLessThan(126000);
+        expect(Buffer.byteLength(list.raw)).toBeLessThan(121000);
         expect(list.json.result).toMatchObject({ ttlMs: 300000, cacheScope: "private" });
         const legacyList = await rpc(connected, "tools/list", {}, false);
         expect(legacyList.json.result.ttlMs).toBeUndefined();
         expect(legacyList.json.result.cacheScope).toBeUndefined();
+        for (const listing of [list, legacyList]) for (const tool of listing.json.result.tools) {
+            const visit = (value: unknown): void => {
+                if (!value || typeof value !== "object") return;
+                for (const [key, child] of Object.entries(value)) {
+                    if (key === "$ref") {
+                        expect(child).toMatch(/^#\//);
+                        const resolved = String(child).slice(2).split("/").reduce<unknown>((current, segment) =>
+                            current && typeof current === "object" ? Reflect.get(current, segment.replace(/~1/g, "/").replace(/~0/g, "~")) : undefined, tool.inputSchema);
+                        expect(resolved).toBeDefined();
+                    } else visit(child);
+                }
+            };
+            visit(tool.inputSchema);
+        }
         const target = { editorSessionId: "38b81a97-d939-4efa-8a10-aefc4ce5bdba", sceneGeneration: 1 };
         for (const request of [
             { name: "file:readBinary", arguments: { path: "fixture.pmx" } },

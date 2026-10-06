@@ -439,6 +439,7 @@
 - [x] [MCPの短時間ビューポート連続取得](./mcp-viewport-sequence-2026-09-18.md): 数秒分のJPEGを実時刻・frameとともに一括返却。撮影による再生/seekなし、枚数・容量上限と許可失効を扱う。
 - [x] [MCP通信の軽量化と結果待機](./mcp-communication-lightweight-2026-10-05.md): 一覧を既定20件、メニューをページ取得、設定schemaを共有しprivate TTLを付与。長時間jobの照会は最大30秒待機し、同時取消と許可失効を扱う。
 - [x] [MCP出力・操作の完了通知](./mcp-operation-completion-notifications-2026-10-05.md): ローカルresource購読へ完了/失敗/取消をURIだけで配送。購読前の早期完了、許可失効、状態要約のTTL 0を扱う。
+- [x] [MCPの状態要約とツールschemaの共通参照](./mcp-compact-context-and-schema-2026-10-06.md): detail:summaryで編集条件と件数を取得。53ツールを維持し大きい4schemaをローカル参照で軽量化。full既定・入力検証・互換textを維持する。
 - [ ] MCP完了通知の利用者client確認: MCP 2026-07-28の購読維持と、通知からのAI再開・ユーザー表示を実接続で確認する。未対応clientは結果待機を使用する。
 - [ ] `SQLite WASM` の実験導入（本筋ではなく研究用）
 - [ ] `in-memory RDB` としてのイベント記録基盤の試作

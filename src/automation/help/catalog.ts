@@ -10,6 +10,11 @@ export type AutomationHelpTopic = {
 // Only bundled, trusted documentation belongs here. Asset names and paths are data.
 export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
+        id: "context-summary", title: "編集前の状態を軽く取得", aliases: ["context", "summary", "full", "状態", "要約", "revision"],
+        status: "implemented", summary: "mmd_get_context(detail:summary)は編集条件と件数だけ。モデル名・カメラはfullで取得。",
+        body: "最初にmmd_get_contextでwindow/targetやモデル一覧を確認する。既定detail:fullは従来と同じ。編集直前や状態確認にはtargetとdetail:summaryを指定し、最新target/editRevision/assetRevision、frame/playing/busy、許可・編集阻害理由・ユーザー確認待ちを含むstatus、timelineTarget/timelineScope、undoId/redoId、modelCount/assetCountを取得する。camera/models/backend/materialModeは含めない。summaryのmodelCountからモデルIDを推測せず、必要ならfullでmodelsを確認する。カメラ編集値や描画経路の確認もfullを使う。summaryはその時点の観測でありキャッシュや未変更判定ではない。再生frameや権限はeditRevisionを変えずに変わる場合があるためrevisionだけで再取得を省略しない。複数window時のtarget選択、古いsessionの拒否、編集のrevision照合はfullと同じ。summaryだけを取得しても編集許可は増えない。",
+    },
+    {
         id: "completion-notifications", title: "出力・操作の完了通知", aliases: ["notification", "subscription", "completionUri", "完了通知", "購読"],
         status: "implemented", summary: "MCP 2026-07-28の購読でUI jobの完了・失敗・取消を受信。通知はURIだけ。",
         body: "mmd_start_ui_operationのcompletionUriを保存する。MCP 2026-07-28対応clientはsubscriptions/listenへnotifications:{resourceSubscriptions:[completionUri]}を指定し、notifications/subscriptions/acknowledgedを受けてからresources/read(uri:completionUri)。開始直後の完了も最初の本文で確認する。status:runningならnotifications/resources/updatedのparams.uriを待ち、resources/readで状態を再取得する。本文はoperationId/status/completedAt/errorCodeのみ。completed/failed/canceledを確認後、mmd_get_operationを一度呼びoutputやdiagnosticを取得する。fileTools等はcompletedでも個別結果の失敗があり得るので詳細を読む。通知を受けただけで成功と判断しない。通信切断後の再接続でも購読ack後に本文を読み、再送イベントを前提にしない。購読は最大8接続、終了後に切断する。購読切断はjobを取消しない。出力取消はmmd_cancel_operation。状態要約は各window最新100件のメモリ保持、キャッシュTTLは0。OFF・許可変更・reload・window終了で古いURIと該当購読は失効。待機中のユーザー操作要求や進捗は通知対象外でmmd_get_operationを必要時に読む。旧clientや購読未対応clientはcommunicationのwaitMs:30000を使う。通知によるAI再開や画面表示はclientの対応次第。ローカル接続を維持して受信する方式で、Cloud向けMCP Eventsのwebhookや切断中の配送は含まない。",

@@ -4,21 +4,23 @@ import { effectKeyframePayloadSchema } from "../editor/effect-keyframe-definitio
 const number = z.number().finite().min(-1000000).max(1000000);
 const vector = z.object({ x: number, y: number, z: number }).strict();
 const color = z.object({ r: z.number().min(0).max(1), g: z.number().min(0).max(1), b: z.number().min(0).max(1) }).strict();
-const floats = (length: number) => z.array(number).length(length);
-const interpolation = (length: number) => z.array(z.number().int().min(0).max(127)).length(length);
+const positionValues = z.array(number).length(3);
+const interpolationValue = z.number().int().min(0).max(127);
+const rotationInterpolation = z.array(interpolationValue).length(4);
+const positionInterpolation = z.array(interpolationValue).length(12);
 const name = z.string().min(1).max(200);
 const path = z.string().max(4096).nullable();
 const parent = z.object({ modelInstanceId: name.nullable().optional(), modelPath: path, boneName: name.nullable() }).strict();
 const boneParent = z.object({ childBoneName: name, parentModelInstanceId: name.nullable().optional(), parentModelPath: path, parentBoneName: name.nullable() }).strict();
 const rotation = z.array(number).length(4).refine(values => Math.abs(Math.hypot(...values) - 1) < 0.001, "Quaternion must be normalized (x,y,z,w)");
-const bone = { rotations: rotation, rotationInterpolations: interpolation(4), physicsToggles: z.array(z.number().int().min(0).max(1)).length(1), externalParent: boneParent.optional() };
+const bone = { rotations: rotation, rotationInterpolations: rotationInterpolation, physicsToggles: z.array(z.number().int().min(0).max(1)).length(1), externalParent: boneParent.optional() };
 
 /** Only editable animation values; never model, mesh, texture, or arbitrary object data. */
 export const keyframePayloadSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("bone"), ...bone }).strict(),
-    z.object({ kind: z.literal("movableBone"), ...bone, positions: floats(3), positionInterpolations: interpolation(12) }).strict(),
+    z.object({ kind: z.literal("movableBone"), ...bone, positions: positionValues, positionInterpolations: positionInterpolation }).strict(),
     z.object({ kind: z.literal("morph"), weights: z.array(z.number().min(0).max(1)).length(1) }).strict(),
-    z.object({ kind: z.literal("camera"), positions: floats(3), positionInterpolations: interpolation(12), rotations: floats(3), rotationInterpolations: interpolation(4), distances: z.array(z.number().min(-100000).max(0)).length(1), distanceInterpolations: interpolation(4), fovs: z.array(z.number().min(10).max(120)).length(1), fovInterpolations: interpolation(4), externalParent: parent }).strict(),
+    z.object({ kind: z.literal("camera"), positions: positionValues, positionInterpolations: positionInterpolation, rotations: positionValues, rotationInterpolations: rotationInterpolation, distances: z.array(z.number().min(-100000).max(0)).length(1), distanceInterpolations: rotationInterpolation, fovs: z.array(z.number().min(10).max(120)).length(1), fovInterpolations: rotationInterpolation, externalParent: parent }).strict(),
     z.object({ kind: z.literal("property"), visible: z.boolean(), ikStates: z.array(z.object({ boneName: name, enabled: z.boolean() }).strict()).max(256) }).strict(),
     z.object({ kind: z.literal("light"), color, direction: vector }).strict(),
     z.object({ kind: z.literal("shadow"), color, toonInfluence: z.number().min(0).max(1), maxZ: z.number().min(0).max(100000), lightIntensity: z.number().min(0).max(10) }).strict(),

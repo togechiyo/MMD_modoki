@@ -7,6 +7,9 @@ import { automationHelpTopics, searchAutomationHelp } from "../../automation/hel
 import { automationTools, type AutomationToolName, type AutomationResult, AutomationError } from "../../automation/contracts";
 import { describeAutomationFailure, toAutomationFailure } from "../../automation/diagnostics";
 import { operationResourceTemplate, type AutomationOperationSummary } from "../../automation/operation-notifications";
+import { compactMcpSchema } from "./compact-schema";
+
+const compactSchemaTools = new Set(["mmd_set_control", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_start_ui_operation"]);
 
 export const helpInputSchema = z.object({
     query: z.string().trim().min(1).max(200).optional(),
@@ -24,7 +27,7 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
             "resources/list": { ttlMs: 300000, cacheScope: "private" },
             "resources/read": { ttlMs: 300000, cacheScope: "private" },
         },
-        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Query catalogs narrowly; pages default to 20 items, follow nextOffset. UI jobs return completionUri: subscribe, await acknowledgement, then resources/read to avoid missing early completion; read again on resources/updated. Fetch full job result once via mmd_get_operation. Without subscriptions use waitMs:30000, repeat while running. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
+        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Use detail:summary for fresh guards/status; full (default) for camera/model names. Query catalogs narrowly; pages default to 20 items, follow nextOffset. UI jobs return completionUri: subscribe, await acknowledgement, then resources/read to avoid missing early completion; read again on resources/updated. Fetch full job result once via mmd_get_operation. Without subscriptions use waitMs:30000, repeat while running. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
     });
     server.registerTool("mmd_help", {
         title: "MMD_modokiの機能ヘルプ",
@@ -60,7 +63,7 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
     });
     if (dispatch) for (const [name, definition] of Object.entries(automationTools)) {
         server.registerTool(name, {
-            description: definition.description, inputSchema: definition.schema,
+            description: definition.description, inputSchema: compactSchemaTools.has(name) ? compactMcpSchema(definition.schema) : definition.schema,
             annotations: { readOnlyHint: !definition.edit, destructiveHint: false, openWorldHint: false },
         }, async (args, context) => {
             try {

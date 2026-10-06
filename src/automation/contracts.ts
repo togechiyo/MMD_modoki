@@ -57,7 +57,7 @@ export const automationTools = {
     mmd_start_ui_operation: { description: "新規ウィンドウ作成・ローカル素材読込・project保存/読込・出力・通常/PBR切替・最適化/リターゲットの一括変換を開始。completionUriを購読し完了通知、詳細はmmd_get_operation。受付は完了ではない。モデルバイナリを返さない。", edit: true, schema: z.object({ ...edit, operation: uiOperationSchema }).strict() },
     mmd_list_controls: { description: "対応済みUI設定の検索。設定ID・現在値・値schema・単位・利用可否を返す。値は保持設定で描画完了を保証しない。", edit: false, schema: z.object({ ...query, ...paging, query: z.string().max(100).default(""), expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
     mmd_set_control: { description: "mmd_list_controlsの設定1項目を変更。UIと共通のsetterを使い適用値を返す。Undo対象外。", edit: true, schema: z.object({ ...edit, control: automationControlSchema }).strict() },
-    mmd_get_context: { description: "公開ウィンドウとシーン概要。モデル本体は返しません。", edit: false, schema: z.object({ target: target.optional() }).strict() },
+    mmd_get_context: { description: "公開ウィンドウとシーン概要。detail:summaryは編集に必要な状態・許可・件数のみ、full（既定）はモデル名一覧やカメラも取得。モデル本体は返しません。", edit: false, schema: z.object({ target: target.optional(), detail: z.enum(["summary", "full"]).default("full") }).strict() },
     mmd_list_assets: { description: "読込元パスと使用先の一覧。ファイル内容・モデル本体は返しません。", edit: false, schema: z.object({ ...query, ...paging, expectedAssetRevision: z.number().int().optional() }).strict() },
     mmd_capture_viewport: { description: "現在表示中のビューポートのPNG画像。モデルファイルは返しません。", edit: false, schema: z.object(query).strict() },
     mmd_get_settings: { description: "対応済みUI設定の値と利用可否。idと値の範囲はmmd_set_settingのschemaを参照。", edit: false, schema: z.object(query).strict() },

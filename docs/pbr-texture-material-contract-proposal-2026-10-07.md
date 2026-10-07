@@ -5,17 +5,44 @@
 
 ## 目的と最初の範囲
 
-所有者が、Normalマップ等を使えるテクスチャ付きPBRシェーダーを次版の希望として挙げた。材質へ追加画像を割り当て、強さを調整し、保存・再読込・出力まで同じ結果にするための案を残す。[次バージョン候補](./v0.2.4-next-version-candidates.md)と[基本タスクチェックリスト](./mmd-basic-task-checklist.md)から参照する。
+所有者が、Normalマップ等を使えるテクスチャ付きPBRシェーダーを次版の希望として挙げた。同日の用途確認で「こっちは布の質感が欲しいだけ」と明示した。目標は既存モデルの衣服へ材質セットを適用することであり、新しいモデルの読込を必要条件にしない。材質へ追加画像を割り当て、強さを調整し、保存・再読込・出力まで同じ結果にするための案を残す。[次バージョン候補](./v0.2.4-next-version-candidates.md)と[基本タスクチェックリスト](./mmd-basic-task-checklist.md)から参照する。
 
 テクスチャの意味は **glTF 2.0のmetallic-roughness規約に寄せ、描画は既存のBabylon `PBRMaterial`を使う**案。PMXをglTFへ変換しなくても、材質ごとに画像を追加できる形を考える。glTF完全互換やOpenPBRへの移行をこの機能の前提にしない。
 
-既成のglTF / GLBを表示する用途では、下記の追加調査を踏まえ、Babylon loaderが作るPBR材質をそのまま保持する経路を先に評価する案。PMX材質へ追加画像を割り当てる用途では、既存のBase ColorにNormalを加え、強さ・Y方向の規約・解除を扱うところから始める。両者の最初の範囲は未決定。PBRの明示的利用と、通常MMDの既定経路を維持する。
+最初の範囲は、モデルを含まないPBR材質セットの読込と、選択した既存材質への適用を検討する。glTF / GLBをその容器に使う案は成立する。布向けにはNormal、Roughness、Sheen、織り目の細かさを扱い、元のBase Colorを保つ適用を初期案とする。PBRの明示的利用と、通常MMDの既定経路を維持する。材質セットの規約採用・GUI・保存schemaは未決定。
+
+## 材質だけのglTF / GLB — 用途確認後の追加調査
+
+**glTFはモデルなしで材質設定とtexture参照を保持できる。Babylon 9.2.0でも材質だけを読み込める。** Khronosの[root schema](https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/schema/glTF.schema.json)では`asset`が必須で、`meshes` / `nodes` / `scenes`は必須ではない。`materials`、必要な`textures` / `images` / `samplers`を持つassetにできる。画像をGLBへ同梱する場合のbufferは、モデルgeometryの存在を要求するものではない。
+
+導入済み`GLTFFileLoader`の型と実装には`loadOnlyMaterials`と`loadAllMaterials`がある。9.2.0で未使用材質も確実に読むには両方を指定する。`loadOnlyMaterials`だけでは、今回のmeshなしassetの材質は読み込まれなかった。
+
+```ts
+const container = await LoadAssetContainerAsync(source, scene, {
+  pluginExtension: ".gltf", // バイナリGLBの場合は ".glb"
+  pluginOptions: {
+    gltf: { loadOnlyMaterials: true, loadAllMaterials: true },
+  },
+});
+```
+
+2026-10-07に、モデル・scene・画像を含まない材質1個のglTFと、同じ内容をJSON chunkだけへ格納したGLBをメモリ上で生成し、`NullEngine`で確認した。どちらも**mesh 0個 / material 1個**。生成された`PBRMaterial`はmetallic=0、roughness=0.8、Sheen有効、sheen roughness=0.5を保持した。glTFの既定optionsと`loadOnlyMaterials`単独ではmesh 0個 / material 0個だった。参照元は導入済み`glTFFileLoader.d.ts`と`glTF/2.0/glTFLoader.js`。画像decode・既存PMXへの適用・実描画は未確認。
+
+### 布の材質セットとして使う案
+
+- 単一材質のセットを読み、既存modelの選択材質へ適用する。複数材質が入っている場合の選択方法は後続設計。モデルを含む入力でも材質だけを対象にし、meshをsceneへ追加する導線にはしない。
+- Normalで織り目、Roughnessで反射の粗さ、`KHR_materials_sheen`で布向けの表面反射を表す案。元の衣服の色柄を保つ「質感だけ適用」と、Base Colorも採用する操作を区別する。Sheenを含める範囲・初期値は未決定。
+- 既存UVへtileableな布画像を重ねるとき、織り目用画像のUV scale / repeatとNormal強度を調整する。元の色柄のUVを一緒に拡大しない。特定モデルのUVへ焼いたNormal / AOと、繰り返し可能な布画像は転用条件が異なる。
+- 読み込んだ材質から必要なtexture / factorを既存PBR材質へ接続するserviceを設計する。meshの材質を単純に丸ごと置換して、既存の材質モーフ・SSS・アプリ用pluginを失わない。適用値を材質bankへ保存し、Undo / Redo・Reset・モード往復・出力へつなぐ。
+- 一時`AssetContainer`をsceneへ一括追加しない。採用したtextureの所有を移したうえで未使用資源を解放し、適用後のtextureが一時containerのdisposeで消えないようにする。local画像の解決・同梱・欠損復帰も材質セット側で扱う。
+
+一般の制作toolが材質のみのglTF / GLBを出力できるか、材質セットを抽出・同梱する補助toolが必要かは別途確認する。通常のモデル用loaderで未使用材質が省かれることと、規格上モデルが必須であることを混同しない。
 
 ## glTF / GLBのPBRをそのまま使えるか — 追加調査
 
 2026-10-07に所有者から、glTFにPBR材質の扱いがあるなら、そのまま対応してもよいとの提案とBabylonの対応状況について質問があった。公式資料、導入済み9.2.0のsource、最小glTFの読込を照合した。
 
-**標準glTF PBRを読む機能はBabylon側にあり、専用のPBR loaderやshaderを新しく作る必要はない。アプリ側ではGLB読込の再開と、元材質を保持する統合が必要**という調査結果。依存更新やOpenPBRへの移行を先に要求する理由は、基本材質の読込については見つかっていない。
+標準glTF PBRを読む機能はBabylon側にあり、専用のPBR loaderやshaderを新しく作る必要はない。依存更新やOpenPBRへの移行を先に要求する理由は、基本材質の読込については見つかっていない。以下のモデル付GLB表示の統合課題は3D形式拡張側の参考として残す。**用途確認後の布の材質セット読込に、GLBモデルのGUI再開は必要ない。**
 
 glTFはBabylonの`PBRMaterial`オブジェクトを保存する形式ではなく、標準化された材質値とtexture参照を保存する。通常のglTF 2.0材質をBabylon loaderが`PBRMaterial`へ接続する。独自WGSL、任意のBabylon plugin、アプリ専用presetまでglTFに含まれる意味ではない。[Khronos材質仕様](https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/Specification.adoc#materials)、[Babylon PBRの公式説明](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/materials/using/masterPBR.md)を参照。
 
@@ -28,18 +55,18 @@ glTFはBabylonの`PBRMaterial`オブジェクトを保存する形式ではな�
 
 最小読込は、メモリ上に生成した三角形・法線・UVと材質値を持つglTFを`NullEngine`で`LoadAssetContainerAsync`へ渡した。結果は`PBRMaterial`、metallic=0.37、roughness=0.62、alpha=0.9、cutoff=0.23、両面、coat=0.4、sheen roughness=0.6、IOR=1.7、specular=0.8、anisotropy=0.5。画像decode・shader compile・WebGPU描画・アプリGUI・PNG / WebMはこの確認に含まれない。
 
-### 現在のアプリで必要な作業
+### モデル付GLBを表示する場合の別タスク
 
 - [GUI読込](../src/ui-controller.ts)はGLBを`GLB import is currently disabled`として拒否する。内部loaderと旧project復元経路が残っていることを、通常GUIで利用可能な対応と混同しない。
 - [GLB accessory経路](../src/mmd-manager-x-extension.ts)はWebGPUで`normalizeGlbAccessoryMaterials()`を呼び、PBR等を`StandardMaterial`へ変換する。Metallic-Roughness画像やClearcoat等の意味を保持する変換ではない。元PBRを維持する経路をこの互換処理から分ける必要がある。
 - 同じ経路にGLBだけのdepth write無効化、受影・cast shadow除外、強制enable、自動配置がある。[4月の調査](./glb-loading-investigation-2026-04-01.md)の描画問題を現在のPBR基盤で再現確認する。材質変換を外すだけで解決とはせず、GLBの深度・透明・影・PostFX・出力を横断確認する。シーン全体の影設定をこの修正へ混ぜない。
 - 元材質を保持する場合、既存MMD用presetを自動上書きせず、保存再読込と材質編集の対象範囲を定義する。GLB内のcamera / light / animationを勝手にsceneへ採用しない。
 
-最初は**非圧縮geometryとPNG / JPEG画像を同梱した自己完結GLBを、静的accessoryとしてPBR材質のまま表示・保存復元する**案。既存MMD材質と同居させる境界を定め、実験導線・最小fixtureで確認する。テキスト`.gltf`の外部`.bin` / 画像解決、骨格・animation編集、PMXへの材質転用は後続範囲とする。
+形式拡張側では、非圧縮geometryとPNG / JPEG画像を同梱した自己完結GLBを、静的accessoryとしてPBR材質のまま表示・保存復元する段階案がある。既存MMD材質と同居させる境界を定め、実験導線・最小fixtureで確認する。骨格・animation編集は別に範囲を決める。このモデル読込を布の材質セット機能より先に完成させる必要はない。
 
 Draco / Meshopt / KTX2にもBabylonの対応はあるが、標準設定ではdecoder等をCDNから取得する場合がある。[公式loader資料](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/importers/glTF.md)に従い、対応するなら必要なdecoderをlocalへ固定する。GLBであっても外部参照を持ち得るため、自己完結・offline-firstの検査をファイル拡張子だけで代用しない。
 
-PMXはglTFのMetallic / Roughness / Normal割当を持つ前提ではない。GLBの元材質を保つ機能だけではPMXへのNormal追加は完成しない。PMXに別のglTF材質を転用するなら、対象材質、UV、texture参照と保存の対応付けが別途必要であり、名前やindexだけで自動転用しない。
+PMXはglTFのMetallic / Roughness / Normal割当を持つ前提ではない。PMXの既存PBR材質へセットを適用する際は、選択対象、UV、texture参照と保存の対応付けが必要。対象を材質名やindexだけで勝手に選ばない。
 
 ## 入力マップの案
 

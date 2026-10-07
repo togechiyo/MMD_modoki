@@ -54,6 +54,7 @@
 | adopted | [上級者向け外部WGSLはMMEの名前と用途を参考にする](./decisions/external-wgsl-follows-mme-concepts.md) | JSON混合を廃止し新形式へ一本化。Release未収録の旧形式・snapshot互換は不要。調整箇所をテキストで明示し、BabylonのWGSL処理に沿う。通常MMD/PBR、単一WGSL・共通割当・読込1ボタン・sample同梱・viewport通知と復旧導線を維持。具体的なv2宣言と検証範囲は仕様書を参照 |
 | adopted | [宝石WGSLサンプルは見た目の近似を優先する](./decisions/gemstone-samples-prioritize-visual-approximation.md) | モデル色・模様を下地に光学効果を重ね、シラー・遊色・分散を見た目で近似する |
 | confirmed | [今回の色干渉報告ではPBR照明を変更しない](./decisions/keep-current-pbr-light-shadow-color-behavior.md) | 影の薄さ再確認後の維持判断。MMD Likeのmaskや半球下色を調査だけで変更しない |
+| confirmed | [PBR材質セットはモデル読込を要求せず布の質感を追加する](./decisions/pbr-texture-sets-add-cloth-without-model-import.md) | 材質設定と画像だけで既存モデルの布へ質感を足す。GLBモデル読込再開を前提にせず、具体的な容器・適用範囲は別に決める |
 | adopted | [保存済みMCPポートが使用中なら空きポートを再取得する](./decisions/recover-busy-mcp-port.md) | MCP起動時のポート競合、自動再取得、接続先の案内を変更する |
 | adopted | [MCPの連続取得は数秒分の画像をまとめて動きを評価する](./decisions/mcp-sequences-return-short-image-batches.md) | VLM向け連続画像の用途・batchとライブ配信の範囲を決める |
 | adopted | [書き出しメニューは形式名から始める](./decisions/export-menu-labels-start-with-format.md) | VMD・BVMD・VPD・PNG・WebMの書き出し表記を変更する |

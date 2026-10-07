@@ -256,7 +256,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 2026-10-07: 所有者が次バージョンまでの候補として形式拡張を再列挙。最初の対象形式と静的配置 / animationの範囲は [次版候補](./v0.2.4-next-version-candidates.md) で検討する。以下の未完了形式をすべて次版へ収録する判断ではない。
 
 - [ ] Babylon.js Editor 互換 3D 形式の整理
-- [ ] glTF/GLB 読み込み（2026-10-07: 通常GLB GUIは停止中。Babylon 9.2.0の標準PBR読込を確認し、元材質を保持する静的GLB経路の再開を検討。[対応状況と統合上の残件](./pbr-texture-material-contract-proposal-2026-10-07.md)）
+- [ ] glTF/GLB 読み込み（2026-10-07: 通常GLB GUIは停止中。Babylon 9.2.0の標準PBR読込を確認し、元材質を保持する静的GLB経路の再開を検討。布の材質セット読込とは独立した形式拡張の候補。[対応状況と統合上の残件](./pbr-texture-material-contract-proposal-2026-10-07.md)）
 - [ ] glTF/GLB アニメーション対応
 - [x] OBJ 読み込み最小 PoC（2026-08-20: MTLなし豆腐モデルをアクセサリとして読み込み、情報欄操作、transform / 表示 / 影 / pathのproject保存・再読み込みをE2E確認）
 - [x] OBJの単一MTL / ローカルtexture対応（2026-08-21: IPCでcompanion fileを安全に読み、画像をoffline data URLとしてBabylon OBJ / MTL loaderへ渡す。欠損時fallback、path境界、外部URL拒否、project再読込をunit / Electron E2E確認）
@@ -380,7 +380,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 ## シェーダー / 材質拡張メモ
 
 - [ ] シェーダープリセットの拡充
-- [ ] Normalマップ等のテクスチャ付きPBR材質を検討・実装する。入力規約、材質別割当、presetとの優先関係、保存・通常MMD/PBR往復、出力まで確認する（2026-10-07所有者の次版希望。[入力・保存規約案](./pbr-texture-material-contract-proposal-2026-10-07.md)。最初の範囲と規約採用は未決定、外部WGSLのtexture入力は別の後続契約）
+- [ ] 既存モデルの布へ質感を足せる、モデルなしのPBR材質セットを検討・実装する。Normal・Roughness・Sheen等の入力規約、UVの細かさ、材質別適用、presetとの優先関係、保存・通常MMD/PBR往復、出力を確認する（2026-10-07所有者の用途指定。[入力・保存規約案](./pbr-texture-material-contract-proposal-2026-10-07.md)。glTF / GLBの材質のみ読込は確認済み、具体的な規約・適用範囲は未決定。モデル読込を必須にしない）
 - [x] 新しいリアルタイム SSS 方式を調査し、Burley screen-space diffusion を本来の表面下拡散の長期候補へ選定（[調査メモ](./realtime-sss-methods-research-2026-08-26.md)）
 - [x] `SSS Skin`をBabylon Burley screen-space diffusionへ作り直して実モデル比較まで行ったが、白さが残るため`SSS Standard`とともに不採用とし通常UIから撤去（保存IDは旧project互換用に維持、[実装・撤退記録](./sss-standard-skin-shader-presets-2026-08-26.md)）
 - [x] Babylon.js標準SSSと旧SSSを再利用せず、独自buffer・拡散・厚み透過・合成を持つWGSL SSSを試作し、許可された実モデルと配布fixtureで比較（[実装・比較記録](./owned-sss-development-2026-09-06.md)）

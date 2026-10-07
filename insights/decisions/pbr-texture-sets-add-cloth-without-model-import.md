@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/pbr-texture-materials
 confidence: high
-last_verified: 2026-10-07
+last_verified: 2026-10-08
 decision_owner: project-owner
 decision: confirmed
 decided_on: 2026-10-07
@@ -13,6 +13,7 @@ evidence:
 source_docs:
   - ../../docs/pbr-texture-material-contract-proposal-2026-10-07.md
   - ../../docs/v0.2.4-next-version-candidates.md
+  - ../../docs/wgsl-pbr-texture-material-package-investigation-2026-10-08.md
 superseded_by: null
 ---
 
@@ -26,7 +27,7 @@ Normalマップ等のテクスチャ付きPBR材質の範囲、配布・読込�
 
 所有者の目的は、既存モデルへ布の質感を追加すること。材質設定と画像だけで使えるようにし、別モデルを必須にしない。GLBモデル読込の再開をこの機能の前提にしない。
 
-具体的な容器としてglTF / GLBを採用する判断、画像の適用範囲、UI、保存schemaはまだ確定していない。モデル形式の拡張という別の希望を取り消す意味には広げない。
+2026-10-08の後続指定で、所有者はWGSLを入口にする外部画像の参照型を選んだ。形式の方向は[外部WGSLの判断](./external-wgsl-follows-mme-concepts.md)へ記録する。glTF / GLBを配布容器にすることは採用しておらず、具体的な画像名規則・適用範囲・UI・保存schemaは設計中。モデル形式の拡張という別の希望を取り消す意味には広げない。
 
 ## 避けること
 

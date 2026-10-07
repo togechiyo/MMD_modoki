@@ -137,7 +137,7 @@ MMEの意味を参考にしつつObject注釈をfield名へ畳み込む。MMEの
 
 作者による`#include` / `#define`、独立stage、追加texture / storage buffer、discardは初期材質profileで引き続き未対応。Babylonが扱えることと、このアプリが値・passを接続できることを区別する。texture・CONTROL・light hook・別profileは後続のresource契約で設計し、文字列を数値配列へ隠すような代替設定言語を作らない。
 
-2026-10-08、[WGSLとPBRテクスチャをまとめて配布する案](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)でtexture接続基盤と画像同梱の成立条件を調査した。標準WGSLのtexture参照と、画像bytesを運ぶアプリ側の容器を分ける。画像入力・PBR出力の拡張と新しい配布容器は未採用・未実装であり、現行v2の対応範囲は変えていない。
+2026-10-08、[WGSLとPBRテクスチャをまとめて配布する案](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)でtexture接続基盤と画像同梱の成立条件を調査した。同日の後続指定でWGSLを入口にして外部画像を参照する方向を採用し、PBR識別を`MODOKI_REQUIRE_PBR: bool`で表す案を整理した。画像入力・PBR出力・新予約定数は未実装であり、現行v2の対応範囲は変えていない。定数名と画像名規則は設計案。
 
 宣言エラーは作者ファイルの行・列を示す。GPU診断は生成shader側の位置として表示する。作者sourceへの厳密な逆変換は後続課題で、対応不能な生成箇所を作者の行番号として誤表示しない。ライセンス・調整コメント込みの原文を保存し、GPU用のコメント除去済みsourceとは区別する。
 

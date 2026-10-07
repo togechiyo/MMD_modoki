@@ -54,7 +54,7 @@ WebGPUではBabylonのisReady後にもShaderModuleが不正な場合があった
 
 初期のtextureなし材質profileを越えるresource/pass契約と全variant検証は未完了のため、全体方針の分類は引き続きobservationとする。
 
-2026-10-08、標準WGSLのtexture参照はhost接続を要し、画像内蔵asset形式ではないことを一次仕様で確認した。Babylon 9.2.0のCPU probeは5 texture / 5 samplerのbinding補完を確認したが、現行pluginには画像接続がなく、PBR出力にもRoughness / Metallic等がない。単一WGSLへの画像埋め込みとWGSLを含む材質パッケージは別案で、作者形式・保存・資源寿命を定めずに対応済みと扱わない。容器の採用とGPU描画は未確認。
+2026-10-08、標準WGSLのtexture参照はhost接続を要し、画像内蔵asset形式ではないことを一次仕様で確認した。Babylon 9.2.0のCPU probeは5 texture / 5 samplerのbinding補完を確認したが、現行pluginには画像接続がなく、PBR出力にもRoughness / Metallic等がない。後続の所有者指定でWGSL入口と外部画像の参照型を選択した。PBR識別、画像名規則、保存・資源寿命は設計案であり、対応済みと扱わない。GPU描画は未確認。
 
 NME持込では、9.2.0でWGSL生成を確認したが、生成text単体にはruntime bindingが揃わない。現在の詳細設計ではWGSL関数とMME風入力接続を主軸とし、生成コードは入出力を合わせて移植する。JSONをNodeMaterialで復元する案は将来の別adapter候補であり、今回の必須実装ではない。GPU・PMX適用は未確認。
 

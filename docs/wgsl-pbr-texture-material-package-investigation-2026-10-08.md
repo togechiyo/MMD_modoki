@@ -2,11 +2,13 @@
 
 調査日: 2026-10-08
 対象: 現行の外部WGSL API v2 / Babylon.js 9.2.0 / WebGPU
-状態: 成立条件の調査と設計案。画像入力・容器・新APIは未採用、未実装
+状態: WGSL入口と外部画像の参照型を採用する方向。PBR識別・接続規則は設計案、runtimeは未実装
 
 ## 用途と結論
 
 所有者から「WGSLにPBRテクスチャとか一式詰め込めるか」「これができるなら独自で立ててもいい」と確認があった。材質の計算、調整値、画像を一式配布し、既存モデルの服へ割り当てる用途を考える。独自形式への許容は条件付きの意向であり、以下の容器や記法が採用済みという意味ではない。
+
+同日の後続指定「参照型でいいよお。WGSLがなんだかんだよさげかな」により、**WGSLを入口にして外部画像を参照する方向**を採用として記録する。画像内蔵や新archive容器を最初の要件にしない。続く「PBR向けにフラグつけて見分けられるようにしたらいいか」は、後述の識別案へ具体化する。定数名・配置・画像名規則は実装側の案であり、所有者が個別指定した仕様ではない。
 
 **WGSLからPBR用テクスチャを利用することは可能。画像まで一つの配布物にまとめることも、アプリ側のloaderを作れば可能。** 標準WGSLはtextureの参照と計算を書く言語であり、PNG / JPEGを内蔵して自動decodeするasset形式ではない。単一`.wgsl`への画像埋め込みと、WGSLを含む単一材質パッケージを区別する。
 
@@ -45,6 +47,8 @@ fn sampleNormal(uv: vec2f) -> vec3f {
 
 ## 独自形式を検討する場合の案
 
+以下の埋め込み・archiveは当初比較した選択肢として残す。現時点の方向は後述のWGSL入口とlocal画像参照であり、容器の新設を前提にしない。
+
 前に採用した作者形式は[単一WGSL・JSON混合なし・設定用コメントなし](../insights/decisions/external-wgsl-follows-mme-concepts.md)。したがって、画像内蔵のために新しいコメント設定言語を追加し、現行方針を維持したと説明しない。画像埋め込みを選ぶ場合は、asset領域と作者コードの境界、識別・サイズ・破損時の扱い、作者形式への影響を明示して再設計する。
 
 別案は**作者コードを一つのWGSLに保ち、画像と一緒に材質パッケージとして配る**こと。例えばarchive内の`effect.wgsl`と決まった名前のlocal画像を、loaderが同じ材質assetへまとめる。調整値はWGSLの`const`に置き、texture宣言と固定のslot名で接続する案なら、作者用JSONを再導入する必要はない。ただし、これは既存の「単一WGSLを配布・読込する」形式に新しい容器を追加する提案であり、採用済みではない。拡張子やファイル名規約も未決定。
@@ -52,3 +56,39 @@ fn sampleNormal(uv: vec2f) -> vec3f {
 PBRの画像の意味は[既存規約案](./pbr-texture-material-contract-proposal-2026-10-07.md)と揃える。Normal方向、ORMのチャンネル、色空間、UV / sampler、元の服の色柄を保持する適用、未指定slotの継承を共通にできる。独自形式にする場合も、PBR照明全体を一から書くことを前提にせず、BabylonのPBR材質とアプリの資源管理へつなぐ。
 
 まず画像と既知のPBR mapの接続を局所化し、その後に作者WGSLからsampleできるresourceとPBR出力を拡張する段階案。shader用binding番号は作者へ任せずBabylon側で補完し、既存材質・影等と合算したdevice limitsを確認する。保存・復元・Undo / Redo・材質モーフ・mode bank・Classic / Frame Graph・PNG / WebMまで確認して完了とする。今回は設計メモのみでruntimeは変更していない。
+
+## 参照型WGSLとPBR識別の具体案
+
+### PBRを必要とする宣言
+
+既存の`MODOKI_REQUIRE_UV0`と揃え、PBR向けの識別を次の予約定数で表す案。識別は描画方式の必要条件で、OpenPBRへの切替やPBR計算一式の実装完了を意味しない。
+
+```wgsl
+// 後続APIの宣言案。現行v2ローダーはこの予約定数に未対応。
+const MODOKI_REQUIRE_PBR: bool = true;
+```
+
+- `true`: PBR向け材質。PBRモードの材質にだけ適用し、通常MMDへの適用は確定前に診断する。シーン全体の材質モードを自動変更しない。
+- 省略 / `false`: 従来の共通WGSLとして扱う。共通hookが通常MMD / PBRで使える範囲を保つ。PBR専用の入力やhookがある場合は、フラグと契約の不整合を診断する。
+- 型は`bool`、値はリテラル、module scopeの一度だけの宣言として読む。入力struct・定数・予約名の既存検査と同じ扱いにし、CPU側で任意のWGSL式を評価しない。
+- 材質一覧の既存1行へ`PBR`表記を加える案。通常MMDではPBR専用の項目を適用不可として区別する。通常MMD用とPBR用の割当bankは維持する。
+- 内部descriptorにPBR要件を記録し、保存復元でもsource宣言と照合する。UIの表示だけでなく、serviceによる適用・復元・Undo / Redoにも同じ適合判定を使う。
+
+予約定数とPBR用texture / hookのAPI番号は実装時にまとめて決める。フラグだけを現在のsampleへ付けても、新しい画像入力が有効になるわけではない。
+
+### 画像の相対参照
+
+WGSLには文字列型のファイル名を置かず、**texture宣言名とlocal画像名を対応させる**初期案。例えば`Cloth.wgsl`から隣の`Cloth.textures/`を参照する。
+
+```text
+Cloth.wgsl
+Cloth.textures/
+  normalMap.png
+  ormMap.png
+```
+
+作者は`var normalMap: texture_2d<f32>;`と`var normalMapSampler: sampler;`等を宣言する。loaderが対応slotを認識して画像を読み、Babylonのbindingへ接続する。相対参照規則はアプリ契約であり、標準WGSLが画像を探す機能ではない。作者用JSONや設定コメントを加えず、見た目の数値はWGSLの`const`を保つ。
+
+初期slotはNormal / ORMを中心に、Base Color / Emissive / Sheenの範囲を決める。宣言のないslotは元材質を継承し、布の質感だけ適用するときはBase Colorを維持する。参照先の画像名・PNG / JPEGの選択・二重候補・sampler / UVの規約はloader実装前に確定する。絶対pathやremote URLへ依存する作者形式にはしない。
+
+画像を変更した場合もasset revisionを変え、sourceと採用画像をproject内へ保存する。元のWGSLフォルダがなくても復元できるようにする。画像欠損・decode失敗・compile失敗は現在の割当を保ち、既存の診断・再指定導線へつなぐ。宣言の解析、画像の準備、PBR出力の接続、GUI・保存・出力確認を実装の区切りとし、識別フラグの追加だけで完了にはしない。

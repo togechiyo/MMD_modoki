@@ -380,7 +380,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 ## シェーダー / 材質拡張メモ
 
 - [ ] シェーダープリセットの拡充
-- [ ] 既存モデルの布へ質感を足せる、モデルなしのPBR材質セットを検討・実装する。Normal・Roughness・Sheen等の入力規約、UVの細かさ、材質別適用、presetとの優先関係、保存・通常MMD/PBR往復、出力を確認する（2026-10-07所有者の用途指定。[入力・保存規約案](./pbr-texture-material-contract-proposal-2026-10-07.md)。glTF / GLBの材質のみ読込は確認済み、具体的な規約・適用範囲は未決定。モデル読込を必須にしない）
+- [ ] 既存モデルの布へ質感を足せる、モデルなしのPBR材質セットを検討・実装する。WGSL入口と外部画像の参照型を採用する方向とし、PBR向け識別、Normal・Roughness・Sheen等の入力規約、UVの細かさ、材質別適用、presetとの優先関係、保存・通常MMD/PBR往復、出力を確認する（2026-10-07 / 08所有者の用途・参照型指定。[WGSLの参照・PBR識別案](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)、[入力・保存規約案](./pbr-texture-material-contract-proposal-2026-10-07.md)。具体的な宣言・画像名規則は設計案、runtimeは未実装。モデル読込を必須にしない）
 - [x] 新しいリアルタイム SSS 方式を調査し、Burley screen-space diffusion を本来の表面下拡散の長期候補へ選定（[調査メモ](./realtime-sss-methods-research-2026-08-26.md)）
 - [x] `SSS Skin`をBabylon Burley screen-space diffusionへ作り直して実モデル比較まで行ったが、白さが残るため`SSS Standard`とともに不採用とし通常UIから撤去（保存IDは旧project互換用に維持、[実装・撤退記録](./sss-standard-skin-shader-presets-2026-08-26.md)）
 - [x] Babylon.js標準SSSと旧SSSを再利用せず、独自buffer・拡散・厚み透過・合成を持つWGSL SSSを試作し、許可された実モデルと配布fixtureで比較（[実装・比較記録](./owned-sss-development-2026-09-06.md)）

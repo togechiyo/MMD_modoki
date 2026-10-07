@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: experiments/shaders
 confidence: high
-last_verified: 2026-09-16
+last_verified: 2026-10-08
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-09-12
@@ -12,6 +12,7 @@ evidence:
   - conversation-explicit-instruction
 source_docs:
   - ../../docs/external-wgsl-authoring-v2-design-2026-09-16.md
+  - ../../docs/wgsl-pbr-texture-material-package-investigation-2026-10-08.md
   - ../../docs/external-wgsl-mme-semantics-design-2026-09-12.md
   - ../../docs/external-wgsl-material-api-v1-design.md
   - ../../docs/external-wgsl-material-usage.md
@@ -39,6 +40,8 @@ WGSLのコンパイル・読込エラーは、PMX読込エラーと同じビュ�
 外部WGSLの色・数値等の編集UIは設けず、値は利用者がテキストエディタで変更する。読み込んだ外部定義を既存プリセットと同じ一覧に追加し、割り当ても既存ボタンへ統合する。追加UIは外部WGSL読込ボタン1つに留める。
 
 作者向け配布・読込は単一WGSLとする。2026-09-16、所有者はJSON混合をなくす設計へ変更し、Babylon.jsのWGSL処理に近い記法と、テキストエディタで調整箇所が分かる説明を重視すると指定した。スライダー用の設定情報は不要。冒頭JSONコメントという2026-09-12の方式は新規設計の目標から外し、旧実装の履歴として区別する。
+
+2026-10-08、PBR画像の配布について所有者は参照型を許可し、WGSLを入口にする方向を選んだ。画像内蔵や新archive形式を必須にせず、単一WGSLとlocal画像の参照で設計する。PBR向けフラグによる識別の提案を受け、具体化は[参照・識別案](../../docs/wgsl-pbr-texture-material-package-investigation-2026-10-08.md)へ分離する。`MODOKI_REQUIRE_PBR`という名前・値・画像名規則まで所有者が個別採用したとは扱わない。runtimeは未実装。
 
 具体的なconst名、入力struct、hook名、API番号は[v2設計](../../docs/external-wgsl-authoring-v2-design-2026-09-16.md)で定めた実装上の仕様であり、所有者が個別指定した仕様とは扱わない。サンプル名は引き続き短くし、調整値には用途・単位・推奨範囲等を分かりやすく説明する。
 
@@ -75,6 +78,8 @@ WGSLの失敗がアプリ全体の操作不能につながる事態に備え、�
 2026-09-16の指定: 「json混合やなのでなくす設計に修正したい」「テキストエディタとかで編集するためにいじるといいとこはできるだけわかりやすくしたい」「Babylon.jsのWGSLの扱いからあまり離れたくもない」。今回の依頼は仕様再検討で、実装完了の報告ではない。
 
 同日の後続指定: 「旧仕様のWGSL形式との互換は取らなくていいよ。まだReleaseにのせてないから」。先の設計案に含めた旧snapshot互換・自動移行要件を撤回する根拠とする。
+
+2026-10-08の指定: 「参照型でいいよお。WGSLがなんだかんだよさげかな。PBR向けにフラグつけて見分けられるようにしたらいいか」。画像埋め込みを必須にしないWGSL入口と参照型の根拠とする。
 
 ## 再確認条件
 

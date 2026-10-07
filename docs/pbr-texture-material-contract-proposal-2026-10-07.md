@@ -1,7 +1,7 @@
 # テクスチャ付きPBR材質の入力・保存規約案
 
 更新日: 2026-10-08
-状態: 次バージョン候補 / 仕様案。規約の採用・実装範囲は未決定
+状態: 次バージョン候補 / WGSL入口の参照型を採用する方向。具体規約・実装範囲は設計中
 
 ## 目的と最初の範囲
 
@@ -9,7 +9,7 @@
 
 テクスチャの意味は **glTF 2.0のmetallic-roughness規約に寄せ、描画は既存のBabylon `PBRMaterial`を使う**案。PMXをglTFへ変換しなくても、材質ごとに画像を追加できる形を考える。glTF完全互換やOpenPBRへの移行をこの機能の前提にしない。
 
-最初の範囲は、モデルを含まないPBR材質セットの読込と、選択した既存材質への適用を検討する。glTF / GLBをその容器に使う案は成立する。布向けにはNormal、Roughness、Sheen、織り目の細かさを扱い、元のBase Colorを保つ適用を初期案とする。PBRの明示的利用と、通常MMDの既定経路を維持する。材質セットの規約採用・GUI・保存schemaは未決定。
+最初の範囲は、モデルを含まないPBR材質セットの読込と、選択した既存材質への適用を検討する。2026-10-08の後続指定により、WGSLを入口にして外部画像を参照する方向を採用した。[参照規則・PBR識別の具体案](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)を参照する。glTF / GLBを容器に使えるという以下の確認は比較資料として残す。布向けにはNormal、Roughness、Sheen、織り目の細かさを扱い、元のBase Colorを保つ適用を初期案とする。PBRの明示的利用と、通常MMDの既定経路を維持する。具体的な画像名規則・GUI・保存schemaは未決定、runtimeは未実装。
 
 材質だけの配布、ray-mmdに近い割り当て体験、導入済みBabylonの対応範囲は[glTF・OpenPBR・MaterialXの比較](./gltf-openpbr-materialx-material-library-comparison-2026-10-08.md)へ整理した。OpenPBRという描画モデルの採用と、材質セットを運ぶ形式の選択を分ける。
 

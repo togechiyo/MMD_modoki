@@ -19,7 +19,7 @@ MMD 本体機能より優先度は低いものの、再開時の判断や撤退�
 | verified | [PBR実験はMMD Standard既定経路から外す](./verified/keep-pbr-experiments-out-of-the-default-mmd-path.md) | PBR/IBL/HDRIの公開範囲と全体材質モードの寿命管理を変更する |
 | verified | [Screen-space diffusionだけを薄い部位の透過表現に使わない](./verified/pbr-skin-screen-space-sss-does-not-match-thin-part-transmission.md) | 肌SSSの逆光透過やthicknessを変更する |
 | verified | [IBL Shadowsは性能とWebGPU条件が改善するまで凍結する](./verified/keep-ibl-shadows-frozen-until-cost-and-webgpu-improve.md) | IBL接地影を再評価する |
-| verified | [OpenPBR読込は明示的なGLB実験に限定する](./verified/openpbr-import-stays-an-explicit-glb-experiment.md) | OpenPBR/MaterialX/USD読込を検討する |
+| verified | [OpenPBR対応と材質ファイル読込を分けて評価する](./verified/openpbr-import-stays-an-explicit-glb-experiment.md) | OpenPBR/MaterialX/glTFの材質セットやモデル読込を検討する |
 
 ## Stage / effects
 

@@ -41,6 +41,7 @@
 - [MCPの2026年最新動向とMMD_modokiへの影響](./mcp-2026-latest-findings-2026-09-10.md)（2026-10-05再確認: 最新仕様・SDK・情報量）
 - [PBR材質プリセットの役割整理 2026-09-08](./pbr-material-presets-2026-09-08.md)
 - [テクスチャ付きPBR材質の入力・保存規約案 2026-10-07](./pbr-texture-material-contract-proposal-2026-10-07.md)
+- [glTF・OpenPBR・MaterialX — 材質だけの配布と割り当ての比較 2026-10-08](./gltf-openpbr-materialx-material-library-comparison-2026-10-08.md)
 - [PBR方向光・遮蔽・影色の比較調査 2026-09-17](./pbr-directional-shadow-color-audit-2026-09-17.md)
 - [プロジェクト全体の材質モードと設定退避 2026-09-08](./project-material-mode-design-2026-09-08.md)
 - [FrameGraph 個別切替と全体ON/OFF 2026-09-08](./framegraph-master-toggle-2026-09-08.md)

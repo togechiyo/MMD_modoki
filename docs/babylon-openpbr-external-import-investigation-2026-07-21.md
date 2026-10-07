@@ -17,6 +17,8 @@ Babylon.js 9 系で前面に出てきた `OpenPBRMaterial` について、次を
 
 この資料は調査と設計メモであり、OpenPBR 読込の実装完了を示すものではない。
 
+2026-10-08追記: モデルを含まない布の材質セットについて、[glTF・OpenPBR・MaterialXの比較](./gltf-openpbr-materialx-material-library-comparison-2026-10-08.md)で再調査した。9.2.0で材質だけのglTFからPBR / OpenPBR objectを生成できることを確認した。この資料のGLBモデル読込案を、材質だけの利用の必要条件にしない。USD等の上流対応状況は調査日の情報であり、新しい発表との差分は比較メモを参照する。
+
 ## 結論
 
 1. OpenPBR は材質・シェーディングモデルの仕様であり、単独のアセットファイル形式ではない。標準的な `.openpbr` ファイルを直接読む、という構造ではない。

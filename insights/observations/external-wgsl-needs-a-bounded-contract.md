@@ -12,8 +12,10 @@ evidence:
   - existing-validator-execution-2026-09-12
   - local-electron-webgpu-e2e-2026-09-12
   - local-electron-webgpu-e2e-2026-09-16
+  - primary-source-and-cpu-texture-probe-2026-10-08
 source_docs:
   - ../../docs/external-wgsl-authoring-v2-design-2026-09-16.md
+  - ../../docs/wgsl-pbr-texture-material-package-investigation-2026-10-08.md
   - ../../docs/external-wgsl-shader-loading-concept-2026-06-12.md
   - ../../docs/wgsl-shader-capabilities.md
   - ../../docs/external-wgsl-reopening-review-2026-09-12.md
@@ -51,6 +53,8 @@ Babylon.jsはcompile/binding基盤を提供するが、入力texture、pass順�
 WebGPUではBabylonのisReady後にもShaderModuleが不正な場合があった。getCompilationInfoとvalidation error scopeを併用し、不正候補を局所診断へ回収する。材質pluginのextra eventを使う場合はregisterForExtraEventsを設定してから_enableする。後から設定するだけでは専用UBOが描画時にbindされなかった。
 
 初期のtextureなし材質profileを越えるresource/pass契約と全variant検証は未完了のため、全体方針の分類は引き続きobservationとする。
+
+2026-10-08、標準WGSLのtexture参照はhost接続を要し、画像内蔵asset形式ではないことを一次仕様で確認した。Babylon 9.2.0のCPU probeは5 texture / 5 samplerのbinding補完を確認したが、現行pluginには画像接続がなく、PBR出力にもRoughness / Metallic等がない。単一WGSLへの画像埋め込みとWGSLを含む材質パッケージは別案で、作者形式・保存・資源寿命を定めずに対応済みと扱わない。容器の採用とGPU描画は未確認。
 
 NME持込では、9.2.0でWGSL生成を確認したが、生成text単体にはruntime bindingが揃わない。現在の詳細設計ではWGSL関数とMME風入力接続を主軸とし、生成コードは入出力を合わせて移植する。JSONをNodeMaterialで復元する案は将来の別adapter候補であり、今回の必須実装ではない。GPU・PMX適用は未確認。
 

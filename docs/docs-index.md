@@ -7,6 +7,7 @@
 ## まず読む
 
 - [外部WGSL作者形式 v2 再設計 — JSONを使わない宣言](./external-wgsl-authoring-v2-design-2026-09-16.md)
+- [WGSLとPBRテクスチャをまとめて配布する案 2026-10-08](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)
 - [外部親カメラの黒画面出力・保存復元の修正](./issue-26-camera-external-parent-output-2026-09-16.md)
 - [Xアクセサリの後続キーが動画へ反映されない報告の調査](./x-accessory-keyframe-output-investigation-2026-09-17.md)
 - [Issue #25 照明キーの動画反映調査](./issue-25-light-output-investigation-2026-09-16.md)

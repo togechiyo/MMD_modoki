@@ -57,7 +57,7 @@
 
 ## 運用 / 品質 / リリース
 
-- [v0.2.4 リリースノート（準備中）](./v0.2.4-release-note.md)
+- [v0.2.4 リリースノート](./v0.2.4-release-note.md)
 - [v0.2.4 リリース前確認 2026-09-18](./v0.2.4-release-preflight-2026-09-18.md)
 - [Codex Agent Skills 調査・初回導入メモ 2026-08-20](./codex-agent-skills-adoption-note-2026-08-20.md)
 - [手動テストチェックリスト](./manual-test-checklist.md)
@@ -113,6 +113,7 @@
 
 - [v0.2 作業メモ](./v0.2-task-memo.md)
 - [v0.2 作業チェックリスト](./v0.2-task-checklist.md)
+- [v0.2.4 リリース後台帳](./v0.2.4-post-release-ledger.md)
 - [v0.2.3 リリースノート](./v0.2.3-release-note.md)
 - [v0.2.3 リリース後台帳](./v0.2.3-post-release-ledger.md)
 - [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)

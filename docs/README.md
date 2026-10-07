@@ -20,8 +20,9 @@
 ## どこに書くか
 
 - 利用者向けのよくある質問: [faq.md](./faq.md)
-- 次期リリースノート（準備中）: [v0.2.4-release-note.md](./v0.2.4-release-note.md)
+- 公開済みv0.2.4のリリースノート: [v0.2.4-release-note.md](./v0.2.4-release-note.md)
 - v0.2.4公開前の確認記録: [v0.2.4-release-preflight-2026-09-18.md](./v0.2.4-release-preflight-2026-09-18.md)
+- 公開後の報告・対応の入口: [v0.2.4-post-release-ledger.md](./v0.2.4-post-release-ledger.md)
 - 公開済みv0.2.3のリリースノート: [v0.2.3-release-note.md](./v0.2.3-release-note.md)
 - 過去版の調査履歴: [v0.2.3-post-release-ledger.md](./v0.2.3-post-release-ledger.md)
 - バージョン横断のフィードバック台帳: [v0.2-feedback.md](./v0.2-feedback.md)

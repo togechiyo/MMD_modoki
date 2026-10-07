@@ -114,6 +114,7 @@
 - [v0.2 作業メモ](./v0.2-task-memo.md)
 - [v0.2 作業チェックリスト](./v0.2-task-checklist.md)
 - [v0.2.4 リリース後台帳](./v0.2.4-post-release-ledger.md)
+- [v0.2.4後の次バージョン候補](./v0.2.4-next-version-candidates.md)
 - [v0.2.3 リリースノート](./v0.2.3-release-note.md)
 - [v0.2.3 リリース後台帳](./v0.2.3-post-release-ledger.md)
 - [v0.2.3 タイムライン / シーンキー編集 計画メモ](./v0.2.3-timeline-scene-key-editing-plan.md)

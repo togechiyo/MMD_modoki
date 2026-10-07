@@ -31,7 +31,7 @@
 | adopted | [街モデルを扱える広域描画を支援する](./decisions/support-city-scale-wide-area-rendering.md) | far、空ドーム、影距離を変更する |
 | accepted-with-constraints | [シーン全体の影設定変更には所有者の許可を必要とする](./decisions/scene-wide-shadow-settings-require-owner-approval.md) | CSM、ShadowGenerator、cascade、全体bias、影距離を変更する |
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |
-| adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | 最新指定でエフェクトキーは次版から一時退避。標準UI・キー再生をOFFにし、実装・保存済みキーを保管。照明・影・重力と通常のエフェクト調整は維持。再開・標準公開は所有者の再指定を待つ（2026-09-15） |
+| adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | 2026-10-07: エフェクトキーの再開を次版で目指す候補へ追加。復帰対象・収録範囲・標準公開時期は未決定。現状の標準OFFと保存済みキーの保管を維持し、既存17種と公開UIの範囲を照合して再開計画を整理する |
 | adopted | [再生中の編集権限はカテゴリごとのキー有無で決める](./decisions/playback-ownership-follows-category-key-presence.md) | camera / light / shadow / gravity の再生中評価とUIロックを変更する |
 | adopted | [DoF autofocusは手前のsurfaceより人物を優先する](./decisions/dof-autofocus-prefers-people-over-foreground-depth.md) | DoFの自動対象選択やfocus modeを変更する |
 | confirmed | [動画出力は現在のviewport物理状態から開始する](./decisions/webm-export-starts-from-current-viewport-physics-state.md) | WebM出力開始時の物理reset、warm-up、snapshot引き継ぎを変更する |

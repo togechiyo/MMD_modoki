@@ -1,6 +1,8 @@
 # WGSL シェーダーでできること / できないこと
 
-更新日: 2026-03-13
+更新日: 2026-10-08
+
+第1〜7節は2026-03-13時点のToon差し込み基盤についての記録。現在の外部材質WGSLは[v2作者形式](./external-wgsl-authoring-v2-design-2026-09-16.md)を参照する。以下の「できない」は当時の材質接続APIの制約であり、WGSL言語やBabylon.js全体の制約ではない。カスタムポストエフェクトの確認結果は第8節。
 
 ## 1. 前提
 
@@ -169,3 +171,18 @@ WGSL を `VP9` で書き出していても、それだけで HDR にはなりま
 - ただし本物のポスト bloom / AutoLuminous は別物
 
 という整理になる。
+
+## 8. カスタムポストエフェクトの実現性 — 2026-10-08確認
+
+WGSLでカスタムポストエフェクトを作ることは可能。材質WGSLがモデルの各材質へ差し込まれるのに対し、ポストエフェクトは描画済みの画面画像を入力として別の画像を出力する。Babylon公式も[独自PostProcessと複数段の連結](https://raw.githubusercontent.com/BabylonJS/Documentation/master/content/features/featuresDeepDive/postProcesses/usePostProcesses.md)を説明し、[Frame Graphでは独自taskと画像の入出力・履歴を扱える](https://raw.githubusercontent.com/BabylonJS/Documentation/master/content/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphClassOverview.md)。公式PostProcessの作例はGLSLであり、WGSL対応は下記の導入済み実装も照合した。
+
+- Babylon.js 9.2.0の`PostProcess`と`EffectWrapper`は`shaderLanguage`指定を持つ。`EffectWrapper`の`useAsPostProcess`は画面画像用の`textureSampler`を用意し、`FrameGraphPostProcessTask`へ接続できる。
+- 本リポジトリの`src/render/frame-graph-post-effects-controller.ts`でも`EffectWrapper`へ`ShaderLanguage.WGSL`を指定した内蔵効果がある。一方、現在の外部`.wgsl`ローダーは材質用であり、カスタムPostFXの読込・割当は未実装。この確認では新しい外部WGSLのGPU実行は検証していない。
+- 画面の色画像を入力にした1段の処理から、色補正、ビネット、粒子ノイズ、色収差、画面歪み、モザイクなどを扱える。ブラーは近傍サンプリングを使い、Bloomの抽出・ぼかし・合成や被写界深度、SSRなどは効果に応じて複数段・深度・法線などの入力が必要になる。残像などは前フレーム画像の管理も必要。
+
+将来の外部PostFX設計では、次を材質用APIとは別の接続契約として検討する。ここでは実装や次版への採用を決定していない。
+
+1. 最初は画面色画像を受け取る1段の処理に絞り、入力画像、UV、解像度、タイムライン由来の時刻をアプリが供給する。LUTやノイズ画像は[WGSL＋ローカル画像参照の方向](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)を応用できるが、読込と保存は別途実装が必要。
+2. 材質用 / ポストエフェクト用の識別は、提案中のPBR必須フラグと分ける。画面効果は通常MMD / PBRの両方へ適用できる。具体的な識別子・関数名は未定。
+3. 入出力の色空間、tone mappingやAAに対する挿入位置、alphaの扱いを定義する。プレビューと画像・動画出力で順序と時刻を揃える。
+4. Classic / Frame Graphの実行経路を分け、二重適用を避ける。Frame Graphの段構成・画像入出力を変更する際は[既存の再build方針](./framegraph-postfx-risk-note-2026-07-01.md)に従い、実行中に依存を付け替えない。

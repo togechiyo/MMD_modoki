@@ -256,7 +256,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 2026-10-07: 所有者が次バージョンまでの候補として形式拡張を再列挙。最初の対象形式と静的配置 / animationの範囲は [次版候補](./v0.2.4-next-version-candidates.md) で検討する。以下の未完了形式をすべて次版へ収録する判断ではない。
 
 - [ ] Babylon.js Editor 互換 3D 形式の整理
-- [ ] glTF/GLB 読み込み
+- [ ] glTF/GLB 読み込み（2026-10-07: 通常GLB GUIは停止中。Babylon 9.2.0の標準PBR読込を確認し、元材質を保持する静的GLB経路の再開を検討。[対応状況と統合上の残件](./pbr-texture-material-contract-proposal-2026-10-07.md)）
 - [ ] glTF/GLB アニメーション対応
 - [x] OBJ 読み込み最小 PoC（2026-08-20: MTLなし豆腐モデルをアクセサリとして読み込み、情報欄操作、transform / 表示 / 影 / pathのproject保存・再読み込みをE2E確認）
 - [x] OBJの単一MTL / ローカルtexture対応（2026-08-21: IPCでcompanion fileを安全に読み、画像をoffline data URLとしてBabylon OBJ / MTL loaderへ渡す。欠損時fallback、path境界、外部URL拒否、project再読込をunit / Electron E2E確認）

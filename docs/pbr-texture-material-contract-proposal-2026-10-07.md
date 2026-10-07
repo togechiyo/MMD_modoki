@@ -9,7 +9,37 @@
 
 テクスチャの意味は **glTF 2.0のmetallic-roughness規約に寄せ、描画は既存のBabylon `PBRMaterial`を使う**案。PMXをglTFへ変換しなくても、材質ごとに画像を追加できる形を考える。glTF完全互換やOpenPBRへの移行をこの機能の前提にしない。
 
-最初の到達点は、既存のBase Colorを保ったままNormal画像を割り当て、強さ・Y方向の規約・解除を扱うこと。続いてMetallic / Roughness・AO・Emissiveを追加する。PBRの実験設定からの明示的利用と、通常MMDの既定経路を維持する。
+既成のglTF / GLBを表示する用途では、下記の追加調査を踏まえ、Babylon loaderが作るPBR材質をそのまま保持する経路を先に評価する案。PMX材質へ追加画像を割り当てる用途では、既存のBase ColorにNormalを加え、強さ・Y方向の規約・解除を扱うところから始める。両者の最初の範囲は未決定。PBRの明示的利用と、通常MMDの既定経路を維持する。
+
+## glTF / GLBのPBRをそのまま使えるか — 追加調査
+
+2026-10-07に所有者から、glTFにPBR材質の扱いがあるなら、そのまま対応してもよいとの提案とBabylonの対応状況について質問があった。公式資料、導入済み9.2.0のsource、最小glTFの読込を照合した。
+
+**標準glTF PBRを読む機能はBabylon側にあり、専用のPBR loaderやshaderを新しく作る必要はない。アプリ側ではGLB読込の再開と、元材質を保持する統合が必要**という調査結果。依存更新やOpenPBRへの移行を先に要求する理由は、基本材質の読込については見つかっていない。
+
+glTFはBabylonの`PBRMaterial`オブジェクトを保存する形式ではなく、標準化された材質値とtexture参照を保存する。通常のglTF 2.0材質をBabylon loaderが`PBRMaterial`へ接続する。独自WGSL、任意のBabylon plugin、アプリ専用presetまでglTFに含まれる意味ではない。[Khronos材質仕様](https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/Specification.adoc#materials)、[Babylon PBRの公式説明](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/materials/using/masterPBR.md)を参照。
+
+| 対象 | 導入済み9.2.0で確認した範囲 |
+| --- | --- |
+| 基本材質 | Base Color / Metallic / Roughness、Normal / AO / Emissiveの読込・接続が実装済み。色空間、チャンネル、Normal scaleと反転はloader側が設定する |
+| Alpha / 両面 | Opaque / Mask / Blendとcutoff、double-sidedの処理あり。今回の最小読込ではMaskのcutoffと両面flagも確認 |
+| 代表的なKHR材質拡張 | Clearcoat、Sheen、IOR、Specular、Anisotropy、Emissive Strengthを`extensionsRequired`にした最小glTFが読込成功。前5種の設定値も確認。発光強さの接続先はsourceで`emissiveIntensity`と確認 |
+| Transmission / Volume等 | 導入済みloaderに対応実装あり。ただし透過用の描画経路・中間画像とアプリのFrame Graph / 出力との組合せは今回未確認。対応fileがあることだけで完成扱いにしない |
+
+最小読込は、メモリ上に生成した三角形・法線・UVと材質値を持つglTFを`NullEngine`で`LoadAssetContainerAsync`へ渡した。結果は`PBRMaterial`、metallic=0.37、roughness=0.62、alpha=0.9、cutoff=0.23、両面、coat=0.4、sheen roughness=0.6、IOR=1.7、specular=0.8、anisotropy=0.5。画像decode・shader compile・WebGPU描画・アプリGUI・PNG / WebMはこの確認に含まれない。
+
+### 現在のアプリで必要な作業
+
+- [GUI読込](../src/ui-controller.ts)はGLBを`GLB import is currently disabled`として拒否する。内部loaderと旧project復元経路が残っていることを、通常GUIで利用可能な対応と混同しない。
+- [GLB accessory経路](../src/mmd-manager-x-extension.ts)はWebGPUで`normalizeGlbAccessoryMaterials()`を呼び、PBR等を`StandardMaterial`へ変換する。Metallic-Roughness画像やClearcoat等の意味を保持する変換ではない。元PBRを維持する経路をこの互換処理から分ける必要がある。
+- 同じ経路にGLBだけのdepth write無効化、受影・cast shadow除外、強制enable、自動配置がある。[4月の調査](./glb-loading-investigation-2026-04-01.md)の描画問題を現在のPBR基盤で再現確認する。材質変換を外すだけで解決とはせず、GLBの深度・透明・影・PostFX・出力を横断確認する。シーン全体の影設定をこの修正へ混ぜない。
+- 元材質を保持する場合、既存MMD用presetを自動上書きせず、保存再読込と材質編集の対象範囲を定義する。GLB内のcamera / light / animationを勝手にsceneへ採用しない。
+
+最初は**非圧縮geometryとPNG / JPEG画像を同梱した自己完結GLBを、静的accessoryとしてPBR材質のまま表示・保存復元する**案。既存MMD材質と同居させる境界を定め、実験導線・最小fixtureで確認する。テキスト`.gltf`の外部`.bin` / 画像解決、骨格・animation編集、PMXへの材質転用は後続範囲とする。
+
+Draco / Meshopt / KTX2にもBabylonの対応はあるが、標準設定ではdecoder等をCDNから取得する場合がある。[公式loader資料](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/importers/glTF.md)に従い、対応するなら必要なdecoderをlocalへ固定する。GLBであっても外部参照を持ち得るため、自己完結・offline-firstの検査をファイル拡張子だけで代用しない。
+
+PMXはglTFのMetallic / Roughness / Normal割当を持つ前提ではない。GLBの元材質を保つ機能だけではPMXへのNormal追加は完成しない。PMXに別のglTF材質を転用するなら、対象材質、UV、texture参照と保存の対応付けが別途必要であり、名前やindexだけで自動転用しない。
 
 ## 入力マップの案
 

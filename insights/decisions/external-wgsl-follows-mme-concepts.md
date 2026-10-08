@@ -13,6 +13,8 @@ evidence:
 source_docs:
   - ../../docs/external-wgsl-authoring-v2-design-2026-09-16.md
   - ../../docs/wgsl-pbr-texture-material-package-investigation-2026-10-08.md
+  - ../../docs/wgsl-shader-capabilities.md
+  - ../../docs/v0.2.4-post-release-ledger.md
   - ../../docs/external-wgsl-mme-semantics-design-2026-09-12.md
   - ../../docs/external-wgsl-material-api-v1-design.md
   - ../../docs/external-wgsl-material-usage.md
@@ -42,6 +44,8 @@ WGSLのコンパイル・読込エラーは、PMX読込エラーと同じビュ�
 作者向け配布・読込は単一WGSLとする。2026-09-16、所有者はJSON混合をなくす設計へ変更し、Babylon.jsのWGSL処理に近い記法と、テキストエディタで調整箇所が分かる説明を重視すると指定した。スライダー用の設定情報は不要。冒頭JSONコメントという2026-09-12の方式は新規設計の目標から外し、旧実装の履歴として区別する。
 
 2026-10-08、PBR画像の配布について所有者は参照型を許可し、WGSLを入口にする方向を選んだ。画像内蔵や新archive形式を必須にせず、単一WGSLとlocal画像の参照で設計する。PBR向けフラグによる識別の提案を受け、具体化は[参照・識別案](../../docs/wgsl-pbr-texture-material-package-investigation-2026-10-08.md)へ分離する。`MODOKI_REQUIRE_PBR`という名前・値・画像名規則まで所有者が個別採用したとは扱わない。runtimeは未実装。
+
+同日の後続指定で、PBRの必要性と材質用 / ポストエフェクト用の識別を[リリース後台帳](../../docs/v0.2.4-post-release-ledger.md)へ記録し、PBR画像参照・識別と外部PostFXの拡張はすぐには実装着手せず保留する。再開時期・次版収録は未定。LUTに近い読込とFrame Graph taskへの接続は[設計案](../../docs/wgsl-shader-capabilities.md)として保持し、具体的な定数名・内部形式まで確定したとは扱わない。
 
 具体的なconst名、入力struct、hook名、API番号は[v2設計](../../docs/external-wgsl-authoring-v2-design-2026-09-16.md)で定めた実装上の仕様であり、所有者が個別指定した仕様とは扱わない。サンプル名は引き続き短くし、調整値には用途・単位・推奨範囲等を分かりやすく説明する。
 
@@ -80,6 +84,8 @@ WGSLの失敗がアプリ全体の操作不能につながる事態に備え、�
 同日の後続指定: 「旧仕様のWGSL形式との互換は取らなくていいよ。まだReleaseにのせてないから」。先の設計案に含めた旧snapshot互換・自動移行要件を撤回する根拠とする。
 
 2026-10-08の指定: 「参照型でいいよお。WGSLがなんだかんだよさげかな。PBR向けにフラグつけて見分けられるようにしたらいいか」。画像埋め込みを必須にしないWGSL入口と参照型の根拠とする。
+
+同日の後続指定: 「じゃあPBRかどうかとポストエフェクトかの識別が必要か」「すぐには着手しないのでv0.2.4後台帳にメモしておいてほしいな」。拡張の識別を記録し、即時の実装着手を保留する根拠とする。
 
 ## 再確認条件
 

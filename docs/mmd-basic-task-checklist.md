@@ -284,7 +284,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 2026-09-16: JSONを廃止し、調整用const・入力UBO・固定hookのv2作者形式へ一本化。所有者指定によりRelease未収録の旧WGSL形式・snapshot互換は維持しない（[v2仕様・検証](./external-wgsl-authoring-v2-design-2026-09-16.md)）
   - [x] 宣言reader・材質接続・新snapshot保存復元・配布11sample書換を実装。Classic / Frame Graph、通常MMD / PBR、GUI / PNG / WebM、旧形式の拒否とproject読込継続を検証
 - [ ] 外部WGSL材質B以降：light hook・texture・CONTROL入力、全variant検証とsource位置の逆変換（入力の意味は[v1設計](./external-wgsl-material-api-v1-design.md)、新作者形式は[v2設計](./external-wgsl-authoring-v2-design-2026-09-16.md)）
-- [ ] 外部WGSL PostFXをLUTに近いファイル読込操作で追加する候補を検討する。まずFrame Graphの1段の画面効果、識別・入力、stackのON / OFF・順序・削除、内容snapshotと割当の保存復元、失敗復帰・出力を整理する（2026-10-08所有者提案。[導線・確認範囲の案](./wgsl-shader-capabilities.md#82-lutに近い外部ファイル読込の導線案)。実装着手・次版収録は未決定）
+- [ ] 外部WGSL PostFXをLUTに近いファイル読込操作で追加する候補を検討する。まずFrame Graphの1段の画面効果、識別・入力、stackのON / OFF・順序・削除、内容snapshotと割当の保存復元、失敗復帰・出力を整理する（2026-10-08所有者提案。[導線・確認範囲の案](./wgsl-shader-capabilities.md#82-lutに近い外部ファイル読込の導線案)。同日の所有者指定で着手保留、[台帳メモ](./v0.2.4-post-release-ledger.md)参照。再開時期・次版収録は未定）
 - [ ] 主要エフェクトの WGSL 化
 - [x] 2026-09-17: パラフレアの光側が方向光と左右逆になる符号を修正。左右・上下・背面cameraでviewport / PNGを確認（[記録](./framegraph-directional-light-shafts-implementation-2026-08-12.md#2026-09-17-左右反転の修正)）
 - [ ] WebGL2 vs WebGPU 性能比較
@@ -381,7 +381,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 ## シェーダー / 材質拡張メモ
 
 - [ ] シェーダープリセットの拡充
-- [ ] 既存モデルの布へ質感を足せる、モデルなしのPBR材質セットを検討・実装する。WGSL入口と外部画像の参照型を採用する方向とし、PBR向け識別、Normal・Roughness・Sheen等の入力規約、UVの細かさ、材質別適用、presetとの優先関係、保存・通常MMD/PBR往復、出力を確認する（2026-10-07 / 08所有者の用途・参照型指定。[WGSLの参照・PBR識別案](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)、[入力・保存規約案](./pbr-texture-material-contract-proposal-2026-10-07.md)。具体的な宣言・画像名規則は設計案、runtimeは未実装。モデル読込を必須にしない）
+- [ ] 既存モデルの布へ質感を足せる、モデルなしのPBR材質セットを検討・実装する。WGSL入口と外部画像の参照型を採用する方向とし、PBR向け識別、Normal・Roughness・Sheen等の入力規約、UVの細かさ、材質別適用、presetとの優先関係、保存・通常MMD/PBR往復、出力を確認する（2026-10-07 / 08所有者の用途・参照型指定。[WGSLの参照・PBR識別案](./wgsl-pbr-texture-material-package-investigation-2026-10-08.md)、[入力・保存規約案](./pbr-texture-material-contract-proposal-2026-10-07.md)。具体的な宣言・画像名規則は設計案、runtimeは未実装。モデル読込を必須にしない。2026-10-08所有者指定で着手保留、[台帳メモ](./v0.2.4-post-release-ledger.md)参照）
 - [x] 新しいリアルタイム SSS 方式を調査し、Burley screen-space diffusion を本来の表面下拡散の長期候補へ選定（[調査メモ](./realtime-sss-methods-research-2026-08-26.md)）
 - [x] `SSS Skin`をBabylon Burley screen-space diffusionへ作り直して実モデル比較まで行ったが、白さが残るため`SSS Standard`とともに不採用とし通常UIから撤去（保存IDは旧project互換用に維持、[実装・撤退記録](./sss-standard-skin-shader-presets-2026-08-26.md)）
 - [x] Babylon.js標準SSSと旧SSSを再利用せず、独自buffer・拡散・厚み透過・合成を持つWGSL SSSを試作し、許可された実モデルと配布fixtureで比較（[実装・比較記録](./owned-sss-development-2026-09-06.md)）

@@ -51,7 +51,7 @@
 | adopted | [実体のないヘルプ項目は表示しない](./decisions/omit-empty-help-menu-items.md) | 上位メニュー、ショートカット、ログ、Aboutの導線を変更する |
 | adopted | [キー登録の上書き確認は出さない](./decisions/key-registration-overwrites-without-confirmation.md) | キー登録、同一フレーム上書き、Auto Key、Undo導線を変更する |
 | adopted | [作業の区切りで commit・push する](./decisions/commit-and-push-at-verified-work-boundaries.md) | 通常作業のcommit・push時期、検証、対象差分を判断する |
-| adopted | [上級者向け外部WGSLはMMEの名前と用途を参考にする](./decisions/external-wgsl-follows-mme-concepts.md) | JSON混合を廃止し新形式へ一本化。旧形式・snapshot互換は不要。通常MMD/PBR、単一WGSL・共通割当・読込1ボタン・sample同梱・viewport通知と復旧導線を維持。2026-10-08: PBR画像はWGSL入口の参照型で設計。PBR識別の具体定数と画像名規則は設計案、runtime未実装。詳細と検証範囲は仕様書を参照 |
+| adopted | [上級者向け外部WGSLはMMEの名前と用途を参考にする](./decisions/external-wgsl-follows-mme-concepts.md) | JSON混合を廃止し新形式へ一本化。旧形式・snapshot互換は不要。通常MMD/PBR、単一WGSL・共通割当・読込1ボタン・sample同梱・viewport通知と復旧導線を維持。2026-10-08: PBR画像はWGSL入口の参照型で設計。PBR条件と材質用 / PostFX識別を台帳へ記録し、この拡張は即時着手を保留。具体定数・画像名規則・内部形式は設計案、runtime未実装。詳細と検証範囲は仕様書を参照 |
 | adopted | [宝石WGSLサンプルは見た目の近似を優先する](./decisions/gemstone-samples-prioritize-visual-approximation.md) | モデル色・模様を下地に光学効果を重ね、シラー・遊色・分散を見た目で近似する |
 | confirmed | [今回の色干渉報告ではPBR照明を変更しない](./decisions/keep-current-pbr-light-shadow-color-behavior.md) | 影の薄さ再確認後の維持判断。MMD Likeのmaskや半球下色を調査だけで変更しない |
 | confirmed | [PBR材質セットはモデル読込を要求せず布の質感を追加する](./decisions/pbr-texture-sets-add-cloth-without-model-import.md) | 材質設定と画像だけで既存モデルの布へ質感を足す。GLBモデル読込再開を前提にしない。2026-10-08: WGSL入口と外部画像の参照型を選択。画像名規則・適用範囲・保存は設計中 |

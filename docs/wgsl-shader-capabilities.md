@@ -201,3 +201,16 @@ WGSLでカスタムポストエフェクトを作ることは可能。材質WGSL
 - **実行**: 入力色画像、画像形式・色空間、出力解像度、uniform、追加textureの依存を定義する。GPUのtexture handle、binding、資源寿命はアプリとBabylonが扱う。
 
 1段のWGSLを差し込む範囲なら、この識別と接続契約で進められる。任意の複数段Frame Graphを作者が組む場合は、フラグに加えて各passのsource、入出力、順序、中間画像、履歴の仕様が必要になる。まず1段の形式を検証し、複数段の作者形式は別に設計する案とする。これは実装未着手の設計案であり、採用判断の記録ではない。
+
+### 8.2 LUTに近い外部ファイル読込の導線案
+
+2026-10-08、所有者が「LUTみたいに外部ファイル読込でさせるようにしたら便利そう」と挙げた。外部WGSL PostFXの候補として記録し、実装着手・収録時期の決定とは区別する。
+
+操作案は「WGSL読込ボタンで`.wgsl`を選択 → ポスト用宣言と入力を検証 → GPUのコンパイル・資源準備を確認 → 既存のエフェクト追加一覧へ登録 → stackへ追加」。ON / OFF、順序変更、削除は既存stackの操作へ揃える。数値・色はWGSLの`const`をテキストエディタで編集する方式を踏襲し、専用エディターや任意のパラメータースライダーを追加する前提にはしない。
+
+- 既存LUTの参考箇所は`src/ui/lut-panel-controller.ts`の`chooseExternalLut` / `importExternalLutFile`と、`src/ui/lut-panel-state.ts`の選択・保存計画。LUTは検査後に一覧登録・適用するが、WGSLではGPUコンパイルの確認も必要になるため、ファイルを読めただけで成功通知しない。
+- 読込・再読込失敗時は診断を表示し、直前の有効なeffectとstackを保つ。projectの欠落assetは該当effectを無効にして他の編集・読込を続ける。
+- 保存は既存の外部材質WGSLの内容revisionとsnapshot同梱を参考にする。元の絶対パスだけへ依存せず、sourceとstack割当を保存して、元ファイルの移動後にも復元できるようにする。参照画像を扱う段階では画像も同梱対象に含める。
+- 最初の候補範囲はFrame Graph用の1段の画面効果。明示的なClassic選択時に勝手にbackendを変えず、適用条件を表示する。新規taskの追加・削除・順序変更は再build、確保済みの入力内の個別ON / OFFは既存のdisabled pass方針を使う。
+
+実装時は読込・再読込・削除・Undo / Redo、初期OFF、保存再読込、元source欠落、backend切替、PNG / WebMを確認する。ファイルの供給をtest hookで行っても、読込後の一覧とstackはローカルElectron E2EのGUIから検証する。候補入口は[次版メモ](./v0.2.4-next-version-candidates.md)、進捗の正本は[基本チェックリスト](./mmd-basic-task-checklist.md)。

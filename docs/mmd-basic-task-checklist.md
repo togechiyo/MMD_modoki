@@ -1,6 +1,6 @@
 # MMD基本機能タスクチェックリスト
 
-更新日: 2026-10-07
+更新日: 2026-10-08
 
 v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バージョン候補](./v0.2.4-next-version-candidates.md)。収録範囲は未決定。個別報告の確認状態は [リリース後台帳](./v0.2.4-post-release-ledger.md) と分けて管理する。
 
@@ -284,6 +284,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 2026-09-16: JSONを廃止し、調整用const・入力UBO・固定hookのv2作者形式へ一本化。所有者指定によりRelease未収録の旧WGSL形式・snapshot互換は維持しない（[v2仕様・検証](./external-wgsl-authoring-v2-design-2026-09-16.md)）
   - [x] 宣言reader・材質接続・新snapshot保存復元・配布11sample書換を実装。Classic / Frame Graph、通常MMD / PBR、GUI / PNG / WebM、旧形式の拒否とproject読込継続を検証
 - [ ] 外部WGSL材質B以降：light hook・texture・CONTROL入力、全variant検証とsource位置の逆変換（入力の意味は[v1設計](./external-wgsl-material-api-v1-design.md)、新作者形式は[v2設計](./external-wgsl-authoring-v2-design-2026-09-16.md)）
+- [ ] 外部WGSL PostFXをLUTに近いファイル読込操作で追加する候補を検討する。まずFrame Graphの1段の画面効果、識別・入力、stackのON / OFF・順序・削除、内容snapshotと割当の保存復元、失敗復帰・出力を整理する（2026-10-08所有者提案。[導線・確認範囲の案](./wgsl-shader-capabilities.md#82-lutに近い外部ファイル読込の導線案)。実装着手・次版収録は未決定）
 - [ ] 主要エフェクトの WGSL 化
 - [x] 2026-09-17: パラフレアの光側が方向光と左右逆になる符号を修正。左右・上下・背面cameraでviewport / PNGを確認（[記録](./framegraph-directional-light-shafts-implementation-2026-08-12.md#2026-09-17-左右反転の修正)）
 - [ ] WebGL2 vs WebGPU 性能比較

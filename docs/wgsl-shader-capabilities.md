@@ -186,3 +186,18 @@ WGSLでカスタムポストエフェクトを作ることは可能。材質WGSL
 2. 材質用 / ポストエフェクト用の識別は、提案中のPBR必須フラグと分ける。画面効果は通常MMD / PBRの両方へ適用できる。具体的な識別子・関数名は未定。
 3. 入出力の色空間、tone mappingやAAに対する挿入位置、alphaの扱いを定義する。プレビューと画像・動画出力で順序と時刻を揃える。
 4. Classic / Frame Graphの実行経路を分け、二重適用を避ける。Frame Graphの段構成・画像入出力を変更する際は[既存の再build方針](./framegraph-postfx-risk-note-2026-07-01.md)に従い、実行中に依存を付け替えない。
+
+### 8.1 フラグと内部形式からFrame Graphへ接続する案
+
+作者の`.wgsl`にポスト用の識別宣言を置き、アプリが内部descriptorへ変換すれば、既存Frame Graphへカスタムのポスト処理taskとして載せられる。フラグ例は`const MODOKI_POST_PROCESS: bool = true;`だが、名前・API番号・呼出関数は未確定。これはアプリ用の宣言でありWGSL標準の機能ではない。現行v2の宣言readerは未知の`MODOKI_`名を拒否するため、今のローダーへこの例を渡しても使用できない。
+
+接続の流れは「WGSLの識別・検証 → 内部descriptor → フルスクリーン用WGSLを組み立てる → `FrameGraphCustomPostProcessTask` → 次段へ`outputTexture`を接続」。Babylonには[標準のカスタムPostFX task](https://raw.githubusercontent.com/BabylonJS/Documentation/master/content/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList.md)があり、導入済み9.2.0にも存在する。内部の`ThinCustomPostProcess`は`EffectWrapper`を継承し、同じoptionsで`ShaderLanguage.WGSL`を指定できる。`onApplyObservable`からuniformなどを供給でき、親の`FrameGraphPostProcessTask`が入力を`textureSampler`へbindし、全画面描画と無効時の画像コピーを記録する。単一段ならこの共通taskを使い、作者ファイルごとにTypeScriptのtask classを用意する必要はない。
+
+内部形式は次を分ける。
+
+- **種別**: 現行の`kind: "mmd-material"`へ、例えば`kind: "post-process"`を追加し、種別ごとにhookと入力を検証する。PBR必須条件は材質側の別情報とし、ポスト用識別と混同しない。
+- **資産**: source、画像参照、内容revisionなどは共有できる。作者向けJSONは追加せず、アプリがdescriptorを生成しprojectへ保存する。
+- **割当**: 材質用のmodel / material targetと、ポスト用のstack内instanceを分ける。ポスト側ではinstance ID、順序、enabledなどを保存し、同じsourceの複数配置を区別できるようにする。
+- **実行**: 入力色画像、画像形式・色空間、出力解像度、uniform、追加textureの依存を定義する。GPUのtexture handle、binding、資源寿命はアプリとBabylonが扱う。
+
+1段のWGSLを差し込む範囲なら、この識別と接続契約で進められる。任意の複数段Frame Graphを作者が組む場合は、フラグに加えて各passのsource、入出力、順序、中間画像、履歴の仕様が必要になる。まず1段の形式を検証し、複数段の作者形式は別に設計する案とする。これは実装未着手の設計案であり、採用判断の記録ではない。

@@ -3,6 +3,13 @@
 `MMD_modoki`のアクセサリ読込と出力を確認するための自作fixture。
 第三者モデルや外部テクスチャには依存しない。
 
+## PLY / STL
+
+- `static-triangle.ply`: 三角形1面、RGB頂点色、ASCII PLY 1.0。
+- `static-triangle.stl`: 同じ座標の三角形1面、明示normal、ASCII STL。
+
+両方とも自作した最小geometryで、CC0として配布可能。binary PLY / STLはunit test内で同じgeometryから生成する。
+
 ## Xモデル
 
 - `simple-triangle.x`: Xローダーの最小構文を確認する三角形

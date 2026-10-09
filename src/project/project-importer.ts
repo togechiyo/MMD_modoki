@@ -794,6 +794,8 @@ export async function importProjectState(
         loadX?: (filePath: string) => Promise<boolean>;
         loadGlb?: (filePath: string) => Promise<boolean>;
         loadObj?: (filePath: string) => Promise<boolean>;
+        loadPly?: (filePath: string) => Promise<boolean>;
+        loadStl?: (filePath: string) => Promise<boolean>;
         getLoadedAccessories?: () => Array<{ index: number }>;
         setAccessoryVisibility?: (index: number, visible: boolean) => boolean;
         setAccessoryCastsShadow?: (index: number, castsShadow: boolean) => boolean;
@@ -829,7 +831,11 @@ export async function importProjectState(
                     ? accessoryExtension.loadObj
                     : ext === "x"
                         ? accessoryExtension.loadX
-                        : undefined;
+                        : ext === "ply"
+                            ? accessoryExtension.loadPly
+                            : ext === "stl"
+                                ? accessoryExtension.loadStl
+                                : undefined;
             if (typeof loadAccessory !== "function") {
                 warnings.push(`Accessory restore skipped: unsupported accessory type for ${accessoryState.path}`);
                 continue;

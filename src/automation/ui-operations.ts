@@ -25,7 +25,7 @@ export type UiOperationHost = {
     refresh(): void;
 };
 const extensions = {
-    model: ["pmx", "pmd", "bpmx"], accessory: ["x", "obj"], motion: ["vmd", "bvmd"], cameraMotion: ["vmd", "bvmd"], pose: ["vpd"],
+    model: ["pmx", "pmd", "bpmx"], accessory: ["x", "obj", "ply", "stl"], motion: ["vmd", "bvmd"], cameraMotion: ["vmd", "bvmd"], pose: ["vpd"],
     audio: ["mp3", "wav", "ogg"], backgroundImage: ["png", "jpg", "jpeg", "bmp", "webp"], backgroundVideo: ["webm", "mp4", "avi"], environment: ["hdr", "env", "dds"], lut: ["cube", "3dl"],
 };
 export async function runAutomationUiOperation(host: UiOperationHost, operation: AutomationUiOperation, context: AutomationJobContext): Promise<Record<string, unknown>> {

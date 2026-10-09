@@ -10,6 +10,7 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       '@babylonjs/loaders/OBJ/objFileLoader.js',
+      '@babylonjs/loaders/STL/stlFileLoader.js',
       // babylon-mmd dynamically imports this after the first BMP toon/sphere texture is inspected.
       // Discover it up front so Vite does not invalidate optimized deps mid-session.
       'babylon-mmd/esm/Loader/dxBmpTextureLoader',

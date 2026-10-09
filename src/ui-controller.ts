@@ -3753,7 +3753,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
+            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "ply", "stl", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3821,7 +3821,9 @@ export class UIController {
                 await this.loadAccessoryFromPath(filePath);
                 return;
             }
-            case "obj": {
+            case "obj":
+            case "ply":
+            case "stl": {
                 await this.loadAccessoryFromPath(filePath);
                 return;
             }
@@ -4169,12 +4171,16 @@ export class UIController {
     public async loadAccessoryFromPath(filePath: string): Promise<boolean> {
         const normalizedPath = filePath.replace(/\\/g, "/");
         const extension = normalizedPath.substring(normalizedPath.lastIndexOf(".") + 1).toLowerCase();
-        const formatLabel = extension === "obj" ? "OBJ" : "X";
+        const formatLabel = extension.toUpperCase();
         const loadAccessory = extension === "obj"
             ? this.mmdManager.loadObj.bind(this.mmdManager)
             : extension === "x"
                 ? this.mmdManager.loadX.bind(this.mmdManager)
-                : null;
+                : extension === "ply"
+                    ? this.mmdManager.loadPly.bind(this.mmdManager)
+                    : extension === "stl"
+                        ? this.mmdManager.loadStl.bind(this.mmdManager)
+                        : null;
         if (!loadAccessory) {
             this.setStatus(`Unsupported accessory format: ${extension || "unknown"}`, false);
             return false;

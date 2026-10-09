@@ -95,7 +95,11 @@ STLは静的geometryとして範囲を限定しやすい。materialやtextureを
 
 MMDアクセサリとしては見た目の情報が少なく、OBJより優先度を下げる。ASCII / binary、normal、単位、巨大または極小boundsを確認する。
 
+2026-10-09: 所有者がPLY・STLの追加を選び、ASCII / binary STLを倍率1の通常アクセサリへ接続した。現在の対応範囲・検証は [PLY / STL の静的アクセサリ読込](./ply-stl-static-accessory-support-2026-10-09.md) を参照する。
+
 ### PLY
+
+2026-10-09: 初期対応は三角形面を持つ通常mesh。ASCII / binary little / big endianと頂点色を専用readerで扱う。点群・Gaussian Splat・多角形を同じ材質 / 影経路へ流さず、対象外として説明する。[対応範囲・検証](./ply-stl-static-accessory-support-2026-10-09.md) を参照する。以下のSPLAT loader分類案は後続の点群・Splat検討用である。
 
 現行Babylon.js 9.2.0のSPLAT loaderは、PLYの内容を次の3種類へ分類する。
 

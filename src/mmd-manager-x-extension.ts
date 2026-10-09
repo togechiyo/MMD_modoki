@@ -28,6 +28,7 @@ import { applyAccessoryCoplanarMaterialDepthBias } from "./scene/accessory-copla
 import { getDefaultAccessoryToonTexture, loadXIntoScene } from "./x-file-loader";
 import type { ProjectModelMaterialShaderState, ProjectSerializedAccessoryTransformTrack } from "./types";
 import { createObjLoaderForLocalMaterialData, prepareLocalObjMaterialBundle } from "./shared/obj-local-materials";
+import { loadStaticAccessoryMeshes, type StaticAccessoryKind } from "./assets/static-accessory-loader";
 import {
     createAccessoryTransformKeyframeTrack,
     deserializeAccessoryTransformKeyframeTrack,
@@ -42,7 +43,7 @@ import {
     upsertAccessoryTransformKeyframe,
 } from "./editor/accessory-transform-keyframe-track";
 
-export type AccessoryKind = "x" | "glb" | "obj";
+export type AccessoryKind = "x" | "glb" | "obj" | StaticAccessoryKind;
 
 export type AccessoryState = {
     index: number;
@@ -79,6 +80,8 @@ declare module "./mmd-manager" {
         loadX(filePath: string): Promise<boolean>;
         loadGlb(filePath: string): Promise<boolean>;
         loadObj(filePath: string): Promise<boolean>;
+        loadPly(filePath: string): Promise<boolean>;
+        loadStl(filePath: string): Promise<boolean>;
         getLoadedAccessories(): AccessoryState[];
         clearAccessories(): void;
         setAccessoryVisibility(index: number, visible: boolean): boolean;
@@ -987,15 +990,22 @@ function createAccessoryEntryFromImport(
     } else {
         configureImportedAccessoryMeshes(host, result.meshes, managedMeshes);
     }
-    if (kind === "x" || kind === "obj") {
+    if (kind !== "glb") {
         ensureAccessoryFallbackMaterial(host.scene, managedMeshes, accessoryName);
+    }
+    if (kind === "ply") {
+        for (const mesh of managedMeshes) {
+            if (mesh.isVerticesDataPresent(VertexBuffer.ColorKind) && mesh.material instanceof MmdStandardMaterial) {
+                mesh.material.diffuseColor.set(1, 1, 1);
+            }
+        }
     }
     if (kind === "obj") {
         normalizeObjAccessoryMaterialsToMmd(host.scene, managedMeshes);
     }
     forceAccessoryHierarchyEnabled([...result.transformNodes, ...hierarchyMeshes, ...managedMeshes]);
     prepareManagedAccessoryMeshes(host, managedMeshes, kind !== "glb");
-    if (kind === "x" || kind === "obj") {
+    if (kind !== "glb") {
         const accessoryMaterials = collectAccessoryMaterials(managedMeshes);
         applyWgslShaderPresetToMaterials(
             host as unknown as Parameters<typeof applyWgslShaderPresetToMaterials>[0],
@@ -1253,6 +1263,8 @@ const mmdManagerProto = MmdManager.prototype as unknown as {
     loadX?: (filePath: string) => Promise<boolean>;
     loadGlb?: (filePath: string) => Promise<boolean>;
     loadObj?: (filePath: string) => Promise<boolean>;
+    loadPly?: (filePath: string) => Promise<boolean>;
+    loadStl?: (filePath: string) => Promise<boolean>;
     getLoadedAccessories?: () => AccessoryState[];
     clearAccessories?: () => void;
     setAccessoryVisibility?: (index: number, visible: boolean) => boolean;
@@ -1499,6 +1511,40 @@ if (!mmdManagerProto.loadObj) {
             host.onError?.(`OBJ load error: ${message}`);
             return false;
         }
+    };
+}
+
+async function loadStaticAccessory(host: XLoadHost, filePath: string, kind: StaticAccessoryKind): Promise<boolean> {
+    try {
+        if (/^[a-z][a-z0-9+.-]*:\/\//i.test(filePath)) throw new Error("Static accessory loading only accepts local file paths");
+        const { fileName } = splitFilePath(filePath);
+        logInfo("asset", "static accessory load started", { filePath, kind });
+        const bytes = await window.electronAPI.readBinaryFile(filePath);
+        if (!bytes) throw new Error(`Unable to read ${kind.toUpperCase()} file: ${filePath}`);
+        const meshes = loadStaticAccessoryMeshes(host.scene, kind, Uint8Array.from(bytes).buffer);
+        createAccessoryEntryFromImport(host, kind, filePath, fileName.replace(/\.[^/.]+$/, "") || fileName,
+            { meshes, transformNodes: [] }, 1, "wgsl-accessory-toon");
+        host.applyToonShadowInfluenceToMeshes?.(meshes);
+        host.refreshMmdCoplanarMaterialDepthBiasCorrection?.();
+        host.syncIblShadowsScene?.();
+        host.refreshShadowAfterSceneContentChanged?.();
+        logInfo("asset", "static accessory load completed", { filePath, kind, meshCount: meshes.length });
+        return true;
+    } catch (error: unknown) {
+        logError("asset", "static accessory load failed", { filePath, kind, ...toLogErrorData(error) });
+        host.onError?.(`${kind.toUpperCase()} load error: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+    }
+}
+
+if (!mmdManagerProto.loadPly) {
+    mmdManagerProto.loadPly = async function(filePath: string): Promise<boolean> {
+        return loadStaticAccessory(this as unknown as XLoadHost, filePath, "ply");
+    };
+}
+if (!mmdManagerProto.loadStl) {
+    mmdManagerProto.loadStl = async function(filePath: string): Promise<boolean> {
+        return loadStaticAccessory(this as unknown as XLoadHost, filePath, "stl");
     };
 }
 

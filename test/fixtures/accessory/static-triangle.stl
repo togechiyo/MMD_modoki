@@ -1,0 +1,9 @@
+solid static_triangle
+  facet normal 0 0 1
+    outer loop
+      vertex -4 0 0
+      vertex 4 0 0
+      vertex 0 8 0
+    endloop
+  endfacet
+endsolid static_triangle

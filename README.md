@@ -6,7 +6,7 @@ The v0.2.4 release is in preparation. See the [release notes](./docs/v0.2.4-rele
 
 The current source can:
 
-- Load PMX/PMD/BPMX models, `.x` / OBJ accessories, VMD/BVMD motion, camera motion, and audio
+- Load PMX/PMD/BPMX models, `.x` / OBJ / triangle PLY / STL accessories, VMD/BVMD motion, camera motion, and audio
 - Edit bones, morphs, camera, lighting, shadows, gravity, and accessory transforms on a timeline; adjust post effects separately
 - Import built-in and external LUT files (`.3dl`, `.cube`)
 - Export model/camera VMD (beta) and BVMD, VPD poses, still images, numbered PNG sequences, and WebM videos

@@ -1,0 +1,17 @@
+ply
+format ascii 1.0
+comment Self-authored triangle fixture for MMD_modoki, CC0
+element vertex 3
+property float x
+property float y
+property float z
+property uchar red
+property uchar green
+property uchar blue
+element face 1
+property list uchar int vertex_indices
+end_header
+-4 0 0 255 0 0
+4 0 0 0 255 0
+0 8 0 0 0 255
+3 0 1 2

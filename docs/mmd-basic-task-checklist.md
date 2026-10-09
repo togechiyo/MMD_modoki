@@ -265,6 +265,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
   - [ ] 複数MTL、拡張texture option、空白・日本語file名の追加互換検証
 - [x] 三角形PLYの静的アクセサリ読込（2026-10-09: ASCII / binary両endian、頂点色、法線、情報欄操作、共通transform / 表示キー、project復元を実装。Classic / Frame GraphのElectron E2E確認。[対応範囲](./ply-stl-static-accessory-support-2026-10-09.md)）
 - [x] STL 読み込み（2026-10-09: ASCII / binaryのgeometryを倍率1のアクセサリへ接続。情報欄操作、共通キー、project復元を両backendのElectron E2E確認。材質 / texture拡張は対象外。上記対応範囲を参照）
+- [x] Babylon.js公式assetでPLY / STL追加検証（2026-10-09: Channel9 STLと変換mesh PLYをlocalへ固定し、両backendで読込・表示・project復元を確認。公式Splat PLYの拒否も確認。未配置環境ではskip。[出典・再取得手順・結果](./babylon-ply-stl-reference-assets-2026-10-09.md)）
 - [ ] `.babylon` 読み込み
 - [ ] 点群 / Gaussian Splat 形式（`.ply` / `.splat` / `.spz` / `.sog`）読み込み調査
 - [ ] 座標系 / スケール差の吸収

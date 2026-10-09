@@ -35,7 +35,7 @@ PLYの点群・Gaussian Splat、圧縮PLY、三角形以外の面は、説明付
 
 ## 検証
 
-自作の `test/fixtures/accessory/static-triangle.ply` / `.stl` だけを使用する。binary入力はunit test内で生成し、ユーザー所有モデルは使用しない。
+初回実装の検証には、自作の `test/fixtures/accessory/static-triangle.ply` / `.stl` を使用した。binary入力はunit test内で生成し、ユーザー所有モデルは使用しない。
 
 - unit: ASCII / 両endian、CRLF / 日本語comment、未知property、頂点色、欠損・範囲外・点群の拒否、STLのASCII / binary、法線、失敗時のmesh cleanupとglobal option復元を確認。
 - GUI: `test/e2e/static-accessory.spec.mjs` でOS file dialog結果だけをfixtureへ置換し、実際の「ファイル読込」menuから追加。情報欄の操作・キー・project往復・材質一覧・外部HTTP requestなしをClassic / Frame Graphで確認する。
@@ -44,3 +44,5 @@ PLYの点群・Gaussian Splat、圧縮PLY、三角形以外の面は、説明付
 - `npm.cmd run smoke:launch` は成功。`engine=WebGPU` / `physics=Bullet MPR`、renderer初期化と安定待機を確認した。
 
 三角形fixtureでの接続確認であり、複雑なscan、大規模CAD、DCCごとの軸・単位・材質の再現性まで保証するものではない。
+
+同日の追加検証では、所有者の依頼に基づきBabylon.js公式のChannel9 STLとSplat PLYを取得し、STL由来のmesh PLYも生成した。出典・license・checksum・再取得手順・結果は [Babylon.js アセットによる PLY / STL 読込検証](./babylon-ply-stl-reference-assets-2026-10-09.md) を参照する。

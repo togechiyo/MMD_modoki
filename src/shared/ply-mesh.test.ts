@@ -38,8 +38,8 @@ describe("static PLY mesh reader", () => {
             .replace("0 0 255\n", "0 0 255 1 1 4\n");
         expect(parsePlyMesh(encode(text.replace(/\n/g, "\r\n")))).toEqual(parsePlyMesh(encode(fixture)));
     });
-    it("rejects point clouds and Splat files before constructing a runtime", () => {
-        expect(() => parsePlyMesh(encode(fixture.replace("element face 1", "element face 0")))).toThrow("Point-cloud and Gaussian Splat");
+    it("keeps the triangle-only API from returning point clouds", () => {
+        expect(() => parsePlyMesh(encode(fixture.replace("element face 1", "element face 0")))).toThrow("Point-cloud PLY");
     });
     it.each([
         ["3 0 1 2", "3 0 1 3", "vertex range"],

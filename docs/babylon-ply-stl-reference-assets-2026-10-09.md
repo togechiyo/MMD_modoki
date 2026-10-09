@@ -16,14 +16,15 @@
 | `combined_SPZv3.ply` | [公式binary PLY](https://github.com/BabylonJS/Assets/blob/c81f5d744fe8d41acfebd89eaeb7008c6f9659e3/splats/combined_SPZv3.ply)、無変更。Splat拒否確認 | 144,648 | `2d4d6154960c3de305cdd20d5feb3df97b9b3d39da0693b656c72a4800a391a4` |
 | `Channel9.le.ply` | 上記STLをbinary little endianの三角形mesh PLYへ変換した派生物 | 502,869 | `17bea6f6e1459fae2f5c42b9ad7ba9f0b4fa7800d4599625178f86920ca13083` |
 | `Channel9.be.ply` | 同じ変換のbig endian版 | 502,866 | `a64c382bab35e48f98e5e465477693f6ecf46e1bd4e1bd1b194d96b1b04ab46b` |
+| `Channel9.points.ply` | STL頂点をbinary little endianの点群へ変換した派生物。faceのみ省略 | 425,956 | `d249950241e85149c3a59f3184271e607f558cf0f7d5c7e002f7f3d7735988bc` |
 
 固定commitのAssets内にある `.ply` は `splats/` のファイルで、今回取得した `combined_SPZv3.ply` は1,566 vertices、Gaussian用のscale / opacity / rotation等を持ち、face elementがない。通常meshの成功fixtureへ流用しない。PLY読込の成功検証にはSTL由来の変換fileを使い、公式配布のmesh PLYそのものを確認したとは扱わない。
 
-変換は三角形ごとの3頂点とfacet法線を保持する。頂点を共有せず、float32に格納し、面indexを付ける。軸・単位・原点・倍率を変更せず、色・UV・textureは追加しない。変換fileもCC BY 4.0とし、PLY headerに出典・固定commit・派生物であることを記す。
+meshへの変換は三角形ごとの3頂点とfacet法線を保持する。頂点を共有せず、float32に格納し、面indexを付ける。点群版は同じ頂点列・法線を保持してface element / dataだけを省略する。軸・単位・原点・倍率を変更せず、色・UV・textureは追加しない。変換fileもCC BY 4.0とし、PLY headerに出典・固定commit・派生物であることを記す。点群版も公式配布の点群そのものを確認したという扱いにはしない。
 
 ## 再取得と実行
 
-開発用取得scriptを明示的に実行する。固定URLから取得し、SHA256が一致したfileだけを保存する。既存のsource copyに不一致があれば上書きせず停止する。LICENSEも取得し、STLから両endianのPLYを再生成する。
+開発用取得scriptを明示的に実行する。固定URLから取得し、SHA256が一致したfileだけを保存する。既存のsource copyに不一致があれば上書きせず停止する。LICENSEも取得し、STLから両endianのmesh PLYとlittle endianの点群PLYを再生成する。
 
 ```powershell
 node scripts/fetch-babylon-static-reference-assets.mjs
@@ -33,7 +34,7 @@ npm.cmd run test:e2e -- static-local-reference.spec.mjs
 
 Electron / WebGPU E2EはGPUを利用できるローカル環境でGUI実行する。asset未配置の環境では対象testをskipする。共有する自作最小fixtureのtestは従来どおり独立して実行できる。
 
-## 検証結果
+## 三角形mesh追加時の検証結果
 
 - NullEngine: 元STLと変換PLY両endianはいずれも1 mesh、17,736 vertices、17,736 indices（5,912三角形）。有限な法線と元座標のboundsを保持する。UVはない。
 - Bounds: min `(-38.690868, -23.697248, -1.213336)`、max `(38.690868, 22.182064, 120.544174)`。PLYはfloat32の丸め差を許容する。
@@ -44,3 +45,9 @@ Electron / WebGPU E2EはGPUを利用できるローカル環境でGUI実行す�
 - 全unitは171 files / 1,019 tests成功。今回はアプリの実装・初期化を変更していないため、typecheck / smokeの再実行は省略した。初回実装時の結果は上記の対応範囲文書に記録している。
 
 このassetはZ方向に長いauthored coordinateを持つ。アプリはup-axisを推定しないため、検証用cameraをboundsへ向ける。STLのbinary、頂点色PLY、壊れた入力の広い組合せは [自作fixtureとparser test](./ply-stl-static-accessory-support-2026-10-09.md) で補う。
+
+## 点群追加後の検証
+
+同日の [PLY点群追加](./ply-point-cloud-support-2026-10-09.md) で `Channel9.points.ply` を生成し、17,736点・元bounds・非照明点材質・法線bufferなしをNullEngineで確認した。元STLと両endianのmesh PLYのchecksumは以前の変換と一致する。参照asset unitは10件成功した。
+
+GUI回帰確認の結果は点群対応メモに集約する。公式Splat PLYの拒否は継続して確認し、Gaussianを通常点群へ読み替えない。

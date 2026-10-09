@@ -7,8 +7,9 @@
 
 - `static-triangle.ply`: 三角形1面、RGB頂点色、ASCII PLY 1.0。
 - `static-triangle.stl`: 同じ座標の三角形1面、明示normal、ASCII STL。
+- `color-point-cloud.ply`: 面なし、441点のRGB wave、ASCII PLY 1.0。自作CC0。`node scripts/generate-point-cloud-fixture.mjs` で再生成できる。
 
-両方とも自作した最小geometryで、CC0として配布可能。binary PLY / STLはunit test内で同じgeometryから生成する。
+いずれも自作geometryで、CC0として配布可能。binary PLY / STLはunit test内で同じgeometryから生成する。
 
 ## Xモデル
 

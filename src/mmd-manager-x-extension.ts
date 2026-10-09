@@ -28,7 +28,7 @@ import { applyAccessoryCoplanarMaterialDepthBias } from "./scene/accessory-copla
 import { getDefaultAccessoryToonTexture, loadXIntoScene } from "./x-file-loader";
 import type { ProjectModelMaterialShaderState, ProjectSerializedAccessoryTransformTrack } from "./types";
 import { createObjLoaderForLocalMaterialData, prepareLocalObjMaterialBundle } from "./shared/obj-local-materials";
-import { loadStaticAccessoryMeshes, type StaticAccessoryKind } from "./assets/static-accessory-loader";
+import { isStaticPointCloudMesh, loadStaticAccessoryMeshes, type StaticAccessoryKind } from "./assets/static-accessory-loader";
 import {
     createAccessoryTransformKeyframeTrack,
     deserializeAccessoryTransformKeyframeTrack,
@@ -52,6 +52,7 @@ export type AccessoryState = {
     visible: boolean;
     castsShadow: boolean;
     kind: AccessoryKind;
+    contentKind?: "mesh" | "point-cloud";
 };
 
 export type AccessoryTransformState = {
@@ -71,6 +72,7 @@ export type AccessoryMaterialShaderState = {
     accessoryName: string;
     accessoryPath: string;
     kind: AccessoryKind;
+    contentKind?: "mesh" | "point-cloud";
     defaultPresetId: WgslMaterialShaderPresetId;
     materials: WgslMaterialShaderInfo[];
 };
@@ -142,6 +144,7 @@ type XLoadHost = {
 
 type AccessoryEntry = {
     kind: AccessoryKind;
+    contentKind: "mesh" | "point-cloud";
     name: string;
     path: string;
     root: TransformNode;
@@ -626,19 +629,22 @@ function ensureAccessoryFallbackMaterial(
 
 function prepareManagedAccessoryMeshes(host: XLoadHost, meshes: AbstractMesh[], castShadows: boolean): AbstractMesh[] {
     for (const mesh of meshes) {
+        const pointCloud = isStaticPointCloudMesh(mesh);
         mesh.visibility = 1;
         mesh.isVisible = true;
         mesh.alwaysSelectAsActiveMesh = true;
-        mesh.receiveShadows = true;
+        mesh.receiveShadows = !pointCloud;
         mesh.showBoundingBox = GLB_DEBUG_SHOW_BOUNDING_BOX;
-        stabilizeLargeThinLoadedMesh(mesh);
-        normalizeAccessoryMaterialVisibility(mesh.material);
+        if (!pointCloud) {
+            stabilizeLargeThinLoadedMesh(mesh);
+            normalizeAccessoryMaterialVisibility(mesh.material);
+        }
         if (GLB_DEBUG_SHOW_EDGES && mesh instanceof Mesh) {
             mesh.enableEdgesRendering();
             mesh.edgesWidth = 6;
             mesh.edgesColor = new Color4(1, 0, 0.2, 1);
         }
-        if (castShadows) {
+        if (castShadows && !pointCloud) {
             host.shadowGenerator.addShadowCaster(mesh, false);
         }
     }
@@ -959,6 +965,7 @@ function createAccessoryEntryFromImport(
 
     attachImportedNodesToAccessoryRoot(result, offset);
     let managedMeshes = getManagedAccessoryMeshes(result.meshes);
+    const pointCloud = managedMeshes.some(isStaticPointCloudMesh);
     let hierarchyMeshes = result.meshes;
     if (kind === "glb") {
         normalizeGlbAccessoryMaterials(host, managedMeshes);
@@ -990,7 +997,7 @@ function createAccessoryEntryFromImport(
     } else {
         configureImportedAccessoryMeshes(host, result.meshes, managedMeshes);
     }
-    if (kind !== "glb") {
+    if (kind !== "glb" && !pointCloud) {
         ensureAccessoryFallbackMaterial(host.scene, managedMeshes, accessoryName);
     }
     if (kind === "ply") {
@@ -1004,8 +1011,8 @@ function createAccessoryEntryFromImport(
         normalizeObjAccessoryMaterialsToMmd(host.scene, managedMeshes);
     }
     forceAccessoryHierarchyEnabled([...result.transformNodes, ...hierarchyMeshes, ...managedMeshes]);
-    prepareManagedAccessoryMeshes(host, managedMeshes, kind !== "glb");
-    if (kind !== "glb") {
+    prepareManagedAccessoryMeshes(host, managedMeshes, kind !== "glb" && !pointCloud);
+    if (kind !== "glb" && !pointCloud) {
         const accessoryMaterials = collectAccessoryMaterials(managedMeshes);
         applyWgslShaderPresetToMaterials(
             host as unknown as Parameters<typeof applyWgslShaderPresetToMaterials>[0],
@@ -1031,6 +1038,7 @@ function createAccessoryEntryFromImport(
 
     const entry: AccessoryEntry = {
         kind,
+        contentKind: pointCloud ? "point-cloud" : "mesh",
         name: accessoryName,
         path: filePath,
         root,
@@ -1038,7 +1046,7 @@ function createAccessoryEntryFromImport(
         baseScale,
         meshes: managedMeshes,
         defaultShaderPresetId,
-        castsShadow: kind !== "glb",
+        castsShadow: kind !== "glb" && !pointCloud,
         parentModelRef: null,
         parentModelName: null,
         parentBoneName: null,
@@ -1233,7 +1241,7 @@ function setAccessoryVisible(entry: AccessoryEntry, visible: boolean): void {
 }
 
 function applyAccessoryShadowCasterState(host: XLoadHost, entry: AccessoryEntry): void {
-    const enabled = entry.castsShadow && (host.getShadowEnabled?.() ?? true);
+    const enabled = entry.contentKind !== "point-cloud" && entry.castsShadow && (host.getShadowEnabled?.() ?? true);
     for (const mesh of entry.meshes) {
         if (enabled) {
             host.shadowGenerator.addShadowCaster(mesh, false);
@@ -1524,7 +1532,7 @@ async function loadStaticAccessory(host: XLoadHost, filePath: string, kind: Stat
         const meshes = loadStaticAccessoryMeshes(host.scene, kind, Uint8Array.from(bytes).buffer);
         createAccessoryEntryFromImport(host, kind, filePath, fileName.replace(/\.[^/.]+$/, "") || fileName,
             { meshes, transformNodes: [] }, 1, "wgsl-accessory-toon");
-        host.applyToonShadowInfluenceToMeshes?.(meshes);
+        host.applyToonShadowInfluenceToMeshes?.(meshes.filter(mesh => !isStaticPointCloudMesh(mesh)));
         host.refreshMmdCoplanarMaterialDepthBiasCorrection?.();
         host.syncIblShadowsScene?.();
         host.refreshShadowAfterSceneContentChanged?.();
@@ -1558,6 +1566,7 @@ if (!mmdManagerProto.getLoadedAccessories) {
             visible: isAccessoryVisible(entry),
             castsShadow: entry.castsShadow,
             kind: entry.kind,
+            contentKind: entry.contentKind,
         }));
     };
 }
@@ -1573,7 +1582,7 @@ if (!mmdManagerProto.getIblShadowAccessoryMeshes) {
     mmdManagerProto.getIblShadowAccessoryMeshes = function(): AbstractMesh[] {
         const entries = getAccessoryEntries(this as unknown as object);
         return entries
-            .filter((entry) => entry.kind !== "glb" && isAccessoryVisible(entry))
+            .filter((entry) => entry.kind !== "glb" && entry.contentKind !== "point-cloud" && isAccessoryVisible(entry))
             .flatMap((entry) => entry.meshes.filter(isIblShadowAccessoryMeshCandidate));
     };
 }
@@ -1587,7 +1596,7 @@ if (!mmdManagerProto.clearAccessories) {
             for (const mesh of entry?.meshes ?? []) {
                 host.shadowGenerator.removeShadowCaster(mesh, false);
             }
-            entry?.root.dispose(false);
+            entry?.root.dispose(false, entry.contentKind === "point-cloud");
         }
         host.syncIblShadowsScene?.();
         host.refreshShadowAfterSceneContentChanged?.();
@@ -1639,7 +1648,7 @@ if (!mmdManagerProto.setAccessoryCastsShadow) {
         const entries = getAccessoryEntries(this as unknown as object);
         const entry = entries[index];
         if (!entry) return false;
-        entry.castsShadow = castsShadow;
+        entry.castsShadow = entry.contentKind !== "point-cloud" && castsShadow;
         applyAccessoryShadowCasterState(this as unknown as XLoadHost, entry);
         (this as unknown as XLoadHost).refreshShadowAfterSceneContentChanged?.();
         return true;
@@ -1665,7 +1674,7 @@ if (!mmdManagerProto.removeAccessory) {
         for (const mesh of entry.meshes) {
             host.shadowGenerator.removeShadowCaster(mesh, false);
         }
-        entry.root.dispose(false);
+        entry.root.dispose(false, entry.contentKind === "point-cloud");
         host.syncIblShadowsScene?.();
         host.refreshShadowAfterSceneContentChanged?.();
         return true;
@@ -1994,8 +2003,9 @@ if (!mmdManagerProto.getAccessoryMaterialShaderStates) {
             accessoryName: entry.name,
             accessoryPath: entry.path,
             kind: entry.kind,
+            contentKind: entry.contentKind,
             defaultPresetId: entry.defaultShaderPresetId,
-            materials: collectAccessoryMaterialEntries(entry.meshes).map((materialEntry) => ({
+            materials: (entry.contentKind === "point-cloud" ? [] : collectAccessoryMaterialEntries(entry.meshes)).map((materialEntry) => ({
                 key: materialEntry.key,
                 name: materialEntry.name,
                 presetId: getWgslMaterialShaderPresetForMaterial(
@@ -2037,7 +2047,7 @@ if (!mmdManagerProto.setAccessoryMaterialShaderPreset) {
         presetId: WgslMaterialShaderPresetId,
     ): boolean {
         const entry = getAccessoryEntries(this as unknown as object)[index];
-        if (!entry) return false;
+        if (!entry || entry.contentKind === "point-cloud") return false;
         const targets = collectAccessoryMaterialEntries(entry.meshes)
             .filter((materialEntry) => materialKey === null || materialEntry.key === materialKey)
             .map((materialEntry) => materialEntry.material);
@@ -2055,6 +2065,7 @@ if (!mmdManagerProto.getSerializedAccessoryMaterialShaderStates) {
     ): ProjectModelMaterialShaderState[] {
         const entry = getAccessoryEntries(this as unknown as object)[index];
         if (!entry) return [];
+        if (entry.contentKind === "point-cloud") return [];
         const host = this as unknown as Parameters<typeof getWgslMaterialShaderPresetForMaterial>[0];
         const defaultPreset = getAccessoryDefaultShaderPreset(entry);
         return collectAccessoryMaterialEntries(entry.meshes).flatMap((materialEntry) => {
@@ -2079,6 +2090,10 @@ if (!mmdManagerProto.applyAccessoryMaterialShaderStates) {
         if (!Array.isArray(states) || states.length === 0) return;
         const entry = getAccessoryEntries(this as unknown as object)[index];
         if (!entry) return;
+        if (entry.contentKind === "point-cloud") {
+            warnings.push(`Point-cloud PLY does not support surface material presets: ${entry.path}`);
+            return;
+        }
         const materialEntries = collectAccessoryMaterialEntries(entry.meshes);
         for (const state of states) {
             if (!state || typeof state.materialKey !== "string" || typeof state.presetId !== "string") {

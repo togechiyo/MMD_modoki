@@ -295,6 +295,9 @@ declare global {
                 hasUvs: boolean;
                 materialName: string | null;
                 materialClassName: string | null;
+                pointsCloud: boolean;
+                disableLighting: boolean;
+                receiveShadows: boolean;
                 diffuseTextureUrl: string | null;
                 diffuseTextureReady: boolean;
                 toonTextureName: string | null;

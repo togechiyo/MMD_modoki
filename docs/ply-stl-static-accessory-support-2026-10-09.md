@@ -11,7 +11,7 @@
 | PLY | ASCII 1.0、binary little / big endian 1.0、三角形面、頂点位置、任意の法線、0〜255のRGB / RGBA頂点色 |
 | STL | ASCII / binary、三角形geometry。色・材質・texture拡張は対象外 |
 
-PLYの点群・Gaussian Splat、圧縮PLY、三角形以外の面は、説明付きで読込失敗とする。多角形は制作toolで三角形化してから渡す。PLY内のtexture参照やUVを材質へ接続しない。頂点alphaはbufferへ保持するが、初期実装では透明描画へは使わない。色を持たないPLYとSTLは中立灰色、頂点色PLYは白いdiffuse factorで元の色を保持する。いずれも既存の `Accessory Toon` を既定とする。
+上表は通常meshの対応範囲。同日の追加要望に基づく面なし / face count 0の通常PLYは、専用の非照明点群として読み込む。[PLY点群の範囲と検証](./ply-point-cloud-support-2026-10-09.md) を参照する。Gaussian Splat、圧縮PLY、三角形以外の面は説明付きで読込失敗とする。多角形は制作toolで三角形化してから渡す。PLY内のtexture参照やUVを材質へ接続しない。頂点alphaはbufferへ保持するが、初期実装では透明描画へは使わない。色を持たないmesh PLYとSTLは中立灰色、頂点色mesh PLYは白いdiffuse factorで元の色を保持する。通常meshは既存の `Accessory Toon` を既定とする。
 
 ## 共通操作と保存
 

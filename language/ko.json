@@ -237,6 +237,8 @@
     "shader.note.wgslUnavailable":  "WebGPU(WGSL)에서만 사용 가능합니다",
     "shader.note.loadModel":  "모델을 먼저 불러오세요",
     "shader.note.noMaterial":  "이 모델에는 할당 가능한 재질이 없습니다",
+    "shader.note.pointCloud":  "포인트 클라우드는 표면 재질이나 그림자 없이 정점 색상으로 표시됩니다.",
+    "accessory.pointCloud":  "포인트 클라우드",
     "shader.note.materialUiUnavailable":  "이 모델의 재질 방식은 현재 UI에서 편집할 수 없습니다",
     "shader.apply.selected":  "선택에 할당",
     "shader.apply.all":  "전체 재질에 할당",

@@ -99,7 +99,7 @@ MMDアクセサリとしては見た目の情報が少なく、OBJより優先�
 
 ### PLY
 
-2026-10-09: 初期対応は三角形面を持つ通常mesh。ASCII / binary little / big endianと頂点色を専用readerで扱う。点群・Gaussian Splat・多角形を同じ材質 / 影経路へ流さず、対象外として説明する。[対応範囲・検証](./ply-stl-static-accessory-support-2026-10-09.md) を参照する。以下のSPLAT loader分類案は後続の点群・Splat検討用である。
+2026-10-09: 三角形面を持つ通常meshに加え、所有者の点群読込要望に基づき面なし / face count 0の通常PLYを点群として追加した。ASCII / binary little / big endianと頂点色を専用readerで扱い、内容を分類する。点群は非照明・影なしの専用材質とし、Gaussian Splat・多角形は対象外として説明する。[mesh対応範囲](./ply-stl-static-accessory-support-2026-10-09.md)、[点群対応範囲・WebGPU制約・検証](./ply-point-cloud-support-2026-10-09.md) を参照する。以下のSPLAT loader分類は後続のSplat検討用にも残す。
 
 現行Babylon.js 9.2.0のSPLAT loaderは、PLYの内容を次の3種類へ分類する。
 

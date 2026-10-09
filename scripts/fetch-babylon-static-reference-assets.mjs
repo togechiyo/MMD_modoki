@@ -38,15 +38,15 @@ const facets = [...stl.matchAll(/facet normal ([^\r\n]+)\s+outer loop\s+vertex (
 if (facets.length !== 5912 || facets.some(facet => facet.some(vector => vector.length !== 3 || vector.some(value => !Number.isFinite(value))))) {
   throw new Error("Unexpected Channel9 ASCII STL geometry");
 }
-for (const littleEndian of [true, false]) {
+for (const { littleEndian, points } of [{ littleEndian: true, points: false }, { littleEndian: false, points: false }, { littleEndian: true, points: true }]) {
   const header = Buffer.from([
     "ply", `format binary_${littleEndian ? "little" : "big"}_endian 1.0`,
     `comment Derived from BabylonJS/Assets ${commit} meshes/Channel9/Channel9.stl; CC BY 4.0`,
     `element vertex ${facets.length * 3}`,
     ...["x", "y", "z", "nx", "ny", "nz"].map(property => `property float ${property}`),
-    `element face ${facets.length}`, "property list uchar int vertex_indices", "end_header", "",
+    ...(!points ? [`element face ${facets.length}`, "property list uchar int vertex_indices"] : []), "end_header", "",
   ].join("\n"));
-  const bytes = Buffer.alloc(header.length + facets.length * (3 * 24 + 13));
+  const bytes = Buffer.alloc(header.length + facets.length * (3 * 24 + (points ? 0 : 13)));
   header.copy(bytes);
   let offset = header.length;
   for (const [normal, ...vertices] of facets) {
@@ -58,7 +58,7 @@ for (const littleEndian of [true, false]) {
       }
     }
   }
-  for (let face = 0; face < facets.length; face += 1) {
+  for (let face = 0; face < (points ? 0 : facets.length); face += 1) {
     bytes[offset++] = 3;
     for (let corner = 0; corner < 3; corner += 1) {
       if (littleEndian) bytes.writeInt32LE(face * 3 + corner, offset);
@@ -66,7 +66,7 @@ for (const littleEndian of [true, false]) {
       offset += 4;
     }
   }
-  const name = `Channel9.${littleEndian ? "le" : "be"}.ply`;
+  const name = points ? "Channel9.points.ply" : `Channel9.${littleEndian ? "le" : "be"}.ply`;
   await writeFile(resolve(destination, name), bytes);
   console.log(`${name} (converted): ${bytes.length} bytes, SHA256 ${sha256(bytes)}`);
 }

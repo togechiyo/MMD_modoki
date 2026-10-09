@@ -5,6 +5,8 @@ export type PlyMeshData = {
     colors: number[] | null;
 };
 
+export type PlyData = PlyMeshData & { kind: "mesh" | "point-cloud" };
+
 type ScalarType = { size: number; read(view: DataView, offset: number, little: boolean): number; integer: boolean };
 const scalarTypes: Record<string, ScalarType> = {
     char: { size: 1, read: (v, o) => v.getInt8(o), integer: true },
@@ -30,8 +32,8 @@ function scalarType(name: string): ScalarType {
     return type;
 }
 
-/** Static triangle meshes only. No texture references, point-cloud or Splat runtime. */
-export function parsePlyMesh(data: ArrayBuffer): PlyMeshData {
+/** Local static triangles or points. Gaussian Splat and texture references are not loaded. */
+export function parsePlyData(data: ArrayBuffer): PlyData {
     if (data.byteLength > 256 * 1024 * 1024) throw new Error("PLY file exceeds 256 MiB");
     const bytes = new Uint8Array(data);
     const header = new TextDecoder().decode(bytes.subarray(0, 64 * 1024));
@@ -67,19 +69,25 @@ export function parsePlyMesh(data: ArrayBuffer): PlyMeshData {
     if (!["ascii", "binary_little_endian", "binary_big_endian"].includes(format)) throw new Error("Unsupported PLY encoding");
     const vertex = elements.find(e => e.name === "vertex");
     const face = elements.find(e => e.name === "face");
-    if (!vertex?.count || !["x", "y", "z"].every(name => vertex.properties.some(p => p.name === name && !p.countType))) {
-        throw new Error("PLY mesh needs vertex positions");
-    }
-    if (!face?.count) throw new Error("Point-cloud and Gaussian Splat PLY are not supported; use a PLY with triangle faces");
-    if (elements.filter(e => e.name === "vertex").length !== 1 || elements.filter(e => e.name === "face").length !== 1) {
+    if (elements.filter(e => e.name === "vertex").length > 1 || elements.filter(e => e.name === "face").length > 1) {
         throw new Error("Duplicate PLY vertex or face element");
     }
-    if (!face.properties.some(p => ["vertex_indices", "vertex_index"].includes(p.name) && p.countType && p.valueType.integer)) {
+    const hasVertexProperty = (name: string): boolean => Boolean(vertex?.properties.some(p => p.name === name && !p.countType));
+    const gaussianProperties = ["scale_0", "scale_1", "scale_2", "opacity", "rot_0", "rot_1", "rot_2", "rot_3"];
+    const packedGaussianProperties = ["packed_position", "packed_rotation", "packed_scale", "packed_color"];
+    if (!face?.count && (gaussianProperties.every(hasVertexProperty) || packedGaussianProperties.every(hasVertexProperty))) {
+        throw new Error("Gaussian Splat PLY is not supported; use a regular point-cloud or triangle PLY");
+    }
+    if (!vertex?.count || !["x", "y", "z"].every(name => vertex.properties.some(p => p.name === name && !p.countType))) {
+        throw new Error("PLY needs vertex positions");
+    }
+    const kind = face?.count ? "mesh" : "point-cloud";
+    if (kind === "mesh" && !face?.properties.some(p => ["vertex_indices", "vertex_index"].includes(p.name) && p.countType && p.valueType.integer)) {
         throw new Error("PLY faces need an integer vertex_indices list");
     }
     const hasNormals = ["nx", "ny", "nz"].every(name => vertex.properties.some(p => p.name === name && !p.countType));
     const hasColors = ["red", "green", "blue"].every(name => vertex.properties.some(p => p.name === name && !p.countType));
-    const result: PlyMeshData = { positions: [], indices: [], normals: hasNormals ? [] : null, colors: hasColors ? [] : null };
+    const result: PlyData = { kind, positions: [], indices: [], normals: hasNormals ? [] : null, colors: hasColors ? [] : null };
     const view = new DataView(data);
     const ascii = format === "ascii" ? new TextDecoder().decode(bytes.subarray(headerLength)) : "";
     const tokenPattern = /\S+/g;
@@ -137,6 +145,13 @@ export function parsePlyMesh(data: ArrayBuffer): PlyMeshData {
             }
         }
     }
-    if (!result.indices.length) throw new Error("No triangle mesh data found in PLY file");
+    if (kind === "mesh" && !result.indices.length) throw new Error("No triangle mesh data found in PLY file");
     return result;
+}
+
+/** Strict triangle-only API for callers that require surface geometry. */
+export function parsePlyMesh(data: ArrayBuffer): PlyMeshData {
+    const { kind, ...mesh } = parsePlyData(data);
+    if (kind !== "mesh") throw new Error("Point-cloud PLY is not a triangle mesh");
+    return mesh;
 }

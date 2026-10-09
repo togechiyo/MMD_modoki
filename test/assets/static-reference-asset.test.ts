@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadStaticAccessoryMeshes } from "../../src/assets/static-accessory-loader";
+import { isStaticPointCloudMesh, loadStaticAccessoryMeshes } from "../../src/assets/static-accessory-loader";
 
 const root = resolve("local-references/babylonjs/static-formats");
 const references = [
@@ -44,18 +44,39 @@ for (const [name, hash] of [
     ["combined_SPZv3.ply", "2d4d6154960c3de305cdd20d5feb3df97b9b3d39da0693b656c72a4800a391a4"],
     ["Channel9.le.ply", "17bea6f6e1459fae2f5c42b9ad7ba9f0b4fa7800d4599625178f86920ca13083"],
     ["Channel9.be.ply", "a64c382bab35e48f98e5e465477693f6ecf46e1bd4e1bd1b194d96b1b04ab46b"],
+    ["Channel9.points.ply", "d249950241e85149c3a59f3184271e607f558cf0f7d5c7e002f7f3d7735988bc"],
 ]) {
     it.skipIf(!existsSync(resolve(root, name)))(`${name} matches the recorded source or conversion checksum`, () => {
         expect(createHash("sha256").update(readFileSync(resolve(root, name))).digest("hex")).toBe(hash);
     });
 }
 
+it.skipIf(!existsSync(resolve(root, "Channel9.points.ply")))("loads Channel9 vertices as unlit points without triangle normals", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    try {
+        const data = Uint8Array.from(readFileSync(resolve(root, "Channel9.points.ply"))).buffer;
+        const meshes = loadStaticAccessoryMeshes(scene, "ply", data);
+        expect(meshes).toHaveLength(1);
+        const mesh = meshes[0];
+        expect(isStaticPointCloudMesh(mesh)).toBe(true);
+        expect(mesh.getTotalVertices()).toBe(17_736);
+        expect(mesh.getTotalIndices()).toBe(17_736);
+        expect(mesh.isVerticesDataPresent(VertexBuffer.NormalKind)).toBe(false);
+        expect(mesh.isPickable).toBe(false);
+        expect(mesh.material).toMatchObject({ pointsCloud: true, disableLighting: true, pointSize: 1 });
+        const box = mesh.getBoundingInfo().boundingBox;
+        box.minimum.asArray().forEach((value, axis) => expect(value).toBeCloseTo([-38.690868, -23.697248, -1.213336][axis], 4));
+        box.maximum.asArray().forEach((value, axis) => expect(value).toBeCloseTo([38.690868, 22.182064, 120.544174][axis], 4));
+    } finally { scene.dispose(); engine.dispose(); }
+});
+
 it.skipIf(!existsSync(resolve(root, "combined_SPZv3.ply")))("rejects official Gaussian Splat PLY without adding a scene mesh", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
     try {
         const data = Uint8Array.from(readFileSync(resolve(root, "combined_SPZv3.ply"))).buffer;
-        expect(() => loadStaticAccessoryMeshes(scene, "ply", data)).toThrow(/Point-cloud and Gaussian Splat PLY are not supported/);
+        expect(() => loadStaticAccessoryMeshes(scene, "ply", data)).toThrow(/Gaussian Splat PLY is not supported/);
         expect(scene.meshes).toHaveLength(0);
     } finally { scene.dispose(); engine.dispose(); }
 });

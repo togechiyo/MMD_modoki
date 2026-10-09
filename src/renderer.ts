@@ -377,6 +377,8 @@ async function initializeApp(): Promise<void> {
         getAccessoryMaterialDiagnostics: () => mmdManager.getAccessoryMeshes().map((mesh) => {
           const material = mesh.material as unknown as {
             name?: string;
+            pointsCloud?: boolean;
+            disableLighting?: boolean;
             getClassName?: () => string;
             diffuseTexture?: {
               url?: string;
@@ -393,6 +395,9 @@ async function initializeApp(): Promise<void> {
             hasUvs: mesh.isVerticesDataPresent("uv"),
             materialName: material?.name ?? null,
             materialClassName: material?.getClassName?.() ?? null,
+            pointsCloud: material?.pointsCloud ?? false,
+            disableLighting: material?.disableLighting ?? false,
+            receiveShadows: mesh.receiveShadows,
             diffuseTextureUrl: texture?.url ?? null,
             diffuseTextureReady: texture?.isReady?.() ?? false,
             toonTextureName: material?.toonTexture?.name ?? null,

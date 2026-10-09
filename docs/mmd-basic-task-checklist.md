@@ -267,7 +267,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] STL 読み込み（2026-10-09: ASCII / binaryのgeometryを倍率1のアクセサリへ接続。情報欄操作、共通キー、project復元を両backendのElectron E2E確認。材質 / texture拡張は対象外。上記対応範囲を参照）
 - [x] Babylon.js公式assetでPLY / STL追加検証（2026-10-09: Channel9 STLと変換mesh PLYをlocalへ固定し、両backendで読込・表示・project復元を確認。公式Splat PLYの拒否も確認。未配置環境ではskip。[出典・再取得手順・結果](./babylon-ply-stl-reference-assets-2026-10-09.md)）
 - [ ] `.babylon` 読み込み
-- [ ] 点群 / Gaussian Splat 形式（`.ply` / `.splat` / `.spz` / `.sog`）読み込み調査
+- [x] 通常PLY点群の読込（2026-10-09: ASCII / binary両endian、頂点色、非照明表示、共通transform / 表示キー、project復元。Classic / Frame GraphのGUIとbackend切替を確認。[範囲・制約・検証](./ply-point-cloud-support-2026-10-09.md)）
+- [ ] Gaussian Splat 形式（`.ply` / `.splat` / `.spz` / `.sog`）読み込み調査
 - [ ] 座標系 / スケール差の吸収
 - [ ] 形式ごとのマテリアル / テクスチャ差分整理
 - [x] タイムライン対象形式の整理（2026-08-25: `.x` / OBJ は読み込み形式別に分岐せず、共通のアクセサリ変形トラックとして扱う）

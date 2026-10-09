@@ -13,6 +13,7 @@ evidence:
 source_docs:
   - ../../docs/babylon-static-3d-format-candidates-2026-08-20.md
   - ../../docs/babylon-ply-stl-reference-assets-2026-10-09.md
+  - ../../docs/ply-point-cloud-support-2026-10-09.md
 superseded_by: null
 ---
 
@@ -36,7 +37,7 @@ Texture Libraryにはdiffuse / albedo、height、metallic、normal、opacity、c
 - 大きなassetをそのままunit testへ持ち込まず、目的に合う最小fixtureで代替できるか先に判断する。
 - local referenceを `test/` や機能別directoryへ分散配置しない。
 - 公式assetで通ることだけをもって、MMD固有modelや一般の壊れた入力への互換性まで保証しない。
-- `.ply` という拡張子だけで通常meshのfixtureにしない。face / Gaussian propertyを確認し、形式変換したassetは元sourceと派生物を区別して記録する。
+- `.ply` という拡張子だけで通常meshや点群のfixtureにしない。face / Gaussian propertyを確認してmesh・通常点群・Splatを区別し、形式変換したassetは元sourceと派生物を区別して記録する。
 
 ## 根拠
 
@@ -46,7 +47,8 @@ Texture Libraryにはdiffuse / albedo、height、metallic、normal、opacity、c
 - MMD_modokiの配布アプリはoffline-firstかつtestはfixture中心で検証するため、公式一覧は開発時の探索catalogとして使い、runtime dependencyにはしない。
 - 2026-08-22に `Chair/Chair.obj` を無改変で `local-references/babylonjs/chair/` へ保存した。公式sourceとlocal fileのGit blob SHAは `77f530db3f52e83cb3cbd5ed313d4dbac7d5d6a8` で一致した。
 - `test/assets/obj-reference-asset.test.ts` でsource SHA-256を固定し、Babylon.js 9.2.0 NullEngine上のlocal OBJ経路が10 meshes、16,755 vertices、59,256 indicesと全meshのUV・生成normalを読み込むことを確認した。
-- 2026-10-09に公式 `Channel9.stl` と `combined_SPZv3.ply` をcommit / SHA256固定で取得。元STLと変換mesh PLYは17,736 vertices / 5,912三角形を保持し、Classic / Frame GraphのElectron GUIで読込・表示・project復元を確認した。公式Splat PLYはfaceがなく、通常mesh経路で説明付き拒否を確認した。再取得scriptとoptional testはsource文書を参照する。
+- 2026-10-09に公式 `Channel9.stl` と `combined_SPZv3.ply` をcommit / SHA256固定で取得。元STLと変換mesh PLYは17,736 vertices / 5,912三角形を保持し、Classic / Frame GraphのElectron GUIで読込・表示・project復元を確認した。公式Splat PLYはfaceがなく、Gaussian propertyで説明付き拒否を確認した。再取得scriptとoptional testはsource文書を参照する。
+- 同日の点群追加ではChannel9の頂点列からfaceだけを省略したPLYを生成し、NullEngineで17,736点・元bounds・非照明材質を確認した。Gaussianの位置を通常点群とみなす変換は行わず、表示成功用の派生物と拒否確認用の公式原本を分けた。
 
 ## 再確認条件
 

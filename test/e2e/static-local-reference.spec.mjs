@@ -29,6 +29,7 @@ function observeErrorsAndRequests(page) {
 for (const reference of [
   { file: "Channel9.stl", kind: "STL", label: "Channel9 [STL]" },
   { file: "Channel9.le.ply", kind: "PLY", label: "Channel9.le [PLY]" },
+  { file: "Channel9.points.ply", kind: "PLY", label: "Channel9.points [PLY]", pointCloud: true },
 ]) {
   for (const backend of ["classic", "frameGraph"]) {
     test(`local ${reference.file} renders and restores in ${backend}`, async ({}, testInfo) => {
@@ -46,8 +47,17 @@ for (const reference of [
         const selector = page.locator("#info-model-select");
         await expect(selector).toHaveValue("__accessory__:0");
         await expect(selector.locator('option[value="__accessory__:0"]')).toContainText(reference.label);
-        await expect(page.locator("#info-accessory-kind")).toHaveText(reference.kind);
-        await expect(page.locator("#chk-accessory-shadow")).toBeChecked();
+        await expect(page.locator("#info-accessory-kind")).toHaveText(reference.pointCloud ? `${reference.kind} (点群)` : reference.kind);
+        const shadow = page.locator("#chk-accessory-shadow");
+        if (reference.pointCloud) {
+          await expect(shadow).toBeDisabled();
+          await expect(shadow).not.toBeChecked();
+          const materials = await page.evaluate(() => window.mmdModokiE2e.getAccessoryMaterialDiagnostics());
+          expect(materials).toHaveLength(1);
+          expect(materials[0]).toMatchObject({ pointsCloud: true, disableLighting: true, receiveShadows: false });
+        } else {
+          await expect(shadow).toBeChecked();
+        }
         await expect(page.locator("#chk-accessory-visibility")).toBeChecked();
         const buffers = await page.evaluate(() => window.mmdModokiE2e.getAccessoryVertexBufferDiagnostics());
         expect(buffers).toHaveLength(1);
@@ -61,7 +71,7 @@ for (const reference of [
         await page.locator("#accessory-pos-x").fill("2");
         await page.locator("#accessory-pos-x").press("Enter");
         await page.locator("#chk-accessory-visibility").uncheck();
-        await page.locator("#chk-accessory-shadow").uncheck();
+        if (!reference.pointCloud) await shadow.uncheck();
         const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
         expect(saved.accessories).toHaveLength(1);
         expect(saved.accessories[0]).toMatchObject({ path: filePath, visible: false, castsShadow: false, transform: { position: { x: 2, y: 0, z: 0 }, scale: 1 } });
@@ -72,7 +82,7 @@ for (const reference of [
         await expect(page.locator("#chk-accessory-visibility")).not.toBeChecked();
         await expect(page.locator("#chk-accessory-shadow")).not.toBeChecked();
         await page.locator("#chk-accessory-visibility").check();
-        await page.locator("#chk-accessory-shadow").check();
+        if (!reference.pointCloud) await shadow.check();
         await page.evaluate(async () => {
           for (let frame = 0; frame < 5; frame += 1) await new Promise(resolveFrame => requestAnimationFrame(resolveFrame));
         });
@@ -92,7 +102,7 @@ test("official Splat PLY is rejected through Open without leaving an accessory",
     const diagnostics = observeErrorsAndRequests(page);
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     await openLocalFile(launched.app, page, filePath);
-    await expect(page.locator(".toast.error")).toContainText("Point-cloud and Gaussian Splat PLY are not supported");
+    await expect(page.locator(".toast.error")).toContainText("Gaussian Splat PLY is not supported");
     await expect(page.locator('#info-model-select option[value^="__accessory__:"]')).toHaveCount(0);
     expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).accessories).toHaveLength(0);
     expect(await page.evaluate(() => window.mmdModokiE2e.getAccessoryVertexBufferDiagnostics())).toHaveLength(0);

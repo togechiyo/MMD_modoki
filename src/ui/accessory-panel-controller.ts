@@ -200,7 +200,11 @@ export class AccessoryPanelController {
             ? null
             : this.mmdManager.getLoadedAccessories().find((item) => item.index === selectedIndex) ?? null;
         if (this.elements.name) this.elements.name.textContent = accessory?.name ?? "-";
-        if (this.elements.kind) this.elements.kind.textContent = accessory?.kind.toUpperCase() ?? "-";
+        if (this.elements.kind) {
+            this.elements.kind.textContent = accessory
+                ? `${accessory.kind.toUpperCase()}${accessory.contentKind === "point-cloud" ? ` (${t("accessory.pointCloud")})` : ""}`
+                : "-";
+        }
     }
 
     private setupControls(): void {
@@ -529,6 +533,7 @@ export class AccessoryPanelController {
 
         const accessories = this.mmdManager.getLoadedAccessories();
         const current = accessories.find((item) => item.index === selectedIndex);
+        chkShadow.disabled = !enabled || current?.contentKind === "point-cloud";
         chkVisibility.checked = current?.visible ?? true;
         chkShadow.checked = current?.castsShadow ?? true;
     }

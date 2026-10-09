@@ -202,7 +202,7 @@ export class AccessoryPanelController {
         if (this.elements.name) this.elements.name.textContent = accessory?.name ?? "-";
         if (this.elements.kind) {
             this.elements.kind.textContent = accessory
-                ? `${accessory.kind.toUpperCase()}${accessory.contentKind === "point-cloud" ? ` (${t("accessory.pointCloud")})` : ""}`
+                ? `${accessory.kind.toUpperCase()}${accessory.contentKind === "point-cloud" ? ` (${t("accessory.pointCloud")})` : accessory.contentKind === "gaussian-splat" ? " (Gaussian Splat)" : ""}`
                 : "-";
         }
     }
@@ -533,7 +533,7 @@ export class AccessoryPanelController {
 
         const accessories = this.mmdManager.getLoadedAccessories();
         const current = accessories.find((item) => item.index === selectedIndex);
-        chkShadow.disabled = !enabled || current?.contentKind === "point-cloud";
+        chkShadow.disabled = !enabled || (current?.contentKind !== undefined && current.contentKind !== "mesh");
         chkVisibility.checked = current?.visible ?? true;
         chkShadow.checked = current?.castsShadow ?? true;
     }

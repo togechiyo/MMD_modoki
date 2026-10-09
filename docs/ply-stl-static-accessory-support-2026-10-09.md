@@ -11,7 +11,7 @@
 | PLY | ASCII 1.0、binary little / big endian 1.0、三角形面、頂点位置、任意の法線、0〜255のRGB / RGBA頂点色 |
 | STL | ASCII / binary、三角形geometry。色・材質・texture拡張は対象外 |
 
-上表は通常meshの対応範囲。同日の追加要望に基づく面なし / face count 0の通常PLYは、専用の非照明点群として読み込む。[PLY点群の範囲と検証](./ply-point-cloud-support-2026-10-09.md) を参照する。Gaussian Splat、圧縮PLY、三角形以外の面は説明付きで読込失敗とする。多角形は制作toolで三角形化してから渡す。PLY内のtexture参照やUVを材質へ接続しない。頂点alphaはbufferへ保持するが、初期実装では透明描画へは使わない。色を持たないmesh PLYとSTLは中立灰色、頂点色mesh PLYは白いdiffuse factorで元の色を保持する。通常meshは既存の `Accessory Toon` を既定とする。
+上表は通常meshの対応範囲。同日の追加要望に基づく面なし / face count 0の通常PLYは、専用の非照明点群として読み込む。[PLY点群の範囲と検証](./ply-point-cloud-support-2026-10-09.md) を参照する。Gaussian PLYは[専用Splat経路](./gaussian-splat-accessory-support-2026-10-09.md)で扱い、圧縮PLY、三角形以外の面は説明付きで読込失敗とする。多角形は制作toolで三角形化してから渡す。PLY内のtexture参照やUVを材質へ接続しない。頂点alphaはbufferへ保持するが、初期実装では透明描画へは使わない。色を持たないmesh PLYとSTLは中立灰色、頂点色mesh PLYは白いdiffuse factorで元の色を保持する。通常meshは既存の `Accessory Toon` を既定とする。
 
 ## 共通操作と保存
 
@@ -30,7 +30,7 @@
 
 - STLは公式 `STLFileLoader.importMesh` をbytes / textへ直接適用できる。geometryの検証と欠落・全ゼロ法線の再計算はアプリで補う。
 - 導入済み `SPLAT/splatFileLoader.js` のPLY処理はlittle endianのbinaryと三角形faceを前提とし、通常meshの `_BuildMesh` は法線を付けない。ASCII / big endianまで同じ入口へ渡すことはしない。
-- 今回のPLYは `src/shared/ply-mesh.ts` の小さな静的mesh readerで処理し、Babylon `VertexData` へ渡す。Splat runtime、worker、追加decoderはロードしない。
+- 通常mesh PLYは `src/shared/ply-mesh.ts` の小さな静的mesh readerで処理し、Babylon `VertexData` へ渡す。通常mesh経路ではSplat runtimeやworkerを作成しない。Gaussian専用経路は上記の後続対応メモを参照する。
 - STL deep importはVite `optimizeDeps.include` に追加し、OBJと同様にBabylon coreのmodule graphを共有する。WebGPUの実効strideはGUIテストで確認する。
 
 ## 検証

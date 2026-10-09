@@ -11,6 +11,14 @@
 
 いずれも自作geometryで、CC0として配布可能。binary PLY / STLはunit test内で同じgeometryから生成する。
 
+## Gaussian Splat
+
+- `gaussian-color.ply` / `.splat` / `.spz`: 同じ4個の色付きGaussian。PLYは非圧縮binary LE、日本語comment、SH degree 2（追加係数は0）。SPZはv3。
+- `gaussian-color-v2.spz`: SPZ v2 decoderの確認用。
+- `gaussian-ascii.ply`: 未対応encodingのエラーを確認するfixture。
+
+自作CC0。`node scripts/generate-gaussian-splat-fixtures.mjs` で再生成できる。SPZの色・scaleは量子化による差がある。
+
 ## Xモデル
 
 - `simple-triangle.x`: Xローダーの最小構文を確認する三角形

@@ -6,6 +6,7 @@ export type PlyMeshData = {
 };
 
 export type PlyData = PlyMeshData & { kind: "mesh" | "point-cloud" };
+export type PlyContentKind = PlyData["kind"] | "gaussian-splat";
 
 type ScalarType = { size: number; read(view: DataView, offset: number, little: boolean): number; integer: boolean };
 const scalarTypes: Record<string, ScalarType> = {
@@ -32,8 +33,7 @@ function scalarType(name: string): ScalarType {
     return type;
 }
 
-/** Local static triangles or points. Gaussian Splat and texture references are not loaded. */
-export function parsePlyData(data: ArrayBuffer): PlyData {
+function readPlyHeader(data: ArrayBuffer): { elements: Element[]; format: string; headerLength: number } {
     if (data.byteLength > 256 * 1024 * 1024) throw new Error("PLY file exceeds 256 MiB");
     const bytes = new Uint8Array(data);
     const header = new TextDecoder().decode(bytes.subarray(0, 64 * 1024));
@@ -67,6 +67,10 @@ export function parsePlyData(data: ArrayBuffer): PlyData {
         }
     }
     if (!["ascii", "binary_little_endian", "binary_big_endian"].includes(format)) throw new Error("Unsupported PLY encoding");
+    return { elements, format, headerLength };
+}
+
+function classifyPlyElements(elements: Element[]): PlyContentKind {
     const vertex = elements.find(e => e.name === "vertex");
     const face = elements.find(e => e.name === "face");
     if (elements.filter(e => e.name === "vertex").length > 1 || elements.filter(e => e.name === "face").length > 1) {
@@ -75,13 +79,90 @@ export function parsePlyData(data: ArrayBuffer): PlyData {
     const hasVertexProperty = (name: string): boolean => Boolean(vertex?.properties.some(p => p.name === name && !p.countType));
     const gaussianProperties = ["scale_0", "scale_1", "scale_2", "opacity", "rot_0", "rot_1", "rot_2", "rot_3"];
     const packedGaussianProperties = ["packed_position", "packed_rotation", "packed_scale", "packed_color"];
-    if (!face?.count && (gaussianProperties.every(hasVertexProperty) || packedGaussianProperties.every(hasVertexProperty))) {
-        throw new Error("Gaussian Splat PLY is not supported; use a regular point-cloud or triangle PLY");
+    if (!face?.count && [...gaussianProperties.filter(name => name !== "opacity"), ...packedGaussianProperties].some(hasVertexProperty)) {
+        return "gaussian-splat";
     }
     if (!vertex?.count || !["x", "y", "z"].every(name => vertex.properties.some(p => p.name === name && !p.countType))) {
         throw new Error("PLY needs vertex positions");
     }
-    const kind = face?.count ? "mesh" : "point-cloud";
+    return face?.count ? "mesh" : "point-cloud";
+}
+
+/** Classification is shared by the static reader and dedicated Gaussian path. */
+export function getPlyContentKind(data: ArrayBuffer): PlyContentKind {
+    return classifyPlyElements(readPlyHeader(data).elements);
+}
+
+/** Validate and normalize the subset accepted by Babylon 9.2's public converter. */
+export function prepareGaussianPly(data: ArrayBuffer): ArrayBuffer {
+    const { elements, format, headerLength } = readPlyHeader(data);
+    if (classifyPlyElements(elements) !== "gaussian-splat") throw new Error("PLY is not a Gaussian Splat");
+    if (format !== "binary_little_endian") throw new Error("Gaussian PLY currently requires binary little endian encoding");
+    const vertex = elements.find(e => e.name === "vertex");
+    if (!vertex?.count) throw new Error("Gaussian PLY needs vertices");
+    if (elements.some(e => e !== vertex && e.count > 0) || vertex.properties.some(p => p.countType || p.name.startsWith("packed_"))) {
+        throw new Error("Compressed or multi-element Gaussian PLY is not supported; use uncompressed Gaussian PLY");
+    }
+    const has = (name: string): boolean => vertex.properties.some(p => p.name === name);
+    if (!["scale_0", "scale_1", "scale_2", "opacity", "rot_0", "rot_1", "rot_2", "rot_3"].every(has)) throw new Error("Gaussian PLY is missing scale / opacity / rotation properties");
+    if (vertex.properties.some(p => p.valueType === scalarTypes.char)) throw new Error("Gaussian PLY char properties are not supported by the native converter");
+    const shProperties = vertex.properties.filter(p => p.name.startsWith("f_rest_"));
+    if (shProperties.length && (![9, 24, 45].includes(shProperties.length)
+        || !Array.from({ length: shProperties.length }, (_, i) => `f_rest_${i}`).every(has))) {
+        throw new Error("Gaussian PLY needs complete SH bands (9 / 24 / 45 properties)");
+    }
+    if (!["x", "y", "z"].every(has) || !(["red", "green", "blue"].every(has) || ["f_dc_0", "f_dc_1", "f_dc_2"].every(has))) {
+        throw new Error("Gaussian PLY needs positions and RGB or SH color properties");
+    }
+    const bodyLength = vertex.count * vertex.properties.reduce((sum, property) => sum + property.valueType.size, 0);
+    if (headerLength + bodyLength > data.byteLength) throw new Error("Truncated Gaussian PLY data");
+    const view = new DataView(data);
+    let offset = headerLength;
+    for (let row = 0; row < vertex.count; row++) {
+        let rotationLength = 0;
+        for (const property of vertex.properties) {
+            const value = property.valueType.read(view, offset, true);
+            if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value))) throw new Error("Invalid Gaussian PLY numeric value");
+            if (/^rot_[0-3]$/.test(property.name)) rotationLength += value * value;
+            offset += property.valueType.size;
+        }
+        if (rotationLength === 0) throw new Error("Gaussian PLY rotation must have a nonzero quaternion");
+    }
+    // Native 9.2 treats decoded header character offsets as byte offsets: emit an ASCII-only header.
+    const nativeProperties = vertex.properties.map((property, index) => {
+        const typeName = Object.keys(scalarTypes).find(name => scalarTypes[name] === property.valueType);
+        if (!typeName) throw new Error("Unsupported Gaussian PLY property type");
+        const name = /^[\x21-\x7e]+$/.test(property.name) ? property.name : `unused_property_${index}`;
+        return `property ${typeName} ${name}`;
+    });
+    // Native 9.2 detects degree 2 at f_rest_24 rather than f_rest_23. The sentinel is not copied to SH.
+    const padDegree2 = shProperties.length === 24;
+    if (padDegree2) nativeProperties.push("property uchar f_rest_24");
+    const canonical = ["ply", "format binary_little_endian 1.0", `element vertex ${vertex.count}`, ...nativeProperties, "end_header", ""].join("\n");
+    const prefix = new TextEncoder().encode(canonical);
+    if (prefix.length > 10 * 1024) throw new Error("Gaussian PLY header exceeds native converter's 10 KiB limit");
+    const normalized = new Uint8Array(prefix.length + bodyLength + (padDegree2 ? vertex.count : 0));
+    normalized.set(prefix);
+    if (padDegree2) {
+        const rowLength = bodyLength / vertex.count;
+        for (let row = 0; row < vertex.count; row++) {
+            normalized.set(new Uint8Array(data, headerLength + row * rowLength, rowLength), prefix.length + row * (rowLength + 1));
+        }
+    } else {
+        normalized.set(new Uint8Array(data, headerLength, bodyLength), prefix.length);
+    }
+    return normalized.buffer;
+}
+
+/** Local static triangles or points. Gaussian uses a separate native decoder. */
+export function parsePlyData(data: ArrayBuffer): PlyData {
+    const { elements, format, headerLength } = readPlyHeader(data);
+    const bytes = new Uint8Array(data);
+    const vertex = elements.find(e => e.name === "vertex");
+    const face = elements.find(e => e.name === "face");
+    const kind = classifyPlyElements(elements);
+    if (kind === "gaussian-splat") throw new Error("Gaussian Splat PLY is not supported by the static mesh reader");
+    if (!vertex) throw new Error("PLY needs vertex positions");
     if (kind === "mesh" && !face?.properties.some(p => ["vertex_indices", "vertex_index"].includes(p.name) && p.countType && p.valueType.integer)) {
         throw new Error("PLY faces need an integer vertex_indices list");
     }

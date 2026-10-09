@@ -8,7 +8,7 @@
 
 点群は専用の非照明材質で頂点色を表示し、通常meshのToon preset・coplanar補正・shadow caster・IBL shadow対象から外す。情報欄で点群と表示し、影と表面材質presetは無効にする。分類はfile内容から再取得し、project schemaは変更しない。
 
-対応済みはASCII / binary little / big endian PLY、位置、任意の0〜255 RGB / RGBA。点群のnormalは読み取れても照明には使用せず、alphaは初期対応では不透明表示とする。点の個別編集・点サイズUI・PCD / XYZ / LAS / Gaussian Splatの表示は今回の範囲へ含めない。Gaussian用propertyや圧縮Splatを検出したら説明付きで拒否し、通常点群へ読み替えない。
+対応済みはASCII / binary little / big endian PLY、位置、任意の0〜255 RGB / RGBA。点群のnormalは読み取れても照明には使用せず、alphaは初期対応では不透明表示とする。点の個別編集・点サイズUI・PCD / XYZ / LASは今回の範囲へ含めない。同日の後続要望でGaussian PLYを[専用Splat経路](./gaussian-splat-accessory-support-2026-10-09.md)へ追加した。Gaussian用propertyは通常点群へ読み替えず、未対応encodingや圧縮PLYは説明付きで拒否する。
 
 「ファイル → ファイル読込」またはdrag & dropで通常PLYを開き、情報欄の対象一覧から点群を選択する。画面上の点のクリック選択には未対応。隣接する点indexを三角形と誤認しないようray pickingを無効にする。色なし点群は灰色で表示する。既存readerのfile上限256 MiB、vertex上限500万を維持するが、数百万点のperformanceやscanner形式の広い互換性は未評価。
 

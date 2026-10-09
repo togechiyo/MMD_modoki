@@ -1,0 +1,47 @@
+ply
+format ascii 1.0
+comment 自作CC0 Gaussian fixture (SH degree 2)
+element vertex 4
+property float x
+property float y
+property float z
+property float scale_0
+property float scale_1
+property float scale_2
+property float f_dc_0
+property float f_dc_1
+property float f_dc_2
+property float opacity
+property float rot_0
+property float rot_1
+property float rot_2
+property float rot_3
+property float f_rest_0
+property float f_rest_1
+property float f_rest_2
+property float f_rest_3
+property float f_rest_4
+property float f_rest_5
+property float f_rest_6
+property float f_rest_7
+property float f_rest_8
+property float f_rest_9
+property float f_rest_10
+property float f_rest_11
+property float f_rest_12
+property float f_rest_13
+property float f_rest_14
+property float f_rest_15
+property float f_rest_16
+property float f_rest_17
+property float f_rest_18
+property float f_rest_19
+property float f_rest_20
+property float f_rest_21
+property float f_rest_22
+property float f_rest_23
+end_header
+0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0

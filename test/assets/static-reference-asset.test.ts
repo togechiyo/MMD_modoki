@@ -71,7 +71,7 @@ it.skipIf(!existsSync(resolve(root, "Channel9.points.ply")))("loads Channel9 ver
     } finally { scene.dispose(); engine.dispose(); }
 });
 
-it.skipIf(!existsSync(resolve(root, "combined_SPZv3.ply")))("rejects official Gaussian Splat PLY without adding a scene mesh", () => {
+it.skipIf(!existsSync(resolve(root, "combined_SPZv3.ply")))("static triangle reader never reinterprets official Gaussian Splat PLY as a mesh", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
     try {

@@ -238,6 +238,7 @@
     "shader.note.loadModel":  "Load a model first",
     "shader.note.noMaterial":  "No assignable materials in this model",
     "shader.note.pointCloud":  "Point clouds display vertex colors without surface materials or shadows.",
+    "shader.note.gaussianSplat":  "Gaussian Splats retain color and transparency with their own material. Surface presets and shadows are unavailable.",
     "accessory.pointCloud":  "Point Cloud",
     "shader.note.materialUiUnavailable":  "This model's material pipeline is not editable in the current UI",
     "shader.apply.selected":  "Assign selected",

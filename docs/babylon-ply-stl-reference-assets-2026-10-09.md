@@ -50,4 +50,10 @@ Electron / WebGPU E2EはGPUを利用できるローカル環境でGUI実行す�
 
 同日の [PLY点群追加](./ply-point-cloud-support-2026-10-09.md) で `Channel9.points.ply` を生成し、17,736点・元bounds・非照明点材質・法線bufferなしをNullEngineで確認した。元STLと両endianのmesh PLYのchecksumは以前の変換と一致する。参照asset unitは10件成功した。
 
-GUI回帰確認の結果は点群対応メモに集約する。公式Splat PLYの拒否は継続して確認し、Gaussianを通常点群へ読み替えない。
+GUI回帰確認の結果は点群対応メモに集約する。この段階では公式Splat PLYの拒否を継続確認し、Gaussianを通常点群へ読み替えていない。
+
+## Gaussian追加後の検証
+
+同日の[Gaussian専用経路追加](./gaussian-splat-accessory-support-2026-10-09.md)後は公式 `combined_SPZv3.ply` 原本を無改変で読み込む。native decoderで1,566 splatsとSH band 1、両backendのGUIで専用材質・表示 / 非表示のcanvas差分・共通transform / 表示キー・project復元・削除・外部HTTP requestなしを確認した。通常mesh readerが同assetを三角形として解釈しないunit guardは保持する。GUIの拒否testは未対応ASCII Gaussianの自作fixtureへ置き換えた。
+
+公式原本のposition範囲は `x=-125..225 / y=-75..175 / z=0..100`、native既定Y反転後のcenterは `(50,-50,50)`。検証cameraはasset外側へ置く。座標を縮小した派生物へ置き換えない。最終確認結果はGaussian対応メモを参照する。

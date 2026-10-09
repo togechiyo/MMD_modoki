@@ -293,6 +293,9 @@ declare global {
             getAccessoryMaterialDiagnostics: () => Array<{
                 mesh: string;
                 hasUvs: boolean;
+                meshClassName: string;
+                vertexCount: number;
+                ready: boolean;
                 materialName: string | null;
                 materialClassName: string | null;
                 pointsCloud: boolean;

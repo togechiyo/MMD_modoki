@@ -14,6 +14,7 @@ source_docs:
   - ../../docs/babylon-static-3d-format-candidates-2026-08-20.md
   - ../../docs/babylon-ply-stl-reference-assets-2026-10-09.md
   - ../../docs/ply-point-cloud-support-2026-10-09.md
+  - ../../docs/gaussian-splat-accessory-support-2026-10-09.md
 superseded_by: null
 ---
 
@@ -49,6 +50,7 @@ Texture Libraryにはdiffuse / albedo、height、metallic、normal、opacity、c
 - `test/assets/obj-reference-asset.test.ts` でsource SHA-256を固定し、Babylon.js 9.2.0 NullEngine上のlocal OBJ経路が10 meshes、16,755 vertices、59,256 indicesと全meshのUV・生成normalを読み込むことを確認した。
 - 2026-10-09に公式 `Channel9.stl` と `combined_SPZv3.ply` をcommit / SHA256固定で取得。元STLと変換mesh PLYは17,736 vertices / 5,912三角形を保持し、Classic / Frame GraphのElectron GUIで読込・表示・project復元を確認した。公式Splat PLYはfaceがなく、Gaussian propertyで説明付き拒否を確認した。再取得scriptとoptional testはsource文書を参照する。
 - 同日の点群追加ではChannel9の頂点列からfaceだけを省略したPLYを生成し、NullEngineで17,736点・元bounds・非照明材質を確認した。Gaussianの位置を通常点群とみなす変換は行わず、表示成功用の派生物と拒否確認用の公式原本を分けた。
+- 同日のGaussian追加後は公式原本の1,566 splats / SH band 1を専用decoderと両backendのGUIで確認した。通常mesh・点群の成功fixtureへ流用する扱いは変えず、Splat固有の成功fixtureとして再利用する。以前の拒否結果は専用経路がなかった段階の履歴とする。
 
 ## 再確認条件
 

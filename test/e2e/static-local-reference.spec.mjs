@@ -93,16 +93,15 @@ for (const reference of [
   }
 }
 
-test("official Splat PLY is rejected through Open without leaving an accessory", async () => {
-  const filePath = resolve(referenceRoot, "combined_SPZv3.ply");
-  test.skip(!existsSync(filePath), "Optional Babylon Splat reference is not installed");
+test("unsupported Gaussian PLY encoding fails through Open without leaving an accessory", async () => {
+  const filePath = resolve(root, "test/fixtures/accessory/gaussian-ascii.ply");
   const launched = await launchMmdModoki(root);
   try {
     const page = await launched.app.firstWindow();
     const diagnostics = observeErrorsAndRequests(page);
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     await openLocalFile(launched.app, page, filePath);
-    await expect(page.locator(".toast.error")).toContainText("Gaussian Splat PLY is not supported");
+    await expect(page.locator(".toast.error")).toContainText("Gaussian PLY currently requires binary little endian");
     await expect(page.locator('#info-model-select option[value^="__accessory__:"]')).toHaveCount(0);
     expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).accessories).toHaveLength(0);
     expect(await page.evaluate(() => window.mmdModokiE2e.getAccessoryVertexBufferDiagnostics())).toHaveLength(0);

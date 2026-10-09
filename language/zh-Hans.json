@@ -238,6 +238,7 @@
     "shader.note.loadModel":  "请先读取模型",
     "shader.note.noMaterial":  "此模型没有可分配的材质",
     "shader.note.pointCloud":  "点云以顶点颜色显示，不使用表面材质或阴影。",
+    "shader.note.gaussianSplat":  "Gaussian Splat通过专用材质显示颜色和透明度，不使用表面材质预设或阴影。",
     "accessory.pointCloud":  "点云",
     "shader.note.materialUiUnavailable":  "当前界面无法编辑此模型的材质管线",
     "shader.apply.selected":  "分配给选中材质",

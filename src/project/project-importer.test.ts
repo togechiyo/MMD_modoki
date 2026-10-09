@@ -1379,6 +1379,16 @@ describe("importProjectState", () => {
         );
     });
 
+    it.each(["splat", "spz"] as const)("restores %s accessories with the dedicated loader", async kind => {
+        const host = createHost();
+        const loader = vi.fn(async () => true);
+        Object.assign(host, { [kind === "splat" ? "loadSplat" : "loadSpz"]: loader, getLoadedAccessories: () => [{ index: 0 }] });
+        const path = `C:/accessories/scene.${kind}`;
+        const result = await importProjectState(host, createProject({ accessories: [{ path, visible: true, castsShadow: false }] }));
+        expect(result.warnings).toEqual([]);
+        expect(loader).toHaveBeenCalledWith(path);
+    });
+
     it("restores OBJ accessories with the OBJ loader", async () => {
         const host = createHost();
         let loadedAccessoryCount = 0;

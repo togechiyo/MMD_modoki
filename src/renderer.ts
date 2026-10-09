@@ -393,6 +393,9 @@ async function initializeApp(): Promise<void> {
           return {
             mesh: mesh.name,
             hasUvs: mesh.isVerticesDataPresent("uv"),
+            meshClassName: mesh.getClassName(),
+            vertexCount: mesh.getTotalVertices(),
+            ready: mesh.isReady(true),
             materialName: material?.name ?? null,
             materialClassName: material?.getClassName?.() ?? null,
             pointsCloud: material?.pointsCloud ?? false,

@@ -238,6 +238,7 @@
     "shader.note.loadModel":  "モデルを読み込んでください",
     "shader.note.noMaterial":  "このモデルには割り当て可能な材質がありません",
     "shader.note.pointCloud":  "点群は頂点色で表示します。表面材質と影は使用しません。",
+    "shader.note.gaussianSplat":  "Gaussian Splatは専用材質で色と透明度を表示します。表面材質プリセットと影は使用しません。",
     "accessory.pointCloud":  "点群",
     "shader.note.materialUiUnavailable":  "このモデルの材質方式は現在のUIでは編集できません",
     "shader.apply.selected":  "選択へ割り当て",

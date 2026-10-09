@@ -3753,7 +3753,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "ply", "stl", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
+            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "ply", "stl", "splat", "spz", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3823,6 +3823,8 @@ export class UIController {
             }
             case "obj":
             case "ply":
+            case "splat":
+            case "spz":
             case "stl": {
                 await this.loadAccessoryFromPath(filePath);
                 return;
@@ -4180,7 +4182,11 @@ export class UIController {
                     ? this.mmdManager.loadPly.bind(this.mmdManager)
                     : extension === "stl"
                         ? this.mmdManager.loadStl.bind(this.mmdManager)
-                        : null;
+                        : extension === "splat"
+                            ? this.mmdManager.loadSplat.bind(this.mmdManager)
+                            : extension === "spz"
+                                ? this.mmdManager.loadSpz.bind(this.mmdManager)
+                                : null;
         if (!loadAccessory) {
             this.setStatus(`Unsupported accessory format: ${extension || "unknown"}`, false);
             return false;

@@ -6,6 +6,8 @@ Babylon.js が現行環境で読み込める3Dファイル形式から、skin、
 
 この文書は候補の棚卸しであり、全形式を実装する決定ではない。MMD編集機能との優先順位と実装順は別途決める。
 
+2026-10-09の実装状況: OBJ、通常PLY mesh / 点群、STLを共通アクセサリへ接続した。Gaussianは[非圧縮binary LE PLY / raw SPLAT / SPZ v2・v3](./gaussian-splat-accessory-support-2026-10-09.md)を専用材質で初期対応する。SOG、圧縮PLY、global sorting等は未実装。以下は候補調査時点の整理として保持する。
+
 また、MMD_modokiはセキュリティ上、3D assetの読み込みをローカル完結とする。loaderから外部URLへ自動接続する機能は設けず、関連fileもローカル相対pathだけを解決する。
 
 ## 調査条件

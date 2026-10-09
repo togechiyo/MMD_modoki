@@ -337,7 +337,8 @@ export class ShaderPanelController {
             elements.applySelectedButton.disabled = true;
             elements.applyAllButton.disabled = true;
             elements.resetButton.disabled = true;
-            const note = t(selectedAccessory?.contentKind === "point-cloud" ? "shader.note.pointCloud" : "shader.note.noMaterial");
+            const note = t(selectedAccessory?.contentKind === "gaussian-splat" ? "shader.note.gaussianSplat"
+                : selectedAccessory?.contentKind === "point-cloud" ? "shader.note.pointCloud" : "shader.note.noMaterial");
             elements.note.textContent = note;
             elements.materialList.innerHTML = `<div class="panel-empty-state">${note}</div>`;
             return;

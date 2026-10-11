@@ -82,6 +82,9 @@ import {
 } from "./frame-graph-aerial-perspective-shaders";
 import { FrameGraphDirectionalLightShaftsTask } from "./frame-graph-directional-light-shafts-task";
 import { ensureFrameGraphDirectionalLightShaftsShaders } from "./frame-graph-directional-light-shafts-shaders";
+import { createLuminousRadianceTasks } from "./frame-graph-luminous-radiance";
+import type { RadianceEmissionReader, LuminousRadianceScene } from "./luminous-radiance-scene";
+import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
 
 const SSGI_DENOISE_STEP_WIDTHS = [1, 2, 4] as const;
 
@@ -122,6 +125,7 @@ type EffectWrapperReadyLike = {
 };
 
 export type FrameGraphPostEffectsDiagnosticsSnapshot = {
+    luminousRadiance: { triangles: number; emitters: number; updates: number; error: string | null } | null;
     active: boolean;
     ready: boolean;
     executedFrameCount: number;
@@ -203,6 +207,7 @@ export type FrameGraphPostEffectsSettings = {
     dofFocalLength: number;
     luminousEnabled: boolean;
     luminousIntensity: number;
+    luminousRadiance?: LuminousRadianceSettings;
     luminousPrepared?: boolean;
     luminousThreshold: number;
     luminousRadius: number;
@@ -2020,6 +2025,13 @@ export class FrameGraphPostEffectsController {
     private executedFrameCount = 0;
     private lastImageProcessingEnabled: boolean | null = null;
     private connectedOrder: FrameGraphPostEffectId[] = [];
+    private luminousRadianceData: LuminousRadianceScene | null = null;
+    private luminousRadianceCompositeTask: FrameGraphPostProcessTask | null = null;
+
+    public getLuminousRadianceDiagnostics(): { triangles: number; emitters: number; updates: number; error: string | null } | null {
+        const data = this.luminousRadianceData;
+        return data ? { triangles: data.bvh.triangleCount, emitters: data.emitterTriangles, updates: data.updates, error: data.error } : null;
+    }
 
     constructor(
         private readonly onWarning: (warning: FrameGraphPostEffectsWarning) => void,
@@ -2122,6 +2134,7 @@ export class FrameGraphPostEffectsController {
             motionBlurSamples: 32,
             antialiasEnabled: true,
         }),
+        private readonly readRadianceEmission: RadianceEmissionReader = () => null,
     ) {}
 
     isActive(): boolean {
@@ -2178,6 +2191,7 @@ export class FrameGraphPostEffectsController {
             active: this.active,
             ready: this.ready,
             executedFrameCount: this.executedFrameCount,
+            luminousRadiance: this.getLuminousRadianceDiagnostics(),
             resourcePlan: resourcePlan
                 ? {
                     effectOrder: [...resourcePlan.effectOrder],
@@ -2395,7 +2409,7 @@ export class FrameGraphPostEffectsController {
             // Key preparation bypasses static enable setters; keep the shared
             // depth/normal capture free of outlines without changing model edges.
             const keyedSsao = initialSettings.ssaoPrepared === true && resourcePlan.activeEffects.includes("ssao");
-            if (keyedSsao || resourcePlan.activeEffects.some(id => id === "ssgi" || id === "ssr")) {
+            if (resourcePlan.needsLuminousRadiance || keyedSsao || resourcePlan.activeEffects.some(id => id === "ssgi" || id === "ssr")) {
                 // Babylon's enableOutlineRendering controls its own mesh outlines,
                 // not babylon-mmd's material-based after-mesh stage. Guard this
                 // task instance only, preserving its rendering order and cleanup.
@@ -2991,13 +3005,24 @@ export class FrameGraphPostEffectsController {
             name: "mmdFrameGraphLuminous",
             shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
         });
+        let luminousSceneSource = bloomSourceTexture;
+        if (initialSettings.luminousRadiance?.enabled && camera && this.geometryRendererTask && frameGraph.engine.getCaps().supportComputeShaders) {
+            const radiance = createLuminousRadianceTasks(frameGraph, scene, camera,
+                this.geometryRendererTask.geometryViewDepthTexture, this.geometryRendererTask.geometryViewNormalTexture,
+                () => this.getSettings().luminousRadiance ?? { enabled: false, strength: 1, range: 12 }, this.readRadianceEmission);
+            radiance.composite.sourceTexture = bloomSourceTexture;
+            for (const task of radiance.tasks) deferEffectTask("luminous", task);
+            luminousSceneSource = radiance.composite.outputTexture;
+            this.luminousRadianceData = radiance.data;
+            this.luminousRadianceCompositeTask = radiance.composite;
+        }
         const luminousTask = new FrameGraphPostEffectsLuminousTask(
             "frameGraphPostEffectsLuminous",
             frameGraph,
             this.luminousEffect,
             this.getSettings,
         );
-        luminousTask.sourceTexture = bloomSourceTexture;
+        luminousTask.sourceTexture = luminousSceneSource;
         luminousTask.glowTexture = luminousCoreBlurVerticalTask.outputTexture;
         luminousTask.haloTexture = luminousHaloBlurVerticalTask.outputTexture;
         luminousTask.disabled = luminousDisabled;
@@ -3547,7 +3572,12 @@ export class FrameGraphPostEffectsController {
                     break;
                 case "luminous":
                     if (this.luminousTask) {
-                        this.luminousTask.sourceTexture = currentTexture;
+                        if (this.luminousRadianceCompositeTask) {
+                            this.luminousRadianceCompositeTask.sourceTexture = currentTexture;
+                            this.luminousTask.sourceTexture = this.luminousRadianceCompositeTask.outputTexture;
+                        } else {
+                            this.luminousTask.sourceTexture = currentTexture;
+                        }
                         currentTexture = this.luminousTask.outputTexture;
                         this.connectedOrder.push("luminous");
                     }
@@ -3665,6 +3695,8 @@ export class FrameGraphPostEffectsController {
         this.imageProcessingEffect = null;
         this.imageProcessingTask = null;
         this.geometryRendererTask = null;
+        this.luminousRadianceData = null;
+        this.luminousRadianceCompositeTask = null;
         this.resourcePlan = null;
         this.allocatedResourcePlan = null;
         this.ssgiGatherTask?.dispose();

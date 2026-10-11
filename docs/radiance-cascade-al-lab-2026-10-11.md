@@ -2,6 +2,8 @@
 
 実装・確認日: 2026-10-11
 
+追記: 通常シーンへの接続は [既存 Luminous 材質への 3D RC 接続](./luminous-radiance-integration-2026-10-11.md) で実装した。以下の説明は、通常シーンと独立した検証画面自身の仕様を扱う。
+
 AutoLuminous の発光部分で周囲を照らす構想に向け、独立した WebGPU 検証画面を追加した。ツール →「AL照明 3D RC実験...」から開き、自作の発光面・床・壁・球・遮蔽物で色移りを比較する。[調査メモ](./radiance-cascades-3d-research-2026-10-11.md) の最初の試作段階に相当する。
 
 現在の AL 材質評価、読み込んだ PMX / ステージ、通常の PostFX には接続していない。光源は AL の emission 接続を模した単色の面であり、既存 AutoLuminous を利用する機能が完成したとは扱わない。Split RC の hash map や BVH を再現したものでもない。外部実装のコードや asset は取り込まず、WGSL と解析的な形状を自作した。

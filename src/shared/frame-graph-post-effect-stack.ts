@@ -34,6 +34,7 @@ export type FrameGraphPostEffectActivationSettings = {
     luminousEnabled: boolean;
     luminousIntensity: number;
     luminousPrepared?: boolean;
+    luminousRadiance?: { enabled: boolean; strength: number; range: number };
     bloomEnabled: boolean;
     lutEnabled: boolean;
     gammaEnabled: boolean;
@@ -168,7 +169,8 @@ export function isFrameGraphPostEffectActiveInSettings(
         case "dof":
             return settings.dofEnabled;
         case "luminous":
-            return settings.luminousEnabled && (settings.luminousPrepared === true || settings.luminousIntensity > 0.0001);
+            return settings.luminousEnabled && (settings.luminousPrepared === true || settings.luminousIntensity > 0.0001
+                || (settings.luminousRadiance?.enabled === true && settings.luminousRadiance.strength > 0));
         case "bloom":
             return settings.bloomEnabled;
         case "lut":

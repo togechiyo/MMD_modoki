@@ -300,6 +300,12 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("saves experimental RC separately from the existing Glow controls", () => {
+        const settings = { enabled: true, strength: 2.5, range: 4 };
+        const project = exportProjectState({ ...createHost(), luminousRadianceSettings: settings });
+        expect(project.effects.luminousRadiance).toEqual(settings);
+        expect(exportProjectState(createHost()).effects.luminousRadiance).toEqual({ enabled: false, strength: 1, range: 12 });
+    });
     it.each([true, false])("preserves background media visibility (%s) independently of its path", (visible) => {
         const project = exportProjectState({
             ...createHost(),

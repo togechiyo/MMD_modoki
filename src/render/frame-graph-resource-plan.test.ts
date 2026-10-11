@@ -46,6 +46,19 @@ function createSettings(
 }
 
 describe("buildFrameGraphResourcePlan", () => {
+    it("prepares RC with Glow at zero and rebuilds even when SSGI already supplies normals", () => {
+        const settings = createSettings({ luminousEnabled: true, luminousIntensity: 0,
+            luminousRadiance: { enabled: true, strength: 1, range: 12 }, ssgiEnabled: true });
+        const plan = buildFrameGraphResourcePlan(settings);
+        expect(plan.activeEffects).toContain("luminous");
+        expect(plan.needsLuminousRadiance).toBe(true);
+        expect(plan.requirementKeys).toEqual(expect.arrayContaining(["viewDepth", "viewNormal", "luminousMask"]));
+        const old = buildFrameGraphResourcePlan({ ...settings, luminousIntensity: 1, luminousRadiance: { enabled: false, strength: 1, range: 12 } });
+        expect(canReuseFrameGraphForActivation(old, plan, ["ssgi", "luminous"])).toBe(false);
+        expect(canReuseFrameGraphForActivation(plan, old, ["ssgi", "luminous"])).toBe(false);
+        const disabled = buildFrameGraphResourcePlan({ ...settings, luminousEnabled: false });
+        expect(disabled.needsLuminousRadiance).toBe(false);
+    });
     it.each(["offsetShadow", "offsetHighlight"] as const)("prepares %s depth before its first visible key", id => {
         const neutral = createSettings({ [id + "Enabled"]: true, [id + "Prepared"]: true, [id + "Strength"]: 0 });
         const plan = buildFrameGraphResourcePlan(neutral);

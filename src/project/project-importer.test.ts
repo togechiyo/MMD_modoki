@@ -203,6 +203,15 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores RC settings and resets them OFF when opening a legacy project", async () => {
+        const host = { ...createHost(), luminousRadianceSettings: { enabled: false, strength: 1, range: 12 } };
+        const project = createProject();
+        project.effects.luminousRadiance = { enabled: true, strength: 2.5, range: 4 };
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(host.luminousRadianceSettings).toEqual(project.effects.luminousRadiance);
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], createProject());
+        expect(host.luminousRadianceSettings).toEqual({ enabled: false, strength: 1, range: 12 });
+    });
     it.each(["backgroundImagePath", "backgroundVideoPath"] as const)("restores hidden media after loading %s", async (key) => {
         let visible = true;
         const host = { ...createHost(), setBackgroundMediaVisible: vi.fn((value: boolean) => { visible = value; return value; }) };

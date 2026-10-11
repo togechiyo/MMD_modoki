@@ -1,0 +1,66 @@
+# 既存 Luminous 材質への 3D Radiance Cascades 接続
+
+実装・確認日: 2026-10-11
+
+既存の Luminous / AutoLuminous 対象材質を世界座標の発光面として使い、床や壁に発光色を加える実験経路を追加した。Frame Graph の既存 Luminous 内に配置し、別の効果 ID は増やしていない。[独立検証画面](./radiance-cascade-al-lab-2026-10-11.md) はそのまま残す。
+
+## 操作と保存
+
+Frame Graph の PostFX → Luminous 詳細に、次の固定設定を追加した。
+
+- 「3D RC（実験）」: 初期 OFF。
+- 「RC 強度」: `0..8`、初期 `1`。
+- 「RC 範囲」: `1..100`、初期 `12`。モデルの世界座標単位で、全発光面の境界からこの距離を足した立方体を計算範囲にする。
+
+詳細パネルのスライダー位置・右側の値は、他の Frame Graph 詳細と同じ `0..100` の操作値である。上記は保存・実行される値の範囲。
+
+既存の Luminous 強度は Glow の強度として働き、RC 強度とは独立する。Glow を `0` にしても RC で周囲を照らせる。Luminous のスタック OFF / 全体 OFF は RC も止める。既存 Luminous の ON/OFF キーがある場合は、その enabled 評価で RC 強度をゼロにする。RC 強度・範囲自身のキーフレーム編集は未対応。
+
+プロジェクトの `effects.luminousRadiance = { enabled, strength, range }` に保存する。旧プロジェクトにフィールドがなければ OFF / 1 / 12 に戻す。Classic へ切り替えても保存値は保持するが、Classic では RC を実行しない。Frame Graph に戻すと復元する。
+
+## 材質・形状の入力
+
+`getLuminousRadianceEmission` は既存 Glow と同じ Luminous プリセット / AL 材質名の判定、表示状態、`LightOff` / `LightUp` / 点滅等のモーフ評価を使う。通常材質に対する高い shininess の heuristic は RC 光源に含めない。
+
+Glow の彩度補正、白い芯、発光マスクの増幅より前の色を線形化し、材質強度とモーフを掛ける。追跡入力は単色 emission とし、試作用の放射倍率 `8` を加える。発光テクスチャの画素は追跡しない。
+
+可視・有効な通常 Mesh の indexed triangle を対象にする。Babylon `Mesh.getPositionData(true, true)` で通常の骨・頂点モーフを適用し、world matrix を掛ける。カメラの視錐台による選別は行わないため、画面外の光源・遮蔽物を保持する。`alpha < 0.99` の材質は入力から除外する。
+
+追跡形状は自作の CPU BVH に詰める。三角形数が変われば再構築し、同数なら境界を refit する。入力が同じ場合は BVH 更新と storage upload を省く。形状収集は各フレーム行い、cascade / receiver の GPU 計算も各フレーム行う。10万三角形の上限を超えた場合、照明を消して診断に理由を残す。
+
+## Frame Graph 接続
+
+既存 geometry renderer の view depth / view normal を共有する。RC が必要な場合は、MMD エッジをこの geometry capture 内だけ抑制する。通常描画のエッジ設定は変更しない。
+
+Luminous 群内で、外側から内側への4段 compute → 半解像度 receiver gather → RC 合成 → 既存 core / halo Glow 合成の順に接続する。段の格子・方向数は独立ラボと同じ `16³/32`, `8³/128`, `4³/512`, `2³/2048`。距離区間は立方体の辺長に比例して拡縮する。BVH の最初の面で emission と遮蔽を評価し、遠い段を近い段へ合成する。receiver の短距離追跡も残す。
+
+スタック並べ替え時も RC composite の出力を既存 Luminous の scene source に戻す。SSGI 等がすでに depth / normal を持つ場合も、RC の ON/OFF では必要な task 群の差を検出して組み直す。共有テクスチャと graph 由来の atlas は graph に、storage buffer は RC task 群に所有させ、再構築・全体 OFF で破棄する。
+
+既存 scene-color RT は表示色で、albedo G-buffer を持たない。受け手への加算は bounded な表示色合成であり、MMD / PBR の本来の拡散 BRDF を再評価する方式ではない。SSGI・環境光等を同時に使うと寄与が重なるため、それぞれの強度を比較して調整する。
+
+backend 往復の検証中、Classic の独自 Glow が半径変更時に Babylon `ThinGlowLayer` の未生成 blur wrapper を更新し、`Cannot set properties of undefined (setting 'kernel')` で復元を止める問題が分かった。独自 blur は `blurWidth` uniform を使用するため、独自 layer の半径 accessor を override し、その options を更新する経路に揃えた。既存 Glow の描画方式を変更せず、半径値の受け渡しを修正している。
+
+## 外部 API 確認
+
+Babylon.js `9.2.0` の installed source と [公式 compute shader 文書](https://doc.babylonjs.com/features/featuresDeepDive/materials/shaders/computeShader/) を照合した。StorageBuffer、FrameGraphComputeShaderTask の UBO 更新・内部テクスチャ binding、Mesh の CPU skeleton / morph 適用、geometry renderer の view depth / normal を確認した。独自 Glow の accessor 修正は同版 `GlowLayer` / `ThinGlowLayer` の setter と独自 PostProcess の実経路を照合している。
+
+## 検証範囲と限界
+
+配布可能な tofu fixture の Luminous プリセットを GUI から割り当て、その材質を共有する自作の床・壁・発光面・遮蔽物で確認する。ユーザー所有のモデルは探索・読込しない。
+
+確認対象は、発光色の変更、Glow `0` での照明、画面外光源、遮蔽物 ON/OFF、発光面の移動・非表示、通常 PNG、スタック OFF/ON、プロジェクト保存読込、全体 OFF/ON、Classic / Frame Graph 切替。単体テストでは設定の旧形式 fallback、BVH の refit・境界・拒否、Luminous 対象判定・LightOff・色の保持、共有資源の再構築判定、保存値変換を確認する。
+
+実行結果:
+
+- `npm.cmd run test:e2e -- luminous-radiance.spec.mjs`: ローカル GPU / Electron で2件成功。WebGPU validation / page error は0。画面外の青い発光面について、床の同一領域の青チャンネル平均は遮蔽物あり `37`、なし `72.1`。Gamma とのスタック並べ替え後も照明を維持。
+- `npm.cmd run test:unit`: 177 files / 1062 tests 成功。最後の Classic accessor 修正後は関連4 files / 54 tests も成功。
+- `npm.cmd run lint`: 成功。
+- `npm.cmd run typecheck`: 既存 baseline の非 critical エラーで終了。新規 RC / BVH ファイル、resource plan、renderer / UI の追加箇所にエラーなし。
+- `npm.cmd run typecheck:critical`: 成功、`TS2304` / `TS2552` なし。
+- `npm.cmd run smoke:launch`: WebGPU 初期化・安定性確認成功。
+
+追加実行した既存 `frame-graph-effect-controls.spec.mjs` は Bloom しきい値の期待値 `90` に対して実値 `45` で失敗した。保存値 `0.9` は既存の `0..2 → 0..100` mapping で `45` になる。今回の変更は Bloom の mapping・保存値を変更していない。この既存テストの古い期待値は本作業では変更していない。
+
+本接続は発光から受け手への一回の輸送を扱う。多重反射・鏡面輸送・透明体・alpha texture の穴・発光テクスチャ・instance / thin instance の展開は未対応。標準的な CPU 骨変形とモーフの入力経路を使用しているが、PMX の SDEF / QDEF を含む特殊変形と GPU 表示との一致は未検証。実モデルの負荷、WebM の長時間出力も未検証。
+
+有限の格子・32方向 gather により、段差、光漏れ、遮蔽の粗さ、照明範囲の境界が見える。大きな範囲を設定すると密度が下がる。Split Radiance Cascades の構造や性能を再現した実装ではない。外部コード・asset・runtime 通信を追加していない。

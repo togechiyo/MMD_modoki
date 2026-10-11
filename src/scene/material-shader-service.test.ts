@@ -3,6 +3,7 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import {
     applyImportedMaterialShaderStates,
     getFrameGraphLuminousMaskMaterialState,
+    getLuminousRadianceEmission,
     getSerializedMaterialShaderStates,
     setExternalWgslToonShader,
     syncLuminousGlowLayer,
@@ -122,6 +123,23 @@ function createHost() {
 }
 
 describe("material shader preset restore", () => {
+    it("shares Luminous selection and LightOff with RC while preserving color independently of Glow", () => {
+        const host = createHost();
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)).toBeNull();
+        host.material.diffuseColor.set(1, 0.1, 0.03);
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-autoluminous")).toBe(true);
+        const emission = getLuminousRadianceEmission(host, host.mesh, host.material);
+        if (!emission) throw new Error("Luminous source was not selected");
+        expect(emission.r).toBeGreaterThan(emission.g * 10);
+        host.postEffectGlowIntensityValue = 0;
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.equals(emission)).toBe(true);
+        host.morphWeights.set("LightOff", 1); host.luminousGlowMorphRevision++;
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.equals(Color3.Black())).toBe(true);
+        host.morphWeights.set("LightOff", 0); host.luminousGlowMorphRevision++;
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.equals(emission)).toBe(true);
+        const hidden = { ...host, isMaterialVisible: () => false };
+        expect(getLuminousRadianceEmission(hidden, host.mesh, host.material)).toBeNull();
+    });
     it("saves hidden default materials and restores visibility with legacy ON fallback", () => {
         const fixture = createHost();
         let visible = false;

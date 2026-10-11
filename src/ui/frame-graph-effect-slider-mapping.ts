@@ -21,6 +21,8 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     luminousIntensity: { actualMin: 0, actualMax: 4 },
     luminousThreshold: { actualMin: 0, actualMax: 1.5 },
     luminousRadius: { actualMin: 1, actualMax: 128, actualStep: 1 },
+    luminousRadianceStrength: { actualMin: 0, actualMax: 8 },
+    luminousRadianceRange: { actualMin: 1, actualMax: 100 },
     dofFocusOffset: { actualMin: -20_000, actualMax: 20_000, actualStep: 100 },
     dofLensSize: { actualMin: 1, actualMax: 4_096, actualStep: 1, curve: "logarithmic" },
     lutIntensity: { actualMin: 0, actualMax: 1 },

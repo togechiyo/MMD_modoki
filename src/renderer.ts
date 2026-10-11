@@ -474,6 +474,7 @@ async function initializeApp(): Promise<void> {
           oceanVolumeReady: mmdManager.isFrameGraphOceanVolumeReady(),
           oceanSurfaceReady: mmdManager.isFrameGraphOceanSurfaceReady(),
           stack: [...mmdManager.getFrameGraphPostEffectRuntimeOrder()],
+          luminousRadiance: mmdManager.getLuminousRadianceDiagnostics(),
         }),
         getWebGpuValidationDiagnostics: () => (
           mmdManager.getWebGpuValidationDiagnostics()

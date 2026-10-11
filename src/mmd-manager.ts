@@ -189,6 +189,7 @@ import {
 } from "./render/subsurface-frame-graph-policy";
 import { resolveFrameGraphBackendRebuildAction } from "./render/frame-graph-backend-rebuild-state";
 import { resolveModelEdgeWidth } from "./render/model-edge-settings";
+import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "./render/luminous-radiance-settings";
 import {
     applyImportedMaterialShaderStates as applyImportedMaterialShaderStatesImpl,
     getExternalWgslToonShaderPath as getExternalWgslToonShaderPathImpl,
@@ -198,6 +199,7 @@ import {
     getWgslMaterialShaderPresets as getWgslMaterialShaderPresetsImpl,
     getWgslModelShaderStates as getWgslModelShaderStatesImpl,
     getFrameGraphLuminousMaskMaterialState as getFrameGraphLuminousMaskMaterialStateImpl,
+    getLuminousRadianceEmission,
     hasExternalWgslToonShader as hasExternalWgslToonShaderImpl,
     isWgslMaterialShaderAssignmentAvailable as isWgslMaterialShaderAssignmentAvailableImpl,
     ensureMaterialShaderDefaults as ensureMaterialShaderDefaultsImpl,
@@ -2148,6 +2150,7 @@ ${beforeFogAppendBlock}
     private postEffectColorCurvesSaturationValue = 0;
     private postEffectColorCurvesExposureValue = 0;
     private postEffectGlowEnabledValue = false;
+    private luminousRadianceSettingsValue = normalizeLuminousRadiance(null);
     private postEffectGlowIntensityValue = 0.5;
     private postEffectGlowThresholdValue = 0.5;
     private postEffectGlowKernelValue = 20;
@@ -8751,6 +8754,7 @@ ${beforeFogAppendBlock}
                 luminousMaskScale: FRAME_GRAPH_LUMINOUS_MASK_EXPERIMENT_SCALE,
             },
             luminousMaskRenderedSubMeshes: this.getFrameGraphPostEffectsLuminousMaskRenderedSubMeshCount(),
+            luminousRadiance: controllerSnapshot?.luminousRadiance ?? null,
             controller: controllerSnapshot
                 ? {
                     active: controllerSnapshot.active,
@@ -11306,7 +11310,7 @@ ${beforeFogAppendBlock}
             if (info.event === "ready" && this.frameGraphPostEffectsRebuildPending) {
                 this.scheduleFrameGraphPostEffectsBackendRebuild();
             }
-        }, () => this.getFrameGraphPostEffectsSettings());
+        }, () => this.getFrameGraphPostEffectsSettings(), (mesh, material) => getLuminousRadianceEmission(this, mesh, material));
         this.frameGraphPostEffectsController = controller;
         this.frameGraphPostEffectsBuildGeneration += 1;
 
@@ -11371,6 +11375,11 @@ ${beforeFogAppendBlock}
             dofFocalLength: this.dofFocalLengthValue,
             luminousEnabled: this.effectSceneTracks.has("luminous") ? this.isEffectKeyframePrepared("luminous") : this.isFrameGraphPostEffectActive("luminous"),
             luminousPrepared: this.isEffectKeyframePrepared("luminous"),
+            luminousRadiance: {
+                ...this.luminousRadianceSettingsValue,
+                strength: this.luminousRadianceSettingsValue.strength * (
+                    this.effectSceneTracks.evaluate("luminous", this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0)?.enabled === false ? 0 : 1),
+            },
             luminousIntensity: this.getEffectScalarRenderValue("luminous", "intensity", this.postEffectGlowIntensityValue),
             luminousThreshold: this.getEffectParameterRenderValue("luminous", "threshold", this.postEffectGlowThresholdValue),
             luminousRadius: this.getEffectParameterRenderValue("luminous", "radius", this.postEffectGlowKernelValue),
@@ -12928,6 +12937,16 @@ ${beforeFogAppendBlock}
     }
 
     /** LuminousGlow enabled state. */
+    get luminousRadianceSettings(): LuminousRadianceSettings { return { ...this.luminousRadianceSettingsValue }; }
+    set luminousRadianceSettings(value: LuminousRadianceSettings) {
+        const next = normalizeLuminousRadiance(value);
+        const rebuild = next.enabled !== this.luminousRadianceSettingsValue.enabled
+            || (next.strength > 0) !== (this.luminousRadianceSettingsValue.strength > 0);
+        this.luminousRadianceSettingsValue = next;
+        if (rebuild) this.refreshFrameGraphPostEffectsBackendForStackStateChange();
+    }
+    public getLuminousRadianceDiagnostics() { return this.frameGraphPostEffectsController?.getLuminousRadianceDiagnostics() ?? null; }
+
     get postEffectGlowEnabled(): boolean {
         return this.effectSceneTracks.evaluate("luminous", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectGlowEnabledValue;
     }

@@ -9,6 +9,7 @@ export default defineConfig({
   ],
   optimizeDeps: {
     include: [
+      '@babylonjs/core/Buffers/storageBuffer',
       '@babylonjs/loaders/OBJ/objFileLoader.js',
       '@babylonjs/loaders/STL/stlFileLoader.js',
       '@babylonjs/loaders/SPLAT/spz.js',

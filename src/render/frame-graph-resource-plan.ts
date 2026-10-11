@@ -35,6 +35,7 @@ export type FrameGraphResourcePlan = {
     needsGeometryRenderer: boolean;
     needsDepthRenderer: boolean;
     needsLuminousMask: boolean;
+    needsLuminousRadiance: boolean;
     fixedTasks: {
         imageProcessing: boolean;
         fxaa: boolean;
@@ -47,7 +48,8 @@ export function canReuseFrameGraphForActivation(
     requested: FrameGraphResourcePlan,
     connectedEffects: readonly FrameGraphPostEffectId[],
 ): boolean {
-    return requested.activeEffects.every(id => connectedEffects.includes(
+    return allocated.needsLuminousRadiance === requested.needsLuminousRadiance
+        && requested.activeEffects.every(id => connectedEffects.includes(
         id === "edgeBlur" ? "vignette" : id,
     )) && requested.requirementKeys.every(key => allocated.requirementKeys.includes(key));
 }
@@ -137,6 +139,10 @@ export function buildFrameGraphResourcePlan(
 
     if (activeEffects.includes("luminous")) {
         addConsumer(consumersByKey, "luminousMask", "luminous");
+        if (settings.luminousRadiance?.enabled) {
+            addConsumer(consumersByKey, "viewDepth", "luminous");
+            addConsumer(consumersByKey, "viewNormal", "luminous");
+        }
     }
 
     const requirementKeys = Array.from(consumersByKey.keys());
@@ -158,6 +164,7 @@ export function buildFrameGraphResourcePlan(
             || consumersByKey.has("reflectivity"),
         needsDepthRenderer: consumersByKey.has("depthScene"),
         needsLuminousMask: consumersByKey.has("luminousMask"),
+        needsLuminousRadiance: activeEffects.includes("luminous") && settings.luminousRadiance?.enabled === true,
         fixedTasks: {
             imageProcessing: settings.imageProcessingEnabled,
             fxaa: settings.antialiasEnabled,

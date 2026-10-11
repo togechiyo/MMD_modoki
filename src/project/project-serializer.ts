@@ -1,3 +1,4 @@
+import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
 import type {
     MmdModokiProjectFileV1,
     ProjectAccessoryState,
@@ -176,6 +177,7 @@ type ProjectExportHost = {
     postEffectColorCurvesSaturation: number;
     postEffectColorCurvesExposure: number;
     postEffectGlowEnabled: boolean;
+    luminousRadianceSettings?: LuminousRadianceSettings;
     postEffectGlowIntensity: number;
     postEffectGlowThreshold: number;
     postEffectGlowKernel: number;
@@ -577,6 +579,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             colorCurvesSaturation: host.postEffectColorCurvesSaturation,
             colorCurvesExposure: host.postEffectColorCurvesExposure,
             glowEnabled: host.getStaticResourcePostEffects?.().glowEnabled ?? host.postEffectGlowEnabled,
+            luminousRadiance: normalizeLuminousRadiance(host.luminousRadianceSettings),
             glowIntensity: host.getStaticResourcePostEffects?.().glowIntensity ?? host.postEffectGlowIntensity,
             glowThreshold: host.getStaticResourcePostEffects?.().glowThreshold ?? host.postEffectGlowThreshold,
             glowKernel: host.getStaticResourcePostEffects?.().glowKernel ?? host.postEffectGlowKernel,

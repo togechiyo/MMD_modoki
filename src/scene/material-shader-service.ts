@@ -474,6 +474,10 @@ class LuminousGlowLayer extends GlowLayer {
     private static constructingHost: MaterialShaderHost | null = null;
     private static constructingDepthEdgeStrength = 0;
 
+    // Our depth-aware blurs use blurWidth uniforms, not ThinGlowLayer's four stock blur wrappers.
+    public override get blurKernelSize(): number { return this._options.blurKernelSize ?? 32; }
+    public override set blurKernelSize(value: number) { this._options.blurKernelSize = value; }
+
     public constructor(
         host: MaterialShaderHost,
         name: string,
@@ -738,6 +742,7 @@ function lerpNumber(from: number, to: number, amount: number): number {
 }
 
 function createLuminousGlowOccluderState(texture: Texture | null): {
+    emission: Color3;
     coreColor: Color3;
     haloColor: Color3;
     alpha: number;
@@ -745,6 +750,7 @@ function createLuminousGlowOccluderState(texture: Texture | null): {
     luminous: boolean;
 } {
     return {
+        emission: Color3.Black(),
         coreColor: Color3.Black(),
         haloColor: Color3.Black(),
         alpha: LUMINOUS_GLOW_OCCLUDER_ALPHA,
@@ -974,6 +980,7 @@ function isLuminousGlowPresetMaterial(host: MaterialShaderHost, material: Materi
 function getLuminousGlowMaterialState(host: MaterialShaderHost, material: MaterialShaderMaterial, options?: {
     allowManualHeuristic?: boolean;
 }): {
+    emission: Color3;
     coreColor: Color3;
     haloColor: Color3;
     alpha: number;
@@ -1051,12 +1058,21 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
     );
 
     return {
+        emission: combined.toLinearSpace().scale(strength),
         coreColor,
         haloColor,
         alpha: Math.max(0.05, baseAlpha),
         texture,
         luminous: true,
     };
+}
+
+/** World-space source color, before Glow's saturation, whitening and mask gain. */
+export function getLuminousRadianceEmission(host: unknown, mesh: object, material: object): Color3 | null {
+    const typedHost = host as MaterialShaderHost;
+    const state = getLuminousGlowMaterialState(typedHost, material as MaterialShaderMaterial, { allowManualHeuristic: false });
+    if (!state?.luminous) return null;
+    return state.emission.scale(getLuminousGlowMorphScaleForMesh(typedHost, mesh as MaterialShaderMesh));
 }
 
 function disposeManagedLuminousGlowLayer(host: MaterialShaderHost): void {

@@ -1,4 +1,5 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
+import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
 import { normalizeEnvironmentLightingPreset, type EnvironmentLightingPresetId } from "../shared/environment-lighting-presets";
 import type {
     MmdModokiProjectFileV1,
@@ -265,6 +266,7 @@ type ProjectImportHost = {
     postEffectColorCurvesSaturation: number;
     postEffectColorCurvesExposure: number;
     postEffectGlowEnabled: boolean;
+    luminousRadianceSettings?: LuminousRadianceSettings;
     postEffectGlowIntensity: number;
     postEffectGlowThreshold: number;
     postEffectGlowKernel: number;
@@ -1311,6 +1313,7 @@ export async function importProjectState(
     host.postEffectColorCurvesExposure = typeof data.effects.colorCurvesExposure === "number" && Number.isFinite(data.effects.colorCurvesExposure)
         ? data.effects.colorCurvesExposure
         : 0;
+    host.luminousRadianceSettings = normalizeLuminousRadiance(data.effects.luminousRadiance);
     host.postEffectGlowEnabled = typeof data.effects.glowEnabled === "boolean"
         ? data.effects.glowEnabled
         : false;

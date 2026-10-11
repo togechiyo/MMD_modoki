@@ -738,6 +738,7 @@ export interface ProjectEffectState {
     colorCurvesSaturation?: number;
     colorCurvesExposure?: number;
     glowEnabled?: boolean;
+    luminousRadiance?: { enabled: boolean; strength: number; range: number };
     glowIntensity?: number;
     glowThreshold?: number;
     glowKernel?: number;

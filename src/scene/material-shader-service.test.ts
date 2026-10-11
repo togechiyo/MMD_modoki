@@ -140,6 +140,22 @@ describe("material shader preset restore", () => {
         const hidden = { ...host, isMaterialVisible: () => false };
         expect(getLuminousRadianceEmission(hidden, host.mesh, host.material)).toBeNull();
     });
+    it("keeps simultaneous Luminous material colors independent when one material changes", () => {
+        const host = createHost();
+        const blue = { ...host.material, name: "blue", diffuseColor: new Color3(0, 0, 1),
+            ambientColor: Color3.Black(), emissiveColor: Color3.Black() };
+        host.sceneModels[0].materials.push({ key: "1:blue", material: blue });
+        host.material.diffuseColor.set(1, 0, 0);
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-autoluminous")).toBe(true);
+        expect(setWgslMaterialShaderPreset(host, 0, "1:blue", "wgsl-autoluminous")).toBe(true);
+        const red = getLuminousRadianceEmission(host, host.mesh, host.material);
+        expect(red?.asArray()).toEqual([1.25, 0, 0]);
+        expect(getLuminousRadianceEmission(host, host.mesh, blue)?.asArray()).toEqual([0, 0, 1.25]);
+        blue.diffuseColor.set(0, 1, 0);
+        expect(getLuminousRadianceEmission(host, host.mesh, blue)?.asArray()).toEqual([0, 1.25, 0]);
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.equals(red ?? Color3.Black())).toBe(true);
+        expect(red?.asArray()).toEqual([1.25, 0, 0]);
+    });
     it("saves hidden default materials and restores visibility with legacy ON fallback", () => {
         const fixture = createHost();
         let visible = false;

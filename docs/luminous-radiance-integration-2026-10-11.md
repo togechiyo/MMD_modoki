@@ -22,7 +22,7 @@ Frame Graph の PostFX → Luminous 詳細に、次の固定設定を追加し�
 
 `getLuminousRadianceEmission` は既存 Glow と同じ Luminous プリセット / AL 材質名の判定、表示状態、`LightOff` / `LightUp` / 点滅等のモーフ評価を使う。通常材質に対する高い shininess の heuristic は RC 光源に含めない。
 
-Glow の彩度補正、白い芯、発光マスクの増幅より前の色を線形化し、材質強度とモーフを掛ける。追跡入力は単色 emission とし、試作用の放射倍率 `8` を加える。発光テクスチャの画素は追跡しない。
+Glow の彩度補正、白い芯、発光マスクの増幅より前の色を線形化し、材質強度とモーフを掛ける。各三角形に、その材質の RGB emission と試作用の放射倍率 `8` を持たせる。材質ごとに異なる色を同時に扱い、受け手では各方向から届く線形 RGB の寄与を加算する。「単色」は材質内で色が均一という意味で、シーン全体の発光色を一色に限定しない。発光テクスチャの画素は追跡しない。
 
 可視・有効な通常 Mesh の indexed triangle を対象にする。Babylon `Mesh.getPositionData(true, true)` で通常の骨・頂点モーフを適用し、world matrix を掛ける。カメラの視錐台による選別は行わないため、画面外の光源・遮蔽物を保持する。`alpha < 0.99` の材質は入力から除外する。
 
@@ -40,6 +40,16 @@ Luminous 群内で、外側から内側への4段 compute → 半解像度 recei
 
 backend 往復の検証中、Classic の独自 Glow が半径変更時に Babylon `ThinGlowLayer` の未生成 blur wrapper を更新し、`Cannot set properties of undefined (setting 'kernel')` で復元を止める問題が分かった。独自 blur は `blurWidth` uniform を使用するため、独自 layer の半径 accessor を override し、その options を更新する経路に揃えた。既存 Glow の描画方式を変更せず、半径値の受け渡しを修正している。
 
+## 材質ごとの多色発光
+
+同じ tofu fixture の二つの材質へ GUI から Luminous を割り当て、自作の左右の発光面に共有した。左を赤、右を青、Glow 強度を `0` とし、床の左側は赤、右側は青、中央は赤と青が混ざった紫になることを確認した。既存の材質 reader / 三角形 RGB / cascade の経路で対応できるため、色数の追加設定や別の実行経路は増やしていない。
+
+同じ形状で色だけを変えて、二面とも赤、二面とも青、赤と緑も比較する。青を緑に変更しても赤の寄与が変わらないこと、片方を非表示にするとその色の照明が消え、再表示すると復元することを確認する。表示色合成には tone mapping が入るため、最終 PNG の値そのものを単純加算と比較しない。
+
+最初のローカル GPU 確認で、床中央の `13×13` 領域の平均 RGB は RC OFF が `(20, 20, 19)`、赤と青が `(62.9, 20, 62.3)`、赤と緑が `(62.9, 63.1, 19)`。赤と青の通常 PNG 出力も `(62.6, 20, 62.1)` で混色を保持した。厳密な画素一致ではなく、チャンネルの優位性・独立性と非表示後の消灯を E2E で検証する。
+
+単体テストには、二つの材質の色が互いに上書きされないこと、片方の色変更がもう片方の emission を変えないこと、BVH の並べ替え・色変更後も三角形ごとの RGB が維持されることを追加した。
+
 ## 外部 API 確認
 
 Babylon.js `9.2.0` の installed source と [公式 compute shader 文書](https://doc.babylonjs.com/features/featuresDeepDive/materials/shaders/computeShader/) を照合した。StorageBuffer、FrameGraphComputeShaderTask の UBO 更新・内部テクスチャ binding、Mesh の CPU skeleton / morph 適用、geometry renderer の view depth / normal を確認した。独自 Glow の accessor 修正は同版 `GlowLayer` / `ThinGlowLayer` の setter と独自 PostProcess の実経路を照合している。
@@ -52,8 +62,8 @@ Babylon.js `9.2.0` の installed source と [公式 compute shader 文書](https
 
 実行結果:
 
-- `npm.cmd run test:e2e -- luminous-radiance.spec.mjs`: ローカル GPU / Electron で2件成功。WebGPU validation / page error は0。画面外の青い発光面について、床の同一領域の青チャンネル平均は遮蔽物あり `37`、なし `72.1`。Gamma とのスタック並べ替え後も照明を維持。
-- `npm.cmd run test:unit`: 177 files / 1062 tests 成功。最後の Classic accessor 修正後は関連4 files / 54 tests も成功。
+- `npm.cmd run test:e2e -- luminous-radiance.spec.mjs`: ローカル GPU / Electron で多色確認を含む3件成功。WebGPU validation / page error は0。画面外の青い発光面について、床の同一領域の青チャンネル平均は遮蔽物あり `37`、なし `72.1`。Gamma とのスタック並べ替え後も照明を維持。
+- `npm.cmd run test:unit`: 多色テスト追加後、177 files / 1064 tests 成功。BVH の並べ替えが実際に発生する逆順入力へ確認用データを調整した後、関連2 files / 33 tests も成功。
 - `npm.cmd run lint`: 成功。
 - `npm.cmd run typecheck`: 既存 baseline の非 critical エラーで終了。新規 RC / BVH ファイル、resource plan、renderer / UI の追加箇所にエラーなし。
 - `npm.cmd run typecheck:critical`: 成功、`TS2304` / `TS2552` なし。

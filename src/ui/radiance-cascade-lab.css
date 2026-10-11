@@ -1,0 +1,9 @@
+.radiance-lab { display: grid; gap: 12px; }
+.radiance-lab-canvas { width: min(100%, 640px, calc(38vh * 16 / 9)); aspect-ratio: 16 / 9; justify-self: center; display: block; border-radius: 6px; background: #111; }
+.radiance-lab-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; }
+.radiance-lab-controls label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.radiance-lab-controls input[type="range"] { flex: 1; min-width: 50px; }
+.radiance-lab-controls output { min-width: 28px; text-align: right; }
+.radiance-lab-controls select { flex: 1; }
+.radiance-lab-status { margin: 0; color: var(--text-secondary); font-size: 12px; min-height: 18px; }
+.radiance-lab-status[data-state="error"] { color: #ff9696; white-space: pre-wrap; }

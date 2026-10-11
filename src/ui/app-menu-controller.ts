@@ -28,6 +28,7 @@ import { KeyframeValueCorrectionDialogController } from "./keyframe-value-correc
 import { ModelBodyMotionCorrectionDialogController } from "./model-body-motion-correction-dialog-controller";
 import { MmdOptimizedFormatDialogController } from "./mmd-optimized-format-dialog-controller";
 import { VmdRetargetDialogController } from "./vmd-retarget-dialog-controller";
+import { RadianceCascadeLabDialogController } from "./radiance-cascade-lab-dialog-controller";
 import type { ModelBodyMotionCorrectionPreview } from "../editor/model-body-motion-correction";
 import type { TrackCategory } from "../types";
 
@@ -98,6 +99,7 @@ export class AppMenuController {
     private readonly previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
     private readonly previewBodyMotionCorrection: (sourceModelIndex: number) => ModelBodyMotionCorrectionPreview;
     private readonly popupDialogController: PopupDialogController;
+    private readonly radianceCascadeLab = new RadianceCascadeLabDialogController();
     private openGroup: HTMLElement | null = null;
 
     constructor(deps: AppMenuControllerDeps) {
@@ -681,6 +683,13 @@ export class AppMenuController {
                 return;
             case "tools.vmdRetarget":
                 this.openVmdRetargetDialog(invoker ?? null);
+                return;
+            case "tools.radianceCascadeLab":
+                this.popupDialogController.open({
+                    id: "radiance-cascade-lab", surface: "modal", size: "wide",
+                    title: t("radianceLab.title"), restoreFocusTo: invoker ?? null,
+                    content: this.radianceCascadeLab,
+                });
                 return;
             case "dialog.preferences":
                 this.openDialog("preferences", invoker ?? null);

@@ -67,6 +67,8 @@ export const menuItems: readonly MenuItem[] = [
         "通常/PBR・環境設定は操作可能。MCP有効化・編集/詳細診断許可、外部WGSL有効化、ログのOS操作はユーザー設定。"), status: "partial", groupKey: "menu.window" },
     operation("tools.mmdOptimizedFormat", { kind: "fileTools" }, "itemsにoptimizeModel/optimizeMotionと明示path・overwriteを指定。"),
     operation("tools.vmdRetarget", { kind: "fileTools" }, "itemsにretargetMotionと明示path・options・overwriteを指定。"),
+    { ...item("tools.radianceCascadeLab", [], "専用の3D RC検証画面。MCP操作は未対応。通常シーン・project stateには適用しない。"),
+        status: "informational", labelKey: "radianceLab.title" },
 ];
 
 export function readMenuItems(query: string, translate: (key: string) => string, offset = 0, limit = 20) {

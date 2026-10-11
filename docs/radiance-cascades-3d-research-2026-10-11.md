@@ -62,6 +62,18 @@ Babylon.js には WGSL の [ComputeShader](https://doc.babylonjs.com/features/fe
 
 これらは MMD_modoki のコードと外部実装の構成を照合した設計上の推論であり、動作確認済みの統合手順ではない。
 
+## AutoLuminous の発光部分を光源にする構想
+
+想定用途を AutoLuminous 対象材質による周囲の照明へ絞ると、発光するネオンが床へ色を落とす、髪飾りが近くの髪や頬を照らす、発光する剣が手や服を照らす、といった表現が目標になる。AL の発光源を RC の emission として扱い、Glow は光源の見た目のにじみを受け持つ構成を考える。公開 WebGPU 実装も emission と diffuse irradiance を扱っているが、この接続の品質と負荷は未検証である。[実装説明](https://github.com/wroughtinator/split-radiance-cascades-webgpu/blob/main/IMPLEMENTATION.md)
+
+現行の [material-shader-service](../src/scene/material-shader-service.ts) には、`getLuminousGlowMaterialState` による対象材質と色の評価、`getLuminousGlowMorphScaleForModel` による `LightOff`、`LightUp`、点滅系モーフの評価がある。`getFrameGraphLuminousMaskMaterialState` は、それらから画面上の発光マスク用の色、alpha、texture を返す。対象判定とモーフ評価は接続候補になるが、マスクの完成画像は画面外の形状を持たず、3D 光源データの代わりにはならない。
+
+発光色の評価から Glow の halo と core を作る前の段階を共有し、RC 用には線形な emission を定義する。現行の core は白寄せ、halo は彩度補正、マスクは追加の倍率を含むため、それらをそのまま光源色へ転用すると周囲の照明まで演出用の色補正を受ける。これは今後の設計案であり、共有 helper や RC 入力はまだ存在しない。
+
+Glow のにじみ強度と RC の照明強度は別に調整できる形が適している。両者は同じ AL 対象と点滅状態へ同期させつつ、照らされた床や服を新たな AL 光源として再検出しない。時間方向の履歴を使う場合は、`LightOff` や高速点滅で周囲だけ光が残るかを確認する。
+
+既存の [Emissive Light Assist 構想](./emissive-light-assist-concept-2026-06-12.md) は、AL 材質から少数の補助点光源を作る案である。今回の RC 案は発光面の形状を照明へ使う別の候補として扱い、その案の採用や置き換えを確定しない。最小比較では、同じ AL 発光面に対して Glow の表示と RC の周囲への照明を個別に ON / OFF し、近くの白い面への色移りと遮蔽物の効果を確かめる。
+
 ## 小さく試す場合の順序
 
 最初の評価対象としては、動的 PMX への全面適用より、静的なステージ相当の箱と発光面による色移りが適している。これは試作案であり、実装タスクや通常 UI への採用を確定しない。

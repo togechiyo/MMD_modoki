@@ -10,6 +10,7 @@ import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
 import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh } from "./triangle-radiance-bvh";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { RadianceInputSnapshot } from "./luminous-radiance-input-cache";
+import { LuminousRadiancePoseCache } from "./luminous-radiance-pose-cache";
 import { logWarn } from "../app-logger";
 
 export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: number; g: number; b: number; texture?: Texture | null } | null;
@@ -28,6 +29,7 @@ export class LuminousRadianceScene {
     public error: string | null = null;
     private input = new Float32Array(0);
     private readonly meshInputs = new WeakMap<Mesh, MeshInput>();
+    private readonly poses = new LuminousRadiancePoseCache();
     private chunks: MeshInput[] = [];
     private triangleCapacity = RADIANCE_TRIANGLE_STRIDE * 4;
     private nodeCapacity = 48;
@@ -70,8 +72,7 @@ export class LuminousRadianceScene {
                 throw new Error(`3D RC triangle budget exceeded (${triangleCount} opaque triangles; limit ${this.triangleBudget})`);
             }
             for (const { mesh, indices, surfaces: opaqueSurfaces } of meshes) {
-                // Babylon's public API applies current skeleton and morph weights before the world transform.
-                const positions = mesh.getPositionData(true, true);
+                const pose = this.poses.read(mesh), positions = pose.positions;
                 if (!positions) continue;
                 const world = mesh.computeWorldMatrix();
                 const surfaces = opaqueSurfaces.map(({ indexStart, indexCount, material }) => {
@@ -84,7 +85,7 @@ export class LuminousRadianceScene {
                 const metadata = surfaces.flatMap(surface => [surface.indexStart, surface.indexCount,
                     surface.emission ? 1 : 0, surface.emission?.r ?? 0, surface.emission?.g ?? 0, surface.emission?.b ?? 0,
                     surface.textureSource, surface.wrap, ...(surface.matrix ?? [])]);
-                const parts: ArrayLike<number>[] = [positions, indices, world.m, metadata, ...surfaces.map(surface => surface.uvs ?? [])];
+                const parts: ArrayLike<number>[] = [pose.signature, indices, world.m, metadata, ...surfaces.map(surface => surface.uvs ?? [])];
                 const previous = this.meshInputs.get(mesh);
                 if (previous?.snapshot.matches(parts)) { chunks.push(previous); continue; }
                 const values = new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);

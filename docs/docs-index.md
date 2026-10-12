@@ -364,6 +364,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [3D RC の静止時・強度0の負荷軽減 2026-10-12](./luminous-radiance-performance-2026-10-12.md)
 - [3D RC の照明拡大時の段差修正 2026-10-12](./luminous-radiance-reconstruction-2026-10-12.md)
 - [3D RC の形状上限による消灯の修正 2026-10-12](./luminous-radiance-budget-fix-2026-10-12.md)
+- [3D RC の姿勢再利用・数値比較の高速化 2026-10-12](./luminous-radiance-pose-cache-performance-2026-10-12.md)
 - [MirroringFloor 実装検討メモ](./mirroring-floor-plan-2026-05-11.md)
 
 ## Effect Panel

@@ -26,7 +26,7 @@ Frame Graph の PostFX → Luminous 詳細に、次の固定設定を追加し�
 
 Glow の彩度補正、白い芯、発光マスクの増幅より前の色を線形化し、材質強度とモーフを掛ける。各三角形に、その材質の RGB emission と試作用の放射倍率 `8` を持たせる。材質ごとに異なる色を同時に扱い、受け手では各方向から届く線形 RGB の寄与を加算する。静的な発光テクスチャは `64×64` の線形 field に保持し、ヒット位置の UV から色を掛ける。初回の材質内で均一な色だけを使う仕様から拡張している。
 
-可視・有効な通常 Mesh の indexed triangle を対象にする。Babylon `Mesh.getPositionData(true, true)` で通常の骨・頂点モーフを適用し、world matrix を掛ける。カメラの視錐台による選別は行わないため、画面外の光源・遮蔽物を保持する。`alpha < 0.99` の材質は入力から除外する。
+可視・有効な通常 Mesh の indexed triangle を対象にする。通常の骨・頂点モーフを適用し、world matrix を掛ける。当初はBabylon `Mesh.getPositionData(true, true)`を毎フレーム呼んでいたが、同日の[姿勢再利用・数値比較の高速化](./luminous-radiance-pose-cache-performance-2026-10-12.md)で変形入力を先に比較し、変化時だけ計算する。寄与するモーフをnativeと同じ順序・丸めで加え、骨変形は`getPositionData(true, false, data)`に渡す。カメラの視錐台による選別は行わないため、画面外の光源・遮蔽物を保持する。`alpha < 0.99` の材質は入力から除外する。
 
 追跡形状は自作の CPU BVH に詰める。三角形数が変われば再構築し、同数なら境界を refit する。入力が同じ場合は BVH 更新と storage upload を省く。2026-10-12の後続修正でmesh入力をcacheし、同じmeshの三角形再展開と、入力・範囲が同じときのcascade計算も省く。receiverはカメラを反映して各フレーム計算する。強度0ではRC計算を停止する（[負荷軽減・fixture計測](./luminous-radiance-performance-2026-10-12.md)）。当初の10万三角形上限は実機でRC停止を起こしたため、同日の後続修正で最大100万へ拡張した。実行deviceのstorage binding / buffer上限内に制限し、超過時は頂点変形・展開前に拒否して照明を消し、総数と上限を診断に残す（[上限による消灯の修正](./luminous-radiance-budget-fix-2026-10-12.md)）。
 

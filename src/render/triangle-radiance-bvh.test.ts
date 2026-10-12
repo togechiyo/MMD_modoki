@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TriangleRadianceBvh, MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE as STRIDE } from "./triangle-radiance-bvh";
+import { TriangleRadianceBvh, radianceTriangleBudget, MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE as STRIDE } from "./triangle-radiance-bvh";
 
 function geometry(count: number, shift = 0): Float32Array {
     return new Float32Array(Array.from({ length: count }, (_, index) => {
@@ -9,6 +9,12 @@ function geometry(count: number, shift = 0): Float32Array {
 }
 
 describe("world triangle radiance BVH", () => {
+    it("supports dense scenes within both enabled device limits and a bounded ceiling", () => {
+        expect(radianceTriangleBudget(128 * 1024 * 1024, 256 * 1024 * 1024)).toBe(1000000);
+        expect(radianceTriangleBudget(10 * STRIDE * 4 + 4, 1024)).toBe(10);
+        expect(radianceTriangleBudget(1024, 10 * STRIDE * 4 + 4)).toBe(10);
+        expect(radianceTriangleBudget(95, 1024)).toBe(0);
+    });
     it("encloses every triangle and preserves source emission after deformation refit", () => {
         const bvh = new TriangleRadianceBvh();
         for (const shift of [0, -100, 50]) {

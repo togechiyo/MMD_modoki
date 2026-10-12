@@ -150,12 +150,17 @@ export async function createRadianceReceiverColors() {
   return radianceProbeState();
 }
 
-export function createDenseRadianceProbe() {
+export function createDenseRadianceProbe({ subdivisions = 128, tiles = 1 } = {}) {
   const current = scene(), floor = current.getMeshByName("rc-floor");
   floor.setEnabled(false);
-  const ground = CreateGround("rc-dense-floor", { width: 12, height: 10, subdivisions: 128, updatable: true }, current);
-  ground.material = floor.material;
-  return ground.getTotalIndices() / 3;
+  for (const mesh of [...current.meshes]) if (mesh.name.startsWith("rc-dense-floor")) mesh.dispose();
+  let triangles = 0;
+  for (let i = 0; i < tiles; i++) {
+    const ground = CreateGround(i ? `rc-dense-floor-${i}` : "rc-dense-floor", { width: 12, height: 10, subdivisions, updatable: true }, current);
+    ground.position.x = i * 12; ground.material = floor.material;
+    triangles += ground.getTotalIndices() / 3;
+  }
+  return triangles;
 }
 
 export async function createRadianceQualityProbe() {

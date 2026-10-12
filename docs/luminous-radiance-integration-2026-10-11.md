@@ -28,7 +28,7 @@ Glow の彩度補正、白い芯、発光マスクの増幅より前の色を線
 
 可視・有効な通常 Mesh の indexed triangle を対象にする。Babylon `Mesh.getPositionData(true, true)` で通常の骨・頂点モーフを適用し、world matrix を掛ける。カメラの視錐台による選別は行わないため、画面外の光源・遮蔽物を保持する。`alpha < 0.99` の材質は入力から除外する。
 
-追跡形状は自作の CPU BVH に詰める。三角形数が変われば再構築し、同数なら境界を refit する。入力が同じ場合は BVH 更新と storage upload を省く。2026-10-12の後続修正でmesh入力をcacheし、同じmeshの三角形再展開と、入力・範囲が同じときのcascade計算も省く。receiverはカメラを反映して各フレーム計算する。強度0ではRC計算を停止する（[負荷軽減・fixture計測](./luminous-radiance-performance-2026-10-12.md)）。10万三角形の上限を超えた場合、照明を消して診断に理由を残す。
+追跡形状は自作の CPU BVH に詰める。三角形数が変われば再構築し、同数なら境界を refit する。入力が同じ場合は BVH 更新と storage upload を省く。2026-10-12の後続修正でmesh入力をcacheし、同じmeshの三角形再展開と、入力・範囲が同じときのcascade計算も省く。receiverはカメラを反映して各フレーム計算する。強度0ではRC計算を停止する（[負荷軽減・fixture計測](./luminous-radiance-performance-2026-10-12.md)）。当初の10万三角形上限は実機でRC停止を起こしたため、同日の後続修正で最大100万へ拡張した。実行deviceのstorage binding / buffer上限内に制限し、超過時は頂点変形・展開前に拒否して照明を消し、総数と上限を診断に残す（[上限による消灯の修正](./luminous-radiance-budget-fix-2026-10-12.md)）。
 
 ## Frame Graph 接続
 

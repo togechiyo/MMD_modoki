@@ -70,6 +70,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 3D RCの照明を、既存Glowの圧縮と加算を参考に、受け手の材質色を使う合成へ変更。MMD/Standardの色と黒さ、Glow併用、PNGをfixtureで確認（[実装・確認範囲・実機再確認待ち](./luminous-radiance-composition-2026-10-12.md)）
 - [x] 3D RCのmesh入力と静止した光場をcacheし、強度0で計算を停止。大画面receiverを長辺640画素以内へ制限し、色光の材質フィルタを少し緩める（[負荷軽減・fixture計測・実機再確認待ち](./luminous-radiance-performance-2026-10-12.md)）
 - [x] 3D RCの照明を点サンプリングのまま拡大していた不備を修正。既存depth / normalで面を区別する4点補間を追加し、曲面・輪郭の段差をfixtureで確認（[修正・確認範囲・実機再確認待ち](./luminous-radiance-reconstruction-2026-10-12.md)）
+- [x] 3D RCだけが消える実機報告をapp logで10万三角形上限による停止と特定。deviceのbuffer制約内で最大100万へ拡張し、配列展開前に超過を検出する（[修正・確認範囲・実機再確認待ち](./luminous-radiance-budget-fix-2026-10-12.md)）
 - [x] FrameGraph stack 見出し右端を全体ON/OFFへ変更。OFFで資源解放、ONで設定を保持して再構築。個別切替は確保済みtask/resourceを再利用（[実装・検証](./framegraph-master-toggle-2026-09-08.md)）
 - [x] FrameGraph stack 並べ替え時のtask登録順・build済みtexture再接続・非同期build競合を解消（[並べ替え安定化メモ](./framegraph-stack-reorder-stability-fix-2026-08-11.md)）
 - [x] Classic の既存設定を再利用した object-based Motion Blur を FrameGraph stack へ追加（[実装メモ](./framegraph-motion-blur-implementation-note-2026-08-11.md)）

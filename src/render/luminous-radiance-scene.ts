@@ -7,7 +7,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Scene } from "@babylonjs/core/scene";
 import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
-import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh } from "./triangle-radiance-bvh";
+import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh } from "./triangle-radiance-bvh";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { RadianceInputSnapshot } from "./luminous-radiance-input-cache";
 import { logWarn } from "../app-logger";
@@ -34,11 +34,14 @@ export class LuminousRadianceScene {
     private emissionCapacity = 16;
     private textureRevision = -1;
     private readonly textures = new LuminousRadianceTextures();
+    private readonly triangleBudget: number;
 
     constructor(private readonly scene: Scene, private readonly readEmission: RadianceEmissionReader) {
-        this.triangleBuffer = new StorageBuffer(scene.getEngine() as WebGPUEngine, this.triangleCapacity);
-        this.nodeBuffer = new StorageBuffer(scene.getEngine() as WebGPUEngine, this.nodeCapacity);
-        this.emissionBuffer = new StorageBuffer(scene.getEngine() as WebGPUEngine, this.emissionCapacity);
+        const engine = scene.getEngine() as WebGPUEngine;
+        this.triangleBudget = radianceTriangleBudget(engine.currentLimits.maxStorageBufferBindingSize, engine.currentLimits.maxBufferSize);
+        this.triangleBuffer = new StorageBuffer(engine, this.triangleCapacity);
+        this.nodeBuffer = new StorageBuffer(engine, this.nodeCapacity);
+        this.emissionBuffer = new StorageBuffer(engine, this.emissionCapacity);
     }
 
     public get ready(): boolean { return this.textures.ready; }
@@ -48,23 +51,35 @@ export class LuminousRadianceScene {
         const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
         let emitters = 0;
         try {
-            for (const mesh of this.scene.meshes) {
+            // Count eligible surfaces before skinning or packing. A rejected scene must not allocate
+            // oversized geometry again each frame, or warm emission textures it cannot use.
+            const meshes = this.scene.meshes.flatMap(mesh => {
                 if (!(mesh instanceof Mesh) || !mesh.isVisible || !mesh.isEnabled() || mesh.visibility <= 0
-                    || mesh.getClassName() === "LinesMesh" || !mesh.material || mesh.material.getClassName() === "BackgroundMaterial") continue;
+                    || mesh.getClassName() === "LinesMesh" || !mesh.material || mesh.material.getClassName() === "BackgroundMaterial") return [];
                 const indices = mesh.getIndices();
-                if (!indices?.length) continue;
+                if (!indices?.length) return [];
+                const surfaces = mesh.subMeshes.flatMap(subMesh => {
+                    const material = subMesh.getMaterial();
+                    return material && material.alpha >= 0.99
+                        ? [{ indexStart: subMesh.indexStart, indexCount: subMesh.indexCount, material }] : [];
+                });
+                return [{ mesh, indices, surfaces }];
+            });
+            const triangleCount = meshes.reduce((total, entry) => total + entry.surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0), 0);
+            if (triangleCount > this.triangleBudget) {
+                throw new Error(`3D RC triangle budget exceeded (${triangleCount} opaque triangles; limit ${this.triangleBudget})`);
+            }
+            for (const { mesh, indices, surfaces: opaqueSurfaces } of meshes) {
                 // Babylon's public API applies current skeleton and morph weights before the world transform.
                 const positions = mesh.getPositionData(true, true);
                 if (!positions) continue;
                 const world = mesh.computeWorldMatrix();
-                const surfaces = mesh.subMeshes.flatMap(subMesh => {
-                    const material = subMesh.getMaterial();
-                    if (!material || material.alpha < 0.99) return [];
+                const surfaces = opaqueSurfaces.map(({ indexStart, indexCount, material }) => {
                     const emission = this.readEmission(mesh, material), texture = emission?.texture;
                     const uvs = texture ? mesh.getVerticesData(texture.coordinatesIndex === 1 ? VertexBuffer.UV2Kind : VertexBuffer.UVKind) : null;
-                    return [{ indexStart: subMesh.indexStart, indexCount: subMesh.indexCount, emission, uvs,
+                    return { indexStart, indexCount, emission, uvs,
                         textureSource: texture ? this.textures.source(texture) : -1, matrix: texture?.getTextureMatrix().m,
-                        wrap: texture ? texture.wrapU + texture.wrapV * 4 : 0 }];
+                        wrap: texture ? texture.wrapU + texture.wrapV * 4 : 0 };
                 });
                 const metadata = surfaces.flatMap(surface => [surface.indexStart, surface.indexCount,
                     surface.emission ? 1 : 0, surface.emission?.r ?? 0, surface.emission?.g ?? 0, surface.emission?.b ?? 0,
@@ -72,8 +87,9 @@ export class LuminousRadianceScene {
                 const parts: ArrayLike<number>[] = [positions, indices, world.m, metadata, ...surfaces.map(surface => surface.uvs ?? [])];
                 const previous = this.meshInputs.get(mesh);
                 if (previous?.snapshot.matches(parts)) { chunks.push(previous); continue; }
-                const values: number[] = [], low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
-                let emitters = 0;
+                const values = new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);
+                const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
+                let emitters = 0, writeOffset = 0;
                 const transformed = new Float32Array(positions.length);
                 const point = Vector3.Zero();
                 for (let vertex = 0; vertex < positions.length; vertex += 3) {
@@ -84,18 +100,17 @@ export class LuminousRadianceScene {
                     const { emission, uvs, textureSource, wrap, matrix: textureMatrix } = surface;
                     if (emission && ![emission.r, emission.g, emission.b].every(Number.isFinite)) throw new Error("3D RC emission contains invalid colors");
                     for (let index = surface.indexStart; index < surface.indexStart + surface.indexCount; index += 3) {
-                        if (values.length / RADIANCE_TRIANGLE_STRIDE >= MAX_RADIANCE_TRIANGLES) throw new Error(`3D RC supports at most ${MAX_RADIANCE_TRIANGLES} opaque triangles`);
                         for (let corner = 0; corner < 3; corner++) {
                             const vertex = indices[index + corner], offset = vertex * 3;
                             for (let axis = 0; axis < 3; axis++) {
                                 const value = transformed[offset + axis];
                                 if (!Number.isFinite(value)) throw new Error("3D RC geometry contains invalid vertices");
-                                values.push(value);
+                                values[writeOffset++] = value;
                                 if (emission) { low[axis] = Math.min(low[axis], value); high[axis] = Math.max(high[axis], value); }
                             }
-                            values.push(0);
+                            values[writeOffset++] = 0;
                         }
-                        values.push((emission?.r ?? 0) * 8, (emission?.g ?? 0) * 8, (emission?.b ?? 0) * 8, 0);
+                        values.set([(emission?.r ?? 0) * 8, (emission?.g ?? 0) * 8, (emission?.b ?? 0) * 8, 0], writeOffset); writeOffset += 4;
                         if (textureMatrix) {
                             for (let corner = 0; corner < 3; corner++) {
                                 const vertex = indices[index + corner];
@@ -104,18 +119,15 @@ export class LuminousRadianceScene {
                                 const tu = u * textureMatrix[0] + v * textureMatrix[4] + textureMatrix[8];
                                 const tv = u * textureMatrix[1] + v * textureMatrix[5] + textureMatrix[9];
                                 if (!Number.isFinite(tu) || !Number.isFinite(tv)) throw new Error("3D RC geometry contains invalid UVs");
-                                values.push(tu, tv);
+                                values[writeOffset++] = tu; values[writeOffset++] = tv;
                             }
-                        } else values.push(0, 0, 0, 0, 0, 0);
-                        values.push(textureSource, wrap);
+                        } else writeOffset += 6;
+                        values[writeOffset++] = textureSource; values[writeOffset++] = wrap;
                         if (emission) emitters++;
                     }
                 }
-                const chunk = { snapshot: new RadianceInputSnapshot(parts), triangles: new Float32Array(values), emitters, low, high };
+                const chunk = { snapshot: new RadianceInputSnapshot(parts), triangles: values, emitters, low, high };
                 this.meshInputs.set(mesh, chunk); chunks.push(chunk);
-            }
-            if (chunks.reduce((count, chunk) => count + chunk.triangles.length / RADIANCE_TRIANGLE_STRIDE, 0) > MAX_RADIANCE_TRIANGLES) {
-                throw new Error(`3D RC supports at most ${MAX_RADIANCE_TRIANGLES} opaque triangles`);
             }
             for (const chunk of chunks) {
                 emitters += chunk.emitters;

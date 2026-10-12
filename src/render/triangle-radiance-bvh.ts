@@ -1,6 +1,11 @@
 // World vertices, linear emission, UVs and texture source metadata (6 vec4s).
-export const MAX_RADIANCE_TRIANGLES = 100000;
+// 96 MB at this ceiling, below WebGPU's default 128 MiB storage binding limit.
+export const MAX_RADIANCE_TRIANGLES = 1000000;
 export const RADIANCE_TRIANGLE_STRIDE = 24;
+export function radianceTriangleBudget(maxStorageBufferBindingSize: number, maxBufferSize: number): number {
+    return Math.min(MAX_RADIANCE_TRIANGLES, Math.floor(Math.min(maxStorageBufferBindingSize, maxBufferSize)
+        / (RADIANCE_TRIANGLE_STRIDE * Float32Array.BYTES_PER_ELEMENT)));
+}
 export class TriangleRadianceBvh {
     public nodes = new Float32Array(12);
     public triangles = new Float32Array(RADIANCE_TRIANGLE_STRIDE);

@@ -41,4 +41,6 @@ cascade・receiverのray数や解像度、input / atlas cache、強度0の停止
 
 低解像度の4sampleに含まれない非常に細い面には、照明を再構成できない画素が残り得る。RC格子・32方向gatherの粗さや短距離遮蔽による段差、透明体・特殊変形等の未確認事項も残る。この修正は完全な高解像度GIやscene全体のAA追加ではない。実ステージでの見え方と追加のcomposite費用は再確認待ち。
 
+同日16:23の実機報告「平面の既存ルミナスだけ光る」は、app logで10万三角形の上限によるRC停止を確認した。[上限による消灯の修正](./luminous-radiance-budget-fix-2026-10-12.md)で対応する。補間変更による照明消失と推定してこのshaderの判定を緩める根拠はなく、4点補間は維持する。
+
 [公式Frame Graph task一覧](https://doc.babylonjs.com/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList/)と、依存中9.2.0の`frameGraphTextureManager`、`frameGraphRenderContext`、`postProcessTask`を照合した。既定sampling modeがnearestである点はinstalled sourceと実描画に基づく。

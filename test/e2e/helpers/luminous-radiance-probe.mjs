@@ -4,6 +4,8 @@ import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { Vector3, Matrix } from "@babylonjs/core/Maths/math.vector";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
+import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 
 let latestGraph;
 const executeGraph = FrameGraph.prototype.execute;
@@ -145,4 +147,47 @@ export async function createRadianceReceiverColors() {
   }
   await current.whenReadyAsync();
   return radianceProbeState();
+}
+
+export function createDenseRadianceProbe() {
+  const current = scene(), floor = current.getMeshByName("rc-floor");
+  floor.setEnabled(false);
+  const ground = CreateGround("rc-dense-floor", { width: 12, height: 10, subdivisions: 128, updatable: true }, current);
+  ground.material = floor.material;
+  return ground.getTotalIndices() / 3;
+}
+
+// Test-only timings: frame intervals include presentation; task setup measures CPU collection separately.
+export async function profileRadianceProbe(frames = 30, change) {
+  const tasks = [3, 2, 1, 0].map(i => latestGraph.getTaskByName(`luminousRadianceCascade${i}`));
+  const receiver = latestGraph.getTaskByName("luminousRadianceReceiver");
+  const counts = { cascades: 0, receiver: 0 }, durations = [], intervals = [], undo = [];
+  for (const task of [...tasks, receiver]) {
+    const original = task.computeShader.dispatch;
+    task.computeShader.dispatch = function (...args) {
+      if (args[0] > 0 && args[1] > 0 && args[2] > 0) counts[task === receiver ? "receiver" : "cascades"]++;
+      return original.apply(this, args);
+    };
+    undo.push(() => { task.computeShader.dispatch = original; });
+  }
+  const prepare = latestGraph.getTaskByName("luminousRadiancePrepare") ?? tasks[0];
+  const key = "func" in prepare ? "func" : "execute", original = prepare[key];
+  prepare[key] = function (...args) {
+    const start = performance.now();
+    try { return original.apply(this, args); } finally { durations.push(performance.now() - start); }
+  };
+  undo.push(() => { prepare[key] = original; });
+  try {
+    if (change === "vertex") {
+      const ground = scene().getMeshByName("rc-dense-floor"), positions = ground.getVerticesData(VertexBuffer.PositionKind);
+      positions[1] += 0.1; ground.updateVerticesData(VertexBuffer.PositionKind, positions);
+    } else if (change === "transform") scene().getMeshByName("rc-emitter").position.x += 0.1;
+    let previous = await new Promise(resolve => requestAnimationFrame(resolve));
+    for (let i = 0; i < frames; i++) {
+      const now = await new Promise(resolve => requestAnimationFrame(resolve)); intervals.push(now - previous); previous = now;
+    }
+    const median = values => values.sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+    return { counts, cpuMedianMs: median(durations), frameMedianMs: median(intervals),
+      receiverSize: [receiver.dispatchSize.x * 8, receiver.dispatchSize.y * 8] };
+  } finally { for (const restore of undo) restore(); }
 }

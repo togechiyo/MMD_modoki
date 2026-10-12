@@ -389,6 +389,12 @@ test("RC respects MMD and Standard reflectance without washing dark materials wh
     for (const surface of off) expect(Math.max(...surface.rgb)).toBeLessThan(3);
     await control("luminousRadianceEnabled").selectOption("1"); const restored = await capture("reflectance-restored");
     for (const [i, surface] of restored.entries()) for (const c of [0, 1, 2]) expect(Math.abs(surface.rgb[c] - on[i].rgb[c])).toBeLessThan(3);
+    await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState({ color: [1, 0, 0] }));
+    const colored = await capture("reflectance-red-light");
+    expect(colored[1].rgb[0]).toBeGreaterThan(on[1].rgb[0] * 1.5);
+    expect(colored[1].rgb[1]).toBeLessThan(3); expect(colored[1].rgb[2]).toBeLessThan(3);
+    expect(colored[2].rgb[0]).toBeLessThan(colored[3].rgb[0] * 0.15);
+    await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState({ color: [1, 1, 1] }));
     for (const [id, value] of [["light-intensity", 100], ["light-ambient", 30]]) await page.locator(`#${id}`).evaluate((input, value) => {
       input.value = String(value); input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));

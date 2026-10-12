@@ -28,15 +28,15 @@ Glow の彩度補正、白い芯、発光マスクの増幅より前の色を線
 
 可視・有効な通常 Mesh の indexed triangle を対象にする。Babylon `Mesh.getPositionData(true, true)` で通常の骨・頂点モーフを適用し、world matrix を掛ける。カメラの視錐台による選別は行わないため、画面外の光源・遮蔽物を保持する。`alpha < 0.99` の材質は入力から除外する。
 
-追跡形状は自作の CPU BVH に詰める。三角形数が変われば再構築し、同数なら境界を refit する。入力が同じ場合は BVH 更新と storage upload を省く。形状収集は各フレーム行い、cascade / receiver の GPU 計算も各フレーム行う。10万三角形の上限を超えた場合、照明を消して診断に理由を残す。
+追跡形状は自作の CPU BVH に詰める。三角形数が変われば再構築し、同数なら境界を refit する。入力が同じ場合は BVH 更新と storage upload を省く。2026-10-12の後続修正でmesh入力をcacheし、同じmeshの三角形再展開と、入力・範囲が同じときのcascade計算も省く。receiverはカメラを反映して各フレーム計算する。強度0ではRC計算を停止する（[負荷軽減・fixture計測](./luminous-radiance-performance-2026-10-12.md)）。10万三角形の上限を超えた場合、照明を消して診断に理由を残す。
 
 ## Frame Graph 接続
 
 既存 geometry renderer の view depth / view normal を共有する。RC が必要な場合は、MMD エッジをこの geometry capture 内だけ抑制する。通常描画のエッジ設定は変更しない。
 
-Luminous 群内で、外側から内側への4段 compute → 半解像度 receiver gather → RC 合成 → 既存 core / halo Glow 合成の順に接続する。段の格子・方向数は独立ラボと同じ `16³/32`, `8³/128`, `4³/512`, `2³/2048`。距離区間は立方体の辺長に比例して拡縮する。BVH の最初の面で emission と遮蔽を評価し、遠い段を近い段へ合成する。receiver の短距離追跡も残す。
+Luminous 群内で、外側から内側への4段 compute → receiver gather → RC 合成 → 既存 core / halo Glow 合成の順に接続する。receiverは半解像度・長辺640画素以内とする。段の格子・方向数は独立ラボと同じ `16³/32`, `8³/128`, `4³/512`, `2³/2048`。距離区間は立方体の辺長に比例して拡縮する。BVH の最初の面で emission と遮蔽を評価し、遠い段を近い段へ合成する。receiver の短距離追跡も残す。
 
-スタック並べ替え時も RC composite の出力を既存 Luminous の scene source に戻す。SSGI 等がすでに depth / normal を持つ場合も、RC の ON/OFF では必要な task 群の差を検出して組み直す。共有テクスチャと graph 由来の atlas は graph に、storage buffer は RC task 群に所有させ、再構築・全体 OFF で破棄する。
+スタック並べ替え時も RC composite の出力を既存 Luminous の scene source に戻す。SSGI 等がすでに depth / normal を持つ場合も、RC の ON/OFF では必要な task 群の差を検出して組み直す。共有テクスチャと一時atlasはgraphに、再利用する最内側atlasとstorage bufferはRC task群に所有させ、再構築・全体OFFで破棄する。
 
 2026-10-12、白いかすみの実機報告を受け、RC ON時だけalbedo出力を追加し、材質色を掛けた光を局所的な線形RGBで加算する方式へ変更した。既存Glowのsoft圧縮と加算係数を参考にするが、受け手へスクリーン合成は行わない。[照明合成・材質色の取得・確認範囲](./luminous-radiance-composition-2026-10-12.md) を参照。MMD / PBRの完全なBRDFの再評価は行わず、SSGI・環境光等を同時に使うと寄与が重なるため、それぞれの強度を比較して調整する。
 

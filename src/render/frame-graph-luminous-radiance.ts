@@ -5,6 +5,7 @@ import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { EffectWrapper } from "@babylonjs/core/Materials/effectRenderer";
 import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { FrameGraphComputeShaderTask } from "@babylonjs/core/FrameGraph/Tasks/Misc/computeShaderTask";
+import { FrameGraphExecuteTask } from "@babylonjs/core/FrameGraph/Tasks/Misc/executeTask";
 import { FrameGraphPostProcessTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/postProcessTask";
 import type { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
 import type { FrameGraphTask } from "@babylonjs/core/FrameGraph/frameGraphTask";
@@ -15,6 +16,7 @@ import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
 import { LuminousRadianceScene, type RadianceEmissionReader } from "./luminous-radiance-scene";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "./luminous-radiance-settings";
 import { captureRadianceAlbedo } from "./luminous-radiance-albedo";
+import { radianceReceiverSize } from "./luminous-radiance-input-cache";
 import { LUMINOUS_RADIANCE_CASCADE_WGSL, LUMINOUS_RADIANCE_RECEIVER_WGSL, LUMINOUS_RADIANCE_COMPOSITE_WGSL } from "./luminous-radiance-shaders";
 
 function storageTexture(graph: FrameGraph, name: string, width: number, height: number): FrameGraphTextureHandle {
@@ -31,9 +33,18 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     const releaseAlbedo = captureRadianceAlbedo(scene, geometryPassId);
     // Prime source texture readback before buildAsync waits for task readiness, including resized exports.
     data.update(normalizeLuminousRadiance(getSettings()));
-    const tasks: FrameGraphTask[] = [];
+    const prepare = new FrameGraphExecuteTask("luminousRadiancePrepare", graph);
+    const tasks: FrameGraphTask[] = [prepare], cascades: FrameGraphComputeShaderTask[] = [];
     const layouts = createRadianceCascadeLayouts();
-    const fields = layouts.map((layout, index) => storageTexture(graph, `luminousRadiance${index}`, layout.width, layout.height));
+    // The base atlas survives between frames. Imported storage is not subject to transient texture aliasing.
+    const cachedField = graph.engine.createRenderTargetTexture({ width: layouts[0].width, height: layouts[0].height }, {
+        type: Constants.TEXTURETYPE_HALF_FLOAT, format: Constants.TEXTUREFORMAT_RGBA,
+        creationFlags: Constants.TEXTURE_CREATIONFLAG_STORAGE, generateDepthBuffer: false, generateMipMaps: false,
+    });
+    if (!cachedField.texture) { cachedField.dispose(); data.dispose(); releaseAlbedo(); throw new Error("RC atlas allocation failed"); }
+    const fields = layouts.map((layout, index) => index === 0
+        ? graph.textureManager.importTexture("luminousRadiance0", cachedField.texture)
+        : storageTexture(graph, `luminousRadiance${index}`, layout.width, layout.height));
     const dummy = storageTexture(graph, "luminousRadianceEmpty", 1, 1);
     for (let index = layouts.length - 1; index >= 0; index--) {
         const layout = layouts[index];
@@ -53,8 +64,6 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             task.setInternalTexture("outputField", context.getTextureFromHandle(fields[index]));
         });
         task.execute = () => {
-            const settings = normalizeLuminousRadiance(getSettings());
-            if (index === layouts.length - 1) data.update(settings);
             task.setStorageBuffer("triangles", data.triangleBuffer); task.setStorageBuffer("nodes", data.nodeBuffer);
             task.setStorageBuffer("emissionPixels", data.emissionBuffer);
             params.updateFloat4("volumeMin", ...data.volumeMin as [number, number, number], 0);
@@ -65,13 +74,10 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         if (index === layouts.length - 1) {
             const isReady = task.isReady.bind(task);
             task.isReady = () => isReady() && data.ready;
-            const dispose = task.dispose.bind(task);
-            task.dispose = () => { dispose(); data.dispose(); releaseAlbedo(); };
         }
-        tasks.push(task);
+        tasks.push(task); cascades.push(task);
     }
-    const width = Math.max(1, Math.ceil(graph.engine.getRenderWidth() / 2));
-    const height = Math.max(1, Math.ceil(graph.engine.getRenderHeight() / 2));
+    const { width, height } = radianceReceiverSize(graph.engine.getRenderWidth(), graph.engine.getRenderHeight());
     const output = storageTexture(graph, "luminousRadianceIrradiance", width, height);
     const receiver = new FrameGraphComputeShaderTask("luminousRadianceReceiver", graph,
         { computeSource: LUMINOUS_RADIANCE_RECEIVER_WGSL }, { bindingsMapping: {
@@ -116,5 +122,18 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         pass.addDependencies([output, albedo]); return pass;
     };
     tasks.push(composite);
+    let fieldRevision = -1, fieldRange = -1;
+    prepare.func = () => {
+        const settings = normalizeLuminousRadiance(getSettings());
+        const active = settings.enabled && settings.strength > 0.0001;
+        if (active) data.update(settings);
+        const visible = active && data.emitterTriangles > 0 && !data.error;
+        const refresh = visible && (fieldRevision !== data.revision || fieldRange !== settings.range);
+        for (const task of cascades) task.disabled = !refresh;
+        receiver.disabled = !visible; composite.disabled = !visible;
+        if (refresh) { fieldRevision = data.revision; fieldRange = settings.range; }
+    };
+    const dispose = prepare.dispose.bind(prepare);
+    prepare.dispose = () => { dispose(); data.dispose(); releaseAlbedo(); cachedField.dispose(); };
     return { tasks, composite, data };
 }

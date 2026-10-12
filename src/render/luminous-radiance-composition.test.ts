@@ -28,4 +28,14 @@ describe("material-tinted RC composition", () => {
             expect(dark[0]).toBeLessThan(white[0] * 0.2);
         }
     });
+    it("lets colored light show on an opposing material hue without lifting black reflectance", () => {
+        const blue = [0.0063, 0.0707, 0.6118];
+        const redLight = composeRadiance([0, 0, 0], blue, [8, 0, 0]);
+        const neutral = composeRadiance([0, 0, 0], blue, [8, 8, 8]);
+        expect(redLight[0]).toBeGreaterThan(neutral[0] * 1.5);
+        expect(redLight[1]).toBe(0); expect(redLight[2]).toBe(0);
+        expect(composeRadiance([0, 0, 0], [0, 0, 0], [8, 0, 0])).toEqual([0, 0, 0]);
+        const dark = composeRadiance([0, 0, 0], [0.001, 0.001, 0.001], [8, 0, 0]);
+        expect(dark[0]).toBeLessThan(redLight[0] * 0.25);
+    });
 });

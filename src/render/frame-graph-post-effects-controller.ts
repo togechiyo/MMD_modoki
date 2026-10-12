@@ -3018,7 +3018,10 @@ export class FrameGraphPostEffectsController {
             const radiance = createLuminousRadianceTasks(frameGraph, scene, camera,
                 this.geometryRendererTask.geometryViewDepthTexture, this.geometryRendererTask.geometryViewNormalTexture,
                 this.geometryRendererTask.geometryAlbedoTexture, this.geometryRendererTask.objectRenderer.renderPassId,
-                () => this.getSettings().luminousRadiance ?? { enabled: false, strength: 1, range: 12 }, this.readRadianceEmission);
+                () => {
+                    const settings = this.getSettings(), radiance = settings.luminousRadiance ?? { enabled: false, strength: 1, range: 12 };
+                    return { ...radiance, enabled: radiance.enabled && settings.luminousEnabled };
+                }, this.readRadianceEmission);
             radiance.composite.sourceTexture = bloomSourceTexture;
             for (const task of radiance.tasks) deferEffectTask("luminous", task);
             luminousSceneSource = radiance.composite.outputTexture;
@@ -3378,7 +3381,11 @@ export class FrameGraphPostEffectsController {
                 || this.luminousTask.haloTexture === undefined;
         }
         if (this.geometryRendererTask) {
-            this.geometryRendererTask.disabled = !resourcePlan.needsGeometryRenderer;
+            const radianceActive = settings.luminousEnabled && settings.luminousRadiance?.enabled
+                && settings.luminousRadiance.strength > 0.0001;
+            const otherGeometryConsumer = resourcePlan.requirements.some(requirement => requirement.producer === "geometryRenderer"
+                && requirement.consumers.some(id => id !== "luminous"));
+            this.geometryRendererTask.disabled = !resourcePlan.needsGeometryRenderer || (!radianceActive && !otherGeometryConsumer);
         }
         if (this.ssrTask) {
             this.ssrTask.disabled = !this.isPostEffectActive(settings, "ssr") || settings.ssrStrength <= 0.00001;

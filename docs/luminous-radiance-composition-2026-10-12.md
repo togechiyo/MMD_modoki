@@ -19,6 +19,8 @@
 
 概略は `added = A * L / (1 + max(L)) * 0.78`。receiver gather の `4 / 32` は Lambertian の正規化を含むため、合成側でさらに `1 / π` を掛けない。
 
+同日の後続実機確認で「なじみすぎている？」と報告され、所有者は「材質の色を残しつつ、発光色をもう少し目立たせる」方向を選んだ。到来光の彩度 `s = (max(L) - min(L)) / max(L)` に応じ、反射色を `Aeff = mix(A, vec3(luminance(A)), s * 0.35)` とする。上記の `A` にこの `Aeff` を使い、青い材質が赤い光を消しすぎることを緩める。白い光では `s=0` のため元の材質色を維持し、黒い材質では輝度も低いので白く持ち上げない。物理的な反射率そのものを使う方式から、色光の見え方を少し優先した固定調整である。強度の保存値・操作値は変更しない。
+
 RC 合成の後に従来の Glow を実行する。Glow 強度0でRCだけを確認でき、Glowの白い芯やにじみは引き続き別の寄与として調整できる。
 
 ## 受け手の材質色
@@ -55,5 +57,7 @@ PBRは既存の `surfaceAlbedo` が線形の材質色を含むので、その出
 現行のscene colorを局所的にガンマ2.2で線形化する近似であり、scene全体のHDR・色管理・tone mappingを作り直したものではない。Luminousより前にGamma等を並べた場合は、その加工後の色を入力として使う。Toonの照明・PBRの完全なBRDFと同じ計算にはならない。SSGI等を併用すると間接光の寄与も重なる。
 
 albedo attachmentの追加と初回plugin追加にはGPUメモリ・shader準備の費用がある。実ステージでの見た目と負荷は所有者の再確認待ち。PBR専用の実描画比較は未実施。有限の格子や方向数による光漏れ・段差の制約も残る。
+
+同日の[静止時・強度0の負荷軽減](./luminous-radiance-performance-2026-10-12.md)で、atlasの再利用、mesh入力のcache、大画面receiverの解像度上限を追加した。
 
 [公式 MaterialPlugin 文書](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/materialPlugins/) と [Frame Graph task一覧](https://doc.babylonjs.com/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList/) を、依存中の `MaterialPluginManager`、`geometryRendererTask`、Standard `default.fragment`、PBR `pbrBlockPrePass` のWGSL sourceと照合した。Standardの材質色が標準albedoに含まれない点と、pluginのextra eventの登録順はinstalled sourceおよびローカルGPUで確認している。

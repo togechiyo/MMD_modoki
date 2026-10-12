@@ -14,6 +14,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
 import { LuminousRadianceScene, type RadianceEmissionReader } from "./luminous-radiance-scene";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "./luminous-radiance-settings";
+import { captureRadianceAlbedo } from "./luminous-radiance-albedo";
 import { LUMINOUS_RADIANCE_CASCADE_WGSL, LUMINOUS_RADIANCE_RECEIVER_WGSL, LUMINOUS_RADIANCE_COMPOSITE_WGSL } from "./luminous-radiance-shaders";
 
 function storageTexture(graph: FrameGraph, name: string, width: number, height: number): FrameGraphTextureHandle {
@@ -23,10 +24,11 @@ function storageTexture(graph: FrameGraph, name: string, width: number, height: 
 }
 
 export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, camera: Camera,
-    depth: FrameGraphTextureHandle, normal: FrameGraphTextureHandle,
+    depth: FrameGraphTextureHandle, normal: FrameGraphTextureHandle, albedo: FrameGraphTextureHandle, geometryPassId: number,
     getSettings: () => LuminousRadianceSettings, readEmission: RadianceEmissionReader,
 ): { tasks: FrameGraphTask[]; composite: FrameGraphPostProcessTask; data: LuminousRadianceScene } {
     const data = new LuminousRadianceScene(scene, readEmission);
+    const releaseAlbedo = captureRadianceAlbedo(scene, geometryPassId);
     // Prime source texture readback before buildAsync waits for task readiness, including resized exports.
     data.update(normalizeLuminousRadiance(getSettings()));
     const tasks: FrameGraphTask[] = [];
@@ -64,7 +66,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             const isReady = task.isReady.bind(task);
             task.isReady = () => isReady() && data.ready;
             const dispose = task.dispose.bind(task);
-            task.dispose = () => { dispose(); data.dispose(); };
+            task.dispose = () => { dispose(); data.dispose(); releaseAlbedo(); };
         }
         tasks.push(task);
     }
@@ -103,12 +105,15 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     tasks.push(receiver);
     ShaderStore.ShadersStoreWGSL["mmdLuminousRadianceCompositePixelShader"] = LUMINOUS_RADIANCE_COMPOSITE_WGSL;
     const effect = new EffectWrapper({ engine: graph.engine, fragmentShader: "mmdLuminousRadianceComposite", useShaderStore: true,
-        useAsPostProcess: true, shaderLanguage: ShaderLanguage.WGSL, samplers: ["radianceSampler"], name: "luminousRadianceComposite" });
+        useAsPostProcess: true, shaderLanguage: ShaderLanguage.WGSL, samplers: ["radianceSampler", "albedoSampler"], name: "luminousRadianceComposite" });
     const composite = new FrameGraphPostProcessTask("luminousRadianceComposite", graph, effect);
     const record = composite.record.bind(composite);
     composite.record = (skip, execute, bindings) => {
-        const pass = record(skip, execute, context => { context.bindTextureHandle(effect.effect, "radianceSampler", output); bindings?.(context); });
-        pass.addDependencies(output); return pass;
+        const pass = record(skip, execute, context => {
+            context.bindTextureHandle(effect.effect, "radianceSampler", output);
+            context.bindTextureHandle(effect.effect, "albedoSampler", albedo); bindings?.(context);
+        });
+        pass.addDependencies([output, albedo]); return pass;
     };
     tasks.push(composite);
     return { tasks, composite, data };

@@ -38,7 +38,7 @@ Luminous 群内で、外側から内側への4段 compute → 半解像度 recei
 
 スタック並べ替え時も RC composite の出力を既存 Luminous の scene source に戻す。SSGI 等がすでに depth / normal を持つ場合も、RC の ON/OFF では必要な task 群の差を検出して組み直す。共有テクスチャと graph 由来の atlas は graph に、storage buffer は RC task 群に所有させ、再構築・全体 OFF で破棄する。
 
-既存 scene-color RT は表示色で、albedo G-buffer を持たない。受け手への加算は bounded な表示色合成であり、MMD / PBR の本来の拡散 BRDF を再評価する方式ではない。SSGI・環境光等を同時に使うと寄与が重なるため、それぞれの強度を比較して調整する。
+2026-10-12、白いかすみの実機報告を受け、RC ON時だけalbedo出力を追加し、材質色を掛けた光を局所的な線形RGBで加算する方式へ変更した。既存Glowのsoft圧縮と加算係数を参考にするが、受け手へスクリーン合成は行わない。[照明合成・材質色の取得・確認範囲](./luminous-radiance-composition-2026-10-12.md) を参照。MMD / PBRの完全なBRDFの再評価は行わず、SSGI・環境光等を同時に使うと寄与が重なるため、それぞれの強度を比較して調整する。
 
 backend 往復の検証中、Classic の独自 Glow が半径変更時に Babylon `ThinGlowLayer` の未生成 blur wrapper を更新し、`Cannot set properties of undefined (setting 'kernel')` で復元を止める問題が分かった。独自 blur は `blurWidth` uniform を使用するため、独自 layer の半径 accessor を override し、その options を更新する経路に揃えた。既存 Glow の描画方式を変更せず、半径値の受け渡しを修正している。
 

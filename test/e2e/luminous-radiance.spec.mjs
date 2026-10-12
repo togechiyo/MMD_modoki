@@ -22,6 +22,14 @@ function sample(png, point, channel) {
   return sum / 169;
 }
 
+// Separate intrinsic reflectance from already lit scene color: the receivers start in darkness.
+async function darkLighting(page) {
+  for (const id of ["light-intensity", "light-ambient"]) await page.locator(`#${id}`).evaluate(input => {
+    input.value = "0"; input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
 test("existing Luminous emits world-space RC light in Frame Graph", async ({}, testInfo) => {
   const launched = await launchMmdModoki(root);
   const errors = [], states = {};
@@ -40,6 +48,7 @@ test("existing Luminous emits world-space RC light in Frame Graph", async ({}, t
     await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous");
     await page.locator("#btn-shader-apply-all").click();
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createRadianceProbe());
+    await darkLighting(page);
     await page.locator("#info-model-select").selectOption("__camera__");
     for (const [key, value] of Object.entries({ tx: 0, ty: 1.5, tz: 0, rx: -20, ry: -20, rz: 0, camDistance: 12 })) {
       const field = page.locator(`#bone-controls input[data-control-key='${key}']`);
@@ -152,6 +161,7 @@ test("Luminous materials illuminate together with independent colors and additiv
     await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous");
     await page.locator("#btn-shader-apply-all").click();
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createRadianceProbe({ multicolor: true }));
+    await darkLighting(page);
     await page.locator("#info-model-select").selectOption("__camera__");
     for (const [key, value] of Object.entries({ tx: 0, ty: 1, tz: 0, rx: -25, ry: 0, rz: 0, camDistance: 11 })) {
       const field = page.locator(`#bone-controls input[data-control-key='${key}']`);
@@ -215,6 +225,7 @@ test("Luminous materials illuminate together with independent colors and additiv
       const moved = await capture(`camera-${index}`);
       moved.surface = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeSurface());
       expect(moved.surface.worldNormal[1]).toBeGreaterThan(0.99);
+      for (const value of moved.surface.albedo.slice(0, 3)) expect(value).toBeCloseTo(0.6 ** 2.2, 3);
       for (const value of moved.surface.world) expect(Math.abs(value)).toBeLessThan(0.03);
       for (const channel of [0, 2]) expect(Math.abs(moved.floor[channel] - restored.floor[channel])).toBeLessThan(3);
     }
@@ -249,6 +260,7 @@ test("RC follows emission texture UVs and fades its volume boundary", async ({},
     await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous");
     await page.locator("#btn-shader-apply-all").click();
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createRadianceProbe());
+    await darkLighting(page);
     await page.locator("#info-model-select").selectOption("__camera__");
     async function camera(values) {
       for (const [key, value] of Object.entries(values)) {
@@ -307,9 +319,89 @@ test("RC follows emission texture UVs and fades its volume boundary", async ({},
     await camera({ tx: 6, ty: 0, rx: -50, ry: 0, camDistance: 12 });
     const boundary = await capture("volume-boundary");
     expect(boundary.inner[2]).toBeGreaterThan(boundary.outside[2] + 10);
-    expect(Math.abs(boundary.inside[2] - boundary.outside[2])).toBeLessThan(15);
+    // The compositor now encodes linear light with gamma; compare residual light, not the old display-space delta.
+    const linear = value => (value / 255) ** 2.2;
+    expect(linear(boundary.inside[2]) - linear(boundary.outside[2]))
+      .toBeLessThan((linear(boundary.inner[2]) - linear(boundary.outside[2])) * 0.1);
     for (const state of Object.values(states)) expect(state.validation.count).toBe(0);
     expect(errors).toEqual([]);
+  } finally { await launched.close(); }
+});
+
+test("RC respects MMD and Standard reflectance without washing dark materials white", async ({}, testInfo) => {
+  const launched = await launchMmdModoki(root), errors = [], states = {};
+  try {
+    const page = await launched.app.firstWindow();
+    page.on("pageerror", error => errors.push(error.message));
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    await page.evaluate(async () => {
+      const state = window.mmdModokiE2e.exportProjectState();
+      state.physics.enabled = false; state.viewport.groundVisible = false; state.viewport.skydomeVisible = false;
+      await window.mmdModokiE2e.importProjectState(state);
+    });
+    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
+    await page.locator("#btn-toggle-shader-panel").click();
+    await page.locator('[data-effect-tab="materials"]').click();
+    await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous");
+    await page.locator("#btn-shader-apply-all").click();
+    await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createRadianceProbe());
+    await darkLighting(page);
+    await page.locator("#info-model-select").selectOption("__camera__");
+    for (const [key, value] of Object.entries({ tx: 0, ty: 0.5, tz: 0, rx: -35, ry: 0, rz: 0, camDistance: 11 })) {
+      const field = page.locator(`#bone-controls input[data-control-key='${key}']`);
+      await field.fill(String(value)); await field.press("Enter");
+    }
+    await page.locator('[data-effect-tab="post"]').click();
+    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+      await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
+    }
+    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    for (const [key, value] of [["luminousRadianceRange", 3], ["luminousIntensity", 0], ["luminousRadianceStrength", 100]]) {
+      await control(key).evaluate((input, value) => { input.value = String(value);
+        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+    }
+    await control("luminousRadianceEnabled").selectOption("1");
+    await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+    await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createRadianceReceiverColors());
+    async function capture(name) {
+      await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+      const points = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState());
+      const path = testInfo.outputPath(`${name}.png`); await page.locator("#render-canvas").screenshot({ path });
+      const png = PNG.sync.read(readFileSync(path));
+      states[name] = { surfaces: points.surfaces.map(surface => ({ ...surface,
+        rgb: [0, 1, 2].map(channel => sample(png, surface.point, channel)) })),
+        validation: await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()) };
+      writeFileSync(testInfo.outputPath("reflectance-report.json"), JSON.stringify({ states, errors }, null, 2));
+      return states[name].surfaces;
+    }
+    const on = await capture("reflectance-rc-on");
+    const [warm, blue, black, white] = on.map(surface => surface.rgb);
+    expect(warm[0]).toBeGreaterThan(warm[1] * 1.5); expect(warm[1]).toBeGreaterThan(warm[2] * 1.5);
+    expect(blue[2]).toBeGreaterThan(blue[0] * 2); expect(blue[2]).toBeGreaterThan(blue[1] * 1.5);
+    expect(white[0]).toBeGreaterThan(80);
+    expect(Math.max(...black)).toBeLessThan(Math.min(...white) * 0.15);
+    for (const surface of on) {
+      const data = await page.evaluate(async point => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeSurface(point), surface.point);
+      surface.albedo = data.albedo;
+      for (const i of [0, 1, 2]) expect(data.albedo[i]).toBeCloseTo(surface.color[i] ** 2.2, 3);
+    }
+    await control("luminousRadianceEnabled").selectOption("0"); const off = await capture("reflectance-rc-off");
+    for (const surface of off) expect(Math.max(...surface.rgb)).toBeLessThan(3);
+    await control("luminousRadianceEnabled").selectOption("1"); const restored = await capture("reflectance-restored");
+    for (const [i, surface] of restored.entries()) for (const c of [0, 1, 2]) expect(Math.abs(surface.rgb[c] - on[i].rgb[c])).toBeLessThan(3);
+    for (const [id, value] of [["light-intensity", 100], ["light-ambient", 30]]) await page.locator(`#${id}`).evaluate((input, value) => {
+      input.value = String(value); input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, value);
+    const lit = await capture("reflectance-with-scene-light");
+    expect(lit[0].rgb[0]).toBeGreaterThan(lit[0].rgb[1] * 1.5);
+    expect(lit[1].rgb[2]).toBeGreaterThan(lit[1].rgb[1] * 1.5);
+    expect(Math.max(...lit[2].rgb)).toBeLessThan(Math.min(...lit[3].rgb) * 0.15);
+    await control("luminousRadianceEnabled").selectOption("0"); const litOff = await capture("reflectance-scene-light-only");
+    for (const [i, surface] of litOff.entries()) expect(lit[i].rgb[0]).toBeGreaterThanOrEqual(surface.rgb[0]);
+    for (const state of Object.values(states)) expect(state.validation.count).toBe(0);
+    expect(errors).toEqual([]);
+    writeFileSync(testInfo.outputPath("reflectance-report.json"), JSON.stringify({ states, errors }, null, 2));
   } finally { await launched.close(); }
 });
 

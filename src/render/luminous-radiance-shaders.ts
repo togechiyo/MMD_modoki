@@ -1,3 +1,5 @@
+import { RADIANCE_COMPOSITION_WGSL } from "./luminous-radiance-composition";
+
 const COMMON = `
 struct Triangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f, uvAB: vec4f, uvSource: vec4f };
 struct Node { low: vec4f, high: vec4f, info: vec4f };
@@ -154,16 +156,18 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 }
 `;
 
-// Receivers are composited in display space because the existing editor scene-color RT is display space.
-// This experimental path has no albedo G-buffer: it adds a bounded diffuse contribution, not a full BRDF.
+// Scene color remains display space. Decode it locally; RC albedo and irradiance are linear.
 export const LUMINOUS_RADIANCE_COMPOSITE_WGSL = `
 varying vUV: vec2f;
 var textureSamplerSampler: sampler; var textureSampler: texture_2d<f32>;
 var radianceSamplerSampler: sampler; var radianceSampler: texture_2d<f32>;
+var albedoSampler: texture_2d<f32>;
+${RADIANCE_COMPOSITION_WGSL}
 @fragment fn main(input: FragmentInputs) -> FragmentOutputs {
     let base = textureSample(textureSampler, textureSamplerSampler, input.vUV);
     let light = textureSample(radianceSampler, radianceSamplerSampler, input.vUV).rgb;
-    let mapped = light / (vec3f(1.0) + light);
-    fragmentOutputs.color = vec4f(base.rgb + mapped * (vec3f(1.0) - clamp(base.rgb, vec3f(0.0), vec3f(1.0))), base.a);
+    let size = vec2i(textureDimensions(albedoSampler));
+    let surface = textureLoad(albedoSampler, clamp(vec2i(input.vUV * vec2f(size)), vec2i(0), size - 1), 0);
+    fragmentOutputs.color = vec4f(composeRadiance(base.rgb, surface.rgb * surface.a, light), base.a);
 }
 `;

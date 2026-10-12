@@ -29,7 +29,7 @@ export async function createRadianceProbe({ multicolor = false } = {}) {
   luminous.diffuseColor.set(1, 0.08, 0.03); luminous.ambientColor.set(0, 0, 0);
   luminous.emissiveColor.set(1, 0.08, 0.03); luminous.renderOutline = false;
   const receiver = new StandardMaterial("rc-receiver", current);
-  receiver.diffuseColor.set(0.12, 0.12, 0.12); receiver.specularColor.set(0, 0, 0);
+  receiver.diffuseColor.set(0.6, 0.6, 0.6); receiver.specularColor.set(0, 0, 0);
   function box(name, size, position, material) {
     const mesh = CreateBox(name, { width: size[0], height: size[1], depth: size[2] }, current);
     mesh.position.set(...position); mesh.material = material; return mesh;
@@ -67,6 +67,9 @@ export async function radianceProbeState({ color, secondColor, blocker, emitter,
     return [projected.x / engine.getRenderWidth(), projected.y / engine.getRenderHeight(), projected.z];
   };
   return { floor: project([0, 0, 0]), floorLeft: project([-1.5, 0, 0]), floorRight: project([1.5, 0, 0]),
+    surfaces: current.meshes.filter(mesh => mesh.name.startsWith("rc-surface-")).map(mesh => ({
+      name: mesh.name, point: project([mesh.position.x, 0.6, -0.5]), color: mesh.material.diffuseColor.asArray(),
+    })),
     emitter: project(source.position.asArray()), secondEmitter: second ? project(second.position.asArray()) : null,
     edgeInner: project([5.25, 0, 0]), edgeInside: project([5.9, 0, 0]), edgeOutside: project([6.1, 0, 0]),
     camera: camera.position.asArray() };
@@ -101,21 +104,45 @@ export async function setRadianceProbeBoundary() {
 }
 
 // Test-only readback of the existing geometry pass, to distinguish reconstruction from camera timing.
-export async function radianceProbeSurface() {
+export async function radianceProbeSurface(point) {
   const current = scene(), task = latestGraph?.getTaskByName("frameGraphPostEffectsGeometry");
   if (!task) return null;
   const engine = current.getEngine(), camera = current.activeCamera;
   const points = await radianceProbeState();
   const depthTexture = latestGraph.textureManager.getTextureFromHandle(task.geometryViewDepthTexture);
   const normalTexture = latestGraph.textureManager.getTextureFromHandle(task.geometryViewNormalTexture);
-  const x = Math.floor(points.floor[0] * depthTexture.width), y = depthTexture.height - 1 - Math.floor(points.floor[1] * depthTexture.height);
+  const albedoTexture = latestGraph.textureManager.getTextureFromHandle(task.geometryAlbedoTexture);
+  point ??= points.floor;
+  const x = Math.floor(point[0] * depthTexture.width), y = depthTexture.height - 1 - Math.floor(point[1] * depthTexture.height);
   const depth = await engine._readTexturePixels(depthTexture, 1, 1, -1, 0, null, true, false, x, y);
   const normal = await engine._readTexturePixels(normalTexture, 1, 1, -1, 0, null, true, false, x, y);
+  const albedo = await engine._readTexturePixels(albedoTexture, 1, 1, -1, 0, null, true, false, x, y);
   const inverseProjection = camera.getProjectionMatrix().clone().invert(), inverseView = camera.getViewMatrix().clone().invert();
   const ray = Vector3.TransformCoordinates(new Vector3((x + 0.5) / depthTexture.width * 2 - 1,
     (y + 0.5) / depthTexture.height * 2 - 1, 0.5), inverseProjection);
   const world = Vector3.TransformCoordinates(ray.scale(depth[0] / ray.z), inverseView);
-  return { depth: Array.from(depth), normal: Array.from(normal), world: world.asArray(),
+  return { depth: Array.from(depth), normal: Array.from(normal), albedo: Array.from(albedo), world: world.asArray(),
     worldNormal: Vector3.TransformNormal(new Vector3(...Array.from(normal).slice(0, 3)), inverseView).asArray(),
     expectedViewDepth: Vector3.TransformCoordinates(Vector3.Zero(), camera.getViewMatrix()).z };
+}
+
+// Added while RC is running: both loaded MMD and plain Standard materials must capture their color.
+export async function createRadianceReceiverColors() {
+  const current = scene(), source = current.getMeshByName("rc-emitter");
+  source.material.diffuseTexture?.dispose(); source.material.diffuseTexture = null;
+  source.material.diffuseColor.set(1, 1, 1); source.material.emissiveColor.set(1, 1, 1);
+  source.rotation.z = Math.PI / 2; source.scaling.set(1, 3, 3); source.position.set(0, 3, 2);
+  current.getMeshByName("rc-wall").setEnabled(false); current.getMeshByName("rc-blocker").setEnabled(false);
+  for (const [i, [name, color, mmd]] of [
+    ["warm-mmd", [0.8, 0.4, 0.2], true], ["blue-mmd", [0.1, 0.3, 0.8], true],
+    ["black-standard", [0.03, 0.03, 0.03], false], ["white-standard", [0.8, 0.8, 0.8], false],
+  ].entries()) {
+    const material = mmd ? source.material.clone(`rc-surface-${name}`) : new StandardMaterial(`rc-surface-${name}`, current);
+    material.disableLighting = false; material.diffuseColor.set(...color);
+    material.emissiveColor.set(0, 0, 0); material.ambientColor.set(0, 0, 0); material.specularColor.set(0, 0, 0);
+    const mesh = CreateBox(`rc-surface-${name}`, { width: 0.85, height: 0.6, depth: 1 }, current);
+    mesh.position.set((i - 1.5) * 1.2, 0.3, -0.5); mesh.material = material;
+  }
+  await current.whenReadyAsync();
+  return radianceProbeState();
 }

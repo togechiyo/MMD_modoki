@@ -52,12 +52,14 @@ describe("buildFrameGraphResourcePlan", () => {
         const plan = buildFrameGraphResourcePlan(settings);
         expect(plan.activeEffects).toContain("luminous");
         expect(plan.needsLuminousRadiance).toBe(true);
-        expect(plan.requirementKeys).toEqual(expect.arrayContaining(["viewDepth", "viewNormal", "luminousMask"]));
+        expect(plan.requirementKeys).toEqual(expect.arrayContaining(["viewDepth", "viewNormal", "luminousMask", "radianceAlbedo"]));
+        expect(plan.requirements).toContainEqual({ key: "radianceAlbedo", consumers: ["luminous"], producer: "geometryRenderer", resolution: "full" });
         const old = buildFrameGraphResourcePlan({ ...settings, luminousIntensity: 1, luminousRadiance: { enabled: false, strength: 1, range: 12 } });
         expect(canReuseFrameGraphForActivation(old, plan, ["ssgi", "luminous"])).toBe(false);
         expect(canReuseFrameGraphForActivation(plan, old, ["ssgi", "luminous"])).toBe(false);
         const disabled = buildFrameGraphResourcePlan({ ...settings, luminousEnabled: false });
         expect(disabled.needsLuminousRadiance).toBe(false);
+        expect(disabled.requirementKeys).not.toContain("radianceAlbedo");
     });
     it.each(["offsetShadow", "offsetHighlight"] as const)("prepares %s depth before its first visible key", id => {
         const neutral = createSettings({ [id + "Enabled"]: true, [id + "Prepared"]: true, [id + "Strength"]: 0 });

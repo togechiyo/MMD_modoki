@@ -11,6 +11,7 @@ export type FrameGraphSharedResourceKey =
     | "depthScene"
     | "viewDepth"
     | "viewNormal"
+    | "radianceAlbedo"
     | "velocity"
     | "reflectivity"
     | "luminousMask";
@@ -72,6 +73,7 @@ function getProducer(key: FrameGraphSharedResourceKey): FrameGraphResourceRequir
             return "depthRenderer";
         case "viewDepth":
         case "viewNormal":
+        case "radianceAlbedo":
         case "velocity":
         case "reflectivity":
             return "geometryRenderer";
@@ -142,6 +144,7 @@ export function buildFrameGraphResourcePlan(
         if (settings.luminousRadiance?.enabled) {
             addConsumer(consumersByKey, "viewDepth", "luminous");
             addConsumer(consumersByKey, "viewNormal", "luminous");
+            addConsumer(consumersByKey, "radianceAlbedo", "luminous");
         }
     }
 

@@ -2452,6 +2452,13 @@ export class FrameGraphPostEffectsController {
                     textureFormat: Constants.TEXTUREFORMAT_RGBA,
                 });
             }
+            if (resourcePlan.requirementKeys.includes("radianceAlbedo")) {
+                geometryRendererTask.textureDescriptions.push({
+                    type: Constants.PREPASS_ALBEDO_TEXTURE_TYPE,
+                    textureType: Constants.TEXTURETYPE_HALF_FLOAT,
+                    textureFormat: Constants.TEXTUREFORMAT_RGBA,
+                });
+            }
             if (resourcePlan.requirementKeys.includes("velocity")) {
                 geometryRendererTask.textureDescriptions.push({
                     type: Constants.PREPASS_VELOCITY_TEXTURE_TYPE,
@@ -3010,6 +3017,7 @@ export class FrameGraphPostEffectsController {
         if (initialSettings.luminousRadiance?.enabled && camera && this.geometryRendererTask && frameGraph.engine.getCaps().supportComputeShaders) {
             const radiance = createLuminousRadianceTasks(frameGraph, scene, camera,
                 this.geometryRendererTask.geometryViewDepthTexture, this.geometryRendererTask.geometryViewNormalTexture,
+                this.geometryRendererTask.geometryAlbedoTexture, this.geometryRendererTask.objectRenderer.renderPassId,
                 () => this.getSettings().luminousRadiance ?? { enabled: false, strength: 1, range: 12 }, this.readRadianceEmission);
             radiance.composite.sourceTexture = bloomSourceTexture;
             for (const task of radiance.tasks) deferEffectTask("luminous", task);

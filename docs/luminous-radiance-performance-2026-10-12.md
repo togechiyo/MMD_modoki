@@ -45,4 +45,6 @@ tofuの材質へGUIからLuminousを割り当て、自作の発光面・壁・�
 
 receiver解像度の上限は、大画面でのray数の増加を止める代わりに細い陰影・隣接面の境界を粗くし得る。格子・方向数・geometryの10万三角形上限、透明体やinstance展開の未対応等は従来どおり。通常の影設定は変更しない。
 
+同日の[照明拡大時の段差修正](./luminous-radiance-reconstruction-2026-10-12.md)で、点サンプリングの拡大を、depth / normalで面を区別する4点補間へ変更した。照明解像度の上限とcacheは維持する。
+
 [公式Frame Graph task一覧](https://doc.babylonjs.com/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList/)と、依存中のBabylon.js 9.2.0の`executeTask`、`computeShaderTask`、`frameGraphTask`、`frameGraphTextureManager`、`Mesh.getPositionData`を照合した。taskのdisabledはそのtaskの実行前に決め、カメラ依存のreceiverと世界座標atlasを別々に更新する。

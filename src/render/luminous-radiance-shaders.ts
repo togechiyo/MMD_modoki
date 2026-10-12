@@ -1,4 +1,5 @@
 import { RADIANCE_COMPOSITION_WGSL } from "./luminous-radiance-composition";
+import { RADIANCE_RECONSTRUCTION_WGSL } from "./luminous-radiance-reconstruction";
 
 const COMMON = `
 struct Triangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f, uvAB: vec4f, uvSource: vec4f };
@@ -160,12 +161,15 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 export const LUMINOUS_RADIANCE_COMPOSITE_WGSL = `
 varying vUV: vec2f;
 var textureSamplerSampler: sampler; var textureSampler: texture_2d<f32>;
-var radianceSamplerSampler: sampler; var radianceSampler: texture_2d<f32>;
+var radianceSampler: texture_2d<f32>;
 var albedoSampler: texture_2d<f32>;
+var viewDepthSampler: texture_2d<f32>; var viewNormalSampler: texture_2d<f32>;
+uniform inverseProjection: mat4x4f;
 ${RADIANCE_COMPOSITION_WGSL}
+${RADIANCE_RECONSTRUCTION_WGSL}
 @fragment fn main(input: FragmentInputs) -> FragmentOutputs {
     let base = textureSample(textureSampler, textureSamplerSampler, input.vUV);
-    let light = textureSample(radianceSampler, radianceSamplerSampler, input.vUV).rgb;
+    let light = reconstructRadiance(input.vUV);
     let size = vec2i(textureDimensions(albedoSampler));
     let surface = textureLoad(albedoSampler, clamp(vec2i(input.vUV * vec2f(size)), vec2i(0), size - 1), 0);
     fragmentOutputs.color = vec4f(composeRadiance(base.rgb, surface.rgb * surface.a, light), base.a);

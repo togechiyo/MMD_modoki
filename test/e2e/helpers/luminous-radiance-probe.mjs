@@ -6,6 +6,7 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
 import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
+import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 
 let latestGraph;
 const executeGraph = FrameGraph.prototype.execute;
@@ -155,6 +156,30 @@ export function createDenseRadianceProbe() {
   const ground = CreateGround("rc-dense-floor", { width: 12, height: 10, subdivisions: 128, updatable: true }, current);
   ground.material = floor.material;
   return ground.getTotalIndices() / 3;
+}
+
+export async function createRadianceQualityProbe() {
+  const current = scene(), source = current.getMeshByName("rc-emitter");
+  source.material.diffuseColor.set(1, 1, 1); source.material.emissiveColor.set(1, 1, 1);
+  source.position.set(-3, 2, -1.5);
+  current.getMeshByName("rc-wall").setEnabled(false); current.getMeshByName("rc-blocker").setEnabled(false);
+  const material = source.material.clone("rc-quality-material");
+  material.diffuseColor.set(0.8, 0.8, 0.8); material.emissiveColor.set(0, 0, 0);
+  material.specularColor.set(0, 0, 0); material.ambientColor.set(0, 0, 0); material.disableLighting = false;
+  const sphere = CreateSphere("rc-quality-sphere", { diameter: 2, segments: 64 }, current);
+  sphere.position.set(0, 1, 0); sphere.material = material;
+  await current.whenReadyAsync();
+}
+
+export async function radianceQualityProbeState() {
+  const current = scene(); await radianceProbeState();
+  const engine = current.getEngine(), camera = current.activeCamera;
+  const viewport = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight());
+  const project = x => {
+    const p = Vector3.Project(new Vector3(x, 1, -Math.sqrt(1 - x * x)), Matrix.Identity(), current.getTransformMatrix(), viewport);
+    return [p.x / engine.getRenderWidth(), p.y / engine.getRenderHeight()];
+  };
+  return { left: project(-0.6), right: project(0.6), width: engine.getRenderWidth(), height: engine.getRenderHeight() };
 }
 
 // Test-only timings: frame intervals include presentation; task setup measures CPU collection separately.

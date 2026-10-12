@@ -111,15 +111,19 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     tasks.push(receiver);
     ShaderStore.ShadersStoreWGSL["mmdLuminousRadianceCompositePixelShader"] = LUMINOUS_RADIANCE_COMPOSITE_WGSL;
     const effect = new EffectWrapper({ engine: graph.engine, fragmentShader: "mmdLuminousRadianceComposite", useShaderStore: true,
-        useAsPostProcess: true, shaderLanguage: ShaderLanguage.WGSL, samplers: ["radianceSampler", "albedoSampler"], name: "luminousRadianceComposite" });
+        useAsPostProcess: true, shaderLanguage: ShaderLanguage.WGSL, uniforms: ["inverseProjection"],
+        samplers: ["radianceSampler", "albedoSampler", "viewDepthSampler", "viewNormalSampler"], name: "luminousRadianceComposite" });
     const composite = new FrameGraphPostProcessTask("luminousRadianceComposite", graph, effect);
     const record = composite.record.bind(composite);
     composite.record = (skip, execute, bindings) => {
         const pass = record(skip, execute, context => {
             context.bindTextureHandle(effect.effect, "radianceSampler", output);
-            context.bindTextureHandle(effect.effect, "albedoSampler", albedo); bindings?.(context);
+            context.bindTextureHandle(effect.effect, "albedoSampler", albedo);
+            context.bindTextureHandle(effect.effect, "viewDepthSampler", depth);
+            context.bindTextureHandle(effect.effect, "viewNormalSampler", normal);
+            effect.effect.setMatrix("inverseProjection", inverseProjection); bindings?.(context);
         });
-        pass.addDependencies([output, albedo]); return pass;
+        pass.addDependencies([output, albedo, depth, normal]); return pass;
     };
     tasks.push(composite);
     let fieldRevision = -1, fieldRange = -1;

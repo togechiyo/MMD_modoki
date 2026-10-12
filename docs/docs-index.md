@@ -362,6 +362,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [3D RC の発光色・カメラ復元・境界帯の修正 2026-10-12](./luminous-radiance-color-camera-fix-2026-10-12.md)
 - [3D RC の材質色を使う照明合成 2026-10-12](./luminous-radiance-composition-2026-10-12.md)
 - [3D RC の静止時・強度0の負荷軽減 2026-10-12](./luminous-radiance-performance-2026-10-12.md)
+- [3D RC の照明拡大時の段差修正 2026-10-12](./luminous-radiance-reconstruction-2026-10-12.md)
 - [MirroringFloor 実装検討メモ](./mirroring-floor-plan-2026-05-11.md)
 
 ## Effect Panel

@@ -47,4 +47,6 @@ receiver解像度の上限は、大画面でのray数の増加を止める代わ
 
 同日の[照明拡大時の段差修正](./luminous-radiance-reconstruction-2026-10-12.md)で、点サンプリングの拡大を、depth / normalで面を区別する4点補間へ変更した。照明解像度の上限とcacheは維持する。
 
+同日17:43 / 17:50の所有者の[後続実機画像](./luminous-radiance-budget-fix-2026-10-12.md)では、見た目に「まあいい感じかな？」との暫定評価がある一方、街は21 FPS、城は4 FPS。通常照明・Glow・RC範囲・ステージ・カメラが異なり、同条件のRC OFF比較はない。負荷改善完了の証拠にはせず、重い場面では同一シーンのOFF/ONとCPU準備・cascade更新・receiver・通常描画の費用を分ける必要がある。ユーザー所有モデルの探索・読込や追加の性能変更は、この評価記録では行っていない。
+
 [公式Frame Graph task一覧](https://doc.babylonjs.com/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList/)と、依存中のBabylon.js 9.2.0の`executeTask`、`computeShaderTask`、`frameGraphTask`、`frameGraphTextureManager`、`Mesh.getPositionData`を照合した。taskのdisabledはそのtaskの実行前に決め、カメラ依存のreceiverと世界座標atlasを別々に更新する。

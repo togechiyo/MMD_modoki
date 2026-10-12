@@ -55,3 +55,5 @@ fixtureで新規に追加したBabylon importのVite初回最適化が、初回�
 変形が毎frame変わる再生中は、頂点計算、triangle展開、BVH refit / upload、cascade計算が継続する。新しいpose snapshotと結果の保持はCPUメモリを使う。cameraだけの変更では照明fieldを維持し、receiverを現在の画角で計算する。GPUの32方向trace、geometry capture、既存Glowや通常描画の費用は残る。
 
 既存のpublic CPU LBS経路とモーフを対象とし、SDEF / QDEFとGPU表示との一致、透明体、instance展開など従来の未検証範囲を解決したと扱わない。実際の城でのFPS・操作感は所有者の再確認待ち。
+
+後続の実機確認では「静止なら早くなったけど、ダンス再生するとFPSがっつり下がる」と報告された。静止時の改善は確認されたが、再生中の改善完了には扱わない。今回の20frame計測のbone / morph条件は一度だけ変形して残りが静止するため、連続変形の速度を保証していなかった。[実装例の再調査と改修順](./radiance-cascades-animation-research-2026-10-12.md)を次の検討の正本とする。

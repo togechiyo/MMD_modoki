@@ -27,6 +27,8 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     getSettings: () => LuminousRadianceSettings, readEmission: RadianceEmissionReader,
 ): { tasks: FrameGraphTask[]; composite: FrameGraphPostProcessTask; data: LuminousRadianceScene } {
     const data = new LuminousRadianceScene(scene, readEmission);
+    // Prime source texture readback before buildAsync waits for task readiness, including resized exports.
+    data.update(normalizeLuminousRadiance(getSettings()));
     const tasks: FrameGraphTask[] = [];
     const layouts = createRadianceCascadeLayouts();
     const fields = layouts.map((layout, index) => storageTexture(graph, `luminousRadiance${index}`, layout.width, layout.height));
@@ -36,10 +38,11 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         const task = new FrameGraphComputeShaderTask(`luminousRadianceCascade${index}`, graph,
             { computeSource: LUMINOUS_RADIANCE_CASCADE_WGSL }, { bindingsMapping: {
                 params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 }, nodes: { group: 0, binding: 2 },
-                parentField: { group: 0, binding: 3 }, outputField: { group: 0, binding: 4 },
+                parentField: { group: 0, binding: 3 }, outputField: { group: 0, binding: 4 }, emissionPixels: { group: 0, binding: 7 },
             } });
         const params = task.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4, interval: 4 });
         task.setStorageBuffer("triangles", data.triangleBuffer); task.setStorageBuffer("nodes", data.nodeBuffer);
+        task.setStorageBuffer("emissionPixels", data.emissionBuffer);
         task.dispatchSize = new Vector3(Math.ceil(layout.width / 8), Math.ceil(layout.height / 8), 1);
         const parent = fields[index + 1] ?? dummy;
         task.dependencies = new Set([parent, fields[index]]);
@@ -51,12 +54,15 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             const settings = normalizeLuminousRadiance(getSettings());
             if (index === layouts.length - 1) data.update(settings);
             task.setStorageBuffer("triangles", data.triangleBuffer); task.setStorageBuffer("nodes", data.nodeBuffer);
+            task.setStorageBuffer("emissionPixels", data.emissionBuffer);
             params.updateFloat4("volumeMin", ...data.volumeMin as [number, number, number], 0);
             params.updateFloat4("volumeSize", data.volumeSize, data.volumeSize, data.volumeSize, 0);
             params.updateFloat4("shape", layout.grid, layout.directionsX, layout.directionsY, data.bvh.triangleCount);
             params.updateFloat4("interval", layout.start * data.volumeSize / 9, layout.end * data.volumeSize / 9, index < layouts.length - 1 ? 1 : 0, 0);
         };
         if (index === layouts.length - 1) {
+            const isReady = task.isReady.bind(task);
+            task.isReady = () => isReady() && data.ready;
             const dispose = task.dispose.bind(task);
             task.dispose = () => { dispose(); data.dispose(); };
         }
@@ -68,11 +74,12 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     const receiver = new FrameGraphComputeShaderTask("luminousRadianceReceiver", graph,
         { computeSource: LUMINOUS_RADIANCE_RECEIVER_WGSL }, { bindingsMapping: {
             params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 }, nodes: { group: 0, binding: 2 },
-            radianceField: { group: 0, binding: 3 }, viewDepth: { group: 0, binding: 4 }, viewNormal: { group: 0, binding: 5 }, outputGi: { group: 0, binding: 6 },
+            radianceField: { group: 0, binding: 3 }, viewDepth: { group: 0, binding: 4 }, viewNormal: { group: 0, binding: 5 }, outputGi: { group: 0, binding: 6 }, emissionPixels: { group: 0, binding: 7 },
         } });
     const params = receiver.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4, interval: 4,
         inverseProjection: 16, inverseView: 16, outputSize: 4 });
     receiver.setStorageBuffer("triangles", data.triangleBuffer); receiver.setStorageBuffer("nodes", data.nodeBuffer);
+    receiver.setStorageBuffer("emissionPixels", data.emissionBuffer);
     receiver.dispatchSize = new Vector3(Math.ceil(width / 8), Math.ceil(height / 8), 1);
     receiver.dependencies = new Set([fields[0], depth, normal, output]);
     receiver.onTexturesAllocatedObservable.add(context => {
@@ -84,6 +91,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     receiver.execute = () => {
         const settings = normalizeLuminousRadiance(getSettings());
         receiver.setStorageBuffer("triangles", data.triangleBuffer); receiver.setStorageBuffer("nodes", data.nodeBuffer);
+        receiver.setStorageBuffer("emissionPixels", data.emissionBuffer);
         params.updateFloat4("volumeMin", ...data.volumeMin as [number, number, number], 0);
         params.updateFloat4("volumeSize", data.volumeSize, data.volumeSize, data.volumeSize, 0);
         params.updateFloat4("shape", 16, 8, 4, data.bvh.triangleCount);

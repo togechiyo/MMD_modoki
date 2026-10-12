@@ -1068,11 +1068,11 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
 }
 
 /** World-space source color, before Glow's saturation, whitening and mask gain. */
-export function getLuminousRadianceEmission(host: unknown, mesh: object, material: object): Color3 | null {
+export function getLuminousRadianceEmission(host: unknown, mesh: object, material: object): (Color3 & { texture: Texture | null }) | null {
     const typedHost = host as MaterialShaderHost;
     const state = getLuminousGlowMaterialState(typedHost, material as MaterialShaderMaterial, { allowManualHeuristic: false });
     if (!state?.luminous) return null;
-    return state.emission.scale(getLuminousGlowMorphScaleForMesh(typedHost, mesh as MaterialShaderMesh));
+    return Object.assign(state.emission.scale(getLuminousGlowMorphScaleForMesh(typedHost, mesh as MaterialShaderMesh)), { texture: state.texture });
 }
 
 function disposeManagedLuminousGlowLayer(host: MaterialShaderHost): void {

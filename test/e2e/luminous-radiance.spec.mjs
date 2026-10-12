@@ -203,6 +203,21 @@ test("Luminous materials illuminate together with independent colors and additiv
     expect(restored.runtime.luminousRadiance.emitters).toBe(24);
     expect(restored.floor[0]).toBeGreaterThan(off.floor[0] + 10);
     expect(restored.floor[2]).toBeGreaterThan(off.floor[2] + 10);
+    for (const [index, camera] of [
+      { tx: 0, ty: 1, rx: -35, ry: 20, camDistance: 13 },
+      { tx: 1, ty: 0.5, rx: -20, ry: -25, camDistance: 14 },
+      { tx: 0, ty: 1, rx: -25, ry: 0, camDistance: 11 },
+    ].entries()) {
+      for (const [key, value] of Object.entries(camera)) {
+        const field = page.locator(`#bone-controls input[data-control-key='${key}']`);
+        await field.fill(String(value)); await field.press("Enter");
+      }
+      const moved = await capture(`camera-${index}`);
+      moved.surface = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeSurface());
+      expect(moved.surface.worldNormal[1]).toBeGreaterThan(0.99);
+      for (const value of moved.surface.world) expect(Math.abs(value)).toBeLessThan(0.03);
+      for (const channel of [0, 2]) expect(Math.abs(moved.floor[channel] - restored.floor[channel])).toBeLessThan(3);
+    }
     const output = testInfo.outputPath("export"); mkdirSync(output, { recursive: true });
     await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output, 640, 360), output);
     const exported = PNG.sync.read(readFileSync(resolve(output, "single_rgba_surface_e2e.png")));
@@ -213,6 +228,88 @@ test("Luminous materials illuminate together with independent colors and additiv
     for (const state of Object.values(states)) if (state.validation) expect(state.validation.count).toBe(0);
     expect(errors).toEqual([]);
     writeFileSync(testInfo.outputPath("multicolor-report.json"), JSON.stringify({ states, errors }, null, 2));
+  } finally { await launched.close(); }
+});
+
+test("RC follows emission texture UVs and fades its volume boundary", async ({}, testInfo) => {
+  const launched = await launchMmdModoki(root);
+  const states = {}, errors = [];
+  try {
+    const page = await launched.app.firstWindow();
+    page.on("pageerror", error => errors.push(error.message));
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    await page.evaluate(async () => {
+      const state = window.mmdModokiE2e.exportProjectState();
+      state.physics.enabled = false; state.viewport.groundVisible = false; state.viewport.skydomeVisible = false;
+      await window.mmdModokiE2e.importProjectState(state);
+    });
+    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
+    await page.locator("#btn-toggle-shader-panel").click();
+    await page.locator('[data-effect-tab="materials"]').click();
+    await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous");
+    await page.locator("#btn-shader-apply-all").click();
+    await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createRadianceProbe());
+    await page.locator("#info-model-select").selectOption("__camera__");
+    async function camera(values) {
+      for (const [key, value] of Object.entries(values)) {
+        const field = page.locator(`#bone-controls input[data-control-key='${key}']`);
+        await field.fill(String(value)); await field.press("Enter");
+      }
+    }
+    await camera({ tx: 0, ty: 1, tz: 0, rx: -25, ry: 0, rz: 0, camDistance: 11 });
+    await page.locator('[data-effect-tab="post"]').click();
+    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+      await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
+    }
+    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    async function slider(key, value) {
+      await control(key).evaluate((input, value) => { input.value = String(value);
+        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+    }
+    await slider("luminousRadianceRange", 3); await slider("luminousIntensity", 0);
+    await control("luminousRadianceEnabled").selectOption("1");
+    async function capture(name) {
+      await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+      const points = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState({ blocker: false }));
+      const path = testInfo.outputPath(`${name}.png`); await page.locator("#render-canvas").screenshot({ path });
+      const png = PNG.sync.read(readFileSync(path));
+      const rgb = point => [0, 1, 2].map(channel => sample(png, point, channel));
+      states[name] = { floor: rgb(points.floor), inner: rgb(points.edgeInner), inside: rgb(points.edgeInside), outside: rgb(points.edgeOutside),
+        validation: await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()) };
+      writeFileSync(testInfo.outputPath("texture-boundary-report.json"), JSON.stringify({ states, errors }, null, 2));
+      return states[name];
+    }
+    const texture = offset => page.evaluate(async offset => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).setRadianceProbeTexture(offset), offset);
+    await texture(0.25); const green = await capture("texture-green");
+    expect(green.floor[1]).toBeGreaterThan(green.floor[0] + 15);
+    expect(green.floor[1]).toBeGreaterThan(green.floor[2] + 15);
+    await texture(0.75); const blue = await capture("texture-blue");
+    expect(blue.floor[2]).toBeGreaterThan(blue.floor[0] + 15);
+    expect(blue.floor[2]).toBeGreaterThan(blue.floor[1] + 15);
+    await texture(0.5); const mixed = await capture("texture-mixed");
+    expect(mixed.floor[1]).toBeGreaterThan(mixed.floor[0] + 10);
+    expect(mixed.floor[2]).toBeGreaterThan(mixed.floor[0] + 10);
+    await control("luminousRadianceEnabled").selectOption("0"); await capture("texture-rc-off");
+    await control("luminousRadianceEnabled").selectOption("1"); const restored = await capture("texture-rc-restored");
+    expect(restored.floor[1]).toBeGreaterThan(restored.floor[0] + 10);
+    expect(restored.floor[2]).toBeGreaterThan(restored.floor[0] + 10);
+    const output = testInfo.outputPath("export"); mkdirSync(output, { recursive: true });
+    await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output, 640, 360), output);
+    const exported = PNG.sync.read(readFileSync(resolve(output, "single_rgba_surface_e2e.png")));
+    const points = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState());
+    const exportedCenter = [0, 1, 2].map(channel => sample(exported, points.floor, channel));
+    states["texture-export"] = { floor: exportedCenter,
+      validation: await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()) };
+    expect(exportedCenter[1]).toBeGreaterThan(exportedCenter[0] + 10);
+    expect(exportedCenter[2]).toBeGreaterThan(exportedCenter[0] + 10);
+    await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).setRadianceProbeBoundary());
+    await slider("luminousRadianceRange", 0);
+    await camera({ tx: 6, ty: 0, rx: -50, ry: 0, camDistance: 12 });
+    const boundary = await capture("volume-boundary");
+    expect(boundary.inner[2]).toBeGreaterThan(boundary.outside[2] + 10);
+    expect(Math.abs(boundary.inside[2] - boundary.outside[2])).toBeLessThan(15);
+    for (const state of Object.values(states)) expect(state.validation.count).toBe(0);
+    expect(errors).toEqual([]);
   } finally { await launched.close(); }
 });
 

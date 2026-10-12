@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { TriangleRadianceBvh, MAX_RADIANCE_TRIANGLES } from "./triangle-radiance-bvh";
+import { TriangleRadianceBvh, MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE as STRIDE } from "./triangle-radiance-bvh";
 
 function geometry(count: number, shift = 0): Float32Array {
     return new Float32Array(Array.from({ length: count }, (_, index) => {
         const x = index * 2 + shift;
-        return [x, 0, 0, 0, x + 1, 0, 0, 0, x, 1, 0, 0, index, 0.2, 0.3, 0];
+        return [x, 0, 0, 0, x + 1, 0, 0, 0, x, 1, 0, 0, index, 0.2, 0.3, 0, 0, 0, 1, 0, 0, 1, -1, 0];
     }).flat());
 }
 
@@ -21,7 +21,7 @@ describe("world triangle radiance BVH", () => {
                 const base = node * 12, first = bvh.nodes[base + 3], count = bvh.nodes[base + 7];
                 if (!count) { visit(first); visit(bvh.nodes[base + 8]); return; }
                 for (let index = first; index < first + count; index++) {
-                    const triangle = bvh.triangles.subarray(index * 16, index * 16 + 16);
+                    const triangle = bvh.triangles.subarray(index * STRIDE, (index + 1) * STRIDE);
                     visited.push(triangle[12]);
                     expect(triangle[0]).toBeCloseTo(triangle[12] * 2 + shift);
                     for (const vertex of [0, 4, 8]) for (let axis = 0; axis < 3; axis++) {
@@ -42,25 +42,28 @@ describe("world triangle radiance BVH", () => {
     });
     it("keeps red, green and blue emitters on their triangles across sorting and color-only refit", () => {
         const source = geometry(12), input = new Float32Array(source.length);
-        for (let index = 0; index < 12; index++) input.set(source.subarray((11 - index) * 16, (12 - index) * 16), index * 16);
+        for (let index = 0; index < 12; index++) input.set(source.subarray((11 - index) * STRIDE, (12 - index) * STRIDE), index * STRIDE);
         const colors = [[8, 0, 0], [0, 4, 0], [0, 0, 2]];
-        for (let index = 0; index < 12; index++) input.set(colors[index % 3], index * 16 + 12);
+        for (let index = 0; index < 12; index++) {
+            input.set(colors[index % 3], index * STRIDE + 12);
+            input.set([index * 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, index, 5], index * STRIDE + 16);
+        }
         const bvh = new TriangleRadianceBvh();
         const verify = () => {
             bvh.update(input);
             for (let index = 0; index < bvh.triangleCount; index++) {
-                const triangle = bvh.triangles.subarray(index * 16, index * 16 + 16);
+                const triangle = bvh.triangles.subarray(index * STRIDE, (index + 1) * STRIDE);
                 const original = 11 - triangle[0] / 2;
-                expect(Array.from(triangle.subarray(12, 15))).toEqual(Array.from(input.subarray(original * 16 + 12, original * 16 + 15)));
+                expect(Array.from(triangle.subarray(12))).toEqual(Array.from(input.subarray(original * STRIDE + 12, (original + 1) * STRIDE)));
             }
         };
         verify();
-        input.set([1, 2, 3], 5 * 16 + 12);
+        input.set([1, 2, 3], 5 * STRIDE + 12);
         verify();
     });
     it("rejects malformed, nonfinite and excessive geometry before changing the tree", () => {
         const bvh = new TriangleRadianceBvh(); bvh.update(geometry(1));
-        for (const invalid of [new Float32Array(3), new Float32Array(16).fill(NaN), new Float32Array((MAX_RADIANCE_TRIANGLES + 1) * 16)]) {
+        for (const invalid of [new Float32Array(3), new Float32Array(STRIDE).fill(NaN), new Float32Array((MAX_RADIANCE_TRIANGLES + 1) * STRIDE)]) {
             expect(() => bvh.update(invalid)).toThrow(); expect(bvh.triangleCount).toBe(1);
         }
     });

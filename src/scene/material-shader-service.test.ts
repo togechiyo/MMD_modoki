@@ -156,6 +156,14 @@ describe("material shader preset restore", () => {
         expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.equals(red ?? Color3.Black())).toBe(true);
         expect(red?.asArray()).toEqual([1.25, 0, 0]);
     });
+    it("passes the same emission texture as the Luminous mask to RC before white-core correction", () => {
+        const host = createHost();
+        const texture = { hasAlpha: false };
+        Object.assign(host.material, { diffuseTexture: texture });
+        expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-autoluminous")).toBe(true);
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.texture).toBe(texture);
+        expect(getFrameGraphLuminousMaskMaterialState(host, host.mesh, host.material)?.texture).toBe(texture);
+    });
     it("saves hidden default materials and restores visibility with legacy ON fallback", () => {
         const fixture = createHost();
         let visible = false;

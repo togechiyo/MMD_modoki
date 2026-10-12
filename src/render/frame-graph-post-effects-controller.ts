@@ -2149,6 +2149,7 @@ export class FrameGraphPostEffectsController {
     // that only the next graph can create. Capture additionally waits for assets.
     isReadyForCapture(): boolean {
         if (!this.ready) return false;
+        if (!this.frameGraph?.isReady()) return false;
         const settings = this.getSettings();
         if (settings.luminousPrepared && !this.areLuminousEffectsReady()) return false;
         if (settings.bloomPrepared && !this.bloomTask?.bloom.isReady()) return false;

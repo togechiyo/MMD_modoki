@@ -1,9 +1,30 @@
 const COMMON = `
-struct Triangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f };
+struct Triangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f, uvAB: vec4f, uvSource: vec4f };
 struct Node { low: vec4f, high: vec4f, info: vec4f };
 @group(0) @binding(1) var<storage, read> triangles: array<Triangle>;
 @group(0) @binding(2) var<storage, read> nodes: array<Node>;
+@group(0) @binding(7) var<storage, read> emissionPixels: array<vec4f>;
 const PI = 3.141592653589793;
+fn wrapTexel(index: i32, mode: u32) -> i32 {
+    if (mode == 0u) { return clamp(index, 0, 63); }
+    if (mode == 2u) { let mirrored = ((index % 128) + 128) % 128; return min(mirrored, 127 - mirrored); }
+    return ((index % 64) + 64) % 64;
+}
+fn sourceColor(triangle: Triangle, u: f32, v: f32) -> vec3f {
+    if (triangle.uvSource.z < -1.5) { return vec3f(0.0); }
+    if (triangle.uvSource.z < 0.0) { return triangle.emission.rgb; }
+    let uv = triangle.uvAB.xy * (1.0 - u - v) + triangle.uvAB.zw * u + triangle.uvSource.xy * v;
+    let coordinate = uv * 64.0 - 0.5; let low = vec2i(floor(coordinate)); let fraction = fract(coordinate);
+    let flags = u32(triangle.uvSource.w); let first = u32(triangle.uvSource.z) * 4096u;
+    var color = vec3f(0.0);
+    for (var y = 0; y < 2; y++) { for (var x = 0; x < 2; x++) {
+        let pixel = vec2u(vec2i(wrapTexel(low.x + x, flags % 4u), wrapTexel(low.y + y, flags / 4u)));
+        let weight = select(1.0 - fraction, fraction, vec2i(x, y) == vec2i(1));
+        let texel = emissionPixels[first + pixel.y * 64u + pixel.x];
+        color += texel.rgb * texel.a * weight.x * weight.y;
+    } }
+    return triangle.emission.rgb * color;
+}
 fn direction(u: u32, v: u32, columns: u32, rows: u32) -> vec3f {
     let phi = (f32(u) + 0.5) / f32(columns) * 2.0 * PI;
     let y = 1.0 - 2.0 * (f32(v) + 0.5) / f32(rows);
@@ -38,7 +59,7 @@ fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
                 let q = cross(s, edge1); let v = dot(ray, q) / det;
                 let distance = dot(edge2, q) / det;
                 if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 && distance > max(start, 0.0001) && distance < nearest) {
-                    nearest = distance; light = vec4f(triangle.emission.rgb, 0.0);
+                    nearest = distance; light = vec4f(sourceColor(triangle, u, v), 0.0);
                 }
             }
         }
@@ -105,11 +126,15 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     let viewN = textureLoad(viewNormal, pixel, 0).xyz;
     var result = vec3f(0.0);
     if (abs(depth) > 0.000001 && length(viewN) > 0.1 && params.outputSize.z > 0.0) {
-        let homogeneous = params.inverseProjection * vec4f(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, 1.0, 1.0);
-        let viewRay = homogeneous.xyz / homogeneous.w;
+        // Depth belongs to this full-resolution pixel's center, not the half-resolution output center.
+        let depthUv = (vec2f(pixel) + 0.5) / vec2f(textureDimensions(viewDepth));
+        // Babylon's offscreen render targets have the opposite Y orientation from the canvas.
+        let homogeneous = params.inverseProjection * vec4f(depthUv * 2.0 - 1.0, 0.5, 1.0);
+        let viewRay = homogeneous.xyz;
         let world = (params.inverseView * vec4f(viewRay * (depth / viewRay.z), 1.0)).xyz;
         let normal = normalize((params.inverseView * vec4f(viewN, 0.0)).xyz);
-        let bias = params.volumeSize.x / 16.0 * 0.025;
+        // Shared view depth is r16f: its quantization must not put the receiver below its own surface.
+        let bias = max(params.volumeSize.x / 16.0 * 0.025, abs(depth) * length(viewRay / viewRay.z) / 512.0);
         let position = world + normal * bias;
         if (all(position >= params.volumeMin.xyz) && all(position <= params.volumeMin.xyz + params.volumeSize.xyz)) {
             for (var v = 0u; v < 4u; v++) { for (var u = 0u; u < 8u; u++) {
@@ -121,6 +146,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                     result += light * cosine * (4.0 / 32.0);
                 }
             } }
+            let edge = min(position - params.volumeMin.xyz, params.volumeMin.xyz + params.volumeSize.xyz - position);
+            result *= smoothstep(0.0, params.volumeSize.x / 16.0 * 2.0, min(min(edge.x, edge.y), edge.z));
         }
     }
     textureStore(outputGi, vec2i(id.xy), vec4f(result * params.outputSize.z, 1.0));

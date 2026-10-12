@@ -66,6 +66,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] Luminous 半径を固定 blur kernel と連続 direction scale に分離し、スライダー操作中の段階飛びと shader 再コンパイルを解消（[Luminous 半径スライダー修正メモ](./luminous-radius-slider-fix-2026-08-11.md)）
 - [x] AL発光面から周囲を照らす構想に向け、独立した3D RC検証画面を試作。画面外光源・Glow分離・遮蔽・設定保存読込をClassic / Frame Graphで確認（[実装・確認範囲](./radiance-cascade-al-lab-2026-10-11.md)）
 - [x] 既存 Luminous 材質を光源とする3D RCを、Frame Graph の Luminous 詳細へ実験接続。材質ごとの RGB emission・opaque triangle・保存設定を共有し、多色同時発光・混色・色変更の独立性・PNG出力を確認（[仕様・確認範囲・限界](./luminous-radiance-integration-2026-10-11.md)）
+- [x] 3D RCへ静的テクスチャの発光色を入力し、geometry RTの上下方向と画素中心を合わせてカメラ依存の照明ずれを修正。計算範囲の境界を減衰させ、PNGでもtexture準備を待つ（[修正・fixture確認・実機再確認待ち](./luminous-radiance-color-camera-fix-2026-10-12.md)）
 - [x] FrameGraph stack 見出し右端を全体ON/OFFへ変更。OFFで資源解放、ONで設定を保持して再構築。個別切替は確保済みtask/resourceを再利用（[実装・検証](./framegraph-master-toggle-2026-09-08.md)）
 - [x] FrameGraph stack 並べ替え時のtask登録順・build済みtexture再接続・非同期build競合を解消（[並べ替え安定化メモ](./framegraph-stack-reorder-stability-fix-2026-08-11.md)）
 - [x] Classic の既存設定を再利用した object-based Motion Blur を FrameGraph stack へ追加（[実装メモ](./framegraph-motion-blur-implementation-note-2026-08-11.md)）

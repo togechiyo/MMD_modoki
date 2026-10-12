@@ -2,6 +2,12 @@ import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { Vector3, Matrix } from "@babylonjs/core/Maths/math.vector";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
+
+let latestGraph;
+const executeGraph = FrameGraph.prototype.execute;
+FrameGraph.prototype.execute = function () { latestGraph = this; return executeGraph.call(this); };
 
 function scene() {
   const texture = RawTexture.CreateRGBATexture(new Uint8Array(4), 1, 1, undefined, false, false);
@@ -62,5 +68,54 @@ export async function radianceProbeState({ color, secondColor, blocker, emitter,
   };
   return { floor: project([0, 0, 0]), floorLeft: project([-1.5, 0, 0]), floorRight: project([1.5, 0, 0]),
     emitter: project(source.position.asArray()), secondEmitter: second ? project(second.position.asArray()) : null,
+    edgeInner: project([5.25, 0, 0]), edgeInside: project([5.9, 0, 0]), edgeOutside: project([6.1, 0, 0]),
     camera: camera.position.asArray() };
+}
+
+export async function setRadianceProbeTexture(uOffset) {
+  const current = scene(), source = current.getMeshByName("rc-emitter");
+  let texture = source.material.diffuseTexture;
+  if (!texture) {
+    const pixels = new Uint8Array(64 * 64 * 4);
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+      pixels.set(x < 32 ? [0, 255, 0, 255] : [0, 0, 255, 255], (y * 64 + x) * 4);
+    }
+    texture = RawTexture.CreateRGBATexture(pixels, 64, 64, current, false, false, Texture.BILINEAR_SAMPLINGMODE);
+    texture.name = "rc-original-color-fixture"; texture.gammaSpace = true;
+    source.material.diffuseTexture = texture;
+    source.material.diffuseColor.set(1, 1, 1); source.material.emissiveColor.set(1, 1, 1);
+  }
+  texture.uScale = 0; texture.uOffset = uOffset;
+  await current.whenReadyAsync();
+  return radianceProbeState();
+}
+
+export async function setRadianceProbeBoundary() {
+  const current = scene(), source = current.getMeshByName("rc-emitter");
+  source.material.diffuseTexture?.dispose(); source.material.diffuseTexture = null;
+  source.material.diffuseColor.set(0, 0, 1); source.material.emissiveColor.set(0, 0, 1);
+  source.rotation.z = Math.PI / 2; source.scaling.set(1, 5, 5); source.position.set(0, 2, 0);
+  current.getMeshByName("rc-wall").setEnabled(false); current.getMeshByName("rc-blocker").setEnabled(false);
+  current.getMeshByName("rc-floor").scaling.set(2, 1, 2);
+  return radianceProbeState();
+}
+
+// Test-only readback of the existing geometry pass, to distinguish reconstruction from camera timing.
+export async function radianceProbeSurface() {
+  const current = scene(), task = latestGraph?.getTaskByName("frameGraphPostEffectsGeometry");
+  if (!task) return null;
+  const engine = current.getEngine(), camera = current.activeCamera;
+  const points = await radianceProbeState();
+  const depthTexture = latestGraph.textureManager.getTextureFromHandle(task.geometryViewDepthTexture);
+  const normalTexture = latestGraph.textureManager.getTextureFromHandle(task.geometryViewNormalTexture);
+  const x = Math.floor(points.floor[0] * depthTexture.width), y = depthTexture.height - 1 - Math.floor(points.floor[1] * depthTexture.height);
+  const depth = await engine._readTexturePixels(depthTexture, 1, 1, -1, 0, null, true, false, x, y);
+  const normal = await engine._readTexturePixels(normalTexture, 1, 1, -1, 0, null, true, false, x, y);
+  const inverseProjection = camera.getProjectionMatrix().clone().invert(), inverseView = camera.getViewMatrix().clone().invert();
+  const ray = Vector3.TransformCoordinates(new Vector3((x + 0.5) / depthTexture.width * 2 - 1,
+    (y + 0.5) / depthTexture.height * 2 - 1, 0.5), inverseProjection);
+  const world = Vector3.TransformCoordinates(ray.scale(depth[0] / ray.z), inverseView);
+  return { depth: Array.from(depth), normal: Array.from(normal), world: world.asArray(),
+    worldNormal: Vector3.TransformNormal(new Vector3(...Array.from(normal).slice(0, 3)), inverseView).asArray(),
+    expectedViewDepth: Vector3.TransformCoordinates(Vector3.Zero(), camera.getViewMatrix()).z };
 }

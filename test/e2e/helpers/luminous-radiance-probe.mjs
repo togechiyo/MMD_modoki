@@ -12,6 +12,9 @@ import { Bone } from "@babylonjs/core/Bones/bone";
 import { MorphTarget } from "@babylonjs/core/Morph/morphTarget";
 import { MorphTargetManager } from "@babylonjs/core/Morph/morphTargetManager";
 import { EngineInstrumentation } from "@babylonjs/core/Instrumentation/engineInstrumentation";
+import { StorageBuffer } from "@babylonjs/core/Buffers/storageBuffer";
+import { LuminousRadianceScene } from "/src/render/luminous-radiance-scene.ts";
+import { TriangleRadianceBvh } from "/src/render/triangle-radiance-bvh.ts";
 
 let latestGraph;
 const executeGraph = FrameGraph.prototype.execute;
@@ -168,8 +171,8 @@ export function createDenseRadianceProbe({ subdivisions = 128, tiles = 1 } = {})
   return triangles;
 }
 
-export function skinDenseRadianceProbe() {
-  const current = scene(), ground = current.getMeshByName("rc-dense-floor");
+export function skinDenseRadianceProbe(name = "rc-dense-floor") {
+  const current = scene(), ground = current.getMeshByName(name);
   const skeleton = new Skeleton("rc-pose-skeleton", "rc-pose-skeleton", current);
   const root = new Bone("rc-pose-root", skeleton, null, Matrix.Identity());
   for (let i = 1; i < 4; i++) new Bone(`rc-pose-bone-${i}`, skeleton, root, Matrix.Identity());
@@ -184,6 +187,24 @@ export function skinDenseRadianceProbe() {
   ground.morphTargetManager.areUpdatesFrozen = true; ground.morphTargetManager.addTarget(target);
   for (let i = 1; i < 32; i++) { const inactive = new MorphTarget(`rc-inactive-morph-${i}`, 0, current); inactive.setPositions(positions); ground.morphTargetManager.addTarget(inactive); }
   ground.morphTargetManager.areUpdatesFrozen = false;
+}
+
+export async function createAnimatedRadianceProbe() {
+  createDenseRadianceProbe({ subdivisions: 384 });
+  const current = scene(), character = CreateSphere("rc-animated-character", { diameter: 2, segments: 48 }, current);
+  character.position.set(0, 1.1, 0); character.material = current.getMeshByName("rc-floor").material;
+  skinDenseRadianceProbe(character.name);
+  const positions = character.getVerticesData(VertexBuffer.PositionKind);
+  const weights = character.getVerticesData(VertexBuffer.MatricesWeightsKind);
+  for (let vertex = 0; vertex < character.getTotalVertices(); vertex++) {
+    const top = (positions[vertex * 3 + 1] + 1) / 2;
+    weights.set([1 - top, top, 0, 0], vertex * 4);
+  }
+  character.updateVerticesData(VertexBuffer.MatricesWeightsKind, weights);
+  current.getMeshByName("rc-blocker").setEnabled(false);
+  await current.whenReadyAsync();
+  return { staticTriangles: current.getMeshByName("rc-dense-floor").getTotalIndices() / 3,
+    movingTriangles: character.getTotalIndices() / 3 };
 }
 
 export async function createRadianceQualityProbe() {
@@ -212,19 +233,19 @@ export async function radianceQualityProbeState() {
 
 // Test-only timings: frame intervals include presentation; task setup measures CPU collection separately.
 export async function profileRadianceProbe(frames = 30, change) {
-  const tasks = [3, 2, 1, 0].map(i => latestGraph.getTaskByName(`luminousRadianceCascade${i}`));
+  const tasks = [3, 2, 1, 0].map(i => latestGraph.getTaskByName(`luminousRadianceCascade${i}`)).filter(Boolean);
   const receiver = latestGraph.getTaskByName("luminousRadianceReceiver");
-  const counts = { cascades: 0, receiver: 0, positions: 0 }, durations = [], intervals = [], positionDurations = [], gpu = [], undo = [];
+  const counts = { cascades: 0, receiver: 0, positions: 0, refittedTriangles: 0, uploadedBytes: 0, updates: 0 }, durations = [], intervals = [], positionDurations = [], gpu = [], undo = [];
   const engine = scene().getEngine(), instrumentation = new EngineInstrumentation(engine);
   instrumentation.captureGPUFrameTime = true;
-  const ground = scene().getMeshByName("rc-dense-floor");
+  const ground = scene().getMeshByName(change === "continuous" ? "rc-animated-character" : "rc-dense-floor");
   if (ground) {
     const original = ground.getPositionData;
     ground.getPositionData = function (...args) { const start = performance.now(); counts.positions++;
       try { return original.apply(this, args); } finally { positionDurations.push(performance.now() - start); } };
     undo.push(() => { ground.getPositionData = original; });
   }
-  for (const task of [...tasks, receiver]) {
+  for (const task of [...tasks, receiver].filter(Boolean)) {
     const original = task.computeShader.dispatch;
     task.computeShader.dispatch = function (...args) {
       if (args[0] > 0 && args[1] > 0 && args[2] > 0) counts[task === receiver ? "receiver" : "cascades"]++;
@@ -233,12 +254,30 @@ export async function profileRadianceProbe(frames = 30, change) {
     undo.push(() => { task.computeShader.dispatch = original; });
   }
   const prepare = latestGraph.getTaskByName("luminousRadiancePrepare") ?? tasks[0];
-  const key = "func" in prepare ? "func" : "execute", original = prepare[key];
-  prepare[key] = function (...args) {
-    const start = performance.now();
-    try { return original.apply(this, args); } finally { durations.push(performance.now() - start); }
+  if (prepare) {
+    const key = "func" in prepare ? "func" : "execute", original = prepare[key];
+    prepare[key] = function (...args) {
+      const start = performance.now();
+      try { return original.apply(this, args); } finally { durations.push(performance.now() - start); }
+    };
+    undo.push(() => { prepare[key] = original; });
+  }
+  const buffers = new Set(), updateScene = LuminousRadianceScene.prototype.update;
+  LuminousRadianceScene.prototype.update = function (...args) {
+    buffers.add(this.triangleBuffer); buffers.add(this.nodeBuffer);
+    const before = this.updates;
+    try { return updateScene.apply(this, args); } finally { counts.updates += this.updates - before; }
   };
-  undo.push(() => { prepare[key] = original; });
+  undo.push(() => { LuminousRadianceScene.prototype.update = updateScene; });
+  const updateBvh = TriangleRadianceBvh.prototype.update;
+  TriangleRadianceBvh.prototype.update = function (input) { counts.refittedTriangles += input.length / 24; return updateBvh.call(this, input); };
+  undo.push(() => { TriangleRadianceBvh.prototype.update = updateBvh; });
+  const upload = StorageBuffer.prototype.update;
+  StorageBuffer.prototype.update = function (data, offset, length) {
+    if (buffers.has(this)) counts.uploadedBytes += length ?? data.byteLength;
+    return upload.call(this, data, offset, length);
+  };
+  undo.push(() => { StorageBuffer.prototype.update = upload; });
   try {
     if (change === "vertex") {
       const ground = scene().getMeshByName("rc-dense-floor"), positions = ground.getVerticesData(VertexBuffer.PositionKind);
@@ -246,6 +285,18 @@ export async function profileRadianceProbe(frames = 30, change) {
     } else if (change === "transform") scene().getMeshByName("rc-emitter").position.x += 0.1;
     else if (change === "bone") { const bone = ground.skeleton.bones[0]; bone.setPosition(bone.getPosition().add(new Vector3(0.1, 0, 0))); }
     else if (change === "morph") ground.morphTargetManager.getTarget(0).influence = 0.5;
+    else if (change === "continuous") {
+      let frame = 0;
+      const observer = scene().onBeforeRenderObservable.add(() => {
+        const phase = ++frame * 0.13;
+        ground.skeleton.bones[0].setPosition(new Vector3(Math.sin(phase) * 0.7, 0, 0));
+        ground.skeleton.bones[1].setRotation(new Vector3(0, 0, Math.sin(phase * 0.7) * 0.3));
+        ground.morphTargetManager.getTarget(0).influence = (Math.sin(phase * 0.8) + 1) * 0.25;
+      });
+      undo.push(() => { scene().onBeforeRenderObservable.remove(observer);
+        ground.skeleton.bones[0].setPosition(Vector3.Zero()); ground.skeleton.bones[1].setRotation(Vector3.Zero());
+        ground.morphTargetManager.getTarget(0).influence = 0; });
+    }
     let previous = await new Promise(resolve => requestAnimationFrame(resolve));
     for (let i = 0; i < frames; i++) {
       const now = await new Promise(resolve => requestAnimationFrame(resolve)); intervals.push(now - previous); previous = now;
@@ -254,7 +305,8 @@ export async function profileRadianceProbe(frames = 30, change) {
     }
     const median = values => values.sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
     return { counts: { cascades: counts.cascades, receiver: counts.receiver }, positionCalls: counts.positions,
+      geometryUpdates: counts.updates, refittedTriangles: counts.refittedTriangles, uploadedBytes: counts.uploadedBytes,
       positionCpuMedianMs: median(positionDurations), cpuMedianMs: median(durations), gpuMedianMs: gpu.length ? median(gpu) : null, frameMedianMs: median(intervals),
-      receiverSize: [receiver.dispatchSize.x * 8, receiver.dispatchSize.y * 8] };
+      receiverSize: receiver ? [receiver.dispatchSize.x * 8, receiver.dispatchSize.y * 8] : null };
   } finally { for (const restore of undo) restore(); instrumentation.captureGPUFrameTime = false; instrumentation.dispose(); }
 }

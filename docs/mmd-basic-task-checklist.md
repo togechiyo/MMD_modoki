@@ -73,7 +73,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 3D RCだけが消える実機報告をapp logで10万三角形上限による停止と特定。deviceのbuffer制約内で最大100万へ拡張し、配列展開前に超過を検出する（[修正・確認範囲・実機再確認待ち](./luminous-radiance-budget-fix-2026-10-12.md)）
 - [x] 3D RCの静止した骨・モーフのCPU変形を再利用し、寄与するモーフだけを走査。typed array数値比較を高速化し、骨付き約30万三角形・32モーフfixtureで変形更新と修正前後のPNG一致を確認（[負荷軽減・実機再確認待ち](./luminous-radiance-pose-cache-performance-2026-10-12.md)）
 - [x] 3D RCのダンス再生時の負荷を受け、参照Split RC・WebGPU剛体拡張・voxel proxy実装を再調査。現行のscene全体更新との差と改修候補を記録（[再調査](./radiance-cascades-animation-research-2026-10-12.md)）
-- [ ] 3D RCの連続変形fixtureで再生中の費用を測り、静的 / 動的BVH分離とprobe側irradiance事前集計を段階比較する（[改修順・比較項目](./radiance-cascades-animation-research-2026-10-12.md)）
+- [x] 3D RCの骨・モーフが毎frame変わるfixtureで再生負荷を測り、meshごとのBLASと上位treeへ分離。動いたmeshだけのrefit・部分uploadと停止後の画像一致を確認（[実装・比較・実機再確認待ち](./luminous-radiance-animation-performance-2026-10-13.md)）
+- [ ] 3D RCのprobe側irradiance事前集計を、短距離visibility・曲面・薄壁を保つreceiver経路と段階比較する（[改修順・比較項目](./radiance-cascades-animation-research-2026-10-12.md)）
 - [x] FrameGraph stack 見出し右端を全体ON/OFFへ変更。OFFで資源解放、ONで設定を保持して再構築。個別切替は確保済みtask/resourceを再利用（[実装・検証](./framegraph-master-toggle-2026-09-08.md)）
 - [x] FrameGraph stack 並べ替え時のtask登録順・build済みtexture再接続・非同期build競合を解消（[並べ替え安定化メモ](./framegraph-stack-reorder-stability-fix-2026-08-11.md)）
 - [x] Classic の既存設定を再利用した object-based Motion Blur を FrameGraph stack へ追加（[実装メモ](./framegraph-motion-blur-implementation-note-2026-08-11.md)）

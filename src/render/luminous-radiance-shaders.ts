@@ -36,7 +36,8 @@ fn direction(u: u32, v: u32, columns: u32, rows: u32) -> vec3f {
 }
 fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
     if (params.shape.w < 0.5) { return vec4f(0.0, 0.0, 0.0, 1.0); }
-    var stack: array<u32, 32>; stack[0] = 0u;
+    // Mesh top tree plus a BLAS can be deeper than the previous scene-wide tree.
+    var stack: array<u32, 64>; stack[0] = 0u;
     var count = 1u;
     var nearest = end;
     var light = vec4f(0.0, 0.0, 0.0, 1.0);
@@ -50,7 +51,7 @@ fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
         if (max(max(lo.x, lo.y), max(lo.z, start)) > min(min(hi.x, hi.y), min(hi.z, nearest))) { continue; }
         let leafCount = u32(node.high.w);
         if (leafCount == 0u) {
-            if (count + 2u <= 32u) { stack[count] = u32(node.low.w); stack[count + 1u] = u32(node.info.x); count += 2u; }
+            if (count + 2u <= 64u) { stack[count] = u32(node.low.w); stack[count + 1u] = u32(node.info.x); count += 2u; }
         } else {
             let first = u32(node.low.w);
             for (var index = first; index < first + leafCount; index++) {

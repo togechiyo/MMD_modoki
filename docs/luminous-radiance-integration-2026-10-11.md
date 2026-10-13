@@ -32,6 +32,8 @@ Glow の彩度補正、白い芯、発光マスクの増幅より前の色を線
 
 ## Frame Graph 接続
 
+2026-10-13の再生負荷修正で、scene全体のBVH更新をmeshごとのBLASと小さな上位treeへ分離した。入力が変わったmeshだけをrefit・部分uploadし、mesh集合やtriangle数の変更時は全体配置を更新する。連続した骨・モーフ変形、静止復帰、修正前後の画像一致は[連続変形時のBVH・転送分離](./luminous-radiance-animation-performance-2026-10-13.md)を参照。動的遮蔽のためのcascade再計算は維持する。
+
 既存 geometry renderer の view depth / view normal を共有する。RC が必要な場合は、MMD エッジをこの geometry capture 内だけ抑制する。通常描画のエッジ設定は変更しない。
 
 Luminous 群内で、外側から内側への4段 compute → receiver gather → RC 合成 → 既存 core / halo Glow 合成の順に接続する。receiverは半解像度・長辺640画素以内とする。段の格子・方向数は独立ラボと同じ `16³/32`, `8³/128`, `4³/512`, `2³/2048`。距離区間は立方体の辺長に比例して拡縮する。BVH の最初の面で emission と遮蔽を評価し、遠い段を近い段へ合成する。receiver の短距離追跡も残す。

@@ -7,17 +7,18 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Scene } from "@babylonjs/core/scene";
 import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
-import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh } from "./triangle-radiance-bvh";
+import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE } from "./triangle-radiance-bvh";
+import { MeshRadianceBvh } from "./mesh-radiance-bvh";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { RadianceInputSnapshot } from "./luminous-radiance-input-cache";
 import { LuminousRadiancePoseCache } from "./luminous-radiance-pose-cache";
 import { logWarn } from "../app-logger";
 
 export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: number; g: number; b: number; texture?: Texture | null } | null;
-type MeshInput = { snapshot: RadianceInputSnapshot; triangles: Float32Array; emitters: number; low: number[]; high: number[] };
+type MeshInput = { key: Mesh; snapshot: RadianceInputSnapshot; triangles: Float32Array; emitters: number; low: number[]; high: number[] };
 
 export class LuminousRadianceScene {
-    public readonly bvh = new TriangleRadianceBvh();
+    public readonly bvh = new MeshRadianceBvh();
     public triangleBuffer: StorageBuffer;
     public nodeBuffer: StorageBuffer;
     public emissionBuffer: StorageBuffer;
@@ -27,7 +28,6 @@ export class LuminousRadianceScene {
     public revision = 0;
     public emitterTriangles = 0;
     public error: string | null = null;
-    private input = new Float32Array(0);
     private readonly meshInputs = new WeakMap<Mesh, MeshInput>();
     private readonly poses = new LuminousRadiancePoseCache();
     private chunks: MeshInput[] = [];
@@ -127,7 +127,7 @@ export class LuminousRadianceScene {
                         if (emission) emitters++;
                     }
                 }
-                const chunk = { snapshot: new RadianceInputSnapshot(parts), triangles: values, emitters, low, high };
+                const chunk = { key: mesh, snapshot: new RadianceInputSnapshot(parts), triangles: values, emitters, low, high };
                 this.meshInputs.set(mesh, chunk); chunks.push(chunk);
             }
             for (const chunk of chunks) {
@@ -153,12 +153,7 @@ export class LuminousRadianceScene {
         }
         if (chunks.length === this.chunks.length && chunks.every((chunk, index) => chunk === this.chunks[index]) && this.updates) return;
         this.chunks = chunks;
-        const next = new Float32Array(chunks.reduce((length, chunk) => length + chunk.triangles.length, 0));
-        let offset = 0;
-        for (const chunk of chunks) { next.set(chunk.triangles, offset); offset += chunk.triangles.length; }
-        if (next.length === this.input.length && next.every((value, index) => value === this.input[index]) && this.updates) return;
-        this.input = next;
-        this.bvh.update(next);
+        const changes = this.bvh.update(chunks);
         if (this.bvh.triangles.byteLength > this.triangleCapacity) {
             this.triangleBuffer.dispose(); this.triangleCapacity = this.bvh.triangles.byteLength;
             this.triangleBuffer = new StorageBuffer(this.scene.getEngine() as WebGPUEngine, this.triangleCapacity);
@@ -167,7 +162,9 @@ export class LuminousRadianceScene {
             this.nodeBuffer.dispose(); this.nodeCapacity = this.bvh.nodes.byteLength;
             this.nodeBuffer = new StorageBuffer(this.scene.getEngine() as WebGPUEngine, this.nodeCapacity);
         }
-        this.triangleBuffer.update(this.bvh.triangles); this.nodeBuffer.update(this.bvh.nodes); this.updates++; this.revision++;
+        for (const range of changes.triangles) this.triangleBuffer.update(range.data, range.byteOffset);
+        for (const range of changes.nodes) this.nodeBuffer.update(range.data, range.byteOffset);
+        this.updates++; this.revision++;
     }
 
     public dispose(): void { this.triangleBuffer.dispose(); this.nodeBuffer.dispose(); this.emissionBuffer.dispose(); this.textures.dispose(); }

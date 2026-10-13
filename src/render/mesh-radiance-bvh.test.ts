@@ -54,6 +54,8 @@ describe("mesh radiance acceleration updates", () => {
         const spy = vi.spyOn(TriangleRadianceBvh.prototype, "update");
         try {
             for (const shift of [700, -500, 50]) {
+                const oldLow = Math.min(...Array.from(actor.triangles.filter((_, index) => index % STRIDE === 0)));
+                const oldHigh = oldLow + 23;
                 actor.triangles = geometry(12, shift);
                 // Include color/UV/source edits as well as deformation; reordered records must retain all fields.
                 actor.triangles.set([0, 8, 2, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 2, 5], 12);
@@ -61,6 +63,9 @@ describe("mesh radiance acceleration updates", () => {
                 expect(spy).toHaveBeenLastCalledWith(actor.triangles);
                 expect(changes.triangles.reduce((size, range) => size + range.data.length, 0)).toBe(actor.triangles.length);
                 expect(changes.nodes.reduce((size, range) => size + range.data.length, 0)).toBeLessThan(bvh.nodes.length / 2);
+                expect(bvh.changedMin[0]).toBeLessThanOrEqual(Math.min(oldLow, shift));
+                expect(bvh.changedMax[0]).toBeGreaterThanOrEqual(Math.max(oldHigh, shift + 23));
+                expect(bvh.changedMax[0]).toBeLessThan(1000); // The unchanged distant lamp is not dirty.
                 apply(triangleMirror, changes.triangles); apply(nodeMirror, changes.nodes);
                 expect(triangleMirror).toEqual(bvh.triangles); expect(nodeMirror).toEqual(bvh.nodes);
                 verifyTree(bvh, [stage.triangles, actor.triangles, lamp.triangles]);

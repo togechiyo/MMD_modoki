@@ -47,6 +47,7 @@ export class LuminousRadianceScene {
     }
 
     public get ready(): boolean { return this.textures.ready; }
+    public get emissionTextureRevision(): number { return this.textureRevision; }
 
     public update(settings: LuminousRadianceSettings): void {
         const chunks: MeshInput[] = [];

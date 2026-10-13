@@ -18,8 +18,8 @@ test("RC updates only moving geometry during continuous bone and morph animation
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
     await page.locator("#btn-toggle-shader-panel").click(); await page.locator('[data-effect-tab="materials"]').click();
     await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous"); await page.locator("#btn-shader-apply-all").click();
-    report.fixture = await page.evaluate(async () => { const probe = await import("/test/e2e/helpers/luminous-radiance-probe.mjs");
-      await probe.createRadianceProbe(); return probe.createAnimatedRadianceProbe(); });
+    report.fixture = await page.evaluate(async complex => { const probe = await import("/test/e2e/helpers/luminous-radiance-probe.mjs");
+      await probe.createRadianceProbe(); return probe.createAnimatedRadianceProbe({ complex }); }, process.env.MMD_RC_COMPLEX_FIXTURE === "1");
     await page.locator("#info-model-select").selectOption("__camera__");
     for (const [key, value] of Object.entries({ tx: 0, ty: 1, tz: 0, rx: -25, ry: 0, rz: 0, camDistance: 11 })) {
       const field = page.locator(`#bone-controls input[data-control-key='${key}']`); await field.fill(String(value)); await field.press("Enter");
@@ -37,12 +37,17 @@ test("RC updates only moving geometry during continuous bone and morph animation
     await control("luminousRadianceEnabled").selectOption("1");
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     if (!active) await control("luminousRadianceEnabled").selectOption("0");
+    if (active && process.env.MMD_RC_FULL_RECEIVER === "1") {
+      await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).forceRadianceReceiverFull(true));
+    }
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState());
     // Warm shader and pose paths first; measured frames continuously change both bones and a morph.
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).profileRadianceProbe(15, "continuous"));
     report.animation = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).profileRadianceProbe(60, "continuous"));
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState());
     report.stationary = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).profileRadianceProbe(20));
+    if (active) report.receiverCompletionMedianMs = await page.evaluate(async () =>
+      (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).profileRadianceReceiverCompletion());
     await page.locator("#render-canvas").screenshot({ path: testInfo.outputPath("animation-restored.png") });
     writeFileSync(testInfo.outputPath("animation-performance-report.json"), JSON.stringify(report, null, 2));
     console.log(`RC animation profile: ${JSON.stringify(report)}`);
@@ -53,11 +58,31 @@ test("RC updates only moving geometry during continuous bone and morph animation
     if (process.env.MMD_RC_PROFILE_ONLY !== "1") {
       expect(moving.refittedTriangles).toBe(moving.geometryUpdates * report.fixture.movingTriangles);
       if (active) expect(moving.uploadedBytes / moving.geometryUpdates).toBeLessThan(report.fixture.staticTriangles * 96 / 10);
+      if (active && process.env.MMD_RC_FULL_RECEIVER !== "1") {
+        expect(moving.reuse.reused).toBeGreaterThan(0); expect(moving.reuse.computed).toBeGreaterThan(0);
+        expect(report.stationary.reuse.reused).toBeGreaterThan(0); expect(report.stationary.reuse.computed).toBe(0);
+      }
       if (active && process.env.MMD_RC_ANIMATION_BASELINE_PNG) {
         const baseline = PNG.sync.read(readFileSync(process.env.MMD_RC_ANIMATION_BASELINE_PNG));
         const current = PNG.sync.read(readFileSync(testInfo.outputPath("animation-restored.png")));
         expect([current.width, current.height]).toEqual([baseline.width, baseline.height]);
         expect(current.data).toEqual(baseline.data);
+      }
+      if (active) {
+        // Compare the first frame after each jump against a forced full gather at the same pose.
+        // Both endpoints of the old/new shadow region must update, without eight warm frames hiding a stale cache.
+        for (const [index, pose] of [{ x: -2.5, rotation: 0.4, morph: 0.5 }, { x: 2.5, rotation: -0.5, morph: 0.2 },
+          { x: 0, rotation: 0, morph: 0 }, { x: -1, rotation: 0.8, morph: 0.8 },
+          { x: -1, rotation: 0.8, morph: 0.8, normalFlip: true }, { x: -1, rotation: 0.8, morph: 0.8, normalFlip: false }].entries()) {
+          const shots = [];
+          for (const full of [false, true]) {
+            await page.evaluate(async value => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).renderRadiancePoseFrame(value), { ...pose, full });
+            const png = await page.locator("#render-canvas").screenshot({ path: testInfo.outputPath(`pose-${index}-${full ? "full" : "cached"}.png`) });
+            shots.push(PNG.sync.read(png).data);
+          }
+          expect(shots[0]).toEqual(shots[1]);
+        }
+        await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).resumeRadianceRender());
       }
     }
     expect(report.stationary.counts.cascades).toBe(0); expect(report.stationary.uploadedBytes).toBe(0);

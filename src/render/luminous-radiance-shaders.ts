@@ -8,6 +8,9 @@ struct Node { low: vec4f, high: vec4f, info: vec4f };
 @group(0) @binding(2) var<storage, read> nodes: array<Node>;
 @group(0) @binding(7) var<storage, read> emissionPixels: array<vec4f>;
 const PI = 3.141592653589793;
+fn radianceHalf(value: vec4f) -> vec4f {
+    return vec4f(unpack2x16float(pack2x16float(value.xy)), unpack2x16float(pack2x16float(value.zw)));
+}
 fn wrapTexel(index: i32, mode: u32) -> i32 {
     if (mode == 0u) { return clamp(index, 0, 63); }
     if (mode == 2u) { let mirrored = ((index % 128) + 128) % 128; return min(mirrored, 127 - mirrored); }
@@ -87,10 +90,12 @@ fn interpolate(field: texture_2d<f32>, position: vec3f, angular: vec2u, grid: u3
 `;
 
 export const LUMINOUS_RADIANCE_CASCADE_WGSL = `
-struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec4f };
+struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec4f, cache: vec4f };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(3) var parentField: texture_2d<f32>;
 @group(0) @binding(4) var outputField: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(8) var previousField: texture_2d<f32>;
+@group(0) @binding(9) var<storage, read_write> probeEpochs: array<atomic<u32>>;
 ${COMMON}
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
@@ -109,18 +114,39 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         merged = vec4f(local.rgb + local.a * farther.rgb, local.a * farther.a);
     }
     textureStore(outputField, vec2i(id.xy), merged);
+    if (grid == 16u) {
+        // All directions of a changed probe receive this frame's monotonic epoch.
+        // A maximum over the receiver's eight probes then detects any newer neighbor.
+        // Receiver gather uses RGB; a visibility-only alpha change cannot change its far light.
+        if (params.cache.y < 0.5 || any(radianceHalf(merged).rgb != textureLoad(previousField, vec2i(id.xy), 0).rgb)) {
+            atomicStore(&probeEpochs[(probe.z * 16u + probe.y) * 16u + probe.x], u32(params.cache.x));
+        }
+    }
 }
 `;
 
 export const LUMINOUS_RADIANCE_RECEIVER_WGSL = `
 struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec4f,
-    inverseProjection: mat4x4f, inverseView: mat4x4f, outputSize: vec4f };
+    inverseProjection: mat4x4f, inverseView: mat4x4f, outputSize: vec4f, dirtyMin: vec4f, dirtyMax: vec4f };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(3) var radianceField: texture_2d<f32>;
 @group(0) @binding(4) var viewDepth: texture_2d<f32>;
 @group(0) @binding(5) var viewNormal: texture_2d<f32>;
-@group(0) @binding(6) var outputGi: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(6) var outputGi: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(8) var<storage, read> probeEpochs: array<u32>;
+@group(0) @binding(9) var previousGi: texture_2d<f32>;
+@group(0) @binding(10) var previousGeometry: texture_2d<f32>;
+@group(0) @binding(11) var outputGeometry: texture_storage_2d<rgba32float, write>;
 ${COMMON}
+fn receiverEpoch(position: vec3f) -> u32 {
+    let coordinate = clamp((position - params.volumeMin.xyz) / params.volumeSize.xyz * 16.0 - 0.5, vec3f(0.0), vec3f(15.0));
+    let low = vec3u(floor(coordinate)); var epoch = 0u;
+    for (var z = 0u; z < 2u; z++) { for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
+        let probe = min(low + vec3u(x, y, z), vec3u(15u));
+        epoch = max(epoch, probeEpochs[(probe.z * 16u + probe.y) * 16u + probe.x]);
+    } } }
+    return epoch;
+}
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
     if (any(id.xy >= vec2u(params.outputSize.xy))) { return; }
@@ -128,7 +154,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     let pixel = min(vec2i(uv * vec2f(textureDimensions(viewDepth))), vec2i(textureDimensions(viewDepth)) - 1);
     let depth = textureLoad(viewDepth, pixel, 0).r;
     let viewN = textureLoad(viewNormal, pixel, 0).xyz;
-    var result = vec3f(0.0);
+    let geometry = vec4f(depth, viewN); textureStore(outputGeometry, vec2i(id.xy), geometry);
+    var result = vec3f(0.0); var epoch = 0u; var reused = false;
     if (abs(depth) > 0.000001 && length(viewN) > 0.1 && params.outputSize.z > 0.0) {
         // Depth belongs to this full-resolution pixel's center, not the half-resolution output center.
         let depthUv = (vec2f(pixel) + 0.5) / vec2f(textureDimensions(viewDepth));
@@ -141,7 +168,16 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         let bias = max(params.volumeSize.x / 16.0 * 0.025, abs(depth) * length(viewRay / viewRay.z) / 512.0);
         let position = world + normal * bias;
         if (all(position >= params.volumeMin.xyz) && all(position <= params.volumeMin.xyz + params.volumeSize.xyz)) {
-            for (var v = 0u; v < 4u; v++) { for (var u = 0u; u < 8u; u++) {
+            epoch = receiverEpoch(position);
+            let previous = textureLoad(previousGi, vec2i(id.xy), 0);
+            // The field covers distant transport; short contact rays also need the swept dirty bounds.
+            let contactDirty = params.dirtyMin.w > 0.5 && all(position >= params.dirtyMin.xyz - params.interval.x)
+                && all(position <= params.dirtyMax.xyz + params.interval.x);
+            let reuse = params.interval.w > 0.5 && abs(previous.a) == f32(epoch) && !contactDirty
+                && all(geometry == textureLoad(previousGeometry, vec2i(id.xy), 0));
+            if (reuse) { result = previous.rgb; reused = true; }
+            else {
+              for (var v = 0u; v < 4u; v++) { for (var u = 0u; u < 8u; u++) {
                 let ray = direction(u, v, 8u, 4u); let cosine = max(0.0, dot(normal, ray));
                 if (cosine > 0.0) {
                     var light = interpolate(radianceField, position, vec2u(u, v), 16u, 8u, 4u).rgb;
@@ -151,10 +187,12 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                 }
             } }
             let edge = min(position - params.volumeMin.xyz, params.volumeMin.xyz + params.volumeSize.xyz - position);
-            result *= smoothstep(0.0, params.volumeSize.x / 16.0 * 2.0, min(min(edge.x, edge.y), edge.z));
+            result *= smoothstep(0.0, params.volumeSize.x / 16.0 * 2.0, min(min(edge.x, edge.y), edge.z)) * params.outputSize.z;
+            }
         }
     }
-    textureStore(outputGi, vec2i(id.xy), vec4f(result * params.outputSize.z, 1.0));
+    // Retain rgba16f light rounding. Signed epoch metadata records whether this value was reused.
+    textureStore(outputGi, vec2i(id.xy), vec4f(radianceHalf(vec4f(result, 0.0)).rgb, select(f32(epoch), -f32(epoch), reused)));
 }
 `;
 

@@ -12,10 +12,13 @@ export class MeshRadianceBvh {
     public nodes = new Float32Array(NODE_STRIDE);
     public triangles = new Float32Array(RADIANCE_TRIANGLE_STRIDE);
     public triangleCount = 0;
+    public changedMin = [Infinity, Infinity, Infinity];
+    public changedMax = [-Infinity, -Infinity, -Infinity];
     private entries: Entry[] = [];
     private topCount = 0;
 
     public update(inputs: Input[]): Changes {
+        this.changedMin.fill(Infinity); this.changedMax.fill(-Infinity);
         inputs = inputs.filter(input => input.triangles.length > 0);
         const count = inputs.reduce((total, input) => total + input.triangles.length / RADIANCE_TRIANGLE_STRIDE, 0);
         if (!Number.isInteger(count) || count > MAX_RADIANCE_TRIANGLES) throw new Error("3D RC triangle budget exceeded or invalid geometry");
@@ -25,6 +28,7 @@ export class MeshRadianceBvh {
         });
         const changed: Entry[] = [];
         if (rebuild) {
+            if (this.triangleCount) this.includeBounds(this.nodes, 0);
             const previous = new Map(this.entries.map(entry => [entry.key, entry]));
             this.entries = inputs.map(input => {
                 const old = previous.get(input.key), bvh = old?.bvh ?? new TriangleRadianceBvh();
@@ -45,12 +49,14 @@ export class MeshRadianceBvh {
             for (let index = 0; index < inputs.length; index++) {
                 const entry = this.entries[index], input = inputs[index];
                 if (entry.triangles === input.triangles) continue;
+                this.includeBounds(entry.bvh.nodes, 0);
                 entry.bvh.update(input.triangles); entry.triangles = input.triangles; changed.push(entry);
             }
         }
         this.triangleCount = count;
         const changes: Changes = { triangles: [], nodes: [] };
         for (const entry of changed) {
+            this.includeBounds(entry.bvh.nodes, 0);
             const triangleOffset = entry.triangleOffset * RADIANCE_TRIANGLE_STRIDE;
             this.triangles.set(entry.bvh.triangles, triangleOffset);
             const nodeOffset = entry.nodeOffset * NODE_STRIDE;
@@ -75,6 +81,13 @@ export class MeshRadianceBvh {
         }
         if (rebuild) return { triangles: [this.range(this.triangles, 0, this.triangles.length)], nodes: [this.range(this.nodes, 0, this.nodes.length)] };
         return changes;
+    }
+
+    private includeBounds(nodes: Float32Array, offset: number): void {
+        for (let axis = 0; axis < 3; axis++) {
+            this.changedMin[axis] = Math.min(this.changedMin[axis], nodes[offset + axis]);
+            this.changedMax[axis] = Math.max(this.changedMax[axis], nodes[offset + 4 + axis]);
+        }
     }
 
     private range(data: Float32Array, offset: number, length: number): RadianceBufferRange {

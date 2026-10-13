@@ -55,3 +55,5 @@ OFF計測の初回は、RC OFFでtask群が削除されることを計測helper�
 密なprobe・全4段の更新・receiverの方向積分と短距離visibility traceは維持する。probe側irradiance事前集計は、近距離遮蔽を保つreceiver経路との比較が必要な次の段階として残す。Split RCの疎なsurface-driven構成へ移行したと扱わない。
 
 SDEF / QDEF、透明体、instance等の既存未検証範囲は変わらない。所有者の実際のステージ・ダンスでのFPSと追従は再確認待ち。
+
+後続の実機確認では、添付画面がPaused・11 FPSで「重い」と報告された。RC OFFの回答は「30」。前回のfixtureの約60 FPSを実シーンの改善完了に扱わず、[受け手照明の再利用](./luminous-radiance-receiver-reuse-2026-10-13.md)で探索側の削減を追加した。

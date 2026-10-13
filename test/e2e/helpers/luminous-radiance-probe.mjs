@@ -15,6 +15,7 @@ import { EngineInstrumentation } from "@babylonjs/core/Instrumentation/engineIns
 import { StorageBuffer } from "@babylonjs/core/Buffers/storageBuffer";
 import { LuminousRadianceScene } from "/src/render/luminous-radiance-scene.ts";
 import { TriangleRadianceBvh } from "/src/render/triangle-radiance-bvh.ts";
+import { WebGPUPerfCounter } from "@babylonjs/core/Engines/WebGPU/webgpuPerfCounter";
 
 let latestGraph;
 const executeGraph = FrameGraph.prototype.execute;
@@ -189,7 +190,7 @@ export function skinDenseRadianceProbe(name = "rc-dense-floor") {
   ground.morphTargetManager.areUpdatesFrozen = false;
 }
 
-export async function createAnimatedRadianceProbe() {
+export async function createAnimatedRadianceProbe({ complex = false } = {}) {
   createDenseRadianceProbe({ subdivisions: 384 });
   const current = scene(), character = CreateSphere("rc-animated-character", { diameter: 2, segments: 48 }, current);
   character.position.set(0, 1.1, 0); character.material = current.getMeshByName("rc-floor").material;
@@ -202,9 +203,83 @@ export async function createAnimatedRadianceProbe() {
   }
   character.updateVerticesData(VertexBuffer.MatricesWeightsKind, weights);
   current.getMeshByName("rc-blocker").setEnabled(false);
+  if (complex) {
+    for (let z = 0; z < 6; z++) for (let x = 0; x < 8; x++) {
+      const mesh = CreateSphere(`rc-static-curved-${x}-${z}`, { diameter: 1.3, segments: 48 }, current);
+      mesh.position.set((x - 3.5) * 1.65, 0.65, z * 1.6 - 0.5); mesh.material = character.material;
+    }
+  }
   await current.whenReadyAsync();
   return { staticTriangles: current.getMeshByName("rc-dense-floor").getTotalIndices() / 3,
     movingTriangles: character.getTotalIndices() / 3 };
+}
+
+const fullReceiverExecutions = new WeakMap();
+export function forceRadianceReceiverFull(enabled) {
+  const task = latestGraph.getTaskByName("luminousRadianceReceiver");
+  const previous = fullReceiverExecutions.get(task);
+  if (!enabled) { if (previous) { task.execute = previous; fullReceiverExecutions.delete(task); } return; }
+  if (previous) return;
+  const execute = task.execute;
+  task.execute = context => {
+    execute(context);
+    const uniform = task.getUniformBuffer("params"), interval = uniform.getData().slice(12, 16);
+    uniform.updateFloat4("interval", interval[0], interval[1], interval[2], 0);
+  };
+  fullReceiverExecutions.set(task, execute);
+}
+
+let pausedRadianceLoops;
+const originalRadianceNormals = new WeakMap();
+export async function renderRadiancePoseFrame({ x, rotation, morph, full, normalFlip }) {
+  const current = scene(), engine = current.getEngine();
+  if (!pausedRadianceLoops) { pausedRadianceLoops = engine.activeRenderLoops.slice(); engine.stopRenderLoop(); }
+  forceRadianceReceiverFull(full);
+  const character = current.getMeshByName("rc-animated-character");
+  if (normalFlip !== undefined) {
+    if (!originalRadianceNormals.has(character)) originalRadianceNormals.set(character, Float32Array.from(character.getVerticesData(VertexBuffer.NormalKind)));
+    const normals = originalRadianceNormals.get(character);
+    character.updateVerticesData(VertexBuffer.NormalKind, Float32Array.from(normals, value => normalFlip ? -value : value));
+  }
+  character.skeleton.bones[0].setPosition(new Vector3(x, 0, 0));
+  character.skeleton.bones[1].setRotation(new Vector3(0, 0, rotation));
+  character.morphTargetManager.getTarget(0).influence = morph;
+  engine.beginFrame(); current.render(); engine.endFrame();
+  await engine._device.queue.onSubmittedWorkDone();
+}
+export function resumeRadianceRender() {
+  const engine = scene().getEngine();
+  for (const loop of pausedRadianceLoops ?? []) engine.runRenderLoop(loop);
+  pausedRadianceLoops = undefined; forceRadianceReceiverFull(false);
+}
+
+// An isolated dispatch + submission/completion wall time, not a GPU timestamp.
+// Stop only this test renderer and restore its loops even if a dispatch fails.
+export async function profileRadianceReceiverCompletion(frames = 15) {
+  const engine = scene().getEngine(), loops = engine.activeRenderLoops.slice();
+  const task = latestGraph.getTaskByName("luminousRadianceReceiver"), samples = [];
+  engine.stopRenderLoop();
+  try {
+    engine.flushFramebuffer(); await engine._device.queue.onSubmittedWorkDone();
+    for (let i = 0; i < frames + 3; i++) {
+      const start = performance.now(); engine.beginFrame(); task._execute(); engine.endFrame();
+      await engine._device.queue.onSubmittedWorkDone();
+      if (i >= 3) samples.push(performance.now() - start);
+    }
+    return samples.sort((a, b) => a - b)[Math.floor(samples.length / 2)];
+  } finally { for (const loop of loops) engine.runRenderLoop(loop); }
+}
+
+export async function radianceReceiverReuseStats() {
+  const task = latestGraph.getTaskByName("luminousRadianceReceiver");
+  if (!task) return null;
+  const texture = task.computeShader._bindings.outputGi.object;
+  const values = await scene().getEngine()._readTexturePixels(texture, texture.width, texture.height, -1, 0, null, true, false);
+  let reused = 0, computed = 0;
+  for (let index = 3; index < values.length; index += 4) {
+    if (values[index] < 0) reused++; else if (values[index] > 0) computed++;
+  }
+  return { reused, computed };
 }
 
 export async function createRadianceQualityProbe() {
@@ -238,6 +313,18 @@ export async function profileRadianceProbe(frames = 30, change) {
   const counts = { cascades: 0, receiver: 0, positions: 0, refittedTriangles: 0, uploadedBytes: 0, updates: 0 }, durations = [], intervals = [], positionDurations = [], gpu = [], undo = [];
   const engine = scene().getEngine(), instrumentation = new EngineInstrumentation(engine);
   instrumentation.captureGPUFrameTime = true;
+  const passGpu = {};
+  if (engine.enableGPUTimingMeasurements) for (const task of [...tasks, receiver].filter(Boolean)) {
+    const previous = task.computeShader.gpuTimeInFrame, counter = new WebGPUPerfCounter();
+    passGpu[task.name] = [];
+    const add = counter._addDuration;
+    counter._addDuration = function (frame, duration) {
+      if (duration > 0) passGpu[task.name].push(duration / 1e6);
+      return add.call(this, frame, duration);
+    };
+    task.computeShader.gpuTimeInFrame = counter;
+    undo.push(() => { task.computeShader.gpuTimeInFrame = previous; });
+  }
   const ground = scene().getMeshByName(change === "continuous" ? "rc-animated-character" : "rc-dense-floor");
   if (ground) {
     const original = ground.getPositionData;
@@ -307,6 +394,8 @@ export async function profileRadianceProbe(frames = 30, change) {
     return { counts: { cascades: counts.cascades, receiver: counts.receiver }, positionCalls: counts.positions,
       geometryUpdates: counts.updates, refittedTriangles: counts.refittedTriangles, uploadedBytes: counts.uploadedBytes,
       positionCpuMedianMs: median(positionDurations), cpuMedianMs: median(durations), gpuMedianMs: gpu.length ? median(gpu) : null, frameMedianMs: median(intervals),
+      passGpuMedianMs: Object.fromEntries(Object.entries(passGpu).map(([name, values]) => [name, values.length ? median(values) : null])),
+      reuse: await radianceReceiverReuseStats(),
       receiverSize: receiver ? [receiver.dispatchSize.x * 8, receiver.dispatchSize.y * 8] : null };
   } finally { for (const restore of undo) restore(); instrumentation.captureGPUFrameTime = false; instrumentation.dispose(); }
 }

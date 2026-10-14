@@ -368,6 +368,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [3D RC の再生時負荷と実装例の再調査 2026-10-12](./radiance-cascades-animation-research-2026-10-12.md)
 - [3D RC の連続変形時のBVH・転送分離 2026-10-13](./luminous-radiance-animation-performance-2026-10-13.md)
 - [3D RC の受け手照明を変化した場所だけ再計算 2026-10-13](./luminous-radiance-receiver-reuse-2026-10-13.md)
+- [3D Radiance Cascades 初回導入の振り返り 2026-10-14](./radiance-cascades-development-retrospective-2026-10-14.md)
 - [MirroringFloor 実装検討メモ](./mirroring-floor-plan-2026-05-11.md)
 
 ## Effect Panel

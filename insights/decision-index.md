@@ -80,3 +80,4 @@
 | rejected | [海エフェクトは没としタイムライン化の対象から外す](./decisions/defer-ocean-effect-ui-until-quality-improves.md) | 海の再開・UI復帰・キー化を検討する。旧実装・保存互換の削除は別判断 |
 | deferred | [VMDU は VMD 出力要件が固まるまで保留する](./decisions/defer-vmdu-until-vmd-export-proves-requirements.md) | VMDU や VMD 差分形式を検討する |
 | deferred | [自前の高度VMD retarget補正は構想に留める](./decisions/defer-custom-advanced-vmd-retarget-corrections.md) | 肩・腕basis、捩り分配、足接地bakeを提案する |
+| deferred | [3D RCの追加最適化はいったん保留する](./decisions/defer-further-radiance-cascade-optimization.md) | 2026-10-14の実機確認を区切りとし現状を維持する。FPS改善完了とせず、追加最適化は再開依頼時に検討する |

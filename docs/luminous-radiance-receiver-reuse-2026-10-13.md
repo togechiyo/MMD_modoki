@@ -47,4 +47,12 @@ GPU timestamp-queryはこのengineでは利用できず、frame counterはnull�
 
 ## 残る負荷
 
-cameraが動けば再利用条件が変わり、受け手全体を計算する。volumeや大きな光源が変わる場合も再計算が広がる。4段cascade、CPUの変形・BLAS更新、geometry capture、通常描画、既存Glowの費用は残る。次に必要なら、残る処理の計測に基づいて[probe側の事前集計・GPU変形等](./radiance-cascades-animation-research-2026-10-12.md)を比較する。所有者の実際のステージ・ダンスでの改善幅は再確認待ち。
+cameraが動けば再利用条件が変わり、受け手全体を計算する。volumeや大きな光源が変わる場合も再計算が広がる。4段cascade、CPUの変形・BLAS更新、geometry capture、通常描画、既存Glowの費用は残る。再開時には、残る処理の計測に基づいて[probe側の事前集計・GPU変形等](./radiance-cascades-animation-research-2026-10-12.md)を比較する。
+
+## 2026-10-14 実機確認と今回の区切り
+
+所有者から「fpsはそんなに変わらないけど体感はちょっと滑らかになってるかも。まあいったんこれでいいかな」と確認結果を受けた。添付画面はPlaying・11 FPS・WebGPU / WGSL・Bullet MPR Bufferedで、RCはON。FPSの大幅な改善は確認されておらず、滑らかさは所有者の暫定的な体感評価として記録する。
+
+前の添付画面はBullet MPR Immediate、今回はBufferedであり、同条件の修正前後比較ではない。frame timeのばらつきも実測していないため、滑らかさの変化をRC修正だけの効果と断定しない。
+
+今回の作業はここで区切り、現在の実験実装を維持して追加の最適化をいったん保留する。残る負荷は解決済みにせず、[所有者の区切り判断](../insights/decisions/defer-further-radiance-cascade-optimization.md)に沿って、再開の依頼があった場合に次の段階を検討する。

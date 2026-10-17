@@ -246,7 +246,9 @@ function createShadowGenerator(host: LightShadowHost, dirLight: DirectionalLight
     }
     host.shadowGenerator = shadowGenerator;
     applyShadowFilterSettings(host);
-    shadowGenerator.frustumEdgeFalloff = 0.26;
+    // CSM already blends neighboring cascades. Fading each map to unshadowed
+    // creates a bright band at the split, especially with unstabilized PCSS.
+    shadowGenerator.frustumEdgeFalloff = shadowGenerator instanceof CascadedShadowGenerator ? 0 : 0.26;
     applyTransparentShadowSettings(host);
     shadowGenerator.darkness = host.shadowDarknessValue;
     applyShadowBiasSettings(host);

@@ -53,6 +53,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] スカイドーム表示 ON/OFF
 - [x] ライティング調整
 - [x] 影調整
+- [x] CSM 境界を影なしへフェードしてしまう明るい帯を修正（[調査・検証メモ](./csm-boundary-unshadowed-band-2026-10-17.md)）
+- [ ] 最後の PMX 削除後の shadow sampling 停止同期を補い、残留 map を比較検証する（[確認結果](./csm-boundary-unshadowed-band-2026-10-17.md)）
 - [x] AA ON/OFF
 - [x] DoF / レンズ関連調整
 - [x] モデル輪郭調整

@@ -6,6 +6,7 @@
 - [光・影実装メモ（Toon分離 + フラット光）](./light-shadow-implementation.md)
 - [影品質向上の検討メモ](./shadow-quality-investigation.md)
 - [セルフ影の横縞メモ](./self-shadow-horizontal-banding-note.md)
+- [CSM 境界の影抜け帯 修正メモ 2026-10-17](./csm-boundary-unshadowed-band-2026-10-17.md)
 - [IBL Shadows 検討メモ](./ibl-shadows-investigation-2026-05-07.md)
 - [Blob Shadow 接地影検討メモ](./blob-shadow-contact-plan-2026-05-08.md)
 
@@ -88,7 +89,8 @@ WGSL CSM PCF 経路だけを避ける互換処理です。代償として WebGPU
 - 接地感調整
   - `bias = 0.0005`
   - `normalBias = 0.01`
-  - `frustumEdgeFalloff = 0.26`
+  - 通常 `ShadowGenerator`: `frustumEdgeFalloff = 0.26`
+  - CSM: `frustumEdgeFalloff = 0`（各マップ端の非遮蔽フェードによる境界の帯を防ぎ、cascade blend で接続する）
 - 透明材質対応
   - `transparentShadowEnabled = true`
   - `softTransparentShadowEnabled = true`

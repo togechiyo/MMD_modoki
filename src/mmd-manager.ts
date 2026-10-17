@@ -4664,7 +4664,8 @@ ${beforeFogAppendBlock}
 
         shadowGenerator.bias = this.shadowBiasValue;
         shadowGenerator.normalBias = this.shadowNormalBiasValue;
-        shadowGenerator.frustumEdgeFalloff = 0.26;
+        // CSM uses cascade blending; a per-map fade to unshadowed leaves bright bands.
+        shadowGenerator.frustumEdgeFalloff = shadowGenerator instanceof CascadedShadowGenerator ? 0 : 0.26;
         shadowGenerator.transparencyShadow = this.transparentShadowEnabledValue;
         shadowGenerator.enableSoftTransparentShadow = this.transparentShadowEnabledValue && this.softTransparentShadowEnabledValue;
         shadowGenerator.useOpacityTextureForTransparentShadow = this.transparentShadowEnabledValue;

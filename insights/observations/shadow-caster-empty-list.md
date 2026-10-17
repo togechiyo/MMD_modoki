@@ -3,12 +3,15 @@ id: shadow-caster-empty-list
 status: observation
 scope: rendering/shadow
 confidence: medium
-last_verified: null
+last_verified: 2026-10-17
 evidence:
   - runtime-log
   - unit-test
+  - electron-webgpu-e2e
+  - code-inspection
 source_docs:
   - ../../docs/x-accessory-alpha-coplanar-rendering-note-2026-08-20.md
+  - ../../docs/csm-boundary-unshadowed-band-2026-10-17.md
 superseded_by: null
 ---
 
@@ -22,6 +25,11 @@ superseded_by: null
 
 caster list が空の間は方向光の shadow sampling を停止し、shadow generator の darkness を非表示側へ固定する。caster が戻ったら、全体の影設定と保存済み darkness から sampling を復帰する。
 
+2026-10-17 の fixture 比較では、OBJ 削除時は sampling が停止する一方、最後の PMX 削除後は
+`casterCount=0` / `lightSamplingEnabled=true` が残った。PMX の `removeActiveModel()` は caster 除去後の
+`syncShadowSamplingWithCasterList()` が欠けている。すべての削除経路で対策済みとは判断しない。
+CSM 境界のフェードによる明るい帯とは別件として扱う。
+
 ## 避けること
 
 - caster list が空で更新されなくなった shadow texture を、そのまま receiver から参照し続けない。
@@ -34,6 +42,7 @@ caster list が空の間は方向光の shadow sampling を停止し、shadow ge
 - `src/scene/shadow-caster-runtime-state.ts`
 - `src/mmd-manager.ts`
 - runtime log では、アクセサリの影解除後に caster list が `1` から `0` へ更新されていた。階段の縞はこの対策後も残り、別途逆向き重複 polygon が主因と判明した。
+- `test/e2e/csm-boundary.spec.mjs` の PMX / OBJ 削除・再読込と、`removeActiveModel()` の同期呼び出しを照合した。
 
 ## 未確認
 

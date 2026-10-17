@@ -49,6 +49,7 @@ PMX 2.0 / UTF-16LE、センター 1 ボーン、共有 Toon 0、エッジ OFF。
 ```powershell
 npm.cmd run generate:shadow-stage
 npm.cmd run test:e2e -- wide-shadow-stage-fixture.spec.mjs
+npm.cmd run test:e2e -- wide-shadow-stage-travel.spec.mjs
 ```
 
 生成器は頂点範囲・法線・面の向き・退化三角形を検査し、インストール済み `babylon-mmd` の
@@ -59,3 +60,8 @@ E2E はローカル GPU 環境で、モデルの表示と caster / receiver 登�
 2026-10-17: PMX 再読込、同一 SHA256 での再生成、`lint`、ローカル Electron / WebGPU E2E が成功。
 通常影 / CSM の近景 / 全景の 4 表示を画像でも確認し、JavaScript / WebGPU validation error は 0 件。
 アプリ本体のコードは変更していない。
+
+連続移動の追加確認では、Classic / FrameGraph × 半影 OFF / ON の計296キャプチャで、
+カスケード境界付近に影が抜ける帯を検出しなかった。
+壁沿いの前進と近景から全景への後退・上昇を録画し、旧フェード値で同じ PMX に帯が出ることも比較した。
+条件と測定結果は [CSM 境界の影抜け帯メモ](../../../docs/csm-boundary-unshadowed-band-2026-10-17.md#広域-pmx-のカメラ移動確認) を参照する。

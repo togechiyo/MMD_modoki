@@ -54,6 +54,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] ライティング調整
 - [x] 影調整
 - [x] 広域の影を比較できる6,000×6,000単位の自作PMXステージを追加し、近景から遠景へのCSM境界をカメラ移動で確認（[配置・使用方法と確認結果](../test/fixtures/shadow-stage/README.md)）
+- [x] 静的PMXステージを影あり・エフェクトなし・剛体なしで1,000万三角形まで実描画し、読込・カメラ移動FPS・RAMを計測（[条件・結果・再現方法](./polygon-capacity-stage-benchmark-2026-10-18.md)）
 - [x] CSM 境界を影なしへフェードしてしまう明るい帯を修正（[調査・検証メモ](./csm-boundary-unshadowed-band-2026-10-17.md)）
 - [ ] 最後の PMX 削除後の shadow sampling 停止同期を補い、残留 map を比較検証する（[確認結果](./csm-boundary-unshadowed-band-2026-10-17.md)）
 - [x] AA ON/OFF

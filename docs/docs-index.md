@@ -346,6 +346,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 
 - [影仕様と実装](./shadow-spec.md)
 - [広域シャドウ確認用 PMX ステージ](../test/fixtures/shadow-stage/README.md)
+- [静的PMXステージ1,000万三角形の描画計測 2026-10-18](./polygon-capacity-stage-benchmark-2026-10-18.md)
 - [CSM 境界の影抜け帯 修正メモ 2026-10-17](./csm-boundary-unshadowed-band-2026-10-17.md)
 - [Frame Graph 影移行 調査メモ 2026-08-22](./framegraph-shadow-migration-investigation-2026-08-22.md)
 - [WebGPU CSM + PCF 斜め誤影 調査・暫定回避メモ 2026-08-22](./webgpu-csm-pcf-diagonal-shadow-investigation-2026-08-22.md)

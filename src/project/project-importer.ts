@@ -921,7 +921,6 @@ export async function importProjectState(
 
     host.setGroundVisible(Boolean(data.viewport.groundVisible));
     host.setSkydomeBackgroundStyle?.(normalizeSkydomeBackgroundStyle(data.viewport.skydomeBackground));
-    host.setSkydomeVisible(Boolean(data.viewport.skydomeVisible));
     const backgroundDisplayMode = normalizeBackgroundDisplayMode(
         data.viewport.backgroundDisplayMode,
         Boolean(data.viewport.backgroundBlack),
@@ -980,6 +979,8 @@ export async function importProjectState(
     }
     // Loading media makes it visible; restore the saved flag only after loading finishes.
     host.setBackgroundMediaVisible?.(data.viewport.backgroundMediaVisible !== false);
+    // Interactive media loading also hides the sky; retain the project's saved choice.
+    host.setSkydomeVisible(Boolean(data.viewport.skydomeVisible));
 
     if (lightDirectionX !== null && lightDirectionY !== null && lightDirectionZ !== null) {
         host.setLightDirection(lightDirectionX, lightDirectionY, lightDirectionZ);

@@ -84,6 +84,17 @@ export const unpremultiplyExportRgba = (pixels: Uint8Array): Uint8Array => {
     return pixels;
 };
 
+export const normalizeExportRgbaAlpha = (
+    pixels: Uint8Array,
+    alphaMode: RenderedExportFrame["alphaMode"],
+): Uint8Array => {
+    if (alphaMode === "straight") return unpremultiplyExportRgba(pixels);
+    // Some background / post-effect paths leave zero alpha with a valid final RGB.
+    // Non-transparent PNG and video consumers must receive the promised opaque frame.
+    for (let offset = 3; offset < pixels.length; offset += 4) pixels[offset] = 255;
+    return pixels;
+};
+
 export class ExportRenderSurface {
     public readonly renderTarget: RenderTargetTexture;
     private readbackCount = 0;
@@ -162,10 +173,9 @@ export class ExportRenderSurface {
         }
         const data = await withTimeout(readback, timeoutMs, "Export render surface readback");
         this.readbackCount += 1;
-        const pixels = normalizeExportRgbaRows(data, this.width, this.height);
-        if (alphaMode === "straight") {
-            unpremultiplyExportRgba(pixels);
-        }
+        const pixels = normalizeExportRgbaAlpha(
+            normalizeExportRgbaRows(data, this.width, this.height), alphaMode,
+        );
         return {
             width: this.width,
             height: this.height,

@@ -233,6 +233,26 @@ describe("importProjectState", () => {
         expect(host.setBackgroundMediaVisible).toHaveBeenCalledWith(true);
     });
 
+    it.each([
+        ["backgroundImagePath", true, false], ["backgroundImagePath", false, true],
+        ["backgroundVideoPath", true, false], ["backgroundVideoPath", false, true],
+    ] as const)("restores the saved sky after loading %s (sky=%s, media=%s)", async (key, savedSky, savedMedia) => {
+        let skyVisible = false;
+        const host = {
+            ...createHost(),
+            setSkydomeVisible: vi.fn((value: boolean) => { skyVisible = value; }),
+        };
+        // Interactive media loading hides the sky; project restore must apply its saved state afterwards.
+        host.setBackgroundImageFromPath.mockImplementation(async () => { skyVisible = false; });
+        host.setBackgroundVideoFromPath.mockImplementation(async () => { skyVisible = false; });
+        const project = createProject();
+        project.viewport[key] = "fixture";
+        project.viewport.backgroundMediaVisible = savedMedia;
+        project.viewport.skydomeVisible = savedSky;
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(skyVisible).toBe(savedSky);
+    });
+
     it("keeps banks separate for duplicate legacy paths and applies the whole-project mode", async () => {
         const host = { ...createHost(), setMmdMaterialPipelinePreset: vi.fn(value => value) };
         host.loadPMX.mockImplementation(async (path: string) => {

@@ -196,6 +196,18 @@ items[]:
 
 2026-08-24時点でfocused unit、全unit、lint、critical typecheck、対象Electron E2Eを通過している。通常typecheckにはプロジェクト既知の非criticalベースラインエラーが残る。
 
+## 大量選択時のメニュー停止修正 2026-10-19
+
+[Issue #29](https://github.com/togechiyo/MMD_modoki/issues/29)のV022-117を調査した。menuを開くと補正項目の有効判定でpreviewが実行され、全channelの値を`Math.min(...values)` / `Math.max(...values)`の引数へ展開していた。可動bone 30,000キー・180,000値で、修正前のunitが`RangeError: Maximum call stack size exceeded`を再現した。報告者の約25,000キーという数は概算で、固定の選択上限にはしない。
+
+previewの最小・最大を走査中に集計し、全値を保持する2配列と、大量の引数展開を廃止した。対象数・変更数、空入力の`null`、非有限入力の無効判定、補正値・補間・CommandDiffの仕様は維持する。
+
+- unit: 30,000可動boneキーの値域・変更数・元payload保持、空入力、途中で無効値が出る場合を確認。
+- [Issue #29 E2E](../test/e2e/issue-29-regressions.spec.mjs): 配布可能PMXに自作の3 track × 8248frame（24,744キー）を供給し、GUIのbone全選択 → menu → 補正preview → Xへ1加算 → 適用 → Undo → Redo → 再び補正menuを開く操作が成功。page errorなし。
+- 既存のcamera補正E2Eも成功し、補間保持・Undo / Redo・保存再読込を確認した。全unitは184 files / 1093 tests、lint成功、critical typecheck成功。通常typecheckの既存548件に新規diagnosticなし。
+
+mainの修正は元報告環境・元VMDでは未確認で、台帳は`needs retest`。全ての大量キー操作の速度改善や、件数によらず一定時間で応答する保証にはしない。
+
 ## 既知の制約と次の候補
 
 - ボーン回転はcanonical Eulerへの分解を伴うため、元のEuler巻き数を維持できない。

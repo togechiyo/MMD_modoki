@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { normalizeExportRgbaRows, unpremultiplyExportRgba } from "./export-render-surface";
+import { normalizeExportRgbaAlpha, normalizeExportRgbaRows, unpremultiplyExportRgba } from "./export-render-surface";
+
+describe("normalizeExportRgbaAlpha", () => {
+    it("makes opaque output fully opaque while preserving the rendered RGB", () => {
+        const pixels = new Uint8Array([0, 152, 0, 0, 25, 50, 75, 128, 9, 8, 7, 255]);
+        expect([...normalizeExportRgbaAlpha(pixels, "opaque")]).toEqual([
+            0, 152, 0, 255, 25, 50, 75, 255, 9, 8, 7, 255,
+        ]);
+    });
+
+    it("keeps straight-alpha transparency and unpremultiplies the RGB", () => {
+        const pixels = new Uint8Array([64, 32, 16, 128, 12, 13, 14, 0]);
+        expect([...normalizeExportRgbaAlpha(pixels, "straight")]).toEqual([
+            128, 64, 32, 128, 0, 0, 0, 0,
+        ]);
+    });
+});
 
 describe("normalizeExportRgbaRows", () => {
     it("converts bottom-to-top RGBA readback into top-to-bottom row order", () => {

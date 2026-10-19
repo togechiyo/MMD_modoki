@@ -16121,7 +16121,14 @@ ${beforeFogAppendBlock}
     }
 
     public async waitForPostEffectBackendReadyForCapture(timeoutMs = 8_000): Promise<boolean> {
-        if (this.isPostEffectBackendReadyForCapture()) {
+        const isReady = (): boolean => {
+            if (!this.isPostEffectBackendReadyForCapture()) return false;
+            if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) return true;
+            // Graph effects can be ready before the scene-color pass has compiled
+            // newly restored background materials for its render pass.
+            return this.frameGraphPostEffectsSceneColorTarget?.isReadyForRendering() === true;
+        };
+        if (isReady()) {
             return true;
         }
 
@@ -16131,11 +16138,11 @@ ${beforeFogAppendBlock}
             await new Promise<void>((resolve) => {
                 requestAnimationFrame(() => resolve());
             });
-            if (this.isPostEffectBackendReadyForCapture()) {
+            if (isReady()) {
                 return true;
             }
         }
-        return this.isPostEffectBackendReadyForCapture();
+        return isReady();
     }
 
     public prepareExportRenderSurface(

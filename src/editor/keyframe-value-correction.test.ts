@@ -3,6 +3,7 @@ import { Quaternion } from "@babylonjs/core/Maths/math.vector";
 
 import {
     applyKeyframeValueCorrection,
+    createIdentityKeyframeValueCorrection,
     createKeyframeValueCorrectionPreview,
     isKeyframeValueCorrectionIdentity,
     isKeyframeValueCorrectionValid,
@@ -297,5 +298,36 @@ describe("keyframe value correction", () => {
         expect(isKeyframeValueCorrectionIdentity(identity)).toBe(true);
         expect(isKeyframeValueCorrectionValid(identity)).toBe(true);
         expect(isKeyframeValueCorrectionValid(invalid)).toBe(false);
+    });
+
+    it("summarizes dense bone selections without exceeding the function argument limit", () => {
+        const payloads: MovableBoneKeyframePayload[] = Array.from({ length: 30000 }, (_, index) => ({
+            kind: "movableBone",
+            positions: [index - 15000, 2, -3], positionInterpolations: [],
+            rotations: [0, 0, 0, 1], rotationInterpolations: [], physicsToggles: [1],
+        }));
+        const correction = createIdentityKeyframeValueCorrection("bone");
+        if (correction.kind !== "bone") throw new Error("expected bone correction");
+        correction.position.x.add = 5;
+        expect(createKeyframeValueCorrectionPreview(payloads, correction)).toEqual({
+            compatibleKeyCount: 30000, changedKeyCount: 30000,
+            beforeMin: -15000, beforeMax: 14999, afterMin: -14995, afterMax: 15004, valid: true,
+        });
+        expect(payloads[0].positions).toEqual([-15000, 2, -3]);
+    });
+
+    it("keeps empty and invalid preview ranges distinct", () => {
+        const correction = createIdentityKeyframeValueCorrection("morph");
+        expect(createKeyframeValueCorrectionPreview([], correction)).toEqual({
+            compatibleKeyCount: 0, changedKeyCount: 0,
+            beforeMin: null, beforeMax: null, afterMin: null, afterMax: null, valid: true,
+        });
+        expect(createKeyframeValueCorrectionPreview([
+            { kind: "morph", weights: [0.4] },
+            { kind: "morph", weights: [Number.NaN] },
+        ], correction)).toEqual({
+            compatibleKeyCount: 2, changedKeyCount: 0,
+            beforeMin: 0.4, beforeMax: 0.4, afterMin: 0.4, afterMax: 0.4, valid: false,
+        });
     });
 });

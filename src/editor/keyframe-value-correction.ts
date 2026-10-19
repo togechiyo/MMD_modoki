@@ -315,8 +315,10 @@ export function createKeyframeValueCorrectionPreview(
     payloads: readonly TimelineKeyframePayload[],
     correction: KeyframeValueCorrection,
 ): KeyframeValueCorrectionPreview {
-    const beforeValues: number[] = [];
-    const afterValues: number[] = [];
+    let beforeMin: number | null = null;
+    let beforeMax: number | null = null;
+    let afterMin: number | null = null;
+    let afterMax: number | null = null;
     let compatibleKeyCount = 0;
     let changedKeyCount = 0;
     let valid = isKeyframeValueCorrectionValid(correction);
@@ -335,18 +337,25 @@ export function createKeyframeValueCorrectionPreview(
             valid = false;
             continue;
         }
-        beforeValues.push(...before);
-        afterValues.push(...after);
+        // Keep the preview bounded even when dense motions select hundreds of thousands of values.
+        for (const value of before) {
+            beforeMin = beforeMin === null ? value : Math.min(beforeMin, value);
+            beforeMax = beforeMax === null ? value : Math.max(beforeMax, value);
+        }
+        for (const value of after) {
+            afterMin = afterMin === null ? value : Math.min(afterMin, value);
+            afterMax = afterMax === null ? value : Math.max(afterMax, value);
+        }
         if (before.some((value, index) => Math.abs(value - (after[index] ?? value)) > 1e-9)) changedKeyCount += 1;
     }
 
     return {
         compatibleKeyCount,
         changedKeyCount,
-        beforeMin: beforeValues.length > 0 ? Math.min(...beforeValues) : null,
-        beforeMax: beforeValues.length > 0 ? Math.max(...beforeValues) : null,
-        afterMin: afterValues.length > 0 ? Math.min(...afterValues) : null,
-        afterMax: afterValues.length > 0 ? Math.max(...afterValues) : null,
+        beforeMin,
+        beforeMax,
+        afterMin,
+        afterMax,
         valid,
     };
 }

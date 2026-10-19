@@ -1,6 +1,6 @@
 # MMD基本機能タスクチェックリスト
 
-更新日: 2026-10-14
+更新日: 2026-10-19
 
 v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バージョン候補](./v0.2.4-next-version-candidates.md)。収録範囲は未決定。個別報告の確認状態は [リリース後台帳](./v0.2.4-post-release-ledger.md) と分けて管理する。
 
@@ -51,6 +51,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 
 - [x] 床表示 ON/OFF
 - [x] スカイドーム表示 ON/OFF
+- [x] 背景画像・動画を保持したprojectの空表示を読込後に復元し、非透過alpha・FrameGraphの入力素材準備を含めPNG / WebM出力を確認（[V022-116・元環境再確認待ち](./issue-29-background-sky-restore-2026-10-19.md)）
 - [x] ライティング調整
 - [x] 影調整
 - [x] 広域の影を比較できる6,000×6,000単位の自作PMXステージを追加し、近景から遠景へのCSM境界をカメラ移動で確認（[配置・使用方法と確認結果](../test/fixtures/shadow-stage/README.md)）
@@ -204,6 +205,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] タイムライン操作を選択キー操作 / 時間軸構造操作 / 値補正へ整理
 - [x] 空フレーム挿入 / フレーム列削除を batch key edit として実装
 - [x] 選択キーの位置 XYZ 補正を1操作単位で実装
+- [x] 大量キー選択時の補正previewの引数上限超過を直し、24,744キーのGUI補正・Undo / Redo・menu再表示を確認（[V022-117・元環境再確認待ち](./keyframe-value-correction-implementation-2026-08-24.md)）
 - [x] カメラ距離 / FoV 補正を実装
 - [x] 距離の正の加算で遠ざかるよう符号を修正し、preview・Undo / Redo・保存復元を確認（[V022-070対応](./keyframe-value-correction-implementation-2026-08-24.md#カメラ距離の符号)）
 - [x] 回転 XYZ 補正の Euler / Quaternion 整合を調査・実装

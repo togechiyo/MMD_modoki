@@ -86,4 +86,21 @@ describe("optimized MMD motion loading", () => {
         expect(host.mmdCamera.setRuntimeAnimation).toHaveBeenCalledTimes(1);
         expect(result?.name).toBe("camera");
     });
+
+    it("only suppresses an empty camera track notification when model fallback is allowed", async () => {
+        const host = createHost();
+        host.bvmdLoader.loadFromBuffer.mockReturnValue({ cameraTrack: { frameNumbers: new Uint32Array() } });
+        expect(await loadCameraVMD(host as never, "expression.bvmd", { allowModelFallback: true })).toBeNull();
+        expect(host.onError).not.toHaveBeenCalled();
+        expect(host.mmdCamera.setRuntimeAnimation).not.toHaveBeenCalled();
+        expect(await loadCameraVMD(host as never, "expression.bvmd")).toBeNull();
+        expect(host.onError).toHaveBeenCalledWith("This BVMD has no camera track");
+    });
+
+    it("still reports unreadable files during camera type probing", async () => {
+        const host = createHost();
+        vi.mocked(window.electronAPI.readBinaryFile).mockResolvedValue(null);
+        expect(await loadCameraVMD(host as never, "missing.vmd", { allowModelFallback: true })).toBeNull();
+        expect(host.onError).toHaveBeenCalledWith("Failed to read camera VMD file");
+    });
 });

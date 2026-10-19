@@ -20,7 +20,7 @@ import { uiOperationSchema, type AutomationOutput, type AutomationOutputResult, 
 export { AutomationError } from "./diagnostics";
 
 const vector = z.object({ x: z.number().finite().min(-100000).max(100000), y: z.number().finite().min(-100000).max(100000), z: z.number().finite().min(-100000).max(100000) }).strict();
-export const cameraSchema = z.object({ target: vector, rotation: vector, distance: z.number().min(0).max(100000), fov: z.number().min(10).max(120) }).strict();
+export const cameraSchema = z.object({ target: vector, rotation: vector, distance: z.number().min(-100000).max(100000), fov: z.number().min(1).max(120) }).strict();
 const target = z.object({ editorSessionId: z.string().uuid(), sceneGeneration: z.number().int().nonnegative() }).strict();
 const query = { target };
 const paging = { offset: z.number().int().min(0).max(1000000).default(0), limit: z.number().int().min(1).max(200).default(20) };

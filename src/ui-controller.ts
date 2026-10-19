@@ -33,6 +33,7 @@ import { AppMenuController } from "./ui/app-menu-controller";
 import { BloomToneMapController } from "./ui/bloom-tone-map-controller";
 import { BottomPanelLayoutController } from "./ui/bottom-panel-layout-controller";
 import { CameraPanelController } from "./ui/camera-panel-controller";
+import { clampCameraEditingDistance, clampCameraFovDegrees } from "./ui/camera-control-limits";
 import { ColorPostFxController } from "./ui/color-postfx-controller";
 import { DofPanelController } from "./ui/dof-panel-controller";
 import { ExperimentalPostFxController } from "./ui/experimental-postfx-controller";
@@ -599,6 +600,7 @@ export class UIController {
     private readonly actionDispatcher = new ActionDispatcher();
     private readonly commandHistory = new HistoryManager();
     private pendingBoneTransformCommand: PendingBoneTransformCommand | null = null;
+    private pendingCameraTransformCommand: { frame: number; before: CameraTransformCommandSnapshot } | null = null;
     private autoKeyEnabled = false;
     private autoKeyScope: AutoKeyScope = "all";
     private pendingCameraAutoKeyTimer: number | null = null;
@@ -3387,6 +3389,7 @@ export class UIController {
         try {
             const result = await this.mmdManager.importProjectState(state.project);
             this.commandHistory.clear("runtime-mode-reload");
+            this.pendingCameraTransformCommand = null;
             this.currentProjectFilePath = state.projectFilePath;
 
             const lutMode = state.project.effects.lutSourceMode === "project-relative"
@@ -3711,6 +3714,7 @@ export class UIController {
             if (permission) await assertAutomationPermission(permission);
             const result = await this.mmdManager.importProjectState(parsed);
             this.commandHistory.clear("project-load");
+            this.pendingCameraTransformCommand = null;
             this.currentProjectFilePath = filePath;
 
             this.postFxWgslToonPath = resolvedWgslToonPath;
@@ -3848,7 +3852,7 @@ export class UIController {
                 const preferCamera = this.isLikelyCameraVmdPath(filePath);
                 if (preferCamera) {
                     this.setStatus(`Loading camera ${formatLabel}...`, true);
-                    const cameraInfo = await this.mmdManager.loadCameraVMD(filePath);
+                    const cameraInfo = await this.mmdManager.loadCameraVMD(filePath, { allowModelFallback: true });
                     if (cameraInfo) return;
                     this.setStatus("Loading motion/pose...", true);
                     await this.mmdManager.loadVMD(filePath);
@@ -7474,7 +7478,14 @@ export class UIController {
     }
 
     private beginBoneTransformCommand(boneName: string | null): void {
-        if (!boneName || boneName === "Camera") return;
+        if (!boneName) return;
+        if (boneName === "Camera") {
+            this.pendingCameraTransformCommand ??= {
+                frame: this.mmdManager.currentFrame,
+                before: this.captureCameraTransformCommandSnapshot(),
+            };
+            return;
+        }
         const modelInstanceId = this.getActiveModelInstanceId();
         if (!modelInstanceId) return;
         if (
@@ -7494,6 +7505,14 @@ export class UIController {
     }
 
     private commitBoneTransformCommand(boneName: string | null): void {
+        if (boneName === "Camera") {
+            const pending = this.pendingCameraTransformCommand;
+            this.pendingCameraTransformCommand = null;
+            if (!pending) return;
+            const command = buildCameraTransformCommand({ ...pending, after: this.captureCameraTransformCommandSnapshot() });
+            if (command) this.commandHistory.push(command);
+            return;
+        }
         const pending = this.pendingBoneTransformCommand;
         this.pendingBoneTransformCommand = null;
         if (!pending) return;
@@ -7841,8 +7860,8 @@ export class UIController {
         this.mmdManager.applyCameraTrackPose(
             snapshot.target,
             snapshot.rotation,
-            Math.max(0, snapshot.distance),
-            Math.max(10, Math.min(120, snapshot.fov)),
+            clampCameraEditingDistance(snapshot.distance),
+            clampCameraFovDegrees(snapshot.fov),
         );
         this.rememberEditedBonePoseSnapshot("Camera", this.captureCurrentBonePoseSnapshot("Camera"));
         this.markSectionKeyframeDirty("bone", this.getBoneKeyframeContextKey("Camera"));
@@ -8978,6 +8997,7 @@ export class UIController {
         }
         if (restore) this.selectAutomationTimeline(restore);
         this.commandHistory.clear("asset-remove");
+        this.pendingCameraTransformCommand = null;
         this.refreshModelSelector();
         this.refreshShaderPanel();
         this.applyLocalizedUiState();
@@ -9370,7 +9390,7 @@ export class UIController {
         const yRad = (snapshot.rotation.y * Math.PI) / 180;
         const zRad = (snapshot.rotation.z * Math.PI) / 180;
         const rotation = Matrix.RotationYawPitchRoll(-yRad, -xRad, -zRad);
-        const distance = Math.max(0.0001, snapshot.distance ?? this.mmdManager.getCameraDistance());
+        const distance = snapshot.distance ?? this.mmdManager.getCameraDistance();
         const offset = Vector3.TransformNormal(new Vector3(0, 0, distance), rotation);
         return new Vector3(snapshot.position.x, snapshot.position.y, snapshot.position.z).add(offset);
     }
@@ -9414,7 +9434,7 @@ export class UIController {
                 position: { x: viewportPosition.x, y: viewportPosition.y, z: viewportPosition.z },
                 rotation: rotationDeg,
                 target: { x: target.x, y: target.y, z: target.z },
-                distance: Math.abs(distance[0]),
+                distance: -distance[0],
                 fov: fov[0],
             };
         }
@@ -9497,7 +9517,7 @@ export class UIController {
             position: { x: viewportPosition.x, y: viewportPosition.y, z: viewportPosition.z },
             rotation: rotationDeg,
             target: { x: target.x, y: target.y, z: target.z },
-            distance: Math.abs(trackDistance),
+            distance: -trackDistance,
             fov: fovA[0] + (fovB[0] - fovA[0]) * fovWeight,
         };
     }
@@ -11059,7 +11079,7 @@ export class UIController {
             ?? this.mmdManager.getCameraExternalParentPayload();
         const distance = externalParent.modelInstanceId || externalParent.modelPath
             ? 0
-            : Math.max(0.0001, poseSnapshot?.distance ?? runtimePose.distance);
+            : poseSnapshot?.distance ?? runtimePose.distance;
         const fov = poseSnapshot?.fov ?? runtimePose.fov;
         const degToRad = Math.PI / 180;
         return {
@@ -11491,7 +11511,7 @@ export class UIController {
         const cameraRotationDeg = poseSnapshot?.rotation ?? runtimePose.rotation;
         const cameraDistance = this.mmdManager.getCameraExternalParent()
             ? 0
-            : Math.max(0.0001, poseSnapshot?.distance ?? runtimePose.distance);
+            : poseSnapshot?.distance ?? runtimePose.distance;
         const cameraFovDeg = poseSnapshot?.fov ?? runtimePose.fov;
         const cameraTarget = poseSnapshot?.target ?? runtimePose.target;
         const degToRad = Math.PI / 180;

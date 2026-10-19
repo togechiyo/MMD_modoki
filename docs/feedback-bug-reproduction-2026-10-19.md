@@ -1,5 +1,7 @@
 # 未修正バグの再現確認 2026-10-19
 
+後続作業: 再現した8件のうち7件のmain修正を[修正・検証メモ](./feedback-reproduced-bug-fixes-2026-10-19.md)へ記録した。本書の数値・集計は修正前の再現確認時点の記録として保持する。
+
 ## 対象と集計
 
 [フィードバック台帳](./v0.2-feedback.md)の`bug`分類で、`collecting` / `investigating` / `fix planned`だった36件を棚卸しした。関連修正後の`needs retest` 15件と、不具合未確定の`investigation`分類8件は今回の36件へ含めない。

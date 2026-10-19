@@ -77,7 +77,12 @@ for (const { backend, legacy, background, fps } of [
   test(`external-parent camera output (${backend}, ${legacy ? "legacy static" : "keyed"}, ${background ? "image" : "no background"}, ${fps}fps)`, async () => {
     test.setTimeout(180000);
     const launched = await launchMmdModoki(root);
-    const handleDialogs = page => page.on("dialog", dialog => { void dialog.dismiss().catch(() => undefined); });
+    const dialogPages = new WeakSet();
+    const handleDialogs = page => {
+      if (dialogPages.has(page)) return;
+      dialogPages.add(page);
+      page.on("dialog", dialog => { void dialog.dismiss().catch(() => undefined); });
+    };
     launched.app.on("window", handleDialogs);
     try {
       const page = await launched.app.firstWindow();
@@ -134,7 +139,8 @@ for (const { backend, legacy, background, fps } of [
       expect(movedPosition.y).toBeCloseTo(3, 2);
       expect(movedPosition.z).toBeCloseTo(-20 * Math.cos(Math.PI / 6), 2);
       for (const video of [false, true]) {
-        expect((await exportMedia(page, project, launched.tempDir, video, fps)).status).toBe("completed");
+        const result = await exportMedia(page, project, launched.tempDir, video, fps);
+        expect(result.status, JSON.stringify({ video, result })).toBe("completed");
         await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 30000 });
       }
       for (const [index, frame] of [0, 15, 30].entries()) {

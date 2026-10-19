@@ -14,6 +14,7 @@
 - [Issue #26 背景画像・動画の表示と出力](./issue-26-background-media-output-2026-09-16.md)
 - [Issue #29 背景素材を残した空の保存・出力の修正](./issue-29-background-sky-restore-2026-10-19.md)
 - [未修正バグ36件の再現確認 2026-10-19](./feedback-bug-reproduction-2026-10-19.md)
+- [再現した7件の局所修正と真上視点の影の残件 2026-10-19](./feedback-reproduced-bug-fixes-2026-10-19.md)
 - [Docs 入口](./README.md)
 - [ドキュメントリンク集](./docs-index.md)
 - [よくある質問](./faq.md)

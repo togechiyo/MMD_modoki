@@ -48,6 +48,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 ## 2. ビューポート・描画・出力
 
 - [x] 未修正bug 36件を再現・限定条件で未再現・条件不足に分け、生成fixture / Electron / WebGPUの観測結果を記録（[一括確認](./feedback-bug-reproduction-2026-10-19.md)。製品修正は別作業）
+- [x] 再現8件中7件のcamera値保持・再生差、入力範囲、VMD誤通知、AA背景、texture再読込を局所修正（[詳細](./feedback-reproduced-bug-fixes-2026-10-19.md)。元環境再確認待ち、真上の影は継続調査）
 
 - [x] [選択ボーンを注視](./camera-focus-selected-bones-2026-09-15.md): 表示メニュー/Fキー/MCPから注視点を合わせ、複数選択・Undo/Redo・外部親カメラを扱う。
 

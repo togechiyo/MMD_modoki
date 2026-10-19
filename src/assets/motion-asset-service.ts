@@ -272,7 +272,7 @@ export async function loadVPD(host: MotionAssetHost, filePath: string): Promise<
     }
 }
 
-export async function loadCameraVMD(host: MotionAssetHost, filePath: string): Promise<MotionInfo | null> {
+export async function loadCameraVMD(host: MotionAssetHost, filePath: string, options?: { allowModelFallback?: boolean }): Promise<MotionInfo | null> {
     try {
         const pathParts = filePath.replace(/\\/g, "/");
         const lastSlash = pathParts.lastIndexOf("/");
@@ -305,8 +305,10 @@ export async function loadCameraVMD(host: MotionAssetHost, filePath: string): Pr
         }
 
         if (animation.cameraTrack.frameNumbers.length === 0) {
-            logWarn("camera-vmd", "camera track is empty", { filePath, type: motionType });
-            host.onError?.(`This ${motionType.toUpperCase()} has no camera track`);
+            if (!options?.allowModelFallback) {
+                logWarn("camera-vmd", "camera track is empty", { filePath, type: motionType });
+                host.onError?.(`This ${motionType.toUpperCase()} has no camera track`);
+            }
             return null;
         }
 

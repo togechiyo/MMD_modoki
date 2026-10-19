@@ -2,6 +2,8 @@ import { t } from "../i18n";
 import type { MmdManager } from "../mmd-manager";
 import type { EditorAction } from "../actions/types";
 import { createPanelNumberGrid, installEnterCommitNumberInput } from "./panel-control-helpers";
+import { TRANSLATION_CONTROL_MAX, TRANSLATION_CONTROL_MIN } from "./transform-control-limits";
+import { resolveRetainedNumberInput } from "./retained-number-input";
 
 type AccessoryTransformSliderKey = "px" | "py" | "pz" | "rx" | "ry" | "rz" | "s";
 type ToastType = "success" | "error" | "info";
@@ -52,6 +54,7 @@ export class AccessoryPanelController {
     private readonly onAccessoriesChanged: () => void;
     private readonly dispatchAction: ((action: EditorAction) => boolean) | null;
     private readonly transformInputs = new Map<AccessoryTransformSliderKey, HTMLInputElement>();
+    private readonly transformSources = new WeakMap<HTMLInputElement, { value: number; display: string }>();
     private isSyncingTransformUi = false;
     private isSyncingParentUi = false;
     private selectedAccessoryIndex: number | null = null;
@@ -262,12 +265,12 @@ export class AccessoryPanelController {
         if (!container) return;
 
         const grid = createPanelNumberGrid([
-            { key: "px", id: "accessory-pos-x", label: "X", min: -100, max: 100, step: 1, value: "0.0" },
-            { key: "py", id: "accessory-pos-y", label: "Y", min: -100, max: 100, step: 1, value: "0.0" },
-            { key: "pz", id: "accessory-pos-z", label: "Z", min: -100, max: 100, step: 1, value: "0.0" },
-            { key: "rx", id: "accessory-rot-x", label: "Rx", min: -180, max: 180, step: 1, value: "0.0" },
-            { key: "ry", id: "accessory-rot-y", label: "Ry", min: -180, max: 180, step: 1, value: "0.0" },
-            { key: "rz", id: "accessory-rot-z", label: "Rz", min: -180, max: 180, step: 1, value: "0.0" },
+            { key: "px", id: "accessory-pos-x", label: "X", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, value: "0.0" },
+            { key: "py", id: "accessory-pos-y", label: "Y", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, value: "0.0" },
+            { key: "pz", id: "accessory-pos-z", label: "Z", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, value: "0.0" },
+            { key: "rx", id: "accessory-rot-x", label: "Rx", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, value: "0.0" },
+            { key: "ry", id: "accessory-rot-y", label: "Ry", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, value: "0.0" },
+            { key: "rz", id: "accessory-rot-z", label: "Rz", min: TRANSLATION_CONTROL_MIN, max: TRANSLATION_CONTROL_MAX, step: 1, value: "0.0" },
             { key: "s", id: "accessory-scale", label: "Si", min: 0.01, max: 50, step: 0.01, value: "1" },
             { key: "tr", id: "accessory-tr", label: "Tr", min: 0, max: 1, step: 0.01, value: "0.00", disabled: true },
         ], "accessory-transform");
@@ -484,6 +487,7 @@ export class AccessoryPanelController {
         const max = Number(input.max);
         const clamped = Math.max(min, Math.min(max, value));
         input.value = this.formatTransformInputValue(key, clamped);
+        this.transformSources.set(input, { value, display: input.value });
     }
 
     private updateTransformInputsFromCurrentValues(): void {
@@ -495,18 +499,21 @@ export class AccessoryPanelController {
     private getTransformInputNumber(key: AccessoryTransformSliderKey, fallback: number): number {
         const input = this.transformInputs.get(key);
         if (!input) return fallback;
-        const value = Number(input.value);
+        const source = this.transformSources.get(input);
+        const value = source ? resolveRetainedNumberInput(input.value, source.display, source.value) : Number(input.value);
         return Number.isFinite(value) ? value : fallback;
     }
 
     private normalizeTransformInput(input: HTMLInputElement, key: AccessoryTransformSliderKey): void {
-        const parsed = Number(input.value);
+        const source = this.transformSources.get(input);
+        const parsed = source ? resolveRetainedNumberInput(input.value, source.display, source.value) : Number(input.value);
         const fallback = key === "s" ? 1 : 0;
         const value = Number.isFinite(parsed) ? parsed : fallback;
         const min = input.min === "" ? Number.NEGATIVE_INFINITY : Number(input.min);
         const max = input.max === "" ? Number.POSITIVE_INFINITY : Number(input.max);
-        const clamped = Math.max(min, Math.min(max, value));
+        const clamped = value === source?.value ? value : Math.max(min, Math.min(max, value));
         input.value = this.formatTransformInputValue(key, clamped);
+        this.transformSources.set(input, { value: clamped, display: input.value });
     }
 
     private formatTransformInputValue(key: AccessoryTransformSliderKey, value: number): string {

@@ -15,8 +15,13 @@ describe("shared keyframe value schemas", () => {
                 expect(keyframePayloadSchema.safeParse({ ...camera, [field]: value }).success).toBe(false);
             }
         }
-        for (const patch of [{ positions: [0, 0] }, { rotations: [0, Infinity, 0] }, { distances: [1] }, { fovs: [121] }, { vertices: [] }]) {
+        for (const patch of [{ positions: [0, 0] }, { rotations: [0, Infinity, 0] }, { distances: [100001] }, { distances: [-100001] }, { fovs: [0] }, { fovs: [121] }, { vertices: [] }]) {
             expect(keyframePayloadSchema.safeParse({ ...camera, ...patch }).success).toBe(false);
+        }
+    });
+    it("accepts zero and both signs for MMD camera distance", () => {
+        for (const distance of [-100000, -45, 0, 12, 100000]) {
+            expect(keyframePayloadSchema.safeParse({ ...camera, distances: [distance], fovs: [1] }).success).toBe(true);
         }
     });
     it("keeps quaternion normalization separate from camera Euler angles", () => {

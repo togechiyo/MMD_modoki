@@ -20,7 +20,7 @@ export const keyframePayloadSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("bone"), ...bone }).strict(),
     z.object({ kind: z.literal("movableBone"), ...bone, positions: positionValues, positionInterpolations: positionInterpolation }).strict(),
     z.object({ kind: z.literal("morph"), weights: z.array(z.number().min(0).max(1)).length(1) }).strict(),
-    z.object({ kind: z.literal("camera"), positions: positionValues, positionInterpolations: positionInterpolation, rotations: positionValues, rotationInterpolations: rotationInterpolation, distances: z.array(z.number().min(-100000).max(0)).length(1), distanceInterpolations: rotationInterpolation, fovs: z.array(z.number().min(10).max(120)).length(1), fovInterpolations: rotationInterpolation, externalParent: parent }).strict(),
+    z.object({ kind: z.literal("camera"), positions: positionValues, positionInterpolations: positionInterpolation, rotations: positionValues, rotationInterpolations: rotationInterpolation, distances: z.array(z.number().min(-100000).max(100000)).length(1), distanceInterpolations: rotationInterpolation, fovs: z.array(z.number().min(1).max(120)).length(1), fovInterpolations: rotationInterpolation, externalParent: parent }).strict(),
     z.object({ kind: z.literal("property"), visible: z.boolean(), ikStates: z.array(z.object({ boneName: name, enabled: z.boolean() }).strict()).max(256) }).strict(),
     z.object({ kind: z.literal("light"), color, direction: vector }).strict(),
     z.object({ kind: z.literal("shadow"), color, toonInfluence: z.number().min(0).max(1), maxZ: z.number().min(0).max(100000), lightIntensity: z.number().min(0).max(10) }).strict(),

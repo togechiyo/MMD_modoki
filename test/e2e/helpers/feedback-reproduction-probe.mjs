@@ -29,3 +29,13 @@ export async function textures() {
     ready: texture.isReady(), size: texture.getSize(), pixels: Array.from((await texture.readPixels()).slice(0, 16)),
   })));
 }
+
+export async function modelToonPixels() {
+  await observe();
+  const handle = RawTexture.CreateRGBATexture(new Uint8Array(4), 1, 1, undefined, false, false);
+  const scene = handle.getScene(); handle.dispose();
+  const textures = new Set(scene.meshes.filter(mesh => mesh.skeleton && mesh.getTotalVertices() > 0)
+    .flatMap(mesh => mesh.material?.subMaterials ?? [mesh.material])
+    .map(material => material?.toonTexture).filter(texture => texture?.name.includes("reload-color.bmp")));
+  return Promise.all([...textures].map(async texture => [...(await texture.readPixels()).slice(0, 4)]));
+}

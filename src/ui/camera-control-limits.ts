@@ -8,6 +8,12 @@ export function clampCameraDistance(value: number): number {
     return Math.max(CAMERA_DISTANCE_MIN, Math.min(CAMERA_DISTANCE_MAX, value));
 }
 
+/** Editor distance uses the opposite sign to the VMD source and includes zero. */
+export function clampCameraEditingDistance(value: number): number {
+    if (!Number.isFinite(value)) return 45;
+    return Math.max(-CAMERA_DISTANCE_MAX, Math.min(CAMERA_DISTANCE_MAX, value));
+}
+
 export function clampCameraFovDegrees(value: number): number {
     if (!Number.isFinite(value)) return 30;
     return Math.max(CAMERA_FOV_MIN_DEG, Math.min(CAMERA_FOV_MAX_DEG, value));

@@ -436,8 +436,11 @@ import {
 import {
     CAMERA_DISTANCE_MIN,
     clampCameraDistance,
+    clampCameraEditingDistance,
     clampCameraFovDegrees,
 } from "./ui/camera-control-limits";
+import { mmdCameraViewportTarget } from "./scene/mmd-camera-viewport-target";
+import { textureContentKey } from "./assets/texture-content-key";
 import { shouldDeferBulletBackendSwitch } from "./physics/physics-backend-switch-policy";
 import {
     decodeDdsTextureToRgba,
@@ -7113,6 +7116,7 @@ ${beforeFogAppendBlock}
             .filter((target): target is RenderTargetTexture => target != null);
         if (this.backgroundImageLayer) this.backgroundImageLayer.renderTargetTextures = targets;
         if (this.backgroundVideoLayer) this.backgroundVideoLayer.renderTargetTextures = targets;
+        if (this.checkerBackgroundLayer) this.checkerBackgroundLayer.renderTargetTextures = targets;
     }
 
     public setExportTransparentBackgroundEnabled(enabled: boolean): void {
@@ -7173,6 +7177,7 @@ ${beforeFogAppendBlock}
         layer.texture = texture;
         this.checkerBackgroundTexture = texture;
         this.checkerBackgroundLayer = layer;
+        this.syncBackgroundMediaRenderTargets();
         this.syncCheckerBackgroundTextureScale();
     }
 
@@ -10026,8 +10031,8 @@ ${beforeFogAppendBlock}
         return loadVPDImpl(this, filePath);
     }
 
-    async loadCameraVMD(filePath: string): Promise<MotionInfo | null> {
-        return loadCameraVMDImpl(this, filePath);
+    async loadCameraVMD(filePath: string, options?: { allowModelFallback?: boolean }): Promise<MotionInfo | null> {
+        return loadCameraVMDImpl(this, filePath, options);
     }
 
     async loadMP3(filePath: string): Promise<boolean> {
@@ -11010,11 +11015,24 @@ ${beforeFogAppendBlock}
         this.webGpuConfiguredMmdTextureLoaders.add(textureLoader);
 
         const originalLoadTextureAsync = textureLoader.loadTextureAsync?.bind(textureLoader);
+        const originalLoadTextureFromBufferAsync = textureLoader.loadTextureFromBufferAsync?.bind(textureLoader);
         if (originalLoadTextureAsync) {
             textureLoader.loadTextureAsync = (async (uniqueId, rootUrl, relativeTexturePathOrIndex, scene, assetContainer, options) => {
                 const textureOptions = { ...options };
                 if (typeof relativeTexturePathOrIndex === "string") {
                     const textureUrl = PathNormalize(rootUrl + relativeTexturePathOrIndex);
+                    if (originalLoadTextureFromBufferAsync && this.fileUrlToLocalPath(textureUrl)) {
+                        let buffer: ArrayBuffer;
+                        try {
+                            buffer = await this.loadArrayBufferFromUrl(textureUrl);
+                        } catch (err) {
+                            logWarn("asset", "local model texture could not be read", { textureUrl, ...toLogErrorData(err) });
+                            return null;
+                        }
+                        return textureLoader.loadTextureFromBufferAsync?.(
+                            uniqueId, textureUrl, buffer, scene, assetContainer, textureOptions,
+                        ) ?? null;
+                    }
                     if (this.shouldInspectDdsTextureUrlForWebGpuFallback(textureUrl, textureOptions.forcedExtension)) {
                         try {
                             const arrayBuffer = await this.loadArrayBufferFromUrl(textureUrl);
@@ -11098,9 +11116,8 @@ ${beforeFogAppendBlock}
             }) as typeof textureLoader.loadTextureAsync;
         }
 
-        const originalLoadTextureFromBufferAsync = textureLoader.loadTextureFromBufferAsync?.bind(textureLoader);
         if (originalLoadTextureFromBufferAsync) {
-            textureLoader.loadTextureFromBufferAsync = (async (uniqueId, textureName, arrayBufferOrBlob, scene, assetContainer, options, applyPathNormalization = true) => {
+            const loadTextureFromBufferWithOptions: NonNullable<typeof textureLoader.loadTextureFromBufferAsync> = async (uniqueId, textureName, arrayBufferOrBlob, scene, assetContainer, options, applyPathNormalization = true) => {
                 const textureOptions = { ...options };
                 let ddsFallbackTexture: Texture | null = null;
                 try {
@@ -11161,7 +11178,15 @@ ${beforeFogAppendBlock}
                     textureOptions,
                     applyPathNormalization,
                 );
-            }) as typeof textureLoader.loadTextureFromBufferAsync;
+            };
+            textureLoader.loadTextureFromBufferAsync = async (...args) => {
+                const sourceName = args[1];
+                args[1] = await textureContentKey(sourceName, args[2]);
+                args[6] = false; // The key is a buffer identity, never a file request URL.
+                const texture = await loadTextureFromBufferWithOptions(...args);
+                if (texture instanceof Texture) texture.name = sourceName;
+                return texture;
+            };
         }
     }
 
@@ -15080,16 +15105,6 @@ ${beforeFogAppendBlock}
         distance: number;
         fov: number;
     } {
-        if (this.cameraExternalParentModelIndex === null) {
-            return {
-                position: this.getCameraPosition(),
-                rotation: this.getCameraRotation(),
-                target: this.getCameraTarget(),
-                distance: this.getCameraDistance(),
-                fov: this.getCameraFov(),
-            };
-        }
-
         this.mmdCamera.updatePosition();
         return {
             position: {
@@ -15099,15 +15114,15 @@ ${beforeFogAppendBlock}
             },
             rotation: {
                 x: (this.mmdCamera.rotation.x * 180) / Math.PI,
-                y: this.normalizeCameraAngleDeg((this.mmdCamera.rotation.y * 180) / Math.PI),
-                z: this.normalizeCameraAngleDeg((this.mmdCamera.rotation.z * 180) / Math.PI),
+                y: (this.mmdCamera.rotation.y * 180) / Math.PI,
+                z: (this.mmdCamera.rotation.z * 180) / Math.PI,
             },
             target: {
                 x: this.mmdCamera.target.x,
                 y: this.mmdCamera.target.y,
                 z: this.mmdCamera.target.z,
             },
-            distance: 0,
+            distance: this.cameraExternalParentModelIndex !== null ? 0 : -this.mmdCamera.distance,
             fov: (this.mmdCamera.fov * 180) / Math.PI,
         };
     }
@@ -15237,11 +15252,11 @@ ${beforeFogAppendBlock}
             },
             rotation: {
                 x: (this.mmdCamera.rotation.x * 180) / Math.PI,
-                y: this.normalizeCameraAngleDeg((this.mmdCamera.rotation.y * 180) / Math.PI),
-                z: this.normalizeCameraAngleDeg((this.mmdCamera.rotation.z * 180) / Math.PI),
+                y: (this.mmdCamera.rotation.y * 180) / Math.PI,
+                z: (this.mmdCamera.rotation.z * 180) / Math.PI,
             },
             fov: (this.mmdCamera.fov * 180) / Math.PI,
-            distance: Math.abs(this.mmdCamera.distance),
+            distance: -this.mmdCamera.distance,
             externalParent: (() => {
                 const parent = this.getCameraExternalParent();
                 if (typeof parent?.modelIndex !== "number" || parent.modelIndex < 0) return null;
@@ -15343,11 +15358,12 @@ ${beforeFogAppendBlock}
         );
         this.mmdCamera.distance = this.cameraExternalParentModelIndex !== null
             ? 0
-            : -clampCameraDistance(Math.abs(distance));
+            : -clampCameraEditingDistance(distance);
         if (typeof fovDeg === "number") {
             this.mmdCamera.fov = (clampCameraFovDegrees(fovDeg) * Math.PI) / 180;
         }
         this.syncViewportCameraFromMmdCamera();
+        this.clearCameraInertialOffsets();
         this.updateOrthographicCameraBounds();
     }
 
@@ -15484,7 +15500,9 @@ ${beforeFogAppendBlock}
                 .addInPlace(this.cameraExternalParentPosition);
         } else {
             this.cameraExternalParentPosition.copyFrom(this.mmdCamera.position);
-            this.cameraExternalParentTarget.copyFrom(this.mmdCamera.target);
+            this.cameraExternalParentTarget.copyFrom(mmdCameraViewportTarget(
+                this.mmdCamera.position, this.mmdCamera.target, this.cameraExternalParentForward, this.mmdCamera.distance,
+            ));
         }
         this.cameraExternalParentUp.copyFrom(rotatedUp);
         if (!this.applyCameraExternalParentToViewportVectors()) return;
@@ -15496,8 +15514,8 @@ ${beforeFogAppendBlock}
         this.camera.fov = this.mmdCamera.fov;
         this.cameraRotationEulerDeg.set(
             (this.mmdCamera.rotation.x * 180) / Math.PI,
-            this.normalizeCameraAngleDeg((this.mmdCamera.rotation.y * 180) / Math.PI),
-            this.normalizeCameraAngleDeg((this.mmdCamera.rotation.z * 180) / Math.PI),
+            (this.mmdCamera.rotation.y * 180) / Math.PI,
+            (this.mmdCamera.rotation.z * 180) / Math.PI,
         );
         this.recordViewportCameraSyncState();
         this.updateDofFocalLengthFromCameraFov();

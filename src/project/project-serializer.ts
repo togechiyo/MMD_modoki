@@ -1,5 +1,4 @@
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
-import { normalizeSsaoToneMode, type SsaoToneMode } from "../shared/ssao-tone-mode";
 import type {
     MmdModokiProjectFileV1,
     ProjectAccessoryState,
@@ -147,7 +146,6 @@ type ProjectExportHost = {
     postEffectSsaoEnabled: boolean;
     postEffectSsaoStrength: number;
     postEffectSsaoRadius: number;
-    postEffectSsaoToneMode?: SsaoToneMode;
     postEffectSsaoFadeEnd: number;
     postEffectSsaoDebugView: boolean;
     postEffectOffsetShadowEnabled: boolean;
@@ -550,7 +548,6 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             ssaoEnabled: host.getStaticScreenSpacePostEffects?.().ssao.enabled ?? host.postEffectSsaoEnabled,
             ssaoStrength: host.getStaticScreenSpacePostEffects?.().ssao.strength ?? host.postEffectSsaoStrength,
             ssaoRadius: host.getStaticScreenSpacePostEffects?.().ssao.radius ?? host.postEffectSsaoRadius,
-            ssaoToneMode: normalizeSsaoToneMode(host.postEffectSsaoToneMode),
             ssaoFadeEnd: host.postEffectSsaoFadeEnd,
             ssaoDebugView: host.postEffectSsaoDebugView,
             offsetShadowEnabled: host.getStaticDepthPostEffects?.().offsetShadow.enabled ?? host.postEffectOffsetShadowEnabled,

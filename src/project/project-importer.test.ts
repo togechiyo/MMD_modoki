@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { importProjectState } from "./project-importer";
 import type { MmdModokiProjectFileV1 } from "../types";
 import { DEFAULT_SKYDOME_BACKGROUND_STYLE } from "../shared/skydome-background-style";
-import type { SsaoToneMode } from "../shared/ssao-tone-mode";
 
 function createProject(overrides: Partial<MmdModokiProjectFileV1> = {}): MmdModokiProjectFileV1 {
     return {
@@ -204,20 +203,13 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
-    it.each(["simple", "legacy"] as const)("restores the %s SSAO tone choice", async mode => {
-        const host = { ...createHost(), postEffectSsaoToneMode: "legacy" as SsaoToneMode };
+    it.each([undefined, "simple", "legacy", "invalid"])("ignores obsolete SSAO tone flags (%s) and keeps saved strength", async mode => {
+        const host = { ...createHost(), postEffectSsaoStrength: 0.5 };
         const project = createProject();
-        project.effects.ssaoToneMode = mode;
+        Object.assign(project.effects, { ssaoToneMode: mode, ssaoStrength: 0.75 });
         await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
-        expect(host.postEffectSsaoToneMode).toBe(mode);
-    });
-
-    it.each([undefined, "invalid"])("resets the tone to legacy for an old or invalid saved mode (%s)", async mode => {
-        const host = { ...createHost(), postEffectSsaoToneMode: "simple" as SsaoToneMode };
-        const project = createProject();
-        Object.assign(project.effects, { ssaoToneMode: mode });
-        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
-        expect(host.postEffectSsaoToneMode).toBe("legacy");
+        expect(host.postEffectSsaoStrength).toBe(0.75);
+        expect(host).not.toHaveProperty("postEffectSsaoToneMode");
     });
 
     it("restores RC settings and resets them OFF when opening a legacy project", async () => {

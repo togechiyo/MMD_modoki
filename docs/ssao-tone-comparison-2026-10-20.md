@@ -1,8 +1,16 @@
 # FrameGraph SSAO 階調の新旧比較 2026-10-20
 
+## 現行の採用結果
+
+所有者が最大強度2倍のシンプル版を実機で確認し、PBRへの馴染みを理由にシンプルだけを採用した。FrameGraphは線形の強度0〜2と現在の色合成へ一本化し、従来の強度カーブ・濃いAOの追加乗算・階調選択UIを削除した。
+
+保存強度0〜1、既定値0.5、半径、キー、色相の寄せ方、白色保護は維持する。旧projectに`ssaoToneMode: legacy` / `simple`があっても欠落していても、そのフラグを無視して現行の処理で読む。再保存時にmodeは出力しない。従来階調を保存互換として残すという初回の方針は、この所有者判断で置き換えた。Classic / Experimentalの別SSAO実装は対象外。
+
+判断は[Human Decision](../insights/decisions/framegraph-ssao-uses-simple-tone.md)に記録する。以下は比較・調整段階の履歴。
+
 ## 目的と範囲
 
-所有者の「色合成は残し、濃淡の追加補正と強度カーブを簡単にしたい。従来版も比較できるように残す」という依頼に対応する。FrameGraphのSSAO詳細へ「階調: シンプル / 従来」を追加する。採用する見た目の最終判断は比較後に行う。
+所有者の「色合成は残し、濃淡の追加補正と強度カーブを簡単にしたい。従来版も比較できるように残す」という初回依頼に対応し、FrameGraphのSSAO詳細へ「階調: シンプル / 従来」を追加した。以下の比較用UI・保存仕様は採用前のもの。
 
 AO生成は引き続きBabylon.js 9.2.0の`FrameGraphSSAO2RenderingPipelineTask`を使う。Classic / ExperimentalのSSAO処理、サンプル数、ぼかし、半径、depth / normal、outline capture guardは今回変更しない。
 
@@ -34,7 +42,7 @@ AO生成は引き続きBabylon.js 9.2.0の`FrameGraphSSAO2RenderingPipelineTask`
 
 全確認は開始時のSSAO / outline・PBR整理の既存差分を保持した作業treeで実施。今回のcommitにはその既存差分を含めない。起動経路の変更はなく`smoke:launch`は未実行。Electron / WebGPUの起動は上記E2Eで確認した。実モデルでの見た目の採否、透明材質、動画出力の比較は未確認。
 
-比較用E2E: `test/e2e/ssao-tone-comparison.spec.mjs`。比較画像とreportはignoredな`artifacts/e2e/ssao-tone-comparison-2026-10-20/`へ保存する。
+比較段階のE2Eは`test/e2e/ssao-tone-comparison.spec.mjs`（現在は`ssao.spec.mjs`へ置換）。当時の比較画像とreportはignoredな`artifacts/e2e/ssao-tone-comparison-2026-10-20/`へ保存した。
 
 ## シンプルの最大強度を2倍にする追記
 
@@ -42,6 +50,19 @@ AO生成は引き続きBabylon.js 9.2.0の`FrameGraphSSAO2RenderingPipelineTask`
 
 - 全unit 188 files / 1,116 tests、lint、`typecheck:critical`成功。通常型エラーは既存548件から内容を含め増減なし。helperでシンプルの0 / 0.5 / 1→0 / 1 / 2と従来カーブの維持を確認。
 - ローカルElectron / WebGPUの比較E2E 1件成功（50.3秒）。シンプルの50→100でPNGの15,478画素に8階調超の差を検出し、15,459画素は最大側が暗い。箱の下部の陰り増加を目視確認した。保存値は引き続き0.5 / 1で、両モードの保存・読込、旧形式、Classic往復も成功。WebGPU validation errorとpageerrorは0件。
+
+## 一本化後の検証
+
+- 全unit 188 files / 1,113 tests、lint、`typecheck:critical`成功。通常型エラーは既存548件で、行番号を除いた内容も作業前と同じ。比較用のmodeテストを廃止し、旧フラグを無視するimportとmodeを保存しないexportへ差し替えた。
+- ローカルElectron / WebGPU E2Eは通常MMDとPBRの2件成功（34.8秒 / 29.6秒）。GUIに階調selectがなく、強度50→100でPNGの陰りが増えることを確認した。PBRのPNGは20,334画素に8階調超の差があり、うち20,317画素が100側で暗い。通常MMD / PBRの画像を目視確認した。
+- 実ファイル保存時にmodeを省略し、旧modeの欠落 / `legacy` / `simple`を含むfileをGUIから読んでも、現行の最大強度のPNGへ揃うことを両材質モードで確認。再出力したproject stateにもmodeがなく、強度1を維持した。
+- 下記のClassicパネル修正後、両材質モードともClassic往復で強度1・半径3を維持し、FrameGraph復帰後のPNG差は100画素未満。PBRでは42画素だった。両テストのWebGPU validation error / pageerrorは0件。
+
+現行E2Eは`test/e2e/ssao.spec.mjs`、画像・reportはignoredな`artifacts/e2e/ssao-simple-2026-10-20/`へ保存する。配布fixtureだけの確認であり、透明な実モデル・動画出力の追加検証は未実施。起動経路は変更しておらず、今回の`smoke:launch`は省略し、Electron / WebGPUの起動はE2Eで確認した。
+
+この検証で、Classic側の`ExperimentalPostFxController.connect()`が非公開SSAOを停止するとき、強度を0・半径を2・fadeを200へ書き戻す既存経路を再現した。切替前とsessionStorageの保存snapshotは強度1だが、復元後は0になり、通常MMD / PBRとも失敗した。完了待機をproject値へ変えても解消しなかったため、待機競合として扱わない。
+
+非公開SSAOのOFFは維持し、停止時には有効フラグだけを書き換えて調整値を残す局所修正を加えた。SSAOのClassic描画shaderを置き換える変更ではない。回帰E2Eでは強度1・半径3の保持に加え、FrameGraph復帰後のPNGが切替前と揃うことも確認対象にする。
 
 ## 参照
 

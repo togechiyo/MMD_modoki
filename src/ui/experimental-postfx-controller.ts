@@ -168,9 +168,8 @@ export class ExperimentalPostFxController {
         if (this.mmdManager.getPostEffectBackend() === "frameGraph" || this.mmdManager.hasEffectSceneTrack("ssao")) {
             return;
         }
-        this.mmdManager.postEffectSsaoStrength = 0;
-        this.mmdManager.postEffectSsaoRadius = 2;
-        this.mmdManager.postEffectSsaoFadeEnd = 200;
+        // Classic has no exposed SSAO control, but switching back must retain
+        // the project's FrameGraph strength/radius instead of resetting them.
         this.mmdManager.postEffectSsaoEnabled = false;
     }
 }

@@ -5976,9 +5976,6 @@ export class UIController {
                 break;
             case "ssao":
                 rows.push(
-                    select("ssaoToneMode", label("ssaoToneMode"),
-                        (["simple", "legacy"] as const).map(mode => `<option value="${mode}"${this.mmdManager.postEffectSsaoToneMode === mode ? " selected" : ""}>${label(`ssaoTone${mode === "simple" ? "Simple" : "Legacy"}`)}</option>`).join(""),
-                        ""),
                     range("ssaoStrength", label("strength"), this.mmdManager.postEffectSsaoStrength, this.mmdManager.postEffectSsaoStrength.toFixed(2)),
                     range("ssaoRadius", label("radius"), this.mmdManager.postEffectSsaoRadius, this.mmdManager.postEffectSsaoRadius.toFixed(2)),
                 );
@@ -6234,9 +6231,6 @@ export class UIController {
                 this.mmdManager.postEffectSsaoStrength = Number(actualValue);
                 this.mmdManager.postEffectSsaoDebugView = false;
                 break;
-            case "ssaoToneMode":
-                if (rawValue === "simple" || rawValue === "legacy") this.mmdManager.postEffectSsaoToneMode = rawValue;
-                break;
             case "ssaoRadius":
                 this.mmdManager.postEffectSsaoRadius = Number(actualValue);
                 break;
@@ -6480,7 +6474,6 @@ export class UIController {
                 return "motionBlur";
             case "ssaoStrength":
             case "ssaoRadius":
-            case "ssaoToneMode":
                 return "ssao";
             case "ssgiStrength":
             case "ssgiSampleRadius":

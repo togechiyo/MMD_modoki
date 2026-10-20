@@ -10,9 +10,9 @@ describe("SSAO tone modes", () => {
         expect(normalizeSsaoToneMode("legacy")).toBe("legacy");
     });
 
-    it("uses a linear strength in simple mode", () => {
-        for (const strength of [0, 0.25, 0.5, 0.75, 1]) {
-            expect(getSsaoTotalStrength(strength, "simple")).toBe(strength);
+    it("uses a linear 0..2 output strength in simple mode", () => {
+        for (const [strength, expected] of [[0, 0], [0.25, 0.5], [0.5, 1], [0.75, 1.5], [1, 2]]) {
+            expect(getSsaoTotalStrength(strength, "simple")).toBe(expected);
         }
     });
 
@@ -24,7 +24,7 @@ describe("SSAO tone modes", () => {
 
     it("bounds invalid strengths before sending them to the renderer", () => {
         expect(getSsaoTotalStrength(-1, "simple")).toBe(0);
-        expect(getSsaoTotalStrength(2, "simple")).toBe(1);
+        expect(getSsaoTotalStrength(2, "simple")).toBe(2);
         expect(getSsaoTotalStrength(Number.NaN, "legacy")).toBe(0);
     });
 });

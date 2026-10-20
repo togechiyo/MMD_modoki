@@ -108,6 +108,21 @@ test("SSAO tone comparison keeps legacy output, saved choice and backend state",
     expect(report.exportDifference.brighter).toBeGreaterThan(report.exportDifference.darker);
     expect(report.legacyRestoredDifference.changed).toBeLessThan(100);
 
+    // Half of the new simple range reaches its previous maximum; the new
+    // maximum must add observable occlusion without changing saved units.
+    await (await details(page)).selectOption("simple");
+    await strength.fill("50");
+    await strength.dispatchEvent("input");
+    await strength.dispatchEvent("change");
+    expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.ssaoStrength)).toBe(0.5);
+    await capture("simple-previous-max");
+    report.simpleExtendedRange = difference(report.captures["simple-previous-max"], report.captures.simple);
+    expect(report.simpleExtendedRange.changed).toBeGreaterThan(100);
+    expect(report.simpleExtendedRange.darker).toBeGreaterThan(report.simpleExtendedRange.brighter);
+    await strength.fill("100");
+    await strength.dispatchEvent("input");
+    await strength.dispatchEvent("change");
+
     const savedPath = testInfo.outputPath("ssao-tone.json");
     await launched.app.evaluate(({ dialog }, filePath) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath });
@@ -125,6 +140,7 @@ test("SSAO tone comparison keeps legacy output, saved choice and backend state",
       await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.ssaoToneMode)).toBe(mode);
       await settle(page);
       await expect(await details(page)).toHaveValue(mode);
+      expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.ssaoStrength)).toBe(1);
     }
 
     // Actual file load also checks the migration from projects without a tone field.

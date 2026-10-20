@@ -10,18 +10,20 @@ AO生成は引き続きBabylon.js 9.2.0の`FrameGraphSSAO2RenderingPipelineTask`
 
 | 項目 | シンプル | 従来 |
 | --- | --- | --- |
-| 強度からSSAO2への値 | 0〜1をそのまま渡す | `strength ^ 1.35 * 2.2` |
+| 強度からSSAO2への値 | 0〜1を2倍して0〜2へ渡す | `strength ^ 1.35 * 2.2` |
 | 濃い部分への追加乗算 | 省く | `deepAo`のsmoothstepと2回目の色乗算を維持 |
 | 影色・描画済み材質色への寄せ | 共通で維持 | 共通で維持 |
 | 明るい低彩度部分のAO抑制 | 共通で維持 | 共通で維持 |
 
-「シンプル」は色合成を含めてBabylon既定へ戻す設定ではない。色合成内の色相判定・白色保護・基本の色ブレンドはそのままなので、全ての非線形処理を撤去したという意味でもない。同じ強度でも従来より薄く見えるため、比較時にはその差を含めて判断する。
+「シンプル」は色合成を含めてBabylon既定へ戻す設定ではない。色合成内の色相判定・白色保護・基本の色ブレンドはそのままなので、全ての非線形処理を撤去したという意味でもない。同じ強度でも両モードの結果は一致せず、比較時にはその差を含めて判断する。
 
 既定値は新規sceneで`simple`。projectの`effects.ssaoToneMode`へ保存し、値のない旧projectと不明な値は`legacy`へ戻す。旧projectの出力を無断で新階調へ変えない。切替後の保存では選択値を明示する。
 
 階調はproject全体の固定設定で、既存のSSAO ON/OFF・強度・半径キーとは独立する。Classic往復や別process出力でもproject値を保持し、FrameGraphへ戻ったときに再適用する。切替は同じtaskのuniformと強度だけを更新し、graphの再構築や二重のSSAO適用を追加しない。
 
 ## 検証
+
+以下は初回追加（`1cc7275`、シンプルの出力範囲0〜1）の確認記録。後続の範囲拡大は末尾に記載する。
 
 - 対象unit 95件、全unit 188 files / 1,116 tests成功。通常sandboxではViteの一時file renameとlocalhost通信の制限に遭遇したため、前者はworkspace内のTEMP、全unitは通常ローカル権限で確認した。
 - lint成功。通常typecheckは作業前後とも548 diagnosticsで、行番号を除いた内容にも増減なし。`typecheck:critical`成功、TS2304 / TS2552なし。
@@ -33,6 +35,13 @@ AO生成は引き続きBabylon.js 9.2.0の`FrameGraphSSAO2RenderingPipelineTask`
 全確認は開始時のSSAO / outline・PBR整理の既存差分を保持した作業treeで実施。今回のcommitにはその既存差分を含めない。起動経路の変更はなく`smoke:launch`は未実行。Electron / WebGPUの起動は上記E2Eで確認した。実モデルでの見た目の採否、透明材質、動画出力の比較は未確認。
 
 比較用E2E: `test/e2e/ssao-tone-comparison.spec.mjs`。比較画像とreportはignoredな`artifacts/e2e/ssao-tone-comparison-2026-10-20/`へ保存する。
+
+## シンプルの最大強度を2倍にする追記
+
+所有者の「シンプルの方だとだいぶなじむ」という比較結果と最大強度を倍にする指定を受け、シンプルだけ線形ゲインを2倍にする。保存値・キー・UIは従来の0〜1 / 0〜100のまま、SSAO2へ渡す強度を0〜2にする。中央の50で初回版の最大相当、100でその2倍となる。同じスライダー位置や既存のシンプル設定も以前より2倍の強度になる。従来モードのカーブ、既定のスライダー位置、色合成は変えない。
+
+- 全unit 188 files / 1,116 tests、lint、`typecheck:critical`成功。通常型エラーは既存548件から内容を含め増減なし。helperでシンプルの0 / 0.5 / 1→0 / 1 / 2と従来カーブの維持を確認。
+- ローカルElectron / WebGPUの比較E2E 1件成功（50.3秒）。シンプルの50→100でPNGの15,478画素に8階調超の差を検出し、15,459画素は最大側が暗い。箱の下部の陰り増加を目視確認した。保存値は引き続き0.5 / 1で、両モードの保存・読込、旧形式、Classic往復も成功。WebGPU validation errorとpageerrorは0件。
 
 ## 参照
 

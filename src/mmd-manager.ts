@@ -381,6 +381,7 @@ import {
     type FrameGraphPostEffectId,
     type FrameGraphPostEffectStackEntry,
 } from "./shared/frame-graph-post-effect-stack";
+import { normalizeSsaoToneMode, type SsaoToneMode } from "./shared/ssao-tone-mode";
 import {
     MAX_DIRECTIONAL_LIGHT_INTENSITY,
     applyLightColorTemperature as applyLightColorTemperatureImpl,
@@ -2122,6 +2123,7 @@ ${beforeFogAppendBlock}
     private postEffectSsaoEnabledValue = false;
     private postEffectSsaoStrengthValue = 0.5;
     private postEffectSsaoRadiusValue = 3;
+    private postEffectSsaoToneModeValue: SsaoToneMode = "simple";
     private postEffectSsaoFadeEndValue = 200;
     private postEffectSsaoDebugViewValue = false;
     private postEffectOffsetShadowEnabledValue = false;
@@ -11431,6 +11433,7 @@ ${beforeFogAppendBlock}
             ssaoPrepared: this.isEffectKeyframePrepared("ssao"),
             ssaoStrength: this.getEffectScalarRenderValue("ssao", "strength", this.postEffectSsaoStrengthValue),
             ssaoRadius: this.getEffectParameterRenderValue("ssao", "radius", this.postEffectSsaoRadiusValue),
+            ssaoToneMode: this.postEffectSsaoToneModeValue,
             ssaoShadowColor: { r: 0.5, g: 0.5, b: 0.5 },
             ssaoToonInfluence: 1,
             offsetShadowEnabled: this.effectSceneTracks.has("offsetShadow") ? this.isEffectKeyframePrepared("offsetShadow") : this.isFrameGraphPostEffectActive("offsetShadow"),
@@ -12683,6 +12686,14 @@ ${beforeFogAppendBlock}
         if (this.effectSceneTracks.has("ssao")) { this.setEffectScenePreview("ssao", { ...this.captureCurrentEffectKeyframePayload("ssao").value, radius: v }); return; }
         this.postEffectSsaoRadiusValue = Math.max(0.01, Math.min(5, v));
         this.applySsaoSettings();
+    }
+
+    /** FrameGraph tone comparison; independent of the animated strength/radius. */
+    get postEffectSsaoToneMode(): SsaoToneMode {
+        return this.postEffectSsaoToneModeValue;
+    }
+    set postEffectSsaoToneMode(value: SsaoToneMode) {
+        this.postEffectSsaoToneModeValue = normalizeSsaoToneMode(value);
     }
 
     /** SSAO fade-out end distance in meters (4..200). */

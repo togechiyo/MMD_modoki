@@ -342,6 +342,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [SSAO 調査メモ（WebGPU）](./ssao-webgpu-investigation.md)
 - [SSAO 現行仕様（2026-03-07）](./ssao-current-spec.md)
 - [FrameGraph SSAO 調整メモ 2026-07-15](./ssao-framegraph-tuning-note-2026-07-15.md)
+- [FrameGraph SSAO 階調の新旧比較 2026-10-20](./ssao-tone-comparison-2026-10-20.md)
 - [LensRenderingPipeline 実装ガイド](./lens-rendering-pipeline-guide.md)
 - [Babylon Editor DoF 調査](./babylon-editor-dof-research.md)
 

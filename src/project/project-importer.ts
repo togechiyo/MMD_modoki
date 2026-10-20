@@ -17,6 +17,7 @@ import type {
     ProjectRingParticleState,
 } from "../types";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
+import { normalizeSsaoToneMode, type SsaoToneMode } from "../shared/ssao-tone-mode";
 import { createCameraAnimationFromTrack, deserializeCameraTrack, deserializeModelAnimation } from "./project-codec";
 import {
     addFrameGraphPostEffectId,
@@ -234,6 +235,7 @@ type ProjectImportHost = {
     postEffectSharpenEdge: number;
     postEffectSsaoStrength: number;
     postEffectSsaoRadius: number;
+    postEffectSsaoToneMode?: SsaoToneMode;
     postEffectSsaoFadeEnd: number;
     postEffectSsaoDebugView: boolean;
     postEffectSsaoEnabled: boolean;
@@ -1237,6 +1239,7 @@ export async function importProjectState(
     host.postEffectSsaoRadius = typeof data.effects.ssaoRadius === "number" && Number.isFinite(data.effects.ssaoRadius)
         ? data.effects.ssaoRadius
         : 3;
+    host.postEffectSsaoToneMode = normalizeSsaoToneMode(data.effects.ssaoToneMode);
     host.postEffectSsaoFadeEnd = typeof data.effects.ssaoFadeEnd === "number" && Number.isFinite(data.effects.ssaoFadeEnd)
         ? data.effects.ssaoFadeEnd
         : 200;

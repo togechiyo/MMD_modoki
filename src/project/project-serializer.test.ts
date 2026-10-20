@@ -300,6 +300,11 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it.each(["simple", "legacy"] as const)("saves the %s SSAO tone choice", mode => {
+        const project = exportProjectState({ ...createHost(), postEffectSsaoToneMode: mode });
+        expect(project.effects.ssaoToneMode).toBe(mode);
+    });
+
     it("saves experimental RC separately from the existing Glow controls", () => {
         const settings = { enabled: true, strength: 2.5, range: 4 };
         const project = exportProjectState({ ...createHost(), luminousRadianceSettings: settings });

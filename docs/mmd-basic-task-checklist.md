@@ -223,6 +223,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 所有者指定でエフェクトキーを次版から一時退避。標準のUI・キー再生をOFFにし、実装と保存済みキーを保管。通常のエフェクト調整と照明・影・重力キーは継続。開発用opt-inで再開可能（[休止・再開方法](./effect-timeline-shelving-2026-09-15.md)、2026-09-15）。
 - [ ] エフェクトキーの再開を次版の目標として、復帰対象・登録UI・保存済みキー・両backend・PNG / WebMの確認範囲を整理する（所有者追加指定2026-10-07、[次版候補](./v0.2.4-next-version-candidates.md#エフェクトキー再開の検討)。標準ONの時期・収録範囲は未決定）
 - [x] SSAO・SSGI・SSRのON / OFFと現行UIの6スライダーをキー化。初期OFF準備、半径/ステップ補間、保存・PNG/WebM・Classic往復でキー保持を確認。Frame Graphの対応は合計17種、残りは被写界深度・モーションブラー・パーティクル（[実装・検証](./screen-space-effects-timeline-2026-09-15.md)、2026-09-15）。
+- [x] FrameGraph SSAOの色合成を維持し、強度を線形化・濃いAOの追加乗算を省いた「シンプル」と「従来」の切替を追加。保存・旧project・GUI / PNG・backend往復を検証（[比較メモ](./ssao-tone-comparison-2026-10-20.md)、2026-10-20）。
 - [x] パラフレア・オフセット影・オフセットリムのON / OFFと現行UIの12スライダーをキー化。初期OFFの深度準備、補間・保存・数値入力同期・PNG/WebMを確認し、対応は合計14種（[実装・検証](./depth-effects-timeline-2026-09-14.md)、2026-09-14）。
 - [x] 空気遠近のON / OFF・強度・開始距離・広がりをキー化。初期OFFで深度を準備し、Frame Graphの補間・保存・PNG/WebM、Classic往復でキー保持を確認。対応は合計11種（[実装・次候補](./aerial-perspective-timeline-2026-09-14.md)、2026-09-14）。
 - [x] ブルームのカーネル幅、ルミナスのしきい値・半径もキーへ接続。再生中の再コンパイルを避け、両backendの補間・保存・PNG/WebMを確認。LUT選択は内蔵presetのstep切替と事前読込を後続設計（[実装・後続設計](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)、2026-09-14）。

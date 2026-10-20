@@ -1,4 +1,5 @@
 import type { FrameGraphPostEffectStackEntry } from "./shared/frame-graph-post-effect-stack";
+import type { SsaoToneMode } from "./shared/ssao-tone-mode";
 import type { EnvironmentLightingPresetId } from "./shared/environment-lighting-presets";
 import type { MmdMaterialPipelinePreset } from "./shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "./shared/mmd-render-order";
@@ -707,6 +708,7 @@ export interface ProjectEffectState {
     ssaoEnabled?: boolean;
     ssaoStrength?: number;
     ssaoRadius?: number;
+    ssaoToneMode?: SsaoToneMode;
     ssaoFadeEnd?: number;
     ssaoDebugView?: boolean;
     offsetShadowEnabled?: boolean;

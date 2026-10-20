@@ -16,6 +16,7 @@ import { FrameGraphSSAO2RenderingPipelineTask } from "@babylonjs/core/FrameGraph
 import { FrameGraphSSRRenderingPipelineTask } from "@babylonjs/core/FrameGraph/Tasks/PostProcesses/ssrRenderingPipelineTask";
 import { FrameGraphGeometryRendererTask } from "@babylonjs/core/FrameGraph/Tasks/Rendering/geometryRendererTask";
 import { withoutMmdOutlines } from "./mmd-outline-capture-guard";
+import { getSsaoTotalStrength, normalizeSsaoToneMode, type SsaoToneMode } from "../shared/ssao-tone-mode";
 import { FrameGraphClearTextureTask } from "@babylonjs/core/FrameGraph/Tasks/Texture/clearTextureTask";
 import { FrameGraphCopyToBackbufferColorTask } from "@babylonjs/core/FrameGraph/Tasks/Texture/copyToBackbufferColorTask";
 import { FrameGraphCopyToTextureTask } from "@babylonjs/core/FrameGraph/Tasks/Texture/copyToTextureTask";
@@ -233,6 +234,7 @@ export type FrameGraphPostEffectsSettings = {
     ssaoEnabled: boolean;
     ssaoStrength: number;
     ssaoRadius: number;
+    ssaoToneMode?: SsaoToneMode;
     ssaoShadowColor: { r: number; g: number; b: number };
     ssaoToonInfluence: number;
     offsetShadowEnabled: boolean;
@@ -1138,6 +1140,7 @@ function ensureSsaoToonCompositeShaders(): void {
             uniform sampler2D originalColor;
             uniform vec3 shadowColor;
             uniform float toonInfluence;
+            uniform float legacyTone;
             uniform float enabled;
 
             vec3 safeHue(vec3 color) {
@@ -1178,11 +1181,13 @@ function ensureSsaoToonCompositeShaders(): void {
                 vec3 shadowBand = mix(vec3(0.68), shadowHue * 0.66, 0.72);
                 vec3 toonBand = mix(shadowBand, materialToonBand, clamp(toonInfluence, 0.0, 1.0) * 0.55);
 
-                float deepAo = smoothstep(0.12, 0.46, ao) * (1.0 - brightNeutralProtect * 0.75);
                 vec3 tinted = original.rgb * mix(vec3(1.0), toonBand, vec3(clamp(ao * 1.12, 0.0, 1.0)));
                 vec3 result = mix(ssaoColor.rgb, tinted, clamp(0.82 + ao * 0.12 + brightNeutralProtect * 0.10, 0.0, 0.97));
-                vec3 selfMultiplied = tinted * mix(vec3(1.0), toonBand, vec3(clamp(deepAo * 0.95, 0.0, 1.0)));
-                result = mix(result, min(result, selfMultiplied), clamp(deepAo * 0.72, 0.0, 0.86));
+                if (legacyTone > 0.5) {
+                    float deepAo = smoothstep(0.12, 0.46, ao) * (1.0 - brightNeutralProtect * 0.75);
+                    vec3 selfMultiplied = tinted * mix(vec3(1.0), toonBand, vec3(clamp(deepAo * 0.95, 0.0, 1.0)));
+                    result = mix(result, min(result, selfMultiplied), clamp(deepAo * 0.72, 0.0, 0.86));
+                }
                 gl_FragColor = vec4(result, ssaoColor.a);
             }
         `;
@@ -1196,6 +1201,7 @@ function ensureSsaoToonCompositeShaders(): void {
             var originalColor: texture_2d<f32>;
             uniform shadowColor: vec3f;
             uniform toonInfluence: f32;
+            uniform legacyTone: f32;
             uniform enabled: f32;
 
             fn safeHue(color: vec3f) -> vec3f {
@@ -1238,12 +1244,14 @@ function ensureSsaoToonCompositeShaders(): void {
                 let shadowBand = mix(vec3f(0.68), shadowHue * 0.66, vec3f(0.72));
                 var toonBand = mix(shadowBand, materialToonBand, vec3f(clamp(uniforms.toonInfluence, 0.0, 1.0) * 0.55));
 
-                let deepAo = smoothstep(0.12, 0.46, protectedAo) * (1.0 - brightNeutralProtect * 0.75);
                 let tinted = original.rgb * mix(vec3f(1.0), toonBand, vec3f(clamp(protectedAo * 1.12, 0.0, 1.0)));
-                let result = mix(ssaoColor.rgb, tinted, vec3f(clamp(0.82 + protectedAo * 0.12 + brightNeutralProtect * 0.10, 0.0, 0.97)));
-                let selfMultiplied = tinted * mix(vec3f(1.0), toonBand, vec3f(clamp(deepAo * 0.95, 0.0, 1.0)));
-                let deepResult = mix(result, min(result, selfMultiplied), vec3f(clamp(deepAo * 0.72, 0.0, 0.86)));
-                fragmentOutputs.color = vec4f(deepResult, ssaoColor.a);
+                var result = mix(ssaoColor.rgb, tinted, vec3f(clamp(0.82 + protectedAo * 0.12 + brightNeutralProtect * 0.10, 0.0, 0.97)));
+                if (uniforms.legacyTone > 0.5) {
+                    let deepAo = smoothstep(0.12, 0.46, protectedAo) * (1.0 - brightNeutralProtect * 0.75);
+                    let selfMultiplied = tinted * mix(vec3f(1.0), toonBand, vec3f(clamp(deepAo * 0.95, 0.0, 1.0)));
+                    result = mix(result, min(result, selfMultiplied), vec3f(clamp(deepAo * 0.72, 0.0, 0.86)));
+                }
+                fragmentOutputs.color = vec4f(result, ssaoColor.a);
                 return fragmentOutputs;
             }
         `;
@@ -1754,6 +1762,7 @@ class FrameGraphPostEffectsSsaoToonCompositeTask extends FrameGraphPostProcessTa
                 const shadowColor = settings.ssaoShadowColor;
                 effect.setFloat3("shadowColor", shadowColor.r, shadowColor.g, shadowColor.b);
                 effect.setFloat("toonInfluence", settings.ssaoToonInfluence);
+                effect.setFloat("legacyTone", normalizeSsaoToneMode(settings.ssaoToneMode) === "legacy" ? 1 : 0);
                 effect.setFloat("enabled", isFrameGraphPostEffectActiveInSettings(settings, "ssao") ? 1 : 0);
                 if (this.originalTexture !== undefined) {
                     context.bindTextureHandle(effect, "originalColor", this.originalTexture);
@@ -2071,6 +2080,7 @@ export class FrameGraphPostEffectsController {
             ssaoEnabled: false,
             ssaoStrength: 0.5,
             ssaoRadius: 3,
+            ssaoToneMode: "simple",
             ssaoShadowColor: { r: 0.5, g: 0.5, b: 0.5 },
             ssaoToonInfluence: 1,
             offsetShadowEnabled: false,
@@ -2770,7 +2780,7 @@ export class FrameGraphPostEffectsController {
                     fragmentShader: "mmdFrameGraphSsaoToonComposite",
                     useShaderStore: true,
                     useAsPostProcess: true,
-                    uniforms: ["shadowColor", "toonInfluence", "enabled"],
+                    uniforms: ["shadowColor", "toonInfluence", "legacyTone", "enabled"],
                     samplers: ["originalColor"],
                     name: "mmdFrameGraphSsaoToonComposite",
                     shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
@@ -3882,7 +3892,7 @@ export class FrameGraphPostEffectsController {
         ssaoTask.ssao.bilateralSoften = 0.25;
         ssaoTask.ssao.bilateralTolerance = 0.15;
         ssaoTask.ssao.base = 0;
-        ssaoTask.ssao.totalStrength = Math.pow(Math.max(0, settings.ssaoStrength), 1.35) * 2.2;
+        ssaoTask.ssao.totalStrength = getSsaoTotalStrength(settings.ssaoStrength, normalizeSsaoToneMode(settings.ssaoToneMode));
         ssaoTask.ssao.radius = Math.max(0.01, settings.ssaoRadius);
         ssaoTask.ssao.maxZ = Math.max(50, Math.min(2000, camera.maxZ));
         ssaoTask.ssao.minZAspect = 0.2;

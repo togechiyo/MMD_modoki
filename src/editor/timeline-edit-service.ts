@@ -1479,7 +1479,7 @@ export function applyTimelineKeyframePayload(
         case "gravity":
             return host.applyGravitySceneKeyframePayload?.(normalized, payload) ?? false;
         case "effect":
-            return track.category === "effect" && track.name === payload.effectId
+            return track.category === "effect" && track.name === (payload.instanceId ?? payload.effectId)
                 ? host.applyEffectSceneKeyframePayload?.(track.name, normalized, payload) ?? false : false;
     }
 }

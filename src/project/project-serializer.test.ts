@@ -300,6 +300,13 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("uses project v2 only when authored effect instances are present", () => {
+        const block = { version: 1 as const, order: ["fx-a"], instances: [{ instanceId: "fx-a", type: "gamma" as const, label: "A", settings: { enabled: true, gamma: 2 }, animation: { version: 1, tracks: [] } }] };
+        const project = exportProjectState({ ...createHost(), getSerializedEffectInstances: () => block });
+        expect(project.version).toBe(2);
+        expect(project.effects.frameGraphInstances).toEqual(block);
+        expect(exportProjectState(createHost()).version).toBe(1);
+    });
     it("saves SSAO strength without an obsolete tone flag", () => {
         const project = exportProjectState({ ...createHost(), postEffectSsaoStrength: 0.75 });
         expect(project.effects.ssaoStrength).toBe(0.75);

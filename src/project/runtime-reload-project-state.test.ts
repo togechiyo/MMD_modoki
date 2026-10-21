@@ -28,4 +28,8 @@ describe("runtime reload project state", () => {
         expect(decodeRuntimeReloadProjectState("not json")).toBeNull();
         expect(decodeRuntimeReloadProjectState(JSON.stringify({ project: { format: "other", version: 1 } }))).toBeNull();
     });
+    it("keeps project v2 through a backend reload", () => {
+        const state = { project: { ...project, version: 2 as const }, projectFilePath: null, externalLut: { path: null, text: null }, externalWgslToon: { path: null, text: null } };
+        expect(decodeRuntimeReloadProjectState(encodeRuntimeReloadProjectState(state))).toEqual(state);
+    });
 });

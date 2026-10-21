@@ -280,6 +280,7 @@ type ProjectExportHost = {
     getPostEffectFogColor: () => { r: number; g: number; b: number };
     getRingParticleSettings?: () => ProjectRingParticleState;
     getFrameGraphPostEffectStackEntries?: () => FrameGraphPostEffectStackEntry[];
+    getSerializedEffectInstances?: () => import("../editor/frame-graph-effect-instances").SerializedEffectInstances | undefined;
     getFrameGraphPostEffectsEnabled?: () => boolean;
     getMmdRenderOrderMode?: () => MmdRenderOrderMode;
     getMmdCoplanarDepthBiasStrength?: () => number;
@@ -389,10 +390,11 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
         z: Number(serializedLightDirection?.z ?? 0),
     };
     const serializedCamera = host.getCameraProjectState?.();
+    const effectInstances = host.getSerializedEffectInstances?.();
 
     return {
         format: "mmd_modoki_project",
-        version: 1,
+        version: effectInstances ? 2 : 1,
         savedAt: new Date().toISOString(),
         scene: {
             materialMode: host.getMmdMaterialPipelinePreset?.() ?? models[0]?.materialPipeline ?? "mmd-standard",
@@ -639,6 +641,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
                 colorC: { r: 1, g: 1, b: 1 },
             },
             frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.(),
+            ...(effectInstances ? { frameGraphInstances: effectInstances } : {}),
             frameGraphPostEnabled: host.getFrameGraphPostEffectsEnabled?.() ?? true,
             gammaEncodingVersion: 2,
         },

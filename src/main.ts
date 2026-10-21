@@ -407,7 +407,7 @@ const sanitizeExportExternalLut = (
 const sanitizePngSequenceExportRequest = (request: PngSequenceExportRequest): PngSequenceExportRequest | null => {
   if (!request || typeof request !== 'object') return null;
   if (!request.project || typeof request.project !== 'object') return null;
-  if (request.project.format !== 'mmd_modoki_project' || request.project.version !== 1) return null;
+  if (request.project.format !== 'mmd_modoki_project' || (request.project.version !== 1 && request.project.version !== 2)) return null;
   if (!request.outputDirectoryPath || typeof request.outputDirectoryPath !== 'string') return null;
 
   const startFrame = Number.isFinite(request.startFrame) ? Math.max(0, Math.floor(request.startFrame)) : 0;
@@ -528,7 +528,7 @@ const sanitizeWebmInitialPhysicsState = (
 const sanitizeWebmExportRequest = (request: WebmExportRequest): WebmExportRequest | null => {
   if (!request || typeof request !== 'object') return null;
   if (!request.project || typeof request.project !== 'object') return null;
-  if (request.project.format !== 'mmd_modoki_project' || request.project.version !== 1) return null;
+  if (request.project.format !== 'mmd_modoki_project' || (request.project.version !== 1 && request.project.version !== 2)) return null;
   if (!request.outputFilePath || typeof request.outputFilePath !== 'string') return null;
 
   const startFrame = Number.isFinite(request.startFrame) ? Math.max(0, Math.floor(request.startFrame)) : 0;

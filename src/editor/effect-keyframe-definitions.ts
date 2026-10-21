@@ -23,7 +23,7 @@ export type EffectId = keyof EffectValueById;
 export type ScreenSpaceEffectValues = Pick<EffectValueById, "ssao" | "ssgi" | "ssr">;
 export type DepthEffectValues = Pick<EffectValueById, "directionalLightShafts" | "offsetShadow" | "offsetHighlight">;
 export type EffectKeyframePayload = {
-    [K in EffectId]: { kind: "effect"; effectId: K; value: EffectValueById[K] }
+    [K in EffectId]: { kind: "effect"; effectId: K; instanceId?: string; value: EffectValueById[K] }
 }[EffectId];
 export type EffectValue = { enabled: boolean; [field: string]: number | boolean };
 type Field = { kind: "step"; default: boolean } | { kind: "linear" | "log"; default: number; min: number; max: number };
@@ -169,6 +169,7 @@ function valueSchema(id: EffectId) {
 }
 export const effectKeyframePayloadSchema = z.object({
     kind: z.literal("effect"), effectId: z.enum(["ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
+    instanceId: z.string().regex(/^fx-[a-zA-Z0-9-]{1,190}$/).optional(),
 }).strict().superRefine((payload, context) => {
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });

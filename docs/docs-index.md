@@ -190,6 +190,7 @@
 - [エフェクト・DoF 対象のタイムラインキー化 事前検討 2026-08-25](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)
 - [エフェクト単位のタイムライン共通基盤：設計・見積もり 2026-09-14](./effect-timeline-common-foundation-design-2026-09-14.md)
 - [FrameGraphエフェクトの重ねがけ・タイムライン共同設計 2026-10-21](./framegraph-effect-instances-and-timeline-design-2026-10-21.md)
+- [FrameGraph Gammaの複数配置とタイムライン連携・第一段階の実装 2026-10-21](./framegraph-effect-instances-implementation-2026-10-21.md)
 - [ブルーム幅・ルミナス形状のキーとLUT選択の後続設計 2026-09-14](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)
 - [空気遠近のタイムラインキー 2026-09-14](./aerial-perspective-timeline-2026-09-14.md)
 - [エフェクトキー機能の一時休止 2026-09-15](./effect-timeline-shelving-2026-09-15.md)

@@ -5,7 +5,8 @@ type SliderControl = { mapping: EffectSlider; input: HTMLInputElement; output: H
 
 /** Builds controls on effect changes; readout updates preserve focus. */
 export class EffectKeyframeController {
-    private id: EffectId | null = null;
+    private id: string | null = null;
+    private effectType: EffectId | null = null;
     private current: EffectValue = { enabled: false };
     private readonly enabled: HTMLInputElement;
     private readonly parameters: HTMLElement;
@@ -14,7 +15,7 @@ export class EffectKeyframeController {
     private readonly scope: HTMLElement;
     private controls: SliderControl[] = [];
 
-    constructor(private readonly root: HTMLElement, private readonly preview: (id: EffectId, value: EffectValue) => void) {
+    constructor(private readonly root: HTMLElement, private readonly preview: (id: string, value: EffectValue) => void) {
         const enabled = root.querySelector<HTMLInputElement>("#effect-key-enabled");
         const parameters = root.querySelector<HTMLElement>("#effect-key-parameters");
         const label = root.querySelector<HTMLElement>("[data-effect-key-label]");
@@ -51,13 +52,14 @@ export class EffectKeyframeController {
         });
     }
 
-    refresh(payload: EffectKeyframePayload | null, playing: boolean, suspended: boolean): void {
+    refresh(payload: EffectKeyframePayload | null, playing: boolean, suspended: boolean, displayName?: string, stateMessage?: string): void {
         this.root.hidden = payload === null;
         if (!payload) { this.id = null; return; }
-        if (this.id !== payload.effectId) this.buildControls(payload.effectId);
-        this.id = payload.effectId;
+        if (this.effectType !== payload.effectId) this.buildControls(payload.effectId);
+        this.effectType = payload.effectId;
+        this.id = payload.instanceId ?? payload.effectId;
         this.current = payload.value;
-        const name = t(`effect.frameGraphPost.effects.${payload.effectId}`);
+        const name = displayName ?? t(`effect.frameGraphPost.effects.${payload.effectId}`);
         this.label.textContent = name;
         this.enabled.disabled = playing;
         this.enabled.checked = payload.value.enabled;
@@ -69,7 +71,7 @@ export class EffectKeyframeController {
             if (input.value !== position) input.value = position;
             output.value = `${position}%`;
         }
-        this.state.textContent = suspended ? t("timeline.effectSuspended") : "";
+        this.state.textContent = stateMessage ?? (suspended ? t("timeline.effectSuspended") : "");
         const scopeKey = getEffectDefinition(payload.effectId).fixedSettingsLabelKey;
         this.scope.textContent = scopeKey ? t(scopeKey) : payload.effectId === "bloom" ? t("timeline.bloomFixedSettings") : "";
     }

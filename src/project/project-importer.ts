@@ -1,4 +1,5 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
+import { FrameGraphEffectInstances } from "../editor/frame-graph-effect-instances";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
 import { normalizeEnvironmentLightingPreset, type EnvironmentLightingPresetId } from "../shared/environment-lighting-presets";
 import type {
@@ -317,6 +318,7 @@ type ProjectImportHost = {
     setPostEffectFogColor(r: number, g: number, b: number): void;
     setFrameGraphPostEffectStackIds?: (ids: readonly FrameGraphPostEffectId[]) => void;
     setFrameGraphPostEffectStackEntries?: (entries: readonly FrameGraphPostEffectStackEntry[]) => void;
+    setSerializedEffectInstances?: (state: unknown) => void;
     setFrameGraphPostEffectsEnabled?: (enabled: boolean) => void;
     refreshTotalFramesFromContent(): void;
     setRenderFpsLimit(value: number): void;
@@ -356,7 +358,7 @@ function isProjectFileV1(value: unknown): value is MmdModokiProjectFileV1 {
     return !!value
         && typeof value === "object"
         && (value as MmdModokiProjectFileV1).format === "mmd_modoki_project"
-        && (value as MmdModokiProjectFileV1).version === 1;
+        && ((value as MmdModokiProjectFileV1).version === 1 || (value as MmdModokiProjectFileV1).version === 2);
 }
 
 function finalizeImportedRenderState(
@@ -424,6 +426,8 @@ export async function importProjectState(
     if (!isProjectFileV1(data)) {
         throw new Error("Invalid project file format or version");
     }
+    // Validate the new block before loading models or replacing any current scene state.
+    new FrameGraphEffectInstances().restore(data.effects?.frameGraphInstances);
 
     const warnings: string[] = [];
     const projectMaterialMode = resolveProjectMaterialMode(data.scene);
@@ -1546,6 +1550,7 @@ export async function importProjectState(
     }
 
     host.setSerializedEffectSceneTracks?.(data.keyframes?.effectAnimations);
+    host.setSerializedEffectInstances?.(data.effects.frameGraphInstances);
     host.refreshTotalFramesFromContent();
     host.setFrameGraphPostEffectsEnabled?.(data.effects.frameGraphPostEnabled !== false);
     host.setRenderFpsLimit(host.renderFpsLimit);

@@ -475,6 +475,7 @@ export type TimelineTarget = "model" | "camera" | "accessory";
 
 /** A single row in the keyframe timeline */
 export interface KeyframeTrack {
+    effectInstance?: { type: "gamma"; label: string; suspended: boolean };
     /** Bone or morph name */
     name: string;
     /** Row ordering category */
@@ -788,6 +789,7 @@ export interface ProjectEffectState {
     fogColor?: ProjectRgbColor;
     ringParticles?: ProjectRingParticleState;
     frameGraphPostStack?: FrameGraphPostEffectStackEntry[];
+    frameGraphInstances?: import("./editor/frame-graph-effect-instances").SerializedEffectInstances;
     frameGraphPostEnabled?: boolean;
     gammaEncodingVersion?: 2;
 }
@@ -959,10 +961,10 @@ export interface ProjectKeyframeBundle {
     effectAnimations?: import("./editor/effect-scene-track-store").SerializedEffectAnimations | null;
 }
 
-export interface MmdModokiProjectFileV1 {
+export interface MmdModokiProjectFile {
     externalEffects?: Array<import("./external-wgsl/contract").EffectAsset | import("./external-wgsl/contract").EffectAssetReference>;
     format: "mmd_modoki_project";
-    version: 1;
+    version: 1 | 2;
     savedAt: string;
     scene: {
         materialMode?: MmdMaterialPipelinePreset;
@@ -989,6 +991,9 @@ export interface MmdModokiProjectFileV1 {
     accessories?: ProjectAccessoryState[];
     keyframes?: ProjectKeyframeBundle;
 }
+
+/** Historical source alias; both supported project versions use the common DTO. */
+export type MmdModokiProjectFileV1 = MmdModokiProjectFile;
 
 export interface PngSequenceExportRequest {
     project: MmdModokiProjectFileV1;

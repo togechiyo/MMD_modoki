@@ -271,10 +271,11 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             }
             if (input.kind === "tracks") {
                 const all = timeline.getKeyframeTracks();
-                return { data: { items: all.slice(input.offset, input.offset + input.limit).map(({ category, name, frames }) => {
+                return { data: { items: all.slice(input.offset, input.offset + input.limit).map(({ category, name, frames, effectInstance }) => {
                     const bone = ["root", "semi-standard", "bone"].includes(category);
                     const movable = manager.getActiveModelInfo()?.boneControlInfos?.find(control => control.name === name)?.movable ?? category === "root";
                     return { category, name, keyCount: frames.length, payloadKind: bone ? (movable ? "movableBone" : "bone") : category,
+                        ...(effectInstance ? { effectType: effectInstance.type, displayName: effectInstance.label, suspended: effectInstance.suspended } : {}),
                         ...(category === "property" ? { ikStates: manager.getActiveModelIkStates() } : {}) };
                 }), editRevision: revision, scope: ui.getAutomationTimelineScope(), nextOffset: input.offset + input.limit < all.length ? input.offset + input.limit : null } };
             }

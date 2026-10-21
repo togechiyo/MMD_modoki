@@ -257,6 +257,9 @@ export function canExecuteEditorAction(
         case "effect.applyLut":
         case "effect.chooseExternalLut":
             return true;
+        case "effect.instanceEdit":
+        case "effect.instanceValue":
+            return true;
         case "project.dropFiles":
             return action.filePaths.length > 0;
         case "selection.cycleActiveModel":

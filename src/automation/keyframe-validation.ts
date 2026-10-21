@@ -13,6 +13,8 @@ export function validateAutomationKeyframes(manager: MmdManager, timeline: Timel
         if (!payload) continue;
         const boneCategory = ["root", "semi-standard", "bone"].includes(item.track.category);
         if (!boneCategory && item.track.category !== payload.kind) throw new AutomationError("KEY_KIND_MISMATCH");
+        if (payload.kind === "effect" && (item.track.name !== (payload.instanceId ?? payload.effectId)
+            || (payload.instanceId && (!manager.isEffectInstance(payload.instanceId) || payload.effectId !== "gamma")))) throw new AutomationError("KEY_KIND_MISMATCH");
         if (boneCategory) {
             if (diff.owner.kind !== "model" || (payload.kind !== "bone" && payload.kind !== "movableBone")) throw new AutomationError("KEY_KIND_MISMATCH");
             const info = manager.getActiveModelInfo();

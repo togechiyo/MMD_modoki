@@ -102,7 +102,7 @@ const CAT = {
     morph: { bg: "rgba(251,191,36,0.07)", kf: "#fbbf24", text: "#fcd34d", bar: "" },
 } as const;
 
-export function getTimelineTrackDisplayName(track: Pick<KeyframeTrack, "name" | "category">): string {
+export function getTimelineTrackDisplayName(track: Pick<KeyframeTrack, "name" | "category" | "effectInstance">): string {
     switch (track.category) {
         case "camera":
             return t("toolbar.mode.camera");
@@ -115,6 +115,7 @@ export function getTimelineTrackDisplayName(track: Pick<KeyframeTrack, "name" | 
         case "gravity":
             return t("section.gravity");
         case "effect":
+            if (track.effectInstance) return track.effectInstance.label;
             return t(`effect.frameGraphPost.effects.${track.name}`);
         case "property":
             return "表示・IK";

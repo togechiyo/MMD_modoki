@@ -151,6 +151,10 @@ import { canReuseProjectWindow, classifyProjectDrop, projectDropSnapshot } from 
 
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { EffectKeyframeController } from "./ui/effect-keyframe-controller";
+import { FrameGraphInstanceController } from "./ui/frame-graph-instance-controller";
+import { editEffectInstances, type EffectInstanceOperation } from "./editor/effect-instance-operations";
+import { FrameGraphEffectInstances } from "./editor/frame-graph-effect-instances";
+import { buildEffectInstanceDiff } from "./actions/effect-instance-command";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
 
 type SectionKeyframeButtonState = "none" | "dirty" | "registered";
@@ -583,6 +587,7 @@ export class UIController {
     private colorPostFxController: ColorPostFxController | null = null;
     private refreshLensEffectKeyframeUi: (() => void) | null = null;
     private effectKeyframeController: EffectKeyframeController | null = null;
+    private frameGraphInstanceController: FrameGraphInstanceController | null = null;
     private dofPanelController: DofPanelController | null = null;
     private effectPanelShellController: EffectPanelShellController | null = null;
     private experimentalPostFxController: ExperimentalPostFxController | null = null;
@@ -665,7 +670,7 @@ export class UIController {
         });
         this.modelCommentNoticeController = new ModelCommentNoticeController();
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
-        if (EFFECT_TIMELINE_ENABLED) this.effectKeyframeController = new EffectKeyframeController(getRequiredElement("effect-key-controls"), (id, value) => {
+        this.effectKeyframeController = new EffectKeyframeController(getRequiredElement("effect-key-controls"), (id, value) => {
             const first = !this.mmdManager.hasEffectSceneTrack(id);
             this.mmdManager.setEffectScenePreview(id, value);
             if (first) this.refreshFrameGraphPostAddUi();
@@ -1277,8 +1282,8 @@ export class UIController {
         });
 
         this.timeline.onSelectionChanged = (track) => {
-            if (track?.category === "effect" && isEffectId(track.name)) {
-                this.expandedFrameGraphPostEffectId = track.name;
+            if (track?.category === "effect" && (isEffectId(track.name) || this.mmdManager.isEffectInstance(track.name))) {
+                this.expandedFrameGraphPostEffectId = isEffectId(track.name) ? track.name : null;
                 this.effectPanelShellController?.setActiveTab("post");
                 this.refreshFrameGraphPostAddUi();
             }
@@ -2873,6 +2878,12 @@ export class UIController {
         this.actionDispatcher.register("effect.setGammaOffset", (action) => {
             this.colorPostFxController?.setGammaOffsetPercent(action.offsetPercent);
         });
+        this.actionDispatcher.register("effect.instanceEdit", action => this.editFrameGraphInstance(action.operation));
+        this.actionDispatcher.register("effect.instanceValue", action => {
+            this.mmdManager.setEffectInstanceValue(action.instanceId, action.value);
+            this.frameGraphInstanceController?.refresh();
+            this.refreshEffectKeyframeUi();
+        });
         this.actionDispatcher.register("effect.setExposure", (action) => {
             this.colorPostFxController?.setExposure(action.value);
         });
@@ -3648,7 +3659,7 @@ export class UIController {
 
             if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new AutomationError("INVALID_PROJECT");
             const parsedProject = parsed as Partial<MmdModokiProjectFileV1>;
-            if (parsedProject.format !== "mmd_modoki_project" || parsedProject.version !== 1
+            if (parsedProject.format !== "mmd_modoki_project" || (parsedProject.version !== 1 && parsedProject.version !== 2)
                 || !Array.isArray(parsedProject.scene?.models)) throw new AutomationError("INVALID_PROJECT");
             if (permission) await assertAutomationPermission(permission);
             const requestedLutMode = parsedProject.effects?.lutSourceMode;
@@ -4632,6 +4643,7 @@ export class UIController {
                 }
 
                 slider.dispatchEvent(new Event("input", { bubbles: true }));
+                if (slider.dataset.instanceField === "gamma") slider.dispatchEvent(new Event("change", { bubbles: true }));
                 this.syncRangeNumberInput(slider);
             };
 
@@ -5199,6 +5211,14 @@ export class UIController {
     }
 
     private setupPostEffectAddControls(): void {
+        if (this.postEffectStackList) this.frameGraphInstanceController = new FrameGraphInstanceController(this.postEffectStackList, this.mmdManager,
+            operation => { this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation }); },
+            (instanceId, value) => { this.actionDispatcher.dispatch({ type: "effect.instanceValue", source: "panel", instanceId, value }); },
+            id => { this.mmdManager.setTimelineTarget("camera"); this.timeline.selectTrackByNameAndCategory(id, ["effect"]); },
+            before => {
+                const diff = buildEffectInstanceDiff(before, this.mmdManager.getEffectInstanceState());
+                if (diff) this.commandHistory.push({ id: crypto.randomUUID(), label: "Effect value", scope: "effect", createdAtMs: Date.now(), diff });
+            }, slider => this.syncRangeNumberInput(slider));
         document.getElementById("btn-effect-toggle-framegraph")?.addEventListener("click", () => {
             if (this.getConfiguredPostEffectBackend() !== "frameGraph") return;
             this.mmdManager.setFrameGraphPostEffectsEnabled(
@@ -5475,6 +5495,17 @@ export class UIController {
         }
     }
 
+    private editFrameGraphInstance(operation: EffectInstanceOperation): void {
+        if (this.mmdManager.isPlaying || this.getConfiguredPostEffectBackend() !== "frameGraph") return;
+        const before = this.mmdManager.getEffectInstanceState(), next = new FrameGraphEffectInstances();
+        try { next.restore(before); editEffectInstances(next, operation); }
+        catch (error) { this.showToast(error instanceof Error ? error.message : "Effect edit failed", "error"); return; }
+        const diff = buildEffectInstanceDiff(before, next.serialize());
+        if (!diff) return;
+        const command: BuiltCommand = { id: crypto.randomUUID(), label: `Effect: ${operation.action}`, scope: "effect", createdAtMs: Date.now(), diff };
+        if (executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) this.commandHistory.push(command);
+    }
+
     private addFrameGraphPostEffect(effectId: FrameGraphPostAddEffectId): void {
         if (this.getConfiguredPostEffectBackend() !== "frameGraph") {
             this.showToast(t("effect.frameGraphPost.backendRequired"), "info");
@@ -5482,6 +5513,10 @@ export class UIController {
             return;
         }
 
+        if (effectId === "gamma" && !EFFECT_TIMELINE_ENABLED) {
+            this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation: { action: "add" } });
+            return;
+        }
         const wasActive = this.mmdManager.isFrameGraphPostEffectActive(effectId);
         const previousStackIds = [...this.mmdManager.getFrameGraphPostEffectStackIds()];
         if (!isEffectId(effectId) || !this.mmdManager.hasEffectSceneTrack(effectId)) {
@@ -5651,7 +5686,7 @@ export class UIController {
             const effectId = button.dataset.effectAddPost ?? "";
             const known = this.isFrameGraphPostAddEffectId(effectId);
             button.hidden = known && HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS.has(effectId);
-            button.disabled = !frameGraphReady || (known && this.isFrameGraphPostEffectInStack(effectId));
+            button.disabled = !frameGraphReady || (known && effectId !== "gamma" && this.isFrameGraphPostEffectInStack(effectId));
         });
 
         this.renderFrameGraphPostStack(frameGraphReady);
@@ -6835,7 +6870,8 @@ export class UIController {
             return;
         }
 
-        if (stackEffects.length === 0) {
+        const instanceState = this.mmdManager.getEffectInstanceState();
+        if (stackEffects.length === 0 && instanceState.instances.length === 0) {
             this.expandedFrameGraphPostEffectId = null;
             this.postEffectStackList.innerHTML = `<div class="panel-empty-state">${this.escapeEffectStackHtml(t("effect.frameGraphPost.empty"))}</div>`;
             return;
@@ -6845,22 +6881,23 @@ export class UIController {
             this.expandedFrameGraphPostEffectId = null;
         }
 
-        this.postEffectStackList.innerHTML = stackEffects.map((effect) => {
+        const legacyRows = new Map<FrameGraphPostEffectId, string>(stackEffects.map((effect): [FrameGraphPostEffectId, string] => {
+            const rowId: string = effect.id;
             const expanded = effect.id === this.expandedFrameGraphPostEffectId;
             const enabled = effect.isActive(this.mmdManager);
             const effectLabel = this.escapeEffectStackHtml(t(effect.labelKey));
             const toggleTitle = this.escapeEffectStackHtml(t("effect.frameGraphPost.toggleVisibility"));
             const dragTitle = this.escapeEffectStackHtml(t("effect.frameGraphPost.dragToReorder"));
-            return `
-                <div class="effect-layer-placeholder effect-layer-placeholder--active effect-layer-placeholder--check${enabled ? "" : " effect-layer-placeholder--off"}" data-effect-stack-row="${effect.id}">
+            return [effect.id, `
+                <div class="effect-layer-placeholder effect-layer-placeholder--active effect-layer-placeholder--check${enabled ? "" : " effect-layer-placeholder--off"}" data-effect-stack-row="${rowId}">
                     <div class="effect-layer-header">
                         <label class="effect-layer-check-wrap" title="${toggleTitle}">
-                            <input class="effect-layer-check" type="checkbox" data-effect-stack-toggle="${effect.id}"${enabled ? " checked" : ""}>
+                            <input class="effect-layer-check" type="checkbox" data-effect-stack-toggle="${rowId}"${enabled ? " checked" : ""}>
                         </label>
-                        <button class="effect-layer-main" type="button" data-effect-stack-item="${effect.id}" aria-expanded="${expanded ? "true" : "false"}">
+                        <button class="effect-layer-main" type="button" data-effect-stack-item="${rowId}" aria-expanded="${expanded ? "true" : "false"}">
                             <span class="effect-layer-name">${effectLabel}</span>
                         </button>
-                        <button class="effect-layer-drag-handle" type="button" draggable="true" data-effect-stack-drag="${effect.id}" title="${dragTitle}" aria-label="${dragTitle}">
+                        <button class="effect-layer-drag-handle" type="button" draggable="true" data-effect-stack-drag="${rowId}" title="${dragTitle}" aria-label="${dragTitle}">
                             <span class="effect-layer-drag-grip" aria-hidden="true"></span>
                         </button>
                     </div>
@@ -6870,8 +6907,11 @@ export class UIController {
                         </div>
                     ` : ""}
                 </div>
-            `;
-        }).join("");
+            `] as const;
+        }));
+        this.postEffectStackList.innerHTML = [...instanceState.order].reverse().map(id => this.mmdManager.isEffectInstance(id)
+            ? this.frameGraphInstanceController?.render(id, true) ?? "" : legacyRows.get(id as FrameGraphPostEffectId) ?? "").join("")
+            + instanceState.instances.filter(item => !instanceState.order.includes(item.instanceId)).map(item => this.frameGraphInstanceController?.render(item.instanceId, false) ?? "").join("");
     }
 
     private installPostEffectBackendControls(root: HTMLElement): void {
@@ -7974,6 +8014,11 @@ export class UIController {
             this.refreshRuntimeAnimationForTrack();
         };
         return {
+            applyEffectInstances: (diff, direction) => {
+                const applied = this.mmdManager.applyEffectInstanceDiff(diff, direction);
+                if (applied) { this.refreshFrameGraphPostAddUi(); this.updateTimelineEditState(); }
+                return applied;
+            },
             applyObjectState: (diff, direction) => this.executeObjectStateCommand(diff, direction),
             applyExternalWgsl: (changes, direction) => this.mmdManager.restoreExternalWgsl(changes, direction),
             applyBonePoseBatch: (diff, direction) => this.executeBonePoseBatchCommand(diff, direction),
@@ -8307,11 +8352,15 @@ export class UIController {
     }
 
     private refreshEffectKeyframeUi(): void {
-        if (!EFFECT_TIMELINE_ENABLED) return;
         const track = this.getSelectedTimelineTrack();
-        const id = track?.category === "effect" && isEffectId(track.name) ? track.name : null;
+        const id = track?.category === "effect" && (this.mmdManager.isEffectInstance(track.name) || (EFFECT_TIMELINE_ENABLED && isEffectId(track.name))) ? track.name : null;
         const payload = id ? this.mmdManager.captureCurrentEffectKeyframePayload(id) : null;
-        this.effectKeyframeController?.refresh(payload, this.mmdManager.isPlaying, id ? this.mmdManager.isEffectTrackSuspended(id) : false);
+        const instanceUnsupported = id && this.mmdManager.isEffectInstance(id) && this.getConfiguredPostEffectBackend() !== "frameGraph";
+        this.effectKeyframeController?.refresh(payload, this.mmdManager.isPlaying || Boolean(instanceUnsupported), id ? this.mmdManager.isEffectTrackSuspended(id) : false,
+            track?.effectInstance?.label, instanceUnsupported ? t("effect.frameGraphPost.backendRequired") : undefined);
+        this.frameGraphInstanceController?.refresh();
+        if (id) this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying || Boolean(instanceUnsupported);
+        if (!EFFECT_TIMELINE_ENABLED) return;
         this.colorPostFxController?.refreshGammaUi();
         this.colorPostFxController?.refreshGrainUi();
         this.bloomToneMapController?.refreshBloomUi();
@@ -8412,7 +8461,7 @@ export class UIController {
         } else {
             this.updateInterpolationPreview(track, interpolationFrame);
         }
-        this.btnKeyframeAdd.disabled = track.category === "effect" && this.mmdManager.isPlaying;
+        this.btnKeyframeAdd.disabled = track.category === "effect" && (this.mmdManager.isPlaying || (this.mmdManager.isEffectInstance(track.name) && this.getConfiguredPostEffectBackend() !== "frameGraph"));
 
         const hasCurrentFrameKey = this.mmdManager.hasTimelineKeyframe(track, currentFrame);
         const canDelete = selectedFrame !== null || hasCurrentFrameKey;
@@ -10695,7 +10744,7 @@ export class UIController {
     private registerEffectKeyframeAtCurrentFrame(): void {
         if (this.mmdManager.isPlaying) return;
         const track = this.getSelectedTimelineTrack();
-        if (track?.category !== "effect" || !isEffectId(track.name)) return;
+        if (track?.category !== "effect" || (!isEffectId(track.name) && !this.mmdManager.isEffectInstance(track.name))) return;
         const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentEffectKeyframePayload(track.name);
@@ -11950,6 +11999,10 @@ export class UIController {
         const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
         const before = this.mmdManager.readTimelineKeyframePayload(target.track, frame);
         const after = this.cloneKeyframePayload(clipboard.payload);
+        if (after.kind === "effect") {
+            if (this.mmdManager.isEffectInstance(target.track.name)) after.instanceId = target.track.name;
+            else delete after.instanceId;
+        }
         const nowMs = Date.now();
         const command: BuiltCommand = {
             id: `keyframe.paste:${createCommandTrackKey(target.track)}:${frame}:${nowMs}`,
@@ -12138,7 +12191,7 @@ export class UIController {
             case "gravity":
                 return track.category === "gravity";
             case "effect":
-                return track.category === "effect" && track.name === payload.effectId;
+                return track.category === "effect" && (this.mmdManager.isEffectInstance(track.name) ? payload.effectId === "gamma" : track.name === payload.effectId);
             case "morph":
                 return track.category === "morph";
             case "property":

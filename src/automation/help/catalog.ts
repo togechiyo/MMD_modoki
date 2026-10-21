@@ -10,6 +10,11 @@ export type AutomationHelpTopic = {
 // Only bundled, trusted documentation belongs here. Asset names and paths are data.
 export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
+        id: "effect-instances", title: "FrameGraphのGamma個体キー", aliases: ["effect", "gamma", "instance", "エフェクト", "重ねがけ"],
+        status: "partial", summary: "Gammaは個体ごとにキーを持つ。tracks一覧の個体IDを参照する。",
+        body: "GUIで追加したGamma個体はcamera scopeのeffect行へ表示される。tracks一覧のnameが固定の個体IDで、effectType:gamma、displayName、suspendedも返す。nameをGammaや翻訳表示名へ置換しない。key payloadは{kind:effect,effectId:gamma,instanceId:name,value:{enabled,gamma}}。既存のキー登録・set/delete/move/copyと共有Undoを使い、instanceIdとtrack.nameの一致を保つ。GUIの単一キー個体間貼付けだけは同種を確認して対象IDへ付け替える。一括貼付けは元の個体IDを保持する。検索names/nameContainsは内部nameが対象で、表示名検索ではない。個体追加・複製・名称変更・並べ替え・休止/復帰・完全削除は現在GUIから行う。Classicでは個体データを保持し、新Gammaの描画・キー編集はFrameGraphへ戻して行う。旧17種のキーは引き続き標準OFFであり、全効果の多重化・公開ではない。個体を含む保存はproject version 2。",
+    },
+    {
         id: "context-summary", title: "編集前の状態を軽く取得", aliases: ["context", "summary", "full", "状態", "要約", "revision"],
         status: "implemented", summary: "mmd_get_context(detail:summary)は編集条件と件数だけ。モデル名・カメラはfullで取得。",
         body: "最初にmmd_get_contextでwindow/targetやモデル一覧を確認する。既定detail:fullは従来と同じ。編集直前や状態確認にはtargetとdetail:summaryを指定し、最新target/editRevision/assetRevision、frame/playing/busy、許可・編集阻害理由・ユーザー確認待ちを含むstatus、timelineTarget/timelineScope、undoId/redoId、modelCount/assetCountを取得する。camera/models/backend/materialModeは含めない。summaryのmodelCountからモデルIDを推測せず、必要ならfullでmodelsを確認する。カメラ編集値や描画経路の確認もfullを使う。summaryはその時点の観測でありキャッシュや未変更判定ではない。再生frameや権限はeditRevisionを変えずに変わる場合があるためrevisionだけで再取得を省略しない。複数window時のtarget選択、古いsessionの拒否、編集のrevision照合はfullと同じ。summaryだけを取得しても編集許可は増えない。",

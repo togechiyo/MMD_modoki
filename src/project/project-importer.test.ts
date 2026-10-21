@@ -203,6 +203,18 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores v2 effect instances and validates unsupported blocks before touching the scene", async () => {
+        const setSerializedEffectInstances = vi.fn();
+        const host = { ...createHost(), setSerializedEffectInstances };
+        const importHost = host as unknown as Parameters<typeof importProjectState>[0];
+        const block = { version: 1 as const, order: ["fx-a"], instances: [{ instanceId: "fx-a", type: "gamma" as const, label: "A", settings: { enabled: true, gamma: 2 }, animation: { version: 1, tracks: [] } }] };
+        const project = createProject({ version: 2 }); project.effects.frameGraphInstances = block;
+        await importProjectState(importHost, project);
+        expect(setSerializedEffectInstances).toHaveBeenCalledWith(block);
+        host.setFrameGraphPostEffectStackEntries.mockClear();
+        await expect(importProjectState(importHost, { ...project, effects: { ...project.effects, frameGraphInstances: { ...block, version: 99 } } })).rejects.toThrow("Unsupported effect instance format");
+        expect(host.setFrameGraphPostEffectStackEntries).not.toHaveBeenCalled();
+    });
     it.each([undefined, "simple", "legacy", "invalid"])("ignores obsolete SSAO tone flags (%s) and keeps saved strength", async mode => {
         const host = { ...createHost(), postEffectSsaoStrength: 0.5 };
         const project = createProject();

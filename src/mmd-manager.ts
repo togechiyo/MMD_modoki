@@ -517,6 +517,9 @@ import {
     type SerializedShadowSceneTrack,
 } from "./editor/scene-keyframe-track";
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
+import { FrameGraphEffectInstances, type SerializedEffectInstances } from "./editor/frame-graph-effect-instances";
+import { EffectInstanceRuntimeDuration } from "./editor/effect-instance-runtime-duration";
+import { applyEffectInstanceDiff, type EffectInstanceDiff } from "./actions/effect-instance-command";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue, type DepthEffectValues, type ScreenSpaceEffectValues } from "./editor/effect-keyframe-definitions";
 import { applyClassicKeyframedBloomBlur } from "./render/keyframed-bloom-blur";
@@ -1993,6 +1996,8 @@ ${beforeFogAppendBlock}
     private lastEvaluatedGravitySceneFrame: number | null = null;
     public onEffectKeyframePreviewChanged: (() => void) | null = null;
     private readonly effectSceneTracks = new EffectSceneTrackStore(EFFECT_TIMELINE_ENABLED);
+    private readonly effectInstances = new FrameGraphEffectInstances();
+    private readonly effectInstanceRuntimeDuration = new EffectInstanceRuntimeDuration();
     private effectCaptureDepth = 0;
     private readonly effectPlaybackPreparation = new EffectPlaybackPreparation();
     private effectRenderState = { gammaPower: 1, grainIntensity: 0, grainPrepared: false, bloomWeight: 1, bloomThreshold: 1 };
@@ -6528,13 +6533,15 @@ ${beforeFogAppendBlock}
     }
 
     public getEffectSceneKeyframeFrames(id?: string): Uint32Array {
+        if (id && this.effectInstances.has(id)) return this.effectInstances.frames(id);
         if (id !== undefined) return isEffectId(id) ? this.effectSceneTracks.frames(id) : new Uint32Array();
-        return new Uint32Array([...new Set(this.effectSceneTracks.ids().flatMap(effect => [...this.effectSceneTracks.frames(effect)]))].sort((a, b) => a - b));
+        return new Uint32Array([...new Set([...this.effectSceneTracks.ids().flatMap(effect => [...this.effectSceneTracks.frames(effect)]), ...this.effectInstances.ids().flatMap(effect => [...this.effectInstances.frames(effect)])])].sort((a, b) => a - b));
     }
     public getEffectTimelineTracks(): KeyframeTrack[] {
-        if (!EFFECT_TIMELINE_ENABLED) return [];
-        return EFFECT_KEYFRAME_DEFINITIONS
-            .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
+        const legacy = EFFECT_TIMELINE_ENABLED ? EFFECT_KEYFRAME_DEFINITIONS
+            .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) })) : [];
+        const ids = [...this.effectInstances.order().filter(id => this.effectInstances.has(id)), ...this.effectInstances.ids().filter(id => !this.effectInstances.present(id))];
+        return [...legacy, ...ids.map(id => ({ name: id, category: "effect" as const, frames: this.effectInstances.frames(id), effectInstance: { type: "gamma" as const, label: this.effectInstances.label(id), suspended: !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph" } }))];
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
         if (id === "ssao" || id === "ssgi" || id === "ssr") {
@@ -6558,14 +6565,23 @@ ${beforeFogAppendBlock}
         return id === "gamma" ? { enabled, gamma: this.postEffectGammaValue } : { enabled, intensity: this.postEffectGrainIntensityValue };
     }
     public captureCurrentEffectKeyframePayload(id: string): EffectKeyframePayload {
+        if (this.effectInstances.has(id)) return this.effectInstances.capture(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
         if (!isEffectId(id)) throw new Error(`Unsupported effect key: ${id}`);
         return makeEffectPayload(id, this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying) ?? this.getStaticEffectValue(id));
     }
-    public hasEffectSceneTrack(id: EffectId): boolean { return this.effectSceneTracks.has(id); }
+    public hasEffectSceneTrack(id: string): boolean { return this.effectInstances.has(id) ? this.effectInstances.hasTrack(id) : isEffectId(id) && this.effectSceneTracks.has(id); }
     public isEffectTrackSuspended(id: string): boolean {
+        if (this.effectInstances.has(id)) return !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph";
         return isEffectId(id) && this.effectSceneTracks.has(id) && !this.getFrameGraphPostEffectStackIds().includes(id);
     }
-    public setEffectScenePreview(id: EffectId, value: unknown): void {
+    public setEffectScenePreview(id: string, value: unknown): void {
+        if (this.effectInstances.has(id)) {
+            if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
+            this.effectInstances.setValue(id, value as EffectValue, this._currentFrame, true);
+            this.onEffectKeyframePreviewChanged?.();
+            return;
+        }
+        if (!isEffectId(id)) return;
         if (!EFFECT_TIMELINE_ENABLED) return;
         if (this.isPlaying) return;
         const first = !this.effectSceneTracks.has(id);
@@ -6576,14 +6592,22 @@ ${beforeFogAppendBlock}
         this.onEffectKeyframePreviewChanged?.();
     }
     public readEffectSceneKeyframePayload(id: string, frame: number): EffectKeyframePayload | null {
+        if (this.effectInstances.has(id)) return this.effectInstances.read(id, frame);
         return isEffectId(id) ? this.effectSceneTracks.read(id, frame) : null;
     }
     private effectSceneTracksChanged(): void {
         this.evaluateEffectTracks(this._currentFrame);
         refreshTotalFramesFromContentImpl(this);
+        this.effectInstanceRuntimeDuration.setDuration(this.effectInstances.ids().some(id => this.effectInstances.frames(id).length > 0) ? this._totalFrames : 0);
         emitMergedKeyframeTracksImpl(this);
     }
     public applyEffectSceneKeyframePayload(id: string, frame: number, payload: EffectKeyframePayload | null): boolean {
+        if (this.effectInstances.has(id)) {
+            if (this.postEffectBackend !== "frameGraph") return false;
+            const applied = this.effectInstances.apply(id, frame, payload);
+            if (applied) this.effectSceneTracksChanged();
+            return applied;
+        }
         if (!isEffectId(id)) return false;
         const first = !this.effectSceneTracks.has(id);
         if (!this.effectSceneTracks.apply(id, frame, payload, this.getStaticEffectValue(id))) return false;
@@ -6595,16 +6619,50 @@ ${beforeFogAppendBlock}
         return true;
     }
     public removeEffectSceneKeyframePayloads(id: string, frames: readonly number[]): boolean {
+        if (this.effectInstances.has(id) && this.postEffectBackend !== "frameGraph") return false;
+        if (this.effectInstances.has(id)) { const applied = this.effectInstances.remove(id, frames); if (applied) this.effectSceneTracksChanged(); return applied; }
         if (!isEffectId(id) || !this.effectSceneTracks.remove(id, frames)) return false;
         this.effectSceneTracksChanged();
         return true;
     }
     public moveEffectSceneKeyframe(id: string, fromFrame: number, toFrame: number): boolean {
+        if (this.effectInstances.has(id) && this.postEffectBackend !== "frameGraph") return false;
+        if (this.effectInstances.has(id)) { const applied = this.effectInstances.move(id, fromFrame, toFrame); if (applied) this.effectSceneTracksChanged(); return applied; }
         if (!isEffectId(id) || !this.effectSceneTracks.move(id, fromFrame, toFrame)) return false;
         this.effectSceneTracksChanged();
         return true;
     }
     public getSerializedEffectSceneTracks(): SerializedEffectAnimations { return this.effectSceneTracks.serialize(); }
+    public getSerializedEffectInstances(): SerializedEffectInstances | undefined {
+        this.effectInstances.syncLegacyOrder(this.getFrameGraphPostEffectStackIds());
+        return this.effectInstances.ids().length ? this.effectInstances.serialize() : undefined;
+    }
+    public getEffectInstanceState(): SerializedEffectInstances {
+        this.effectInstances.syncLegacyOrder(this.getFrameGraphPostEffectStackIds());
+        return this.effectInstances.serialize();
+    }
+    public setSerializedEffectInstances(state: unknown): void {
+        this.effectInstances.restore(state);
+        this.effectInstances.syncLegacyOrder(this.getFrameGraphPostEffectStackIds());
+        this.effectSceneTracksChanged();
+        this.refreshFrameGraphPostEffectsBackendForOrderChange();
+    }
+    public isEffectInstance(id: string): boolean { return this.effectInstances.has(id); }
+    public getEffectInstanceLabel(id: string): string { return this.effectInstances.label(id); }
+    public setEffectInstanceValue(id: string, value: EffectValue): void {
+        if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
+        this.effectInstances.setValue(id, value, this._currentFrame);
+        this.onEffectKeyframePreviewChanged?.();
+    }
+    public applyEffectInstanceDiff(diff: EffectInstanceDiff, direction: "apply" | "revert"): boolean {
+        if (this._isPlaying) return false;
+        const state = this.getEffectInstanceState(), next = applyEffectInstanceDiff(state, diff, direction);
+        if (!next) return false;
+        try { this.effectInstances.restore(next); } catch { return false; }
+        this.effectSceneTracksChanged();
+        if (JSON.stringify(state.order) !== JSON.stringify(next.order)) this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        return true;
+    }
     public setSerializedEffectSceneTracks(data: unknown): void {
         this.effectSceneTracks.restore(data, id => this.getStaticEffectValue(id));
         if (!EFFECT_TIMELINE_ENABLED) return;
@@ -6672,6 +6730,7 @@ ${beforeFogAppendBlock}
         return this.effectSceneTracks.has("grain") && this.getFrameGraphPostEffectStackIds().includes("grain");
     }
     private evaluateEffectTracks(frame: number): void {
+        if (this._isPlaying) this.effectInstances.clearPreviews();
         if (this._isPlaying) this.effectSceneTracks.clearPreviews();
         const withPreview = !this._isPlaying && this.effectCaptureDepth === 0;
         this.effectRenderState = effectRenderValues(
@@ -8293,6 +8352,7 @@ ${beforeFogAppendBlock}
         this.mmdCamera = new MmdCamera("mmdRuntimeCamera", this.camera.target.clone(), this.scene, false);
         this.syncMmdCameraFromViewportCamera();
         this.mmdRuntime.addAnimatable(this.mmdCamera);
+        this.mmdRuntime.addAnimatable(this.effectInstanceRuntimeDuration);
         this.physicsInitializationPromise = this.initializeRuntimeModeAndPhysics();
         this.installScenePerformancePhaseObservers();
 
@@ -8526,10 +8586,12 @@ ${beforeFogAppendBlock}
         wasmRuntime.register(this.scene);
 
         this.mmdRuntime.unregister(this.scene);
+        this.mmdRuntime.removeAnimatable(this.effectInstanceRuntimeDuration);
         this.mmdRuntime.dispose(this.scene);
         this.mmdRuntime = wasmRuntime;
         this.mmdWasmInstance = wasmInstance;
         this.mmdRuntime.addAnimatable(this.mmdCamera);
+        this.mmdRuntime.addAnimatable(this.effectInstanceRuntimeDuration);
         this.physicsController.useWasmRuntime(wasmRuntime);
         this.syncScenePhysicsSimulationState();
         this.applyPhysicsStateToAllModels();
@@ -10055,8 +10117,9 @@ ${beforeFogAppendBlock}
 
     play(): void {
         if (!this.currentModel || this.effectPlaybackPreparation.pending) return;
-        if (this.effectSceneTracks.ids().length && !this.isPostEffectBackendReadyForCapture()) {
+        if ((this.effectSceneTracks.ids().length || this.effectInstances.ids().length) && !this.isPostEffectBackendReadyForCapture()) {
             this.effectSceneTracks.clearPreviews();
+            this.effectInstances.clearPreviews();
             this.effectPlaybackPreparation.run(
                 () => this.waitForPostEffectBackendReadyForCapture(),
                 () => this.play(),
@@ -10138,6 +10201,7 @@ ${beforeFogAppendBlock}
         }
         this._currentFrame = targetFrame;
         this.effectSceneTracks.clearPreviewsOutside(targetFrame);
+        this.effectInstances.clearPreviews(targetFrame);
         // Explicit seeks restore keys even if project loading changed the scene at this frame.
         this.evaluateAccessoryTransformKeyframes(this._currentFrame, true);
         this.evaluateSceneTracksAtFrame(this._currentFrame);
@@ -10579,6 +10643,8 @@ ${beforeFogAppendBlock}
         this.gravitySceneTrack = null;
         this.lastEvaluatedGravitySceneFrame = null;
         this.effectSceneTracks.restore(null);
+        this.effectInstances.restore(null);
+        this.effectInstanceRuntimeDuration.setDuration(0);
 
         if (this.audioPlayer) {
             void this.mmdRuntime.setAudioPlayer(null);
@@ -10631,7 +10697,7 @@ ${beforeFogAppendBlock}
     private isProjectFileV1(value: unknown): value is MmdModokiProjectFileV1 {
         if (!value || typeof value !== "object") return false;
         const maybeProject = value as Partial<MmdModokiProjectFileV1>;
-        return maybeProject.format === "mmd_modoki_project" && maybeProject.version === 1;
+        return maybeProject.format === "mmd_modoki_project" && (maybeProject.version === 1 || maybeProject.version === 2);
     }
     public exportProjectState(): MmdModokiProjectFileV1 {
         if (this.materialModeSwitching) throw new Error("Wait for the material mode switch before saving or exporting");
@@ -11392,6 +11458,8 @@ ${beforeFogAppendBlock}
             contrast: this.postEffectContrastValue,
             gammaPower: this.effectRenderState.gammaPower,
             gammaEnabled: this.effectSceneTracks.has("gamma") ? this.getFrameGraphPostEffectStackIds().includes("gamma") : this.isFrameGraphPostEffectActive("gamma"),
+            gammaInstances: this.effectInstances.ids().filter(id => this.effectInstances.present(id)).map(id => ({ instanceId: id, ...this.effectInstances.value(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0) })),
+            instanceOrder: this.effectInstances.order(),
             imageProcessingEnabled: this.isFrameGraphImageProcessingTaskNeeded(),
             dofEnabled: this.isFrameGraphPostEffectActive("dof"),
             dofBlurLevel: this.dofBlurLevelValue,
@@ -11800,6 +11868,7 @@ ${beforeFogAppendBlock}
 
     private shouldExecuteFrameGraphPostEffects(): boolean {
         return this.frameGraphPostEffectsEnabledValue && (this.getActiveFrameGraphPostEffectIds().length > 0
+            || this.effectInstances.ids().some(id => this.effectInstances.present(id))
             || this.isFrameGraphImageProcessingTaskNeeded()
             || this.antialiasEnabledValue);
     }
@@ -12017,6 +12086,7 @@ ${beforeFogAppendBlock}
             }
         }
         this.frameGraphPostEffectStackIdsValue = normalized;
+        this.effectInstances.syncLegacyOrder(normalized);
         this.syncRingParticleEnabledFromFrameGraphStack();
         this.syncWaterSurfaceEnabledFromFrameGraphStack();
         this.applyDefaultPipelinePostProcessSettings();
@@ -12048,6 +12118,7 @@ ${beforeFogAppendBlock}
         }
         this.frameGraphPostEffectStackIdsValue = normalized;
         this.frameGraphPostEffectStackEnabledValue = enabledById;
+        this.effectInstances.syncLegacyOrder(normalized);
         this.syncRingParticleEnabledFromFrameGraphStack();
         this.syncWaterSurfaceEnabledFromFrameGraphStack();
         if (idsChanged) {
@@ -16391,6 +16462,7 @@ ${beforeFogAppendBlock}
             this.cameraAnimationHandle = null;
         }
         this.mmdRuntime.removeAnimatable(this.mmdCamera);
+        this.mmdRuntime.removeAnimatable(this.effectInstanceRuntimeDuration);
         this.mmdCamera.dispose();
         this.mmdRuntime.dispose(this.scene);
         this.physicsController.dispose();

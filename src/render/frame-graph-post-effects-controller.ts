@@ -196,6 +196,8 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
 };
 
 export type FrameGraphPostEffectsSettings = {
+    gammaInstances?: Array<{ instanceId: string; enabled: boolean; gamma: number }>;
+    instanceOrder?: string[];
     contrast: number;
     gammaPower: number;
     gammaEnabled: boolean;
@@ -1950,6 +1952,7 @@ class FrameGraphPostEffectsLensDistortionTask extends FrameGraphPostProcessTask 
 }
 
 export class FrameGraphPostEffectsController {
+    private readonly gammaInstanceTasks = new Map<string, { task: FrameGraphPostEffectsColorCorrectionTask; effect: EffectWrapper }>();
     private activationWarningEmitted = false;
     private colorCorrectionEffect: EffectWrapper | null = null;
     private gammaCorrectionEffect: EffectWrapper | null = null;
@@ -2297,14 +2300,14 @@ export class FrameGraphPostEffectsController {
         const frameGraph = new FrameGraph(scene, false);
         frameGraph.name = "MMD modoki post effects";
         const normalizedEffectOrder = normalizeFrameGraphPostEffectIds(effectOrder);
-        const physicalEffectOrder = normalizeFrameGraphPostEffectIds(
+        let physicalEffectOrder: string[] = normalizeFrameGraphPostEffectIds(
             normalizedEffectOrder,
             FRAME_GRAPH_POST_EFFECT_IDS,
         );
         const preludeTasks: FrameGraphTask[] = [];
-        const effectTasks = new Map<FrameGraphPostEffectId, FrameGraphTask[]>();
+        const effectTasks = new Map<string, FrameGraphTask[]>();
         const postludeTasks: FrameGraphTask[] = [];
-        const deferEffectTask = (id: FrameGraphPostEffectId, task: FrameGraphTask): void => {
+        const deferEffectTask = (id: string, task: FrameGraphTask): void => {
             const tasks = effectTasks.get(id) ?? [];
             tasks.push(task);
             effectTasks.set(id, tasks);
@@ -2357,6 +2360,23 @@ export class FrameGraphPostEffectsController {
             this.imageProcessingEffect,
         );
         const initialSettings = this.getSettings();
+        if (initialSettings.gammaInstances?.length) {
+            const validIds = new Set([...physicalEffectOrder, ...initialSettings.gammaInstances.map(item => item.instanceId)]);
+            physicalEffectOrder = [...new Set([...(initialSettings.instanceOrder ?? []), ...physicalEffectOrder])].filter(id => validIds.has(id));
+            for (const instance of initialSettings.gammaInstances) {
+                const effect = new EffectWrapper({ engine: frameGraph.engine, fragmentShader: "mmdFrameGraphColorCorrection", useShaderStore: true, useAsPostProcess: true,
+                    uniforms: ["contrast", "gammaPower"], name: `gamma-${instance.instanceId}`, shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL });
+                const settings = (): FrameGraphPostEffectsSettings => {
+                    const current = this.getSettings(), value = current.gammaInstances?.find(item => item.instanceId === instance.instanceId);
+                    return { ...current, gammaEnabled: value?.enabled ?? false, gammaPower: value?.gamma ?? 1 };
+                };
+                const task = new FrameGraphPostEffectsColorCorrectionTask(`gamma-${instance.instanceId}`, frameGraph, effect, () => undefined, settings, false, true);
+                task.sourceTexture = sourceTextureHandle;
+                task.disabled = !instance.enabled;
+                this.gammaInstanceTasks.set(instance.instanceId, { task, effect });
+                deferEffectTask(instance.instanceId, task);
+            }
+        }
         const resourcePlan = buildFrameGraphResourcePlan(initialSettings, effectOrder);
         this.resourcePlan = resourcePlan;
         this.allocatedResourcePlan = resourcePlan;
@@ -3327,6 +3347,7 @@ export class FrameGraphPostEffectsController {
             return;
         }
         const settings = this.getSettings();
+        for (const [id, entry] of this.gammaInstanceTasks) entry.task.disabled = settings.gammaInstances?.find(item => item.instanceId === id)?.enabled !== true;
         const resourcePlan = buildFrameGraphResourcePlan(
             settings,
             this.resourcePlan?.effectOrder ?? FRAME_GRAPH_POST_EFFECT_IDS,
@@ -3506,12 +3527,12 @@ export class FrameGraphPostEffectsController {
     private connectPostEffectOrder(
         baseTexture: FrameGraphTextureHandle,
         stackOutputTask: FrameGraphPostEffectsStackOutputTask,
-        effectOrder: readonly FrameGraphPostEffectId[],
+        effectOrder: readonly string[],
     ): void {
         let currentTexture = baseTexture;
         let vignetteEdgeBlurConnected = false;
         this.connectedOrder = [];
-        const normalizedOrder = normalizeFrameGraphPostEffectIds(effectOrder);
+        const normalizedOrder = [...new Set(effectOrder)];
 
         const connectVignetteEdgeBlur = (): void => {
             if (vignetteEdgeBlurConnected || !this.vignetteEdgeBlurTask) {
@@ -3524,6 +3545,13 @@ export class FrameGraphPostEffectsController {
         };
 
         for (const id of normalizedOrder) {
+            const instance = this.gammaInstanceTasks.get(id);
+            if (instance) {
+                instance.task.sourceTexture = currentTexture;
+                currentTexture = instance.task.outputTexture;
+                this.connectedOrder.push("gamma");
+                continue;
+            }
             switch (id) {
                 case "ssr":
                     if (this.ssrTask) {
@@ -3693,6 +3721,8 @@ export class FrameGraphPostEffectsController {
     }
 
     dispose(): void {
+        for (const entry of this.gammaInstanceTasks.values()) entry.effect.dispose();
+        this.gammaInstanceTasks.clear();
         this.colorCorrectionEffect?.dispose();
         this.colorCorrectionEffect = null;
         this.gammaCorrectionEffect?.dispose();

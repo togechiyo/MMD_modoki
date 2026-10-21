@@ -23,7 +23,7 @@ export function decodeRuntimeReloadProjectState(value: string | null): RuntimeRe
     if (!value) return null;
     try {
         const parsed = JSON.parse(value) as Partial<RuntimeReloadProjectState>;
-        if (parsed.project?.format !== "mmd_modoki_project" || parsed.project.version !== 1) {
+        if (parsed.project?.format !== "mmd_modoki_project" || (parsed.project.version !== 1 && parsed.project.version !== 2)) {
             return null;
         }
         return {

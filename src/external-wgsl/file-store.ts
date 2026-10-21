@@ -48,7 +48,7 @@ type ProjectWithEffects = { format: string; version: number; externalEffects: Ar
 function projectWithEffects(content: string): ProjectWithEffects | null {
     let value: ProjectWithEffects;
     try { value = JSON.parse(content); } catch { return null; }
-    return value?.format === "mmd_modoki_project" && value.version === 1 && Array.isArray(value.externalEffects) && value.externalEffects.length ? value : null;
+    return value?.format === "mmd_modoki_project" && (value.version === 1 || value.version === 2) && Array.isArray(value.externalEffects) && value.externalEffects.length ? value : null;
 }
 async function atomicWrite(file: string, content: string): Promise<void> {
     await fs.mkdir(path.dirname(file), { recursive: true });

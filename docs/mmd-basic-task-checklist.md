@@ -228,7 +228,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 新個体方式へGrain・Sharpen・Chromatic・Vignette・Edge Blur・Distortion・Bloomを追加し、Gammaと合わせて8種へ展開。各2個体の独立キー・色・履歴・多数行UI・保存・Classic往復・PNG / WebMを確認（[実装・検証](./framegraph-effect-instance-expansion-2026-10-24.md)、2026-10-24）。旧仕様の移行・復帰は所有者指定で対象外。
 - [x] LUT・空気遠近・パラフレア・オフセットシャドウ・オフセットハイライトを新個体方式へ追加し、計13種へ展開。外部LUT内容の保存、個体ごとの固定色・独立キー、共有深度、履歴・Classic往復・PNG / WebMを確認（[実装・検証](./framegraph-effect-instance-depth-and-lut-2026-10-24.md)、2026-10-24）。
 - [x] DoFの後回しを所有者指定で解除し、新個体方式へ追加。モデル個体ID・ボーン・方式の対象キー、数値補間、移動追従、同一PMX二個体、保存・Classic往復・PNG / WebM・5言語を確認（[実装・検証](./framegraph-dof-instance-target-keys-2026-10-24.md)、2026-10-24）。計14種類。
-- [ ] 残る既存効果の個体化を順次進める。Luminous、SSAO / SSGI / SSR、Motion Blurが後続。
+- [x] 残るLuminous・SSAO / SSGI / SSR・Motion Blurを個体化。計19種類のキー・重ねがけ・保存・PNG / WebM、Luminous RCの二個体、Motion BlurのPMX再生と先行個体の回帰を確認（[実装・検証](./framegraph-remaining-effect-instances-2026-10-24.md)、2026-10-24）。
 - [x] SSAO・SSGI・SSRのON / OFFと現行UIの6スライダーをキー化。初期OFF準備、半径/ステップ補間、保存・PNG/WebM・Classic往復でキー保持を確認。Frame Graphの対応は合計17種、残りは被写界深度・モーションブラー・パーティクル（[実装・検証](./screen-space-effects-timeline-2026-09-15.md)、2026-09-15）。
 - [x] FrameGraph SSAOをシンプル階調（線形0〜2、濃いAOの追加乗算なし、色合成を維持）へ一本化。旧modeのUI・保存フラグを外し、旧projectも現行処理へ統一（[比較・採用メモ](./ssao-tone-comparison-2026-10-20.md)、2026-10-20）。
 - [x] パラフレア・オフセット影・オフセットリムのON / OFFと現行UIの12スライダーをキー化。初期OFFの深度準備、補間・保存・数値入力同期・PNG/WebMを確認し、対応は合計14種（[実装・検証](./depth-effects-timeline-2026-09-14.md)、2026-09-14）。

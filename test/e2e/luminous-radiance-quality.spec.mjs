@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test("RC reconstructs smooth illumination on curved MMD receivers", async ({}, testInfo) => {
@@ -28,25 +29,25 @@ test("RC reconstructs smooth illumination on curved MMD receivers", async ({}, t
       const field = page.locator(`#bone-controls input[data-control-key='${key}']`); await field.fill(String(value)); await field.press("Enter");
     }
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    const control = key => luminousInstanceControl(page, key);
     for (const [key, value] of [["luminousIntensity", 0], ["luminousRadianceStrength", 100], ["luminousRadianceRange", 3]]) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
     async function capture(name) {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       const points = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceQualityProbeState());
-      const path = testInfo.outputPath(`${name}.png`); await page.locator("#render-canvas").screenshot({ path });
+      const path = testInfo.outputPath(`${name}.png`); await expect(page.locator(".toast")).toHaveCount(0);
+      await page.locator("#render-canvas").screenshot({ path });
       const png = PNG.sync.read(readFileSync(path)), y = Math.round(points.left[1] * png.height), row = [];
       for (let x = Math.round(points.left[0] * png.width); x <= Math.round(points.right[0] * png.width); x++) row.push(png.data[(y * png.width + x) * 4]);
       report[name] = { points, row, maxStep: Math.max(...row.slice(1).map((value, i) => Math.abs(value - row[i]))) };
       writeFileSync(testInfo.outputPath("quality-report.json"), JSON.stringify(report, null, 2)); return report[name];
     }
     const off = await capture("rc-off");
-    await control("luminousRadianceEnabled").selectOption("1"); const on = await capture("rc-on");
+    await control("luminousRadianceEnabled").check(); const on = await capture("rc-on");
     expect(Math.max(...off.row)).toBeLessThan(3); expect(Math.max(...on.row)).toBeGreaterThan(50);
     expect(on.maxStep).toBeLessThan(4);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0); expect(errors).toEqual([]);

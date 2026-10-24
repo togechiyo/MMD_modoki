@@ -18,6 +18,7 @@ import { TriangleRadianceBvh } from "/src/render/triangle-radiance-bvh.ts";
 import { WebGPUPerfCounter } from "@babylonjs/core/Engines/WebGPU/webgpuPerfCounter";
 
 let latestGraph;
+const radianceTask = name => latestGraph.tasks.find(task => task.name === name || task.name.endsWith(`-${name}`));
 const executeGraph = FrameGraph.prototype.execute;
 FrameGraph.prototype.execute = function () { latestGraph = this; return executeGraph.call(this); };
 
@@ -216,7 +217,7 @@ export async function createAnimatedRadianceProbe({ complex = false } = {}) {
 
 const fullReceiverExecutions = new WeakMap();
 export function forceRadianceReceiverFull(enabled) {
-  const task = latestGraph.getTaskByName("luminousRadianceReceiver");
+  const task = radianceTask("luminousRadianceReceiver");
   const previous = fullReceiverExecutions.get(task);
   if (!enabled) { if (previous) { task.execute = previous; fullReceiverExecutions.delete(task); } return; }
   if (previous) return;
@@ -257,7 +258,7 @@ export function resumeRadianceRender() {
 // Stop only this test renderer and restore its loops even if a dispatch fails.
 export async function profileRadianceReceiverCompletion(frames = 15) {
   const engine = scene().getEngine(), loops = engine.activeRenderLoops.slice();
-  const task = latestGraph.getTaskByName("luminousRadianceReceiver"), samples = [];
+  const task = radianceTask("luminousRadianceReceiver"), samples = [];
   engine.stopRenderLoop();
   try {
     engine.flushFramebuffer(); await engine._device.queue.onSubmittedWorkDone();
@@ -271,7 +272,7 @@ export async function profileRadianceReceiverCompletion(frames = 15) {
 }
 
 export async function radianceReceiverReuseStats() {
-  const task = latestGraph.getTaskByName("luminousRadianceReceiver");
+  const task = radianceTask("luminousRadianceReceiver");
   if (!task) return null;
   const texture = task.computeShader._bindings.outputGi.object;
   const values = await scene().getEngine()._readTexturePixels(texture, texture.width, texture.height, -1, 0, null, true, false);
@@ -308,8 +309,8 @@ export async function radianceQualityProbeState() {
 
 // Test-only timings: frame intervals include presentation; task setup measures CPU collection separately.
 export async function profileRadianceProbe(frames = 30, change) {
-  const tasks = [3, 2, 1, 0].map(i => latestGraph.getTaskByName(`luminousRadianceCascade${i}`)).filter(Boolean);
-  const receiver = latestGraph.getTaskByName("luminousRadianceReceiver");
+  const tasks = [3, 2, 1, 0].map(i => radianceTask(`luminousRadianceCascade${i}`)).filter(Boolean);
+  const receiver = radianceTask("luminousRadianceReceiver");
   const counts = { cascades: 0, receiver: 0, positions: 0, refittedTriangles: 0, uploadedBytes: 0, updates: 0 }, durations = [], intervals = [], positionDurations = [], gpu = [], undo = [];
   const engine = scene().getEngine(), instrumentation = new EngineInstrumentation(engine);
   instrumentation.captureGPUFrameTime = true;
@@ -340,7 +341,7 @@ export async function profileRadianceProbe(frames = 30, change) {
     };
     undo.push(() => { task.computeShader.dispatch = original; });
   }
-  const prepare = latestGraph.getTaskByName("luminousRadiancePrepare") ?? tasks[0];
+  const prepare = radianceTask("luminousRadiancePrepare") ?? tasks[0];
   if (prepare) {
     const key = "func" in prepare ? "func" : "execute", original = prepare[key];
     prepare[key] = function (...args) {

@@ -10,6 +10,16 @@ import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-insta
 
 const escape = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEffectInstanceState" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
+type FixedNumber = { field: string; label: string; min: number; max: number; step: number; value: number };
+function fixedNumbers(type: string, settings: InstanceFixedSettings = {}): FixedNumber[] {
+    switch (type) {
+        case "offsetShadow": return [{ field: "thickness", label: "effect.frameGraphPost.controls.thickness", min: 0.0001, max: 1, step: 0.01, value: settings.thickness ?? 1 }, { field: "softness", label: "effect.frameGraphPost.controls.softness", min: 0, max: 12, step: 1, value: settings.softness ?? 0 }];
+        case "ssao": return [{ field: "toonInfluence", label: "label.toonInfluence", min: 0, max: 1, step: 0.01, value: settings.toonInfluence ?? 1 }];
+        case "motionBlur": return [{ field: "samples", label: "effect.frameGraphPost.controls.samples", min: 8, max: 64, step: 1, value: settings.samples ?? 32 }];
+        case "luminous": return [{ field: "radianceStrength", label: "effect.frameGraphPost.controls.luminousRadianceStrength", min: 0, max: 8, step: 0.1, value: settings.radiance?.strength ?? 1 }, { field: "radianceRange", label: "effect.frameGraphPost.controls.luminousRadianceRange", min: 1, max: 100, step: 1, value: settings.radiance?.range ?? 12 }];
+        default: return [];
+    }
+}
 
 /** One delegated view for instance controls; the manager and Command layer own state. */
 export class FrameGraphInstanceController {
@@ -45,9 +55,14 @@ export class FrameGraphInstanceController {
             const select = event.target instanceof HTMLSelectElement ? event.target : null;
             const selectedId = select?.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             if (selectedId && select?.dataset.instanceField === "lutPreset") this.editFixed(selectedId, { lut: { kind: "builtin", preset: select.value } });
+            if (selectedId && select?.dataset.instanceField === "blendMode") this.editFixed(selectedId, { blendMode: select.value as InstanceFixedSettings["blendMode"] });
             const input = event.target instanceof HTMLInputElement ? event.target : null;
             const id = input?.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             if (!id || !input) return;
+            if (input.dataset.instanceFixedToggle === "radiance") {
+                const radiance = host.getEffectInstanceState().instances.find(item => item.instanceId === id)?.fixedSettings?.radiance ?? { enabled: false, strength: 1, range: 12 };
+                this.editFixed(id, { radiance: { ...radiance, enabled: input.checked } });
+            }
             if (input.dataset.instanceField === "label") edit({ action: "rename", instanceId: id, label: input.value });
             if (input.dataset.instanceField === "color") {
                 const color = Number.parseInt(input.value.slice(1), 16);
@@ -78,7 +93,8 @@ export class FrameGraphInstanceController {
         const primaryColor = instance?.bloomColor ?? instance?.fixedSettings?.color;
         const color = primaryColor ? this.renderColor("color", primaryColor) : "";
         const shadowColor = instance?.fixedSettings?.shadowColor ? this.renderColor("shadowColor", instance.fixedSettings.shadowColor) : "";
-        const fixedNumbers = instance?.type === "offsetShadow" ? ["thickness", "softness"].map(field => `<label class="effect-layer-control-row"><span class="effect-layer-control-label">${escape(t(`effect.frameGraphPost.controls.${field}`))}</span><input class="panel-number-input" type="number" min="${field === "softness" ? 0 : 0.0001}" max="${field === "softness" ? 12 : 1}" step="${field === "softness" ? 1 : 0.01}" data-instance-fixed="${field}" aria-label="${escape(t(`effect.frameGraphPost.controls.${field}`))}" value="${field === "softness" ? instance.fixedSettings?.softness ?? 0 : instance.fixedSettings?.thickness ?? 1}"></label>`).join("") : "";
+        const fixedNumberControls = fixedNumbers(instance?.type ?? "", instance?.fixedSettings).map(item => `<label class="effect-layer-control-row"><span class="effect-layer-control-label">${escape(t(item.label))}</span><input class="panel-number-input" type="number" min="${item.min}" max="${item.max}" step="${item.step}" data-instance-fixed="${item.field}" aria-label="${escape(t(item.label))}" value="${item.value}"></label>`).join("");
+        const fixedSelects = instance?.type === "ssgi" ? `<select class="effect-layer-control-select" data-instance-field="blendMode" aria-label="${escape(t("effect.frameGraphPost.controls.blendMode"))}">${["additive", "softLight", "overlay"].map(mode => `<option value="${mode}"${instance.fixedSettings?.blendMode === mode ? " selected" : ""}>${escape(t(`effect.frameGraphPost.blendModes.${mode}`))}</option>`).join("")}</select>` : instance?.type === "luminous" ? `<label class="effect-layer-control-row"><span>${escape(t("effect.frameGraphPost.controls.luminousRadianceEnabled"))}</span><input type="checkbox" data-instance-fixed-toggle="radiance"${instance.fixedSettings?.radiance?.enabled ? " checked" : ""}></label>` : "";
         const lut = instance?.fixedSettings?.lut;
         const lutControls = instance?.type === "lut" ? `<select class="effect-layer-control-select" data-instance-field="lutPreset" aria-label="${escape(t("shader.postfx.lutSource"))}">${INSTANCE_LUT_PRESETS.map(preset => `<option value="${preset.id}"${lut?.kind === "builtin" && lut.preset === preset.id ? " selected" : ""}>${preset.label}</option>`).join("")}${lut?.kind === "external" ? `<option value="external" selected>${escape(lut.name)}</option>` : ""}</select><button type="button" data-instance-action="lutFile">${escape(t("shader.postfx.lutFile"))}</button>` : "";
         const button = (action: string, text: string): string => `<button type="button" class="effect-layer-control-button" data-instance-action="${action}" aria-label="${escape(t(`effect.instance.${action}`))}"${this.host.isPlaying ? " disabled" : ""}>${escape(text)}</button>`;
@@ -86,7 +102,7 @@ export class FrameGraphInstanceController {
             <div class="effect-layer-header"><input type="checkbox" data-instance-field="enabled" aria-label="${escape(t("status.on"))}"${value.enabled ? " checked" : ""}>
             <button type="button" class="effect-layer-main" data-instance-action="select"><span class="effect-layer-name">${label}</span></button></div>
             <div class="effect-layer-details"><input type="text" data-instance-field="label" maxlength="80" aria-label="${escape(t("effect.instance.name"))}" value="${label}">
-            ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedNumbers}${lutControls}
+            ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSelects}${fixedNumberControls}${lutControls}
             <div class="effect-instance-actions">${button("up", "↑")}${button("down", "↓")}${button("duplicate", t("effect.instance.duplicate"))}${button(present ? "suspend" : "resume", t(present ? "effect.instance.suspend" : "effect.instance.resume"))}${button("delete", t("effect.instance.delete"))}</div>
             ${present ? "" : `<span>${escape(t("timeline.effectSuspended"))}</span>`}</div></div>`;
     }
@@ -104,13 +120,20 @@ export class FrameGraphInstanceController {
         this.root.querySelectorAll<HTMLInputElement>("[data-instance-fixed]").forEach(input => {
             const id = input.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             const field = input.dataset.instanceFixed;
-            if (!id || (field !== "thickness" && field !== "softness")) return;
+            if (!id || !field) return;
             const revert = (): void => {
-                const settings = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id)?.fixedSettings;
-                input.value = String(settings?.[field] ?? (field === "softness" ? 0 : 1));
+                const instance = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id);
+                input.value = String(fixedNumbers(instance?.type ?? "", instance?.fixedSettings).find(item => item.field === field)?.value ?? 0);
             };
             installEnterCommitNumberInput(input, {
-                commit: () => { const value = Number(input.value); if (Number.isFinite(value)) this.editFixed(id, { [field]: value }); revert(); },
+                commit: () => {
+                    const value = Number(input.value);
+                    if (Number.isFinite(value)) {
+                        const settings = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id)?.fixedSettings;
+                        this.editFixed(id, field === "radianceStrength" || field === "radianceRange" ? { radiance: { ...settings?.radiance ?? { enabled: false, strength: 1, range: 12 }, [field === "radianceStrength" ? "strength" : "range"]: value } } : { [field]: value });
+                    }
+                    revert();
+                },
                 revert,
             });
         });

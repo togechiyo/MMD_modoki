@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test("RC illuminates scenes exceeding the old per-mesh and total triangle budgets", async ({}, testInfo) => {
@@ -27,26 +28,26 @@ test("RC illuminates scenes exceeding the old per-mesh and total triangle budget
       const field = page.locator(`#bone-controls input[data-control-key='${key}']`); await field.fill(String(value)); await field.press("Enter");
     }
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    const control = key => luminousInstanceControl(page, key);
     for (const [key, value] of [["luminousIntensity", 0], ["luminousRadianceStrength", 100], ["luminousRadianceRange", 3]]) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
     async function capture(name) {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       const points = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState({ blocker: false }));
-      const path = testInfo.outputPath(`${name}.png`); await page.locator("#render-canvas").screenshot({ path });
+      const path = testInfo.outputPath(`${name}.png`); await expect(page.locator(".toast")).toHaveCount(0);
+      await page.locator("#render-canvas").screenshot({ path });
       const png = PNG.sync.read(readFileSync(path)), x = Math.round(points.floor[0] * png.width), y = Math.round(points.floor[1] * png.height);
       const rgb = [0, 0, 0];
       for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) for (let c = 0; c < 3; c++) rgb[c] += png.data[((y + dy) * png.width + x + dx) * 4 + c] / 169;
-      report[name] = { rgb, runtime: await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().luminousRadiance) };
+      report[name] = { rgb, runtime: (await getLuminousInstanceRuntime(page)).luminousRadiance };
       writeFileSync(testInfo.outputPath("budget-report.json"), JSON.stringify(report, null, 2)); return report[name];
     }
     const off = await capture("rc-off");
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     for (const [name, subdivisions, tiles] of [["total-over-100k", 192, 2], ["mesh-over-100k", 384, 1]]) {
       if (tiles === 1) await page.evaluate(async options => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createDenseRadianceProbe(options), { subdivisions, tiles });
       const on = await capture(name);

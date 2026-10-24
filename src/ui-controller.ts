@@ -8386,7 +8386,7 @@ export class UIController {
         this.lensEffectController?.refresh();
         this.colorPostFxController?.refreshVignetteUi();
         this.colorPostFxController?.refreshSharpenUi();
-        for (const definition of EFFECT_KEYFRAME_DEFINITIONS.filter(definition => definition.id !== "dof")) {
+        for (const definition of EFFECT_KEYFRAME_DEFINITIONS.filter(definition => definition.id !== "dof" && definition.id !== "motionBlur")) {
             const effectId = definition.id;
             const value = this.mmdManager.captureCurrentEffectKeyframePayload(effectId);
             const toggle = this.postEffectStackList?.querySelector<HTMLInputElement>(`[data-effect-stack-toggle="${effectId}"]`);

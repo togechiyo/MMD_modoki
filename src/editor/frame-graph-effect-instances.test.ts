@@ -1,8 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { FrameGraphEffectInstances } from "./frame-graph-effect-instances";
+import { effectKeyframePayloadSchema, getEffectDefinition } from "./effect-keyframe-definitions";
 
 describe("FrameGraph effect instances", () => {
-    it.each(["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom", "lut", "aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight"] as const)("owns independent %s settings and tracks", type => {
+    it("keeps the existing Luminous add-menu defaults independently of other instances", () => {
+        const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, "luminous");
+        expect(store.staticValue("fx-a")).toEqual({ enabled: true, intensity: 1, threshold: 0.15, radius: 48 });
+    });
+    it.each(["luminous", "ssao", "ssgi", "ssr", "motionBlur"] as const)("interpolates %s values, steps enabled and preserves independent fixed settings on restore", type => {
+        const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, type); store.add("fx-b", undefined, undefined, type);
+        const definition = getEffectDefinition(type);
+        const from = store.capture("fx-a", 0), to = store.capture("fx-a", 20);
+        from.value.enabled = false;
+        for (const slider of definition.sliders) { Reflect.set(from.value, slider.field, slider.toValue(slider.min)); Reflect.set(to.value, slider.field, slider.toValue(slider.max)); }
+        store.apply("fx-a", 0, from); store.apply("fx-a", 20, to);
+        expect(store.value("fx-a", 10).enabled).toBe(false); expect(store.value("fx-a", 20).enabled).toBe(true);
+        for (const slider of definition.sliders) expect(store.value("fx-a", 10)[slider.field]).toBeCloseTo((Number(Reflect.get(from.value, slider.field)) + Number(Reflect.get(to.value, slider.field))) / 2);
+        expect(effectKeyframePayloadSchema.safeParse(store.read("fx-a", 20)).success).toBe(true);
+        if (type !== "ssr") store.setFixedSettings("fx-a", { color: { r: 1, g: 0, b: 0 }, toonInfluence: 0.2, blendMode: "overlay", samples: 64, radiance: { enabled: true, strength: 3, range: 20 } });
+        const before = store.serialize(); store.duplicate("fx-a", "fx-c");
+        const copy = store.serialize().instances.find(item => item.instanceId === "fx-c");
+        expect(copy?.fixedSettings).toEqual(before.instances[0].fixedSettings);
+        store.restore(before); expect(store.serialize()).toEqual(before);
+        expect(store.frames("fx-b")).toHaveLength(0);
+    });
+    it.each(["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom", "lut", "aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight", "luminous", "ssao", "ssgi", "ssr", "motionBlur"] as const)("owns independent %s settings and tracks", type => {
         const store = new FrameGraphEffectInstances();
         store.add("fx-a", undefined, undefined, type); store.add("fx-b", undefined, undefined, type);
         expect(store.type("fx-a")).toBe(type);

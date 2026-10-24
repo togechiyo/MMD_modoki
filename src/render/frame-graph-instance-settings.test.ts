@@ -4,6 +4,14 @@ import type { FrameGraphPostEffectsSettings } from "./frame-graph-post-effects-c
 
 describe("instance render settings", () => {
     const base = { vignetteEnabled: true, vignetteWeight: 4, edgeBlurStrength: 3 } as FrameGraphPostEffectsSettings;
+    it("does not inherit singleton screen-space, motion or radiance settings", () => {
+        const singleton = { ...base, ssaoToonInfluence: 0.9, motionBlurSamples: 64, luminousRadiance: { enabled: true, strength: 8, range: 100 } };
+        expect(frameGraphInstanceSettings(singleton, { instanceId: "fx-ao", type: "ssao", value: { enabled: false, strength: 0.7, radius: 2 }, fixedSettings: { color: { r: 1, g: 0, b: 0 }, toonInfluence: 0.2 } })).toMatchObject({ ssaoEnabled: false, ssaoPrepared: true, ssaoStrength: 0.7, ssaoRadius: 2, ssaoToonInfluence: 0.2, ssaoShadowColor: { r: 1, g: 0, b: 0 } });
+        expect(frameGraphInstanceSettings(singleton, { instanceId: "fx-gi", type: "ssgi", value: { enabled: true, strength: 0.4, sampleRadius: 80 }, fixedSettings: { blendMode: "additive" } })).toMatchObject({ ssgiStrength: 0.4, ssgiSampleRadius: 80, ssgiBlendMode: "additive" });
+        expect(frameGraphInstanceSettings(singleton, { instanceId: "fx-ssr", type: "ssr", value: { enabled: true, strength: 1.5, step: 3 } })).toMatchObject({ ssrStrength: 1.5, ssrStep: 3 });
+        expect(frameGraphInstanceSettings(singleton, { instanceId: "fx-motion", type: "motionBlur", value: { enabled: true, strength: 4 } })).toMatchObject({ motionBlurStrength: 4, motionBlurSamples: 32 });
+        expect(frameGraphInstanceSettings(singleton, { instanceId: "fx-glow", type: "luminous", value: { enabled: true, intensity: 2, threshold: 0.4, radius: 60 } })).toMatchObject({ luminousIntensity: 2, luminousThreshold: 0.4, luminousRadius: 60, luminousRadiance: { enabled: false, strength: 1, range: 12 } });
+    });
     it("uses per-instance resolved DoF focus and optics", () => {
         expect(frameGraphInstanceSettings(base, { instanceId: "fx-dof", type: "dof", value: { enabled: false, focusDistance: 1000, fStop: 4, lensSize: 50, focalLength: 80 }, dofFocusDistanceMm: 23000 })).toMatchObject({ dofEnabled: false, dofFocusDistanceMm: 23000, dofEffectiveFStop: 4, dofLensSize: 50, dofFocalLength: 80, dofBlurLevel: 1 });
     });

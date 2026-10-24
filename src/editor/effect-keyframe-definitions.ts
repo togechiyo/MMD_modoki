@@ -5,6 +5,7 @@ export type EffectValueById = {
     ssao: { enabled: boolean; strength: number; radius: number };
     ssgi: { enabled: boolean; strength: number; sampleRadius: number };
     ssr: { enabled: boolean; strength: number; step: number };
+    motionBlur: { enabled: boolean; strength: number };
     directionalLightShafts: { enabled: boolean; strength: number; phaseG: number };
     offsetShadow: { enabled: boolean; strength: number; offsetX: number; offsetY: number; depthBias: number; maxDepth: number; depthScale: number };
     offsetHighlight: { enabled: boolean; strength: number; offsetX: number; offsetY: number; depthScale: number };
@@ -44,6 +45,8 @@ function linearSlider(field: string, panelField: string, label: string, min: num
         toPosition: value => (value - min) / (max - min) * 100 };
 }
 export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
+    { id: "motionBlur", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 10, min: 0, max: 10 } },
+        sliders: [linearSlider("strength", "motionBlurStrength", "strength", 0, 10)] },
     { id: "dof", fields: {
         enabled: { kind: "step", default: false },
         focusMode: { kind: "discrete", default: "person-auto", values: ["camera-target", "model-target", "person-auto", "manual"] },
@@ -189,10 +192,10 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : field.kind === "discrete" ? z.string().refine(value => validDiscrete(value, field.values)) : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
+    kind: z.literal("effect"), effectId: z.enum(["motionBlur", "dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
     instanceId: z.string().regex(/^fx-[a-zA-Z0-9-]{1,190}$/).optional(),
 }).strict().superRefine((payload, context) => {
-    if (payload.effectId === "dof" && !payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "DoF keys require an effect instance" });
+    if (["dof", "motionBlur"].includes(payload.effectId) && !payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "These keys require an effect instance" });
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });
 }).transform(payload => payload as EffectKeyframePayload);

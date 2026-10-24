@@ -7,12 +7,13 @@ import { launchMmdModoki } from "./electron-app.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const requestedGroup = process.env.MMD_INSTANCE_EFFECT_GROUP;
-const groups = requestedGroup === "depth" ? [true] : requestedGroup === "screen" ? [false] : [false, true];
+const groups = requestedGroup ? [requestedGroup] : ["screen", "depth", "remaining"];
 const difference = (a, b) => a.reduce((sum, value, i) => sum + (i % 4 === 3 ? 0 : Math.abs(value - b[i])), 0) / (a.length * 0.75);
 const seek = async (page, frame) => { const input = page.locator("#current-frame"); await input.fill(String(frame)); await input.press("Enter"); await expect(input).toHaveValue(String(frame)); };
 async function menu(page, command) { await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click(); await page.locator(`[data-menu-command="${command}"]`).click(); }
 
-for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : "screen effects"}: independent instances, keys, color, lifecycle, project and output`, async ({}, testInfo) => {
+for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" : group === "remaining" ? "remaining effects" : "screen effects"}: independent instances, keys, color, lifecycle, project and output`, async ({}, testInfo) => {
+  const depthGroup = group === "depth", remainingGroup = group === "remaining";
   test.setTimeout(240000);
   const launched = await launchMmdModoki(root), report = { errors: [], effects: [] };
   try {
@@ -28,6 +29,10 @@ for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : 
     });
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
     if (await page.locator("#btn-toggle-shader-panel").getAttribute("aria-pressed") !== "true") await page.locator("#btn-toggle-shader-panel").click();
+    if (remainingGroup) {
+      await page.locator('[data-effect-tab="materials"]').click(); await page.locator("#shader-preset-select").selectOption("wgsl-autoluminous"); await page.locator("#btn-shader-apply-all").click();
+      await page.evaluate(async () => (await import("/test/e2e/helpers/remaining-effect-probe.mjs")).createRemainingEffectProbe());
+    }
     await page.locator("#info-model-select").selectOption("__camera__");
     for (const [key, value] of Object.entries({ tx: 0, ty: 1.5, tz: 0, rx: -12, ry: -25, rz: 0, camDistance: 14 })) {
       const input = page.locator(`#bone-controls input[data-control-key='${key}']`); await input.fill(String(value)); await input.press("Enter");
@@ -44,11 +49,12 @@ for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : 
       return PNG.sync.read(readFileSync(resolve(dir, "single_rgba_surface_e2e.png"))).data;
     };
     const active = [];
-    for (const type of depthGroup ? ["lut", "aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight"] : ["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom"]) {
+    for (const type of remainingGroup ? ["luminous", "ssao", "ssgi", "ssr", "motionBlur"] : depthGroup ? ["lut", "aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight"] : ["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom"]) {
       await add(type); await add(type);
       const entries = (await state()).instances.filter(item => item.type === type), [a, b] = entries.map(item => item.instanceId);
       active.push(a);
       expect(entries).toHaveLength(2); expect(entries[0].settings.enabled).toBe(true);
+      if (type === "luminous") expect(entries[0].settings).toEqual({ enabled: true, intensity: 1, threshold: 0.15, radius: 48 });
       await number(b, 0, 14); await row(b).locator('[data-instance-field="enabled"]').uncheck();
       const bSettings = (await state()).instances.find(item => item.instanceId === b).settings;
       await number(a, 0, 10); await row(a).locator('[data-instance-field="enabled"]').uncheck();
@@ -58,6 +64,13 @@ for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : 
           const input = row(id).locator('[data-instance-field="color"]'); await input.fill(color); await input.dispatchEvent("change");
         }
       }
+      if (type === "luminous") { await number(a, 1, 0); await number(a, 2, 40); }
+      if (type === "ssao") {
+        const color = row(a).locator('[data-instance-field="color"]'); await color.fill("#402010"); await color.dispatchEvent("change");
+        const toon = row(a).locator('[data-instance-fixed="toonInfluence"]'); await toon.fill("0.5"); await toon.press("Enter");
+      }
+      if (type === "ssgi") await row(a).locator('[data-instance-field="blendMode"]').selectOption("additive");
+      if (type === "motionBlur") { const samples = row(a).locator('[data-instance-fixed="samples"]'); await samples.fill("48"); await samples.press("Enter"); }
       if (type === "lut") {
         await row(a).locator('select[data-instance-field="lutPreset"]').selectOption("monotone");
         await row(b).locator('select[data-instance-field="lutPreset"]').selectOption("sepia");
@@ -90,7 +103,10 @@ for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : 
       expect((await state()).instances.find(item => item.instanceId === b).settings).toEqual(bSettings);
       await seek(page, 0); const off = await capture(`${type}-off`);
       await seek(page, 20); const on = await capture(`${type}-on`);
-      const diff = difference(off, on); expect(diff).toBeGreaterThan(0.001); report.effects.push({ type, difference: diff });
+      const diff = difference(off, on);
+      // Object velocity is zero in stopped PNG captures. Its animated path has a separate scenario.
+      if (type !== "motionBlur") expect(diff).toBeGreaterThan(0.001);
+      report.effects.push({ type, difference: diff });
       await select(a); await page.locator("#btn-kf-copy").click(); await select(b); await seek(page, 40); await page.locator("#btn-kf-paste").click();
       expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys.map(key => key.frame)).toEqual([40]);
       await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
@@ -106,8 +122,13 @@ for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : 
       await row(a).locator('[data-instance-action="suspend"]').click();
     }
     for (const id of active) await row(id).locator('[data-instance-action="resume"]').click();
+    if (remainingGroup) {
+      // Synthetic geometry is only a fixture for the individual shader comparisons.
+      // Output/backend tests use the saved PMX scene, which survives runtime recreation.
+      await page.evaluate(async () => (await import("/test/e2e/helpers/remaining-effect-probe.mjs")).removeRemainingEffectProbe());
+    }
     await seek(page, 0); const combined0 = await capture("combined-0");
-    if (depthGroup) {
+    if (depthGroup || remainingGroup) {
       const diagnostics = await page.evaluate(() => window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects);
       expect(diagnostics.resourcePlan.requirementKeys).toContain("viewDepth");
       expect(diagnostics.resourcePlan.needsDepthRenderer).toBe(false);
@@ -117,10 +138,15 @@ for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : 
         expect(diagnostics.controller.taskNames).not.toContain(type);
       }
       report.preparedResources = diagnostics.resourcePlan;
+      if (remainingGroup) {
+        expect(diagnostics.resourcePlan.requirementKeys).toEqual(expect.arrayContaining(["viewNormal", "reflectivity", "velocity", "luminousMask"]));
+        for (const type of ["luminous", "ssao", "ssgi", "ssr", "motionBlur"]) { expect(diagnostics.resourcePlan.activeEffects).not.toContain(type); expect(diagnostics.controller.taskNames).not.toContain(type); }
+        expect(diagnostics.controller.instances).toHaveLength(10);
+      }
     }
     await seek(page, 20); const combined20 = await capture("combined-20");
     expect(difference(combined0, combined20)).toBeGreaterThan(0.1);
-    if (depthGroup) {
+    if (depthGroup || remainingGroup) {
       const before = await state();
       await page.locator("#btn-effect-toggle-framegraph").click();
       await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().resourcesAllocated)).toBe(false);
@@ -142,6 +168,7 @@ for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : 
       await page.locator('select[data-postfx-select="backend"]').selectOption(backend, { force: true });
       await page.waitForFunction(backend => window.mmdModokiE2e?.getFrameGraphPostEffectsState().backend === backend, backend);
       await expect.poll(state).toEqual(saved.effects.frameGraphInstances);
+      if (remainingGroup) await expect(page.locator("#status-text")).toContainText("Project restored after Runtime change");
     }
     await seek(page, 20); expect(difference(combined20, await capture("restored"))).toBeLessThan(0.15);
     const webm = testInfo.outputPath("screen-effects.webm");

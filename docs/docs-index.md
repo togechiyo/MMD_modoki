@@ -194,6 +194,7 @@
 - [FrameGraph既存エフェクトの個体方式への展開 2026-10-24](./framegraph-effect-instance-expansion-2026-10-24.md)
 - [LUTと深度演出エフェクトの個体対応・資源破棄 2026-10-24](./framegraph-effect-instance-depth-and-lut-2026-10-24.md)
 - [DoF個体とフォーカス対象キー 2026-10-24](./framegraph-dof-instance-target-keys-2026-10-24.md)
+- [残るFrameGraph効果の個体化 2026-10-24](./framegraph-remaining-effect-instances-2026-10-24.md)
 - [ブルーム幅・ルミナス形状のキーとLUT選択の後続設計 2026-09-14](./effect-shape-keyframes-and-lut-selection-2026-09-14.md)
 - [空気遠近のタイムラインキー 2026-09-14](./aerial-perspective-timeline-2026-09-14.md)
 - [エフェクトキー機能の一時休止 2026-09-15](./effect-timeline-shelving-2026-09-15.md)

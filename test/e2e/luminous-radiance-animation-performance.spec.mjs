@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 import { PNG } from "playwright-core/lib/utilsBundle";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -25,18 +26,17 @@ test("RC updates only moving geometry during continuous bone and morph animation
       const field = page.locator(`#bone-controls input[data-control-key='${key}']`); await field.fill(String(value)); await field.press("Enter");
     }
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    const control = key => luminousInstanceControl(page, key);
     report.mode = active ? "on" : "off";
     for (const [key, value] of [["luminousIntensity", 2], ["luminousRadianceStrength", 100], ["luminousRadianceRange", 3]]) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
-    if (!active) await control("luminousRadianceEnabled").selectOption("0");
+    if (!active) await control("luminousRadianceEnabled").uncheck();
     if (active && process.env.MMD_RC_FULL_RECEIVER === "1") {
       await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).forceRadianceReceiverFull(true));
     }

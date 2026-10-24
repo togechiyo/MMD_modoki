@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 function colored(png, channel) {
@@ -55,31 +56,31 @@ test("existing Luminous emits world-space RC light in Frame Graph", async ({}, t
       await field.fill(String(value)); await field.press("Enter");
     }
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click();
       await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    const control = key => luminousInstanceControl(page, key);
     async function slider(key, value) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
     async function probe(value = {}) { return page.evaluate(async value => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState(value), value); }
     async function capture(name) {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready, null, { timeout: 60000 });
       const position = await probe();
       const path = testInfo.outputPath(`${name}.png`);
+      await expect(page.locator(".toast")).toHaveCount(0);
       await page.locator("#render-canvas").screenshot({ path });
-      states[name] = { position, runtime: await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState()),
+      states[name] = { position, runtime: await getLuminousInstanceRuntime(page),
         validation: await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()) };
       writeFileSync(testInfo.outputPath("report.json"), JSON.stringify({ states, errors }, null, 2));
       return PNG.sync.read(readFileSync(path));
     }
-    await expect(control("luminousRadianceEnabled")).toHaveValue("0");
+    await expect(control("luminousRadianceEnabled")).not.toBeChecked();
     await slider("luminousRadianceRange", 3);
     await slider("luminousIntensity", 0);
     const off = await capture("rc-off");
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     const on = await capture("rc-on");
     await slider("luminousIntensity", 10);
     await capture("glow-on-rc-on");
@@ -115,25 +116,22 @@ test("existing Luminous emits world-space RC light in Frame Graph", async ({}, t
     expect(states.shadow.unblocked - states.shadow.blocked).toBeGreaterThan(5);
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="gamma"]').click();
-    const gamma = page.locator('[data-effect-stack-row="gamma"]');
-    const gammaBox = await gamma.boundingBox();
-    if (!gammaBox) throw new Error("Gamma row has no bounds");
-    await page.locator('[data-effect-stack-drag="luminous"]').dragTo(gamma, { targetPosition: { x: 20, y: gammaBox.height - 2 } });
+    await luminousInstanceRow(page).locator('[data-instance-action="up"]').click();
     const reordered = await capture("reordered-with-gamma");
     expect(colored(reordered, 2)).toBeGreaterThan(100);
-    await control("luminousRadianceEnabled").selectOption("0");
+    await control("luminousRadianceEnabled").uncheck();
     const offscreenOff = await capture("offscreen-rc-off");
     expect(colored(offscreenOff, 2)).toBeLessThan(20);
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     await probe({ position: [-3, 2, -0.5] });
     await capture("moved-emitter");
     const output = testInfo.outputPath("export"); mkdirSync(output, { recursive: true });
     await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output, 640, 360), output);
     expect(colored(PNG.sync.read(readFileSync(resolve(output, "single_rgba_surface_e2e.png"))), 2)).toBeGreaterThan(100);
-    await page.locator('[data-effect-stack-toggle="luminous"]').uncheck();
+    await luminousInstanceRow(page).locator('[data-instance-field="enabled"]').uncheck();
     const stackOff = await capture("stack-off");
     expect(colored(stackOff, 2)).toBeLessThan(20);
-    await page.locator('[data-effect-stack-toggle="luminous"]').check();
+    await luminousInstanceRow(page).locator('[data-instance-field="enabled"]').check();
     const restored = await capture("stack-restored");
     expect(colored(restored, 2)).toBeGreaterThan(100);
     for (const state of Object.values(states)) if (state.validation) expect(state.validation.count).toBe(0);
@@ -168,30 +166,30 @@ test("Luminous materials illuminate together with independent colors and additiv
       await field.fill(String(value)); await field.press("Enter");
     }
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click();
       await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    const control = key => luminousInstanceControl(page, key);
     for (const [key, value] of [["luminousRadianceRange", 3], ["luminousIntensity", 0]]) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
     async function capture(name, value = {}) {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       const position = await page.evaluate(async value => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState(value), value);
       const path = testInfo.outputPath(`${name}.png`);
+      await expect(page.locator(".toast")).toHaveCount(0);
       await page.locator("#render-canvas").screenshot({ path });
       const png = PNG.sync.read(readFileSync(path));
       const rgb = point => [0, 1, 2].map(channel => sample(png, point, channel));
       states[name] = { position, floor: rgb(position.floor), left: rgb(position.floorLeft), right: rgb(position.floorRight),
-        runtime: await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState()),
+        runtime: await getLuminousInstanceRuntime(page),
         validation: await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()) };
       writeFileSync(testInfo.outputPath("multicolor-report.json"), JSON.stringify({ states, errors }, null, 2));
       return states[name];
     }
     const off = await capture("multicolor-off", { blocker: false });
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     const mixed = await capture("red-blue-mixed");
     expect(mixed.runtime.luminousRadiance.emitters).toBe(24);
     expect(mixed.left[0]).toBeGreaterThan(mixed.left[2] + 10);
@@ -270,20 +268,20 @@ test("RC follows emission texture UVs and fades its volume boundary", async ({},
     }
     await camera({ tx: 0, ty: 1, tz: 0, rx: -25, ry: 0, rz: 0, camDistance: 11 });
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    const control = key => luminousInstanceControl(page, key);
     async function slider(key, value) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
     await slider("luminousRadianceRange", 3); await slider("luminousIntensity", 0);
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     async function capture(name) {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       const points = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState({ blocker: false }));
-      const path = testInfo.outputPath(`${name}.png`); await page.locator("#render-canvas").screenshot({ path });
+      const path = testInfo.outputPath(`${name}.png`); await expect(page.locator(".toast")).toHaveCount(0);
+      await page.locator("#render-canvas").screenshot({ path });
       const png = PNG.sync.read(readFileSync(path));
       const rgb = point => [0, 1, 2].map(channel => sample(png, point, channel));
       states[name] = { floor: rgb(points.floor), inner: rgb(points.edgeInner), inside: rgb(points.edgeInside), outside: rgb(points.edgeOutside),
@@ -301,8 +299,8 @@ test("RC follows emission texture UVs and fades its volume boundary", async ({},
     await texture(0.5); const mixed = await capture("texture-mixed");
     expect(mixed.floor[1]).toBeGreaterThan(mixed.floor[0] + 10);
     expect(mixed.floor[2]).toBeGreaterThan(mixed.floor[0] + 10);
-    await control("luminousRadianceEnabled").selectOption("0"); await capture("texture-rc-off");
-    await control("luminousRadianceEnabled").selectOption("1"); const restored = await capture("texture-rc-restored");
+    await control("luminousRadianceEnabled").uncheck(); await capture("texture-rc-off");
+    await control("luminousRadianceEnabled").check(); const restored = await capture("texture-rc-restored");
     expect(restored.floor[1]).toBeGreaterThan(restored.floor[0] + 10);
     expect(restored.floor[2]).toBeGreaterThan(restored.floor[0] + 10);
     const output = testInfo.outputPath("export"); mkdirSync(output, { recursive: true });
@@ -352,21 +350,21 @@ test("RC respects MMD and Standard reflectance without washing dark materials wh
       await field.fill(String(value)); await field.press("Enter");
     }
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
+    const control = key => luminousInstanceControl(page, key);
     for (const [key, value] of [["luminousRadianceRange", 3], ["luminousIntensity", 0], ["luminousRadianceStrength", 100]]) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).createRadianceReceiverColors());
     async function capture(name) {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       const points = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState());
-      const path = testInfo.outputPath(`${name}.png`); await page.locator("#render-canvas").screenshot({ path });
+      const path = testInfo.outputPath(`${name}.png`); await expect(page.locator(".toast")).toHaveCount(0);
+      await page.locator("#render-canvas").screenshot({ path });
       const png = PNG.sync.read(readFileSync(path));
       states[name] = { surfaces: points.surfaces.map(surface => ({ ...surface,
         rgb: [0, 1, 2].map(channel => sample(png, surface.point, channel)) })),
@@ -385,9 +383,9 @@ test("RC respects MMD and Standard reflectance without washing dark materials wh
       surface.albedo = data.albedo;
       for (const i of [0, 1, 2]) expect(data.albedo[i]).toBeCloseTo(surface.color[i] ** 2.2, 3);
     }
-    await control("luminousRadianceEnabled").selectOption("0"); const off = await capture("reflectance-rc-off");
+    await control("luminousRadianceEnabled").uncheck(); const off = await capture("reflectance-rc-off");
     for (const surface of off) expect(Math.max(...surface.rgb)).toBeLessThan(3);
-    await control("luminousRadianceEnabled").selectOption("1"); const restored = await capture("reflectance-restored");
+    await control("luminousRadianceEnabled").check(); const restored = await capture("reflectance-restored");
     for (const [i, surface] of restored.entries()) for (const c of [0, 1, 2]) expect(Math.abs(surface.rgb[c] - on[i].rgb[c])).toBeLessThan(3);
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState({ color: [1, 0, 0] }));
     const colored = await capture("reflectance-red-light");
@@ -403,7 +401,7 @@ test("RC respects MMD and Standard reflectance without washing dark materials wh
     expect(lit[0].rgb[0]).toBeGreaterThan(lit[0].rgb[1] * 1.5);
     expect(lit[1].rgb[2]).toBeGreaterThan(lit[1].rgb[1] * 1.5);
     expect(Math.max(...lit[2].rgb)).toBeLessThan(Math.min(...lit[3].rgb) * 0.15);
-    await control("luminousRadianceEnabled").selectOption("0"); const litOff = await capture("reflectance-scene-light-only");
+    await control("luminousRadianceEnabled").uncheck(); const litOff = await capture("reflectance-scene-light-only");
     for (const [i, surface] of litOff.entries()) expect(lit[i].rgb[0]).toBeGreaterThanOrEqual(surface.rgb[0]);
     for (const state of Object.values(states)) expect(state.validation.count).toBe(0);
     expect(errors).toEqual([]);
@@ -421,14 +419,13 @@ test("RC controls survive project load, master toggle and backend changes", asyn
     await page.locator('[data-effect-tab="post"]').click();
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="luminous"]').click();
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
-    await expect(control("luminousRadianceEnabled")).toHaveValue("0");
-    await control("luminousRadianceEnabled").selectOption("1");
+    const control = key => luminousInstanceControl(page, key);
+    await expect(control("luminousRadianceEnabled")).not.toBeChecked();
+    await control("luminousRadianceEnabled").check();
     for (const [key, value] of [["luminousRadianceStrength", 30], ["luminousRadianceRange", 3], ["luminousRadius", 80]]) {
-      await control(key).evaluate((input, value) => { input.value = String(value);
-        input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, value);
+      await setLuminousInstancePosition(page, key, value);
     }
-    const settings = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.luminousRadiance);
+    const settings = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances.instances.find(item => item.type === "luminous").fixedSettings.radiance);
     expect(settings).toMatchObject({ enabled: true, strength: 2.4 });
     expect(settings.range).toBeCloseTo(3.97);
     const menu = async command => {
@@ -438,14 +435,14 @@ test("RC controls survive project load, master toggle and backend changes", asyn
     const saved = testInfo.outputPath("rc-project.json");
     await launched.app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, saved);
     await menu("file.saveProject"); await expect.poll(() => existsSync(saved)).toBe(true);
-    expect(JSON.parse(readFileSync(saved, "utf8")).effects.luminousRadiance).toEqual(settings);
-    await control("luminousRadianceEnabled").selectOption("0");
+    expect(JSON.parse(readFileSync(saved, "utf8")).effects.frameGraphInstances.instances.find(item => item.type === "luminous").fixedSettings.radiance).toEqual(settings);
+    await control("luminousRadianceEnabled").uncheck();
     await launched.app.evaluate(({ dialog }, path) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] }); }, saved);
     await menu("file.loadProject");
     await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
-    await expect(control("luminousRadianceEnabled")).toHaveValue("1");
-    await expect(control("luminousRadianceStrength")).toHaveValue("30");
-    await expect(control("luminousRadianceRange")).toHaveValue("3");
+    await expect(control("luminousRadianceEnabled")).toBeChecked();
+    await expect(control("luminousRadianceStrength")).toHaveValue("2.4");
+    await expect(control("luminousRadianceRange")).toHaveValue("3.97");
     await page.locator("#btn-effect-toggle-framegraph").click();
     await page.waitForFunction(() => !window.mmdModokiE2e.getFrameGraphPostEffectsState().resourcesAllocated);
     await page.locator("#btn-effect-toggle-framegraph").click();
@@ -455,14 +452,14 @@ test("RC controls survive project load, master toggle and backend changes", asyn
       await page.waitForFunction(value => window.mmdModokiE2e?.getFrameGraphPostEffectsState().backend === value, backend);
       await page.waitForFunction(() => /Project restored|Project restore failed/.test(document.querySelector("#status-text")?.textContent ?? ""));
       expect(await page.locator("#status-text").textContent(), await page.locator("body").innerText()).toContain("Project restored after Runtime change");
-      expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.luminousRadiance)).toEqual(settings);
+      expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances.instances.find(item => item.type === "luminous").fixedSettings.radiance)).toEqual(settings);
     }
     if (!await page.locator("#shader-panel").isVisible()) await page.locator("#btn-toggle-shader-panel").click();
     await page.locator('[data-effect-tab="post"]').click();
-    const row = page.locator('[data-effect-stack-row="luminous"]');
-    if (!await control("luminousRadianceEnabled").isVisible()) await row.locator('[data-effect-stack-item="luminous"]').click();
-    await expect(control("luminousRadianceEnabled")).toHaveValue("1");
-    await expect(control("luminousRadianceStrength")).toHaveValue("30");
+    const row = luminousInstanceRow(page);
+    if (!await control("luminousRadianceEnabled").isVisible()) await row.locator('[data-instance-action="select"]').click();
+    await expect(control("luminousRadianceEnabled")).toBeChecked();
+    await expect(control("luminousRadianceStrength")).toHaveValue("2.4");
     await expect(control("luminousRadius")).toHaveValue("80");
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
     await row.screenshot({ path: testInfo.outputPath("luminous-controls.png") });

@@ -17,7 +17,7 @@ export type FrameGraphSharedResourceKey =
     | "luminousMask";
 
 export type FrameGraphResourcePlanSettings = FrameGraphPostEffectActivationSettings & {
-    effectInstances?: readonly { type: FrameGraphPostEffectId }[];
+    effectInstances?: readonly { type: FrameGraphPostEffectId; fixedSettings?: { radiance?: { enabled: boolean } } }[];
     imageProcessingEnabled: boolean;
     antialiasEnabled: boolean;
 };
@@ -143,7 +143,7 @@ export function buildFrameGraphResourcePlan(
 
     if (resourceEffects.includes("luminous")) {
         addConsumer(consumersByKey, "luminousMask", "luminous");
-        if (settings.luminousRadiance?.enabled) {
+        if ((activeEffects.includes("luminous") && settings.luminousRadiance?.enabled) || settings.effectInstances?.some(item => item.type === "luminous" && item.fixedSettings?.radiance?.enabled)) {
             addConsumer(consumersByKey, "viewDepth", "luminous");
             addConsumer(consumersByKey, "viewNormal", "luminous");
             addConsumer(consumersByKey, "radianceAlbedo", "luminous");
@@ -169,7 +169,7 @@ export function buildFrameGraphResourcePlan(
             || consumersByKey.has("reflectivity"),
         needsDepthRenderer: consumersByKey.has("depthScene"),
         needsLuminousMask: consumersByKey.has("luminousMask"),
-        needsLuminousRadiance: activeEffects.includes("luminous") && settings.luminousRadiance?.enabled === true,
+        needsLuminousRadiance: (activeEffects.includes("luminous") && settings.luminousRadiance?.enabled === true) || !!settings.effectInstances?.some(item => item.type === "luminous" && item.fixedSettings?.radiance?.enabled),
         fixedTasks: {
             imageProcessing: settings.imageProcessingEnabled,
             fxaa: settings.antialiasEnabled,

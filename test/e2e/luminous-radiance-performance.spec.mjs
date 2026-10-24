@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test("RC reuses its static field and stops compute at zero strength", async ({}, testInfo) => {
@@ -28,21 +29,18 @@ test("RC reuses its static field and stops compute at zero strength", async ({},
       await field.fill(String(value)); await field.press("Enter");
     }
     await page.locator('[data-effect-tab="post"]').click();
-    if (!await page.locator('[data-effect-stack-row="luminous"]').count()) {
+    if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
-    const control = key => page.locator(`[data-effect-stack-control="${key}"]`);
-    const slider = (key, value) => control(key).evaluate((input, value) => {
-      input.value = String(value); input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    }, value);
+    const control = key => luminousInstanceControl(page, key);
+    const slider = (key, value) => setLuminousInstancePosition(page, key, value);
     await slider("luminousRadianceRange", 3); await slider("luminousIntensity", 2);
-    await control("luminousRadianceEnabled").selectOption("1");
+    await control("luminousRadianceEnabled").check();
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     async function measure(name) {
       await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).radianceProbeState({ blocker: false }));
       report[name] = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).profileRadianceProbe());
-      report[name].runtime = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().luminousRadiance);
+      report[name].runtime = (await getLuminousInstanceRuntime(page)).luminousRadiance;
       writeFileSync(testInfo.outputPath("performance-report.json"), JSON.stringify(report, null, 2));
       return report[name];
     }

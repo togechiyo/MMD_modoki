@@ -5,6 +5,11 @@ import type { FrameGraphPostEffectsSettings } from "./frame-graph-post-effects-c
 export function frameGraphInstanceSettings(base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance): FrameGraphPostEffectsSettings {
     const value = instance.value;
     switch (instance.type) {
+        case "ssao": return { ...base, ssaoEnabled: value.enabled, ssaoPrepared: true, ssaoStrength: Number(value.strength), ssaoRadius: Number(value.radius), ssaoShadowColor: instance.fixedSettings?.color ?? { r: 0.5, g: 0.5, b: 0.5 }, ssaoToonInfluence: instance.fixedSettings?.toonInfluence ?? 1 };
+        case "ssgi": return { ...base, ssgiEnabled: value.enabled, ssgiStrength: Number(value.strength), ssgiSampleRadius: Number(value.sampleRadius), ssgiBlendMode: instance.fixedSettings?.blendMode ?? "softLight" };
+        case "ssr": return { ...base, ssrEnabled: value.enabled, ssrPrepared: true, ssrStrength: Number(value.strength), ssrStep: Number(value.step) };
+        case "motionBlur": return { ...base, motionBlurEnabled: value.enabled, motionBlurStrength: Number(value.strength), motionBlurSamples: instance.fixedSettings?.samples ?? 32 };
+        case "luminous": return { ...base, luminousEnabled: value.enabled, luminousPrepared: true, luminousIntensity: Number(value.intensity), luminousThreshold: Number(value.threshold), luminousRadius: Number(value.radius), luminousGlareCount: 0, luminousGlareLength: 48, luminousGlareAngle: 0, luminousGlarePower: 0, luminousRadiance: instance.fixedSettings?.radiance ?? { enabled: false, strength: 1, range: 12 } };
         case "dof": return { ...base, dofEnabled: value.enabled, dofFocusDistanceMm: instance.dofFocusDistanceMm ?? Number(value.focusDistance), dofEffectiveFStop: Number(value.fStop), dofLensSize: Number(value.lensSize), dofFocalLength: Number(value.focalLength), dofBlurLevel: 1 };
         case "gamma": return { ...base, gammaEnabled: value.enabled, gammaPower: Number(value.gamma) };
         case "grain": return { ...base, grainIntensity: Number(value.intensity) };

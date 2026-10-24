@@ -129,6 +129,7 @@ type EffectWrapperReadyLike = {
 };
 
 export type FrameGraphPostEffectsDiagnosticsSnapshot = {
+    instances: Array<{ instanceId: string; type: EffectInstanceType; taskNames: string[]; radiance: { triangles: number; emitters: number; updates: number; error: string | null } | null }>;
     luminousRadiance: { triangles: number; emitters: number; updates: number; error: string | null } | null;
     active: boolean;
     ready: boolean;
@@ -1955,7 +1956,7 @@ class FrameGraphPostEffectsLensDistortionTask extends FrameGraphPostProcessTask 
 }
 
 export class FrameGraphPostEffectsController {
-    private readonly instanceTasks = new Map<string, { type: EffectInstanceType; tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask | FrameGraphDepthOfFieldTask>; connect: (source: FrameGraphTextureHandle) => FrameGraphTextureHandle; update: (base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance) => void; ready: (instance: EvaluatedEffectInstance) => boolean; dispose: () => void }>();
+    private readonly instanceTasks = new Map<string, { type: EffectInstanceType; tasks: FrameGraphTask[]; radianceData?: LuminousRadianceScene; connect: (source: FrameGraphTextureHandle) => FrameGraphTextureHandle; update: (base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance) => void; ready: (instance: EvaluatedEffectInstance) => boolean; dispose: () => void }>();
     private activationWarningEmitted = false;
     private colorCorrectionEffect: EffectWrapper | null = null;
     private gammaCorrectionEffect: EffectWrapper | null = null;
@@ -2196,6 +2197,7 @@ export class FrameGraphPostEffectsController {
             ready: this.ready,
             executedFrameCount: this.executedFrameCount,
             luminousRadiance: this.getLuminousRadianceDiagnostics(),
+            instances: [...this.instanceTasks].map(([instanceId, group]) => ({ instanceId, type: group.type, taskNames: group.tasks.map(task => task.name), radiance: group.radianceData ? { triangles: group.radianceData.bvh.triangleCount, emitters: group.radianceData.emitterTriangles, updates: group.radianceData.updates, error: group.radianceData.error } : null })),
             resourcePlan: resourcePlan
                 ? {
                     effectOrder: [...resourcePlan.effectOrder],
@@ -2248,7 +2250,7 @@ export class FrameGraphPostEffectsController {
                 viewDepth: this.geometryRendererTask !== null,
                 viewNormal: this.geometryRendererTask !== null,
                 velocity: resourcePlan?.requirementKeys.includes("velocity") ?? false,
-                reflectivity: this.geometryRendererTask !== null && this.ssrTask !== null,
+                reflectivity: this.geometryRendererTask !== null && !!resourcePlan?.requirementKeys.includes("reflectivity"),
                 ssgiHalfResolution: this.ssgiGatherTask !== null,
                 ssgiDenoisedHalfResolution:
                     this.ssgiDenoiseTasks.length === SSGI_DENOISE_STEP_WIDTHS.length,
@@ -2882,7 +2884,7 @@ export class FrameGraphPostEffectsController {
         }
 
         for (const instance of initialSettings.effectInstances ?? []) {
-            const group = this.createInstanceTasks(frameGraph, instance, initialSettings, scene, camera, directionalLight, this.geometryRendererTask?.geometryViewDepthTexture, depthTextureHandle);
+            const group = this.createInstanceTasks(frameGraph, instance, initialSettings, scene, camera, directionalLight, this.geometryRendererTask?.geometryViewDepthTexture, depthTextureHandle, luminousTextureHandle, this.getSourceTextureSize(scene, sourceTexture));
             group.connect(sourceTextureHandle);
             this.instanceTasks.set(instance.instanceId, group);
             for (const task of group.tasks) deferEffectTask(instance.instanceId, task);
@@ -2912,7 +2914,7 @@ export class FrameGraphPostEffectsController {
         }
 
         let luminousOutputTexture = bloomSourceTexture;
-        if (resourcePlan.needsLuminousMask && luminousTextureHandle !== undefined) {
+        if (resourcePlan.activeEffects.includes("luminous") && luminousTextureHandle !== undefined) {
             const luminousDisabled = false;
 
         this.luminousExtractEffect = new EffectWrapper({
@@ -3287,7 +3289,7 @@ export class FrameGraphPostEffectsController {
             frameGraph.addTask(task);
         }
 
-        if (resourcePlan.activeEffects.includes("motionBlur")) {
+        if (resourcePlan.requirementKeys.includes("velocity")) {
             this.motionBlurBoneVelocityMode.synchronize(scene.meshes);
         }
 
@@ -3403,7 +3405,7 @@ export class FrameGraphPostEffectsController {
         }
         if (this.geometryRendererTask) {
             const radianceActive = settings.luminousEnabled && settings.luminousRadiance?.enabled
-                && settings.luminousRadiance.strength > 0.0001;
+                && settings.luminousRadiance.strength > 0.0001 || settings.effectInstances?.some(item => item.type === "luminous" && item.value.enabled && item.fixedSettings?.radiance?.enabled && item.fixedSettings.radiance.strength > 0.0001);
             const otherGeometryConsumer = resourcePlan.requirements.some(requirement => requirement.producer === "geometryRenderer"
                 && requirement.consumers.some(id => id !== "luminous"));
             this.geometryRendererTask.disabled = !resourcePlan.needsGeometryRenderer || (!radianceActive && !otherGeometryConsumer);
@@ -3454,6 +3456,7 @@ export class FrameGraphPostEffectsController {
                 || settings.offsetHighlightStrength <= 0.0001
                 || this.offsetHighlightTask.depthTexture === undefined;
         }
+        if (this.allocatedResourcePlan?.requirementKeys.includes("velocity") && this.activeScene) this.motionBlurBoneVelocityMode.synchronize(this.activeScene.meshes);
         if (this.motionBlurTask) {
             if (this.activeScene) {
                 this.motionBlurBoneVelocityMode.synchronize(this.activeScene.meshes);
@@ -3529,22 +3532,92 @@ export class FrameGraphPostEffectsController {
         return false;
     }
 
-    private createInstanceTasks(frameGraph: FrameGraph, instance: EvaluatedEffectInstance, base: FrameGraphPostEffectsSettings, scene: Scene, camera: Camera | null, light: DirectionalLight | null, depth?: FrameGraphTextureHandle, dofDepth?: FrameGraphTextureHandle) {
+    private createInstanceTasks(frameGraph: FrameGraph, instance: EvaluatedEffectInstance, base: FrameGraphPostEffectsSettings, scene: Scene, camera: Camera | null, light: DirectionalLight | null, depth?: FrameGraphTextureHandle, dofDepth?: FrameGraphTextureHandle, luminousMask?: FrameGraphTextureHandle, size = { width: 1, height: 1 }) {
         const name = `${instance.type}-${instance.instanceId}`, engine = frameGraph.engine;
         const shaderLanguage = engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL;
         let current = frameGraphInstanceSettings(base, instance);
         const settings = (): FrameGraphPostEffectsSettings => current;
-        const tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask | FrameGraphDepthOfFieldTask> = [];
+        const linearTasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask | FrameGraphDepthOfFieldTask | FrameGraphSSAO2RenderingPipelineTask | FrameGraphSSRRenderingPipelineTask> = [];
+        const tasks: FrameGraphTask[] = linearTasks;
+        let connectBranch: ((source: FrameGraphTextureHandle) => FrameGraphTextureHandle) | undefined;
+        let radianceData: LuminousRadianceScene | undefined;
         const wrapper = (shader: string, uniforms: string[], samplers?: string[]): EffectWrapper => new EffectWrapper({ engine, fragmentShader: shader, useShaderStore: true, useAsPostProcess: true, uniforms, ...(samplers ? { samplers } : {}), name, shaderLanguage });
         let updateValues: () => void = () => undefined;
         let lutTexture: RawTexture | null = null, lutText: string | null = null;
         if (instanceNeedsViewDepth(instance.type) && (!camera || depth === undefined)) throw new Error(`${name}: view depth is required`);
         switch (instance.type) {
+            case "ssr": {
+                const geometry = this.geometryRendererTask;
+                if (!camera || !geometry) throw new Error(`${name}: geometry and camera are required`);
+                const task = new FrameGraphSSRRenderingPipelineTask(name, frameGraph, Constants.TEXTURETYPE_HALF_FLOAT);
+                task.camera = camera; task.depthTexture = geometry.geometryViewDepthTexture; task.normalTexture = geometry.geometryViewNormalTexture; task.reflectivityTexture = geometry.geometryReflectivityTexture;
+                linearTasks.push(task); updateValues = () => this.applySsrSettings(task, current); break;
+            }
+            case "ssao": {
+                const geometry = this.geometryRendererTask;
+                if (!camera || !geometry) throw new Error(`${name}: geometry and camera are required`);
+                const ao = new FrameGraphSSAO2RenderingPipelineTask(name, frameGraph, 0.5, 0.5);
+                ao.camera = camera; ao.depthTexture = geometry.geometryViewDepthTexture; ao.normalTexture = geometry.geometryViewNormalTexture;
+                const composite = new FrameGraphPostEffectsSsaoToonCompositeTask(`${name}-composite`, frameGraph, wrapper("mmdFrameGraphSsaoToonComposite", ["shadowColor", "toonInfluence", "enabled"], ["originalColor"]), settings);
+                tasks.push(ao, composite);
+                connectBranch = source => { ao.sourceTexture = source; composite.sourceTexture = ao.outputTexture; composite.originalTexture = source; return composite.outputTexture; };
+                updateValues = () => this.applySsaoSettings(ao, current, camera); break;
+            }
+            case "ssgi": {
+                const geometry = this.geometryRendererTask;
+                if (!camera || !geometry || !engine.isWebGPU || !engine.getCaps().supportComputeShaders) throw new Error(`${name}: compute shaders, geometry and camera are required`);
+                const getSsgi = () => ({ strength: current.ssgiStrength, sampleRadius: current.ssgiSampleRadius, blendMode: current.ssgiBlendMode });
+                const gather = new FrameGraphPostEffectsSsgiGatherTask(name, frameGraph, size.width, size.height, camera, getSsgi);
+                gather.depthTexture = geometry.geometryViewDepthTexture; gather.normalTexture = geometry.geometryViewNormalTexture;
+                const denoisers = SSGI_DENOISE_STEP_WIDTHS.map((step, index) => {
+                    const task = new FrameGraphPostEffectsSsgiDenoiseTask(`${name}-denoise-${index}`, frameGraph, size.width, size.height, gather.outputWidth, gather.outputHeight, step);
+                    task.depthTexture = geometry.geometryViewDepthTexture; task.normalTexture = geometry.geometryViewNormalTexture; return task;
+                });
+                const composite = new FrameGraphPostEffectsSsgiCompositeTask(`${name}-composite`, frameGraph, wrapper("mmdFrameGraphSsgiComposite", ["strength", "blendMode"], ["ssgiTexture", "viewDepthTexture", "viewNormalTexture"]), getSsgi);
+                composite.depthTexture = geometry.geometryViewDepthTexture; composite.normalTexture = geometry.geometryViewNormalTexture;
+                tasks.push(gather, ...denoisers, composite);
+                connectBranch = source => {
+                    gather.sourceTexture = source; let gi = gather.outputTexture;
+                    for (const task of denoisers) { task.sourceTexture = gi; task.sceneColorTexture = source; gi = task.outputTexture; }
+                    composite.sourceTexture = source; composite.ssgiTexture = gi; return composite.outputTexture;
+                }; break;
+            }
+            case "motionBlur": {
+                const geometry = this.geometryRendererTask;
+                if (!geometry) throw new Error(`${name}: velocity is required`);
+                const task = new FrameGraphMotionBlurTask(name, frameGraph); task.velocityTexture = geometry.geometryVelocityTexture;
+                linearTasks.push(task); updateValues = () => this.applyMotionBlurSettings(task, current); break;
+            }
+            case "luminous": {
+                if (luminousMask === undefined) throw new Error(`${name}: material emission mask is required`);
+                const extract = new FrameGraphPostEffectsLuminousExtractTask(`${name}-extract`, frameGraph, wrapper("mmdFrameGraphLuminousExtract", ["threshold"]), settings);
+                extract.sourceTexture = luminousMask;
+                const blur = (band: LuminousBlurBand, horizontal: boolean) => new FrameGraphPostEffectsLuminousThinBlurTask(`${name}-${band}-${horizontal ? "x" : "y"}`, frameGraph,
+                    new ThinBlurPostProcess(`${name}-${band}`, engine, horizontal ? new Vector2(1, 0) : new Vector2(0, 1), resolveLuminousBlurPassSettings(current.luminousRadius, band).kernel, { shaderLanguage }), settings, horizontal ? "horizontal" : "vertical", band);
+                const coreX = blur("core", true), coreY = blur("core", false), haloX = blur("halo", true), haloY = blur("halo", false);
+                coreX.sourceTexture = extract.outputTexture; coreY.sourceTexture = coreX.outputTexture; haloX.sourceTexture = extract.outputTexture; haloY.sourceTexture = haloX.outputTexture;
+                const composite = new FrameGraphPostEffectsLuminousTask(`${name}-composite`, frameGraph, wrapper("mmdFrameGraphLuminous", ["intensity", "glareCount", "glareLength", "glareAngle", "glarePower", "texelSize"], ["glowSampler", "haloSampler"]), settings);
+                composite.glowTexture = coreY.outputTexture; composite.haloTexture = haloY.outputTexture;
+                tasks.push(extract, coreX, coreY, haloX, haloY);
+                let radiance: ReturnType<typeof createLuminousRadianceTasks> | undefined;
+                if (current.luminousRadiance?.enabled) {
+                    const geometry = this.geometryRendererTask;
+                    if (!geometry || !camera || !engine.isWebGPU || !engine.getCaps().supportComputeShaders) throw new Error(`${name}: radiance geometry and compute shaders are required`);
+                    radiance = createLuminousRadianceTasks(frameGraph, scene, camera, geometry.geometryViewDepthTexture, geometry.geometryViewNormalTexture, geometry.geometryAlbedoTexture, geometry.objectRenderer.renderPassId,
+                        () => ({ ...current.luminousRadiance ?? { strength: 1, range: 12 }, enabled: current.luminousEnabled && current.luminousRadiance?.enabled === true }), this.readRadianceEmission);
+                    radianceData = radiance.data;
+                    for (const task of radiance.tasks) task.name = `${name}-${task.name}`;
+                    tasks.push(...radiance.tasks);
+                    const prepare = radiance.tasks[0]; updateValues = () => { prepare.disabled = false; };
+                }
+                tasks.push(composite);
+                connectBranch = source => { if (radiance) radiance.composite.sourceTexture = source; composite.sourceTexture = radiance?.composite.outputTexture ?? source; return composite.outputTexture; }; break;
+            }
             case "dof": {
                 if (!camera || dofDepth === undefined) throw new Error(`${name}: camera and DoF depth are required`);
                 const task = new FrameGraphDepthOfFieldTask(name, frameGraph, ThinDepthOfFieldEffectBlurLevel.Medium, false);
                 task.camera = camera; task.depthTexture = dofDepth;
-                tasks.push(task); updateValues = () => this.applyDepthOfFieldSettings(task, current); break;
+                linearTasks.push(task); updateValues = () => this.applyDepthOfFieldSettings(task, current); break;
             }
             case "gamma": tasks.push(new FrameGraphPostEffectsColorCorrectionTask(name, frameGraph, wrapper("mmdFrameGraphColorCorrection", ["contrast", "gammaPower"]), () => undefined, settings, false, true)); break;
             case "grain": {
@@ -3600,12 +3673,13 @@ export class FrameGraphPostEffectsController {
             }
         }
         const group = {
-            type: instance.type, tasks,
+            type: instance.type, tasks, radianceData,
             ready: (value: EvaluatedEffectInstance): boolean => (instance.type !== "lut" || (!!lutTexture?.isReady() && lutText === value.lutText)) && tasks.every(task => task.isReady()),
             dispose: (): void => { for (const task of tasks) task.dispose(); lutTexture?.dispose(); lutTexture = null; },
             connect: (source: FrameGraphTextureHandle): FrameGraphTextureHandle => {
+                if (connectBranch) return connectBranch(source);
                 let texture = source;
-                for (const task of tasks) {
+                for (const task of linearTasks) {
                     task.sourceTexture = texture;
                     if (task instanceof FrameGraphPostEffectsBloomTintTask) task.originalTexture = source;
                     texture = task.outputTexture;

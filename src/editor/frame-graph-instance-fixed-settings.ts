@@ -1,12 +1,14 @@
 import { buildLutAtlasDataFrom3dlText } from "../render/lut-atlas-texture";
 import { instanceColor, type InstanceColor, type EffectInstanceType } from "./frame-graph-instance-effects";
+import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
+import type { SsgiBlendMode } from "../types";
 
 export const INSTANCE_LUT_PRESETS = [
     { id: "anime-soft", label: "Anime Soft" }, { id: "anime-cool", label: "Anime Cool" }, { id: "anime-dramatic", label: "Anime Dramatic" },
     { id: "monotone", label: "Monotone" }, { id: "sepia", label: "Sepia" }, { id: "teal-orange", label: "Teal Orange" },
 ] as const;
 export type InstanceLutSource = { kind: "builtin"; preset: string } | { kind: "external"; name: string; runtimeText: string };
-export type InstanceFixedSettings = { color?: InstanceColor; shadowColor?: InstanceColor; thickness?: number; softness?: number; lut?: InstanceLutSource };
+export type InstanceFixedSettings = { color?: InstanceColor; shadowColor?: InstanceColor; thickness?: number; softness?: number; lut?: InstanceLutSource; toonInfluence?: number; blendMode?: SsgiBlendMode; samples?: number; radiance?: LuminousRadianceSettings };
 const validatedLuts = new Set<string>();
 function lutSource(source: InstanceLutSource | undefined): InstanceLutSource {
     if (!source) return { kind: "builtin", preset: "anime-soft" };
@@ -21,6 +23,10 @@ function lutSource(source: InstanceLutSource | undefined): InstanceLutSource {
 }
 export function instanceFixedSettings(type: EffectInstanceType, value: InstanceFixedSettings = {}): InstanceFixedSettings | undefined {
     switch (type) {
+        case "ssao": return { color: instanceColor(value.color ?? { r: 0.5, g: 0.5, b: 0.5 }), toonInfluence: finite(value.toonInfluence, 1, 0, 1) };
+        case "ssgi": return { blendMode: ["additive", "softLight", "overlay"].includes(value.blendMode ?? "") ? value.blendMode : "softLight" };
+        case "motionBlur": return { samples: Math.round(finite(value.samples, 32, 8, 64)) };
+        case "luminous": return { radiance: normalizeLuminousRadiance(value.radiance) };
         case "lut": return { lut: lutSource(value.lut) };
         case "aerialPerspective": return { color: instanceColor(value.color ?? { r: 0.72, g: 0.79, b: 0.83 }) };
         case "directionalLightShafts": return { color: instanceColor(value.color), shadowColor: instanceColor(value.shadowColor ?? { r: 0, g: 0, b: 0 }) };

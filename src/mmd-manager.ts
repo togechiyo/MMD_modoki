@@ -6534,7 +6534,7 @@ ${beforeFogAppendBlock}
     }
     public getEffectTimelineTracks(): KeyframeTrack[] {
         const legacy = EFFECT_TIMELINE_ENABLED ? EFFECT_KEYFRAME_DEFINITIONS
-            .filter(definition => definition.id !== "dof")
+            .filter(definition => definition.id !== "dof" && definition.id !== "motionBlur")
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) })) : [];
         const ids = [...this.effectInstances.order().filter(id => this.effectInstances.has(id)), ...this.effectInstances.ids().filter(id => !this.effectInstances.present(id))];
         return [...legacy, ...ids.map(id => ({ name: id, category: "effect" as const, frames: this.effectInstances.frames(id), effectInstance: { type: this.effectInstances.type(id), label: this.effectInstances.label(id), suspended: !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph" } }))];
@@ -6657,7 +6657,8 @@ ${beforeFogAppendBlock}
         if (!next) return false;
         try { this.effectInstances.restore(next); } catch { return false; }
         this.effectSceneTracksChanged();
-        if (JSON.stringify(state.order) !== JSON.stringify(next.order)) this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        const radianceStructure = (data: SerializedEffectInstances): string => JSON.stringify(data.instances.filter(item => item.type === "luminous" && item.fixedSettings?.radiance?.enabled).map(item => item.instanceId));
+        if (JSON.stringify(state.order) !== JSON.stringify(next.order) || radianceStructure(state) !== radianceStructure(next)) this.refreshFrameGraphPostEffectsBackendForOrderChange();
         return true;
     }
     public setSerializedEffectSceneTracks(data: unknown): void {
@@ -8829,6 +8830,7 @@ ${beforeFogAppendBlock}
                     resourceNames,
                     planRequirementKeys: resourcePlan?.requirementKeys ?? [],
                     connectedOrder: controllerSnapshot.connectedOrder,
+                    instances: controllerSnapshot.instances,
                     luminousCoreKernel: controllerSnapshot.luminousBlur.coreKernel,
                     luminousHaloKernel: controllerSnapshot.luminousBlur.haloKernel,
                     luminousCoreDirectionScale: controllerSnapshot.luminousBlur.coreDirectionScale,

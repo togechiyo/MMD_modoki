@@ -46,6 +46,21 @@ function createSettings(
 }
 
 describe("instance depth resources", () => {
+    it("prepares all remaining instance resources without enabling any singleton", () => {
+        const effects = ["ssao", "ssgi", "ssr", "motionBlur", "luminous"] as const;
+        const plan = buildFrameGraphResourcePlan(createSettings({ effectInstances: effects.flatMap(type => [{ type }, { type }]) }));
+        expect(plan.activeEffects).toEqual([]);
+        expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth", "viewNormal", "reflectivity", "velocity", "luminousMask"]);
+        expect(plan.needsDepthRenderer).toBe(false); expect(plan.needsLuminousRadiance).toBe(false);
+        expect(plan.requirements.find(item => item.key === "viewNormal")?.consumers).toEqual(["ssr", "ssgi", "ssao"]);
+    });
+    it("prepares RC only for a luminous instance that owns it, even with another RC instance already present", () => {
+        const off = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "luminous" }], luminousRadiance: { enabled: true, strength: 1, range: 12 } }));
+        expect(off.needsLuminousRadiance).toBe(false); expect(off.needsGeometryRenderer).toBe(false);
+        const on = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "luminous", fixedSettings: { radiance: { enabled: true } } }] }));
+        expect(on.activeEffects).toEqual([]); expect(on.needsLuminousRadiance).toBe(true);
+        expect(on.requirementKeys).toContain("radianceAlbedo"); expect(canReuseFrameGraphForActivation(off, on, [])).toBe(false);
+    });
     it("prepares shared view depth for OFF instances without creating a singleton effect", () => {
         const plan = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "offsetShadow" }, { type: "aerialPerspective" }, { type: "offsetHighlight" }] }));
         expect(plan.activeEffects).toEqual([]);

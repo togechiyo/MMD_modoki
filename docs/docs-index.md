@@ -186,6 +186,7 @@
 
 ## カメラ / タイムライン / キーフレーム
 
+- [FrameGraphエフェクト個体化・タイムライン対応 総括（19種類・現行仕様）2026-10-24](./framegraph-effect-instances-summary-2026-10-24.md)
 - [アクセサリ・タイムライン仕様](./accessory-timeline-spec.md)
 - [エフェクト・DoF 対象のタイムラインキー化 事前検討 2026-08-25](./effect-timeline-dof-target-keying-investigation-2026-08-25.md)
 - [エフェクト単位のタイムライン共通基盤：設計・見積もり 2026-09-14](./effect-timeline-common-foundation-design-2026-09-14.md)

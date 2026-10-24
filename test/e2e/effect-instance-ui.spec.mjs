@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync } from "node:fs";
-import { launchMmdModoki } from "./electron-app.mjs";
+import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
 import { dragEffectStackRow, selectEffectInstance, expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -12,12 +12,13 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     const page = await launched.app.firstWindow(); await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
     await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1280, 900));
-    await page.locator("#info-model-select").selectOption("__camera__");
+    expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.timelineTarget)).toBe("model");
     await page.locator("#btn-toggle-shader-panel").click(); await page.locator('[data-effect-tab="post"]').click();
     for (const type of ["ssao", "ssao", "ssgi", "ringParticles"]) {
       await page.locator("#btn-effect-add-post").click(); await page.locator(`[data-effect-add-post="${type}"]`).click();
     }
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
+    const effectRows = () => page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().filter(track => track.category === "effect"));
     const before = await state(), [a, b, c] = before.instances.map(item => item.instanceId);
     expect(before.instances.map(item => item.label)).toEqual(["SSAO", "SSAO 2", "SSGI"]);
     const row = id => page.locator(`[data-effect-stack-row="${id}"]`);
@@ -27,7 +28,19 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     expect((await state()).instances).toEqual(before.instances);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click(); expect(await state()).toEqual(before);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click(); expect((await state()).order).toEqual([b, c, "ringParticles", a]);
+    await expandEffectInstance(row(b));
+    expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.timelineTarget)).toBe("model");
+    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await page.locator("#info-model-select").selectOption("__camera__");
+    expect(await effectRows()).toEqual([]);
+    const strength = row(b).locator('[data-instance-field="strength"]');
+    await strength.locator("..").locator(".range-number-input").fill("60");
+    await strength.locator("..").locator(".range-number-input").press("Enter");
+    expect(await effectRows()).toEqual([]);
+    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await page.screenshot({ path: testInfo.outputPath("normal-effect-settings.png") });
     await selectEffectInstance(row(b));
+    expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [] }]);
     await expect(page.locator("[data-effect-key-label]")).toHaveText("SSAO 2");
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
     await expect(row(a).locator(".effect-layer-details")).toBeHidden();
@@ -35,6 +48,30 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await expect(row(b).locator('[data-instance-field="color"], [data-instance-fixed="toonInfluence"]')).toHaveCount(0);
     await expect(row(b).locator('[data-instance-field="strength"], [data-instance-field="radius"]')).toHaveCount(2);
     await page.locator("#shader-panel").screenshot({ path: testInfo.outputPath("effect-panel.png") });
+    // Leaving an unregistered edit session drops its temporary row without making a key.
+    await selectTimelineTrack(page, "camera", "Camera");
+    expect(await effectRows()).toEqual([]);
+    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await selectEffectInstance(row(b));
+    await page.locator("#btn-kf-add").click();
+    await selectTimelineTrack(page, "camera", "Camera");
+    expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [0] }]);
+    const savedProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), savedProject);
+    expect(await state()).toEqual(savedProject.effects.frameGraphInstances);
+    expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [0] }]);
+    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    // Existing keyed rows remain editable; deleting the last key hides the row, including on Redo.
+    await selectTimelineTrack(page, "effect", b);
+    await expect(page.locator("#effect-key-controls")).toBeVisible();
+    await page.locator("#btn-kf-delete").click();
+    expect(await effectRows()).toEqual([]);
+    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
+    expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [0] }]);
+    await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
+    expect(await effectRows()).toEqual([]);
+    expect((await state()).instances).toHaveLength(3);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
   } finally { await launched.close(); }
 });

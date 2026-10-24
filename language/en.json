@@ -630,6 +630,7 @@
     "effect.instance.name": "Effect name",
     "effect.instance.select": "Select in timeline",
     "effect.instance.duplicate": "Duplicate",
+    "effect.instance.keyEdit": "Edit keys",
     "effect.instance.suspend": "Suspend",
     "effect.instance.resume": "Restore",
     "effect.instance.delete": "Delete permanently",

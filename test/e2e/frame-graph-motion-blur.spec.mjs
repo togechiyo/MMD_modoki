@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki, selectCenterBone } from "./electron-app.mjs";
+import { selectEffectInstance } from "./helpers/effect-instance-controls.mjs";
 import { writeFileSync } from "node:fs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -84,7 +85,7 @@ test("Motion Blur instances evaluate separate keys during PMX bone playback and 
     const ids = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances.instances.map(item => item.instanceId));
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     await row(ids[1]).locator('[data-instance-field="enabled"]').uncheck();
-    await row(ids[0]).locator('[data-instance-action="select"]').click();
+    await selectEffectInstance(row(ids[0]));
     for (const [frame, value] of [[0, 20], [20, 80]]) {
       await seek(frame); await page.locator("#effect-key-value").fill(String(value)); await page.locator("#effect-key-value").dispatchEvent("input"); await page.locator("#effect-key-enabled").setChecked(frame > 0); await page.locator("#btn-kf-add").click();
     }

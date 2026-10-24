@@ -4,8 +4,8 @@ export async function expandEffectInstance(row) {
 }
 
 export async function selectEffectInstance(row) {
-  await row.locator('[data-instance-action="select"]').click();
   await expandEffectInstance(row);
+  await row.locator('[data-instance-action="keyEdit"]').click();
 }
 
 export async function dragEffectStackRow(source, target, placement) {

@@ -630,6 +630,7 @@
     "effect.instance.name": "エフェクト名",
     "effect.instance.select": "タイムラインで選択",
     "effect.instance.duplicate": "複製",
+    "effect.instance.keyEdit": "キー編集",
     "effect.instance.suspend": "外す",
     "effect.instance.resume": "復帰",
     "effect.instance.delete": "完全削除",

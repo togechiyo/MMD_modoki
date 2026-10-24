@@ -8,6 +8,7 @@ import { assertKeyCount, resolveKeySelection, type KeySelection, type SelectedKe
 import { readObjectState, validateObjectState, writeObjectState } from "./automation/object-state";
 import { getTimelineTrackDisplayName, type Timeline, type TimelineBoneTrackSelectionRef, type TimelineKeySelectionRef } from "./timeline";
 import { createTimelineSelectionScopeKey } from "./editor/timeline-key-selection";
+import { EffectTimelineViewState } from "./editor/effect-timeline-view-state";
 import type { BottomPanel } from "./bottom-panel";
 import { applyI18nToDom, getLocale, setLocale, t } from "./i18n";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -547,6 +548,8 @@ export class UIController {
     private postEffectAddButton: HTMLButtonElement | null = null;
     private postEffectEnableFrameGraphButton: HTMLButtonElement | null = null;
     private expandedFrameGraphPostEffectId: string | null = null;
+    private readonly effectTimelineView = new EffectTimelineViewState();
+    private updatingEffectTimelineTracks = false;
     private draggingFrameGraphPostEffectId: string | null = null;
     private btnInfoKeyframe: HTMLButtonElement | null = null;
     private btnInterpolationKeyframe: HTMLButtonElement | null = null;
@@ -1284,6 +1287,9 @@ export class UIController {
         });
 
         this.timeline.onSelectionChanged = (track) => {
+            if (!this.updatingEffectTimelineTracks && this.effectTimelineView.selectTrack(track)) {
+                this.refreshVisibleTimelineTracks();
+            }
             if (track?.category === "effect" && (isEffectId(track.name) || this.mmdManager.isEffectInstance(track.name))) {
                 this.expandedFrameGraphPostEffectId = track.name;
                 this.effectPanelShellController?.setActiveTab("post");
@@ -1945,7 +1951,8 @@ export class UIController {
             const selectionScopeChanged = this.timelineSelectionScopeKey !== null
                 && this.timelineSelectionScopeKey !== nextSelectionScopeKey;
             this.timelineSelectionScopeKey = nextSelectionScopeKey;
-            this.timeline.setKeyframeTracks(tracks, { resetSelection: selectionScopeChanged });
+            this.effectTimelineView.setTracks(tracks);
+            this.refreshVisibleTimelineTracks(selectionScopeChanged);
             if (timelineTarget === "model") {
                 const selectedBone = this.bottomPanel.getSelectedBone();
                 if (selectedBone) {
@@ -5222,10 +5229,19 @@ export class UIController {
             (instanceId, field, value) => { this.actionDispatcher.dispatch({ type: "effect.instanceFixedValue", source: "panel", instanceId, field, value }); },
             id => {
                 const close = this.expandedFrameGraphPostEffectId === id;
-                this.mmdManager.setTimelineTarget("camera");
-                this.timeline.selectTrackByNameAndCategory(id, ["effect"]);
+                this.effectTimelineView.endEditing();
+                if (this.timeline.getSelectedTrack()?.category === "effect") this.timeline.selectTrackByNameAndCategory("Camera", ["camera"]);
+                this.refreshVisibleTimelineTracks();
                 this.expandedFrameGraphPostEffectId = close ? null : id;
                 this.refreshFrameGraphPostAddUi();
+            },
+            id => {
+                if (this.mmdManager.isPlaying || this.getConfiguredPostEffectBackend() !== "frameGraph") return;
+                this.mmdManager.setTimelineTarget("camera");
+                if (!this.effectTimelineView.beginEditing(id)) return;
+                this.refreshVisibleTimelineTracks();
+                this.timeline.selectTrackByNameAndCategory(id, ["effect"]);
+                this.updateTimelineEditState();
             },
             before => {
                 const diff = buildEffectInstanceDiff(before, this.mmdManager.getEffectInstanceState());
@@ -8381,6 +8397,14 @@ export class UIController {
             z,
             maxAbsValue,
         };
+    }
+
+    private refreshVisibleTimelineTracks(resetSelection = false): void {
+        // Reconciliation emits the previous selection before an explicit key-edit selection is applied.
+        const updating = this.updatingEffectTimelineTracks;
+        this.updatingEffectTimelineTracks = true;
+        try { this.timeline.setKeyframeTracks(this.effectTimelineView.visibleTracks(), { resetSelection }); }
+        finally { this.updatingEffectTimelineTracks = updating; }
     }
 
     private refreshEffectKeyframeUi(): void {

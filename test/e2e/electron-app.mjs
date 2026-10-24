@@ -72,19 +72,22 @@ export async function selectTimelineTrack(page, category, name) {
     { targetCategory: category, targetName: name },
   )).toBe(true);
 
-  const rowIndex = await page.evaluate(
-    ({ targetCategory, targetName }) => window.mmdModokiE2e.getTimelineTracks().findIndex(
-      (track) => track.category === targetCategory && track.name === targetName,
-    ),
+  const rowTop = await page.evaluate(
+    ({ targetCategory, targetName }) => {
+      const tracks = window.mmdModokiE2e.getTimelineTracks();
+      const index = tracks.findIndex(track => track.category === targetCategory && track.name === targetName);
+      // The camera is followed by one blank row; it is not an authored track.
+      return index < 0 ? -1 : tracks.slice(0, index).reduce((top, track) => top + 18 + (track.category === "camera" ? 18 : 0), 0);
+    },
     { targetCategory: category, targetName: name },
   );
-  expect(rowIndex).toBeGreaterThanOrEqual(0);
+  expect(rowTop).toBeGreaterThanOrEqual(0);
 
-  await page.locator("#timeline-labels").evaluate((element, index) => {
-    element.scrollTop = Math.max(0, index * 18 - 36);
-  }, rowIndex);
+  await page.locator("#timeline-labels").evaluate((element, top) => {
+    element.scrollTop = Math.max(0, top - 36);
+  }, rowTop);
   const scrollTop = await page.locator("#timeline-labels").evaluate((element) => element.scrollTop);
-  const y = 20 + rowIndex * 18 + 9 - scrollTop;
+  const y = 20 + rowTop + 9 - scrollTop;
   await page.locator("#timeline-label-canvas").click({ position: { x: 40, y } });
   await expect.poll(() => page.evaluate(
     () => window.mmdModokiE2e.getTimelineSelection().activeTrack,

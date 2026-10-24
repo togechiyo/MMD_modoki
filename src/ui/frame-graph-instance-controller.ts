@@ -27,6 +27,7 @@ export class FrameGraphInstanceController {
         private readonly value: (instanceId: string, value: EffectValue) => void,
         private readonly fixedValue: (instanceId: string, field: InstanceFixedSliderField, value: number) => void,
         private readonly select: (instanceId: string) => void,
+        private readonly editKeys: (instanceId: string) => void,
         private readonly commitValue: (before: SerializedEffectInstances) => void,
         private readonly syncSlider: (slider: HTMLInputElement) => void,
         private readonly loadLut: (instanceId: string) => void) {
@@ -36,6 +37,7 @@ export class FrameGraphInstanceController {
             if (!id || !button || !host.isEffectInstance(id)) return;
             const action = button.dataset.instanceAction;
             if (action === "select") { select(id); return; }
+            if (action === "keyEdit") { editKeys(id); return; }
             if (action === "lutFile") { loadLut(id); return; }
             if (action === "duplicate" || action === "suspend" || action === "resume" || action === "delete") edit({ action, instanceId: id });
         });
@@ -106,7 +108,7 @@ export class FrameGraphInstanceController {
             ${present ? `<button class="effect-layer-drag-handle" type="button" draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}" aria-label="${dragTitle}"${this.host.isPlaying ? " disabled" : ""}><span class="effect-layer-drag-grip" aria-hidden="true"></span></button>` : ""}</div>
             <div class="effect-layer-details"${expanded ? "" : " hidden"}>
             ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSelects}${fixedSliderControls}${lutControls}
-            <div class="effect-instance-actions">${button("duplicate")}${button(present ? "suspend" : "resume")}${button("delete")}</div>
+            <div class="effect-instance-actions">${button("keyEdit")}${button("duplicate")}${button(present ? "suspend" : "resume")}${button("delete")}</div>
             ${present ? "" : `<span>${escape(t("timeline.effectSuspended"))}</span>`}</div></div>`;
     }
     installControls(): void {

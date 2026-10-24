@@ -630,6 +630,7 @@
     "effect.instance.name": "효과 이름",
     "effect.instance.select": "타임라인에서 선택",
     "effect.instance.duplicate": "복제",
+    "effect.instance.keyEdit": "키 편집",
     "effect.instance.suspend": "일시 중지",
     "effect.instance.resume": "복원",
     "effect.instance.delete": "완전히 삭제",

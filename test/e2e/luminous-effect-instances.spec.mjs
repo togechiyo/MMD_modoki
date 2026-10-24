@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const difference = (a, b) => a.reduce((sum, value, i) => sum + (i % 4 === 3 ? 0 : Math.abs(value - b[i])), 0) / (a.length * 0.75);
@@ -30,7 +31,7 @@ test("Luminous instances own RC settings, resources and enabled keys", async ({}
     for (let i = 0; i < 2; i++) { await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click(); }
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     const [a, b] = (await state()).instances.map(item => item.instanceId), row = id => page.locator(`[data-effect-instance-row="${id}"]`);
-    const fixed = async (id, field, value) => { const input = row(id).locator(`[data-instance-fixed="${field}"]`); await input.fill(String(value)); await input.press("Enter"); };
+    const fixed = async (id, field, value) => { await expandEffectInstance(row(id)); const input = row(id).locator(`[data-instance-fixed="${field}"]`); await input.fill(String(value)); await input.press("Enter"); };
     const diagnostics = () => page.evaluate(() => window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects);
     const capture = async name => {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
@@ -38,9 +39,9 @@ test("Luminous instances own RC settings, resources and enabled keys", async ({}
       await expect(page.locator(".toast")).toHaveCount(0);
       const path = testInfo.outputPath(`${name}.png`); await page.locator("#render-canvas").screenshot({ path }); return PNG.sync.read(readFileSync(path)).data;
     };
-    for (const id of [a, b]) { const intensity = row(id).locator('[data-instance-field="intensity"]').locator("..").locator(".range-number-input"); await intensity.fill("0"); await intensity.press("Enter"); await fixed(id, "radianceRange", 4); }
+    for (const id of [a, b]) { await expandEffectInstance(row(id)); const intensity = row(id).locator('[data-instance-field="intensity"]').locator("..").locator(".range-number-input"); await intensity.fill("0"); await intensity.press("Enter"); await fixed(id, "radianceRange", 4); }
     const dark = await capture("rc-off");
-    await row(a).locator('[data-instance-fixed-toggle="radiance"]').check(); const single = await capture("one-rc");
+    await expandEffectInstance(row(a)); await row(a).locator('[data-instance-fixed-toggle="radiance"]').check(); const single = await capture("one-rc");
     expect(difference(dark, single)).toBeGreaterThan(0.2);
     const first = await diagnostics(); expect(first.resourcePlan.activeEffects).not.toContain("luminous"); expect(first.controller.instances.find(item => item.instanceId === a).radiance.emitters).toBeGreaterThan(0);
     await fixed(b, "radianceStrength", 2); await row(b).locator('[data-instance-fixed-toggle="radiance"]').check();

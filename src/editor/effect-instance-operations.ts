@@ -3,11 +3,20 @@ import type { EffectInstanceType, InstanceColor } from "./frame-graph-instance-e
 import type { InstanceFixedSettings } from "./frame-graph-instance-fixed-settings";
 
 export type EffectInstanceOperation = { action: "add"; effectType?: EffectInstanceType } | { action: "color"; instanceId: string; color: InstanceColor } | { action: "duplicate" | "suspend" | "resume" | "delete"; instanceId: string }
+    | { action: "reorder"; draggedId: string; targetId: string; placement: "before" | "after" }
     | { action: "fixed"; instanceId: string; settings: InstanceFixedSettings }
     | { action: "rename"; instanceId: string; label: string } | { action: "move"; instanceId: string; delta: -1 | 1 };
 
 export function editEffectInstances(store: FrameGraphEffectInstances, operation: EffectInstanceOperation): void {
     if (operation.action === "add") { store.add(`fx-${crypto.randomUUID()}`, undefined, undefined, operation.effectType); return; }
+    if (operation.action === "reorder") {
+        const display = store.order().reverse();
+        if (operation.draggedId === operation.targetId || !display.includes(operation.draggedId) || !display.includes(operation.targetId)) return;
+        const next = display.filter(id => id !== operation.draggedId);
+        next.splice(next.indexOf(operation.targetId) + (operation.placement === "after" ? 1 : 0), 0, operation.draggedId);
+        store.setOrder(next.reverse());
+        return;
+    }
     const id = operation.instanceId;
     switch (operation.action) {
         case "fixed": store.setFixedSettings(id, operation.settings); break;

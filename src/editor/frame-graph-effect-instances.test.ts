@@ -3,6 +3,24 @@ import { FrameGraphEffectInstances } from "./frame-graph-effect-instances";
 import { effectKeyframePayloadSchema, getEffectDefinition } from "./effect-keyframe-definitions";
 
 describe("FrameGraph effect instances", () => {
+    it("automatically names the first instance without a number and keeps names stable and unique", () => {
+        const store = new FrameGraphEffectInstances();
+        store.add("fx-a", undefined, undefined, "ssao"); store.duplicate("fx-a", "fx-b"); store.duplicate("fx-a", "fx-c");
+        store.add("fx-d", undefined, undefined, "ssgi");
+        expect(store.ids().map(id => store.label(id))).toEqual(["SSAO", "SSAO 2", "SSAO 3", "SSGI"]);
+        store.setOrder(["fx-c", "fx-b", "fx-a", "fx-d"]); store.suspend("fx-a");
+        store.duplicate("fx-b", "fx-e"); expect(store.label("fx-e")).toBe("SSAO 4");
+        store.delete("fx-b"); store.duplicate("fx-c", "fx-f");
+        expect(store.label("fx-f")).toBe("SSAO 2"); expect(store.label("fx-c")).toBe("SSAO 3");
+        const saved = store.serialize(); store.restore(saved); expect(store.serialize()).toEqual(saved);
+    });
+    it("removes the old first-instance suffix on restore and preserves saved custom names", () => {
+        const store = new FrameGraphEffectInstances(); store.add("fx-a"); store.add("fx-b");
+        const saved = store.serialize(); saved.instances[0].label = "Gamma 1"; saved.instances[1].label = "Custom";
+        store.restore(saved);
+        expect(store.label("fx-a")).toBe("Gamma"); expect(store.label("fx-b")).toBe("Custom");
+        store.duplicate("fx-b", "fx-c"); expect(store.label("fx-c")).toBe("Gamma 2");
+    });
     it("keeps the existing Luminous add-menu defaults independently of other instances", () => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, "luminous");
         expect(store.staticValue("fx-a")).toEqual({ enabled: true, intensity: 1, threshold: 0.15, radius: 48 });

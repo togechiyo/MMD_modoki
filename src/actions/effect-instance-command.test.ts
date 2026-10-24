@@ -10,7 +10,7 @@ describe("effect instance command diffs", () => {
         expect(diff?.changes.map(item => item.instanceId)).toEqual(["fx-a"]);
         store.apply("fx-a", 10, store.capture("fx-a", 10));
         const reverted = applyEffectInstanceDiff(store.serialize(), diff, "revert");
-        expect(reverted?.instances[0].label).toBe("Gamma 1");
+        expect(reverted?.instances[0].label).toBe("Gamma");
         expect(reverted?.instances[0].animation.tracks).toHaveLength(1);
         expect(store.label("fx-a")).toBe("A");
     });

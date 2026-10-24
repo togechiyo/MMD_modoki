@@ -67,7 +67,10 @@ export class FrameGraphEffectInstances {
     add(id: string, settings?: unknown, animation?: unknown, type: EffectInstanceType = "gamma"): void {
         if (!validId(id) || this.has(id)) throw new Error("Invalid or duplicate effect instance ID");
         const tracks = new EffectSceneTrackStore(); tracks.restore(animation);
-        this.entries.set(id, { instanceId: id, type, label: `${INSTANCE_EFFECT_NAMES[type]} ${[...this.entries.values()].filter(entry => entry.type === type).length + 1}`, settings: instanceValue(type, settings), tracks,
+        const name = INSTANCE_EFFECT_NAMES[type], labels = new Set([...this.entries.values()].map(entry => entry.label));
+        let label = name, suffix = 2;
+        while (labels.has(label)) label = `${name} ${suffix++}`;
+        this.entries.set(id, { instanceId: id, type, label, settings: instanceValue(type, settings), tracks,
             ...(type === "bloom" ? { bloomColor: { r: 254 / 255, g: 220 / 255, b: 186 / 255 } } : {}) });
         const fixed = instanceFixedSettings(type);
         if (fixed) this.get(id).fixedSettings = fixed;
@@ -125,7 +128,7 @@ export class FrameGraphEffectInstances {
                 next.add(item.instanceId, item.settings, item.animation, item.type);
                 if (item.type === "bloom") next.setBloomColor(item.instanceId, item.bloomColor);
                 if (item.fixedSettings) next.setFixedSettings(item.instanceId, item.fixedSettings);
-                next.rename(item.instanceId, item.label);
+                next.rename(item.instanceId, item.label === `${INSTANCE_EFFECT_NAMES[item.type]} 1` ? INSTANCE_EFFECT_NAMES[item.type] : item.label);
             }
             next.setOrder(state.order);
         }

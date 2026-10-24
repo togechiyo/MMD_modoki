@@ -39,8 +39,7 @@ export class FrameGraphInstanceController {
             const action = button.dataset.instanceAction;
             if (action === "select") { select(id); return; }
             if (action === "lutFile") { loadLut(id); return; }
-            if (action === "up" || action === "down") edit({ action: "move", instanceId: id, delta: action === "up" ? 1 : -1 });
-            else if (action === "duplicate" || action === "suspend" || action === "resume" || action === "delete") edit({ action, instanceId: id });
+            if (action === "duplicate" || action === "suspend" || action === "resume" || action === "delete") edit({ action, instanceId: id });
         });
         root.addEventListener("input", event => {
             const input = event.target instanceof HTMLInputElement ? event.target : null;
@@ -63,7 +62,6 @@ export class FrameGraphInstanceController {
                 const radiance = host.getEffectInstanceState().instances.find(item => item.instanceId === id)?.fixedSettings?.radiance ?? { enabled: false, strength: 1, range: 12 };
                 this.editFixed(id, { radiance: { ...radiance, enabled: input.checked } });
             }
-            if (input.dataset.instanceField === "label") edit({ action: "rename", instanceId: id, label: input.value });
             if (input.dataset.instanceField === "color") {
                 const color = Number.parseInt(input.value.slice(1), 16);
                 const value = { r: (color >> 16 & 255) / 255, g: (color >> 8 & 255) / 255, b: (color & 255) / 255 };
@@ -82,7 +80,7 @@ export class FrameGraphInstanceController {
             if (input.type === "range" && this.pendingValue) { const before = this.pendingValue; this.pendingValue = null; commitValue(before); }
         });
     }
-    render(id: string, present: boolean): string {
+    render(id: string, present: boolean, expanded: boolean): string {
         const value = this.currentValue(id), label = escape(this.host.getEffectInstanceLabel(id));
         const controls = this.controls(id).map(mapping => {
             const field = mapping.panelField as FrameGraphEffectSliderField;
@@ -93,17 +91,19 @@ export class FrameGraphInstanceController {
         const primaryColor = instance?.bloomColor ?? instance?.fixedSettings?.color;
         const color = primaryColor ? this.renderColor("color", primaryColor) : "";
         const shadowColor = instance?.fixedSettings?.shadowColor ? this.renderColor("shadowColor", instance.fixedSettings.shadowColor) : "";
-        const fixedNumberControls = fixedNumbers(instance?.type ?? "", instance?.fixedSettings).map(item => `<label class="effect-layer-control-row"><span class="effect-layer-control-label">${escape(t(item.label))}</span><input class="panel-number-input" type="number" min="${item.min}" max="${item.max}" step="${item.step}" data-instance-fixed="${item.field}" aria-label="${escape(t(item.label))}" value="${item.value}"></label>`).join("");
+        const fixedNumberControls = fixedNumbers(instance?.type ?? "", instance?.fixedSettings).map(item => `<label class="effect-layer-control-row effect-layer-control-row--fixed"><span class="effect-layer-control-label">${escape(t(item.label))}</span><input class="panel-number-input" type="number" min="${item.min}" max="${item.max}" step="${item.step}" data-instance-fixed="${item.field}" aria-label="${escape(t(item.label))}" value="${item.value}"></label>`).join("");
         const fixedSelects = instance?.type === "ssgi" ? `<select class="effect-layer-control-select" data-instance-field="blendMode" aria-label="${escape(t("effect.frameGraphPost.controls.blendMode"))}">${["additive", "softLight", "overlay"].map(mode => `<option value="${mode}"${instance.fixedSettings?.blendMode === mode ? " selected" : ""}>${escape(t(`effect.frameGraphPost.blendModes.${mode}`))}</option>`).join("")}</select>` : instance?.type === "luminous" ? `<label class="effect-layer-control-row"><span>${escape(t("effect.frameGraphPost.controls.luminousRadianceEnabled"))}</span><input type="checkbox" data-instance-fixed-toggle="radiance"${instance.fixedSettings?.radiance?.enabled ? " checked" : ""}></label>` : "";
         const lut = instance?.fixedSettings?.lut;
         const lutControls = instance?.type === "lut" ? `<select class="effect-layer-control-select" data-instance-field="lutPreset" aria-label="${escape(t("shader.postfx.lutSource"))}">${INSTANCE_LUT_PRESETS.map(preset => `<option value="${preset.id}"${lut?.kind === "builtin" && lut.preset === preset.id ? " selected" : ""}>${preset.label}</option>`).join("")}${lut?.kind === "external" ? `<option value="external" selected>${escape(lut.name)}</option>` : ""}</select><button type="button" data-instance-action="lutFile">${escape(t("shader.postfx.lutFile"))}</button>` : "";
-        const button = (action: string, text: string): string => `<button type="button" class="effect-layer-control-button" data-instance-action="${action}" aria-label="${escape(t(`effect.instance.${action}`))}"${this.host.isPlaying ? " disabled" : ""}>${escape(text)}</button>`;
-        return `<div class="effect-layer-placeholder effect-layer-placeholder--active effect-layer-placeholder--check" data-effect-stack-row="${id}" data-effect-instance-row="${id}">
-            <div class="effect-layer-header"><input type="checkbox" data-instance-field="enabled" aria-label="${escape(t("status.on"))}"${value.enabled ? " checked" : ""}>
-            <button type="button" class="effect-layer-main" data-instance-action="select"><span class="effect-layer-name">${label}</span></button></div>
-            <div class="effect-layer-details"><input type="text" data-instance-field="label" maxlength="80" aria-label="${escape(t("effect.instance.name"))}" value="${label}">
+        const button = (action: string): string => `<button type="button" class="effect-layer-control-button" data-instance-action="${action}" title="${escape(t(`effect.instance.${action}`))}"${this.host.isPlaying ? " disabled" : ""}>${escape(t(`effect.instance.${action}`))}</button>`;
+        const dragTitle = escape(t("effect.frameGraphPost.dragToReorder"));
+        return `<div class="effect-layer-placeholder effect-layer-placeholder--active effect-layer-placeholder--check${value.enabled && present ? "" : " effect-layer-placeholder--off"}" data-effect-stack-row="${id}" data-effect-instance-row="${id}">
+            <div class="effect-layer-header"><label class="effect-layer-check-wrap" title="${escape(t("effect.frameGraphPost.toggleVisibility"))}"><input class="effect-layer-check" type="checkbox" data-instance-field="enabled" aria-label="${escape(t("status.on"))}"${value.enabled ? " checked" : ""}></label>
+            <button type="button" class="effect-layer-main" data-instance-action="select" aria-expanded="${expanded}"><span class="effect-layer-name">${label}</span></button>
+            ${present ? `<button class="effect-layer-drag-handle" type="button" draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}" aria-label="${dragTitle}"${this.host.isPlaying ? " disabled" : ""}><span class="effect-layer-drag-grip" aria-hidden="true"></span></button>` : ""}</div>
+            <div class="effect-layer-details"${expanded ? "" : " hidden"}>
             ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSelects}${fixedNumberControls}${lutControls}
-            <div class="effect-instance-actions">${button("up", "↑")}${button("down", "↓")}${button("duplicate", t("effect.instance.duplicate"))}${button(present ? "suspend" : "resume", t(present ? "effect.instance.suspend" : "effect.instance.resume"))}${button("delete", t("effect.instance.delete"))}</div>
+            <div class="effect-instance-actions">${button("duplicate")}${button(present ? "suspend" : "resume")}${button("delete")}</div>
             ${present ? "" : `<span>${escape(t("timeline.effectSuspended"))}</span>`}</div></div>`;
     }
     installFixedNumberInputs(): void {
@@ -144,6 +144,8 @@ export class FrameGraphInstanceController {
             const id = row.dataset.effectInstanceRow;
             if (!id || !this.host.isEffectInstance(id)) return;
             const value = this.currentValue(id);
+            row.classList.toggle("effect-layer-placeholder--off", !value.enabled || !row.querySelector("[data-effect-stack-drag]"));
+            row.querySelectorAll<HTMLButtonElement>("[data-effect-stack-drag]").forEach(handle => { handle.disabled = this.host.isPlaying; handle.draggable = !this.host.isPlaying; });
             this.dofControls.get(id)?.refresh(value, this.host.isPlaying, id);
             row.querySelectorAll<HTMLInputElement>("input").forEach(input => {
                 if (input.classList.contains("range-number-input")) return;
@@ -173,6 +175,6 @@ export class FrameGraphInstanceController {
     }
     private renderColor(field: string, color: { r: number; g: number; b: number }): string {
         const label = t(`effect.frameGraphPost.controls.${field === "shadowColor" ? "shadowSideColor" : "color"}`);
-        return `<label class="effect-layer-control-row"><span>${escape(label)}</span><input type="color" data-instance-field="${field}" aria-label="${escape(label)}" value="#${[color.r, color.g, color.b].map(channel => Math.round(channel * 255).toString(16).padStart(2, "0")).join("")}"></label>`;
+        return `<label class="effect-layer-control-row effect-layer-control-row--fixed"><span class="effect-layer-control-label">${escape(label)}</span><input class="effect-layer-control-color" type="color" data-instance-field="${field}" aria-label="${escape(label)}" value="#${[color.r, color.g, color.b].map(channel => Math.round(channel * 255).toString(16).padStart(2, "0")).join("")}"></label>`;
     }
 }

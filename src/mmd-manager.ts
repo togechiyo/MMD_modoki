@@ -376,6 +376,7 @@ import {
 } from "./render/directional-light-shafts-settings";
 import {
     addFrameGraphPostEffectId,
+    isFrameGraphPostEffectId,
     FRAME_GRAPH_POST_EFFECT_IDS,
     normalizeFrameGraphPostEffectIds,
     type FrameGraphPostEffectId,
@@ -6656,6 +6657,8 @@ ${beforeFogAppendBlock}
         const state = this.getEffectInstanceState(), next = applyEffectInstanceDiff(state, diff, direction);
         if (!next) return false;
         try { this.effectInstances.restore(next); } catch { return false; }
+        // Keep singleton slots in the same order when a shared stack drag crosses them.
+        this.frameGraphPostEffectStackIdsValue = next.order.filter(isFrameGraphPostEffectId);
         this.effectSceneTracksChanged();
         const radianceStructure = (data: SerializedEffectInstances): string => JSON.stringify(data.instances.filter(item => item.type === "luminous" && item.fixedSettings?.radiance?.enabled).map(item => item.instanceId));
         if (JSON.stringify(state.order) !== JSON.stringify(next.order) || radianceStructure(state) !== radianceStructure(next)) this.refreshFrameGraphPostEffectsBackendForOrderChange();

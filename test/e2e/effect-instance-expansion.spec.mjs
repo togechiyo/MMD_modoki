@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { expandEffectInstance, selectEffectInstance, dragEffectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const requestedGroup = process.env.MMD_INSTANCE_EFFECT_GROUP;
@@ -41,8 +42,8 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     const add = async type => { await page.locator("#btn-effect-add-post").click(); await page.locator(`[data-effect-add-post="${type}"]`).click(); };
-    const number = async (id, position, value) => { const input = row(id).locator(".range-number-input").nth(position); await input.fill(String(value)); await input.press("Enter"); };
-    const select = async id => { await row(id).locator('[data-instance-action="select"]').click(); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
+    const number = async (id, position, value) => { await expandEffectInstance(row(id)); const input = row(id).locator(".range-number-input").nth(position); await input.fill(String(value)); await input.press("Enter"); };
+    const select = async id => { await selectEffectInstance(row(id)); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
     const capture = async name => {
       const dir = testInfo.outputPath(name); mkdirSync(dir, { recursive: true });
       await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 640, 360), dir);
@@ -61,8 +62,10 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       if (type === "bloom") {
         await number(a, 1, 10); await number(a, 2, 30);
         for (const [id, color] of [[a, "#ff8080"], [b, "#8080ff"]]) {
+          await expandEffectInstance(row(id));
           const input = row(id).locator('[data-instance-field="color"]'); await input.fill(color); await input.dispatchEvent("change");
         }
+        await expandEffectInstance(row(a));
       }
       if (type === "luminous") { await number(a, 1, 0); await number(a, 2, 40); }
       if (type === "ssao") {
@@ -73,7 +76,9 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       if (type === "motionBlur") { const samples = row(a).locator('[data-instance-fixed="samples"]'); await samples.fill("48"); await samples.press("Enter"); }
       if (type === "lut") {
         await row(a).locator('select[data-instance-field="lutPreset"]').selectOption("monotone");
+        await expandEffectInstance(row(b));
         await row(b).locator('select[data-instance-field="lutPreset"]').selectOption("sepia");
+        await expandEffectInstance(row(a));
         await launched.app.evaluate(({ dialog }, filePath) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] }); }, resolve(root, "test/fixtures/lut/synthetic-channel-swap.cube"));
         await row(a).locator('[data-instance-action="lutFile"]').click();
         await expect(row(a).locator('select[data-instance-field="lutPreset"]')).toHaveValue("external");
@@ -110,7 +115,7 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       await select(a); await page.locator("#btn-kf-copy").click(); await select(b); await seek(page, 40); await page.locator("#btn-kf-paste").click();
       expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys.map(key => key.frame)).toEqual([40]);
       await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-      await row(a).locator('[data-instance-action="duplicate"]').click();
+      await expandEffectInstance(row(a)); await row(a).locator('[data-instance-action="duplicate"]').click();
       const c = (await state()).instances.find(item => item.type === type && ![a, b].includes(item.instanceId)).instanceId;
       const source = (await state()).instances.find(item => item.instanceId === a), copy = (await state()).instances.find(item => item.instanceId === c);
       expect(copy.animation).toEqual(source.animation); expect(copy.bloomColor).toEqual(source.bloomColor);
@@ -118,10 +123,10 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       await row(c).locator('[data-instance-action="delete"]').click(); await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
       expect((await state()).instances.some(item => item.instanceId === c)).toBe(true);
       await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
-      await row(a).locator('[data-instance-field="label"]').fill(`${type} A`); await row(a).locator('[data-instance-field="label"]').blur();
+      await expandEffectInstance(row(a));
       await row(a).locator('[data-instance-action="suspend"]').click();
     }
-    for (const id of active) await row(id).locator('[data-instance-action="resume"]').click();
+    for (const id of active) { await expandEffectInstance(row(id)); await row(id).locator('[data-instance-action="resume"]').click(); }
     if (remainingGroup) {
       // Synthetic geometry is only a fixture for the individual shader comparisons.
       // Output/backend tests use the saved PMX scene, which survives runtime recreation.
@@ -157,7 +162,7 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       expect(report.masterRestoreDifference).toBeLessThan(0.15);
     }
     const beforeOrder = (await state()).order;
-    await row(active[0]).locator('[data-instance-action="up"]').click();
+    await dragEffectStackRow(row(active[0]), row(active[1]), "before");
     expect((await state()).order).not.toEqual(beforeOrder);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click(); expect((await state()).order).toEqual(beforeOrder);
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState()), file = testInfo.outputPath("screen-effects.json");

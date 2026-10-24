@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki, selectCenterBone } from "./electron-app.mjs";
+import { expandEffectInstance, selectEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const difference = (a, b) => a.reduce((sum, value, i) => sum + (i % 4 === 3 ? 0 : Math.abs(value - b[i])), 0) / (a.length * 0.75);
@@ -38,7 +39,7 @@ test("DoF instances: same-file targets, step keys, moving bone, output and missi
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     const field = (id, name) => row(id).locator(`[data-dof-instance-field="${name}"]`);
-    const select = async id => { await row(id).locator('[data-instance-action="select"]').click(); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
+    const select = async id => { await selectEffectInstance(row(id)); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
     const number = async (id, name, value) => { const input = row(id).locator(`[data-instance-field="${name}"]`).locator("..").locator(".range-number-input"); await input.fill(String(value)); await input.press("Enter"); };
     const distance = id => row(id).locator("[data-instance-dof-distance]").textContent().then(text => Number.parseFloat(text));
     const capture = async name => { const dir = testInfo.outputPath(name); mkdirSync(dir, { recursive: true }); await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 640, 360), dir); return PNG.sync.read(readFileSync(resolve(dir, "single_rgba_surface_e2e.png"))).data; };
@@ -51,7 +52,7 @@ test("DoF instances: same-file targets, step keys, moving bone, output and missi
     expect(prepared.resourcePlan.needsDepthRenderer).toBe(true); expect(prepared.controller.taskNames).not.toContain("dof"); report.prepared = prepared.resourcePlan;
     await field(b, "focusMode").selectOption("model-target"); await field(b, "targetModelInstanceId").selectOption(models[1].instanceId);
     const bSaved = (await state()).instances.find(item => item.instanceId === b);
-    await field(a, "focusMode").selectOption("model-target"); await field(a, "targetModelInstanceId").selectOption(models[0].instanceId); await field(a, "targetBoneName").selectOption("センター");
+    await expandEffectInstance(row(a)); await field(a, "focusMode").selectOption("model-target"); await field(a, "targetModelInstanceId").selectOption(models[0].instanceId); await field(a, "targetBoneName").selectOption("センター");
     await number(a, "lensSize", 85); await number(a, "focalLength", 7); await number(a, "fStop", 2);
     await row(a).locator('[data-instance-field="enabled"]').check();
     await select(a); await seek(page, 0); await page.locator("#btn-kf-add").click();
@@ -89,7 +90,7 @@ test("DoF instances: same-file targets, step keys, moving bone, output and missi
     const c = (await state()).instances.find(item => ![a, b].includes(item.instanceId)).instanceId;
     expect((await state()).instances.find(item => item.instanceId === c).animation).toEqual((await state()).instances.find(item => item.instanceId === a).animation);
     await row(c).locator('[data-instance-action="delete"]').click(); await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click(); await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
-    await row(a).locator('[data-instance-action="suspend"]').click(); await row(a).locator('[data-instance-action="resume"]').click();
+    await expandEffectInstance(row(a)); await row(a).locator('[data-instance-action="suspend"]').click(); await row(a).locator('[data-instance-action="resume"]').click();
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState()), file = testInfo.outputPath("dof.json");
     await launched.app.evaluate(({ dialog }, path) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: path }); }, file);
     await menu(page, "file.saveProject"); await expect.poll(() => existsSync(file)).toBe(true);

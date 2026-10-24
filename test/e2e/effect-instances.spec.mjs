@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { expandEffectInstance, selectEffectInstance, dragEffectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 async function menu(page, command) {
@@ -97,7 +98,13 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     expect((await state()).order).toEqual([a, bloom, b]);
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().version)).toBe(2);
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
-    const select = async id => { await row(id).locator('[data-instance-action="select"]').click(); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
+    const select = async id => { await selectEffectInstance(row(id)); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
+    await expect(row(a).locator(".effect-layer-name")).toHaveText("Gamma");
+    await expect(row(b).locator(".effect-layer-name")).toHaveText("Gamma 2");
+    await expect(row(bloom).locator(".effect-layer-name")).toHaveText("Bloom");
+    await expect(page.locator('[data-instance-field="label"], [data-instance-action="up"], [data-instance-action="down"]')).toHaveCount(0);
+    await expect(row(a).locator(".effect-layer-details")).toBeHidden();
+    await expect(row(b).locator(".effect-layer-details")).toBeVisible();
     await row(b).locator(".range-number-input").fill("25");
     await row(b).locator(".range-number-input").press("Enter");
     const bValue = (await state()).instances.find(item => item.instanceId === b).settings.gamma;
@@ -127,31 +134,31 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await seek(page, 0); await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeDisabled();
     await expect(row(a).locator('[data-instance-action="duplicate"]')).toBeDisabled();
+    await expect(row(a).locator('[data-effect-stack-drag]')).toBeDisabled();
+    await expect(row(a).locator('[data-effect-stack-drag]')).toHaveAttribute("draggable", "false");
     await expect.poll(async () => Number(await page.locator("#current-frame").inputValue())).toBeGreaterThan(12);
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeEnabled();
+    await expect(row(a).locator('[data-effect-stack-drag]')).toBeEnabled();
     await seek(page, 0); await select(a); await page.locator("#btn-kf-copy").click();
     await select(b); await seek(page, 40); await page.locator("#btn-kf-paste").click();
     expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys[0].value.gamma).toBe(0.5);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys).toEqual([]);
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
-    await row(a).locator('[data-instance-action="duplicate"]').click();
+    await expandEffectInstance(row(a)); await row(a).locator('[data-instance-action="duplicate"]').click();
     const c = (await state()).instances.find(item => ![a, b, bloom].includes(item.instanceId)).instanceId;
+    await expect(row(c).locator(".effect-layer-name")).toHaveText("Gamma 3");
     expect((await state()).instances.find(item => item.instanceId === c).animation.tracks[0].keys).toEqual(savedA.tracks[0].keys);
     await row(c).locator('[data-instance-action="delete"]').click();
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect((await state()).instances.some(item => item.instanceId === c)).toBe(true);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
-    await row(a).locator('[data-instance-field="label"]').fill("Gamma A");
-    await row(a).locator('[data-instance-field="label"]').press("Enter");
-    await row(a).locator('[data-instance-field="label"]').blur();
-    await select(a); await expect(page.locator("[data-effect-key-label]")).toHaveText("Gamma A");
+    await select(a); await expect(page.locator("[data-effect-key-label]")).toHaveText("Gamma");
     await row(a).locator('[data-instance-action="suspend"]').click();
     await expect(page.locator("[data-effect-key-state]")).toContainText("スタックから外れています");
     await row(a).locator('[data-instance-action="resume"]').click();
-    await row(a).locator('[data-instance-action="down"]').click();
-    await row(a).locator('[data-instance-action="down"]').click();
+    await dragEffectStackRow(row(a), row(bloom), "after");
     expect((await state()).order).toEqual([a, bloom, b]);
     const capture = async name => {
       const output = testInfo.outputPath(name); mkdirSync(output, { recursive: true });
@@ -167,7 +174,7 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     expect(difference(withPreview, withoutPreview)).toBeLessThan(0.05);
     await seek(page, 20);
     expect(difference(png0, png20)).toBeGreaterThan(0.2);
-    await row(b).locator('[data-instance-action="down"]').click();
+    await dragEffectStackRow(row(b), row(bloom), "after");
     expect((await state()).order).toEqual([a, b, bloom]);
     const reordered = await capture("reordered");
     report.comparisons.push({ frameDifference: difference(png0, png20), orderDifference: difference(png20, reordered) });
@@ -223,9 +230,14 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await select(a);
     for (const locale of ["en", "zh-Hant", "zh-Hans", "ko", "ja"]) {
       await page.locator("#toolbar-locale-select").selectOption(locale);
-      await expect(row(a).locator('[data-instance-field="label"]')).toHaveValue("Gamma A");
-      expect(await row(a).locator('[data-instance-action="delete"]').getAttribute("aria-label")).not.toContain("effect.instance");
+      await expect(row(a).locator('.effect-layer-name')).toHaveText("Gamma");
+      expect(await row(a).locator('[data-instance-action="delete"]').textContent()).not.toContain("effect.instance");
     }
+    await row(a).locator('[data-instance-action="select"]').click();
+    await expect(row(a).locator(".effect-layer-details")).toBeHidden();
+    await expandEffectInstance(row(a));
+    await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1280, 900));
+    await expect.poll(() => row(a).evaluate(element => [...element.querySelectorAll('.effect-instance-actions button')].every(button => button.scrollWidth <= button.clientWidth))).toBe(true);
     await page.screenshot({ path: testInfo.outputPath("final-ui.png") });
   } finally {
     writeFileSync(testInfo.outputPath("report.json"), JSON.stringify(report, null, 2));

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -30,7 +31,7 @@ test("DoF個体のオートフォーカス既定値・方式・言語・project�
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
     const instance = saved.effects.frameGraphInstances.instances.find(item => item.instanceId === id);
     expect(instance.settings).toMatchObject({ focusMode: "person-auto", targetModelInstanceId: models[0].instanceId, targetBoneName: "センター" });
-    await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), saved); await showPost(); await expect(mode).toHaveValue("person-auto");
+    await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), saved); await showPost(); await expandEffectInstance(row); await expect(mode).toHaveValue("person-auto");
     for (const locale of ["en", "zh-Hant", "zh-Hans", "ko", "ja"]) {
       await page.locator("#toolbar-locale-select").selectOption(locale); await expect(mode).toHaveValue("person-auto");
       expect(await mode.locator("option").allTextContents()).toHaveLength(4);

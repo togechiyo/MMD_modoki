@@ -1,3 +1,5 @@
+import { expandEffectInstance } from "./effect-instance-controls.mjs";
+
 export const luminousInstanceRow = page => page.locator("[data-effect-instance-row]").filter({ has: page.locator('[data-instance-field="threshold"]') }).filter({ has: page.locator('[data-instance-field="radius"]') }).first();
 export function luminousInstanceControl(page, key) {
   const row = luminousInstanceRow(page);
@@ -9,6 +11,7 @@ export function luminousInstanceControl(page, key) {
   return row.locator(`[data-instance-field="${field}"]`);
 }
 export async function setLuminousInstancePosition(page, key, position) {
+  await expandEffectInstance(luminousInstanceRow(page));
   const control = luminousInstanceControl(page, key);
   if (key === "luminousRadianceStrength" || key === "luminousRadianceRange") {
     const value = key === "luminousRadianceStrength" ? position * 8 / 100 : 1 + position * 99 / 100;

@@ -3262,8 +3262,7 @@ body.png-capture-mode .model-comment-notice {
 
 .effect-instance-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 [data-effect-instance-row] { flex: 0 0 auto; }
-.effect-instance-actions .effect-layer-control-button { width: auto; flex: 1; min-width: 26px; }
-[data-effect-instance-row] input[type="text"] { width: 100%; min-width: 0; color: var(--text-primary); background: var(--bg-input, #252525); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-sm); padding: 3px 5px; }
+.effect-instance-actions .effect-layer-control-button { width: auto; flex: 1 1 auto; min-width: max-content; padding: 0 6px; }
 
 .effect-layer-placeholder--active {
   border-color: rgba(148, 163, 184, 0.24);
@@ -3416,6 +3415,25 @@ body.png-capture-mode .model-comment-notice {
 .effect-layer-control-row.range-has-number {
   grid-template-columns: minmax(58px, 0.35fr) minmax(72px, 1fr) 52px;
   gap: 6px;
+}
+
+.effect-layer-control-row--fixed {
+  grid-template-columns: minmax(58px, 0.35fr) minmax(72px, 1fr);
+  gap: 6px;
+}
+
+.effect-layer-control-row--fixed .panel-number-input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  color-scheme: dark;
+  font: 700 11px var(--font-mono);
+  text-align: right;
 }
 
 .effect-layer-control-label {

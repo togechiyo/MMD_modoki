@@ -11,6 +11,7 @@ decided_on: 2026-10-21
 evidence:
   - conversation-explicit-direction
 source_docs:
+  - ../../docs/framegraph-effect-instances-summary-2026-10-24.md
   - ../../docs/framegraph-effect-instances-and-timeline-design-2026-10-21.md
   - ../../docs/framegraph-effect-instances-implementation-2026-10-21.md
   - ../../docs/framegraph-effect-instance-expansion-2026-10-24.md
@@ -38,11 +39,14 @@ FrameGraphエフェクトの同種複数追加、キー再開、個体設定・�
 
 その後、所有者が「じゃあDofもおねがい」と再開を指定したため、DoFの後回しは解除した。多人数のシーンごとに対象を変える用途として、フォーカス対象をキー登録で変更できることを実装範囲へ含める。
 
+同日の個体UI見直しでは、所有者が名前のテキスト入力を不要とし、最初の個体は番号なし・2個目から連番にすること、上下移動等には既存のエフェクトUIを使うことを指定した。個体追加のために独立した名前入力や上下ボタンを増設せず、既存スタックの見出し・ドラッグ操作へ統合する。
+
 ## 避けること
 
 - 片方の保存・参照だけを確定し、もう片方で必要な個体の区別を後付けにする。
 - 旧仕様対応・移行を新方式の追加条件にして作業を止める。
 - 新個体方式への展開を、旧17種のキー休止解除やRelease収録済みと混同する。
+- 個体を識別するために名前の手入力を要求し、既存の並べ替えUIと別の操作系を置く。
 
 ## 根拠
 

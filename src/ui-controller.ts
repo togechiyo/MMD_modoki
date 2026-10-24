@@ -546,8 +546,8 @@ export class UIController {
     private postEffectAddPanel: HTMLElement | null = null;
     private postEffectAddButton: HTMLButtonElement | null = null;
     private postEffectEnableFrameGraphButton: HTMLButtonElement | null = null;
-    private expandedFrameGraphPostEffectId: FrameGraphPostAddEffectId | null = null;
-    private draggingFrameGraphPostEffectId: FrameGraphPostAddEffectId | null = null;
+    private expandedFrameGraphPostEffectId: string | null = null;
+    private draggingFrameGraphPostEffectId: string | null = null;
     private btnInfoKeyframe: HTMLButtonElement | null = null;
     private btnInterpolationKeyframe: HTMLButtonElement | null = null;
     private btnBoneKeyframe: HTMLButtonElement | null = null;
@@ -1285,7 +1285,7 @@ export class UIController {
 
         this.timeline.onSelectionChanged = (track) => {
             if (track?.category === "effect" && (isEffectId(track.name) || this.mmdManager.isEffectInstance(track.name))) {
-                this.expandedFrameGraphPostEffectId = isEffectId(track.name) ? track.name : null;
+                this.expandedFrameGraphPostEffectId = track.name;
                 this.effectPanelShellController?.setActiveTab("post");
                 this.refreshFrameGraphPostAddUi();
             }
@@ -5216,7 +5216,13 @@ export class UIController {
         if (this.postEffectStackList) this.frameGraphInstanceController = new FrameGraphInstanceController(this.postEffectStackList, this.mmdManager,
             operation => { this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation }); },
             (instanceId, value) => { this.actionDispatcher.dispatch({ type: "effect.instanceValue", source: "panel", instanceId, value }); },
-            id => { this.mmdManager.setTimelineTarget("camera"); this.timeline.selectTrackByNameAndCategory(id, ["effect"]); },
+            id => {
+                const close = this.expandedFrameGraphPostEffectId === id;
+                this.mmdManager.setTimelineTarget("camera");
+                this.timeline.selectTrackByNameAndCategory(id, ["effect"]);
+                this.expandedFrameGraphPostEffectId = close ? null : id;
+                this.refreshFrameGraphPostAddUi();
+            },
             before => {
                 const diff = buildEffectInstanceDiff(before, this.mmdManager.getEffectInstanceState());
                 if (diff) this.commandHistory.push({ id: crypto.randomUUID(), label: "Effect value", scope: "effect", createdAtMs: Date.now(), diff });
@@ -5310,7 +5316,8 @@ export class UIController {
             const target = event.target instanceof Element ? event.target : null;
             const handle = target?.closest<HTMLElement>("[data-effect-stack-drag]") ?? null;
             const effectId = handle?.dataset.effectStackDrag ?? "";
-            if (!handle || !this.isFrameGraphPostAddEffectId(effectId)) {
+            if (this.mmdManager.isPlaying || !handle || !this.isFrameGraphPostStackRowId(effectId)) {
+                event.preventDefault();
                 return;
             }
             this.draggingFrameGraphPostEffectId = effectId;
@@ -5321,7 +5328,7 @@ export class UIController {
         });
 
         this.postEffectStackList?.addEventListener("dragover", (event) => {
-            if (!this.draggingFrameGraphPostEffectId) return;
+            if (this.mmdManager.isPlaying || !this.draggingFrameGraphPostEffectId) return;
             const row = this.getFrameGraphPostStackDropRow(event.target);
             if (!row) return;
             event.preventDefault();
@@ -5337,8 +5344,9 @@ export class UIController {
                 ?? "";
             const row = this.getFrameGraphPostStackDropRow(event.target);
             const targetId = row?.dataset.effectStackRow ?? "";
-            if (!this.isFrameGraphPostAddEffectId(draggedId) || !this.isFrameGraphPostAddEffectId(targetId)) {
+            if (this.mmdManager.isPlaying || !this.isFrameGraphPostStackRowId(draggedId) || !this.isFrameGraphPostStackRowId(targetId)) {
                 this.clearFrameGraphPostStackDropMarkers();
+                this.draggingFrameGraphPostEffectId = null;
                 return;
             }
             event.preventDefault();
@@ -5366,6 +5374,10 @@ export class UIController {
 
     private isFrameGraphPostAddEffectId(value: string): value is FrameGraphPostAddEffectId {
         return isFrameGraphPostEffectId(value);
+    }
+
+    private isFrameGraphPostStackRowId(value: string): boolean {
+        return this.mmdManager.getEffectInstanceState().order.includes(value);
     }
 
     private switchPostEffectBackendToFrameGraph(): void {
@@ -5517,8 +5529,15 @@ export class UIController {
         catch (error) { this.showToast(error instanceof Error ? error.message : "Effect edit failed", "error"); return; }
         const diff = buildEffectInstanceDiff(before, next.serialize());
         if (!diff) return;
+        const added = diff.changes.find(change => !change.before && change.after)?.instanceId;
         const command: BuiltCommand = { id: crypto.randomUUID(), label: `Effect: ${operation.action}`, scope: "effect", createdAtMs: Date.now(), diff };
-        if (executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) this.commandHistory.push(command);
+        if (executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) {
+            this.commandHistory.push(command);
+            if (added) {
+                this.expandedFrameGraphPostEffectId = added;
+                this.refreshFrameGraphPostAddUi();
+            }
+        }
     }
 
     private addFrameGraphPostEffect(effectId: FrameGraphPostAddEffectId): void {
@@ -5662,22 +5681,14 @@ export class UIController {
     }
 
     private moveFrameGraphPostEffectToDisplayPosition(
-        draggedId: FrameGraphPostAddEffectId,
-        targetId: FrameGraphPostAddEffectId,
+        draggedId: string,
+        targetId: string,
         placement: "before" | "after",
     ): void {
         if (draggedId === targetId) {
             return;
         }
-        const displayIds = [...this.mmdManager.getFrameGraphPostEffectStackIds()].reverse();
-        const withoutDragged = displayIds.filter((id) => id !== draggedId);
-        const targetIndex = withoutDragged.indexOf(targetId);
-        if (targetIndex < 0) {
-            return;
-        }
-        const insertIndex = placement === "before" ? targetIndex : targetIndex + 1;
-        withoutDragged.splice(insertIndex, 0, draggedId);
-        this.mmdManager.setFrameGraphPostEffectStackIds(withoutDragged.reverse());
+        this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation: { action: "reorder", draggedId, targetId, placement } });
         this.expandedFrameGraphPostEffectId = draggedId;
         this.refreshFrameGraphPostAddUi();
     }
@@ -6892,7 +6903,8 @@ export class UIController {
             return;
         }
 
-        if (!stackEffects.some((effect) => effect.id === this.expandedFrameGraphPostEffectId)) {
+        if (!stackEffects.some((effect) => effect.id === this.expandedFrameGraphPostEffectId)
+            && !instanceState.instances.some(item => item.instanceId === this.expandedFrameGraphPostEffectId)) {
             this.expandedFrameGraphPostEffectId = null;
         }
 
@@ -6925,8 +6937,8 @@ export class UIController {
             `] as const;
         }));
         this.postEffectStackList.innerHTML = [...instanceState.order].reverse().map(id => this.mmdManager.isEffectInstance(id)
-            ? this.frameGraphInstanceController?.render(id, true) ?? "" : legacyRows.get(id as FrameGraphPostEffectId) ?? "").join("")
-            + instanceState.instances.filter(item => !instanceState.order.includes(item.instanceId)).map(item => this.frameGraphInstanceController?.render(item.instanceId, false) ?? "").join("");
+            ? this.frameGraphInstanceController?.render(id, true, id === this.expandedFrameGraphPostEffectId) ?? "" : legacyRows.get(id as FrameGraphPostEffectId) ?? "").join("")
+            + instanceState.instances.filter(item => !instanceState.order.includes(item.instanceId)).map(item => this.frameGraphInstanceController?.render(item.instanceId, false, item.instanceId === this.expandedFrameGraphPostEffectId) ?? "").join("");
         this.frameGraphInstanceController?.installFixedNumberInputs();
     }
 

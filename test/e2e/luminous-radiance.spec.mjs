@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { dragEffectStackRow } from "./helpers/effect-instance-controls.mjs";
 import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -116,7 +117,7 @@ test("existing Luminous emits world-space RC light in Frame Graph", async ({}, t
     expect(states.shadow.unblocked - states.shadow.blocked).toBeGreaterThan(5);
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="gamma"]').click();
-    await luminousInstanceRow(page).locator('[data-instance-action="up"]').click();
+    await dragEffectStackRow(luminousInstanceRow(page), page.locator('[data-effect-instance-row]').filter({ has: page.locator('[data-instance-field="gamma"]') }), "before");
     const reordered = await capture("reordered-with-gamma");
     expect(colored(reordered, 2)).toBeGreaterThan(100);
     await control("luminousRadianceEnabled").uncheck();

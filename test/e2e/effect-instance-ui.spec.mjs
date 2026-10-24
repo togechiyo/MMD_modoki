@@ -23,6 +23,8 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     expect(before.instances.map(item => item.label)).toEqual(["SSAO", "SSAO 2", "SSGI"]);
     const row = id => page.locator(`[data-effect-stack-row="${id}"]`);
     await expect(page.locator('[data-instance-field="label"], [data-instance-action="up"], [data-instance-action="down"]')).toHaveCount(0);
+    await expect(row(a).locator('.effect-layer-main[data-effect-stack-drag]')).toHaveCount(1);
+    await expect(row("ringParticles").locator('.effect-layer-main[data-effect-stack-drag]')).toHaveCount(1);
     await dragEffectStackRow(row(a), row("ringParticles"), "before");
     expect((await state()).order).toEqual([b, c, "ringParticles", a]);
     expect((await state()).instances).toEqual(before.instances);

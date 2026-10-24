@@ -50,6 +50,7 @@ export type KeyframeAction =
     | { type: "keyframe.registerLight"; source: ActionSource }
     | { type: "keyframe.registerShadow"; source: ActionSource }
     | { type: "keyframe.registerGravity"; source: ActionSource }
+    | { type: "keyframe.registerEffect"; source: ActionSource; instanceId: string }
     | { type: "keyframe.correctSelected"; source: ActionSource; correction: KeyframeValueCorrection }
     | { type: "keyframe.correctBodyScale"; source: ActionSource; sourceModelIndex: number };
 

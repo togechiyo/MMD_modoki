@@ -631,6 +631,7 @@
     "effect.instance.select": "在时间轴中选择",
     "effect.instance.duplicate": "复制",
     "effect.instance.keyEdit": "编辑关键帧",
+    "effect.instance.registerKeyframe": "注册关键帧",
     "effect.instance.suspend": "停用",
     "effect.instance.resume": "恢复",
     "effect.instance.delete": "完全删除",

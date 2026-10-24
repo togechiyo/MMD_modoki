@@ -159,8 +159,8 @@ import { isEffectInstanceType } from "./editor/frame-graph-instance-effects";
 import { normalizeLutFile } from "./lut-file";
 import { buildEffectInstanceDiff } from "./actions/effect-instance-command";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
-
-type SectionKeyframeButtonState = "none" | "dirty" | "registered";
+import { EffectKeyframeEditState } from "./editor/effect-keyframe-edit-state";
+import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from "./ui/section-keyframe-button";
 
 type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory" | "light" | "shadow" | "gravity";
 type NumericArrayLike = ArrayLike<number> | null | undefined;
@@ -549,6 +549,7 @@ export class UIController {
     private postEffectEnableFrameGraphButton: HTMLButtonElement | null = null;
     private expandedFrameGraphPostEffectId: string | null = null;
     private readonly effectTimelineView = new EffectTimelineViewState();
+    private readonly effectKeyframeEdits = new EffectKeyframeEditState();
     private updatingEffectTimelineTracks = false;
     private draggingFrameGraphPostEffectId: string | null = null;
     private btnInfoKeyframe: HTMLButtonElement | null = null;
@@ -677,7 +678,9 @@ export class UIController {
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
         this.effectKeyframeController = new EffectKeyframeController(getRequiredElement("effect-key-controls"), (id, value) => {
             const first = !this.mmdManager.hasEffectSceneTrack(id);
+            const before = this.mmdManager.captureCurrentEffectKeyframePayload(id).value;
             this.mmdManager.setEffectScenePreview(id, value);
+            if (this.mmdManager.isEffectInstance(id)) this.effectKeyframeEdits.mark(id, this.mmdManager.currentFrame, before, this.mmdManager.captureCurrentEffectKeyframePayload(id).value);
             if (first) this.refreshFrameGraphPostAddUi();
             this.refreshEffectKeyframeUi();
         }, this.mmdManager);
@@ -2582,6 +2585,9 @@ export class UIController {
         this.actionDispatcher.register("keyframe.registerGravity", () => {
             this.registerGravityKeyframeAtCurrentFrame();
         });
+        this.actionDispatcher.register("keyframe.registerEffect", action => {
+            if (this.mmdManager.isEffectInstance(action.instanceId)) this.registerEffectKeyframeAtCurrentFrame(action.instanceId);
+        });
         this.actionDispatcher.register("interpolation.copy", () => this.copyInterpolationCurves());
         this.actionDispatcher.register("interpolation.paste", () => this.pasteInterpolationCurves());
         this.actionDispatcher.register("interpolation.applyLinear", () => this.resetInterpolationCurvesToLinear());
@@ -2889,7 +2895,9 @@ export class UIController {
         });
         this.actionDispatcher.register("effect.instanceEdit", action => this.editFrameGraphInstance(action.operation));
         this.actionDispatcher.register("effect.instanceValue", action => {
+            const before = this.mmdManager.captureCurrentEffectKeyframePayload(action.instanceId).value;
             this.mmdManager.setEffectInstanceValue(action.instanceId, action.value);
+            this.effectKeyframeEdits.mark(action.instanceId, this.mmdManager.currentFrame, before, this.mmdManager.captureCurrentEffectKeyframePayload(action.instanceId).value);
             this.frameGraphInstanceController?.refresh();
             this.refreshEffectKeyframeUi();
         });
@@ -3463,6 +3471,7 @@ export class UIController {
     }
 
     private refreshUiAfterProjectImport(lighting: Partial<ProjectLightingState> | null | undefined): void {
+        this.effectKeyframeEdits.reset();
         this.refreshModelSelector();
         this.refreshShaderPanel();
         this.applyLocalizedUiState();
@@ -5243,6 +5252,9 @@ export class UIController {
                 this.timeline.selectTrackByNameAndCategory(id, ["effect"]);
                 this.updateTimelineEditState();
             },
+            id => { this.actionDispatcher.dispatch({ type: "keyframe.registerEffect", source: "button", instanceId: id }); },
+            id => this.effectKeyframeEdits.state(id, this.mmdManager.currentFrame, this.mmdManager.captureCurrentEffectKeyframePayload(id).value,
+                this.mmdManager.readEffectSceneKeyframePayload(id, this.mmdManager.currentFrame)?.value ?? null),
             before => {
                 const diff = buildEffectInstanceDiff(before, this.mmdManager.getEffectInstanceState());
                 if (diff) this.commandHistory.push({ id: crypto.randomUUID(), label: "Effect value", scope: "effect", createdAtMs: Date.now(), diff });
@@ -6941,11 +6953,8 @@ export class UIController {
                         <label class="effect-layer-check-wrap" title="${toggleTitle}">
                             <input class="effect-layer-check" type="checkbox" data-effect-stack-toggle="${rowId}"${enabled ? " checked" : ""}>
                         </label>
-                        <button class="effect-layer-main" type="button" data-effect-stack-item="${rowId}" aria-expanded="${expanded ? "true" : "false"}">
+                        <button class="effect-layer-main" type="button" data-effect-stack-item="${rowId}" aria-expanded="${expanded ? "true" : "false"}" draggable="${!this.mmdManager.isPlaying}" data-effect-stack-drag="${rowId}" title="${dragTitle}"${this.mmdManager.isPlaying ? " disabled" : ""}>
                             <span class="effect-layer-name">${effectLabel}</span>
-                        </button>
-                        <button class="effect-layer-drag-handle" type="button" draggable="true" data-effect-stack-drag="${rowId}" title="${dragTitle}" aria-label="${dragTitle}">
-                            <span class="effect-layer-drag-grip" aria-hidden="true"></span>
                         </button>
                     </div>
                     ${expanded ? `
@@ -8585,23 +8594,7 @@ export class UIController {
 
     private setSectionKeyframeButtonState(button: HTMLButtonElement | null, state: SectionKeyframeButtonState): void {
         if (!button) return;
-
-        button.classList.remove("is-none", "is-empty", "is-registered");
-        button.hidden = this.mmdManager.isPlaying;
-        if (this.mmdManager.isPlaying) {
-            button.disabled = true;
-            button.textContent = "";
-            return;
-        }
-        button.disabled = state === "none";
-        button.textContent = state === "registered" ? "♦" : state === "dirty" ? "♢" : "";
-        if (state === "none") {
-            button.classList.add("is-none");
-        } else if (state === "dirty") {
-            button.classList.add("is-empty");
-        } else {
-            button.classList.add("is-registered");
-        }
+        refreshSectionKeyframeButton(button, state, this.mmdManager.isPlaying);
     }
 
     private markSectionKeyframeDirty(section: SectionKeyframeSection, contextKey: string | null): void {
@@ -10797,15 +10790,17 @@ export class UIController {
         this.showToast(before ? `Frame ${frame} gravity keyframe updated` : `Frame ${frame}: gravity keyframe added`, "success");
     }
 
-    private registerEffectKeyframeAtCurrentFrame(): void {
+    private registerEffectKeyframeAtCurrentFrame(instanceId?: string): void {
         if (this.mmdManager.isPlaying) return;
-        const track = this.getSelectedTimelineTrack();
+        const track = instanceId ? { name: instanceId, category: "effect" as const } : this.getSelectedTimelineTrack();
         if (track?.category !== "effect" || (!isEffectId(track.name) && !this.mmdManager.isEffectInstance(track.name))) return;
+        if (this.mmdManager.isEffectInstance(track.name) && this.getConfiguredPostEffectBackend() !== "frameGraph") return;
         const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentEffectKeyframePayload(track.name);
         if (this.getKeyframeRegistrationDecision(before, after) !== "proceed") return;
-        const command = this.createKeyframePasteCommand(track, frame, before, after, `Register ${track.name} keyframe at frame ${frame}`);
+        const label = this.mmdManager.isEffectInstance(track.name) ? this.mmdManager.getEffectInstanceLabel(track.name) : t(`effect.frameGraphPost.effects.${track.name}`);
+        const command = this.createKeyframePasteCommand(track, frame, before, after, `Register ${label} keyframe at frame ${frame}`);
         if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) return;
         this.commandHistory.push(command);
         this.updateTimelineEditState();

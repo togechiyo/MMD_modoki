@@ -6,6 +6,7 @@ import { toFrameGraphEffectSliderValue, fromFrameGraphEffectSliderValue, type Fr
 import { getEffectDefinition, type EffectValue, type EffectSlider } from "../editor/effect-keyframe-definitions";
 import { INSTANCE_LUT_PRESETS, visibleInstanceFixedFields, type InstanceFixedSettings, type InstanceFixedSliderField } from "../editor/frame-graph-instance-fixed-settings";
 import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-instance-focus-controls";
+import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from "./section-keyframe-button";
 
 const escape = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEffectInstanceState" | "getEffectInstanceFixedSettings" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
@@ -28,6 +29,8 @@ export class FrameGraphInstanceController {
         private readonly fixedValue: (instanceId: string, field: InstanceFixedSliderField, value: number) => void,
         private readonly select: (instanceId: string) => void,
         private readonly editKeys: (instanceId: string) => void,
+        private readonly registerKeyframe: (instanceId: string) => void,
+        private readonly keyframeState: (instanceId: string) => SectionKeyframeButtonState,
         private readonly commitValue: (before: SerializedEffectInstances) => void,
         private readonly syncSlider: (slider: HTMLInputElement) => void,
         private readonly loadLut: (instanceId: string) => void) {
@@ -38,6 +41,7 @@ export class FrameGraphInstanceController {
             const action = button.dataset.instanceAction;
             if (action === "select") { select(id); return; }
             if (action === "keyEdit") { editKeys(id); return; }
+            if (action === "registerKeyframe") { registerKeyframe(id); return; }
             if (action === "lutFile") { loadLut(id); return; }
             if (action === "duplicate" || action === "suspend" || action === "resume" || action === "delete") edit({ action, instanceId: id });
         });
@@ -102,10 +106,11 @@ export class FrameGraphInstanceController {
         const lutControls = instance?.type === "lut" ? `<select class="effect-layer-control-select" data-instance-field="lutPreset" aria-label="${escape(t("shader.postfx.lutSource"))}">${INSTANCE_LUT_PRESETS.map(preset => `<option value="${preset.id}"${lut?.kind === "builtin" && lut.preset === preset.id ? " selected" : ""}>${preset.label}</option>`).join("")}${lut?.kind === "external" ? `<option value="external" selected>${escape(lut.name)}</option>` : ""}</select><button type="button" data-instance-action="lutFile">${escape(t("shader.postfx.lutFile"))}</button>` : "";
         const button = (action: string): string => `<button type="button" class="effect-layer-control-button" data-instance-action="${action}" title="${escape(t(`effect.instance.${action}`))}"${this.host.isPlaying ? " disabled" : ""}>${escape(t(`effect.instance.${action}`))}</button>`;
         const dragTitle = escape(t("effect.frameGraphPost.dragToReorder"));
+        const keyTitle = `${label}: ${escape(t("effect.instance.registerKeyframe"))}`;
         return `<div class="effect-layer-placeholder effect-layer-placeholder--active effect-layer-placeholder--check${value.enabled && present ? "" : " effect-layer-placeholder--off"}" data-effect-stack-row="${id}" data-effect-instance-row="${id}">
             <div class="effect-layer-header"><label class="effect-layer-check-wrap" title="${escape(t("effect.frameGraphPost.toggleVisibility"))}"><input class="effect-layer-check" type="checkbox" data-instance-field="enabled" aria-label="${escape(t("status.on"))}"${value.enabled ? " checked" : ""}></label>
-            <button type="button" class="effect-layer-main" data-instance-action="select" aria-expanded="${expanded}"><span class="effect-layer-name">${label}</span></button>
-            ${present ? `<button class="effect-layer-drag-handle" type="button" draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}" aria-label="${dragTitle}"${this.host.isPlaying ? " disabled" : ""}><span class="effect-layer-drag-grip" aria-hidden="true"></span></button>` : ""}</div>
+            <button type="button" class="effect-layer-main" data-instance-action="select" aria-expanded="${expanded}"${present ? ` draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}"${this.host.isPlaying ? " disabled" : ""}` : ""}><span class="effect-layer-name">${label}</span></button>
+            <button type="button" class="section-kf-btn effect-instance-keyframe-button" data-instance-action="registerKeyframe" title="${keyTitle}" aria-label="${keyTitle}"></button></div>
             <div class="effect-layer-details"${expanded ? "" : " hidden"}>
             ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSelects}${fixedSliderControls}${lutControls}
             <div class="effect-instance-actions">${button("keyEdit")}${button("duplicate")}${button(present ? "suspend" : "resume")}${button("delete")}</div>
@@ -149,6 +154,8 @@ export class FrameGraphInstanceController {
                 }
             });
             row.querySelectorAll<HTMLButtonElement>("[data-instance-action]:not([data-instance-action='select'])").forEach(button => { button.disabled = this.host.isPlaying; });
+            const keyButton = row.querySelector<HTMLButtonElement>('[data-instance-action="registerKeyframe"]');
+            if (keyButton) refreshSectionKeyframeButton(keyButton, this.host.isPlaying ? "none" : this.keyframeState(id), this.host.isPlaying);
             row.querySelectorAll<HTMLSelectElement>("select:not([data-dof-instance-field])").forEach(select => { select.disabled = this.host.isPlaying; });
             row.querySelectorAll<HTMLElement>("[data-instance-value]").forEach(output => { output.textContent = Number(value[output.dataset.instanceValue ?? ""]).toFixed(2); });
             row.querySelectorAll<HTMLElement>("[data-instance-fixed-value]").forEach(output => { output.textContent = (fixed.find(item => item.field === output.dataset.instanceFixedValue)?.value ?? 0).toFixed(2); });

@@ -15,6 +15,11 @@ const readySnapshot: EditorActionAvailabilitySnapshot = {
 };
 
 describe("canExecuteEditorAction", () => {
+    it("allows an effect header to register its own instance without a selected timeline row", () => {
+        const snapshot = { ...readySnapshot, hasSelectedTimelineTrack: false };
+        expect(canExecuteEditorAction({ type: "keyframe.registerEffect", source: "button", instanceId: "fx-a" }, snapshot)).toBe(true);
+        expect(canExecuteEditorAction({ type: "keyframe.registerEffect", source: "button", instanceId: "ssao" }, snapshot)).toBe(false);
+    });
     it("allows keyframe add and delete only when a timeline track is selected", () => {
         expect(canExecuteEditorAction(
             { type: "keyframe.addCurrent", source: "shortcut" },

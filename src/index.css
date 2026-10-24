@@ -3282,7 +3282,7 @@ body.png-capture-mode .model-comment-notice {
 
 .effect-layer-header {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 18px;
+  grid-template-columns: 16px minmax(0, 1fr) 22px;
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -3318,36 +3318,21 @@ body.png-capture-mode .model-comment-notice {
   color: var(--text-primary);
 }
 
-.effect-layer-drag-handle {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  color: var(--text-tertiary);
-  background: transparent;
+.effect-layer-main[draggable="true"] {
   cursor: grab;
   user-select: none;
 }
 
-.effect-layer-drag-handle:hover,
-.effect-layer-drag-handle:focus-visible {
-  color: var(--text-secondary);
-}
-
-.effect-layer-drag-handle:active {
+.effect-layer-main[draggable="true"]:active {
   cursor: grabbing;
 }
 
-.effect-layer-drag-grip {
-  width: 3px;
-  height: 3px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow:
-    0 -5px 0 currentColor,
-    0 5px 0 currentColor;
+.effect-layer-header .effect-instance-keyframe-button {
+  margin: 0;
+  width: 22px;
+  min-width: 22px;
+  padding: 0;
+  font-size: 14px;
 }
 
 .effect-layer-placeholder--drop-before {

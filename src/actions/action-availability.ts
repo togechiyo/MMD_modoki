@@ -63,6 +63,8 @@ export function canExecuteEditorAction(
         case "keyframe.registerShadow":
         case "keyframe.registerGravity":
             return true;
+        case "keyframe.registerEffect":
+            return /^fx-[a-zA-Z0-9-]{1,190}$/.test(action.instanceId);
         case "keyframe.toggleAutoKey":
         case "keyframe.setAutoKeyScope":
         case "keyframe.insertEmptyFrame":

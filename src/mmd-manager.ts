@@ -6541,7 +6541,7 @@ ${beforeFogAppendBlock}
         const legacy = EFFECT_TIMELINE_ENABLED ? EFFECT_KEYFRAME_DEFINITIONS
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) })) : [];
         const ids = [...this.effectInstances.order().filter(id => this.effectInstances.has(id)), ...this.effectInstances.ids().filter(id => !this.effectInstances.present(id))];
-        return [...legacy, ...ids.map(id => ({ name: id, category: "effect" as const, frames: this.effectInstances.frames(id), effectInstance: { type: "gamma" as const, label: this.effectInstances.label(id), suspended: !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph" } }))];
+        return [...legacy, ...ids.map(id => ({ name: id, category: "effect" as const, frames: this.effectInstances.frames(id), effectInstance: { type: this.effectInstances.type(id), label: this.effectInstances.label(id), suspended: !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph" } }))];
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
         if (id === "ssao" || id === "ssgi" || id === "ssr") {
@@ -6648,6 +6648,7 @@ ${beforeFogAppendBlock}
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
     public isEffectInstance(id: string): boolean { return this.effectInstances.has(id); }
+    public getEffectInstanceType(id: string): import("./editor/frame-graph-instance-effects").EffectInstanceType | null { return this.effectInstances.type(id); }
     public getEffectInstanceLabel(id: string): string { return this.effectInstances.label(id); }
     public setEffectInstanceValue(id: string, value: EffectValue): void {
         if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
@@ -11458,7 +11459,7 @@ ${beforeFogAppendBlock}
             contrast: this.postEffectContrastValue,
             gammaPower: this.effectRenderState.gammaPower,
             gammaEnabled: this.effectSceneTracks.has("gamma") ? this.getFrameGraphPostEffectStackIds().includes("gamma") : this.isFrameGraphPostEffectActive("gamma"),
-            gammaInstances: this.effectInstances.ids().filter(id => this.effectInstances.present(id)).map(id => ({ instanceId: id, ...this.effectInstances.value(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0) })),
+            effectInstances: this.effectInstances.ids().filter(id => this.effectInstances.present(id)).map(id => ({ instanceId: id, type: this.effectInstances.type(id), value: this.effectInstances.value(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0), bloomColor: this.effectInstances.bloomColor(id) })),
             instanceOrder: this.effectInstances.order(),
             imageProcessingEnabled: this.isFrameGraphImageProcessingTaskNeeded(),
             dofEnabled: this.isFrameGraphPostEffectActive("dof"),

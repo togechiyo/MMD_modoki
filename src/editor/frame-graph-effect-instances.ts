@@ -1,17 +1,18 @@
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./effect-scene-track-store";
-import { makeEffectPayload, normalizeEffectValue, getEffectDefinition, type EffectKeyframePayload, type EffectValue } from "./effect-keyframe-definitions";
+import { makeEffectPayload, type EffectKeyframePayload, type EffectValue } from "./effect-keyframe-definitions";
+import { instanceValue, instanceColor, isEffectInstanceType, INSTANCE_EFFECT_NAMES, type EffectInstanceType, type InstanceColor } from "./frame-graph-instance-effects";
 import { isFrameGraphPostEffectId, type FrameGraphPostEffectId } from "../shared/frame-graph-post-effect-stack";
 
-export type GammaInstance = {
+export type EffectInstance = {
     instanceId: string;
-    type: "gamma";
+    type: EffectInstanceType;
     label: string;
-    settings: { enabled: boolean; gamma: number };
+    settings: EffectValue;
+    bloomColor?: InstanceColor;
     animation: SerializedEffectAnimations;
 };
-export type SerializedEffectInstances = { version: 1; instances: GammaInstance[]; order: string[] };
-type Entry = Omit<GammaInstance, "animation"> & { tracks: EffectSceneTrackStore };
-const gamma = (value: unknown): GammaInstance["settings"] => normalizeEffectValue(getEffectDefinition("gamma"), value) as GammaInstance["settings"];
+export type SerializedEffectInstances = { version: 1; instances: EffectInstance[]; order: string[] };
+type Entry = Omit<EffectInstance, "animation"> & { tracks: EffectSceneTrackStore };
 const validId = (value: unknown): value is string => typeof value === "string" && /^fx-[a-zA-Z0-9-]{1,190}$/.test(value);
 
 /** Each authored instance owns a track store. Evaluation does not mutate authored values. */
@@ -20,53 +21,61 @@ export class FrameGraphEffectInstances {
     private ordered: string[] = [];
     has(id: string): boolean { return this.entries.has(id); }
     ids(): string[] { return [...this.entries.keys()]; }
-    type(id: string): "gamma" | null { return this.has(id) ? "gamma" : null; }
+    type(id: string): EffectInstanceType | null { return this.entries.get(id)?.type ?? null; }
     label(id: string): string { return this.get(id).label; }
     present(id: string): boolean { return this.ordered.includes(id); }
     order(): string[] { return [...this.ordered]; }
-    hasTrack(id: string): boolean { return this.get(id).tracks.has("gamma"); }
-    frames(id: string): Uint32Array { return this.get(id).tracks.frames("gamma"); }
-    staticValue(id: string): GammaInstance["settings"] { return { ...this.get(id).settings }; }
-    value(id: string, frame: number, preview = false): GammaInstance["settings"] {
+    hasTrack(id: string): boolean { const entry = this.get(id); return entry.tracks.has(entry.type); }
+    frames(id: string): Uint32Array { const entry = this.get(id); return entry.tracks.frames(entry.type); }
+    staticValue(id: string): EffectValue { return { ...this.get(id).settings }; }
+    value(id: string, frame: number, preview = false): EffectValue {
         const entry = this.get(id);
-        return gamma(entry.tracks.evaluate("gamma", frame, preview) ?? entry.settings);
+        return instanceValue(entry.type, entry.tracks.evaluate(entry.type, frame, preview) ?? entry.settings);
     }
     capture(id: string, frame: number, preview = true): EffectKeyframePayload {
-        return { ...makeEffectPayload("gamma", this.value(id, frame, preview)), instanceId: id };
+        return { ...makeEffectPayload(this.get(id).type, this.value(id, frame, preview)), instanceId: id };
     }
     read(id: string, frame: number): EffectKeyframePayload | null {
-        const payload = this.get(id).tracks.read("gamma", frame);
+        const entry = this.get(id), payload = entry.tracks.read(entry.type, frame);
         return payload ? { ...payload, instanceId: id } : null;
     }
     setValue(id: string, value: EffectValue, frame: number, keyPreview = false): void {
         const entry = this.get(id);
-        if (entry.tracks.has("gamma") || keyPreview) entry.tracks.preview("gamma", frame, value, entry.settings);
-        else entry.settings = gamma(value);
+        if (entry.tracks.has(entry.type) || keyPreview) entry.tracks.preview(entry.type, frame, value, entry.settings);
+        else entry.settings = instanceValue(entry.type, value);
     }
     apply(id: string, frame: number, payload: EffectKeyframePayload | null): boolean {
-        if (payload && (payload.instanceId !== id || payload.effectId !== "gamma")) return false;
         const entry = this.get(id);
-        return entry.tracks.apply("gamma", frame, payload, entry.settings);
+        if (payload && (payload.instanceId !== id || payload.effectId !== entry.type)) return false;
+        return entry.tracks.apply(entry.type, frame, payload, entry.settings);
     }
-    remove(id: string, frames: readonly number[]): boolean { return this.get(id).tracks.remove("gamma", frames); }
-    move(id: string, from: number, to: number): boolean { return this.get(id).tracks.move("gamma", from, to); }
+    remove(id: string, frames: readonly number[]): boolean { const entry = this.get(id); return entry.tracks.remove(entry.type, frames); }
+    move(id: string, from: number, to: number): boolean { const entry = this.get(id); return entry.tracks.move(entry.type, from, to); }
     clearPreviews(frame?: number): void {
         for (const entry of this.entries.values()) {
             if (frame === undefined) entry.tracks.clearPreviews();
             else entry.tracks.clearPreviewsOutside(frame);
         }
     }
-    add(id: string, settings: unknown = { enabled: true, gamma: 1 }, animation?: unknown): void {
+    add(id: string, settings?: unknown, animation?: unknown, type: EffectInstanceType = "gamma"): void {
         if (!validId(id) || this.has(id)) throw new Error("Invalid or duplicate effect instance ID");
         const tracks = new EffectSceneTrackStore(); tracks.restore(animation);
-        this.entries.set(id, { instanceId: id, type: "gamma", label: `Gamma ${this.entries.size + 1}`, settings: gamma(settings), tracks });
+        this.entries.set(id, { instanceId: id, type, label: `${INSTANCE_EFFECT_NAMES[type]} ${[...this.entries.values()].filter(entry => entry.type === type).length + 1}`, settings: instanceValue(type, settings), tracks,
+            ...(type === "bloom" ? { bloomColor: { r: 254 / 255, g: 220 / 255, b: 186 / 255 } } : {}) });
         this.ordered.push(id);
     }
     duplicate(id: string, nextId: string): void {
         const entry = this.get(id), animation = entry.tracks.serialize();
         for (const track of animation.tracks) if (track && typeof track === "object") delete (track as { preview?: unknown }).preview;
-        this.add(nextId, entry.settings, animation);
+        this.add(nextId, entry.settings, animation, entry.type);
+        if (entry.bloomColor) this.setBloomColor(nextId, entry.bloomColor);
     }
+    setBloomColor(id: string, value: unknown): void {
+        const entry = this.get(id);
+        if (entry.type !== "bloom") throw new Error("Only Bloom owns a color");
+        entry.bloomColor = instanceColor(value);
+    }
+    bloomColor(id: string): InstanceColor | undefined { const color = this.get(id).bloomColor; return color ? { ...color } : undefined; }
     rename(id: string, label: string): void {
         const normalized = label.trim();
         if (!normalized || normalized.length > 80 || [...normalized].some(char => char.charCodeAt(0) < 32)) throw new Error("Invalid effect instance name");
@@ -96,8 +105,9 @@ export class FrameGraphEffectInstances {
             const state = data as SerializedEffectInstances;
             if (state.version !== 1 || !Array.isArray(state.instances) || !Array.isArray(state.order)) throw new Error("Unsupported effect instance format");
             for (const item of state.instances) {
-                if (item?.type !== "gamma") throw new Error("Unsupported effect instance type");
-                next.add(item.instanceId, item.settings, item.animation);
+                if (!item || !isEffectInstanceType(item.type)) throw new Error("Unsupported effect instance type");
+                next.add(item.instanceId, item.settings, item.animation, item.type);
+                if (item.type === "bloom") next.setBloomColor(item.instanceId, item.bloomColor);
                 next.rename(item.instanceId, item.label);
             }
             next.setOrder(state.order);

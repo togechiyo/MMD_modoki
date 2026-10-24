@@ -221,10 +221,11 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] エフェクトキーの最小PoCとして、カメラモードへガンマのON / OFF・スライダー値のキーを追加。保存・Undo / Redo・Classic / FrameGraph・PNG / WebMを確認（[実験メモ](./gamma-timeline-key-experiment-2026-09-14.md)、2026-09-14）。他エフェクトへの展開は後続で判断する。
 - [x] 海を除く1エフェクト1行の共通基盤について、状態・新形式保存・UI・描画adapter・作業分解を設計。所有者指定により未配布の旧ガンマキー互換を外し、下準備10〜18h（予備込み14〜24h）へ改定（[設計・見積もり](./effect-timeline-common-foundation-design-2026-09-14.md)、2026-09-14）。
 - [x] 所有者指定でエフェクトキーを次版から一時退避。標準のUI・キー再生をOFFにし、実装と保存済みキーを保管。通常のエフェクト調整と照明・影・重力キーは継続。開発用opt-inで再開可能（[休止・再開方法](./effect-timeline-shelving-2026-09-15.md)、2026-09-15）。
-- [ ] エフェクトキーの再開を次版の目標として、復帰対象・登録UI・保存済みキー・両backend・PNG / WebMの確認範囲を整理する（所有者追加指定2026-10-07、[次版候補](./v0.2.4-next-version-candidates.md#エフェクトキー再開の検討)。標準ONの時期・収録範囲は未決定）
+- [x] エフェクトキーの再開方式を新個体方式へ整理。2026-10-24の所有者指定で旧仕様の復帰・移行を対象から外し、新方式で既存効果へ展開する（[展開範囲](./framegraph-effect-instance-expansion-2026-10-24.md)）。次版収録は未決定。
 - [x] FrameGraphエフェクトのタイムライン連携と同種の重ねがけを共同設計。現行の種類単位の状態を調べ、個体参照・設定・キー・描画task・保存移行と段階案を整理（[設計案](./framegraph-effect-instances-and-timeline-design-2026-10-21.md)、2026-10-21）。着手前の設計記録。
 - [x] 共同設計を既存タイムラインの選択・表示・登録・貼付け・履歴・scope・列操作・保存へ照合。空trackのbaseと単一 / batch貼付け、個体構造Commandの不足を設計へ反映。関連unit 12 files / 188 testsと二個体参照probe 7 assertionsが成功（[整合性確認](./framegraph-effect-instances-and-timeline-design-2026-10-21.md#8-既存タイムラインとの整合性確認2026-10-21)、2026-10-21）。新UI・描画の動作確認とは区別する。
 - [x] FrameGraph Gamma個体の複数追加・個別キー・構造Undo / Redo・他効果との順序・project v2保存復元を実装。Classic往復、GUI / PNG / WebM、AAなしの単独利用、旧キー休止維持を確認（[第一段階の範囲と検証](./framegraph-effect-instances-implementation-2026-10-21.md)、2026-10-21）。他効果の個体化・既存17種の一括公開は未実施。
+- [x] 新個体方式へGrain・Sharpen・Chromatic・Vignette・Edge Blur・Distortion・Bloomを追加し、Gammaと合わせて8種へ展開。各2個体の独立キー・色・履歴・多数行UI・保存・Classic往復・PNG / WebMを確認（[実装・検証](./framegraph-effect-instance-expansion-2026-10-24.md)、2026-10-24）。旧仕様の移行・復帰は所有者指定で対象外。
 - [x] SSAO・SSGI・SSRのON / OFFと現行UIの6スライダーをキー化。初期OFF準備、半径/ステップ補間、保存・PNG/WebM・Classic往復でキー保持を確認。Frame Graphの対応は合計17種、残りは被写界深度・モーションブラー・パーティクル（[実装・検証](./screen-space-effects-timeline-2026-09-15.md)、2026-09-15）。
 - [x] FrameGraph SSAOをシンプル階調（線形0〜2、濃いAOの追加乗算なし、色合成を維持）へ一本化。旧modeのUI・保存フラグを外し、旧projectも現行処理へ統一（[比較・採用メモ](./ssao-tone-comparison-2026-10-20.md)、2026-10-20）。
 - [x] パラフレア・オフセット影・オフセットリムのON / OFFと現行UIの12スライダーをキー化。初期OFFの深度準備、補間・保存・数値入力同期・PNG/WebMを確認し、対応は合計14種（[実装・検証](./depth-effects-timeline-2026-09-14.md)、2026-09-14）。

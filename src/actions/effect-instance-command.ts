@@ -1,10 +1,10 @@
-import type { GammaInstance, SerializedEffectInstances } from "../editor/frame-graph-effect-instances";
+import type { EffectInstance, SerializedEffectInstances } from "../editor/frame-graph-effect-instances";
 
 export type EffectInstanceDiff = {
     type: "effect.instances";
     beforeOrder: string[];
     afterOrder: string[];
-    changes: Array<{ instanceId: string; before: GammaInstance | null; after: GammaInstance | null }>;
+    changes: Array<{ instanceId: string; before: EffectInstance | null; after: EffectInstance | null }>;
 };
 export function buildEffectInstanceDiff(before: SerializedEffectInstances, after: SerializedEffectInstances): EffectInstanceDiff | null {
     const previous = new Map(before.instances.map(item => [item.instanceId, item]));
@@ -19,12 +19,12 @@ export function buildEffectInstanceDiff(before: SerializedEffectInstances, after
 }
 
 const equal = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-function authored(instance: GammaInstance): GammaInstance {
+function authored(instance: EffectInstance): EffectInstance {
     const result = structuredClone(instance);
     result.animation.tracks = result.animation.tracks.filter(raw => {
         const track = raw as { effectId?: string; keys?: unknown[]; preview?: unknown };
         delete track.preview;
-        return track.effectId !== "gamma" || !Array.isArray(track.keys) || track.keys.length > 0;
+        return track.effectId !== instance.type || !Array.isArray(track.keys) || track.keys.length > 0;
     });
     return result;
 }
@@ -41,7 +41,7 @@ export function applyEffectInstanceDiff(current: SerializedEffectInstances, diff
             if (to) instances.set(change.instanceId, structuredClone(to)); else instances.delete(change.instanceId);
         } else {
             if (!actual || actual.type !== from.type) return null;
-            for (const field of ["label", "settings", "animation"] as const) {
+            for (const field of ["label", "settings", "animation", "bloomColor"] as const) {
                 if (equal(from[field], to[field])) continue;
                 if (!equal(actual[field], from[field])) return null;
                 Object.assign(actual, { [field]: structuredClone(to[field]) });

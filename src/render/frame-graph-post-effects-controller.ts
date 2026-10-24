@@ -1,4 +1,6 @@
 import { Constants } from "@babylonjs/core/Engines/constants";
+import type { EvaluatedEffectInstance, EffectInstanceType } from "../editor/frame-graph-instance-effects";
+import { frameGraphInstanceSettings } from "./frame-graph-instance-settings";
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
 import type { FrameGraphTask } from "@babylonjs/core/FrameGraph/frameGraphTask";
@@ -196,7 +198,7 @@ export type FrameGraphPostEffectsDiagnosticsSnapshot = {
 };
 
 export type FrameGraphPostEffectsSettings = {
-    gammaInstances?: Array<{ instanceId: string; enabled: boolean; gamma: number }>;
+    effectInstances?: EvaluatedEffectInstance[];
     instanceOrder?: string[];
     contrast: number;
     gammaPower: number;
@@ -1952,7 +1954,7 @@ class FrameGraphPostEffectsLensDistortionTask extends FrameGraphPostProcessTask 
 }
 
 export class FrameGraphPostEffectsController {
-    private readonly gammaInstanceTasks = new Map<string, { task: FrameGraphPostEffectsColorCorrectionTask; effect: EffectWrapper }>();
+    private readonly instanceTasks = new Map<string, { type: EffectInstanceType; tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask>; connect: (source: FrameGraphTextureHandle) => FrameGraphTextureHandle; update: (base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance) => void }>();
     private activationWarningEmitted = false;
     private colorCorrectionEffect: EffectWrapper | null = null;
     private gammaCorrectionEffect: EffectWrapper | null = null;
@@ -2360,21 +2362,14 @@ export class FrameGraphPostEffectsController {
             this.imageProcessingEffect,
         );
         const initialSettings = this.getSettings();
-        if (initialSettings.gammaInstances?.length) {
-            const validIds = new Set([...physicalEffectOrder, ...initialSettings.gammaInstances.map(item => item.instanceId)]);
+        if (initialSettings.effectInstances?.length) {
+            const validIds = new Set([...physicalEffectOrder, ...initialSettings.effectInstances.map(item => item.instanceId)]);
             physicalEffectOrder = [...new Set([...(initialSettings.instanceOrder ?? []), ...physicalEffectOrder])].filter(id => validIds.has(id));
-            for (const instance of initialSettings.gammaInstances) {
-                const effect = new EffectWrapper({ engine: frameGraph.engine, fragmentShader: "mmdFrameGraphColorCorrection", useShaderStore: true, useAsPostProcess: true,
-                    uniforms: ["contrast", "gammaPower"], name: `gamma-${instance.instanceId}`, shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL });
-                const settings = (): FrameGraphPostEffectsSettings => {
-                    const current = this.getSettings(), value = current.gammaInstances?.find(item => item.instanceId === instance.instanceId);
-                    return { ...current, gammaEnabled: value?.enabled ?? false, gammaPower: value?.gamma ?? 1 };
-                };
-                const task = new FrameGraphPostEffectsColorCorrectionTask(`gamma-${instance.instanceId}`, frameGraph, effect, () => undefined, settings, false, true);
-                task.sourceTexture = sourceTextureHandle;
-                task.disabled = !instance.enabled;
-                this.gammaInstanceTasks.set(instance.instanceId, { task, effect });
-                deferEffectTask(instance.instanceId, task);
+            for (const instance of initialSettings.effectInstances) {
+                const group = this.createInstanceTasks(frameGraph, instance, initialSettings);
+                group.connect(sourceTextureHandle);
+                this.instanceTasks.set(instance.instanceId, group);
+                for (const task of group.tasks) deferEffectTask(instance.instanceId, task);
             }
         }
         const resourcePlan = buildFrameGraphResourcePlan(initialSettings, effectOrder);
@@ -3347,7 +3342,12 @@ export class FrameGraphPostEffectsController {
             return;
         }
         const settings = this.getSettings();
-        for (const [id, entry] of this.gammaInstanceTasks) entry.task.disabled = settings.gammaInstances?.find(item => item.instanceId === id)?.enabled !== true;
+        const instances = new Map(settings.effectInstances?.map(instance => [instance.instanceId, instance]));
+        for (const [id, group] of this.instanceTasks) {
+            const instance = instances.get(id);
+            if (instance) group.update(settings, instance);
+            else for (const task of group.tasks) task.disabled = true;
+        }
         const resourcePlan = buildFrameGraphResourcePlan(
             settings,
             this.resourcePlan?.effectOrder ?? FRAME_GRAPH_POST_EFFECT_IDS,
@@ -3524,6 +3524,57 @@ export class FrameGraphPostEffectsController {
         return false;
     }
 
+    private createInstanceTasks(frameGraph: FrameGraph, instance: EvaluatedEffectInstance, base: FrameGraphPostEffectsSettings) {
+        const name = `${instance.type}-${instance.instanceId}`, engine = frameGraph.engine;
+        const shaderLanguage = engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL;
+        let current = frameGraphInstanceSettings(base, instance);
+        const settings = (): FrameGraphPostEffectsSettings => current;
+        const tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask> = [];
+        const wrapper = (shader: string, uniforms: string[], samplers?: string[]): EffectWrapper => new EffectWrapper({ engine, fragmentShader: shader, useShaderStore: true, useAsPostProcess: true, uniforms, ...(samplers ? { samplers } : {}), name, shaderLanguage });
+        let updateValues: () => void = () => undefined;
+        switch (instance.type) {
+            case "gamma": tasks.push(new FrameGraphPostEffectsColorCorrectionTask(name, frameGraph, wrapper("mmdFrameGraphColorCorrection", ["contrast", "gammaPower"]), () => undefined, settings, false, true)); break;
+            case "grain": {
+                const task = new FrameGraphGrainTask(name, frameGraph, new ThinGrainPostProcess(name, engine, { shaderLanguage }));
+                tasks.push(task); updateValues = () => this.applyGrainSettings(task, current); break;
+            }
+            case "sharpen": {
+                const task = new FrameGraphSharpenTask(name, frameGraph, new ThinSharpenPostProcess(name, engine, { shaderLanguage }));
+                tasks.push(task); updateValues = () => this.applySharpenSettings(task, current); break;
+            }
+            case "chromatic": {
+                const task = new FrameGraphChromaticAberrationTask(name, frameGraph, new ThinChromaticAberrationPostProcess(name, engine, { shaderLanguage }));
+                tasks.push(task); updateValues = () => this.applyChromaticAberrationSettings(task, current); break;
+            }
+            case "vignette": case "edgeBlur": tasks.push(new FrameGraphPostEffectsVignetteEdgeBlurTask(name, frameGraph, wrapper("mmdFrameGraphVignetteEdgeBlur", ["texelSize", "edgeBlurStrength", "vignetteWeight", "aspectRatio"]), settings)); break;
+            case "distortion": tasks.push(new FrameGraphPostEffectsLensDistortionTask(name, frameGraph, wrapper("mmdFrameGraphLensDistortion", ["distortion"]), settings)); break;
+            case "bloom": {
+                const bloom = new FrameGraphBloomTask(name, frameGraph, current.bloomWeight, current.bloomKernel, current.bloomThreshold, false);
+                const tint = new FrameGraphPostEffectsBloomTintTask(`${name}-tint`, frameGraph, wrapper("mmdFrameGraphBloomTint", ["bloomColor"], ["originalSampler"]), settings);
+                tasks.push(bloom, tint); updateValues = () => this.applyBloomSettings(bloom, current); break;
+            }
+        }
+        const group = {
+            type: instance.type, tasks,
+            connect: (source: FrameGraphTextureHandle): FrameGraphTextureHandle => {
+                let texture = source;
+                for (const task of tasks) {
+                    task.sourceTexture = texture;
+                    if (task instanceof FrameGraphPostEffectsBloomTintTask) task.originalTexture = source;
+                    texture = task.outputTexture;
+                }
+                return texture;
+            },
+            update: (base: FrameGraphPostEffectsSettings, value: EvaluatedEffectInstance): void => {
+                current = frameGraphInstanceSettings(base, value);
+                for (const task of tasks) task.disabled = !value.value.enabled;
+                updateValues();
+            },
+        };
+        group.update(base, instance);
+        return group;
+    }
+
     private connectPostEffectOrder(
         baseTexture: FrameGraphTextureHandle,
         stackOutputTask: FrameGraphPostEffectsStackOutputTask,
@@ -3545,11 +3596,10 @@ export class FrameGraphPostEffectsController {
         };
 
         for (const id of normalizedOrder) {
-            const instance = this.gammaInstanceTasks.get(id);
+            const instance = this.instanceTasks.get(id);
             if (instance) {
-                instance.task.sourceTexture = currentTexture;
-                currentTexture = instance.task.outputTexture;
-                this.connectedOrder.push("gamma");
+                currentTexture = instance.connect(currentTexture);
+                this.connectedOrder.push(instance.type);
                 continue;
             }
             switch (id) {
@@ -3721,8 +3771,7 @@ export class FrameGraphPostEffectsController {
     }
 
     dispose(): void {
-        for (const entry of this.gammaInstanceTasks.values()) entry.effect.dispose();
-        this.gammaInstanceTasks.clear();
+        this.instanceTasks.clear();
         this.colorCorrectionEffect?.dispose();
         this.colorCorrectionEffect = null;
         this.gammaCorrectionEffect?.dispose();

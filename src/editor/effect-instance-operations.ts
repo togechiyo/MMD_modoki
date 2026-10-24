@@ -1,12 +1,14 @@
 import type { FrameGraphEffectInstances } from "./frame-graph-effect-instances";
+import type { EffectInstanceType, InstanceColor } from "./frame-graph-instance-effects";
 
-export type EffectInstanceOperation = { action: "add" } | { action: "duplicate" | "suspend" | "resume" | "delete"; instanceId: string }
+export type EffectInstanceOperation = { action: "add"; effectType?: EffectInstanceType } | { action: "color"; instanceId: string; color: InstanceColor } | { action: "duplicate" | "suspend" | "resume" | "delete"; instanceId: string }
     | { action: "rename"; instanceId: string; label: string } | { action: "move"; instanceId: string; delta: -1 | 1 };
 
 export function editEffectInstances(store: FrameGraphEffectInstances, operation: EffectInstanceOperation): void {
-    if (operation.action === "add") { store.add(`fx-${crypto.randomUUID()}`); return; }
+    if (operation.action === "add") { store.add(`fx-${crypto.randomUUID()}`, undefined, undefined, operation.effectType); return; }
     const id = operation.instanceId;
     switch (operation.action) {
+        case "color": store.setBloomColor(id, operation.color); break;
         case "duplicate": store.duplicate(id, `fx-${crypto.randomUUID()}`); break;
         case "suspend": store.suspend(id); break;
         case "resume": store.resume(id); break;

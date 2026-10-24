@@ -10,9 +10,9 @@ export type AutomationHelpTopic = {
 // Only bundled, trusted documentation belongs here. Asset names and paths are data.
 export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
-        id: "effect-instances", title: "FrameGraphのGamma個体キー", aliases: ["effect", "gamma", "instance", "エフェクト", "重ねがけ"],
-        status: "partial", summary: "Gammaは個体ごとにキーを持つ。tracks一覧の個体IDを参照する。",
-        body: "GUIで追加したGamma個体はcamera scopeのeffect行へ表示される。tracks一覧のnameが固定の個体IDで、effectType:gamma、displayName、suspendedも返す。nameをGammaや翻訳表示名へ置換しない。key payloadは{kind:effect,effectId:gamma,instanceId:name,value:{enabled,gamma}}。既存のキー登録・set/delete/move/copyと共有Undoを使い、instanceIdとtrack.nameの一致を保つ。GUIの単一キー個体間貼付けだけは同種を確認して対象IDへ付け替える。一括貼付けは元の個体IDを保持する。検索names/nameContainsは内部nameが対象で、表示名検索ではない。個体追加・複製・名称変更・並べ替え・休止/復帰・完全削除は現在GUIから行う。Classicでは個体データを保持し、新Gammaの描画・キー編集はFrameGraphへ戻して行う。旧17種のキーは引き続き標準OFFであり、全効果の多重化・公開ではない。個体を含む保存はproject version 2。",
+        id: "effect-instances", title: "FrameGraphのエフェクト個体キー", aliases: ["effect", "gamma", "bloom", "grain", "instance", "エフェクト", "重ねがけ"],
+        status: "partial", summary: "Gamma・Grain・Sharpen・Chromatic・Vignette・Edge Blur・Distortion・Bloomは個体ごとにキーを持つ。",
+        body: "GUIで追加した新個体はcamera scopeのeffect行へ表示される。tracks一覧のnameが固定の個体IDで、effectType、displayName、suspendedも返す。nameを種類名や翻訳表示名へ置換しない。payloadは{kind:effect,effectId:effectType,instanceId:name,value:{enabled,...}}。gamma:{gamma}、grain:{intensity}、sharpen:{edge}、chromatic:{amount}、vignette:{weight}、edgeBlur:{strength}、distortion:{influence}、bloom:{weight,threshold,kernel}を実値で指定する。Bloomの色は個体の固定設定。既存のキー登録・set/delete/move/copyと共有Undoを使い、instanceIdとtrack.nameとeffectTypeの一致を保つ。GUIの単一キー個体間貼付けだけは同種を確認して対象IDへ付け替える。一括貼付けは元の個体IDを保持する。検索names/nameContainsは内部nameが対象。個体追加・複製・名称変更・順序・休止/復帰・削除・固定色は現在GUIから行う。Classicではデータを保持し、新個体の描画・キー編集はFrameGraphへ戻して行う。旧17種のキー復帰や移行は行わない。個体を含む保存はproject version 2。",
     },
     {
         id: "context-summary", title: "編集前の状態を軽く取得", aliases: ["context", "summary", "full", "状態", "要約", "revision"],

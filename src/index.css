@@ -3261,6 +3261,7 @@ body.png-capture-mode .model-comment-notice {
 }
 
 .effect-instance-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+[data-effect-instance-row] { flex: 0 0 auto; }
 .effect-instance-actions .effect-layer-control-button { width: auto; flex: 1; min-width: 26px; }
 [data-effect-instance-row] input[type="text"] { width: 100%; min-width: 0; color: var(--text-primary); background: var(--bg-input, #252525); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-sm); padding: 3px 5px; }
 

@@ -154,6 +154,7 @@ import { EffectKeyframeController } from "./ui/effect-keyframe-controller";
 import { FrameGraphInstanceController } from "./ui/frame-graph-instance-controller";
 import { editEffectInstances, type EffectInstanceOperation } from "./editor/effect-instance-operations";
 import { FrameGraphEffectInstances } from "./editor/frame-graph-effect-instances";
+import { isEffectInstanceType } from "./editor/frame-graph-instance-effects";
 import { buildEffectInstanceDiff } from "./actions/effect-instance-command";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
 
@@ -4643,7 +4644,7 @@ export class UIController {
                 }
 
                 slider.dispatchEvent(new Event("input", { bubbles: true }));
-                if (slider.dataset.instanceField === "gamma") slider.dispatchEvent(new Event("change", { bubbles: true }));
+                if (slider.dataset.instanceField) slider.dispatchEvent(new Event("change", { bubbles: true }));
                 this.syncRangeNumberInput(slider);
             };
 
@@ -5513,8 +5514,8 @@ export class UIController {
             return;
         }
 
-        if (effectId === "gamma" && !EFFECT_TIMELINE_ENABLED) {
-            this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation: { action: "add" } });
+        if (isEffectInstanceType(effectId) && !EFFECT_TIMELINE_ENABLED) {
+            this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation: { action: "add", effectType: effectId } });
             return;
         }
         const wasActive = this.mmdManager.isFrameGraphPostEffectActive(effectId);
@@ -5686,7 +5687,7 @@ export class UIController {
             const effectId = button.dataset.effectAddPost ?? "";
             const known = this.isFrameGraphPostAddEffectId(effectId);
             button.hidden = known && HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS.has(effectId);
-            button.disabled = !frameGraphReady || (known && effectId !== "gamma" && this.isFrameGraphPostEffectInStack(effectId));
+            button.disabled = !frameGraphReady || (known && !isEffectInstanceType(effectId) && this.isFrameGraphPostEffectInStack(effectId));
         });
 
         this.renderFrameGraphPostStack(frameGraphReady);
@@ -12191,7 +12192,7 @@ export class UIController {
             case "gravity":
                 return track.category === "gravity";
             case "effect":
-                return track.category === "effect" && (this.mmdManager.isEffectInstance(track.name) ? payload.effectId === "gamma" : track.name === payload.effectId);
+                return track.category === "effect" && (this.mmdManager.isEffectInstance(track.name) ? payload.effectId === this.mmdManager.getEffectInstanceType(track.name) : track.name === payload.effectId);
             case "morph":
                 return track.category === "morph";
             case "property":

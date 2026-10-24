@@ -475,7 +475,7 @@ export type TimelineTarget = "model" | "camera" | "accessory";
 
 /** A single row in the keyframe timeline */
 export interface KeyframeTrack {
-    effectInstance?: { type: "gamma"; label: string; suspended: boolean };
+    effectInstance?: { type: import("./editor/frame-graph-instance-effects").EffectInstanceType; label: string; suspended: boolean };
     /** Bone or morph name */
     name: string;
     /** Row ordering category */

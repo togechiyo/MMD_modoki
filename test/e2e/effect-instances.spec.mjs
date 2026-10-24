@@ -90,23 +90,25 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     await add("gamma");
     const a = (await state()).instances[0].instanceId;
-    await add("bloom"); await add("gamma");
-    const b = (await state()).instances[1].instanceId;
-    expect((await state()).order).toEqual([a, "bloom", b]);
+    await add("bloom");
+    const bloom = (await state()).instances.find(item => item.type === "bloom").instanceId;
+    await add("gamma");
+    const b = (await state()).instances.find(item => item.type === "gamma" && item.instanceId !== a).instanceId;
+    expect((await state()).order).toEqual([a, bloom, b]);
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().version)).toBe(2);
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     const select = async id => { await row(id).locator('[data-instance-action="select"]').click(); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
     await row(b).locator(".range-number-input").fill("25");
     await row(b).locator(".range-number-input").press("Enter");
-    const bValue = (await state()).instances[1].settings.gamma;
+    const bValue = (await state()).instances.find(item => item.instanceId === b).settings.gamma;
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-    expect((await state()).instances[1].settings.gamma).toBe(1);
+    expect((await state()).instances.find(item => item.instanceId === b).settings.gamma).toBe(1);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-    expect((await state()).instances.map(item => item.instanceId)).toEqual([a]);
+    expect((await state()).instances.map(item => item.instanceId)).toEqual([a, bloom]);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
-    expect((await state()).instances[1].instanceId).toBe(b);
-    expect((await state()).instances[1].settings.gamma).toBe(bValue);
+    expect((await state()).instances.some(item => item.instanceId === b)).toBe(true);
+    expect((await state()).instances.find(item => item.instanceId === b).settings.gamma).toBe(bValue);
     await select(a);
     const slider = page.locator("#effect-key-value");
     for (const [frame, value] of [[0, 100], [20, -100]]) {
@@ -135,7 +137,7 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys).toEqual([]);
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
     await row(a).locator('[data-instance-action="duplicate"]').click();
-    const c = (await state()).instances.find(item => ![a, b].includes(item.instanceId)).instanceId;
+    const c = (await state()).instances.find(item => ![a, b, bloom].includes(item.instanceId)).instanceId;
     expect((await state()).instances.find(item => item.instanceId === c).animation.tracks[0].keys).toEqual(savedA.tracks[0].keys);
     await row(c).locator('[data-instance-action="delete"]').click();
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
@@ -150,7 +152,7 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await row(a).locator('[data-instance-action="resume"]').click();
     await row(a).locator('[data-instance-action="down"]').click();
     await row(a).locator('[data-instance-action="down"]').click();
-    expect((await state()).order).toEqual([a, "bloom", b]);
+    expect((await state()).order).toEqual([a, bloom, b]);
     const capture = async name => {
       const output = testInfo.outputPath(name); mkdirSync(output, { recursive: true });
       await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output, 640, 360), output);
@@ -166,7 +168,7 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await seek(page, 20);
     expect(difference(png0, png20)).toBeGreaterThan(0.2);
     await row(b).locator('[data-instance-action="down"]').click();
-    expect((await state()).order).toEqual([a, b, "bloom"]);
+    expect((await state()).order).toEqual([a, b, bloom]);
     const reordered = await capture("reordered");
     report.comparisons.push({ frameDifference: difference(png0, png20), orderDifference: difference(png20, reordered) });
     expect(difference(png20, reordered)).toBeGreaterThan(0.02);

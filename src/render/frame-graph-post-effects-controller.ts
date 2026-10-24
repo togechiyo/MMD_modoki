@@ -1,6 +1,7 @@
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { EvaluatedEffectInstance, EffectInstanceType } from "../editor/frame-graph-instance-effects";
 import { frameGraphInstanceSettings } from "./frame-graph-instance-settings";
+import { instanceNeedsViewDepth } from "../editor/frame-graph-instance-effects";
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
 import type { FrameGraphTask } from "@babylonjs/core/FrameGraph/frameGraphTask";
@@ -1954,7 +1955,7 @@ class FrameGraphPostEffectsLensDistortionTask extends FrameGraphPostProcessTask 
 }
 
 export class FrameGraphPostEffectsController {
-    private readonly instanceTasks = new Map<string, { type: EffectInstanceType; tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask>; connect: (source: FrameGraphTextureHandle) => FrameGraphTextureHandle; update: (base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance) => void }>();
+    private readonly instanceTasks = new Map<string, { type: EffectInstanceType; tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask>; connect: (source: FrameGraphTextureHandle) => FrameGraphTextureHandle; update: (base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance) => void; ready: (instance: EvaluatedEffectInstance) => boolean; dispose: () => void }>();
     private activationWarningEmitted = false;
     private colorCorrectionEffect: EffectWrapper | null = null;
     private gammaCorrectionEffect: EffectWrapper | null = null;
@@ -2025,6 +2026,7 @@ export class FrameGraphPostEffectsController {
     private executedFrameCount = 0;
     private lastImageProcessingEnabled: boolean | null = null;
     private connectedOrder: FrameGraphPostEffectId[] = [];
+    private connectedLegacyEffects: FrameGraphPostEffectId[] = [];
     private luminousRadianceData: LuminousRadianceScene | null = null;
     private luminousRadianceCompositeTask: FrameGraphPostProcessTask | null = null;
 
@@ -2155,6 +2157,7 @@ export class FrameGraphPostEffectsController {
         if (settings.bloomPrepared && !this.bloomTask?.bloom.isReady()) return false;
         if (settings.lutEnabled && settings.lutRuntimeText
             && (this.lutTextureKey !== settings.lutTextureKey || !this.lutTexture?.isReady())) return false;
+        for (const instance of settings.effectInstances ?? []) if (!this.instanceTasks.get(instance.instanceId)?.ready(instance)) return false;
         return true;
     }
 
@@ -2163,7 +2166,7 @@ export class FrameGraphPostEffectsController {
             && canReuseFrameGraphForActivation(
                 this.allocatedResourcePlan,
                 buildFrameGraphResourcePlan(this.getSettings()),
-                this.connectedOrder,
+                this.connectedLegacyEffects,
             );
     }
 
@@ -2365,12 +2368,6 @@ export class FrameGraphPostEffectsController {
         if (initialSettings.effectInstances?.length) {
             const validIds = new Set([...physicalEffectOrder, ...initialSettings.effectInstances.map(item => item.instanceId)]);
             physicalEffectOrder = [...new Set([...(initialSettings.instanceOrder ?? []), ...physicalEffectOrder])].filter(id => validIds.has(id));
-            for (const instance of initialSettings.effectInstances) {
-                const group = this.createInstanceTasks(frameGraph, instance, initialSettings);
-                group.connect(sourceTextureHandle);
-                this.instanceTasks.set(instance.instanceId, group);
-                for (const task of group.tasks) deferEffectTask(instance.instanceId, task);
-            }
         }
         const resourcePlan = buildFrameGraphResourcePlan(initialSettings, effectOrder);
         this.resourcePlan = resourcePlan;
@@ -2419,7 +2416,8 @@ export class FrameGraphPostEffectsController {
             const objectList = new FrameGraphObjectList();
             // Key preparation bypasses static enable setters; keep the shared
             // depth/normal capture free of outlines without changing model edges.
-            const keyedSsao = initialSettings.ssaoPrepared === true && resourcePlan.activeEffects.includes("ssao");
+            const keyedSsao = (initialSettings.ssaoPrepared === true && resourcePlan.activeEffects.includes("ssao"))
+                || initialSettings.effectInstances?.some(instance => instanceNeedsViewDepth(instance.type));
             if (resourcePlan.needsLuminousRadiance || keyedSsao || resourcePlan.activeEffects.some(id => id === "ssgi" || id === "ssr")) {
                 // Babylon's enableOutlineRendering controls its own mesh outlines,
                 // not babylon-mmd's material-based after-mesh stage. Guard this
@@ -2881,6 +2879,13 @@ export class FrameGraphPostEffectsController {
                 this.motionBlurTask = motionBlurTask;
                 dofSourceTexture = motionBlurTask.outputTexture;
             }
+        }
+
+        for (const instance of initialSettings.effectInstances ?? []) {
+            const group = this.createInstanceTasks(frameGraph, instance, initialSettings, scene, camera, directionalLight, this.geometryRendererTask?.geometryViewDepthTexture);
+            group.connect(sourceTextureHandle);
+            this.instanceTasks.set(instance.instanceId, group);
+            for (const task of group.tasks) deferEffectTask(instance.instanceId, task);
         }
 
         let bloomSourceTexture = dofSourceTexture;
@@ -3524,7 +3529,7 @@ export class FrameGraphPostEffectsController {
         return false;
     }
 
-    private createInstanceTasks(frameGraph: FrameGraph, instance: EvaluatedEffectInstance, base: FrameGraphPostEffectsSettings) {
+    private createInstanceTasks(frameGraph: FrameGraph, instance: EvaluatedEffectInstance, base: FrameGraphPostEffectsSettings, scene: Scene, camera: Camera | null, light: DirectionalLight | null, depth?: FrameGraphTextureHandle) {
         const name = `${instance.type}-${instance.instanceId}`, engine = frameGraph.engine;
         const shaderLanguage = engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL;
         let current = frameGraphInstanceSettings(base, instance);
@@ -3532,6 +3537,8 @@ export class FrameGraphPostEffectsController {
         const tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask> = [];
         const wrapper = (shader: string, uniforms: string[], samplers?: string[]): EffectWrapper => new EffectWrapper({ engine, fragmentShader: shader, useShaderStore: true, useAsPostProcess: true, uniforms, ...(samplers ? { samplers } : {}), name, shaderLanguage });
         let updateValues: () => void = () => undefined;
+        let lutTexture: RawTexture | null = null, lutText: string | null = null;
+        if (instanceNeedsViewDepth(instance.type) && (!camera || depth === undefined)) throw new Error(`${name}: view depth is required`);
         switch (instance.type) {
             case "gamma": tasks.push(new FrameGraphPostEffectsColorCorrectionTask(name, frameGraph, wrapper("mmdFrameGraphColorCorrection", ["contrast", "gammaPower"]), () => undefined, settings, false, true)); break;
             case "grain": {
@@ -3553,9 +3560,43 @@ export class FrameGraphPostEffectsController {
                 const tint = new FrameGraphPostEffectsBloomTintTask(`${name}-tint`, frameGraph, wrapper("mmdFrameGraphBloomTint", ["bloomColor"], ["originalSampler"]), settings);
                 tasks.push(bloom, tint); updateValues = () => this.applyBloomSettings(bloom, current); break;
             }
+            case "lut": {
+                const task = new FrameGraphPostEffectsLutTask(name, frameGraph, wrapper("mmdFrameGraphLut", ["lutSize", "lutIntensity"], ["lutSampler"]), settings, () => lutTexture);
+                tasks.push(task);
+                updateValues = () => {
+                    if (current.lutRuntimeText !== lutText) {
+                        const next = current.lutRuntimeText ? createLutAtlasTextureFrom3dlText(scene, name, current.lutRuntimeText) : null;
+                        lutTexture?.dispose(); lutTexture = next; lutText = current.lutRuntimeText;
+                    }
+                    task.disabled = !current.lutEnabled || !lutTexture;
+                };
+                break;
+            }
+            case "aerialPerspective": {
+                if (!camera) throw new Error(`${name}: camera is required`);
+                const task = new FrameGraphAerialPerspectiveTask(name, frameGraph, wrapper("mmdFrameGraphAerialPerspective", ["inverseProjection", "strength", "startDistance", "transitionRange", "atmosphereColor", "lightColor", "lightIntensity"], ["viewDepthTexture"]), camera,
+                    () => ({ strength: current.aerialPerspectiveStrength, startDistance: current.aerialPerspectiveStart, transitionRange: current.aerialPerspectiveRange, color: current.aerialPerspectiveColor, lightColor: current.aerialPerspectiveLightColor ?? { r: 1, g: 1, b: 1 }, lightIntensity: current.aerialPerspectiveLightIntensity ?? 1 }));
+                task.depthTexture = depth; tasks.push(task); break;
+            }
+            case "directionalLightShafts": {
+                if (!camera || !light || !engine.isWebGPU) throw new Error(`${name}: WebGPU camera and directional light are required`);
+                const task = new FrameGraphDirectionalLightShaftsTask(name, frameGraph, wrapper("mmdFrameGraphDirectionalLightShafts", ["inverseProjection", "lightViewDirection", "lightColor", "lightIntensity", "strength", "phaseG", "flareLightColor", "flareShadowColor"], ["viewDepthTexture"]), camera, light,
+                    () => ({ strength: current.directionalLightShaftsStrength, phaseG: current.directionalLightShaftsPhaseG, lightColor: current.directionalLightShaftsLightColor, shadowColor: current.directionalLightShaftsShadowColor }));
+                task.depthTexture = depth; tasks.push(task); break;
+            }
+            case "offsetShadow": {
+                const task = new FrameGraphPostEffectsOffsetShadowTask(name, frameGraph, wrapper("mmdFrameGraphOffsetShadow", ["texelSize", "offsetPixels", "strength", "depthBias", "maxDepth", "depthScale", "thickness", "softness", "shadowColor", "debugView"], ["depthSampler"]), settings);
+                task.depthTexture = depth; tasks.push(task); break;
+            }
+            case "offsetHighlight": {
+                const task = new FrameGraphPostEffectsOffsetHighlightTask(name, frameGraph, wrapper("mmdFrameGraphOffsetHighlight", ["texelSize", "offsetPixels", "strength", "depthScale", "highlightColor", "debugView"], ["depthSampler"]), settings);
+                task.depthTexture = depth; tasks.push(task); break;
+            }
         }
         const group = {
             type: instance.type, tasks,
+            ready: (value: EvaluatedEffectInstance): boolean => instance.type !== "lut" || (!!lutTexture?.isReady() && lutText === value.lutText),
+            dispose: (): void => { for (const task of tasks) task.dispose(); lutTexture?.dispose(); lutTexture = null; },
             connect: (source: FrameGraphTextureHandle): FrameGraphTextureHandle => {
                 let texture = source;
                 for (const task of tasks) {
@@ -3583,6 +3624,7 @@ export class FrameGraphPostEffectsController {
         let currentTexture = baseTexture;
         let vignetteEdgeBlurConnected = false;
         this.connectedOrder = [];
+        this.connectedLegacyEffects = [];
         const normalizedOrder = [...new Set(effectOrder)];
 
         const connectVignetteEdgeBlur = (): void => {
@@ -3602,6 +3644,7 @@ export class FrameGraphPostEffectsController {
                 this.connectedOrder.push(instance.type);
                 continue;
             }
+            const start = this.connectedOrder.length;
             switch (id) {
                 case "ssr":
                     if (this.ssrTask) {
@@ -3758,6 +3801,7 @@ export class FrameGraphPostEffectsController {
                     }
                     break;
             }
+            this.connectedLegacyEffects.push(...this.connectedOrder.slice(start));
         }
 
         stackOutputTask.sourceTexture = currentTexture;
@@ -3771,6 +3815,7 @@ export class FrameGraphPostEffectsController {
     }
 
     dispose(): void {
+        for (const group of this.instanceTasks.values()) group.dispose();
         this.instanceTasks.clear();
         this.colorCorrectionEffect?.dispose();
         this.colorCorrectionEffect = null;
@@ -3784,6 +3829,7 @@ export class FrameGraphPostEffectsController {
         this.imageProcessingEffect?.dispose();
         this.imageProcessingEffect = null;
         this.imageProcessingTask = null;
+        this.geometryRendererTask?.dispose();
         this.geometryRendererTask = null;
         this.luminousRadianceData = null;
         this.luminousRadianceCompositeTask = null;

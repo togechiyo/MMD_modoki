@@ -518,6 +518,7 @@ import {
 } from "./editor/scene-keyframe-track";
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { FrameGraphEffectInstances, type SerializedEffectInstances } from "./editor/frame-graph-effect-instances";
+import { INSTANCE_LUT_PRESETS } from "./editor/frame-graph-instance-fixed-settings";
 import { EffectInstanceRuntimeDuration } from "./editor/effect-instance-runtime-duration";
 import { applyEffectInstanceDiff, type EffectInstanceDiff } from "./actions/effect-instance-command";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
@@ -1325,14 +1326,7 @@ export class MmdManager {
             description: "White-shadow debug view using the built-in toon debug WGSL",
         },
     ];
-    private static readonly POST_EFFECT_LUT_PRESETS = [
-        { id: "anime-soft", label: "Anime Soft" },
-        { id: "anime-cool", label: "Anime Cool" },
-        { id: "anime-dramatic", label: "Anime Dramatic" },
-        { id: "monotone", label: "Monotone" },
-        { id: "sepia", label: "Sepia" },
-        { id: "teal-orange", label: "Teal Orange" },
-    ] as const;
+    private static readonly POST_EFFECT_LUT_PRESETS = INSTANCE_LUT_PRESETS;
     private static readonly POST_EFFECT_LUT_TEXT_BY_ID: Record<string, string> = {
         "anime-soft": animeSoftLutText,
         "anime-cool": animeCoolLutText,
@@ -11459,7 +11453,12 @@ ${beforeFogAppendBlock}
             contrast: this.postEffectContrastValue,
             gammaPower: this.effectRenderState.gammaPower,
             gammaEnabled: this.effectSceneTracks.has("gamma") ? this.getFrameGraphPostEffectStackIds().includes("gamma") : this.isFrameGraphPostEffectActive("gamma"),
-            effectInstances: this.effectInstances.ids().filter(id => this.effectInstances.present(id)).map(id => ({ instanceId: id, type: this.effectInstances.type(id), value: this.effectInstances.value(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0), bloomColor: this.effectInstances.bloomColor(id) })),
+            effectInstances: this.effectInstances.ids().filter(id => this.effectInstances.present(id)).map(id => {
+                const instance = this.effectInstances.renderState(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
+                const source = instance.fixedSettings?.lut;
+                if (source) instance.lutText = source.kind === "external" ? source.runtimeText : MmdManager.POST_EFFECT_LUT_TEXT_BY_ID[source.preset];
+                return instance;
+            }),
             instanceOrder: this.effectInstances.order(),
             imageProcessingEnabled: this.isFrameGraphImageProcessingTaskNeeded(),
             dofEnabled: this.isFrameGraphPostEffectActive("dof"),

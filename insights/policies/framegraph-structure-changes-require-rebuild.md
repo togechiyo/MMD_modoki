@@ -3,12 +3,13 @@ id: framegraph-structure-changes-require-rebuild
 status: policy
 scope: rendering/framegraph
 confidence: high
-last_verified: 2026-09-14
+last_verified: 2026-10-24
 evidence:
   - webgpu-validation
   - user-device-confirmation
   - unit-test
 source_docs:
+  - ../../docs/framegraph-effect-instance-depth-and-lut-2026-10-24.md
   - ../../docs/resource-effect-timeline-2026-09-14.md
   - ../../docs/framegraph-master-toggle-2026-09-08.md
   - ../../docs/framegraph-post-stack-current-spec-2026-07-01.md
@@ -45,6 +46,8 @@ live reconnect では同一 sync scope 内の `TextureBinding` と `RenderAttach
 2026-09-08のローカルWebGPU E2Eでは20効果の個別OFF/ONを同じbuild世代で確認した。全体OFF/ON・保存読込・PNG出力も通過。ClassicフォグがFrameGraph深度を参照する経路は、深度解放後にbinding例外となるため禁止した。
 
 2026-09-14、LUTの初期OFFキーで準備完了を再構築待ちにも使用すると停止することをローカルE2Eで確認した。判定を分けた後、LUT・ルミナスの初期OFF、シーク、PNG / WebM、backend切替のE2Eが通過した。
+
+2026-10-24、同梱Babylon.js 9.2.0のFrameGraph.clear / disposeはtaskをresetするだけで、task.disposeを呼ばないことをsourceで確認。PostProcessTask / GeometryRendererTaskのdisposeがshader・geometry configuration等を解放するため、再構築・全体OFFでは所有する個体task・asset・共有geometry taskを明示的に破棄する。ライブラリ更新時はこの所有契約を再照合する。
 
 ## 再確認条件
 

@@ -1,7 +1,8 @@
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./effect-scene-track-store";
 import { makeEffectPayload, type EffectKeyframePayload, type EffectValue } from "./effect-keyframe-definitions";
-import { instanceValue, instanceColor, isEffectInstanceType, INSTANCE_EFFECT_NAMES, type EffectInstanceType, type InstanceColor } from "./frame-graph-instance-effects";
+import { instanceValue, instanceColor, isEffectInstanceType, INSTANCE_EFFECT_NAMES, type EffectInstanceType, type InstanceColor, type EvaluatedEffectInstance } from "./frame-graph-instance-effects";
 import { isFrameGraphPostEffectId, type FrameGraphPostEffectId } from "../shared/frame-graph-post-effect-stack";
+import { instanceFixedSettings, type InstanceFixedSettings } from "./frame-graph-instance-fixed-settings";
 
 export type EffectInstance = {
     instanceId: string;
@@ -9,6 +10,7 @@ export type EffectInstance = {
     label: string;
     settings: EffectValue;
     bloomColor?: InstanceColor;
+    fixedSettings?: InstanceFixedSettings;
     animation: SerializedEffectAnimations;
 };
 export type SerializedEffectInstances = { version: 1; instances: EffectInstance[]; order: string[] };
@@ -31,6 +33,11 @@ export class FrameGraphEffectInstances {
     value(id: string, frame: number, preview = false): EffectValue {
         const entry = this.get(id);
         return instanceValue(entry.type, entry.tracks.evaluate(entry.type, frame, preview) ?? entry.settings);
+    }
+    /** Fixed assets are immutable until replaced; do not clone embedded LUT text per frame. */
+    renderState(id: string, frame: number, preview: boolean): EvaluatedEffectInstance {
+        const entry = this.get(id);
+        return { instanceId: id, type: entry.type, value: this.value(id, frame, preview), bloomColor: entry.bloomColor, fixedSettings: entry.fixedSettings };
     }
     capture(id: string, frame: number, preview = true): EffectKeyframePayload {
         return { ...makeEffectPayload(this.get(id).type, this.value(id, frame, preview)), instanceId: id };
@@ -62,6 +69,8 @@ export class FrameGraphEffectInstances {
         const tracks = new EffectSceneTrackStore(); tracks.restore(animation);
         this.entries.set(id, { instanceId: id, type, label: `${INSTANCE_EFFECT_NAMES[type]} ${[...this.entries.values()].filter(entry => entry.type === type).length + 1}`, settings: instanceValue(type, settings), tracks,
             ...(type === "bloom" ? { bloomColor: { r: 254 / 255, g: 220 / 255, b: 186 / 255 } } : {}) });
+        const fixed = instanceFixedSettings(type);
+        if (fixed) this.get(id).fixedSettings = fixed;
         this.ordered.push(id);
     }
     duplicate(id: string, nextId: string): void {
@@ -69,7 +78,14 @@ export class FrameGraphEffectInstances {
         for (const track of animation.tracks) if (track && typeof track === "object") delete (track as { preview?: unknown }).preview;
         this.add(nextId, entry.settings, animation, entry.type);
         if (entry.bloomColor) this.setBloomColor(nextId, entry.bloomColor);
+        if (entry.fixedSettings) this.setFixedSettings(nextId, entry.fixedSettings);
     }
+    setFixedSettings(id: string, value: InstanceFixedSettings): void {
+        const entry = this.get(id), fixed = instanceFixedSettings(entry.type, value);
+        if (!fixed) throw new Error("Effect has no fixed settings");
+        entry.fixedSettings = fixed;
+    }
+    fixedSettings(id: string): InstanceFixedSettings | undefined { return structuredClone(this.get(id).fixedSettings); }
     setBloomColor(id: string, value: unknown): void {
         const entry = this.get(id);
         if (entry.type !== "bloom") throw new Error("Only Bloom owns a color");
@@ -108,6 +124,7 @@ export class FrameGraphEffectInstances {
                 if (!item || !isEffectInstanceType(item.type)) throw new Error("Unsupported effect instance type");
                 next.add(item.instanceId, item.settings, item.animation, item.type);
                 if (item.type === "bloom") next.setBloomColor(item.instanceId, item.bloomColor);
+                if (item.fixedSettings) next.setFixedSettings(item.instanceId, item.fixedSettings);
                 next.rename(item.instanceId, item.label);
             }
             next.setOrder(state.order);

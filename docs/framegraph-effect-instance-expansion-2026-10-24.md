@@ -30,7 +30,7 @@
 
 旧経路で一つのshader / taskへまとめていたVignetteとEdge Blurも、新個体では別taskを持つ。Vignette個体ではblurを0、Edge Blur個体ではvignetteを無効にして、隣の個体やsingletonの値が混ざらないようにする。BloomはBloom taskとtint taskを個体ごとに持ち、tintの元画像をその個体の直前の入力へ接続する。kernelのキー変更には既存のshader variantを固定するhelperを流用する。
 
-公式の[task一覧](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList.md)・[disabled passの説明](https://doc.babylonjs.com/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphWritingTasks/)と、使用中のBabylon.js 9.2.0のPostProcessTask / BloomTaskを照合した。初期OFFでも個体taskを確保し、OFF時はdisabled passで入力を渡す。taskがpostProcessをdisposeする実装なので、新しい個体taskのshader破棄はFrameGraphの所有へ揃える。
+公式の[task一覧](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList.md)・[disabled passの説明](https://doc.babylonjs.com/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphWritingTasks/)と、使用中のBabylon.js 9.2.0のPostProcessTask / BloomTaskを照合した。初期OFFでも個体taskを確保し、OFF時はdisabled passで入力を渡す。後続調査でFrameGraph.disposeだけではtask.disposeが呼ばれないと確認したため、個体所有のtaskを明示的に破棄する形へ修正した（[資源破棄の訂正と後続5種](./framegraph-effect-instance-depth-and-lut-2026-10-24.md)）。
 
 保存は引き続き `effects.frameGraphInstances`、project version 2。Gamma個体の既存保存をそのまま読み、新しい種類も同じブロックへ保存する。Classicでは個体データを保持して描画・キー編集を停止し、Frame Graphへ戻すと復元する。旧形式の自動移行は追加しない。
 
@@ -50,4 +50,4 @@
 
 ## 次の範囲
 
-LUT、Luminous、DoF、Motion Blur、SSAO / SSGI / SSR、深度入力を使う演出は、asset・geometry / depth・mask等の所有を確認して段階的に追加する。新効果としての色調補正やpencil系、個体行のdrag、個体構造のMCP操作は今回の7種追加と別の作業。
+LUTと深度演出4種は[後続の実装・検証](./framegraph-effect-instance-depth-and-lut-2026-10-24.md)で追加した。残るLuminous、Motion Blur、SSAO / SSGI / SSRは、asset・geometry / depth・mask等の所有を確認して段階的に追加する。DoFは所有者指定で後回し。新効果としての色調補正やpencil系、個体行のdrag、個体構造のMCP操作は今回の7種追加と別の作業。

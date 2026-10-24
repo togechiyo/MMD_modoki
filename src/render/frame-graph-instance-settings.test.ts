@@ -13,4 +13,9 @@ describe("instance render settings", () => {
         const result = frameGraphInstanceSettings(base, { instanceId: "fx-a", type: "bloom", value: { enabled: false, weight: 0.7, threshold: 0.2, kernel: 17 }, bloomColor: { r: 1, g: 0, b: 0 } });
         expect(result).toMatchObject({ bloomEnabled: false, bloomWeight: 0.7, bloomThreshold: 0.2, bloomKernel: 17, bloomPrepared: true, bloomColor: { r: 1, g: 0, b: 0 } });
     });
+    it("uses independent depth parameters and LUT data without inheriting singleton values", () => {
+        const shadow = frameGraphInstanceSettings(base, { instanceId: "fx-a", type: "offsetShadow", value: { enabled: false, strength: 0.4, offsetX: 4, offsetY: -3, depthBias: 0.1, maxDepth: 2, depthScale: 1 }, fixedSettings: { color: { r: 0, g: 1, b: 0 }, thickness: 0.3, softness: 2 } });
+        expect(shadow).toMatchObject({ offsetShadowEnabled: false, offsetShadowStrength: 0.4, offsetShadowThickness: 0.3, offsetShadowSoftness: 2, offsetShadowDebugView: false, offsetShadowColor: { r: 0, g: 1, b: 0 } });
+        expect(frameGraphInstanceSettings(base, { instanceId: "fx-lut", type: "lut", value: { enabled: true, intensity: 0.2 }, lutText: "snapshot" })).toMatchObject({ lutRuntimeText: "snapshot", lutIntensity: 0.2, lutTextureKey: "fx-lut" });
+    });
 });

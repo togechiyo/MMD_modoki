@@ -41,7 +41,7 @@ export function applyEffectInstanceDiff(current: SerializedEffectInstances, diff
             if (to) instances.set(change.instanceId, structuredClone(to)); else instances.delete(change.instanceId);
         } else {
             if (!actual || actual.type !== from.type) return null;
-            for (const field of ["label", "settings", "animation", "bloomColor"] as const) {
+            for (const field of ["label", "settings", "animation", "bloomColor", "fixedSettings"] as const) {
                 if (equal(from[field], to[field])) continue;
                 if (!equal(actual[field], from[field])) return null;
                 Object.assign(actual, { [field]: structuredClone(to[field]) });

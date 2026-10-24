@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FrameGraphEffectInstances } from "./frame-graph-effect-instances";
 
 describe("FrameGraph effect instances", () => {
-    it.each(["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom"] as const)("owns independent %s settings and tracks", type => {
+    it.each(["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom", "lut", "aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight"] as const)("owns independent %s settings and tracks", type => {
         const store = new FrameGraphEffectInstances();
         store.add("fx-a", undefined, undefined, type); store.add("fx-b", undefined, undefined, type);
         expect(store.type("fx-a")).toBe(type);

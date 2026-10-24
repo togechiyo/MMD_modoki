@@ -6,15 +6,20 @@ import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const requestedGroup = process.env.MMD_INSTANCE_EFFECT_GROUP;
+const groups = requestedGroup === "depth" ? [true] : requestedGroup === "screen" ? [false] : [false, true];
 const difference = (a, b) => a.reduce((sum, value, i) => sum + (i % 4 === 3 ? 0 : Math.abs(value - b[i])), 0) / (a.length * 0.75);
 const seek = async (page, frame) => { const input = page.locator("#current-frame"); await input.fill(String(frame)); await input.press("Enter"); await expect(input).toHaveValue(String(frame)); };
 async function menu(page, command) { await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click(); await page.locator(`[data-menu-command="${command}"]`).click(); }
 
-test("screen effects: independent instances, keys, color, lifecycle, project and output", async ({}, testInfo) => {
+for (const depthGroup of groups) test(`${depthGroup ? "LUT and depth effects" : "screen effects"}: independent instances, keys, color, lifecycle, project and output`, async ({}, testInfo) => {
   test.setTimeout(240000);
   const launched = await launchMmdModoki(root), report = { errors: [], effects: [] };
   try {
     const page = await launched.app.firstWindow(); page.on("pageerror", error => report.errors.push(error.message));
+    page.on("console", message => { if (message.type() === "error") (report.consoleErrors ??= []).push(message.text()); });
+    page.on("dialog", async dialog => { (report.dialogs ??= []).push({ type: dialog.type(), message: dialog.message() }); await dialog.dismiss(); });
+    launched.app.process().stderr.on("data", data => { report.stderrTail = `${report.stderrTail ?? ""}${data}`.slice(-12000); });
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     await page.evaluate(async () => {
       const project = window.mmdModokiE2e.exportProjectState();
@@ -39,7 +44,7 @@ test("screen effects: independent instances, keys, color, lifecycle, project and
       return PNG.sync.read(readFileSync(resolve(dir, "single_rgba_surface_e2e.png"))).data;
     };
     const active = [];
-    for (const type of ["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom"]) {
+    for (const type of depthGroup ? ["lut", "aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight"] : ["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom"]) {
       await add(type); await add(type);
       const entries = (await state()).instances.filter(item => item.type === type), [a, b] = entries.map(item => item.instanceId);
       active.push(a);
@@ -52,6 +57,27 @@ test("screen effects: independent instances, keys, color, lifecycle, project and
         for (const [id, color] of [[a, "#ff8080"], [b, "#8080ff"]]) {
           const input = row(id).locator('[data-instance-field="color"]'); await input.fill(color); await input.dispatchEvent("change");
         }
+      }
+      if (type === "lut") {
+        await row(a).locator('select[data-instance-field="lutPreset"]').selectOption("monotone");
+        await row(b).locator('select[data-instance-field="lutPreset"]').selectOption("sepia");
+        await launched.app.evaluate(({ dialog }, filePath) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] }); }, resolve(root, "test/fixtures/lut/synthetic-channel-swap.cube"));
+        await row(a).locator('[data-instance-action="lutFile"]').click();
+        await expect(row(a).locator('select[data-instance-field="lutPreset"]')).toHaveValue("external");
+        expect((await state()).instances.find(item => item.instanceId === a).fixedSettings.lut.runtimeText).toContain("4095");
+      }
+      if (type === "aerialPerspective") { await number(a, 1, 0); await number(a, 2, 3); }
+      if (type === "offsetShadow") {
+        await number(a, 1, 70); await number(a, 2, 30); await number(a, 3, 0); await number(a, 4, 100); await number(a, 5, 100);
+        const softness = row(a).locator('[data-instance-fixed="softness"]');
+        await softness.fill("1.25"); await softness.press("Enter");
+        expect((await state()).instances.find(item => item.instanceId === a).fixedSettings.softness).toBe(1.25);
+        await softness.fill("9"); await softness.press("Escape"); await expect(softness).toHaveValue("1.25");
+        await softness.fill("7"); await softness.blur(); await expect(softness).toHaveValue("1.25");
+      }
+      if (type === "offsetHighlight") { await number(a, 1, 70); await number(a, 2, 30); await number(a, 3, 100); }
+      if (depthGroup && type !== "lut") {
+        const color = row(a).locator('[data-instance-field="color"]'); await color.fill(type === "offsetShadow" ? "#402010" : "#80d0ff"); await color.dispatchEvent("change");
       }
       await select(a); await seek(page, 0); await page.locator("#btn-kf-add").click();
       await seek(page, 20); await number(a, 0, 90); await page.locator("#effect-key-enabled").check(); await page.locator("#btn-kf-add").click();
@@ -72,6 +98,7 @@ test("screen effects: independent instances, keys, color, lifecycle, project and
       const c = (await state()).instances.find(item => item.type === type && ![a, b].includes(item.instanceId)).instanceId;
       const source = (await state()).instances.find(item => item.instanceId === a), copy = (await state()).instances.find(item => item.instanceId === c);
       expect(copy.animation).toEqual(source.animation); expect(copy.bloomColor).toEqual(source.bloomColor);
+      expect(copy.fixedSettings).toEqual(source.fixedSettings);
       await row(c).locator('[data-instance-action="delete"]').click(); await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
       expect((await state()).instances.some(item => item.instanceId === c)).toBe(true);
       await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
@@ -80,8 +107,29 @@ test("screen effects: independent instances, keys, color, lifecycle, project and
     }
     for (const id of active) await row(id).locator('[data-instance-action="resume"]').click();
     await seek(page, 0); const combined0 = await capture("combined-0");
+    if (depthGroup) {
+      const diagnostics = await page.evaluate(() => window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects);
+      expect(diagnostics.resourcePlan.requirementKeys).toContain("viewDepth");
+      expect(diagnostics.resourcePlan.needsDepthRenderer).toBe(false);
+      expect(diagnostics.controller.taskNames).toContain("geometryRenderer");
+      for (const type of ["aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight"]) {
+        expect(diagnostics.resourcePlan.activeEffects).not.toContain(type);
+        expect(diagnostics.controller.taskNames).not.toContain(type);
+      }
+      report.preparedResources = diagnostics.resourcePlan;
+    }
     await seek(page, 20); const combined20 = await capture("combined-20");
     expect(difference(combined0, combined20)).toBeGreaterThan(0.1);
+    if (depthGroup) {
+      const before = await state();
+      await page.locator("#btn-effect-toggle-framegraph").click();
+      await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().resourcesAllocated)).toBe(false);
+      expect(await state()).toEqual(before);
+      await page.locator("#btn-effect-toggle-framegraph").click();
+      await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+      report.masterRestoreDifference = difference(combined20, await capture("master-restored"));
+      expect(report.masterRestoreDifference).toBeLessThan(0.15);
+    }
     const beforeOrder = (await state()).order;
     await row(active[0]).locator('[data-instance-action="up"]').click();
     expect((await state()).order).not.toEqual(beforeOrder);
@@ -124,6 +172,8 @@ test("screen effects: independent instances, keys, color, lifecycle, project and
     for (const result of report.video) expect(result.matching).toBeLessThan(result.opposite);
     report.validation = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());
     expect(report.validation.count).toBe(0); expect(report.errors).toEqual([]);
+    expect(report.dialogs ?? []).toEqual([]);
+    expect(report.consoleErrors ?? []).toEqual([]);
     if (await page.locator("#btn-toggle-shader-panel").getAttribute("aria-pressed") !== "true") await page.locator("#btn-toggle-shader-panel").click();
     await select(active.at(-1)); await page.screenshot({ path: testInfo.outputPath("final-ui.png") });
   } finally { writeFileSync(testInfo.outputPath("report.json"), JSON.stringify(report, null, 2)); await launched.close(); }

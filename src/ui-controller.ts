@@ -155,6 +155,7 @@ import { FrameGraphInstanceController } from "./ui/frame-graph-instance-controll
 import { editEffectInstances, type EffectInstanceOperation } from "./editor/effect-instance-operations";
 import { FrameGraphEffectInstances } from "./editor/frame-graph-effect-instances";
 import { isEffectInstanceType } from "./editor/frame-graph-instance-effects";
+import { normalizeLutFile } from "./lut-file";
 import { buildEffectInstanceDiff } from "./actions/effect-instance-command";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
 
@@ -5219,7 +5220,7 @@ export class UIController {
             before => {
                 const diff = buildEffectInstanceDiff(before, this.mmdManager.getEffectInstanceState());
                 if (diff) this.commandHistory.push({ id: crypto.randomUUID(), label: "Effect value", scope: "effect", createdAtMs: Date.now(), diff });
-            }, slider => this.syncRangeNumberInput(slider));
+            }, slider => this.syncRangeNumberInput(slider), id => { void this.loadInstanceLut(id); });
         document.getElementById("btn-effect-toggle-framegraph")?.addEventListener("click", () => {
             if (this.getConfiguredPostEffectBackend() !== "frameGraph") return;
             this.mmdManager.setFrameGraphPostEffectsEnabled(
@@ -5494,6 +5495,19 @@ export class UIController {
                 this.mmdManager.dofLensDistortionInfluence = Math.max(this.mmdManager.dofLensDistortionInfluence, 0.5);
                 break;
         }
+    }
+
+    private async loadInstanceLut(id: string): Promise<void> {
+        if (this.mmdManager.isPlaying || this.getConfiguredPostEffectBackend() !== "frameGraph") return;
+        const path = await window.electronAPI.openFileDialog([{ name: t("shader.group.lutFiles"), extensions: ["3dl", "cube"] }]);
+        if (!path) return;
+        try {
+            const text = await window.electronAPI.readTextFile(path);
+            if (!text) throw new Error(t("status.lutLoadFailed"));
+            const normalized = normalizeLutFile(path, text);
+            if (!this.mmdManager.isEffectInstance(id)) return;
+            this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation: { action: "fixed", instanceId: id, settings: { lut: { kind: "external", name: normalized.displayName, runtimeText: normalized.runtimeText } } } });
+        } catch (error) { this.showToast(error instanceof Error ? error.message : t("status.lutLoadFailed"), "error"); }
     }
 
     private editFrameGraphInstance(operation: EffectInstanceOperation): void {
@@ -6913,6 +6927,7 @@ export class UIController {
         this.postEffectStackList.innerHTML = [...instanceState.order].reverse().map(id => this.mmdManager.isEffectInstance(id)
             ? this.frameGraphInstanceController?.render(id, true) ?? "" : legacyRows.get(id as FrameGraphPostEffectId) ?? "").join("")
             + instanceState.instances.filter(item => !instanceState.order.includes(item.instanceId)).map(item => this.frameGraphInstanceController?.render(item.instanceId, false) ?? "").join("");
+        this.frameGraphInstanceController?.installFixedNumberInputs();
     }
 
     private installPostEffectBackendControls(root: HTMLElement): void {

@@ -14,6 +14,7 @@ source_docs:
   - ../../docs/framegraph-effect-instances-and-timeline-design-2026-10-21.md
   - ../../docs/framegraph-effect-instances-implementation-2026-10-21.md
   - ../../docs/framegraph-effect-instance-expansion-2026-10-24.md
+  - ../../docs/framegraph-effect-instance-depth-and-lut-2026-10-24.md
   - ../../docs/v0.2.4-next-version-candidates.md
 superseded_by: null
 ---
@@ -31,6 +32,8 @@ FrameGraphエフェクトの同種複数追加、キー再開、個体設定・�
 所有者は共同設計と既存タイムライン照合の後、Gammaを最初の対象として段階的に実装する提案に「では実装よろしく」と指定した。Gamma個体の複数配置・独立キー・履歴・保存復元・出力までを第一段階として扱う。具体的な内部IDやschemaを固定する所有者方針、全効果の重複許可、旧17種のキー標準ON、次版収録まで採用されたとは扱わない。
 
 2026-10-24、所有者が「既存Effectを追加していってほしい。旧仕様はしなくていいです」と指定した。既存効果を新個体方式へ段階的に展開し、旧singleton / 旧17種キーからの移行・旧キーUIの復帰は作業対象から外す。どの効果を一つの実装段階に含めるかは描画資源と検証範囲に応じて判断する。
+
+同日の後続指定で「Dofはちと難しそうだから後回しで。他の進めて」とした。DoFを後回しにし、他の既存効果を先に展開する。DoFの不採用や実現不能を意味しない。
 
 ## 避けること
 

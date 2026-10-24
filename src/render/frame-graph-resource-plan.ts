@@ -17,6 +17,7 @@ export type FrameGraphSharedResourceKey =
     | "luminousMask";
 
 export type FrameGraphResourcePlanSettings = FrameGraphPostEffectActivationSettings & {
+    effectInstances?: readonly { type: FrameGraphPostEffectId }[];
     imageProcessingEnabled: boolean;
     antialiasEnabled: boolean;
 };
@@ -90,56 +91,57 @@ export function buildFrameGraphResourcePlan(
     const normalizedOrder = normalizeFrameGraphPostEffectIds(effectOrder, activeEffects);
     const consumersByKey = new Map<FrameGraphSharedResourceKey, Set<FrameGraphPostEffectId>>();
 
-    for (const id of activeEffects) {
+    const resourceEffects = [...new Set([...activeEffects, ...settings.effectInstances?.map(item => item.type) ?? []])];
+    for (const id of resourceEffects) {
         addConsumer(consumersByKey, "sceneColor", id);
     }
 
-    if (activeEffects.includes("ssr")) {
+    if (resourceEffects.includes("ssr")) {
         addConsumer(consumersByKey, "viewDepth", "ssr");
         addConsumer(consumersByKey, "viewNormal", "ssr");
         addConsumer(consumersByKey, "reflectivity", "ssr");
     }
 
-    if (activeEffects.includes("ssgi")) {
+    if (resourceEffects.includes("ssgi")) {
         addConsumer(consumersByKey, "viewDepth", "ssgi");
         addConsumer(consumersByKey, "viewNormal", "ssgi");
     }
 
-    if (activeEffects.includes("ssao")) {
+    if (resourceEffects.includes("ssao")) {
         addConsumer(consumersByKey, "viewDepth", "ssao");
         addConsumer(consumersByKey, "viewNormal", "ssao");
     }
 
-    if (activeEffects.includes("offsetShadow")) {
+    if (resourceEffects.includes("offsetShadow")) {
         addConsumer(consumersByKey, "viewDepth", "offsetShadow");
     }
 
-    if (activeEffects.includes("offsetHighlight")) {
+    if (resourceEffects.includes("offsetHighlight")) {
         addConsumer(consumersByKey, "viewDepth", "offsetHighlight");
     }
 
-    if (activeEffects.includes("dof")) {
+    if (resourceEffects.includes("dof")) {
         addConsumer(consumersByKey, "depthScene", "dof");
     }
 
-    if (activeEffects.includes("ocean")) {
+    if (resourceEffects.includes("ocean")) {
         addConsumer(consumersByKey, "viewDepth", "ocean");
         addConsumer(consumersByKey, "viewNormal", "ocean");
     }
 
-    if (activeEffects.includes("aerialPerspective")) {
+    if (resourceEffects.includes("aerialPerspective")) {
         addConsumer(consumersByKey, "viewDepth", "aerialPerspective");
     }
 
-    if (activeEffects.includes("directionalLightShafts")) {
+    if (resourceEffects.includes("directionalLightShafts")) {
         addConsumer(consumersByKey, "viewDepth", "directionalLightShafts");
     }
 
-    if (activeEffects.includes("motionBlur")) {
+    if (resourceEffects.includes("motionBlur")) {
         addConsumer(consumersByKey, "velocity", "motionBlur");
     }
 
-    if (activeEffects.includes("luminous")) {
+    if (resourceEffects.includes("luminous")) {
         addConsumer(consumersByKey, "luminousMask", "luminous");
         if (settings.luminousRadiance?.enabled) {
             addConsumer(consumersByKey, "viewDepth", "luminous");

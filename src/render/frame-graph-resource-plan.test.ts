@@ -45,6 +45,16 @@ function createSettings(
     };
 }
 
+describe("instance depth resources", () => {
+    it("prepares shared view depth for OFF instances without creating a singleton effect", () => {
+        const plan = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "offsetShadow" }, { type: "aerialPerspective" }, { type: "offsetHighlight" }] }));
+        expect(plan.activeEffects).toEqual([]);
+        expect(plan.requirementKeys).toEqual(["sceneColor", "viewDepth"]);
+        expect(plan.requirements.find(item => item.key === "viewDepth")?.consumers).toEqual(["offsetShadow", "offsetHighlight", "aerialPerspective"]);
+        expect(plan.needsDepthRenderer).toBe(false);
+    });
+});
+
 describe("buildFrameGraphResourcePlan", () => {
     it("prepares RC with Glow at zero and rebuilds even when SSGI already supplies normals", () => {
         const settings = createSettings({ luminousEnabled: true, luminousIntensity: 0,

@@ -677,7 +677,7 @@ export class UIController {
             this.mmdManager.setEffectScenePreview(id, value);
             if (first) this.refreshFrameGraphPostAddUi();
             this.refreshEffectKeyframeUi();
-        });
+        }, this.mmdManager);
         this.mmdManager.onEffectKeyframePreviewChanged = () => this.refreshEffectKeyframeUi();
         this.btnKeyframeCopy = document.getElementById("btn-kf-copy") as HTMLButtonElement;
         this.btnKeyframePaste = document.getElementById("btn-kf-paste") as HTMLButtonElement;
@@ -8386,7 +8386,7 @@ export class UIController {
         this.lensEffectController?.refresh();
         this.colorPostFxController?.refreshVignetteUi();
         this.colorPostFxController?.refreshSharpenUi();
-        for (const definition of EFFECT_KEYFRAME_DEFINITIONS) {
+        for (const definition of EFFECT_KEYFRAME_DEFINITIONS.filter(definition => definition.id !== "dof")) {
             const effectId = definition.id;
             const value = this.mmdManager.captureCurrentEffectKeyframePayload(effectId);
             const toggle = this.postEffectStackList?.querySelector<HTMLInputElement>(`[data-effect-stack-toggle="${effectId}"]`);

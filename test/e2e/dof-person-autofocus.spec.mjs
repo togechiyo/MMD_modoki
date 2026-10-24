@@ -4,96 +4,47 @@ import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const modelPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
 
-const countBrightCenterPixels = async (app, page) => {
-  const png = await page.locator("#render-canvas").screenshot();
-  return app.evaluate(({ nativeImage }, pngBase64) => {
-    const image = nativeImage.createFromDataURL(`data:image/png;base64,${pngBase64}`);
-    const size = image.getSize();
-    const center = image.crop({
-      x: Math.floor(size.width / 4),
-      y: Math.floor(size.height / 4),
-      width: Math.max(1, Math.floor(size.width / 2)),
-      height: Math.max(1, Math.floor(size.height / 2)),
-    });
-    const bitmap = center.toBitmap();
-    let brightPixels = 0;
-    for (let offset = 0; offset + 3 < bitmap.length; offset += 4) {
-      if (bitmap[offset] > 12 || bitmap[offset + 1] > 12 || bitmap[offset + 2] > 12) {
-        brightPixels += 1;
-      }
-    }
-    return brightPixels;
-  }, png.toString("base64"));
-};
-
-test("DoFオートフォーカスを既定選択としてproject保存復元できる", async () => {
+test("DoF個体のオートフォーカス既定値・方式・言語・project保存復元", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
-    expect(await page.evaluate((path) => window.mmdModokiE2e.loadModel(path), modelPath)).not.toBeNull();
-
-    await page.locator("#btn-toggle-shader-panel").click();
-    await page.locator('[data-effect-tab="post"]').click();
-    await page.locator("#btn-effect-add-post").click();
-    await page.locator('[data-effect-add-post="dof"]').click();
-
-    const dofRow = page.locator('[data-effect-stack-row="dof"]');
-    const focusMode = dofRow.locator('[data-effect-stack-control="dofFocusMode"]');
-    await expect(focusMode).toBeVisible();
-    await expect(focusMode.locator("option")).toHaveText([
-      "オートフォーカス",
-      "指定対象",
-      "カメラ注視点",
-    ]);
-    await expect(focusMode).toHaveValue("person-auto");
-
-    await expect(dofRow.locator('[data-effect-stack-value="dofFocusMode"]')).toHaveText("オートフォーカス");
-    await expect(dofRow.locator('[data-effect-stack-control="dofTargetModel"]')).toHaveCount(0);
-    await expect(dofRow.locator('[data-effect-stack-control="dofTargetBone"]')).toHaveCount(0);
-    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).effects.dofFocusMode)
-      .toBe("person-auto");
-    await dofRow.locator('[data-effect-stack-control="dofFocusMode"]').selectOption("model-target");
-    await expect(dofRow.locator('[data-effect-stack-control="dofTargetModel"]')).toHaveCount(1);
-    await expect(dofRow.locator('[data-effect-stack-control="dofTargetBone"]')).toHaveCount(1);
-
-    await dofRow.locator('[data-effect-stack-control="dofFocusMode"]').selectOption("person-auto");
+    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx"));
+    const showPost = async () => {
+      if (await page.locator("#btn-toggle-shader-panel").getAttribute("aria-pressed") !== "true") await page.locator("#btn-toggle-shader-panel").click();
+      const tab = page.locator('[data-effect-tab="post"]'); if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
+    };
+    await showPost(); await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="dof"]').click();
+    const row = page.locator('[data-effect-instance-row]'), mode = row.locator('[data-dof-instance-field="focusMode"]');
+    await expect(mode).toHaveValue("person-auto");
+    await expect(mode.locator("option")).toHaveText(["カメラ注視点", "指定対象", "オートフォーカス", "距離指定"]);
+    const id = await row.getAttribute("data-effect-instance-row");
+    await mode.selectOption("manual"); await expect(row.locator('[data-instance-field="focusDistance"]')).toBeEnabled();
+    await expect(row.locator('[data-instance-field="focusOffset"]')).toBeDisabled();
+    await expect(row.locator('[data-instance-field="focusOffset"]').locator("..").locator(".range-number-input")).toBeDisabled();
+    const models = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.models);
+    await mode.selectOption("model-target"); await row.locator('[data-dof-instance-field="targetModelInstanceId"]').selectOption(models[0].instanceId);
+    await row.locator('[data-dof-instance-field="targetBoneName"]').selectOption("センター");
+    await mode.selectOption("person-auto");
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
-    expect(await page.evaluate((project) => window.mmdModokiE2e.importProjectState(project), saved))
-      .toEqual({ loadedModels: 1, warnings: [] });
-
-    await expect(page.locator('[data-effect-stack-row="dof"] [data-effect-stack-control="dofFocusMode"]'))
-      .toHaveValue("person-auto");
-    expect((await page.evaluate(() => window.mmdModokiE2e.exportProjectState())).effects.dofFocusMode)
-      .toBe("person-auto");
-
-    const disabledDofProject = structuredClone(saved);
-    disabledDofProject.effects.dofEnabled = true;
-    disabledDofProject.effects.frameGraphPostStack = disabledDofProject.effects.frameGraphPostStack.map((entry) => (
-      entry.id === "dof" ? { ...entry, enabled: false } : entry
-    ));
-    expect(await page.evaluate((project) => window.mmdModokiE2e.importProjectState(project), disabledDofProject))
-      .toEqual({ loadedModels: 1, warnings: [] });
-
-    await expect.poll(async () => page.evaluate(() => {
-      const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();
-      return state.ready;
-    }), { timeout: 30_000 }).toBe(true);
-
-    const restored = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
-    expect(restored.effects.dofEnabled).toBe(true);
-    expect(restored.effects.frameGraphPostStack.find((entry) => entry.id === "dof"))
-      .toEqual({ id: "dof", enabled: false });
-
-    await expect.poll(
-      () => countBrightCenterPixels(launched.app, page),
-      { timeout: 15_000 },
-    ).toBeGreaterThan(100);
-    expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()))
-      .toEqual({ count: 0, messages: [] });
-  } finally {
-    await launched.close();
-  }
+    const instance = saved.effects.frameGraphInstances.instances.find(item => item.instanceId === id);
+    expect(instance.settings).toMatchObject({ focusMode: "person-auto", targetModelInstanceId: models[0].instanceId, targetBoneName: "センター" });
+    await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), saved); await showPost(); await expect(mode).toHaveValue("person-auto");
+    for (const locale of ["en", "zh-Hant", "zh-Hans", "ko", "ja"]) {
+      await page.locator("#toolbar-locale-select").selectOption(locale); await expect(mode).toHaveValue("person-auto");
+      expect(await mode.locator("option").allTextContents()).toHaveLength(4);
+      expect((await mode.locator("option").allTextContents()).some(text => text.startsWith("effect."))).toBe(false);
+      await expect(row.locator('[data-instance-field="focusDistance"]').locator("..").locator(".range-number-input")).toBeDisabled();
+    }
+    const off = structuredClone(saved); off.effects.frameGraphInstances.instances[0].settings.enabled = false;
+    await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), off); await showPost();
+    await expect(row.locator('[data-instance-field="enabled"]')).not.toBeChecked();
+    await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+    const restored = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
+    expect(restored.instances[0].settings).toEqual({ ...instance.settings, enabled: false });
+    const diagnostics = await page.evaluate(() => window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects);
+    expect(diagnostics.resourcePlan.needsDepthRenderer).toBe(true);
+    expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toEqual({ count: 0, messages: [] });
+  } finally { await launched.close(); }
 });

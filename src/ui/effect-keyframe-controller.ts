@@ -1,5 +1,6 @@
 import { t } from "../i18n";
 import { getEffectDefinition, type EffectId, type EffectKeyframePayload, type EffectSlider, type EffectValue } from "../editor/effect-keyframe-definitions";
+import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-instance-focus-controls";
 
 type SliderControl = { mapping: EffectSlider; input: HTMLInputElement; output: HTMLOutputElement; label: HTMLSpanElement };
 
@@ -14,8 +15,9 @@ export class EffectKeyframeController {
     private readonly state: HTMLElement;
     private readonly scope: HTMLElement;
     private controls: SliderControl[] = [];
+    private dofControls: DofInstanceFocusControls | null = null;
 
-    constructor(private readonly root: HTMLElement, private readonly preview: (id: string, value: EffectValue) => void) {
+    constructor(private readonly root: HTMLElement, private readonly preview: (id: string, value: EffectValue) => void, private readonly dofHost: DofInstanceFocusHost) {
         const enabled = root.querySelector<HTMLInputElement>("#effect-key-enabled");
         const parameters = root.querySelector<HTMLElement>("#effect-key-parameters");
         const label = root.querySelector<HTMLElement>("[data-effect-key-label]");
@@ -50,6 +52,13 @@ export class EffectKeyframeController {
             this.parameters.append(row);
             return { mapping, input, output, label };
         });
+        this.dofControls = null;
+        if (id === "dof") {
+            const root = document.createElement("div"); this.parameters.prepend(root);
+            this.dofControls = new DofInstanceFocusControls(root, this.dofHost, () => this.current, value => {
+                if (this.id && !this.enabled.disabled) this.preview(this.id, value);
+            });
+        }
     }
 
     refresh(payload: EffectKeyframePayload | null, playing: boolean, suspended: boolean, displayName?: string, stateMessage?: string): void {
@@ -63,10 +72,12 @@ export class EffectKeyframeController {
         this.label.textContent = name;
         this.enabled.disabled = playing;
         this.enabled.checked = payload.value.enabled;
+        if (payload.instanceId) this.dofControls?.refresh(this.current, playing, payload.instanceId);
         for (const { mapping, input, output, label } of this.controls) {
             label.textContent = mapping.labelKey ? t(mapping.labelKey) : "";
             input.setAttribute("aria-label", mapping.labelKey ? `${name} ${t(mapping.labelKey)}` : name);
             input.disabled = playing;
+            if (payload.effectId === "dof") input.disabled ||= (mapping.field === "focusDistance" && this.current.focusMode !== "manual") || (mapping.field === "focusOffset" && this.current.focusMode === "manual");
             const position = String(Math.round(mapping.toPosition(Number(this.current[mapping.field]))));
             if (input.value !== position) input.value = position;
             output.value = `${position}%`;

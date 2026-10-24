@@ -304,6 +304,13 @@ describe("buildFrameGraphResourcePlan", () => {
         expect(plan.needsGeometryRenderer).toBe(true);
         expect(plan.requirementKeys).not.toContain("viewNormal");
     });
+    it("prepares one DoF depth renderer for multiple initially OFF instances without activating a singleton", () => {
+        const plan = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "dof" }, { type: "dof" }] }), []);
+        expect(plan.activeEffects).toEqual([]);
+        expect(plan.needsDepthRenderer).toBe(true);
+        expect(plan.needsGeometryRenderer).toBe(false);
+        expect(plan.requirements.find(item => item.key === "depthScene")?.consumers).toEqual(["dof"]);
+    });
 
     it("uses geometry velocity for object-based Motion Blur", () => {
         const plan = buildFrameGraphResourcePlan(createSettings({

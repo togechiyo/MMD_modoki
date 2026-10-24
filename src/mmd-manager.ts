@@ -519,6 +519,7 @@ import {
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { FrameGraphEffectInstances, type SerializedEffectInstances } from "./editor/frame-graph-effect-instances";
 import { INSTANCE_LUT_PRESETS } from "./editor/frame-graph-instance-fixed-settings";
+import { dofInstanceFocusDistanceMm, resolveDofInstanceFocusTarget } from "./editor/dof-instance-focus";
 import { EffectInstanceRuntimeDuration } from "./editor/effect-instance-runtime-duration";
 import { applyEffectInstanceDiff, type EffectInstanceDiff } from "./actions/effect-instance-command";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
@@ -6533,6 +6534,7 @@ ${beforeFogAppendBlock}
     }
     public getEffectTimelineTracks(): KeyframeTrack[] {
         const legacy = EFFECT_TIMELINE_ENABLED ? EFFECT_KEYFRAME_DEFINITIONS
+            .filter(definition => definition.id !== "dof")
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) })) : [];
         const ids = [...this.effectInstances.order().filter(id => this.effectInstances.has(id)), ...this.effectInstances.ids().filter(id => !this.effectInstances.present(id))];
         return [...legacy, ...ids.map(id => ({ name: id, category: "effect" as const, frames: this.effectInstances.frames(id), effectInstance: { type: this.effectInstances.type(id), label: this.effectInstances.label(id), suspended: !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph" } }))];
@@ -11457,6 +11459,7 @@ ${beforeFogAppendBlock}
                 const instance = this.effectInstances.renderState(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
                 const source = instance.fixedSettings?.lut;
                 if (source) instance.lutText = source.kind === "external" ? source.runtimeText : MmdManager.POST_EFFECT_LUT_TEXT_BY_ID[source.preset];
+                if (instance.type === "dof") instance.dofFocusDistanceMm = this.resolveInstanceDofFocusDistanceMm(instance.value);
                 return instance;
             }),
             instanceOrder: this.effectInstances.order(),
@@ -14605,7 +14608,7 @@ ${beforeFogAppendBlock}
         this.dofPersonAutoFocusLockedBoneNameValue = null;
     }
 
-    private getDofPersonAutoFocusTargetPosition(): Vector3 {
+    private getDofPersonAutoFocusTargetPosition(lockedModelInstanceId = this.dofPersonAutoFocusLockedModelInstanceIdValue, updateLock = true): Vector3 {
         const transform = this.camera.getTransformationMatrix();
         const candidates: DofPersonAutoFocusCandidate[] = [];
         const worldPositions = new Map<string, Vector3>();
@@ -14643,15 +14646,17 @@ ${beforeFogAppendBlock}
 
         const selection = selectDofPersonAutoFocusCandidate(
             candidates,
-            this.dofPersonAutoFocusLockedModelInstanceIdValue,
+            lockedModelInstanceId,
         );
         if (!selection) {
-            this.resetDofPersonAutoFocusLock();
+            if (updateLock) this.resetDofPersonAutoFocusLock();
             return this.camera.target.clone();
         }
 
-        this.dofPersonAutoFocusLockedModelInstanceIdValue = selection.modelInstanceId;
-        this.dofPersonAutoFocusLockedBoneNameValue = selection.boneName;
+        if (updateLock) {
+            this.dofPersonAutoFocusLockedModelInstanceIdValue = selection.modelInstanceId;
+            this.dofPersonAutoFocusLockedBoneNameValue = selection.boneName;
+        }
         return worldPositions.get(selection.modelInstanceId)?.clone() ?? this.camera.target.clone();
     }
 
@@ -14659,6 +14664,23 @@ ${beforeFogAppendBlock}
         const focusTarget = this.getDofFocusTargetPosition() ?? this.camera.target;
         const distance = Vector3.Distance(this.camera.globalPosition, focusTarget);
         return Math.max(this.camera.minZ, distance) * 1000;
+    }
+
+    public getEffectInstanceDofFocusDistanceMm(id: string): number {
+        return this.resolveInstanceDofFocusDistanceMm(this.captureCurrentEffectKeyframePayload(id).value);
+    }
+
+    private resolveInstanceDofFocusDistanceMm(value: EffectValue): number {
+        const target = resolveDofInstanceFocusTarget(value, this.camera.target, (id, boneName) => {
+            const entry = this.sceneModels.find(model => model.info.instanceId === id);
+            if (!entry) return null;
+            const bone = this.getRuntimeBoneByNameFromModel(entry.model, boneName);
+            if (!bone) return entry.mesh.getBoundingInfo().boundingBox.centerWorld;
+            const matrix = Matrix.Identity(); bone.getWorldMatrixToRef(matrix);
+            return matrix.getTranslation();
+        }, () => this.getDofPersonAutoFocusTargetPosition(null, false));
+        const viewDepth = Vector3.TransformCoordinates(target, this.camera.getViewMatrix()).z;
+        return dofInstanceFocusDistanceMm(value, viewDepth, this.camera.minZ);
     }
 
     private getCameraFocusDistanceMm(): number {

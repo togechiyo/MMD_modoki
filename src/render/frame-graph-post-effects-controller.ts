@@ -1955,7 +1955,7 @@ class FrameGraphPostEffectsLensDistortionTask extends FrameGraphPostProcessTask 
 }
 
 export class FrameGraphPostEffectsController {
-    private readonly instanceTasks = new Map<string, { type: EffectInstanceType; tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask>; connect: (source: FrameGraphTextureHandle) => FrameGraphTextureHandle; update: (base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance) => void; ready: (instance: EvaluatedEffectInstance) => boolean; dispose: () => void }>();
+    private readonly instanceTasks = new Map<string, { type: EffectInstanceType; tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask | FrameGraphDepthOfFieldTask>; connect: (source: FrameGraphTextureHandle) => FrameGraphTextureHandle; update: (base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance) => void; ready: (instance: EvaluatedEffectInstance) => boolean; dispose: () => void }>();
     private activationWarningEmitted = false;
     private colorCorrectionEffect: EffectWrapper | null = null;
     private gammaCorrectionEffect: EffectWrapper | null = null;
@@ -2882,7 +2882,7 @@ export class FrameGraphPostEffectsController {
         }
 
         for (const instance of initialSettings.effectInstances ?? []) {
-            const group = this.createInstanceTasks(frameGraph, instance, initialSettings, scene, camera, directionalLight, this.geometryRendererTask?.geometryViewDepthTexture);
+            const group = this.createInstanceTasks(frameGraph, instance, initialSettings, scene, camera, directionalLight, this.geometryRendererTask?.geometryViewDepthTexture, depthTextureHandle);
             group.connect(sourceTextureHandle);
             this.instanceTasks.set(instance.instanceId, group);
             for (const task of group.tasks) deferEffectTask(instance.instanceId, task);
@@ -3529,17 +3529,23 @@ export class FrameGraphPostEffectsController {
         return false;
     }
 
-    private createInstanceTasks(frameGraph: FrameGraph, instance: EvaluatedEffectInstance, base: FrameGraphPostEffectsSettings, scene: Scene, camera: Camera | null, light: DirectionalLight | null, depth?: FrameGraphTextureHandle) {
+    private createInstanceTasks(frameGraph: FrameGraph, instance: EvaluatedEffectInstance, base: FrameGraphPostEffectsSettings, scene: Scene, camera: Camera | null, light: DirectionalLight | null, depth?: FrameGraphTextureHandle, dofDepth?: FrameGraphTextureHandle) {
         const name = `${instance.type}-${instance.instanceId}`, engine = frameGraph.engine;
         const shaderLanguage = engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL;
         let current = frameGraphInstanceSettings(base, instance);
         const settings = (): FrameGraphPostEffectsSettings => current;
-        const tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask> = [];
+        const tasks: Array<FrameGraphPostProcessTask | FrameGraphBloomTask | FrameGraphDepthOfFieldTask> = [];
         const wrapper = (shader: string, uniforms: string[], samplers?: string[]): EffectWrapper => new EffectWrapper({ engine, fragmentShader: shader, useShaderStore: true, useAsPostProcess: true, uniforms, ...(samplers ? { samplers } : {}), name, shaderLanguage });
         let updateValues: () => void = () => undefined;
         let lutTexture: RawTexture | null = null, lutText: string | null = null;
         if (instanceNeedsViewDepth(instance.type) && (!camera || depth === undefined)) throw new Error(`${name}: view depth is required`);
         switch (instance.type) {
+            case "dof": {
+                if (!camera || dofDepth === undefined) throw new Error(`${name}: camera and DoF depth are required`);
+                const task = new FrameGraphDepthOfFieldTask(name, frameGraph, ThinDepthOfFieldEffectBlurLevel.Medium, false);
+                task.camera = camera; task.depthTexture = dofDepth;
+                tasks.push(task); updateValues = () => this.applyDepthOfFieldSettings(task, current); break;
+            }
             case "gamma": tasks.push(new FrameGraphPostEffectsColorCorrectionTask(name, frameGraph, wrapper("mmdFrameGraphColorCorrection", ["contrast", "gammaPower"]), () => undefined, settings, false, true)); break;
             case "grain": {
                 const task = new FrameGraphGrainTask(name, frameGraph, new ThinGrainPostProcess(name, engine, { shaderLanguage }));
@@ -3595,7 +3601,7 @@ export class FrameGraphPostEffectsController {
         }
         const group = {
             type: instance.type, tasks,
-            ready: (value: EvaluatedEffectInstance): boolean => instance.type !== "lut" || (!!lutTexture?.isReady() && lutText === value.lutText),
+            ready: (value: EvaluatedEffectInstance): boolean => (instance.type !== "lut" || (!!lutTexture?.isReady() && lutText === value.lutText)) && tasks.every(task => task.isReady()),
             dispose: (): void => { for (const task of tasks) task.dispose(); lutTexture?.dispose(); lutTexture = null; },
             connect: (source: FrameGraphTextureHandle): FrameGraphTextureHandle => {
                 let texture = source;

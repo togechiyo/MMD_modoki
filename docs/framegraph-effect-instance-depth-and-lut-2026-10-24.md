@@ -54,3 +54,5 @@ fixtureと短尺640×360の範囲であり、長尺・高解像度の性能や�
 ## 残る範囲
 
 Luminous、SSAO / SSGI / SSR、Motion Blurは引き続き後続。DoFは所有者指定で後回し。新しい線画 / pencil等の追加、個体行drag、個体構造のMCP操作は別件。
+
+同日の後続指定でDoFの後回しを解除し、[DoF個体とフォーカス対象キー](./framegraph-dof-instance-target-keys-2026-10-24.md)を実装した。上記はこの5種類を追加した時点の記録。

@@ -10,8 +10,13 @@ export type AutomationHelpTopic = {
 // Only bundled, trusted documentation belongs here. Asset names and paths are data.
 export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     {
+        id: "dof-instance-focus", title: "DoF個体のフォーカス対象キー", aliases: ["dof", "focus", "ピント", "フォーカス", "対象"],
+        status: "implemented", summary: "DoF個体のフォーカス方式・モデル個体ID・ボーン名を同じキーで切り替える。",
+        body: "GUIでDoF個体を追加してeffect trackのnameを取得する。payloadは{kind:effect,effectId:dof,instanceId:name,value:{enabled,focusMode,targetModelInstanceId,targetBoneName,focusDistance,focusOffset,fStop,lensSize,focalLength}}。focusModeはperson-auto/model-target/camera-target/manual。対象モデルはindexやpathではなくmodel instance IDで指定し、対象なしの文字列は空文字。同じPMXの複数個体も区別する。方式・モデル・ボーンはstepでキーのframeから同時に切り替える。数値は補間し、focusDistanceとfocusOffsetはmm、lensSizeとfocalLengthも実値で指定する。focusDistanceはmanualだけ、focusOffsetは追従方式だけで使用する。モデル欠損時はカメラ注視点、ボーン欠損時はモデル中心へfallbackし、キーの指定は消さない。通常の登録・コピー・移動・Undoとversion 2保存を使う。品質はMediumで固定。旧singleton DoFのキー復帰は行わない。",
+    },
+    {
         id: "effect-instances", title: "FrameGraphのエフェクト個体キー", aliases: ["effect", "gamma", "bloom", "grain", "instance", "エフェクト", "重ねがけ"],
-        status: "partial", summary: "Gamma・Grain・Sharpen・Chromatic・Vignette・Edge Blur・Distortion・Bloom・LUT・空気遠近・パラフレア・Offset Shadow・Offset Highlightの13種は個体ごとにキーを持つ。DoFは後回し。",
+        status: "partial", summary: "Gamma・Grain・Sharpen・Chromatic・Vignette・Edge Blur・Distortion・Bloom・LUT・空気遠近・パラフレア・Offset Shadow・Offset Highlight・DoFの14種は個体ごとにキーを持つ。DoFは対象モデル・ボーンもキーで切り替える。",
         body: "GUIで追加した新個体はcamera scopeのeffect行へ表示される。tracks一覧のnameが固定の個体IDで、effectType、displayName、suspendedも返す。nameを種類名や翻訳表示名へ置換しない。payloadは{kind:effect,effectId:effectType,instanceId:name,value:{enabled,...}}。gamma:{gamma}、grain:{intensity}、sharpen:{edge}、chromatic:{amount}、vignette:{weight}、edgeBlur:{strength}、distortion:{influence}、bloom:{weight,threshold,kernel}、lut:{intensity}、aerialPerspective:{strength,start,range}、directionalLightShafts:{strength,phaseG}、offsetShadow:{strength,offsetX,offsetY,depthBias,maxDepth,depthScale}、offsetHighlight:{strength,offsetX,offsetY,depthScale}を実値で指定する。色・LUT内容・Offset Shadowの太さと柔らかさは個体の固定設定。外部LUTは内容snapshotを保存する。既存のキー登録・set/delete/move/copyと共有Undoを使い、instanceIdとtrack.nameとeffectTypeの一致を保つ。GUIの単一キー個体間貼付けだけは同種を確認して対象IDへ付け替える。一括貼付けは元の個体IDを保持する。検索names/nameContainsは内部nameが対象。個体追加・複製・名称変更・順序・休止/復帰・削除・固定設定は現在GUIから行う。Classicではデータを保持し、新個体の描画・キー編集はFrameGraphへ戻して行う。旧17種のキー復帰や移行は行わない。個体を含む保存はproject version 2。",
     },
     {

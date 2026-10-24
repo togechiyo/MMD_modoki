@@ -6,13 +6,15 @@ import { toFrameGraphEffectSliderValue, fromFrameGraphEffectSliderValue, type Fr
 import { getEffectDefinition, type EffectValue, type EffectSlider } from "../editor/effect-keyframe-definitions";
 import { INSTANCE_LUT_PRESETS, type InstanceFixedSettings } from "../editor/frame-graph-instance-fixed-settings";
 import { installEnterCommitNumberInput } from "./panel-control-helpers";
+import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-instance-focus-controls";
 
 const escape = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEffectInstanceState" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying">;
+type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEffectInstanceState" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
 
 /** One delegated view for instance controls; the manager and Command layer own state. */
 export class FrameGraphInstanceController {
     private pendingValue: SerializedEffectInstances | null = null;
+    private readonly dofControls = new Map<string, DofInstanceFocusControls>();
     constructor(private readonly root: HTMLElement, private readonly host: Host,
         private readonly edit: (operation: EffectInstanceOperation) => void,
         private readonly value: (instanceId: string, value: EffectValue) => void,
@@ -84,11 +86,21 @@ export class FrameGraphInstanceController {
             <div class="effect-layer-header"><input type="checkbox" data-instance-field="enabled" aria-label="${escape(t("status.on"))}"${value.enabled ? " checked" : ""}>
             <button type="button" class="effect-layer-main" data-instance-action="select"><span class="effect-layer-name">${label}</span></button></div>
             <div class="effect-layer-details"><input type="text" data-instance-field="label" maxlength="80" aria-label="${escape(t("effect.instance.name"))}" value="${label}">
-            ${controls}${color}${shadowColor}${fixedNumbers}${lutControls}
+            ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedNumbers}${lutControls}
             <div class="effect-instance-actions">${button("up", "↑")}${button("down", "↓")}${button("duplicate", t("effect.instance.duplicate"))}${button(present ? "suspend" : "resume", t(present ? "effect.instance.suspend" : "effect.instance.resume"))}${button("delete", t("effect.instance.delete"))}</div>
             ${present ? "" : `<span>${escape(t("timeline.effectSuspended"))}</span>`}</div></div>`;
     }
     installFixedNumberInputs(): void {
+        this.dofControls.clear();
+        this.root.querySelectorAll<HTMLElement>("[data-instance-dof-controls]").forEach(root => {
+            const id = root.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
+            if (!id) return;
+            const controls = new DofInstanceFocusControls(root, this.host, () => this.currentValue(id), value => {
+                const before = !this.host.hasEffectSceneTrack(id) ? this.host.getEffectInstanceState() : null;
+                this.value(id, value); if (before) this.commitValue(before);
+            });
+            this.dofControls.set(id, controls);
+        });
         this.root.querySelectorAll<HTMLInputElement>("[data-instance-fixed]").forEach(input => {
             const id = input.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             const field = input.dataset.instanceFixed;
@@ -102,23 +114,27 @@ export class FrameGraphInstanceController {
                 revert,
             });
         });
+        this.refresh();
     }
     refresh(): void {
         this.root.querySelectorAll<HTMLElement>("[data-effect-instance-row]").forEach(row => {
             const id = row.dataset.effectInstanceRow;
             if (!id || !this.host.isEffectInstance(id)) return;
             const value = this.currentValue(id);
+            this.dofControls.get(id)?.refresh(value, this.host.isPlaying, id);
             row.querySelectorAll<HTMLInputElement>("input").forEach(input => {
+                if (input.classList.contains("range-number-input")) return;
                 input.disabled = this.host.isPlaying;
                 if (input.dataset.instanceField === "enabled") input.checked = value.enabled;
                 const mapping = this.controls(id).find(item => item.field === input.dataset.instanceField);
                 if (mapping?.panelField) {
+                    if (input.closest("[data-effect-instance-row]")?.querySelector("[data-instance-dof-controls]")) input.disabled ||= (mapping.field === "focusDistance" && value.focusMode !== "manual") || (mapping.field === "focusOffset" && value.focusMode === "manual");
                     if (document.activeElement !== input) input.value = String(Math.round(toFrameGraphEffectSliderValue(mapping.panelField as FrameGraphEffectSliderField, Number(value[mapping.field]))));
                     this.syncSlider(input);
                 }
             });
             row.querySelectorAll<HTMLButtonElement>("[data-instance-action]:not([data-instance-action='select'])").forEach(button => { button.disabled = this.host.isPlaying; });
-            row.querySelectorAll<HTMLSelectElement>("select").forEach(select => { select.disabled = this.host.isPlaying; });
+            row.querySelectorAll<HTMLSelectElement>("select:not([data-dof-instance-field])").forEach(select => { select.disabled = this.host.isPlaying; });
             row.querySelectorAll<HTMLElement>("[data-instance-value]").forEach(output => { output.textContent = Number(value[output.dataset.instanceValue ?? ""]).toFixed(2); });
         });
     }

@@ -9,7 +9,7 @@
 | Outcome | Decision | Use when |
 | --- | --- | --- |
 | adopted | [FrameGraph SSAOはシンプル階調に一本化する](./decisions/framegraph-ssao-uses-simple-tone.md) | 強度は線形0〜2、色合成を維持し、従来階調・切替UI・保存フラグを復活させない |
-| adopted | [FrameGraphの重ねがけとタイムラインを同時に設計する](./decisions/design-framegraph-layering-and-timeline-together.md) | Gammaから既存効果へ新個体方式を段階展開する。DoFは後回し。旧singleton・旧17種キーの移行と復帰は対象外。次版収録は別判断 |
+| adopted | [FrameGraphの重ねがけとタイムラインを同時に設計する](./decisions/design-framegraph-layering-and-timeline-together.md) | 既存効果へ新個体方式を段階展開する。DoFの後回しは解除し、フォーカス対象キーを含める。旧singleton・旧17種キーの移行と復帰は対象外。次版収録は別判断 |
 | adopted | [モーフ描画容量は最低8・余裕4で試行する](./decisions/morph-preview-capacity-keeps-headroom.md) | 未登録モーフのpreview容量、再bind、再コンパイル頻度を変更する |
 | adopted | [アクセサリの表示キーを形式によらず共通で扱う](./decisions/accessory-visibility-keys-cover-all-supported-formats.md) | アクセサリの形式追加、キー登録、保存、出力を変更する |
 | confirmed | [プレビュー周囲の色は現状を維持する](./decisions/keep-current-viewport-surround-color.md) | V022-073のグレー化要望を再検討する |

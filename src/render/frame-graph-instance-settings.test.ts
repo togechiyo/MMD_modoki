@@ -4,6 +4,9 @@ import type { FrameGraphPostEffectsSettings } from "./frame-graph-post-effects-c
 
 describe("instance render settings", () => {
     const base = { vignetteEnabled: true, vignetteWeight: 4, edgeBlurStrength: 3 } as FrameGraphPostEffectsSettings;
+    it("uses per-instance resolved DoF focus and optics", () => {
+        expect(frameGraphInstanceSettings(base, { instanceId: "fx-dof", type: "dof", value: { enabled: false, focusDistance: 1000, fStop: 4, lensSize: 50, focalLength: 80 }, dofFocusDistanceMm: 23000 })).toMatchObject({ dofEnabled: false, dofFocusDistanceMm: 23000, dofEffectiveFStop: 4, dofLensSize: 50, dofFocalLength: 80, dofBlurLevel: 1 });
+    });
     it("isolates vignette and blur even when the singleton or neighbour is active", () => {
         expect(frameGraphInstanceSettings(base, { instanceId: "fx-a", type: "vignette", value: { enabled: true, weight: 0.3 } })).toMatchObject({ vignetteWeight: 0.3, edgeBlurStrength: 0 });
         expect(frameGraphInstanceSettings(base, { instanceId: "fx-b", type: "edgeBlur", value: { enabled: true, strength: 2 } })).toMatchObject({ vignetteEnabled: false, vignetteWeight: 0, edgeBlurStrength: 2 });

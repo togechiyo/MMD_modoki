@@ -15,6 +15,7 @@ source_docs:
   - ../../docs/framegraph-effect-instances-implementation-2026-10-21.md
   - ../../docs/framegraph-effect-instance-expansion-2026-10-24.md
   - ../../docs/framegraph-effect-instance-depth-and-lut-2026-10-24.md
+  - ../../docs/framegraph-dof-instance-target-keys-2026-10-24.md
   - ../../docs/v0.2.4-next-version-candidates.md
 superseded_by: null
 ---
@@ -34,6 +35,8 @@ FrameGraphエフェクトの同種複数追加、キー再開、個体設定・�
 2026-10-24、所有者が「既存Effectを追加していってほしい。旧仕様はしなくていいです」と指定した。既存効果を新個体方式へ段階的に展開し、旧singleton / 旧17種キーからの移行・旧キーUIの復帰は作業対象から外す。どの効果を一つの実装段階に含めるかは描画資源と検証範囲に応じて判断する。
 
 同日の後続指定で「Dofはちと難しそうだから後回しで。他の進めて」とした。DoFを後回しにし、他の既存効果を先に展開する。DoFの不採用や実現不能を意味しない。
+
+その後、所有者が「じゃあDofもおねがい」と再開を指定したため、DoFの後回しは解除した。多人数のシーンごとに対象を変える用途として、フォーカス対象をキー登録で変更できることを実装範囲へ含める。
 
 ## 避けること
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export type EffectValueById = {
+    dof: { enabled: boolean; focusMode: string; targetModelInstanceId: string; targetBoneName: string; focusDistance: number; focusOffset: number; fStop: number; lensSize: number; focalLength: number };
     ssao: { enabled: boolean; strength: number; radius: number };
     ssgi: { enabled: boolean; strength: number; sampleRadius: number };
     ssr: { enabled: boolean; strength: number; step: number };
@@ -25,8 +26,8 @@ export type DepthEffectValues = Pick<EffectValueById, "directionalLightShafts" |
 export type EffectKeyframePayload = {
     [K in EffectId]: { kind: "effect"; effectId: K; instanceId?: string; value: EffectValueById[K] }
 }[EffectId];
-export type EffectValue = { enabled: boolean; [field: string]: number | boolean };
-type Field = { kind: "step"; default: boolean } | { kind: "linear" | "log"; default: number; min: number; max: number };
+export type EffectValue = { enabled: boolean; [field: string]: number | boolean | string };
+type Field = { kind: "step"; default: boolean } | { kind: "discrete"; default: string; values?: readonly string[] } | { kind: "linear" | "log"; default: number; min: number; max: number };
 export type EffectSlider = { field: string; panelField?: string; labelKey?: string; min: number; max: number; toValue: (position: number) => number; toPosition: (value: number) => number };
 export type EffectDefinition = {
     id: EffectId;
@@ -43,6 +44,22 @@ function linearSlider(field: string, panelField: string, label: string, min: num
         toPosition: value => (value - min) / (max - min) * 100 };
 }
 export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
+    { id: "dof", fields: {
+        enabled: { kind: "step", default: false },
+        focusMode: { kind: "discrete", default: "person-auto", values: ["camera-target", "model-target", "person-auto", "manual"] },
+        targetModelInstanceId: { kind: "discrete", default: "" }, targetBoneName: { kind: "discrete", default: "" },
+        focusDistance: { kind: "linear", default: 55000, min: 1, max: 1000000 },
+        focusOffset: { kind: "linear", default: 0, min: -20000, max: 20000 },
+        fStop: { kind: "linear", default: 2, min: 0.01, max: 32 },
+        lensSize: { kind: "linear", default: 1000, min: 1, max: 4096 },
+        focalLength: { kind: "linear", default: 50, min: 1, max: 1000 },
+    }, sliders: [
+        linearSlider("focusOffset", "dofFocusOffset", "offset", -20000, 20000, 100),
+        linearSlider("focusDistance", "dofFocus", "focus", 1, 1000000, 1),
+        linearSlider("fStop", "dofFStop", "fStop", 0.01, 32, 0.01),
+        { field: "lensSize", panelField: "dofLensSize", labelKey: "effect.frameGraphPost.controls.lensSize", min: 0, max: 100, toValue: position => 4096 ** (position / 100), toPosition: value => Math.log(value) / Math.log(4096) * 100 },
+        linearSlider("focalLength", "dofFocalLength", "focalLength", 1, 1000, 1),
+    ] },
     { id: "gamma", fields: { enabled: { kind: "step", default: false }, gamma: { kind: "log", default: 1, min: 0.25, max: 4 } },
         sliders: [{ field: "gamma", panelField: "gammaPower", min: -100, max: 100, toValue: position => 2 ** (-position / 100), toPosition: value => -Math.log2(value) * 100 }] },
     { id: "grain", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0, min: 0, max: 100 } },
@@ -152,6 +169,7 @@ export function normalizeEffectValue(definition: EffectDefinition, input: unknow
     const values = input && typeof input === "object" ? input as Record<string, unknown> : {};
     return Object.fromEntries(Object.entries(definition.fields).map(([key, field]) => {
         const value = values[key] ?? fallback?.[key] ?? field.default;
+        if (field.kind === "discrete") return [key, typeof value === "string" && validDiscrete(value, field.values) ? value : field.default];
         return [key, field.kind === "step" ? (typeof value === "boolean" ? value : field.default)
             : typeof value === "number" && Number.isFinite(value) ? Math.max(field.min, Math.min(field.max, value)) : field.default];
     })) as EffectValue;
@@ -163,14 +181,18 @@ export function interpolateEffectValue(definition: EffectDefinition, from: Effec
         return [key, field.kind === "log" ? Math.exp(Math.log(a) + (Math.log(b) - Math.log(a)) * amount) : a + (b - a) * amount];
     })) as EffectValue;
 }
+function validDiscrete(value: string, allowed?: readonly string[]): boolean {
+    return value.length <= 512 && [...value].every(char => char.charCodeAt(0) >= 32) && (!allowed || allowed.includes(value));
+}
 function valueSchema(id: EffectId) {
     return z.object(Object.fromEntries(Object.entries(getEffectDefinition(id).fields).map(([key, field]) =>
-        [key, field.kind === "step" ? z.boolean() : z.number().finite().min(field.min).max(field.max)]))).strict();
+        [key, field.kind === "step" ? z.boolean() : field.kind === "discrete" ? z.string().refine(value => validDiscrete(value, field.values)) : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean()])),
+    kind: z.literal("effect"), effectId: z.enum(["dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
     instanceId: z.string().regex(/^fx-[a-zA-Z0-9-]{1,190}$/).optional(),
 }).strict().superRefine((payload, context) => {
+    if (payload.effectId === "dof" && !payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "DoF keys require an effect instance" });
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });
 }).transform(payload => payload as EffectKeyframePayload);

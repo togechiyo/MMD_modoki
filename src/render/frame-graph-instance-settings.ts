@@ -5,6 +5,7 @@ import type { FrameGraphPostEffectsSettings } from "./frame-graph-post-effects-c
 export function frameGraphInstanceSettings(base: FrameGraphPostEffectsSettings, instance: EvaluatedEffectInstance): FrameGraphPostEffectsSettings {
     const value = instance.value;
     switch (instance.type) {
+        case "dof": return { ...base, dofEnabled: value.enabled, dofFocusDistanceMm: instance.dofFocusDistanceMm ?? Number(value.focusDistance), dofEffectiveFStop: Number(value.fStop), dofLensSize: Number(value.lensSize), dofFocalLength: Number(value.focalLength), dofBlurLevel: 1 };
         case "gamma": return { ...base, gammaEnabled: value.enabled, gammaPower: Number(value.gamma) };
         case "grain": return { ...base, grainIntensity: Number(value.intensity) };
         case "sharpen": return { ...base, sharpenEdge: Number(value.edge) };

@@ -2886,6 +2886,9 @@ export class UIController {
             this.frameGraphInstanceController?.refresh();
             this.refreshEffectKeyframeUi();
         });
+        this.actionDispatcher.register("effect.instanceFixedValue", action => {
+            this.mmdManager.setEffectInstanceFixedSliderValue(action.instanceId, action.field, action.value);
+        });
         this.actionDispatcher.register("effect.setExposure", (action) => {
             this.colorPostFxController?.setExposure(action.value);
         });
@@ -4645,7 +4648,7 @@ export class UIController {
                 }
 
                 slider.dispatchEvent(new Event("input", { bubbles: true }));
-                if (slider.dataset.instanceField) slider.dispatchEvent(new Event("change", { bubbles: true }));
+                if (slider.dataset.instanceField || slider.dataset.instanceFixed) slider.dispatchEvent(new Event("change", { bubbles: true }));
                 this.syncRangeNumberInput(slider);
             };
 
@@ -5216,6 +5219,7 @@ export class UIController {
         if (this.postEffectStackList) this.frameGraphInstanceController = new FrameGraphInstanceController(this.postEffectStackList, this.mmdManager,
             operation => { this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation }); },
             (instanceId, value) => { this.actionDispatcher.dispatch({ type: "effect.instanceValue", source: "panel", instanceId, value }); },
+            (instanceId, field, value) => { this.actionDispatcher.dispatch({ type: "effect.instanceFixedValue", source: "panel", instanceId, field, value }); },
             id => {
                 const close = this.expandedFrameGraphPostEffectId === id;
                 this.mmdManager.setTimelineTarget("camera");
@@ -6939,7 +6943,7 @@ export class UIController {
         this.postEffectStackList.innerHTML = [...instanceState.order].reverse().map(id => this.mmdManager.isEffectInstance(id)
             ? this.frameGraphInstanceController?.render(id, true, id === this.expandedFrameGraphPostEffectId) ?? "" : legacyRows.get(id as FrameGraphPostEffectId) ?? "").join("")
             + instanceState.instances.filter(item => !instanceState.order.includes(item.instanceId)).map(item => this.frameGraphInstanceController?.render(item.instanceId, false, item.instanceId === this.expandedFrameGraphPostEffectId) ?? "").join("");
-        this.frameGraphInstanceController?.installFixedNumberInputs();
+        this.frameGraphInstanceController?.installControls();
     }
 
     private installPostEffectBackendControls(root: HTMLElement): void {

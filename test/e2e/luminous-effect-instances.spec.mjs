@@ -31,7 +31,11 @@ test("Luminous instances own RC settings, resources and enabled keys", async ({}
     for (let i = 0; i < 2; i++) { await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click(); }
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     const [a, b] = (await state()).instances.map(item => item.instanceId), row = id => page.locator(`[data-effect-instance-row="${id}"]`);
-    const fixed = async (id, field, value) => { await expandEffectInstance(row(id)); const input = row(id).locator(`[data-instance-fixed="${field}"]`); await input.fill(String(value)); await input.press("Enter"); };
+    const fixed = async (id, field, value) => {
+      await expandEffectInstance(row(id)); const input = row(id).locator(`[data-instance-fixed="${field}"]`);
+      await input.fill(String(Math.round(field === "radianceStrength" ? value / 8 * 100 : (value - 1) / 99 * 100)));
+      await input.dispatchEvent("input"); await input.dispatchEvent("change");
+    };
     const diagnostics = () => page.evaluate(() => window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects);
     const capture = async name => {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);

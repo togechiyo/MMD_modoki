@@ -2,7 +2,7 @@ import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./effect
 import { makeEffectPayload, type EffectKeyframePayload, type EffectValue } from "./effect-keyframe-definitions";
 import { instanceValue, instanceColor, isEffectInstanceType, INSTANCE_EFFECT_NAMES, type EffectInstanceType, type InstanceColor, type EvaluatedEffectInstance } from "./frame-graph-instance-effects";
 import { isFrameGraphPostEffectId, type FrameGraphPostEffectId } from "../shared/frame-graph-post-effect-stack";
-import { instanceFixedSettings, type InstanceFixedSettings } from "./frame-graph-instance-fixed-settings";
+import { instanceFixedSettings, type InstanceFixedSettings, type InstanceFixedSliderField } from "./frame-graph-instance-fixed-settings";
 
 export type EffectInstance = {
     instanceId: string;
@@ -89,6 +89,15 @@ export class FrameGraphEffectInstances {
         entry.fixedSettings = fixed;
     }
     fixedSettings(id: string): InstanceFixedSettings | undefined { return structuredClone(this.get(id).fixedSettings); }
+    setFixedSliderValue(id: string, field: InstanceFixedSliderField, value: number): void {
+        if (!Number.isFinite(value)) throw new Error("Invalid fixed slider value");
+        const entry = this.get(id), settings = entry.fixedSettings ?? {};
+        if (entry.type === "motionBlur" && field === "samples") this.setFixedSettings(id, { ...settings, samples: value });
+        else if (entry.type === "luminous" && field !== "samples") this.setFixedSettings(id, { ...settings, radiance: {
+            ...settings.radiance ?? { enabled: false, strength: 1, range: 12 }, [field === "radianceStrength" ? "strength" : "range"]: value,
+        } });
+        else throw new Error("Fixed slider does not belong to this effect");
+    }
     setBloomColor(id: string, value: unknown): void {
         const entry = this.get(id);
         if (entry.type !== "bloom") throw new Error("Only Bloom owns a color");

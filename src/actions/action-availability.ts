@@ -259,6 +259,7 @@ export function canExecuteEditorAction(
             return true;
         case "effect.instanceEdit":
         case "effect.instanceValue":
+        case "effect.instanceFixedValue":
             return true;
         case "project.dropFiles":
             return action.filePaths.length > 0;

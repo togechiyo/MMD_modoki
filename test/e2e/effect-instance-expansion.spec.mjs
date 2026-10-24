@@ -72,7 +72,7 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
         await expect(row(a).locator('[data-instance-field="color"], [data-instance-fixed="toonInfluence"]')).toHaveCount(0);
       }
       if (type === "ssgi") await expect(row(a).locator('[data-instance-field="blendMode"]')).toHaveCount(0);
-      if (type === "motionBlur") { const samples = row(a).locator('[data-instance-fixed="samples"]'); await samples.fill("48"); await samples.press("Enter"); }
+      if (type === "motionBlur") { const samples = row(a).locator('[data-instance-fixed="samples"]'); await samples.fill("71"); await samples.dispatchEvent("input"); await samples.dispatchEvent("change"); }
       if (type === "lut") {
         await row(a).locator('select[data-instance-field="lutPreset"]').selectOption("monotone");
         await expandEffectInstance(row(b));

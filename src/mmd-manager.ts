@@ -6647,6 +6647,14 @@ ${beforeFogAppendBlock}
     public isEffectInstance(id: string): boolean { return this.effectInstances.has(id); }
     public getEffectInstanceType(id: string): import("./editor/frame-graph-instance-effects").EffectInstanceType | null { return this.effectInstances.type(id); }
     public getEffectInstanceLabel(id: string): string { return this.effectInstances.label(id); }
+    public getEffectInstanceFixedSettings(id: string): import("./editor/frame-graph-instance-fixed-settings").InstanceFixedSettings | undefined {
+        return this.effectInstances.fixedSettings(id);
+    }
+    public setEffectInstanceFixedSliderValue(id: string, field: import("./editor/frame-graph-instance-fixed-settings").InstanceFixedSliderField, value: number): void {
+        if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
+        this.effectInstances.setFixedSliderValue(id, field, value);
+        this.onEffectKeyframePreviewChanged?.();
+    }
     public setEffectInstanceValue(id: string, value: EffectValue): void {
         if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
         this.effectInstances.setValue(id, value, this._currentFrame);

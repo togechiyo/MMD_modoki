@@ -4,17 +4,16 @@ import type { SerializedEffectInstances } from "../editor/frame-graph-effect-ins
 import type { EffectInstanceOperation } from "../editor/effect-instance-operations";
 import { toFrameGraphEffectSliderValue, fromFrameGraphEffectSliderValue, type FrameGraphEffectSliderField } from "./frame-graph-effect-slider-mapping";
 import { getEffectDefinition, type EffectValue, type EffectSlider } from "../editor/effect-keyframe-definitions";
-import { INSTANCE_LUT_PRESETS, visibleInstanceFixedFields, type InstanceFixedSettings } from "../editor/frame-graph-instance-fixed-settings";
-import { installEnterCommitNumberInput } from "./panel-control-helpers";
+import { INSTANCE_LUT_PRESETS, visibleInstanceFixedFields, type InstanceFixedSettings, type InstanceFixedSliderField } from "../editor/frame-graph-instance-fixed-settings";
 import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-instance-focus-controls";
 
 const escape = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEffectInstanceState" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
-type FixedNumber = { field: string; label: string; min: number; max: number; step: number; value: number };
-function fixedNumbers(type: string, settings: InstanceFixedSettings = {}): FixedNumber[] {
+type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEffectInstanceState" | "getEffectInstanceFixedSettings" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
+type FixedSlider = { field: InstanceFixedSliderField; panelField: FrameGraphEffectSliderField; label: string; value: number };
+function fixedSliders(type: string, settings: InstanceFixedSettings = {}): FixedSlider[] {
     switch (type) {
-        case "motionBlur": return [{ field: "samples", label: "effect.frameGraphPost.controls.samples", min: 8, max: 64, step: 1, value: settings.samples ?? 32 }];
-        case "luminous": return [{ field: "radianceStrength", label: "effect.frameGraphPost.controls.luminousRadianceStrength", min: 0, max: 8, step: 0.1, value: settings.radiance?.strength ?? 1 }, { field: "radianceRange", label: "effect.frameGraphPost.controls.luminousRadianceRange", min: 1, max: 100, step: 1, value: settings.radiance?.range ?? 12 }];
+        case "motionBlur": return [{ field: "samples", panelField: "motionBlurSamples", label: "effect.frameGraphPost.controls.samples", value: settings.samples ?? 32 }];
+        case "luminous": return [{ field: "radianceStrength", panelField: "luminousRadianceStrength", label: "effect.frameGraphPost.controls.luminousRadianceStrength", value: settings.radiance?.strength ?? 1 }, { field: "radianceRange", panelField: "luminousRadianceRange", label: "effect.frameGraphPost.controls.luminousRadianceRange", value: settings.radiance?.range ?? 12 }];
         default: return [];
     }
 }
@@ -26,6 +25,7 @@ export class FrameGraphInstanceController {
     constructor(private readonly root: HTMLElement, private readonly host: Host,
         private readonly edit: (operation: EffectInstanceOperation) => void,
         private readonly value: (instanceId: string, value: EffectValue) => void,
+        private readonly fixedValue: (instanceId: string, field: InstanceFixedSliderField, value: number) => void,
         private readonly select: (instanceId: string) => void,
         private readonly commitValue: (before: SerializedEffectInstances) => void,
         private readonly syncSlider: (slider: HTMLInputElement) => void,
@@ -46,6 +46,11 @@ export class FrameGraphInstanceController {
             if (id && input && mapping?.panelField) {
                 if (!host.hasEffectSceneTrack(id) && !this.pendingValue) this.pendingValue = host.getEffectInstanceState();
                 value(id, { ...this.currentValue(id), [mapping.field]: fromFrameGraphEffectSliderValue(mapping.panelField as FrameGraphEffectSliderField, Number(input.value)) });
+            }
+            const fixed = id ? this.fixedControls(id).find(item => item.field === input?.dataset.instanceFixed) : null;
+            if (id && input && fixed) {
+                if (!this.pendingValue) this.pendingValue = host.getEffectInstanceState();
+                this.fixedValue(id, fixed.field, fromFrameGraphEffectSliderValue(fixed.panelField, Number(input.value)));
             }
         });
         root.addEventListener("change", event => {
@@ -89,7 +94,7 @@ export class FrameGraphInstanceController {
         const primaryColor = visibleFixed.includes("bloomColor") ? instance?.bloomColor : visibleFixed.includes("color") ? instance?.fixedSettings?.color : undefined;
         const color = primaryColor ? this.renderColor("color", primaryColor) : "";
         const shadowColor = visibleFixed.includes("shadowColor") && instance?.fixedSettings?.shadowColor ? this.renderColor("shadowColor", instance.fixedSettings.shadowColor) : "";
-        const fixedNumberControls = fixedNumbers(instance?.type ?? "", instance?.fixedSettings).map(item => `<label class="effect-layer-control-row effect-layer-control-row--fixed"><span class="effect-layer-control-label">${escape(t(item.label))}</span><input class="panel-number-input" type="number" min="${item.min}" max="${item.max}" step="${item.step}" data-instance-fixed="${item.field}" aria-label="${escape(t(item.label))}" value="${item.value}"></label>`).join("");
+        const fixedSliderControls = fixedSliders(instance?.type ?? "", instance?.fixedSettings).map(item => `<label class="effect-layer-control-row"><span class="effect-layer-control-label">${escape(t(item.label))}</span><input class="effect-layer-control-slider" type="range" min="0" max="100" step="1" data-instance-fixed="${item.field}" aria-label="${escape(t(item.label))}" value="${Math.round(toFrameGraphEffectSliderValue(item.panelField, item.value))}"><output class="effect-layer-control-value" data-instance-fixed-value="${item.field}">${item.value.toFixed(2)}</output></label>`).join("");
         const fixedSelects = visibleFixed.includes("radiance") ? `<label class="effect-layer-control-row"><span>${escape(t("effect.frameGraphPost.controls.luminousRadianceEnabled"))}</span><input type="checkbox" data-instance-fixed-toggle="radiance"${instance?.fixedSettings?.radiance?.enabled ? " checked" : ""}></label>` : "";
         const lut = instance?.fixedSettings?.lut;
         const lutControls = instance?.type === "lut" ? `<select class="effect-layer-control-select" data-instance-field="lutPreset" aria-label="${escape(t("shader.postfx.lutSource"))}">${INSTANCE_LUT_PRESETS.map(preset => `<option value="${preset.id}"${lut?.kind === "builtin" && lut.preset === preset.id ? " selected" : ""}>${preset.label}</option>`).join("")}${lut?.kind === "external" ? `<option value="external" selected>${escape(lut.name)}</option>` : ""}</select><button type="button" data-instance-action="lutFile">${escape(t("shader.postfx.lutFile"))}</button>` : "";
@@ -100,11 +105,11 @@ export class FrameGraphInstanceController {
             <button type="button" class="effect-layer-main" data-instance-action="select" aria-expanded="${expanded}"><span class="effect-layer-name">${label}</span></button>
             ${present ? `<button class="effect-layer-drag-handle" type="button" draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}" aria-label="${dragTitle}"${this.host.isPlaying ? " disabled" : ""}><span class="effect-layer-drag-grip" aria-hidden="true"></span></button>` : ""}</div>
             <div class="effect-layer-details"${expanded ? "" : " hidden"}>
-            ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSelects}${fixedNumberControls}${lutControls}
+            ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSelects}${fixedSliderControls}${lutControls}
             <div class="effect-instance-actions">${button("duplicate")}${button(present ? "suspend" : "resume")}${button("delete")}</div>
             ${present ? "" : `<span>${escape(t("timeline.effectSuspended"))}</span>`}</div></div>`;
     }
-    installFixedNumberInputs(): void {
+    installControls(): void {
         this.dofControls.clear();
         this.root.querySelectorAll<HTMLElement>("[data-instance-dof-controls]").forEach(root => {
             const id = root.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
@@ -115,26 +120,6 @@ export class FrameGraphInstanceController {
             });
             this.dofControls.set(id, controls);
         });
-        this.root.querySelectorAll<HTMLInputElement>("[data-instance-fixed]").forEach(input => {
-            const id = input.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
-            const field = input.dataset.instanceFixed;
-            if (!id || !field) return;
-            const revert = (): void => {
-                const instance = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id);
-                input.value = String(fixedNumbers(instance?.type ?? "", instance?.fixedSettings).find(item => item.field === field)?.value ?? 0);
-            };
-            installEnterCommitNumberInput(input, {
-                commit: () => {
-                    const value = Number(input.value);
-                    if (Number.isFinite(value)) {
-                        const settings = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id)?.fixedSettings;
-                        this.editFixed(id, field === "radianceStrength" || field === "radianceRange" ? { radiance: { ...settings?.radiance ?? { enabled: false, strength: 1, range: 12 }, [field === "radianceStrength" ? "strength" : "range"]: value } } : { [field]: value });
-                    }
-                    revert();
-                },
-                revert,
-            });
-        });
         this.refresh();
     }
     refresh(): void {
@@ -142,6 +127,7 @@ export class FrameGraphInstanceController {
             const id = row.dataset.effectInstanceRow;
             if (!id || !this.host.isEffectInstance(id)) return;
             const value = this.currentValue(id);
+            const fixed = this.fixedControls(id);
             row.classList.toggle("effect-layer-placeholder--off", !value.enabled || !row.querySelector("[data-effect-stack-drag]"));
             row.querySelectorAll<HTMLButtonElement>("[data-effect-stack-drag]").forEach(handle => { handle.disabled = this.host.isPlaying; handle.draggable = !this.host.isPlaying; });
             this.dofControls.get(id)?.refresh(value, this.host.isPlaying, id);
@@ -154,13 +140,23 @@ export class FrameGraphInstanceController {
                     if (document.activeElement !== input) input.value = String(Math.round(toFrameGraphEffectSliderValue(mapping.panelField as FrameGraphEffectSliderField, Number(value[mapping.field]))));
                     this.syncSlider(input);
                 }
+                const fixedMapping = fixed.find(item => item.field === input.dataset.instanceFixed);
+                if (fixedMapping) {
+                    if (document.activeElement !== input) input.value = String(Math.round(toFrameGraphEffectSliderValue(fixedMapping.panelField, fixedMapping.value)));
+                    this.syncSlider(input);
+                }
             });
             row.querySelectorAll<HTMLButtonElement>("[data-instance-action]:not([data-instance-action='select'])").forEach(button => { button.disabled = this.host.isPlaying; });
             row.querySelectorAll<HTMLSelectElement>("select:not([data-dof-instance-field])").forEach(select => { select.disabled = this.host.isPlaying; });
             row.querySelectorAll<HTMLElement>("[data-instance-value]").forEach(output => { output.textContent = Number(value[output.dataset.instanceValue ?? ""]).toFixed(2); });
+            row.querySelectorAll<HTMLElement>("[data-instance-fixed-value]").forEach(output => { output.textContent = (fixed.find(item => item.field === output.dataset.instanceFixedValue)?.value ?? 0).toFixed(2); });
         });
     }
     private controls(id: string): readonly EffectSlider[] { return getEffectDefinition(this.host.captureCurrentEffectKeyframePayload(id).effectId).sliders; }
+    private fixedControls(id: string): FixedSlider[] {
+        const type = this.host.captureCurrentEffectKeyframePayload(id).effectId;
+        return fixedSliders(type).length ? fixedSliders(type, this.host.getEffectInstanceFixedSettings(id)) : [];
+    }
     private controlLabel(id: string, mapping: EffectSlider): string {
         const type = this.host.captureCurrentEffectKeyframePayload(id).effectId;
         return t(mapping.labelKey ?? `effect.frameGraphPost.controls.${type === "gamma" ? "gamma" : type === "grain" ? "intensity" : "strength"}`);

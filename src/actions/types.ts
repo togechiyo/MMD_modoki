@@ -193,6 +193,7 @@ export type EditAction =
 export type EffectAction =
     | { type: "effect.instanceEdit"; source: ActionSource; operation: import("../editor/effect-instance-operations").EffectInstanceOperation }
     | { type: "effect.instanceValue"; source: ActionSource; instanceId: string; value: import("../editor/effect-keyframe-definitions").EffectValue }
+    | { type: "effect.instanceFixedValue"; source: ActionSource; instanceId: string; field: import("../editor/frame-graph-instance-fixed-settings").InstanceFixedSliderField; value: number }
     | { type: "effect.setModelEdgeWidth"; source: ActionSource; percent: number }
     | { type: "effect.setModelEdgeUniformWidth"; source: ActionSource; enabled: boolean }
     | { type: "effect.setModelEdgeColorOverride"; source: ActionSource; enabled: boolean }

@@ -9,6 +9,7 @@ export const INSTANCE_LUT_PRESETS = [
 ] as const;
 export type InstanceLutSource = { kind: "builtin"; preset: string } | { kind: "external"; name: string; runtimeText: string };
 export type InstanceFixedSettings = { color?: InstanceColor; shadowColor?: InstanceColor; thickness?: number; softness?: number; lut?: InstanceLutSource; toonInfluence?: number; blendMode?: SsgiBlendMode; samples?: number; radiance?: LuminousRadianceSettings };
+export type InstanceFixedSliderField = "samples" | "radianceStrength" | "radianceRange";
 /** Public stack controls only. Stored internal settings do not imply a public control. */
 export function visibleInstanceFixedFields(type: EffectInstanceType): readonly (keyof InstanceFixedSettings | "bloomColor")[] {
     switch (type) {

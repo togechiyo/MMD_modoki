@@ -1,8 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { FrameGraphEffectInstances } from "./frame-graph-effect-instances";
 import { effectKeyframePayloadSchema, getEffectDefinition } from "./effect-keyframe-definitions";
+import { applyEffectInstanceDiff, buildEffectInstanceDiff } from "../actions/effect-instance-command";
 
 describe("FrameGraph effect instances", () => {
+    it.each([
+        ["motionBlur", "samples", 47.6, { samples: 48 }],
+        ["luminous", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12 } }],
+        ["luminous", "radianceRange", 75.25, { radiance: { enabled: true, strength: 1, range: 75.25 } }],
+    ] as const)("previews %s %s independently of keys and undoes a gesture in one diff", (type, field, value, expected) => {
+        const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, type);
+        if (type === "luminous") store.setFixedSettings("fx-a", { radiance: { enabled: true, strength: 1, range: 12 } });
+        store.apply("fx-a", 0, store.capture("fx-a", 0));
+        const before = store.serialize();
+        store.setFixedSliderValue("fx-a", field, value / 2); store.setFixedSliderValue("fx-a", field, value);
+        expect(store.fixedSettings("fx-a")).toEqual(expected);
+        expect(store.serialize().instances[0].animation).toEqual(before.instances[0].animation);
+        const diff = buildEffectInstanceDiff(before, store.serialize());
+        store.apply("fx-a", 10, store.capture("fx-a", 10));
+        const reverted = applyEffectInstanceDiff(store.serialize(), diff, "revert");
+        expect(reverted?.instances[0].fixedSettings).toEqual(before.instances[0].fixedSettings);
+        expect(reverted?.instances[0].animation).toEqual(store.serialize().instances[0].animation);
+        const restored = new FrameGraphEffectInstances(); restored.restore(store.serialize());
+        expect(restored.fixedSettings("fx-a")).toEqual(expected);
+    });
+    it("rejects a fixed slider for the wrong effect and non-finite values without changing state", () => {
+        const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, "motionBlur");
+        const before = store.serialize();
+        expect(() => store.setFixedSliderValue("fx-a", "radianceStrength", 2)).toThrow();
+        expect(() => store.setFixedSliderValue("fx-a", "samples", Number.NaN)).toThrow();
+        expect(store.serialize()).toEqual(before);
+    });
     it("automatically names the first instance without a number and keeps names stable and unique", () => {
         const store = new FrameGraphEffectInstances();
         store.add("fx-a", undefined, undefined, "ssao"); store.duplicate("fx-a", "fx-b"); store.duplicate("fx-a", "fx-c");

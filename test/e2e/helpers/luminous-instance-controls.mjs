@@ -13,10 +13,7 @@ export function luminousInstanceControl(page, key) {
 export async function setLuminousInstancePosition(page, key, position) {
   await expandEffectInstance(luminousInstanceRow(page));
   const control = luminousInstanceControl(page, key);
-  if (key === "luminousRadianceStrength" || key === "luminousRadianceRange") {
-    const value = key === "luminousRadianceStrength" ? position * 8 / 100 : 1 + position * 99 / 100;
-    await control.fill(String(value)); await control.press("Enter");
-  } else { await control.fill(String(position)); await control.dispatchEvent("input"); await control.dispatchEvent("change"); }
+  await control.fill(String(position)); await control.dispatchEvent("input"); await control.dispatchEvent("change");
 }
 export const getLuminousInstanceRuntime = page => page.evaluate(() => {
   const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();

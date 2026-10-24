@@ -3422,20 +3422,6 @@ body.png-capture-mode .model-comment-notice {
   gap: 6px;
 }
 
-.effect-layer-control-row--fixed .panel-number-input {
-  width: 100%;
-  min-width: 0;
-  height: 24px;
-  padding: 0 4px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  color-scheme: dark;
-  font: 700 11px var(--font-mono);
-  text-align: right;
-}
-
 .effect-layer-control-label {
   min-width: 0;
   overflow: hidden;

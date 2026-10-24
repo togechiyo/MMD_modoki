@@ -32,6 +32,6 @@ describe("DoF instance target keys", () => {
         expect(dofInstanceFocusDistanceMm(value, 15, 0.1)).toBe(14500);
         expect(dofInstanceFocusDistanceMm(value, -15, 0.1)).toBe(14500);
         expect(dofInstanceFocusDistanceMm({ ...value, focusOffset: 20000 }, 15, 0.1)).toBe(100);
-        expect(dofInstanceFocusDistanceMm({ ...value, focusMode: "manual", focusDistance: 4200 }, 15, 0.1)).toBe(4200);
+        expect(dofInstanceFocusDistanceMm({ ...value, focusMode: "manual", focusDistance: 4200 }, 15, 0.1)).toBe(14500);
     });
 });

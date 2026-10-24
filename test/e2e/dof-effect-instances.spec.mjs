@@ -53,7 +53,7 @@ test("DoF instances: same-file targets, step keys, moving bone, output and missi
     await field(b, "focusMode").selectOption("model-target"); await field(b, "targetModelInstanceId").selectOption(models[1].instanceId);
     const bSaved = (await state()).instances.find(item => item.instanceId === b);
     await expandEffectInstance(row(a)); await field(a, "focusMode").selectOption("model-target"); await field(a, "targetModelInstanceId").selectOption(models[0].instanceId); await field(a, "targetBoneName").selectOption("センター");
-    await number(a, "lensSize", 85); await number(a, "focalLength", 7); await number(a, "fStop", 2);
+    await number(a, "lensSize", 85);
     await row(a).locator('[data-instance-field="enabled"]').check();
     await select(a); await seek(page, 0); await page.locator("#btn-kf-add").click();
     const depthA = await distance(a), focusedA = await capture("focus-a");

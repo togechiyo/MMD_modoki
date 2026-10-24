@@ -9,6 +9,18 @@ export const INSTANCE_LUT_PRESETS = [
 ] as const;
 export type InstanceLutSource = { kind: "builtin"; preset: string } | { kind: "external"; name: string; runtimeText: string };
 export type InstanceFixedSettings = { color?: InstanceColor; shadowColor?: InstanceColor; thickness?: number; softness?: number; lut?: InstanceLutSource; toonInfluence?: number; blendMode?: SsgiBlendMode; samples?: number; radiance?: LuminousRadianceSettings };
+/** Public stack controls only. Stored internal settings do not imply a public control. */
+export function visibleInstanceFixedFields(type: EffectInstanceType): readonly (keyof InstanceFixedSettings | "bloomColor")[] {
+    switch (type) {
+        case "bloom": return ["bloomColor"];
+        case "lut": return ["lut"];
+        case "aerialPerspective": case "offsetShadow": case "offsetHighlight": return ["color"];
+        case "directionalLightShafts": return ["color", "shadowColor"];
+        case "motionBlur": return ["samples"];
+        case "luminous": return ["radiance"];
+        default: return [];
+    }
+}
 const validatedLuts = new Set<string>();
 function lutSource(source: InstanceLutSource | undefined): InstanceLutSource {
     if (!source) return { kind: "builtin", preset: "anime-soft" };

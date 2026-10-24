@@ -12,8 +12,8 @@ describe("instance render settings", () => {
         expect(frameGraphInstanceSettings(singleton, { instanceId: "fx-motion", type: "motionBlur", value: { enabled: true, strength: 4 } })).toMatchObject({ motionBlurStrength: 4, motionBlurSamples: 32 });
         expect(frameGraphInstanceSettings(singleton, { instanceId: "fx-glow", type: "luminous", value: { enabled: true, intensity: 2, threshold: 0.4, radius: 60 } })).toMatchObject({ luminousIntensity: 2, luminousThreshold: 0.4, luminousRadius: 60, luminousRadiance: { enabled: false, strength: 1, range: 12 } });
     });
-    it("uses per-instance resolved DoF focus and optics", () => {
-        expect(frameGraphInstanceSettings(base, { instanceId: "fx-dof", type: "dof", value: { enabled: false, focusDistance: 1000, fStop: 4, lensSize: 50, focalLength: 80 }, dofFocusDistanceMm: 23000 })).toMatchObject({ dofEnabled: false, dofFocusDistanceMm: 23000, dofEffectiveFStop: 4, dofLensSize: 50, dofFocalLength: 80, dofBlurLevel: 1 });
+    it("uses resolved DoF focus and public lens size, keeping hidden optics fixed or camera-linked", () => {
+        expect(frameGraphInstanceSettings({ ...base, dofFocalLength: 56 }, { instanceId: "fx-dof", type: "dof", value: { enabled: false, focusDistance: 1000, fStop: 4, lensSize: 50, focalLength: 80 }, dofFocusDistanceMm: 23000 })).toMatchObject({ dofEnabled: false, dofFocusDistanceMm: 23000, dofEffectiveFStop: 2, dofLensSize: 50, dofFocalLength: 56, dofBlurLevel: 1 });
     });
     it("isolates vignette and blur even when the singleton or neighbour is active", () => {
         expect(frameGraphInstanceSettings(base, { instanceId: "fx-a", type: "vignette", value: { enabled: true, weight: 0.3 } })).toMatchObject({ vignetteWeight: 0.3, edgeBlurStrength: 0 });

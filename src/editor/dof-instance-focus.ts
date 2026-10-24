@@ -8,5 +8,5 @@ export function resolveDofInstanceFocusTarget<T>(value: EffectValue, cameraTarge
 }
 /** Babylon CoC uses camera-space Z; off-axis Euclidean distance moves the focal plane. */
 export function dofInstanceFocusDistanceMm(value: EffectValue, viewDepth: number, minZ: number): number {
-    return Math.max(minZ * 1000, value.focusMode === "manual" ? Number(value.focusDistance) : Math.abs(viewDepth) * 1000 - Number(value.focusOffset));
+    return Math.max(minZ * 1000, Math.abs(viewDepth) * 1000 - Number(value.focusOffset));
 }

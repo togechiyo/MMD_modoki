@@ -77,7 +77,6 @@ export class EffectKeyframeController {
             label.textContent = mapping.labelKey ? t(mapping.labelKey) : "";
             input.setAttribute("aria-label", mapping.labelKey ? `${name} ${t(mapping.labelKey)}` : name);
             input.disabled = playing;
-            if (payload.effectId === "dof") input.disabled ||= (mapping.field === "focusDistance" && this.current.focusMode !== "manual") || (mapping.field === "focusOffset" && this.current.focusMode === "manual");
             const position = String(Math.round(mapping.toPosition(Number(this.current[mapping.field]))));
             if (input.value !== position) input.value = position;
             output.value = `${position}%`;

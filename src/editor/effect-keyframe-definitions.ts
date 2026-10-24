@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export type EffectValueById = {
-    dof: { enabled: boolean; focusMode: string; targetModelInstanceId: string; targetBoneName: string; focusDistance: number; focusOffset: number; fStop: number; lensSize: number; focalLength: number };
+    dof: { enabled: boolean; focusMode: string; targetModelInstanceId: string; targetBoneName: string; focusOffset: number; lensSize: number };
     ssao: { enabled: boolean; strength: number; radius: number };
     ssgi: { enabled: boolean; strength: number; sampleRadius: number };
     ssr: { enabled: boolean; strength: number; step: number };
@@ -49,19 +49,13 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
         sliders: [linearSlider("strength", "motionBlurStrength", "strength", 0, 10)] },
     { id: "dof", fields: {
         enabled: { kind: "step", default: false },
-        focusMode: { kind: "discrete", default: "person-auto", values: ["camera-target", "model-target", "person-auto", "manual"] },
+        focusMode: { kind: "discrete", default: "person-auto", values: ["camera-target", "model-target", "person-auto"] },
         targetModelInstanceId: { kind: "discrete", default: "" }, targetBoneName: { kind: "discrete", default: "" },
-        focusDistance: { kind: "linear", default: 55000, min: 1, max: 1000000 },
         focusOffset: { kind: "linear", default: 0, min: -20000, max: 20000 },
-        fStop: { kind: "linear", default: 2, min: 0.01, max: 32 },
         lensSize: { kind: "linear", default: 1000, min: 1, max: 4096 },
-        focalLength: { kind: "linear", default: 50, min: 1, max: 1000 },
     }, sliders: [
         linearSlider("focusOffset", "dofFocusOffset", "offset", -20000, 20000, 100),
-        linearSlider("focusDistance", "dofFocus", "focus", 1, 1000000, 1),
-        linearSlider("fStop", "dofFStop", "fStop", 0.01, 32, 0.01),
         { field: "lensSize", panelField: "dofLensSize", labelKey: "effect.frameGraphPost.controls.lensSize", min: 0, max: 100, toValue: position => 4096 ** (position / 100), toPosition: value => Math.log(value) / Math.log(4096) * 100 },
-        linearSlider("focalLength", "dofFocalLength", "focalLength", 1, 1000, 1),
     ] },
     { id: "gamma", fields: { enabled: { kind: "step", default: false }, gamma: { kind: "log", default: 1, min: 0.25, max: 4 } },
         sliders: [{ field: "gamma", panelField: "gammaPower", min: -100, max: 100, toValue: position => 2 ** (-position / 100), toPosition: value => -Math.log2(value) * 100 }] },

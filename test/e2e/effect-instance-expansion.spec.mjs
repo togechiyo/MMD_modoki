@@ -69,10 +69,9 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       }
       if (type === "luminous") { await number(a, 1, 0); await number(a, 2, 40); }
       if (type === "ssao") {
-        const color = row(a).locator('[data-instance-field="color"]'); await color.fill("#402010"); await color.dispatchEvent("change");
-        const toon = row(a).locator('[data-instance-fixed="toonInfluence"]'); await toon.fill("0.5"); await toon.press("Enter");
+        await expect(row(a).locator('[data-instance-field="color"], [data-instance-fixed="toonInfluence"]')).toHaveCount(0);
       }
-      if (type === "ssgi") await row(a).locator('[data-instance-field="blendMode"]').selectOption("additive");
+      if (type === "ssgi") await expect(row(a).locator('[data-instance-field="blendMode"]')).toHaveCount(0);
       if (type === "motionBlur") { const samples = row(a).locator('[data-instance-fixed="samples"]'); await samples.fill("48"); await samples.press("Enter"); }
       if (type === "lut") {
         await row(a).locator('select[data-instance-field="lutPreset"]').selectOption("monotone");
@@ -87,11 +86,7 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       if (type === "aerialPerspective") { await number(a, 1, 0); await number(a, 2, 3); }
       if (type === "offsetShadow") {
         await number(a, 1, 70); await number(a, 2, 30); await number(a, 3, 0); await number(a, 4, 100); await number(a, 5, 100);
-        const softness = row(a).locator('[data-instance-fixed="softness"]');
-        await softness.fill("1.25"); await softness.press("Enter");
-        expect((await state()).instances.find(item => item.instanceId === a).fixedSettings.softness).toBe(1.25);
-        await softness.fill("9"); await softness.press("Escape"); await expect(softness).toHaveValue("1.25");
-        await softness.fill("7"); await softness.blur(); await expect(softness).toHaveValue("1.25");
+        await expect(row(a).locator('[data-instance-fixed="softness"], [data-instance-fixed="thickness"]')).toHaveCount(0);
       }
       if (type === "offsetHighlight") { await number(a, 1, 70); await number(a, 2, 30); await number(a, 3, 100); }
       if (depthGroup && type !== "lut") {

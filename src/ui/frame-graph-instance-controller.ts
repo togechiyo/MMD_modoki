@@ -4,7 +4,7 @@ import type { SerializedEffectInstances } from "../editor/frame-graph-effect-ins
 import type { EffectInstanceOperation } from "../editor/effect-instance-operations";
 import { toFrameGraphEffectSliderValue, fromFrameGraphEffectSliderValue, type FrameGraphEffectSliderField } from "./frame-graph-effect-slider-mapping";
 import { getEffectDefinition, type EffectValue, type EffectSlider } from "../editor/effect-keyframe-definitions";
-import { INSTANCE_LUT_PRESETS, type InstanceFixedSettings } from "../editor/frame-graph-instance-fixed-settings";
+import { INSTANCE_LUT_PRESETS, visibleInstanceFixedFields, type InstanceFixedSettings } from "../editor/frame-graph-instance-fixed-settings";
 import { installEnterCommitNumberInput } from "./panel-control-helpers";
 import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-instance-focus-controls";
 
@@ -13,8 +13,6 @@ type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEf
 type FixedNumber = { field: string; label: string; min: number; max: number; step: number; value: number };
 function fixedNumbers(type: string, settings: InstanceFixedSettings = {}): FixedNumber[] {
     switch (type) {
-        case "offsetShadow": return [{ field: "thickness", label: "effect.frameGraphPost.controls.thickness", min: 0.0001, max: 1, step: 0.01, value: settings.thickness ?? 1 }, { field: "softness", label: "effect.frameGraphPost.controls.softness", min: 0, max: 12, step: 1, value: settings.softness ?? 0 }];
-        case "ssao": return [{ field: "toonInfluence", label: "label.toonInfluence", min: 0, max: 1, step: 0.01, value: settings.toonInfluence ?? 1 }];
         case "motionBlur": return [{ field: "samples", label: "effect.frameGraphPost.controls.samples", min: 8, max: 64, step: 1, value: settings.samples ?? 32 }];
         case "luminous": return [{ field: "radianceStrength", label: "effect.frameGraphPost.controls.luminousRadianceStrength", min: 0, max: 8, step: 0.1, value: settings.radiance?.strength ?? 1 }, { field: "radianceRange", label: "effect.frameGraphPost.controls.luminousRadianceRange", min: 1, max: 100, step: 1, value: settings.radiance?.range ?? 12 }];
         default: return [];
@@ -54,7 +52,6 @@ export class FrameGraphInstanceController {
             const select = event.target instanceof HTMLSelectElement ? event.target : null;
             const selectedId = select?.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             if (selectedId && select?.dataset.instanceField === "lutPreset") this.editFixed(selectedId, { lut: { kind: "builtin", preset: select.value } });
-            if (selectedId && select?.dataset.instanceField === "blendMode") this.editFixed(selectedId, { blendMode: select.value as InstanceFixedSettings["blendMode"] });
             const input = event.target instanceof HTMLInputElement ? event.target : null;
             const id = input?.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             if (!id || !input) return;
@@ -88,11 +85,12 @@ export class FrameGraphInstanceController {
             return `<div class="effect-layer-control-row"><span class="effect-layer-control-label">${escape(controlLabel)}</span><input type="range" class="effect-layer-control-slider" min="0" max="100" step="1" data-instance-field="${mapping.field}" aria-label="${escape(controlLabel)}" value="${Math.round(toFrameGraphEffectSliderValue(field, Number(value[mapping.field])))}"><output class="effect-layer-control-value" data-instance-value="${mapping.field}">${Number(value[mapping.field]).toFixed(2)}</output></div>`;
         }).join("");
         const instance = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id);
-        const primaryColor = instance?.bloomColor ?? instance?.fixedSettings?.color;
+        const visibleFixed = instance ? visibleInstanceFixedFields(instance.type) : [];
+        const primaryColor = visibleFixed.includes("bloomColor") ? instance?.bloomColor : visibleFixed.includes("color") ? instance?.fixedSettings?.color : undefined;
         const color = primaryColor ? this.renderColor("color", primaryColor) : "";
-        const shadowColor = instance?.fixedSettings?.shadowColor ? this.renderColor("shadowColor", instance.fixedSettings.shadowColor) : "";
+        const shadowColor = visibleFixed.includes("shadowColor") && instance?.fixedSettings?.shadowColor ? this.renderColor("shadowColor", instance.fixedSettings.shadowColor) : "";
         const fixedNumberControls = fixedNumbers(instance?.type ?? "", instance?.fixedSettings).map(item => `<label class="effect-layer-control-row effect-layer-control-row--fixed"><span class="effect-layer-control-label">${escape(t(item.label))}</span><input class="panel-number-input" type="number" min="${item.min}" max="${item.max}" step="${item.step}" data-instance-fixed="${item.field}" aria-label="${escape(t(item.label))}" value="${item.value}"></label>`).join("");
-        const fixedSelects = instance?.type === "ssgi" ? `<select class="effect-layer-control-select" data-instance-field="blendMode" aria-label="${escape(t("effect.frameGraphPost.controls.blendMode"))}">${["additive", "softLight", "overlay"].map(mode => `<option value="${mode}"${instance.fixedSettings?.blendMode === mode ? " selected" : ""}>${escape(t(`effect.frameGraphPost.blendModes.${mode}`))}</option>`).join("")}</select>` : instance?.type === "luminous" ? `<label class="effect-layer-control-row"><span>${escape(t("effect.frameGraphPost.controls.luminousRadianceEnabled"))}</span><input type="checkbox" data-instance-fixed-toggle="radiance"${instance.fixedSettings?.radiance?.enabled ? " checked" : ""}></label>` : "";
+        const fixedSelects = visibleFixed.includes("radiance") ? `<label class="effect-layer-control-row"><span>${escape(t("effect.frameGraphPost.controls.luminousRadianceEnabled"))}</span><input type="checkbox" data-instance-fixed-toggle="radiance"${instance?.fixedSettings?.radiance?.enabled ? " checked" : ""}></label>` : "";
         const lut = instance?.fixedSettings?.lut;
         const lutControls = instance?.type === "lut" ? `<select class="effect-layer-control-select" data-instance-field="lutPreset" aria-label="${escape(t("shader.postfx.lutSource"))}">${INSTANCE_LUT_PRESETS.map(preset => `<option value="${preset.id}"${lut?.kind === "builtin" && lut.preset === preset.id ? " selected" : ""}>${preset.label}</option>`).join("")}${lut?.kind === "external" ? `<option value="external" selected>${escape(lut.name)}</option>` : ""}</select><button type="button" data-instance-action="lutFile">${escape(t("shader.postfx.lutFile"))}</button>` : "";
         const button = (action: string): string => `<button type="button" class="effect-layer-control-button" data-instance-action="${action}" title="${escape(t(`effect.instance.${action}`))}"${this.host.isPlaying ? " disabled" : ""}>${escape(t(`effect.instance.${action}`))}</button>`;
@@ -153,7 +151,6 @@ export class FrameGraphInstanceController {
                 if (input.dataset.instanceField === "enabled") input.checked = value.enabled;
                 const mapping = this.controls(id).find(item => item.field === input.dataset.instanceField);
                 if (mapping?.panelField) {
-                    if (input.closest("[data-effect-instance-row]")?.querySelector("[data-instance-dof-controls]")) input.disabled ||= (mapping.field === "focusDistance" && value.focusMode !== "manual") || (mapping.field === "focusOffset" && value.focusMode === "manual");
                     if (document.activeElement !== input) input.value = String(Math.round(toFrameGraphEffectSliderValue(mapping.panelField as FrameGraphEffectSliderField, Number(value[mapping.field]))));
                     this.syncSlider(input);
                 }

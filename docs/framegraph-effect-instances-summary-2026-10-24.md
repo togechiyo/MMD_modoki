@@ -26,12 +26,12 @@
 | LUT | 強度 | 内蔵6 preset / 外部3DL・CUBEの内容snapshot |
 | 空気遠近 | 強度・開始距離・広がり | 色 |
 | パラフレア | 強度・gradient bias | 光側色・影側色 |
-| Offset Shadow | 強度・XY・最小 / 最大深度・深度倍率 | 色・太さ・柔らかさ |
+| Offset Shadow | 強度・XY・最小 / 最大深度・深度倍率 | 色。太さ・柔らかさは非公開の内部設定 |
 | Offset Highlight | 強度・XY・深度倍率 | 色 |
-| DoF | フォーカス方式・対象モデル個体ID・ボーン、前後補正・指定距離・F値・レンズサイズ・焦点距離 | 品質はMedium |
+| DoF | フォーカス方式・対象モデル個体ID・ボーン、前後補正・レンズサイズ | 品質Medium・F値2。焦点距離は既存のカメラ連動値 |
 | Luminous | 強度・閾値・半径 | 3D RCの利用・強度・範囲。試作glareは無効のまま |
-| SSAO | 強度・半径 | 影色・Toon色の影響量。現行のシンプル階調と色合成を使用 |
-| SSGI | 強度・sample radius | 加算 / ソフトライト / オーバーレイ |
+| SSAO | 強度・半径 | 内部の影色・Toon色合成を維持。色・Toonの調整UIは非公開 |
+| SSGI | 強度・sample radius | 内部の合成方式を維持。方式の調整UIは非公開 |
 | SSR | 強度・step | 既存品質設定、reflection blurなし |
 | Motion Blur | 強度 | sample数。object-based方式 |
 
@@ -47,6 +47,10 @@
 
 自動名は最初が `SSAO`、次が `SSAO 2`、以降は未使用の番号を使う。休止中の個体も重複判定に含め、並べ替えや他個体の削除で既存名を振り直さない。旧保存の既定名 `SSAO 1` は読込時に `SSAO` へ整理し、以前保存した任意名は維持する。表示名が変わってもキーの参照先は個体IDで維持する。
 
+個体化を理由に非公開・開発用の設定を通常UIへ戻さない。キーの値定義はON / OFF、公開スライダー、DoFの方式・対象selectorだけとする。SSAOの色・Toon、SSGIの合成方式、Offset Shadowの太さ・柔らかさは個体データ内に保持するが、調整欄を作らない。公開済みの色やLUT、Motion Blurのsample数、LuminousのRC設定は従来どおり固定設定として操作する。
+
+DoFで誤って公開した距離指定・F値・焦点距離とmanual方式を除外した。既存の個体設定・animationのbase / key / previewを読み込むときも非公開の3値を取り除き、manualは既定の人物優先へ正規化する。モデル・ボーンselectorの行は指定対象モードのときだけ表示するが、方式切替のための対象参照はキー内に保持する。
+
 保存先は `effects.frameGraphInstances`（ブロックversion 1）で、個体を含むprojectのversionは2。個体ID・種類・表示名・静的設定・固定設定・キー・スタック順を保存する。外部LUTは変換済み内容も保持し、元ファイルの再読込に依存しない。
 
 | 操作 | データと描画の扱い |
@@ -61,7 +65,7 @@
 
 既定は人物優先のオートフォーカス。多人数シーンで対象を固定したい場合は「指定対象」でモデルとボーンを選び、frameごとに登録する。同じPMXの複数読込も個体IDで区別し、指定ボーンの移動へ追従する。方式・モデル・ボーンは同じキーで切り替える。対象間のrack focus用blendは未実装。
 
-モデル欠損時はカメラ注視点、ボーン欠損時はモデルbounds中心へfallbackする。元のID / ボーン指定は保持する。個体のオートフォーカスはframeごとに評価し、過去のsubject lockに依存させない。フォーカス距離の計算はcamera view spaceのZを用い、viewportと出力で共通化している。
+モデル欠損時はカメラ注視点、ボーン欠損時はモデルbounds中心へfallbackする。元のID / ボーン指定は保持する。個体のオートフォーカスはframeごとに評価し、過去のsubject lockに依存させない。フォーカス距離の計算はcamera view spaceのZを用い、viewportと出力で共通化している。公開する数値は前後補正・レンズサイズだけとし、F値は2、焦点距離はカメラ連動の既存値を使う。
 
 ## 描画構成と保守の境界
 
@@ -80,6 +84,8 @@
 各種の独立キー・補間・履歴・保存・Classic往復・PNG / WebM、DoF対象切替と5言語、RC二個体と全geometry入力の併用、Motion BlurのPMX再生時の評価と骨行列設定の復元を確認した。対象シナリオのWebGPU validationは0。配布可能fixtureと自作形状、短尺640×360出力での確認であり、任意モデル・長尺・高解像度・多数個体の品質や性能は別途評価する。停止中PNGだけではMotion Blurの見た目を判定しない。
 
 同日の個体UI整理後は、unit **195 files / 1,168 tests**、lint、typecheck:criticalがPASS。通常typecheckの548診断は内容も増減なし。関連GUIの10シナリオで、19種類の編集・キー・保存復元・出力、自動名、見出し開閉、ドラッグとUndo / Redo、再生中の操作制限、5言語、狭幅でのSSAO欄とボタンの表示を確認した。検証中に見つかった複製後の開閉状態を修正し、DoF対象キーとLuminousのRC並べ替えも再確認した。
+
+続く公開項目の範囲修正では、unit **196 files / 1,171 tests**、lint、typecheck:criticalがPASS。通常typecheckは既存548診断の内容まで増減なし。関連GUIの5シナリオで、非公開欄の不存在、DoFの3方式・対象キー・公開値だけのキー保存・5言語、SSAO / SSGI / Offset Shadowを含む公開項目の編集、履歴・保存復元・Classic往復・PNG / WebMを確認した。保存データの非公開opticsを正規化で除外することもunitで確認した。
 
 後続候補は、個体構造・固定設定のMCP操作、色調補正・pencil等の新効果、DoFの品質選択や対象間blend。MCPの個体キー参照・編集には対応するが、追加・複製・順序等の構造操作はGUIから行う。パーティクルなどscene側の効果はこの19種類の個体化とは別枠で、没となった海の復活も含まない。タスクの正本は[基本タスクチェックリスト](./mmd-basic-task-checklist.md)。
 

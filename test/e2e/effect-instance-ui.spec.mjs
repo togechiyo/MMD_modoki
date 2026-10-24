@@ -31,9 +31,8 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
     await expect(row(a).locator(".effect-layer-details")).toBeHidden();
     await expect.poll(() => row(b).evaluate(element => [...element.querySelectorAll('.effect-instance-actions button')].every(button => button.scrollWidth <= button.clientWidth))).toBe(true);
-    const details = await row(b).locator(".effect-layer-details").boundingBox();
-    const color = await row(b).locator('[data-instance-field="color"]').boundingBox();
-    expect(color.x + color.width).toBeLessThanOrEqual(details.x + details.width);
+    await expect(row(b).locator('[data-instance-field="color"], [data-instance-fixed="toonInfluence"]')).toHaveCount(0);
+    await expect(row(b).locator('[data-instance-field="strength"], [data-instance-field="radius"]')).toHaveCount(2);
     await page.locator("#shader-panel").screenshot({ path: testInfo.outputPath("effect-panel.png") });
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
   } finally { await launched.close(); }

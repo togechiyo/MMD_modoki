@@ -42,7 +42,6 @@ export class DofInstanceFocusControls {
             ["camera-target", t("effect.frameGraphPost.dofFocusModes.cameraTarget")],
             ["model-target", t("effect.frameGraphPost.dofFocusModes.modelTarget")],
             ["person-auto", t("effect.frameGraphPost.dofFocusModes.personAuto")],
-            ["manual", t("effect.frameGraphPost.dofFocusModes.manual")],
         ];
         for (const [field, { label, select }] of this.controls) {
             const text = t(`effect.frameGraphPost.controls.${field === "focusMode" ? "focusMode" : field === "targetModelInstanceId" ? "target" : "bone"}`);
@@ -57,6 +56,7 @@ export class DofInstanceFocusControls {
                 select.dataset.optionsKey = JSON.stringify(options);
             }
             select.value = selected;
+            if (select.parentElement) select.parentElement.hidden = field !== "focusMode" && value.focusMode !== "model-target";
             select.disabled = playing || (field !== "focusMode" && value.focusMode !== "model-target");
         }
         this.refreshDistance(instanceId);

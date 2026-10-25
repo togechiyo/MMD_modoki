@@ -59,6 +59,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）
 - [x] 現行 Luminous RC と WebGPU の最適化を調査。不要な field 補間、発光と形状の更新分離、probe 照度集計、GPU timestamp の有効化条件と次の比較条件を記録（[調査メモ](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)。実装変更・新規性能計測は未実施）
+- [x] Frame Graph の通常 Luminous と Luminous RC を別個体・別task群へ分離。RC単独の資源、独立したenabledキー、旧保存値の移行を実装（[分離メモ](./framegraph-luminous-rc-separation-2026-10-25.md)）
 - [x] 影調整
 - [x] 広域の影を比較できる6,000×6,000単位の自作PMXステージを追加し、近景から遠景へのCSM境界をカメラ移動で確認（[配置・使用方法と確認結果](../test/fixtures/shadow-stage/README.md)）
 - [x] 静的PMXステージを影あり・エフェクトなし・剛体なしで1,000万三角形まで実描画し、読込・カメラ移動FPS・RAMを計測（[条件・結果・再現方法](./polygon-capacity-stage-benchmark-2026-10-18.md)）

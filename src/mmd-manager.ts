@@ -6552,6 +6552,7 @@ ${beforeFogAppendBlock}
         if (id === "aerialPerspective") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? false, ...this.getStaticAerialPerspective() };
         if (id === "lut") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectLutEnabledValue, intensity: this.postEffectLutIntensityValue };
         if (id === "luminous") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectGlowEnabledValue, intensity: this.postEffectGlowIntensityValue, threshold: this.postEffectGlowThresholdValue, radius: this.postEffectGlowKernelValue };
+        if (id === "luminousRadiance") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.luminousRadianceSettingsValue.enabled };
         if (id === "vignette") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? this.postEffectVignetteEnabledValue, weight: this.postEffectVignetteWeightValue };
         if (id === "sharpen") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectSharpenEdgeValue > 0), edge: this.postEffectSharpenEdgeValue };
         if (id === "chromatic") return { enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? (this.postEffectChromaticAberrationValue > 0), amount: this.postEffectChromaticAberrationValue };
@@ -6668,8 +6669,7 @@ ${beforeFogAppendBlock}
         // Keep singleton slots in the same order when a shared stack drag crosses them.
         this.frameGraphPostEffectStackIdsValue = next.order.filter(isFrameGraphPostEffectId);
         this.effectSceneTracksChanged();
-        const radianceStructure = (data: SerializedEffectInstances): string => JSON.stringify(data.instances.filter(item => item.type === "luminous" && item.fixedSettings?.radiance?.enabled).map(item => item.instanceId));
-        if (JSON.stringify(state.order) !== JSON.stringify(next.order) || radianceStructure(state) !== radianceStructure(next)) this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        if (JSON.stringify(state.order) !== JSON.stringify(next.order)) this.refreshFrameGraphPostEffectsBackendForOrderChange();
         return true;
     }
     public setSerializedEffectSceneTracks(data: unknown): void {
@@ -11487,8 +11487,9 @@ ${beforeFogAppendBlock}
             luminousPrepared: this.isEffectKeyframePrepared("luminous"),
             luminousRadiance: {
                 ...this.luminousRadianceSettingsValue,
+                enabled: this.effectSceneTracks.has("luminousRadiance") ? this.isEffectKeyframePrepared("luminousRadiance") : this.isFrameGraphPostEffectActive("luminousRadiance"),
                 strength: this.luminousRadianceSettingsValue.strength * (
-                    this.effectSceneTracks.evaluate("luminous", this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0)?.enabled === false ? 0 : 1),
+                    this.effectSceneTracks.evaluate("luminousRadiance", this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0)?.enabled === false ? 0 : 1),
             },
             luminousIntensity: this.getEffectScalarRenderValue("luminous", "intensity", this.postEffectGlowIntensityValue),
             luminousThreshold: this.getEffectParameterRenderValue("luminous", "threshold", this.postEffectGlowThresholdValue),
@@ -12213,6 +12214,8 @@ ${beforeFogAppendBlock}
                 return this.dofEnabledValue;
             case "luminous":
                 return this.postEffectGlowEnabledValue;
+            case "luminousRadiance":
+                return this.luminousRadianceSettingsValue.enabled;
             case "bloom":
                 return this.postEffectBloomEnabledValue;
             case "lut":

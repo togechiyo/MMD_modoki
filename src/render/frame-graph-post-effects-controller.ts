@@ -2913,6 +2913,16 @@ export class FrameGraphPostEffectsController {
             bloomSourceTexture = depthOfFieldTask.outputTexture;
         }
 
+        if (resourcePlan.activeEffects.includes("luminousRadiance") && camera && this.geometryRendererTask && frameGraph.engine.getCaps().supportComputeShaders) {
+            const radiance = createLuminousRadianceTasks(frameGraph, scene, camera,
+                this.geometryRendererTask.geometryViewDepthTexture, this.geometryRendererTask.geometryViewNormalTexture,
+                this.geometryRendererTask.geometryAlbedoTexture, this.geometryRendererTask.objectRenderer.renderPassId,
+                () => this.getSettings().luminousRadiance ?? { enabled: false, strength: 1, range: 12 }, this.readRadianceEmission);
+            radiance.composite.sourceTexture = bloomSourceTexture;
+            for (const task of radiance.tasks) deferEffectTask("luminousRadiance", task);
+            this.luminousRadianceData = radiance.data;
+            this.luminousRadianceCompositeTask = radiance.composite;
+        }
         let luminousOutputTexture = bloomSourceTexture;
         if (resourcePlan.activeEffects.includes("luminous") && luminousTextureHandle !== undefined) {
             const luminousDisabled = false;
@@ -3030,28 +3040,13 @@ export class FrameGraphPostEffectsController {
             name: "mmdFrameGraphLuminous",
             shaderLanguage: frameGraph.engine.isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
         });
-        let luminousSceneSource = bloomSourceTexture;
-        if (initialSettings.luminousRadiance?.enabled && camera && this.geometryRendererTask && frameGraph.engine.getCaps().supportComputeShaders) {
-            const radiance = createLuminousRadianceTasks(frameGraph, scene, camera,
-                this.geometryRendererTask.geometryViewDepthTexture, this.geometryRendererTask.geometryViewNormalTexture,
-                this.geometryRendererTask.geometryAlbedoTexture, this.geometryRendererTask.objectRenderer.renderPassId,
-                () => {
-                    const settings = this.getSettings(), radiance = settings.luminousRadiance ?? { enabled: false, strength: 1, range: 12 };
-                    return { ...radiance, enabled: radiance.enabled && settings.luminousEnabled };
-                }, this.readRadianceEmission);
-            radiance.composite.sourceTexture = bloomSourceTexture;
-            for (const task of radiance.tasks) deferEffectTask("luminous", task);
-            luminousSceneSource = radiance.composite.outputTexture;
-            this.luminousRadianceData = radiance.data;
-            this.luminousRadianceCompositeTask = radiance.composite;
-        }
         const luminousTask = new FrameGraphPostEffectsLuminousTask(
             "frameGraphPostEffectsLuminous",
             frameGraph,
             this.luminousEffect,
             this.getSettings,
         );
-        luminousTask.sourceTexture = luminousSceneSource;
+        luminousTask.sourceTexture = bloomSourceTexture;
         luminousTask.glowTexture = luminousCoreBlurVerticalTask.outputTexture;
         luminousTask.haloTexture = luminousHaloBlurVerticalTask.outputTexture;
         luminousTask.disabled = luminousDisabled;
@@ -3404,10 +3399,10 @@ export class FrameGraphPostEffectsController {
                 || this.luminousTask.haloTexture === undefined;
         }
         if (this.geometryRendererTask) {
-            const radianceActive = settings.luminousEnabled && settings.luminousRadiance?.enabled
-                && settings.luminousRadiance.strength > 0.0001 || settings.effectInstances?.some(item => item.type === "luminous" && item.value.enabled && item.fixedSettings?.radiance?.enabled && item.fixedSettings.radiance.strength > 0.0001);
+            const radianceActive = settings.luminousRadiance?.enabled
+                && settings.luminousRadiance.strength > 0.0001 || settings.effectInstances?.some(item => item.type === "luminousRadiance" && item.value.enabled && (item.fixedSettings?.radiance?.strength ?? 1) > 0.0001);
             const otherGeometryConsumer = resourcePlan.requirements.some(requirement => requirement.producer === "geometryRenderer"
-                && requirement.consumers.some(id => id !== "luminous"));
+                && requirement.consumers.some(id => id !== "luminousRadiance"));
             this.geometryRendererTask.disabled = !resourcePlan.needsGeometryRenderer || (!radianceActive && !otherGeometryConsumer);
         }
         if (this.ssrTask) {
@@ -3599,19 +3594,19 @@ export class FrameGraphPostEffectsController {
                 const composite = new FrameGraphPostEffectsLuminousTask(`${name}-composite`, frameGraph, wrapper("mmdFrameGraphLuminous", ["intensity", "glareCount", "glareLength", "glareAngle", "glarePower", "texelSize"], ["glowSampler", "haloSampler"]), settings);
                 composite.glowTexture = coreY.outputTexture; composite.haloTexture = haloY.outputTexture;
                 tasks.push(extract, coreX, coreY, haloX, haloY);
-                let radiance: ReturnType<typeof createLuminousRadianceTasks> | undefined;
-                if (current.luminousRadiance?.enabled) {
-                    const geometry = this.geometryRendererTask;
-                    if (!geometry || !camera || !engine.isWebGPU || !engine.getCaps().supportComputeShaders) throw new Error(`${name}: radiance geometry and compute shaders are required`);
-                    radiance = createLuminousRadianceTasks(frameGraph, scene, camera, geometry.geometryViewDepthTexture, geometry.geometryViewNormalTexture, geometry.geometryAlbedoTexture, geometry.objectRenderer.renderPassId,
-                        () => ({ ...current.luminousRadiance ?? { strength: 1, range: 12 }, enabled: current.luminousEnabled && current.luminousRadiance?.enabled === true }), this.readRadianceEmission);
-                    radianceData = radiance.data;
-                    for (const task of radiance.tasks) task.name = `${name}-${task.name}`;
-                    tasks.push(...radiance.tasks);
-                    const prepare = radiance.tasks[0]; updateValues = () => { prepare.disabled = false; };
-                }
                 tasks.push(composite);
-                connectBranch = source => { if (radiance) radiance.composite.sourceTexture = source; composite.sourceTexture = radiance?.composite.outputTexture ?? source; return composite.outputTexture; }; break;
+                connectBranch = source => { composite.sourceTexture = source; return composite.outputTexture; }; break;
+            }
+            case "luminousRadiance": {
+                const geometry = this.geometryRendererTask;
+                if (!geometry || !camera || !engine.isWebGPU || !engine.getCaps().supportComputeShaders) throw new Error(`${name}: radiance geometry and compute shaders are required`);
+                const radiance = createLuminousRadianceTasks(frameGraph, scene, camera, geometry.geometryViewDepthTexture, geometry.geometryViewNormalTexture, geometry.geometryAlbedoTexture, geometry.objectRenderer.renderPassId,
+                    () => current.luminousRadiance ?? { enabled: false, strength: 1, range: 12 }, this.readRadianceEmission);
+                radianceData = radiance.data;
+                for (const task of radiance.tasks) task.name = `${name}-${task.name}`;
+                tasks.push(...radiance.tasks);
+                const prepare = radiance.tasks[0]; updateValues = () => { prepare.disabled = false; };
+                connectBranch = source => { radiance.composite.sourceTexture = source; return radiance.composite.outputTexture; }; break;
             }
             case "dof": {
                 if (!camera || dofDepth === undefined) throw new Error(`${name}: camera and DoF depth are required`);
@@ -3782,14 +3777,16 @@ export class FrameGraphPostEffectsController {
                         this.connectedOrder.push("dof");
                     }
                     break;
+                case "luminousRadiance":
+                    if (this.luminousRadianceCompositeTask) {
+                        this.luminousRadianceCompositeTask.sourceTexture = currentTexture;
+                        currentTexture = this.luminousRadianceCompositeTask.outputTexture;
+                        this.connectedOrder.push("luminousRadiance");
+                    }
+                    break;
                 case "luminous":
                     if (this.luminousTask) {
-                        if (this.luminousRadianceCompositeTask) {
-                            this.luminousRadianceCompositeTask.sourceTexture = currentTexture;
-                            this.luminousTask.sourceTexture = this.luminousRadianceCompositeTask.outputTexture;
-                        } else {
-                            this.luminousTask.sourceTexture = currentTexture;
-                        }
+                        this.luminousTask.sourceTexture = currentTexture;
                         currentTexture = this.luminousTask.outputTexture;
                         this.connectedOrder.push("luminous");
                     }

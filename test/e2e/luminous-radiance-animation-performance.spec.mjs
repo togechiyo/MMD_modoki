@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
+import { ensureLuminousRadianceInstance, luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 import { PNG } from "playwright-core/lib/utilsBundle";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -29,6 +29,7 @@ test("RC updates only moving geometry during continuous bone and morph animation
     if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
+    await ensureLuminousRadianceInstance(page);
     const control = key => luminousInstanceControl(page, key);
     report.mode = active ? "on" : "off";
     for (const [key, value] of [["luminousIntensity", 2], ["luminousRadianceStrength", 100], ["luminousRadianceRange", 3]]) {

@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
+import { ensureLuminousRadianceInstance, luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test("RC reuses its static field and stops compute at zero strength", async ({}, testInfo) => {
@@ -32,6 +32,7 @@ test("RC reuses its static field and stops compute at zero strength", async ({},
     if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
+    await ensureLuminousRadianceInstance(page);
     const control = key => luminousInstanceControl(page, key);
     const slider = (key, value) => setLuminousInstancePosition(page, key, value);
     await slider("luminousRadianceRange", 3); await slider("luminousIntensity", 2);

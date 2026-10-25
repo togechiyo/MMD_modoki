@@ -115,17 +115,18 @@ PBR 経路は「設定 → 実験設定」の全体PBRモードを有効にす�
 | 8 | `offsetShadow` | オフセット影 | depth / normal をずらして、画面空間の落ち影風シルエットを作る。 | shadow generator とは別の後処理。 |
 | 9 | `offsetHighlight` | オフセットリム | depth / normal の差から、ずらした明るい縁取りを作る。 | rim / highlight 用の後処理。 |
 | 10 | `dof` | 被写界深度 | camera と depth texture を使って焦点外をぼかす。 | autofocus、対象 bone、lens 設定と連動する。 |
-| 11 | `luminous` | ルミナス | 発光 mask を抽出し、core / halo blur と glare を合成する。 | `Luminous` 材質プリセットと連動する。 |
-| 12 | `bloom` | ブルーム | 高輝度部分をぼかして scene color へ合成する。 | 色 tint を追加した Babylon FrameGraph Bloom。 |
-| 13 | `lut` | LUT | 3D LUT を atlas texture 化し、色調を変換する。 | 組み込み `.3dl` と外部 `.3dl` / `.cube` に対応。 |
-| 14 | `gamma` | ガンマ | 出力色へ追加の gamma 補正を適用する。 | contrast 等の共通 color correction とは別の可動段。 |
-| 15 | `motionBlur` | モーションブラー | geometry velocity を使う object-based motion blur。 | skinned model の bone velocity 同期を含む。 |
-| 16 | `sharpen` | シャープ | 輪郭成分を強調して画像を引き締める。 | Babylon ThinSharpenPostProcess。 |
-| 17 | `grain` | グレイン | 画面へフィルム粒子状のノイズを加える。 | Babylon ThinGrainPostProcess。 |
-| 18 | `chromatic` | 色収差 | RGB channel をずらしてレンズ色収差を表現する。 | Babylon ThinChromaticAberrationPostProcess。 |
-| 19 | `vignette` | ビネット | 画面周辺を暗くして中心へ視線を寄せる。 | `edgeBlur` と同じ composite task を共有する。 |
-| 20 | `edgeBlur` | エッジブラー | 画面周辺だけをぼかしてレンズ周辺減光風に見せる。 | `vignette` と同じ composite task を共有する。 |
-| 21 | `distortion` | レンズ歪み | 画面座標を歪ませ、樽型・糸巻き型のレンズ表現を加える。 | 独自 lens distortion task。 |
+| 11 | `luminousRadiance` | ルミナス RC | 発光面から周囲へ色光を運ぶ3D RC。 | 通常 Luminous と独立。WebGPU compute、RC 強度・範囲。 |
+| 12 | `luminous` | ルミナス | 発光 mask を抽出し、core / halo blur と glare を合成する。 | `Luminous` 材質プリセットと連動する。 |
+| 13 | `bloom` | ブルーム | 高輝度部分をぼかして scene color へ合成する。 | 色 tint を追加した Babylon FrameGraph Bloom。 |
+| 14 | `lut` | LUT | 3D LUT を atlas texture 化し、色調を変換する。 | 組み込み `.3dl` と外部 `.3dl` / `.cube` に対応。 |
+| 15 | `gamma` | ガンマ | 出力色へ追加の gamma 補正を適用する。 | contrast 等の共通 color correction とは別の可動段。 |
+| 16 | `motionBlur` | モーションブラー | geometry velocity を使う object-based motion blur。 | skinned model の bone velocity 同期を含む。 |
+| 17 | `sharpen` | シャープ | 輪郭成分を強調して画像を引き締める。 | Babylon ThinSharpenPostProcess。 |
+| 18 | `grain` | グレイン | 画面へフィルム粒子状のノイズを加える。 | Babylon ThinGrainPostProcess。 |
+| 19 | `chromatic` | 色収差 | RGB channel をずらしてレンズ色収差を表現する。 | Babylon ThinChromaticAberrationPostProcess。 |
+| 20 | `vignette` | ビネット | 画面周辺を暗くして中心へ視線を寄せる。 | `edgeBlur` と同じ composite task を共有する。 |
+| 21 | `edgeBlur` | エッジブラー | 画面周辺だけをぼかしてレンズ周辺減光風に見せる。 | `vignette` と同じ composite task を共有する。 |
+| 22 | `distortion` | レンズ歪み | 画面座標を歪ませ、樽型・糸巻き型のレンズ表現を加える。 | 独自 lens distortion task。 |
 
 ### スタック外の固定処理
 

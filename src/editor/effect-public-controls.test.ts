@@ -14,7 +14,8 @@ describe("public effect controls", () => {
     it("does not expose internal fixed settings just because a stored value exists", () => {
         expect(visibleInstanceFixedFields("ssao")).toEqual([]); expect(visibleInstanceFixedFields("ssgi")).toEqual([]);
         expect(visibleInstanceFixedFields("offsetShadow")).toEqual(["color"]);
-        expect(visibleInstanceFixedFields("luminous")).toEqual(["radiance"]);
+        expect(visibleInstanceFixedFields("luminous")).toEqual([]);
+        expect(visibleInstanceFixedFields("luminousRadiance")).toEqual(["radiance"]);
         expect(visibleInstanceFixedFields("motionBlur")).toEqual(["samples"]);
     });
     it("drops hidden optics from loaded settings, key bases, keys and previews, preserving target keys", () => {

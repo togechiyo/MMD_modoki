@@ -2,6 +2,8 @@
 
 実装・確認日: 2026-10-11
 
+2026-10-25: [通常 Luminous と Luminous RC を独立した効果へ分離](./framegraph-luminous-rc-separation-2026-10-25.md)した。以下の内包 UI・キー連動は導入時の仕様として残す。旧保存値は新構成へ移行する。
+
 既存の Luminous / AutoLuminous 対象材質を世界座標の発光面として使い、床や壁に発光色を加える実験経路を追加した。Frame Graph の既存 Luminous 内に配置し、別の効果 ID は増やしていない。[独立検証画面](./radiance-cascade-al-lab-2026-10-11.md) はそのまま残す。
 
 2026-10-12 の実機報告を受け、発光テクスチャの入力、geometry RT の上下方向と世界座標復元、計算範囲の境界、PNG の texture 準備待ちを修正した。[発光色・カメラ復元・境界帯の修正](./luminous-radiance-color-camera-fix-2026-10-12.md) を参照。

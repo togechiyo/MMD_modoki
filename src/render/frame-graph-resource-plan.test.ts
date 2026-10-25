@@ -54,11 +54,12 @@ describe("instance depth resources", () => {
         expect(plan.needsDepthRenderer).toBe(false); expect(plan.needsLuminousRadiance).toBe(false);
         expect(plan.requirements.find(item => item.key === "viewNormal")?.consumers).toEqual(["ssr", "ssgi", "ssao"]);
     });
-    it("prepares RC only for a luminous instance that owns it, even with another RC instance already present", () => {
-        const off = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "luminous" }], luminousRadiance: { enabled: true, strength: 1, range: 12 } }));
+    it("prepares RC independently of Glow, including initially disabled RC instances", () => {
+        const off = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "luminous" }] }));
         expect(off.needsLuminousRadiance).toBe(false); expect(off.needsGeometryRenderer).toBe(false);
-        const on = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "luminous", fixedSettings: { radiance: { enabled: true } } }] }));
+        const on = buildFrameGraphResourcePlan(createSettings({ effectInstances: [{ type: "luminousRadiance" }] }));
         expect(on.activeEffects).toEqual([]); expect(on.needsLuminousRadiance).toBe(true);
+        expect(on.needsLuminousMask).toBe(false);
         expect(on.requirementKeys).toContain("radianceAlbedo"); expect(canReuseFrameGraphForActivation(off, on, [])).toBe(false);
     });
     it("prepares shared view depth for OFF instances without creating a singleton effect", () => {
@@ -75,14 +76,17 @@ describe("buildFrameGraphResourcePlan", () => {
         const settings = createSettings({ luminousEnabled: true, luminousIntensity: 0,
             luminousRadiance: { enabled: true, strength: 1, range: 12 }, ssgiEnabled: true });
         const plan = buildFrameGraphResourcePlan(settings);
-        expect(plan.activeEffects).toContain("luminous");
+        expect(plan.activeEffects).toContain("luminousRadiance");
+        expect(plan.activeEffects).not.toContain("luminous");
         expect(plan.needsLuminousRadiance).toBe(true);
-        expect(plan.requirementKeys).toEqual(expect.arrayContaining(["viewDepth", "viewNormal", "luminousMask", "radianceAlbedo"]));
-        expect(plan.requirements).toContainEqual({ key: "radianceAlbedo", consumers: ["luminous"], producer: "geometryRenderer", resolution: "full" });
+        expect(plan.requirementKeys).toEqual(expect.arrayContaining(["viewDepth", "viewNormal", "radianceAlbedo"]));
+        expect(plan.needsLuminousMask).toBe(false);
+        expect(plan.requirements).toContainEqual({ key: "radianceAlbedo", consumers: ["luminousRadiance"], producer: "geometryRenderer", resolution: "full" });
         const old = buildFrameGraphResourcePlan({ ...settings, luminousIntensity: 1, luminousRadiance: { enabled: false, strength: 1, range: 12 } });
         expect(canReuseFrameGraphForActivation(old, plan, ["ssgi", "luminous"])).toBe(false);
         expect(canReuseFrameGraphForActivation(plan, old, ["ssgi", "luminous"])).toBe(false);
-        const disabled = buildFrameGraphResourcePlan({ ...settings, luminousEnabled: false });
+        expect(buildFrameGraphResourcePlan({ ...settings, luminousEnabled: false }).needsLuminousRadiance).toBe(true);
+        const disabled = buildFrameGraphResourcePlan({ ...settings, luminousRadiance: { enabled: false, strength: 1, range: 12 } });
         expect(disabled.needsLuminousRadiance).toBe(false);
         expect(disabled.requirementKeys).not.toContain("radianceAlbedo");
     });

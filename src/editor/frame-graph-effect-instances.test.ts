@@ -6,11 +6,11 @@ import { applyEffectInstanceDiff, buildEffectInstanceDiff } from "../actions/eff
 describe("FrameGraph effect instances", () => {
     it.each([
         ["motionBlur", "samples", 47.6, { samples: 48 }],
-        ["luminous", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12 } }],
-        ["luminous", "radianceRange", 75.25, { radiance: { enabled: true, strength: 1, range: 75.25 } }],
+        ["luminousRadiance", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12 } }],
+        ["luminousRadiance", "radianceRange", 75.25, { radiance: { enabled: true, strength: 1, range: 75.25 } }],
     ] as const)("previews %s %s independently of keys and undoes a gesture in one diff", (type, field, value, expected) => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, type);
-        if (type === "luminous") store.setFixedSettings("fx-a", { radiance: { enabled: true, strength: 1, range: 12 } });
+        if (type === "luminousRadiance") store.setFixedSettings("fx-a", { radiance: { enabled: true, strength: 1, range: 12 } });
         store.apply("fx-a", 0, store.capture("fx-a", 0));
         const before = store.serialize();
         store.setFixedSliderValue("fx-a", field, value / 2); store.setFixedSliderValue("fx-a", field, value);
@@ -63,7 +63,7 @@ describe("FrameGraph effect instances", () => {
         expect(store.value("fx-a", 10).enabled).toBe(false); expect(store.value("fx-a", 20).enabled).toBe(true);
         for (const slider of definition.sliders) expect(store.value("fx-a", 10)[slider.field]).toBeCloseTo((Number(Reflect.get(from.value, slider.field)) + Number(Reflect.get(to.value, slider.field))) / 2);
         expect(effectKeyframePayloadSchema.safeParse(store.read("fx-a", 20)).success).toBe(true);
-        if (type !== "ssr") store.setFixedSettings("fx-a", { color: { r: 1, g: 0, b: 0 }, toonInfluence: 0.2, blendMode: "overlay", samples: 64, radiance: { enabled: true, strength: 3, range: 20 } });
+        if (type !== "ssr" && type !== "luminous") store.setFixedSettings("fx-a", { color: { r: 1, g: 0, b: 0 }, toonInfluence: 0.2, blendMode: "overlay", samples: 64, radiance: { enabled: true, strength: 3, range: 20 } });
         const before = store.serialize(); store.duplicate("fx-a", "fx-c");
         const copy = store.serialize().instances.find(item => item.instanceId === "fx-c");
         expect(copy?.fixedSettings).toEqual(before.instances[0].fixedSettings);

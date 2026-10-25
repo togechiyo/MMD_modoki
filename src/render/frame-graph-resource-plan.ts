@@ -143,11 +143,11 @@ export function buildFrameGraphResourcePlan(
 
     if (resourceEffects.includes("luminous")) {
         addConsumer(consumersByKey, "luminousMask", "luminous");
-        if ((activeEffects.includes("luminous") && settings.luminousRadiance?.enabled) || settings.effectInstances?.some(item => item.type === "luminous" && item.fixedSettings?.radiance?.enabled)) {
-            addConsumer(consumersByKey, "viewDepth", "luminous");
-            addConsumer(consumersByKey, "viewNormal", "luminous");
-            addConsumer(consumersByKey, "radianceAlbedo", "luminous");
-        }
+    }
+    if (resourceEffects.includes("luminousRadiance")) {
+        addConsumer(consumersByKey, "viewDepth", "luminousRadiance");
+        addConsumer(consumersByKey, "viewNormal", "luminousRadiance");
+        addConsumer(consumersByKey, "radianceAlbedo", "luminousRadiance");
     }
 
     const requirementKeys = Array.from(consumersByKey.keys());
@@ -169,7 +169,7 @@ export function buildFrameGraphResourcePlan(
             || consumersByKey.has("reflectivity"),
         needsDepthRenderer: consumersByKey.has("depthScene"),
         needsLuminousMask: consumersByKey.has("luminousMask"),
-        needsLuminousRadiance: (activeEffects.includes("luminous") && settings.luminousRadiance?.enabled === true) || !!settings.effectInstances?.some(item => item.type === "luminous" && item.fixedSettings?.radiance?.enabled),
+        needsLuminousRadiance: resourceEffects.includes("luminousRadiance"),
         fixedTasks: {
             imageProcessing: settings.imageProcessingEnabled,
             fxaa: settings.antialiasEnabled,

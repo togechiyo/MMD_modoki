@@ -4,18 +4,19 @@ status: decision
 priority: low
 scope: rendering/radiance-cascades
 confidence: high
-last_verified: 2026-10-14
+last_verified: 2026-10-25
 decision_owner: project-owner
-decision: deferred
-decided_on: 2026-10-14
+decision: accepted-with-constraints
+decided_on: 2026-10-25
 evidence:
   - conversation-explicit-instruction
 source_docs:
   - ../../docs/luminous-radiance-receiver-reuse-2026-10-13.md
+  - ../../docs/framegraph-luminous-rc-separation-2026-10-25.md
 superseded_by: null
 ---
 
-# 3D RCの追加最適化はいったん保留する
+# 3D RC は通常 Luminous から分離して最適化を再開する
 
 ## 適用条件
 
@@ -23,11 +24,12 @@ Frame GraphのLuminousに接続した実験的3D RCについて、受け手照�
 
 ## 判断
 
-2026-10-14の実機確認を今回の区切りとし、現在の実装を維持して追加最適化をいったん保留する。probe側irradiance事前集計などの候補は未着手のまま残し、再開の依頼があった場合に検討する。
+2026-10-14は追加最適化を保留した。2026-10-25に所有者が再開を依頼し、その前に Frame Graph の通常 Luminous と Luminous RC を分ける方針を選んだ。両者の独立した切替・保存互換・実行経路を先に揃え、RC の最適化を検証可能な単位で進める。
 
 ## 避けること
 
-- 残る未完了項目だけを理由に、今回の最適化を自動的に続行する。
+- 旧保留を根拠に今回の明示的な再開依頼を止める。
+- 通常 Luminous の中へ再び RC の有効化と実行を埋め込む。
 - 区切りの了承を、性能問題の解決や実験機能の正式採用と解釈する。
 - 機能の無効化・削除や、再開期限・目標FPSをこの判断から推定する。
 
@@ -35,6 +37,8 @@ Frame GraphのLuminousに接続した実験的3D RCについて、受け手照�
 
 所有者はFPSが大きく変わらず、体感では少し滑らかになったかもしれないと報告したうえで、「まあいったんこれでいいかな」と今回の区切りを了承した。測定条件と未解決の負荷は参照先の実機確認メモに記録している。
 
+2026-10-25には「ルミナスRCの最適化をしてほしい」「先にFlameGraph分けた方がいいかも」「通常のルミナスと、ルミナス RCに分ける形で」と依頼した。これは再開と分離の選択の証拠であり、特定の最適化方式・改善率の採用を意味しない。
+
 ## 再確認条件
 
-所有者が追加改善の再開を依頼したとき。この判断は他の不具合修正の依頼を妨げない。
+所有者が順序・公開範囲・中断を指定したとき。性能目標と最適化方式は、この判断から補わず実測と個別の要件で決める。

@@ -18,7 +18,7 @@ export function visibleInstanceFixedFields(type: EffectInstanceType): readonly (
         case "aerialPerspective": case "offsetShadow": case "offsetHighlight": return ["color"];
         case "directionalLightShafts": return ["color", "shadowColor"];
         case "motionBlur": return ["samples"];
-        case "luminous": return ["radiance"];
+        case "luminousRadiance": return ["radiance"];
         default: return [];
     }
 }
@@ -39,7 +39,7 @@ export function instanceFixedSettings(type: EffectInstanceType, value: InstanceF
         case "ssao": return { color: instanceColor(value.color ?? { r: 0.5, g: 0.5, b: 0.5 }), toonInfluence: finite(value.toonInfluence, 1, 0, 1) };
         case "ssgi": return { blendMode: ["additive", "softLight", "overlay"].includes(value.blendMode ?? "") ? value.blendMode : "softLight" };
         case "motionBlur": return { samples: Math.round(finite(value.samples, 32, 8, 64)) };
-        case "luminous": return { radiance: normalizeLuminousRadiance(value.radiance) };
+        case "luminousRadiance": return { radiance: { ...normalizeLuminousRadiance(value.radiance), enabled: true } };
         case "lut": return { lut: lutSource(value.lut) };
         case "aerialPerspective": return { color: instanceColor(value.color ?? { r: 0.72, g: 0.79, b: 0.83 }) };
         case "directionalLightShafts": return { color: instanceColor(value.color), shadowColor: instanceColor(value.shadowColor ?? { r: 0, g: 0, b: 0 }) };

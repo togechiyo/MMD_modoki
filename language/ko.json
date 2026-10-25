@@ -658,6 +658,7 @@
     "effect.frameGraphPost.effects.offsetHighlight":  "오프셋 림",
     "effect.frameGraphPost.effects.dof":  "심도",
     "effect.frameGraphPost.effects.luminous":  "루미너스",
+    "effect.frameGraphPost.effects.luminousRadiance": "루미너스 RC",
     "effect.frameGraphPost.effects.bloom":  "블룸",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "효과",

@@ -658,6 +658,7 @@
     "effect.frameGraphPost.effects.offsetHighlight":  "偏移邊光",
     "effect.frameGraphPost.effects.dof":  "景深",
     "effect.frameGraphPost.effects.luminous":  "輝光",
+    "effect.frameGraphPost.effects.luminousRadiance": "輝光 RC",
     "effect.frameGraphPost.effects.bloom":  "泛光",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "效果",

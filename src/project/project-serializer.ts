@@ -582,6 +582,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             colorCurvesExposure: host.postEffectColorCurvesExposure,
             glowEnabled: host.getStaticResourcePostEffects?.().glowEnabled ?? host.postEffectGlowEnabled,
             luminousRadiance: normalizeLuminousRadiance(host.luminousRadianceSettings),
+            luminousRadianceEncodingVersion: 2,
             glowIntensity: host.getStaticResourcePostEffects?.().glowIntensity ?? host.postEffectGlowIntensity,
             glowThreshold: host.getStaticResourcePostEffects?.().glowThreshold ?? host.postEffectGlowThreshold,
             glowKernel: host.getStaticResourcePostEffects?.().glowKernel ?? host.postEffectGlowKernel,

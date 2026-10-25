@@ -658,6 +658,7 @@
     "effect.frameGraphPost.effects.offsetHighlight":  "オフセットリム",
     "effect.frameGraphPost.effects.dof":  "被写界深度",
     "effect.frameGraphPost.effects.luminous":  "ルミナス",
+    "effect.frameGraphPost.effects.luminousRadiance": "ルミナス RC",
     "effect.frameGraphPost.effects.bloom":  "ブルーム",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "エフェクト",

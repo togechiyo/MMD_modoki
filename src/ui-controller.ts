@@ -354,6 +354,12 @@ const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
         setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("dof", active); },
     },
     {
+        id: "luminousRadiance",
+        labelKey: "effect.frameGraphPost.effects.luminousRadiance",
+        isActive: (manager) => manager.isFrameGraphPostEffectActive("luminousRadiance"),
+        setActive: (manager, active) => { manager.setFrameGraphPostEffectStackEntryEnabled("luminousRadiance", active); },
+    },
+    {
         id: "luminous",
         labelKey: "effect.frameGraphPost.effects.luminous",
         isActive: (manager) => manager.isFrameGraphPostEffectActive("luminous"),
@@ -5431,6 +5437,9 @@ export class UIController {
                 this.mmdManager.postEffectGlowThreshold = Math.min(this.mmdManager.postEffectGlowThreshold, 0.15);
                 this.mmdManager.postEffectGlowKernel = Math.max(this.mmdManager.postEffectGlowKernel, 48);
                 break;
+            case "luminousRadiance":
+                this.mmdManager.luminousRadianceSettings = { enabled: true, strength: 1, range: 12 };
+                break;
             case "lut":
                 this.mmdManager.postEffectLutIntensity = Math.max(this.mmdManager.postEffectLutIntensity, 1);
                 break;
@@ -5574,6 +5583,9 @@ export class UIController {
                 break;
             case "luminous":
                 if (!this.mmdManager.hasEffectSceneTrack("luminous")) this.mmdManager.postEffectGlowEnabled = true;
+                break;
+            case "luminousRadiance":
+                this.mmdManager.luminousRadianceSettings = { ...this.mmdManager.luminousRadianceSettings, enabled: true };
                 break;
             case "lut":
                 if (!this.mmdManager.hasEffectSceneTrack("lut")) this.mmdManager.postEffectLutEnabled = true;
@@ -5962,8 +5974,10 @@ export class UIController {
                     range("luminousIntensity", label("intensity"), this.mmdManager.postEffectGlowIntensity, this.mmdManager.postEffectGlowIntensity.toFixed(2)),
                     range("luminousThreshold", label("threshold"), this.mmdManager.postEffectGlowThreshold, this.mmdManager.postEffectGlowThreshold.toFixed(2)),
                     range("luminousRadius", label("radius"), this.mmdManager.postEffectGlowKernel, `${Math.round(this.mmdManager.postEffectGlowKernel)}px`),
-                    select("luminousRadianceEnabled", label("luminousRadianceEnabled"),
-                        `<option value="0"${!this.mmdManager.luminousRadianceSettings.enabled ? " selected" : ""}>OFF</option><option value="1"${this.mmdManager.luminousRadianceSettings.enabled ? " selected" : ""}>ON</option>`, ""),
+                );
+                break;
+            case "luminousRadiance":
+                rows.push(
                     range("luminousRadianceStrength", label("luminousRadianceStrength"), this.mmdManager.luminousRadianceSettings.strength, this.mmdManager.luminousRadianceSettings.strength.toFixed(2)),
                     range("luminousRadianceRange", label("luminousRadianceRange"), this.mmdManager.luminousRadianceSettings.range, this.mmdManager.luminousRadianceSettings.range.toFixed(1)),
                 );
@@ -6510,7 +6524,7 @@ export class UIController {
             case "luminousRadianceEnabled":
             case "luminousRadianceStrength":
             case "luminousRadianceRange":
-                return "luminous";
+                return "luminousRadiance";
             case "bloomWeight":
             case "bloomThreshold":
             case "bloomKernel":

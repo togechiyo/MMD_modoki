@@ -2,6 +2,8 @@
 
 調査日: 2026-10-25。所有者の「現在の Luminous 発光の RC が重い」という報告に対し、現行コード、過去の計測、公開 WebGPU 実装を照合した。今回は調査記録まで。アプリの変更や新しい速度計測は行っていない。[前回の最適化の区切り](../insights/decisions/defer-further-radiance-cascade-optimization.md)を維持し、以下の候補を採用済みとは扱わない。
 
+同日後続: 所有者が最適化の再開と、その前の [通常 Luminous / Luminous RC の分離](./framegraph-luminous-rc-separation-2026-10-25.md)を依頼した。以下は再開前の調査記録で、特定方式の改善率を保証するものではない。
+
 ## 結果と比較する順序
 
 WebGPU の設定だけで軽くするより、既存 RC が繰り返す処理を減らす候補が具体的に見つかった。ただし、現在の所有者環境で CPU / GPU のどちらが支配的かは未確定。

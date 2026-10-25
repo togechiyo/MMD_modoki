@@ -3,6 +3,7 @@ import { makeEffectPayload, type EffectKeyframePayload, type EffectValue } from 
 import { instanceValue, instanceColor, isEffectInstanceType, INSTANCE_EFFECT_NAMES, type EffectInstanceType, type InstanceColor, type EvaluatedEffectInstance } from "./frame-graph-instance-effects";
 import { isFrameGraphPostEffectId, type FrameGraphPostEffectId } from "../shared/frame-graph-post-effect-stack";
 import { instanceFixedSettings, type InstanceFixedSettings, type InstanceFixedSliderField } from "./frame-graph-instance-fixed-settings";
+import { splitLuminousRadianceInstances } from "./luminous-radiance-split";
 
 export type EffectInstance = {
     instanceId: string;
@@ -93,7 +94,7 @@ export class FrameGraphEffectInstances {
         if (!Number.isFinite(value)) throw new Error("Invalid fixed slider value");
         const entry = this.get(id), settings = entry.fixedSettings ?? {};
         if (entry.type === "motionBlur" && field === "samples") this.setFixedSettings(id, { ...settings, samples: value });
-        else if (entry.type === "luminous" && field !== "samples") this.setFixedSettings(id, { ...settings, radiance: {
+        else if (entry.type === "luminousRadiance" && field !== "samples") this.setFixedSettings(id, { ...settings, radiance: {
             ...settings.radiance ?? { enabled: false, strength: 1, range: 12 }, [field === "radianceStrength" ? "strength" : "range"]: value,
         } });
         else throw new Error("Fixed slider does not belong to this effect");
@@ -130,8 +131,9 @@ export class FrameGraphEffectInstances {
     restore(data: unknown): void {
         const next = new FrameGraphEffectInstances();
         if (data !== null && data !== undefined) {
-            const state = data as SerializedEffectInstances;
+            let state = data as SerializedEffectInstances;
             if (state.version !== 1 || !Array.isArray(state.instances) || !Array.isArray(state.order)) throw new Error("Unsupported effect instance format");
+            state = splitLuminousRadianceInstances(state);
             for (const item of state.instances) {
                 if (!item || !isEffectInstanceType(item.type)) throw new Error("Unsupported effect instance type");
                 next.add(item.instanceId, item.settings, item.animation, item.type);

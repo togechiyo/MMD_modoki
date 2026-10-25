@@ -9,6 +9,7 @@ export const FRAME_GRAPH_POST_EFFECT_IDS = [
     "offsetShadow",
     "offsetHighlight",
     "dof",
+    "luminousRadiance",
     "luminous",
     "bloom",
     "lut",
@@ -169,8 +170,9 @@ export function isFrameGraphPostEffectActiveInSettings(
         case "dof":
             return settings.dofEnabled;
         case "luminous":
-            return settings.luminousEnabled && (settings.luminousPrepared === true || settings.luminousIntensity > 0.0001
-                || (settings.luminousRadiance?.enabled === true && settings.luminousRadiance.strength > 0));
+            return settings.luminousEnabled && (settings.luminousPrepared === true || settings.luminousIntensity > 0.0001);
+        case "luminousRadiance":
+            return settings.luminousRadiance?.enabled === true;
         case "bloom":
             return settings.bloomEnabled;
         case "lut":

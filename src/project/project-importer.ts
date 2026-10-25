@@ -1,5 +1,6 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
 import { FrameGraphEffectInstances } from "../editor/frame-graph-effect-instances";
+import { splitLuminousRadianceProject } from "../editor/luminous-radiance-split";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
 import { normalizeEnvironmentLightingPreset, type EnvironmentLightingPresetId } from "../shared/environment-lighting-presets";
 import type {
@@ -420,12 +421,13 @@ function finalizeImportedRenderState(
 
 export async function importProjectState(
     host: ProjectImportHost,
-    data: unknown,
+    input: unknown,
     options: { forExport?: boolean } = {},
 ): Promise<{ loadedModels: number; warnings: string[] }> {
-    if (!isProjectFileV1(data)) {
+    if (!isProjectFileV1(input)) {
         throw new Error("Invalid project file format or version");
     }
+    const data = splitLuminousRadianceProject(input);
     // Validate the new block before loading models or replacing any current scene state.
     new FrameGraphEffectInstances().restore(data.effects?.frameGraphInstances);
 

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
+import { ensureLuminousRadianceInstance, luminousInstanceRow, luminousInstanceControl, setLuminousInstancePosition, getLuminousInstanceRuntime } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test("RC reconstructs smooth illumination on curved MMD receivers", async ({}, testInfo) => {
@@ -32,6 +32,7 @@ test("RC reconstructs smooth illumination on curved MMD receivers", async ({}, t
     if (!await luminousInstanceRow(page).count()) {
       await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="luminous"]').click();
     }
+    await ensureLuminousRadianceInstance(page);
     const control = key => luminousInstanceControl(page, key);
     for (const [key, value] of [["luminousIntensity", 0], ["luminousRadianceStrength", 100], ["luminousRadianceRange", 3]]) {
       await setLuminousInstancePosition(page, key, value);

@@ -658,6 +658,7 @@
     "effect.frameGraphPost.effects.offsetHighlight":  "Offset Rim",
     "effect.frameGraphPost.effects.dof":  "DoF",
     "effect.frameGraphPost.effects.luminous":  "Luminous",
+    "effect.frameGraphPost.effects.luminousRadiance": "Luminous RC",
     "effect.frameGraphPost.effects.bloom":  "Bloom",
     "effect.frameGraphPost.effects.lut":  "LUT",
     "timeline.effect": "Effect",

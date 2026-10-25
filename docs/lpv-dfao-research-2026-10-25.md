@@ -18,6 +18,29 @@ LPV は**間接光を足す**方式、DFAO は**環境光の遮蔽を求める**
 
 仕組みの根拠は [LPV の原論文公開版](https://cg.ivd.kit.edu/publications/p2010/CLPVFRII_Kaplanyan_2010/CLPVFRII_Kaplanyan_2010.pdf)、[Epic の DFAO 解説](https://dev.epicgames.com/documentation/en-us/unreal-engine/distance-field-ambient-occlusion?application_version=4.27)、[Mesh Distance Fields 解説](https://dev.epicgames.com/documentation/en-us/unreal-engine/mesh-distance-fields-in-unreal-engine)。適性評価は、これらと下記の既存実装を照合した推論である。
 
+## 要件の具体化: 通常 MMD の軒下・照明のない屋内
+
+同日の追加確認で、所有者は「軒下や照明のついていない屋内を暗くしたい」「今の SSAO では足りず、影側がべた塗りになりやすい」と説明し、対象を**通常（MMD）モード**と回答した。これは目標の具体化であり、LPV / DFAO の採用決定や現行設定変更の指示とは扱わない。
+
+この目的は、発光を広げることより、**空・屋外から届く光を建物で遮り、開口部と奥で明るさに差を付けること**に近い。DFAO は方向の近い候補だが、Epic 自身も有限の遮蔽距離を持つ AO と Sky Occlusion を区別している。天井や外壁が探索範囲を超えれば、通常の DFAO を強めるだけでは深い屋内を判別できない。[公式の limitations](https://dev.epicgames.com/documentation/en-us/unreal-engine/distance-field-ambient-occlusion?application_version=4.27)
+
+### 通常 MMD の現行コードから分かったこと
+
+- [Toon 分離処理](../src/mmd-manager.ts)の `patchMmdToonLightSeparationShader()` は、面方向と shadow map から明暗 mask を作り、影側では `info.diffuse * toonShadowBand` を残す。`toonShadowBand` は UI 影色と Toon texture 左下の色から作り、その地点から空・窓がどれだけ見えるかは参照しない。同じ材質・影側 mask なら、軒先と奥の明るさをこの処理だけでは区別しにくい。独自プリセットによる置換は別経路。
+- [半球光](../src/scene/light-shadow-controller.ts)は初期強度 0。環境光を上げた場合も、導入済み Babylon.js `HemisphericLight` は shadow generator を持たず、建物による遮蔽は計算しない。したがって「半球光の環境光だけを遮れば解決する」とは限らず、Toon の影側に残している明るさも設計対象になる。
+- [FrameGraph SSAO 合成](../src/render/frame-graph-post-effects-controller.ts)は描画済みの色へ AO・色寄せを合成する。近接部の立体感には使えるが、画面外の屋根・外壁や、その奥にいるかどうかを決める情報はない。今回の症状の画像比較はしておらず、これらを所有者の scene の唯一の原因と断定しない。
+
+### 目的に合わせた設計案
+
+1. **建物の広域遮蔽を先に作る。** 静的な屋根・壁を対象に、距離場または静的形状の BVH から空への方向別の抜けを評価する。BVH を使う場合は DFAO という名称にはしない。単なる真上の一方向判定では、窓や側面から入る光を表せない。
+2. **通常 MMD の影側へ接続する。** 概念上は「直接光の明部 + 遮蔽された環境の明るさ + 必要なら反射光 + 発光」を分ける。現行の Toon 影側を環境の明るさの近似としてどこまで扱うかを先に比較し、完成色全体への黒乗算だけで済ませない。直接光の明部、材質色、発光を同じ割合で暗くすると別の破綻を招く。
+3. **静的建物と動く受け手を分ける。** 建物の表現や遮蔽 field を再利用し、動く PMX は変形後の位置・法線で評価する構成が候補。人物自身による環境遮蔽は別段階にできる。field の補間が壁をまたぐ漏れと、窓を潰さない解像度は要確認。
+4. **SSAO は近接部に残す。** 広域の暗さを担わせず、隅や接触部の補助として比較する。既存 SSAO の階調採用を、この要件だけで撤回しない。
+
+期待する比較は「屋外 → 軒先 → 深い軒下」「窓際 → 部屋の奥」。同じ法線・材質でも位置に応じて明るさが変わり、屋根が画面外へ出ても維持されることを自作 fixture で確認する。壁・天井を動かした場合の更新、暗い領域での階調、PNG の直接 seek / 再生後一致も確認対象にする。遮蔽距離、field 解像度、対象選別、MMD 合成の品質・費用は未計測。
+
+完全に閉じた無照明空間は、物理的には光が入らない。見やすさのための最低輝度は表現上の選択であり、実際の間接光とは分ける。開口部からの反射光まで欲しい段階で LPV 等の GI を比較する。今回の優先候補は広域の環境遮蔽であり、LPV を先に足すことではない。IBL Shadows の凍結解除やシーン全体の shadow generator 設定変更は行っていない。
+
 ## LPV: 空間へ注入した光を隣のセルへ伝える
 
 基本の流れは次のとおり。

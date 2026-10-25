@@ -151,7 +151,6 @@ import {
 import { canReuseProjectWindow, classifyProjectDrop, projectDropSnapshot } from "./project/project-drop";
 
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
-import { EffectKeyframeController } from "./ui/effect-keyframe-controller";
 import { FrameGraphInstanceController } from "./ui/frame-graph-instance-controller";
 import { editEffectInstances, type EffectInstanceOperation } from "./editor/effect-instance-operations";
 import { FrameGraphEffectInstances } from "./editor/frame-graph-effect-instances";
@@ -592,7 +591,6 @@ export class UIController {
     private cameraPanelController: CameraPanelController | null = null;
     private colorPostFxController: ColorPostFxController | null = null;
     private refreshLensEffectKeyframeUi: (() => void) | null = null;
-    private effectKeyframeController: EffectKeyframeController | null = null;
     private frameGraphInstanceController: FrameGraphInstanceController | null = null;
     private dofPanelController: DofPanelController | null = null;
     private effectPanelShellController: EffectPanelShellController | null = null;
@@ -676,14 +674,6 @@ export class UIController {
         });
         this.modelCommentNoticeController = new ModelCommentNoticeController();
         this.btnKeyframeAdd = document.getElementById("btn-kf-add") as HTMLButtonElement;
-        this.effectKeyframeController = new EffectKeyframeController(getRequiredElement("effect-key-controls"), (id, value) => {
-            const first = !this.mmdManager.hasEffectSceneTrack(id);
-            const before = this.mmdManager.captureCurrentEffectKeyframePayload(id).value;
-            this.mmdManager.setEffectScenePreview(id, value);
-            if (this.mmdManager.isEffectInstance(id)) this.effectKeyframeEdits.mark(id, this.mmdManager.currentFrame, before, this.mmdManager.captureCurrentEffectKeyframePayload(id).value);
-            if (first) this.refreshFrameGraphPostAddUi();
-            this.refreshEffectKeyframeUi();
-        }, this.mmdManager);
         this.mmdManager.onEffectKeyframePreviewChanged = () => this.refreshEffectKeyframeUi();
         this.btnKeyframeCopy = document.getElementById("btn-kf-copy") as HTMLButtonElement;
         this.btnKeyframePaste = document.getElementById("btn-kf-paste") as HTMLButtonElement;
@@ -8419,10 +8409,7 @@ export class UIController {
     private refreshEffectKeyframeUi(): void {
         const track = this.getSelectedTimelineTrack();
         const id = track?.category === "effect" && (this.mmdManager.isEffectInstance(track.name) || (EFFECT_TIMELINE_ENABLED && isEffectId(track.name))) ? track.name : null;
-        const payload = id ? this.mmdManager.captureCurrentEffectKeyframePayload(id) : null;
         const instanceUnsupported = id && this.mmdManager.isEffectInstance(id) && this.getConfiguredPostEffectBackend() !== "frameGraph";
-        this.effectKeyframeController?.refresh(payload, this.mmdManager.isPlaying || Boolean(instanceUnsupported), id ? this.mmdManager.isEffectTrackSuspended(id) : false,
-            track?.effectInstance?.label, instanceUnsupported ? t("effect.frameGraphPost.backendRequired") : undefined);
         this.frameGraphInstanceController?.refresh();
         if (id) this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying || Boolean(instanceUnsupported);
         if (!EFFECT_TIMELINE_ENABLED) return;

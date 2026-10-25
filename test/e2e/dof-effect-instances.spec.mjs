@@ -39,7 +39,7 @@ test("DoF instances: same-file targets, step keys, moving bone, output and missi
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     const field = (id, name) => row(id).locator(`[data-dof-instance-field="${name}"]`);
-    const select = async id => { await selectEffectInstance(row(id)); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
+    const select = async id => { await selectEffectInstance(row(id)); await expect(row(id).locator(".effect-layer-details")).toBeVisible(); await expect(page.locator("#effect-key-controls")).toHaveCount(0); };
     const number = async (id, name, value) => { const input = row(id).locator(`[data-instance-field="${name}"]`).locator("..").locator(".range-number-input"); await input.fill(String(value)); await input.press("Enter"); };
     const distance = id => row(id).locator("[data-instance-dof-distance]").textContent().then(text => Number.parseFloat(text));
     const capture = async name => { const dir = testInfo.outputPath(name); mkdirSync(dir, { recursive: true }); await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 640, 360), dir); return PNG.sync.read(readFileSync(resolve(dir, "single_rgba_surface_e2e.png"))).data; };
@@ -58,17 +58,17 @@ test("DoF instances: same-file targets, step keys, moving bone, output and missi
     await select(a); await seek(page, 0); await page.locator("#btn-kf-add").click();
     const depthA = await distance(a), focusedA = await capture("focus-a");
     await seek(page, 20);
-    await page.locator('#effect-key-controls [data-dof-instance-field="targetModelInstanceId"]').selectOption(models[1].instanceId);
-    await page.locator('#effect-key-controls [data-dof-instance-field="targetBoneName"]').selectOption("センター"); await page.locator("#btn-kf-add").click();
+    await field(a, "targetModelInstanceId").selectOption(models[1].instanceId);
+    await field(a, "targetBoneName").selectOption("センター"); await page.locator("#btn-kf-add").click();
     const depthB = await distance(a), focusedB = await capture("focus-b");
     report.focusDistances = [depthA, depthB]; report.targetDifference = difference(focusedA, focusedB);
     expect(Math.abs(depthA - depthB)).toBeGreaterThan(3); expect(report.targetDifference).toBeGreaterThan(0.01);
-    await seek(page, 40); await page.locator("#effect-key-enabled").uncheck(); await page.locator("#btn-kf-add").click();
+    await seek(page, 40); await row(a).locator('[data-instance-field="enabled"]').uncheck(); await page.locator("#btn-kf-add").click();
     const neutral = await capture("key-off"); expect(difference(neutral, focusedB)).toBeGreaterThan(0.01);
     const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
     for (const [frame, model] of [[0, 0], [19, 0], [20, 1], [30, 1], [10, 0]]) {
       await seek(page, frame); await expect(field(a, "targetModelInstanceId")).toHaveValue(models[model].instanceId);
-      await expect(page.locator('#effect-key-controls [data-dof-instance-field="targetModelInstanceId"]')).toHaveValue(models[model].instanceId);
+      await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     }
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
     expect((await state()).instances.find(item => item.instanceId === b)).toEqual(bSaved);

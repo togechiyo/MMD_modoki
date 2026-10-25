@@ -21,7 +21,7 @@ test("shelved effect keys stay hidden and inert while static effects and saved d
       const tracks = await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks());
       expect(tracks.filter(track => track.category === "effect")).toEqual([]);
       for (const category of ["light", "shadow", "gravity"]) expect(tracks.some(track => track.category === category)).toBe(true);
-      await expect(page.locator("#effect-key-controls")).toBeHidden();
+      await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     };
     const menu = async command => {
       await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();

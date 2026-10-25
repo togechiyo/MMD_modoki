@@ -32,18 +32,19 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click(); expect((await state()).order).toEqual([b, c, "ringParticles", a]);
     await expandEffectInstance(row(b));
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.timelineTarget)).toBe("model");
-    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     await page.locator("#info-model-select").selectOption("__camera__");
     expect(await effectRows()).toEqual([]);
     const strength = row(b).locator('[data-instance-field="strength"]');
     await strength.locator("..").locator(".range-number-input").fill("60");
     await strength.locator("..").locator(".range-number-input").press("Enter");
     expect(await effectRows()).toEqual([]);
-    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("normal-effect-settings.png") });
     await selectEffectInstance(row(b));
     expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [] }]);
-    await expect(page.locator("[data-effect-key-label]")).toHaveText("SSAO 2");
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
+    await expect(row(b).locator(".effect-layer-name")).toHaveText("SSAO 2");
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
     await expect(row(a).locator(".effect-layer-details")).toBeHidden();
     await expect.poll(() => row(b).evaluate(element => [...element.querySelectorAll('.effect-instance-actions button')].every(button => button.scrollWidth <= button.clientWidth))).toBe(true);
@@ -53,7 +54,7 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     // Leaving an unregistered edit session drops its temporary row without making a key.
     await selectTimelineTrack(page, "camera", "Camera");
     expect(await effectRows()).toEqual([]);
-    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     await selectEffectInstance(row(b));
     await page.locator("#btn-kf-add").click();
     await selectTimelineTrack(page, "camera", "Camera");
@@ -62,13 +63,14 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), savedProject);
     expect(await state()).toEqual(savedProject.effects.frameGraphInstances);
     expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [0] }]);
-    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     // Existing keyed rows remain editable; deleting the last key hides the row, including on Redo.
     await selectTimelineTrack(page, "effect", b);
-    await expect(page.locator("#effect-key-controls")).toBeVisible();
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
+    await expect(row(b).locator(".effect-layer-details")).toBeVisible();
     await page.locator("#btn-kf-delete").click();
     expect(await effectRows()).toEqual([]);
-    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [0] }]);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();

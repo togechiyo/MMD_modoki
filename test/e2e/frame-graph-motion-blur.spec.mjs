@@ -86,8 +86,9 @@ test("Motion Blur instances evaluate separate keys during PMX bone playback and 
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     await row(ids[1]).locator('[data-instance-field="enabled"]').uncheck();
     await selectEffectInstance(row(ids[0]));
+    const slider = row(ids[0]).locator('[data-instance-field="strength"]');
     for (const [frame, value] of [[0, 20], [20, 80]]) {
-      await seek(frame); await page.locator("#effect-key-value").fill(String(value)); await page.locator("#effect-key-value").dispatchEvent("input"); await page.locator("#effect-key-enabled").setChecked(frame > 0); await page.locator("#btn-kf-add").click();
+      await seek(frame); await slider.fill(String(value)); await slider.dispatchEvent("input"); await row(ids[0]).locator('[data-instance-field="enabled"]').setChecked(frame > 0); await page.locator("#btn-kf-add").click();
     }
     await seek(0); await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);

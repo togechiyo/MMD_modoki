@@ -43,7 +43,7 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     const add = async type => { await page.locator("#btn-effect-add-post").click(); await page.locator(`[data-effect-add-post="${type}"]`).click(); };
     const number = async (id, position, value) => { await expandEffectInstance(row(id)); const input = row(id).locator(".range-number-input").nth(position); await input.fill(String(value)); await input.press("Enter"); };
-    const select = async id => { await selectEffectInstance(row(id)); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
+    const select = async id => { await selectEffectInstance(row(id)); await expect(row(id).locator(".effect-layer-details")).toBeVisible(); await expect(page.locator("#effect-key-controls")).toHaveCount(0); };
     const capture = async name => {
       const dir = testInfo.outputPath(name); mkdirSync(dir, { recursive: true });
       await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 640, 360), dir);
@@ -93,12 +93,12 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
         const color = row(a).locator('[data-instance-field="color"]'); await color.fill(type === "offsetShadow" ? "#402010" : "#80d0ff"); await color.dispatchEvent("change");
       }
       await select(a); await seek(page, 0); await page.locator("#btn-kf-add").click();
-      await seek(page, 20); await number(a, 0, 90); await page.locator("#effect-key-enabled").check(); await page.locator("#btn-kf-add").click();
+      await seek(page, 20); await number(a, 0, 90); await row(a).locator('[data-instance-field="enabled"]').check(); await page.locator("#btn-kf-add").click();
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
       await seek(page, 10); await expect(row(a).locator(".range-number-input").first()).toHaveValue("50");
-      await expect(page.locator("#effect-key-enabled")).not.toBeChecked();
-      await seek(page, 20); await expect(page.locator("#effect-key-enabled")).toBeChecked();
+      await expect(row(a).locator('[data-instance-field="enabled"]')).not.toBeChecked();
+      await seek(page, 20); await expect(row(a).locator('[data-instance-field="enabled"]')).toBeChecked();
       expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
       expect((await state()).instances.find(item => item.instanceId === b).settings).toEqual(bSettings);
       await seek(page, 0); const off = await capture(`${type}-off`);

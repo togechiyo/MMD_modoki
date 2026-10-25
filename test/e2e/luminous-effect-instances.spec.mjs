@@ -58,8 +58,8 @@ test("Luminous instances own RC settings, resources and enabled keys", async ({}
     expect((await diagnostics()).controller.instances.find(item => item.instanceId === b).radiance.emitters).toBeGreaterThan(0);
     const seek = async frame => { await page.locator("#current-frame").fill(String(frame)); await page.locator("#current-frame").press("Enter"); };
     await row(b).locator('[data-instance-field="enabled"]').uncheck(); await selectEffectInstance(row(a));
-    await seek(0); await page.locator("#effect-key-enabled").uncheck(); await page.locator("#btn-kf-add").click();
-    await seek(20); await page.locator("#effect-key-enabled").check(); await page.locator("#btn-kf-add").click();
+    await seek(0); await row(a).locator('[data-instance-field="enabled"]').uncheck(); await page.locator("#btn-kf-add").click();
+    await seek(20); await row(a).locator('[data-instance-field="enabled"]').check(); await page.locator("#btn-kf-add").click();
     const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
     await seek(0); expect(difference(dark, await capture("key-off"))).toBeLessThan(0.1);
     await seek(20); expect(difference(single, await capture("key-on"))).toBeLessThan(0.1);

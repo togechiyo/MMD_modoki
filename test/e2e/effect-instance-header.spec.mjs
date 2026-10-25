@@ -46,7 +46,7 @@ test("effect headers drag by name and register their own diamond key state", asy
     await expect(key(a)).toHaveText("♦");
     expect(await page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack)).toEqual(selected);
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.timelineTarget)).toBe("model");
-    await expect(page.locator("#effect-key-controls")).toBeHidden();
+    await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     const registered = await state();
     expect(registered.instances.find(item => item.instanceId === a).animation.tracks[0].keys.map(item => item.frame)).toEqual([0]);
     const history = await page.evaluate(() => window.mmdModokiE2e.getCommandHistoryState());

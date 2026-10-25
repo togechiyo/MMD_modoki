@@ -98,7 +98,7 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     expect((await state()).order).toEqual([a, bloom, b]);
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().version)).toBe(2);
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
-    const select = async id => { await selectEffectInstance(row(id)); await expect(page.locator("#effect-key-controls")).toBeVisible(); };
+    const select = async id => { await selectEffectInstance(row(id)); await expect(row(id).locator(".effect-layer-details")).toBeVisible(); await expect(page.locator("#effect-key-controls")).toHaveCount(0); };
     await expect(row(a).locator(".effect-layer-name")).toHaveText("Gamma");
     await expect(row(b).locator(".effect-layer-name")).toHaveText("Gamma 2");
     await expect(row(bloom).locator(".effect-layer-name")).toHaveText("Bloom");
@@ -117,20 +117,20 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     expect((await state()).instances.some(item => item.instanceId === b)).toBe(true);
     expect((await state()).instances.find(item => item.instanceId === b).settings.gamma).toBe(bValue);
     await select(a);
-    const slider = page.locator("#effect-key-value");
-    for (const [frame, value] of [[0, 100], [20, -100]]) {
+    const slider = row(a).locator('[data-instance-field="gamma"]');
+    for (const [frame, value] of [[0, 100], [20, 0]]) {
       await seek(page, frame); await slider.fill(String(value)); await slider.dispatchEvent("input");
-      await page.locator("#effect-key-enabled").setChecked(frame > 0); await page.locator("#btn-kf-add").click();
+      await row(a).locator('[data-instance-field="enabled"]').setChecked(frame > 0); await page.locator("#btn-kf-add").click();
     }
     const savedA = (await state()).instances.find(item => item.instanceId === a).animation;
     expect(savedA.tracks[0].keys.map(key => key.frame)).toEqual([0, 20]);
     expect((await state()).instances.find(item => item.instanceId === b).settings.gamma).toBe(bValue);
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
-    await seek(page, 10); await expect(slider).toHaveValue("0");
+    await seek(page, 10); await expect(slider).toHaveValue("50");
     await expect(row(a).locator(".range-number-input")).toHaveValue("50");
-    await expect(page.locator("#effect-key-enabled")).not.toBeChecked();
-    await seek(page, 20); await expect(page.locator("#effect-key-enabled")).toBeChecked();
+    await expect(row(a).locator('[data-instance-field="enabled"]')).not.toBeChecked();
+    await seek(page, 20); await expect(row(a).locator('[data-instance-field="enabled"]')).toBeChecked();
     await seek(page, 0); await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeDisabled();
     await expect(row(a).locator('[data-instance-action="duplicate"]')).toBeDisabled();
@@ -154,9 +154,9 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect((await state()).instances.some(item => item.instanceId === c)).toBe(true);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
-    await select(a); await expect(page.locator("[data-effect-key-label]")).toHaveText("Gamma");
+    await select(a); await expect(row(a).locator(".effect-layer-name")).toHaveText("Gamma");
     await row(a).locator('[data-instance-action="suspend"]').click();
-    await expect(page.locator("[data-effect-key-state]")).toContainText("スタックから外れています");
+    await expect(row(a)).toContainText("スタックから外れています");
     await row(a).locator('[data-instance-action="resume"]').click();
     await dragEffectStackRow(row(a), row(bloom), "after");
     expect((await state()).order).toEqual([a, bloom, b]);

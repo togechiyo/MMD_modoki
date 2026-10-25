@@ -9,6 +9,9 @@ import { launchMmdModoki } from "./electron-app.mjs";
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const modelPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
 
+// Historical singleton UI scenarios. Current registration is covered by effect-instances and effect-keyframe-boundaries.
+test.skip(true, "旧singletonのタイムライン詳細UIは廃止。新個体の右パネル操作を検証する。");
+
 async function seek(page, frame) {
   const input = page.locator("#current-frame");
   await input.fill(String(frame));

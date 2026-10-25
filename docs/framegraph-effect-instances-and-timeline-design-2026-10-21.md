@@ -3,6 +3,8 @@
 更新日: 2026-10-21
 状態: 共同設計と既存タイムライン照合の記録。所有者の実装指定を受け、Gamma個体を対象に第一段階を実装した。[実装・互換性・確認結果](./framegraph-effect-instances-implementation-2026-10-21.md)。以下の設計案・照合結果は着手前の記録を維持する。他効果の対象化・次版収録は未決定。
 
+2026-10-25追記: 当時の `EffectKeyframeController` によるタイムライン詳細UIは廃止した。現在の詳細入力・キー登録は右のエフェクト欄に集約する。[現仕様と検証結果](./framegraph-effect-instances-summary-2026-10-24.md)を参照。
+
 ## 1. 目的と方針
 
 所有者が「FlameGraphタイムラインのせとFlameGraph重ねがけ、これは同時に設計した方がよさそうね」と述べたため、FrameGraphの二つの構想を一つのデータモデルで検討する。所有者の方針は**共同で設計すること**であり、以下のID・操作・保存仕様まで採用されたものではない。
@@ -22,7 +24,7 @@
 | [manager](../src/mmd-manager.ts) | stack、enabled map、パラメーター、キー参照が種類単位 | 個体の状態を持つ小さなstore / serviceへ寄せ、managerは編集・評価・描画の接続を担う |
 | [FrameGraph controller](../src/render/frame-graph-post-effects-controller.ts) | `bloomTask`等は各1組。task登録map・接続順も種類がキー | 個体別のtask一式を生成・更新・破棄する。配列の重複を許すだけでは成立しない |
 | 同controllerのビネット / エッジブラー | 二つの種類を同じtaskで処理し、接続も一回に集約 | 任意順序・重複に対応するには分離か明示的な複合単位が必要。初期の重複許可対象から外す案 |
-| [キー編集](../src/editor/timeline-edit-service.ts) / [キーUI](../src/ui/effect-keyframe-controller.ts) / [MCP schema](../src/automation/keyframe-schema.ts) | `category: effect`の`name`とpayloadの`effectId`を照合 | `name`は個体ID、payloadは個体ID＋種類を持たせ、対象の実在・種類を照合する |
+| [キー編集](../src/editor/timeline-edit-service.ts) / 当時のキーUI `EffectKeyframeController` / [MCP schema](../src/automation/keyframe-schema.ts) | `category: effect`の`name`とpayloadの`effectId`を照合 | `name`は個体ID、payloadは個体ID＋種類を持たせ、対象の実在・種類を照合する |
 | [serializer](../src/project/project-serializer.ts) / [importer](../src/project/project-importer.ts) / [project型](../src/types.ts) | 静的設定はeffectsの種類別field、stackは配列、キーはversion 1 | 個体設定・順序・キーの参照を同時に復元する入口を作る |
 
 既存キー17種には登録・補間・保存・出力の実装がある。全てを作り直さず、[旧共通基盤](./effect-timeline-common-foundation-design-2026-09-14.md)の編集経路とbase / preview / 評価の分離を流用する。現在は[標準OFFで休止中](./effect-timeline-shelving-2026-09-15.md)であり、本設計の追記では復帰させない。
@@ -134,7 +136,7 @@ project versionを上げる場合は、型・importer / serializerだけでな�
 | 観点 | 既存実装で確認したこと | 今回の整理 |
 | --- | --- | --- |
 | 行・キー選択と並べ替え | [timeline](../src/timeline.ts)の`reconcileSelection`と[selection helper](../src/editor/timeline-key-selection.ts)はカテゴリ＋nameで照合。配列indexは識別値ではない | 個体IDをnameに使える。同じcamera scope内の再通知では`resetSelection: false`を維持する。個体削除で参照が消えた場合は選択解除し、別の同種へ選択を移さない |
-| 表示名とパネル選択 | `getTimelineTrackDisplayName`はnameを翻訳keyに使う。[UI controller](../src/ui-controller.ts)の`onSelectionChanged`・`refreshEffectKeyframeUi`・登録処理は`isEffectId(track.name)`で種類確認する | nameだけを個体IDへ変えると、表示・登録・パネルの選択が接続されない。descriptorと個体registryで種類・表示名を解決し、展開中・drag中のstack対象も個体IDへ移す。[EffectKeyframeController](../src/ui/effect-keyframe-controller.ts)は同種二個体でも操作先IDを更新し、controlsの再利用と編集対象を分ける |
+| 表示名とパネル選択 | `getTimelineTrackDisplayName`はnameを翻訳keyに使う。[UI controller](../src/ui-controller.ts)の`onSelectionChanged`・`refreshEffectKeyframeUi`・登録処理は`isEffectId(track.name)`で種類確認する | nameだけを個体IDへ変えると、表示・登録・パネルの選択が接続されない。descriptorと個体registryで種類・表示名を解決し、展開中・drag中のstack対象も個体IDへ移す。当時の `EffectKeyframeController` は同種二個体でも操作先IDを更新し、controlsの再利用と編集対象を分ける |
 | 単一 / batch貼付け | 単一は`resolveKeyframePasteTarget`で選択行へ合わせるが、互換判定は`track.name === payload.effectId`。batchは元trackとframeOffsetを保持し、payloadをcloneする | 単一の明示的ID付替えと、batchの元個体保持を区別する。cloneだけでは個体間の貼付けは成立しない。消えた参照の一件を別個体へ代替せず、書込前の全件検証を行う |
 | 履歴と失敗時の扱い | [Command型](../src/actions/command-types.ts)は個体操作の差分をまだ持たない。[keyframe transaction](../src/actions/keyframe-transaction.ts)はowner・キーpayloadの事前条件と補償を扱う | キー移動のmergeKeyはカテゴリ＋nameで分離できる。個体構造用の差分・handler・補償処理は新設が必要。初回キー登録のUndoは空trackとbaseを残す現仕様を維持し、個体作成・削除とは別に扱う |
 | base / preview / 静的設定 | [effect store](../src/editor/effect-scene-track-store.ts)の`preview`は空trackならbaseを更新するが、静的設定は更新しない。最後のキー削除後もbaseへ戻る | 初稿の「空track調整時に静的設定も同期」を修正した。before-first-key、最後のキー削除、初回登録Undo、previewのseek破棄、キー休止中の静的描画を別々に確認する |

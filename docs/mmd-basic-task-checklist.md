@@ -64,6 +64,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 64発光材質・16自作textureのステージPMXを生成。小型fixtureと53万・82万三角形のローカル版、消灯・増光・遮蔽板モーフ、GUI確認・任意計測を追加。53万版の連続発光変更でCPU prepare約148msを観測（[作成・検証](./luminous-stage-fixture-2026-10-25.md)）
 - [x] Luminous RCの発光RGB変更を形状更新から分け、頂点変換・BLAS/TLAS refit・node転送を省略。53万版の連続発光変更でCPU prepare153→27ms、提示間隔183→67〜72ms。比較PNG6枚一致・回帰10件を確認（[実装・比較](./luminous-radiance-emission-update-optimization-2026-10-25.md)）
 - [x] Luminous RCの発光色を2Dの白い芯・彩度補正・材質clampへ合わせ、texture・発光モーフ・色保持と独立ON/OFFを確認。実マスクRTとの色比較、回帰10件、53万版でRGB専用更新の維持を確認（[色の基準・検証](./luminous-radiance-2d-color-match-2026-10-25.md)）
+- [x] RSM GIのMultiMaterial子材質に3つの描画出力がない不備を修正し、GI OFF時のRSM描画も停止。テクスチャ付きStandard / MMD / PBR、両backendのOFF・再開、ルミナス色合わせとPBRの回帰5件、既定smokeを確認（[再現・修正・検証](./babylon-rsm-gi-notes.md#2026-10-25-rsmのfragment出力不一致ログ)）
 - [x] 影調整
 - [x] 広域の影を比較できる6,000×6,000単位の自作PMXステージを追加し、近景から遠景へのCSM境界をカメラ移動で確認（[配置・使用方法と確認結果](../test/fixtures/shadow-stage/README.md)）
 - [x] 静的PMXステージを影あり・エフェクトなし・剛体なしで1,000万三角形まで実描画し、読込・カメラ移動FPS・RAMを計測（[条件・結果・再現方法](./polygon-capacity-stage-benchmark-2026-10-18.md)）

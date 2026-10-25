@@ -78,6 +78,30 @@ RSMは位置・法線・fluxの3つの出力を生成する（[公式解説](htt
 
 - エラーの発生箇所はRSM GIの描画passであり、Luminous RCのpassではない。2026-09-14の[単一材質fixtureでの同種エラー](./depth-effects-timeline-2026-09-14.md#fixtureでの切り分け)は今回のRC色変更より前に記録されている。ただし同じ発生条件と断定するものではない。
 - ログに材質名・mesh名・生成済みshaderがなく、どの材質のclone / plugin / defineが不整合になったかは未特定。所有者のモデルは探索・読み込みしていない。
-- 現行controllerは初期化時にRSMを生成する一方、OFF時は`giManager.enable = false`だけを設定する。依存中Babylon 9.2.0の`ReflectiveShadowMap`は生成時に`enable = true`でsceneのcustomRenderTargetsへ登録され、`GIRSMManager.enable`はこのRSMのenableを切り替えない。したがってコード上、GI合成のOFFとRSM描画の停止は連動していない。ログだけからGIボタンがONだったとは判断できず、OFFにするだけの回避も保証できない。
+- 調査時のcontrollerは初期化時にRSMを生成する一方、OFF時は`giManager.enable = false`だけを設定していた。依存中Babylon 9.2.0の`ReflectiveShadowMap`は生成時に`enable = true`でsceneのcustomRenderTargetsへ登録され、`GIRSMManager.enable`はこのRSMのenableを切り替えない。このため、GI合成のOFFとRSM描画の停止が連動していなかった。ログだけからGIボタンがONだったとは判断できない。
 
-今回はログと現行ソースの照合のみ。修正・再現E2Eは未実施。次に切り分ける際は配布可能なfixtureで実際のRSM描画有無と各材質のfragment出力を観測し、OFF時の停止と材質互換性を別々に確認する。
+最初のログ解析では原因材質は未特定だった。後続の修正依頼を受け、以下の自作fixtureで同じエラーを再現した。
+
+### 再現と原因
+
+実アプリのGI controllerへ、配布可能なtofu PMXに加えて、自作boxのStandard / MMD MultiMaterialを登録した。変更前はGI OFFでもRSMがsceneのcustomRenderTargetsに残り、子材質にRSMCreate pluginがない状態で描画された。`targets[1]`の出力不一致、invalid pipeline / command bufferが発生し、RSMの3つの出力も0だった。
+
+依存中9.2.0の`ReflectiveShadowMap._addMeshToMRT`は`material.clone(name)`を使う。`MultiMaterial.clone(name)`は子材質を共有し、RSMCreateは親containerにだけ追加される。実際のsubmeshは元の子材質で描くため、RSM用の3出力がない。NullEngineの実材質でも、親にpluginがあり、子にはない状態を確認した。
+
+### 修正
+
+- 初期化直後とGI OFFでは`rsm.enable = false`にし、GIが準備できてONになったときだけRSMも有効にする。材質pluginの早期準備は維持する。
+- [RSM材質互換helper](../src/render/rsm-material-compatibility.ts)で、MultiMaterialの子もRSM専用cloneへ置き換え、各leafへRSMCreateを付ける。共有子材質と入れ子のgroupはclone mapで再利用する。元の材質へのplugin追加や、元の子材質の書き換えは行わない。
+- 子cloneにも既存のno-prepass / lighting無効化を適用し、PBRのcamera用screen-space scatteringはcloneだけで無効にする。
+- controller破棄時にはRSMの描画登録とRT、専用材質cloneを破棄する。元の材質・textureは保持する。
+
+helperは依存中9.2.0のprivate clone mapを使う既存の互換処理を局所化したもの。Babylon更新時はMultiMaterialのclone方法とRSMCreateの付与先を再確認する。任意のcustom ShaderMaterialの互換性まで保証する変更ではない。
+
+### 検証
+
+- 単体203 files / 1,268 tests、lint、typecheck:criticalが成功。通常typecheckは既知548→547 diagnosticsで、旧RSM互換型のprivate property参照エラー1件が減少。位置を除いた診断比較で新規エラー0、TS2304 / TS2552も0。
+- RSMのローカルElectron / WebGPU E2EはClassic / Frame Graphの2件が成功。テクスチャ付きStandard / MMD MultiMaterial、ON中に追加するPBR MultiMaterial、3つのRTの非ゼロ出力、元材質の不変、OFF中の描画回数不変、再開を確認した。どちらも初期OFFでRSM描画0回、明示OFFの待機後も描画回数不変、page error / WebGPU validation 0。
+- 2D LuminousとRCの色比較1件、PBR owned SSSの両backend 2件も成功し、回帰は計5件。GIの既存toolbarはhiddenのためRSM試験の切替はcontroller境界で行い、新しいUI導線は追加していない。backend変更ではrendererが再読込されるので、RSM検証は各backendの起動後にfixtureを供給した。
+- 既定の`smoke:launch`が成功。WebGPU / Bullet MPRの起動、3秒の安定待機、環境光probeを含む描画診断を通過した。
+
+比較用JSON・PNGはignoredな`artifacts/e2e/rsm-gi/`へ保存した。所有者がログを採取した実シーンは再確認待ち。

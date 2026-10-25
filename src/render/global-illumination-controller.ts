@@ -1,10 +1,10 @@
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
-import type { Material } from "@babylonjs/core/Materials/material";
 import type { Scene } from "@babylonjs/core/scene";
 import { GIRSMManager } from "@babylonjs/core/Rendering/GlobalIllumination/giRSMManager";
 import { GIRSM } from "@babylonjs/core/Rendering/GlobalIllumination/giRSM";
 import { ReflectiveShadowMap } from "@babylonjs/core/Rendering/reflectiveShadowMap";
 import type { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
+import { disposeRsmMaterialClones, prepareRsmMaterialClones } from "./rsm-material-compatibility";
 import "@babylonjs/core/Engines/Extensions/engine.multiRender";
 import "@babylonjs/core/Engines/WebGPU/Extensions/engine.multiRender";
 import "@babylonjs/core/Rendering/geometryBufferRendererSceneComponent";
@@ -15,18 +15,6 @@ import "@babylonjs/core/ShadersWGSL/rsmFullGlobalIllumination.fragment";
 
 type SceneModelLike = {
     mesh: AbstractMesh;
-};
-
-type PbrSubSurfaceLike = {
-    isScatteringEnabled: boolean;
-};
-
-type MaterialWithSubSurface = Material & {
-    subSurface?: PbrSubSurfaceLike;
-};
-
-type ReflectiveShadowMapWithMaterialClones = ReflectiveShadowMap & {
-    _regularMatToMatWithPlugin?: Map<Material, Material>;
 };
 
 const GI_OUTPUT_TEXTURE_DIMENSIONS = { width: 256, height: 256 };
@@ -81,6 +69,7 @@ export class GlobalIlluminationController {
             if (this.giManager) {
                 this.giManager.enable = false;
             }
+            if (this.giRsm) this.giRsm.rsm.enable = false;
             this.onEnabledChanged?.(false);
             return false;
         }
@@ -158,9 +147,15 @@ export class GlobalIlluminationController {
     }
 
     public dispose(): void {
+        this.desiredEnabled = false;
         this.enablePending = false;
         this.clearEnableRetryTimer();
+        if (this.giRsm) this.giRsm.rsm.enable = false;
         this.giManager?.dispose();
+        if (this.giRsm) {
+            this.giRsm.rsm.dispose();
+            disposeRsmMaterialClones(this.giRsm.rsm);
+        }
         this.giManager = null;
         this.giRsm = null;
     }
@@ -200,6 +195,8 @@ export class GlobalIlluminationController {
         this.giRsm = new GIRSM(
             new ReflectiveShadowMap(this.scene, light, GI_OUTPUT_TEXTURE_DIMENSIONS),
         );
+        // GIRSMManager.enable controls GI composition, not the independent RSM render target.
+        this.giRsm.rsm.enable = false;
         this.giRsm.intensity = 0.55;
         this.giRsm.radius = 0.18;
         this.giRsm.numSamples = 640;
@@ -216,6 +213,7 @@ export class GlobalIlluminationController {
         }
         this.giManager.addMaterial();
         this.giManager.enable = true;
+        if (this.giRsm) this.giRsm.rsm.enable = this.giManager.enable;
         this.onEnabledChanged?.(true);
     }
 
@@ -264,21 +262,9 @@ export class GlobalIlluminationController {
             }
             this.registeredMeshes.add(mesh);
             this.giRsm.rsm.addMesh(mesh);
-            this.disableScreenSpaceScatteringOnRsmMaterialClones();
         }
-    }
-
-    private disableScreenSpaceScatteringOnRsmMaterialClones(): void {
-        // Babylon creates internal material clones for the reflective shadow map.
-        // They render into a no-prepass MRT and must not participate in the
-        // camera's screen-space subsurface-scattering pass.
-        const rsm = this.giRsm?.rsm as ReflectiveShadowMapWithMaterialClones | undefined;
-        for (const material of rsm?._regularMatToMatWithPlugin?.values() ?? []) {
-            const subSurface = (material as MaterialWithSubSurface).subSurface;
-            if (subSurface?.isScatteringEnabled) {
-                subSurface.isScatteringEnabled = false;
-            }
-        }
+        const light = this.getDirectionalLight();
+        if (light) prepareRsmMaterialClones(this.giRsm.rsm, light);
     }
 
     private canEnableNow(): boolean {

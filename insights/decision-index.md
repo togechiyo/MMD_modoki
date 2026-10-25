@@ -9,6 +9,7 @@
 | Outcome | Decision | Use when |
 | --- | --- | --- |
 | accepted-with-constraints | [3D RC は通常 Luminous から分離して最適化を再開する](./decisions/defer-further-radiance-cascade-optimization.md) | 2026-10-25の再開依頼。Frame Graphの通常GlowとRCを分け、保存互換と独立動作を先に揃える |
+| adopted | [Luminous RCの発光色は2D Luminousを基準にする](./decisions/rc-emission-color-follows-2d-luminous.md) | 2DとRCの色を揃える。補正前の材質色を別基準として固定しない |
 | adopted | [FrameGraph SSAOはシンプル階調に一本化する](./decisions/framegraph-ssao-uses-simple-tone.md) | 強度は線形0〜2、色合成を維持し、従来階調・切替UI・保存フラグを復活させない |
 | adopted | [FrameGraphの重ねがけとタイムラインを同時に設計する](./decisions/design-framegraph-layering-and-timeline-together.md) | 既存効果を新個体方式へ展開し、DoF対象キーも含める。個体は自動命名し、見出しでドラッグ・右端の♢ / ♦でキー登録する。公開項目だけをキー対象にし、詳細入力は右のエフェクト欄へ集約する。「キー編集」「複製」「外す」ボタンは置かず、削除の文言は「削除」とする。旧singleton・旧17種キーの移行と復帰は対象外 |
 | adopted | [モーフ描画容量は最低8・余裕4で試行する](./decisions/morph-preview-capacity-keeps-headroom.md) | 未登録モーフのpreview容量、再bind、再コンパイル頻度を変更する |

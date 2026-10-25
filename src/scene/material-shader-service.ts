@@ -883,6 +883,17 @@ function getLuminousGlowMorphScaleForMesh(host: MaterialShaderHost, mesh: Materi
     return 1;
 }
 
+/** Shared material color before the 2D mask's StandardMaterial clamp and texture multiplication. */
+function getLuminousMaskColor(glowState: { haloColor: Color3; coreColor: Color3 }, morphScale: number): Color3 {
+    const haloColor = scaleColor(glowState.haloColor, morphScale);
+    const coreColor = scaleColor(glowState.coreColor, morphScale);
+    return new Color3(
+        Math.max(haloColor.r, coreColor.r * 0.78) * 1.6,
+        Math.max(haloColor.g, coreColor.g * 0.78) * 1.6,
+        Math.max(haloColor.b, coreColor.b * 0.78) * 1.6,
+    );
+}
+
 export function getFrameGraphLuminousMaskMaterialState(
     host: MaterialShaderHost,
     mesh: MaterialShaderMesh,
@@ -905,16 +916,8 @@ export function getFrameGraphLuminousMaskMaterialState(
         return null;
     }
 
-    const haloColor = scaleColor(glowState.haloColor, morphScale);
-    const coreColor = scaleColor(glowState.coreColor, morphScale);
-    const color = new Color3(
-        Math.max(haloColor.r, coreColor.r * 0.78),
-        Math.max(haloColor.g, coreColor.g * 0.78),
-        Math.max(haloColor.b, coreColor.b * 0.78),
-    );
-
     return {
-        color: scaleColor(color, 1.6),
+        color: getLuminousMaskColor(glowState, morphScale),
         alpha: glowState.alpha,
         texture: glowState.texture,
     };
@@ -1067,12 +1070,19 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
     };
 }
 
-/** World-space source color, before Glow's saturation, whitening and mask gain. */
+/** Transport the 2D luminous source hue in linear RGB while retaining RC's independent peak energy. */
 export function getLuminousRadianceEmission(host: unknown, mesh: object, material: object): (Color3 & { texture: Texture | null }) | null {
     const typedHost = host as MaterialShaderHost;
     const state = getLuminousGlowMaterialState(typedHost, material as MaterialShaderMaterial, { allowManualHeuristic: false });
     if (!state?.luminous) return null;
-    return Object.assign(state.emission.scale(getLuminousGlowMorphScaleForMesh(typedHost, mesh as MaterialShaderMesh)), { texture: state.texture });
+    const morphScale = getLuminousGlowMorphScaleForMesh(typedHost, mesh as MaterialShaderMesh);
+    const mask = getLuminousMaskColor(state, morphScale);
+    // StandardMaterial clamps emissive + diffuse before multiplying the diffuse texture.
+    // Match that source color, rather than transporting the pre-whitening material tint.
+    const color = new Color3(Math.min(1, mask.r), Math.min(1, mask.g), Math.min(1, mask.b)).toLinearSpace();
+    const peak = Math.max(color.r, color.g, color.b);
+    const energy = Math.max(state.emission.r, state.emission.g, state.emission.b) * morphScale;
+    return Object.assign(color.scale(peak > 0 && morphScale > 1e-4 ? energy / peak : 0), { texture: state.texture });
 }
 
 function disposeManagedLuminousGlowLayer(host: MaterialShaderHost): void {

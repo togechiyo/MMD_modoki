@@ -123,14 +123,14 @@ function createHost() {
 }
 
 describe("material shader preset restore", () => {
-    it("shares Luminous selection and LightOff with RC while preserving color independently of Glow", () => {
+    it("shares Luminous selection and LightOff with RC independently of Glow's enabled state", () => {
         const host = createHost();
         expect(getLuminousRadianceEmission(host, host.mesh, host.material)).toBeNull();
         host.material.diffuseColor.set(1, 0.1, 0.03);
         expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-autoluminous")).toBe(true);
         const emission = getLuminousRadianceEmission(host, host.mesh, host.material);
         if (!emission) throw new Error("Luminous source was not selected");
-        expect(emission.r).toBeGreaterThan(emission.g * 10);
+        expect(emission.asArray()).toEqual([1.25, 1.25, 1.25]);
         host.postEffectGlowIntensityValue = 0;
         expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.equals(emission)).toBe(true);
         host.morphWeights.set("LightOff", 1); host.luminousGlowMorphRevision++;
@@ -140,23 +140,44 @@ describe("material shader preset restore", () => {
         const hidden = { ...host, isMaterialVisible: () => false };
         expect(getLuminousRadianceEmission(hidden, host.mesh, host.material)).toBeNull();
     });
+    it("matches the linear hue of the 2D mask after its material clamp while retaining RC peak brightness", () => {
+        const host = createHost();
+        const typedHost = host as unknown as Parameters<typeof getFrameGraphLuminousMaskMaterialState>[0];
+        expect(setWgslMaterialShaderPreset(typedHost, 0, "0:face", "wgsl-autoluminous")).toBe(true);
+        host.material.ambientColor.set(0, 0, 0);
+        for (const color of [[1, 0.1, 0.03], [0.08, 0.03, 0.01], [0.03, 0.09, 0.12]]) {
+            host.material.diffuseColor.set(...color as [number, number, number]);
+            for (const weight of [0, 0.5, 1]) {
+                host.morphWeights.set("LightUp", weight); host.luminousGlowMorphRevision++;
+                const mask = getFrameGraphLuminousMaskMaterialState(typedHost, host.mesh, host.material);
+                const emission = getLuminousRadianceEmission(host, host.mesh, host.material);
+                if (!mask || !emission) throw new Error("Expected both luminous color sources");
+                const linear = mask.color.asArray().map(value => Math.min(1, value) ** 2.2);
+                for (let channel = 0; channel < 3; channel++) expect(emission.asArray()[channel] / Math.max(...emission.asArray()))
+                    .toBeCloseTo(linear[channel] / Math.max(...linear), 6);
+                expect(Math.max(...emission.asArray())).toBeCloseTo(Math.max(...color) ** 2.2 * 1.25 * (1 + weight * 2), 6);
+            }
+        }
+    });
     it("keeps simultaneous Luminous material colors independent when one material changes", () => {
         const host = createHost();
+        Object.assign(host.material, { mmdLuminousPreserveChroma: true });
         const blue = { ...host.material, name: "blue", diffuseColor: new Color3(0, 0, 1),
             ambientColor: Color3.Black(), emissiveColor: Color3.Black() };
         host.sceneModels[0].materials.push({ key: "1:blue", material: blue });
         host.material.diffuseColor.set(1, 0, 0);
         expect(setWgslMaterialShaderPreset(host, 0, "0:face", "wgsl-autoluminous")).toBe(true);
         expect(setWgslMaterialShaderPreset(host, 0, "1:blue", "wgsl-autoluminous")).toBe(true);
+        host.material.emissiveColor.set(1, 0, 0); blue.emissiveColor.set(0, 0, 1);
         const red = getLuminousRadianceEmission(host, host.mesh, host.material);
         expect(red?.asArray()).toEqual([1.25, 0, 0]);
         expect(getLuminousRadianceEmission(host, host.mesh, blue)?.asArray()).toEqual([0, 0, 1.25]);
-        blue.diffuseColor.set(0, 1, 0);
+        blue.diffuseColor.set(0, 1, 0); blue.emissiveColor.set(0, 1, 0);
         expect(getLuminousRadianceEmission(host, host.mesh, blue)?.asArray()).toEqual([0, 1.25, 0]);
         expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.equals(red ?? Color3.Black())).toBe(true);
         expect(red?.asArray()).toEqual([1.25, 0, 0]);
     });
-    it("passes the same emission texture as the Luminous mask to RC before white-core correction", () => {
+    it("passes the same emission texture as the Luminous mask to RC", () => {
         const host = createHost();
         const texture = { hasAlpha: false };
         Object.assign(host.material, { diffuseTexture: texture });

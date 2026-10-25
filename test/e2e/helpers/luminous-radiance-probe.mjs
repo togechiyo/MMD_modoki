@@ -28,7 +28,7 @@ function scene() {
 }
 
 // Original geometry; the source uses the loaded tofu fixture's GUI-assigned Luminous material.
-export async function createRadianceProbe({ multicolor = false } = {}) {
+export async function createRadianceProbe({ multicolor = false, preserveChroma = true } = {}) {
   const current = scene();
   const source = current.meshes.find(mesh => mesh.material && ("toonTexture" in mesh.material
     || mesh.material.subMaterials?.some(material => material && "toonTexture" in material)));
@@ -37,6 +37,10 @@ export async function createRadianceProbe({ multicolor = false } = {}) {
   const materials = [...new Set(current.meshes.flatMap(mesh => mesh.material?.subMaterials ?? [mesh.material]))]
     .filter(material => material && "toonTexture" in material);
   const second = materials.find(material => material !== luminous);
+  // Color-transport probes deliberately use the same chroma-preserving option as colored 2D particles.
+  // Default MMD's white-core appearance is checked separately against its actual 2D mask.
+  luminous.mmdLuminousPreserveChroma = preserveChroma;
+  if (second) second.mmdLuminousPreserveChroma = preserveChroma;
   if (multicolor && !second) throw new Error("Second GUI-assigned Luminous material is missing");
   for (const mesh of current.meshes) if (mesh.material && ("toonTexture" in mesh.material || mesh.material.subMaterials)) mesh.setEnabled(false);
   luminous.diffuseColor.set(1, 0.08, 0.03); luminous.ambientColor.set(0, 0, 0);

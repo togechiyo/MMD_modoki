@@ -61,6 +61,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 現行 Luminous RC と WebGPU の最適化を調査。不要な field 補間、発光と形状の更新分離、probe 照度集計、GPU timestamp の有効化条件と次の比較条件を記録（[調査メモ](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)。実装変更・新規性能計測は未実施）
 - [x] Frame Graph の通常 Luminous と Luminous RC を別個体・別task群へ分離。RC単独の資源、独立したenabledキー、旧保存値の移行を実装（[分離メモ](./framegraph-luminous-rc-separation-2026-10-25.md)）
 - [x] Luminous RCの遮蔽時の不要なfield補間と最終hit以外の発光色評価を削減。変更前PNG一致・回帰10件を確認。fixtureのreceiver単独wall timeは6.11→5.99ms、全体FPS改善は未確認（[実装・比較](./luminous-radiance-occluded-work-optimization-2026-10-25.md)）
+- [x] 64発光材質・16自作textureのステージPMXを生成。小型fixtureと53万・82万三角形のローカル版、消灯・増光・遮蔽板モーフ、GUI確認・任意計測を追加。53万版の連続発光変更でCPU prepare約148msを観測（[作成・検証](./luminous-stage-fixture-2026-10-25.md)）
 - [x] 影調整
 - [x] 広域の影を比較できる6,000×6,000単位の自作PMXステージを追加し、近景から遠景へのCSM境界をカメラ移動で確認（[配置・使用方法と確認結果](../test/fixtures/shadow-stage/README.md)）
 - [x] 静的PMXステージを影あり・エフェクトなし・剛体なしで1,000万三角形まで実描画し、読込・カメラ移動FPS・RAMを計測（[条件・結果・再現方法](./polygon-capacity-stage-benchmark-2026-10-18.md)）

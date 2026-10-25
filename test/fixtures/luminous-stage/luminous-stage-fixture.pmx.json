@@ -1,0 +1,58 @@
+{
+  "preset": "fixture",
+  "vertexCount": 8781,
+  "triangleCount": 8462,
+  "materialCount": 69,
+  "luminousMaterialCount": 64,
+  "sourceTriangleCount": 3072,
+  "textureCount": 16,
+  "vertexIndexSize": 2,
+  "bounds": {
+    "x": [
+      -24.6,
+      24.6
+    ],
+    "y": [
+      -0.4,
+      16.4
+    ],
+    "z": [
+      -24,
+      24.6
+    ]
+  },
+  "bytes": 401480,
+  "sha256": "1630e0063e8fda0ee08d9be50382c66ce5591223390e62dbd2faaff54db69e86",
+  "bones": 1,
+  "morphs": [
+    "LightOff",
+    "LightUp",
+    "遮蔽板スライド"
+  ],
+  "rigidBodies": 0,
+  "joints": 0,
+  "camera": {
+    "position": {
+      "x": 55,
+      "y": 48,
+      "z": -78
+    },
+    "target": {
+      "x": 0,
+      "y": 5,
+      "z": 0
+    }
+  },
+  "coveredCamera": {
+    "position": {
+      "x": -14,
+      "y": 6,
+      "z": -28
+    },
+    "target": {
+      "x": -10,
+      "y": 4,
+      "z": -4
+    }
+  }
+}

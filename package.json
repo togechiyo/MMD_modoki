@@ -15,6 +15,7 @@
     "generate:luts": "node scripts/generate-builtin-luts.js",
     "generate:test-models": "node scripts/generate-external-parent-test-models.mjs",
     "generate:shadow-stage": "node scripts/generate-shadow-stage-fixture.mjs",
+    "generate:luminous-stage": "node scripts/generate-luminous-stage-fixture.mjs",
     "generate:x-test-fixtures": "node scripts/generate-x-accessory-fixtures.mjs",
     "smoke:launch": "node scripts/smoke-launch.mjs",
     "benchmark:export-rgba": "node scripts/benchmark-export-rgba.mjs",

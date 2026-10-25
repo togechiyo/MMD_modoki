@@ -43,7 +43,8 @@ fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
     var stack: array<u32, 64>; stack[0] = 0u;
     var count = 1u;
     var nearest = end;
-    var light = vec4f(0.0, 0.0, 0.0, 1.0);
+    var hitIndex = 0xffffffffu;
+    var hitUv = vec2f(0.0);
     let inverseRay = 1.0 / select(vec3f(0.0000001), ray, abs(ray) > vec3f(0.0000001));
     loop {
         if (count == 0u) { break; }
@@ -66,12 +67,14 @@ fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
                 let q = cross(s, edge1); let v = dot(ray, q) / det;
                 let distance = dot(edge2, q) / det;
                 if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 && distance > max(start, 0.0001) && distance < nearest) {
-                    nearest = distance; light = vec4f(sourceColor(triangle, u, v), 0.0);
+                    nearest = distance; hitIndex = index; hitUv = vec2f(u, v);
                 }
             }
         }
     }
-    return light;
+    // A closer candidate may replace this hit; evaluate its texture/color only once.
+    if (hitIndex != 0xffffffffu) { return vec4f(sourceColor(triangles[hitIndex], hitUv.x, hitUv.y), 0.0); }
+    return vec4f(0.0, 0.0, 0.0, 1.0);
 }
 fn atlasPixel(probe: vec3u, angular: vec2u, grid: u32, columns: u32, rows: u32) -> vec2i {
     return vec2i(i32(probe.x * columns + angular.x), i32((probe.z * grid + probe.y) * rows + angular.y));
@@ -106,7 +109,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     let position = params.volumeMin.xyz + (vec3f(probe) + 0.5) / f32(grid) * params.volumeSize.xyz;
     let local = trace(position, direction(angular.x, angular.y, columns, rows), params.interval.x, params.interval.y);
     var merged = local;
-    if (params.interval.z > 0.5) {
+    // An opaque local hit already supplies the entire interval result.
+    if (params.interval.z > 0.5 && local.a > 0.0) {
         var farther = vec4f(0.0);
         for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
             farther += interpolate(parentField, position, angular * 2u + vec2u(x, y), grid / 2u, columns * 2u, rows * 2u) * 0.25;
@@ -180,9 +184,10 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
               for (var v = 0u; v < 4u; v++) { for (var u = 0u; u < 8u; u++) {
                 let ray = direction(u, v, 8u, 4u); let cosine = max(0.0, dot(normal, ray));
                 if (cosine > 0.0) {
-                    var light = interpolate(radianceField, position, vec2u(u, v), 16u, 8u, 4u).rgb;
                     let contact = trace(position, ray, 0.0, params.interval.x);
-                    if (contact.a == 0.0) { light = contact.rgb; }
+                    var light = contact.rgb;
+                    // Contact replaces the far field; gather only when the ray escapes.
+                    if (contact.a > 0.0) { light = interpolate(radianceField, position, vec2u(u, v), 16u, 8u, 4u).rgb; }
                     result += light * cosine * (4.0 / 32.0);
                 }
             } }

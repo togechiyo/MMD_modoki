@@ -4,6 +4,8 @@
 
 同日後続: 所有者が最適化の再開と、その前の [通常 Luminous / Luminous RC の分離](./framegraph-luminous-rc-separation-2026-10-25.md)を依頼した。以下は再開前の調査記録で、特定方式の改善率を保証するものではない。
 
+[小さい仕事の削減の実装・比較](./luminous-radiance-occluded-work-optimization-2026-10-25.md)では、遮蔽時の field 補間省略と最終 hit の色評価を実装した。PNG は一致したが、fixture の全体 FPS 改善は確認されなかった。他の構造変更候補を実装済みとは扱わない。
+
 ## 結果と比較する順序
 
 WebGPU の設定だけで軽くするより、既存 RC が繰り返す処理を減らす候補が具体的に見つかった。ただし、現在の所有者環境で CPU / GPU のどちらが支配的かは未確定。

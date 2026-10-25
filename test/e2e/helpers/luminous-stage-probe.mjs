@@ -1,5 +1,8 @@
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { LuminousRadianceScene } from "/src/render/luminous-radiance-scene.ts";
+import { MeshRadianceBvh } from "/src/render/mesh-radiance-bvh.ts";
+import { TriangleRadianceBvh } from "/src/render/triangle-radiance-bvh.ts";
+import { StorageBuffer } from "@babylonjs/core/Buffers/storageBuffer";
 
 function scene() {
   const texture = RawTexture.CreateRGBATexture(new Uint8Array(4), 1, 1, undefined, false, false);
@@ -26,9 +29,33 @@ export async function profileLuminousStage({ frames = 60, moving = false, changi
   const morph = changingEmission ? document.querySelector('#morph-controls [data-morph-name="LightUp"]')
     ?.closest(".morph-slider-row")?.querySelector('input[type="range"]') : null;
   if (changingEmission && !morph) throw new Error("LightUp GUI control is required for emission profiling");
+  const bvhTimes = [], refitTimes = [], uploadTimes = [], buffers = new Set(), undo = [];
+  const work = { refittedTriangles: 0, triangleUploadBytes: 0, nodeUploadBytes: 0 };
+  const timed = (target, name, durations, inspect) => {
+    const original = target[name];
+    target[name] = function (...args) {
+      const start = performance.now();
+      try { const result = original.apply(this, args); inspect?.(args, result); return result; }
+      finally { durations.push(performance.now() - start); }
+    };
+    undo.push(() => { target[name] = original; });
+  };
+  timed(MeshRadianceBvh.prototype, "update", bvhTimes, (_, changes) => {
+    work.triangleUploadBytes += changes.triangles.reduce((sum, range) => sum + range.data.byteLength, 0);
+    work.nodeUploadBytes += changes.nodes.reduce((sum, range) => sum + range.data.byteLength, 0);
+  });
+  timed(TriangleRadianceBvh.prototype, "update", refitTimes, args => { work.refittedTriangles += args[0].length / 24; });
+  const upload = StorageBuffer.prototype.update;
+  StorageBuffer.prototype.update = function (...args) {
+    const start = performance.now();
+    try { return upload.apply(this, args); }
+    finally { if (buffers.has(this)) uploadTimes.push(performance.now() - start); }
+  };
+  undo.push(() => { StorageBuffer.prototype.update = upload; });
   const originalWeight = morph?.value;
   const update = LuminousRadianceScene.prototype.update;
   LuminousRadianceScene.prototype.update = function (...args) {
+    buffers.add(this.triangleBuffer); buffers.add(this.nodeBuffer);
     const start = performance.now(), before = this.updates;
     try { return update.apply(this, args); }
     finally {
@@ -53,13 +80,16 @@ export async function profileLuminousStage({ frames = 60, moving = false, changi
     const stats = values => {
       if (!values.length) return null;
       const sorted = [...values].sort((a, b) => a - b);
-      return { median: sorted[Math.floor(sorted.length / 2)], p95: sorted[Math.floor(sorted.length * 0.95)], max: sorted.at(-1) };
+      return { median: sorted[Math.floor(sorted.length / 2)], p95: sorted[Math.floor(sorted.length * 0.95)], max: sorted.at(-1),
+        samples: values.length, total: values.reduce((sum, value) => sum + value, 0) };
     };
     return { frames, moving, changingEmission, intervalMs: stats(intervals), cpuPrepareMs: stats(prepare),
       cpuChangedPrepareMs: stats(updatedPrepare), emissionInputFrames: morph ? index : 0,
+      work, cpuBvhMs: stats(bvhTimes), cpuRefitCallMs: stats(refitTimes), cpuUploadCallMs: stats(uploadTimes),
       geometryUpdates: updates.reduce((sum, value) => sum + value, 0), gpuTimestampMs: null };
   } finally {
     LuminousRadianceScene.prototype.update = update;
+    for (const restore of undo) restore();
     if (observer) current.onBeforeRenderObservable.remove(observer);
     if (morph) { morph.value = originalWeight; morph.dispatchEvent(new Event("input", { bubbles: true })); }
   }

@@ -1,6 +1,7 @@
 import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh } from "./triangle-radiance-bvh";
 
-type Input = { key: object; triangles: Float32Array };
+// Reuse geometryVersion only when every field except inline emission RGB is unchanged.
+type Input = { key: object; triangles: Float32Array; geometryVersion?: object };
 type Entry = Input & { bvh: TriangleRadianceBvh; triangleOffset: number; nodeOffset: number };
 export type RadianceBufferRange = { byteOffset: number; data: Float32Array };
 type Changes = { triangles: RadianceBufferRange[]; nodes: RadianceBufferRange[] };
@@ -27,12 +28,16 @@ export class MeshRadianceBvh {
             return input.key !== previous.key || input.triangles.length !== previous.triangles.length;
         });
         const changed: Entry[] = [];
+        const refitted = new Set<Entry>();
         if (rebuild) {
             if (this.triangleCount) this.includeBounds(this.nodes, 0);
             const previous = new Map(this.entries.map(entry => [entry.key, entry]));
             this.entries = inputs.map(input => {
                 const old = previous.get(input.key), bvh = old?.bvh ?? new TriangleRadianceBvh();
-                if (input.triangles !== old?.triangles) bvh.update(input.triangles);
+                if (input.triangles !== old?.triangles) {
+                    if (old && input.geometryVersion && input.geometryVersion === old.geometryVersion) bvh.updateEmission(input.triangles);
+                    else bvh.update(input.triangles);
+                }
                 return { ...input, bvh, triangleOffset: 0, nodeOffset: 0 };
             });
             this.topCount = Math.max(0, this.entries.length - 1);
@@ -50,7 +55,9 @@ export class MeshRadianceBvh {
                 const entry = this.entries[index], input = inputs[index];
                 if (entry.triangles === input.triangles) continue;
                 this.includeBounds(entry.bvh.nodes, 0);
-                entry.bvh.update(input.triangles); entry.triangles = input.triangles; changed.push(entry);
+                if (input.geometryVersion && input.geometryVersion === entry.geometryVersion) entry.bvh.updateEmission(input.triangles);
+                else { entry.bvh.update(input.triangles); refitted.add(entry); }
+                entry.triangles = input.triangles; entry.geometryVersion = input.geometryVersion; changed.push(entry);
             }
         }
         this.triangleCount = count;
@@ -59,17 +66,19 @@ export class MeshRadianceBvh {
             this.includeBounds(entry.bvh.nodes, 0);
             const triangleOffset = entry.triangleOffset * RADIANCE_TRIANGLE_STRIDE;
             this.triangles.set(entry.bvh.triangles, triangleOffset);
+            changes.triangles.push(this.range(this.triangles, triangleOffset, entry.bvh.triangles.length));
+            // Emission still dirties contact lighting inside these bounds, but cannot move a tree node.
+            if (!rebuild && !refitted.has(entry)) continue;
             const nodeOffset = entry.nodeOffset * NODE_STRIDE;
             this.nodes.set(entry.bvh.nodes, nodeOffset);
             for (let offset = nodeOffset; offset < nodeOffset + entry.bvh.nodes.length; offset += NODE_STRIDE) {
                 if (this.nodes[offset + 7]) this.nodes[offset + 3] += entry.triangleOffset;
                 else { this.nodes[offset + 3] += entry.nodeOffset; this.nodes[offset + 8] += entry.nodeOffset; }
             }
-            changes.triangles.push(this.range(this.triangles, triangleOffset, entry.bvh.triangles.length));
             changes.nodes.push(this.range(this.nodes, nodeOffset, entry.bvh.nodes.length));
         }
         if (rebuild && this.topCount) this.buildTop();
-        if (changed.length && this.topCount) {
+        if ((rebuild || refitted.size) && this.topCount) {
             for (let node = this.topCount - 1; node >= 0; node--) {
                 const offset = node * NODE_STRIDE, left = this.nodes[offset + 3] * NODE_STRIDE, right = this.nodes[offset + 8] * NODE_STRIDE;
                 for (let axis = 0; axis < 3; axis++) {

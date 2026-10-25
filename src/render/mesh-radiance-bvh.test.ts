@@ -43,6 +43,40 @@ function verifyTree(bvh: MeshRadianceBvh, inputs: Float32Array[]): void {
 }
 
 describe("mesh radiance acceleration updates", () => {
+    it("uploads color-only changes without a BLAS/TLAS refit while invalidating the source bounds", () => {
+        const source = { key: {}, geometryVersion: {}, triangles: geometry(21, -100) };
+        const stage = { key: {}, geometryVersion: {}, triangles: geometry(200, 1000) };
+        const bvh = new MeshRadianceBvh(); bvh.update([source, stage]);
+        const nodes = bvh.nodes.slice(), mirror = bvh.triangles.slice();
+        const spy = vi.spyOn(TriangleRadianceBvh.prototype, "update");
+        try {
+            source.triangles = source.triangles.slice();
+            for (let i = 0; i < 21; i++) source.triangles.set([0, i * 0.1, 2], i * STRIDE + 12);
+            const changes = bvh.update([source, stage]);
+            expect(spy).not.toHaveBeenCalled(); expect(changes.nodes).toEqual([]);
+            expect(changes.triangles.reduce((sum, range) => sum + range.data.length, 0)).toBe(source.triangles.length);
+            for (const range of changes.triangles) mirror.set(range.data, range.byteOffset / 4);
+            expect(mirror).toEqual(bvh.triangles); expect(bvh.nodes).toEqual(nodes);
+            expect(bvh.changedMin[0]).toBeLessThanOrEqual(-100);
+            expect(bvh.changedMax[0]).toBeGreaterThanOrEqual(-59);
+            expect(bvh.changedMax[0]).toBeLessThan(1000);
+            verifyTree(bvh, [source.triangles, stage.triangles]);
+            source.geometryVersion = {}; source.triangles = geometry(21, 800);
+            bvh.update([source, stage]); expect(spy).toHaveBeenCalledTimes(1);
+            verifyTree(bvh, [source.triangles, stage.triangles]);
+            // Rebuild top-level offsets while a retained source also changes color.
+            spy.mockClear(); source.triangles = source.triangles.slice(); source.triangles.set([1, 2, 3], 12);
+            bvh.update([stage, source]); expect(spy).not.toHaveBeenCalled();
+            verifyTree(bvh, [stage.triangles, source.triangles]);
+            const actor = { key: {}, geometryVersion: {}, triangles: geometry(9, -50) };
+            bvh.update([stage, source, actor]); spy.mockClear();
+            source.triangles = source.triangles.slice(); source.triangles.set([0, 0, 0], 12);
+            actor.triangles = geometry(9, 700); actor.geometryVersion = {};
+            const mixed = bvh.update([stage, source, actor]);
+            expect(spy).toHaveBeenCalledTimes(1); expect(mixed.nodes.length).toBeGreaterThan(0);
+            verifyTree(bvh, [stage.triangles, source.triangles, actor.triangles]);
+        } finally { spy.mockRestore(); }
+    });
     it("refits/uploads only a changed mesh and keeps the entire top tree enclosing it", () => {
         const stage = { key: {}, triangles: geometry(200) }, actor = { key: {}, triangles: geometry(12, -100) };
         const lamp = { key: {}, triangles: geometry(1, 1000) }, bvh = new MeshRadianceBvh();

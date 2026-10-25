@@ -12,6 +12,23 @@ export class TriangleRadianceBvh {
     public triangleCount = 0;
     private order: number[] = [];
 
+    /** The caller certifies all geometry/UV/source fields are unchanged. Keep the BLAS/order intact. */
+    public updateEmission(input: Float32Array): void {
+        const stride = RADIANCE_TRIANGLE_STRIDE;
+        if (input.length !== this.triangleCount * stride) throw new Error("3D RC emission update topology mismatch");
+        for (let offset = 12; offset < input.length; offset += stride) {
+            if (!Number.isFinite(input[offset]) || !Number.isFinite(input[offset + 1]) || !Number.isFinite(input[offset + 2])) {
+                throw new Error("3D RC emission contains non-finite values");
+            }
+        }
+        for (let index = 0; index < this.triangleCount; index++) {
+            const source = this.order[index] * stride + 12, target = index * stride + 12;
+            this.triangles[target] = input[source];
+            this.triangles[target + 1] = input[source + 1];
+            this.triangles[target + 2] = input[source + 2];
+        }
+    }
+
     public update(input: Float32Array): void {
         const stride = RADIANCE_TRIANGLE_STRIDE;
         const count = input.length / stride;

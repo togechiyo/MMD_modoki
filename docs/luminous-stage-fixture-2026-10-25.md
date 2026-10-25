@@ -51,3 +51,5 @@ heavyのLightUp連続入力では、30提示間隔の計測窓に31入力・31�
 - heavyのOFF / RC / 通常Luminous併用と、stressのRCをローカルElectronで確認。heavyは53万・stressは82万三角形がRCに入り、それぞれ発光三角形307,200 / 442,368、geometry errorなし。
 - 最終5条件のpage error / WebGPU validation / 予期しないnavigationは0。小型・stress全景と庇下画像も目視確認した。
 - 全版のPmxReader読み戻し、単体201 files / 1,259 tests、lint、変更した`.mjs`のsyntax確認が成功。本体の型・起動経路は変更していないため、typecheckと独立したsmokeの追加実行は省略した。
+
+後続の[発光変更時のCPU更新削減](./luminous-radiance-emission-update-optimization-2026-10-25.md)では、このheavy版でCPU prepareが約153→27 msとなる改善を確認した。上表はfixture作成時点の結果として保持する。

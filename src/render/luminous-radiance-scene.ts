@@ -15,7 +15,8 @@ import { LuminousRadiancePoseCache } from "./luminous-radiance-pose-cache";
 import { logWarn } from "../app-logger";
 
 export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: number; g: number; b: number; texture?: Texture | null } | null;
-type MeshInput = { key: Mesh; snapshot: RadianceInputSnapshot; triangles: Float32Array; emitters: number; low: number[]; high: number[] };
+type MeshInput = { key: Mesh; snapshot: RadianceInputSnapshot; emissionSnapshot: RadianceInputSnapshot;
+    geometryVersion: object; triangles: Float32Array; emitters: number; low: number[]; high: number[] };
 
 export class LuminousRadianceScene {
     public readonly bvh = new MeshRadianceBvh();
@@ -84,11 +85,28 @@ export class LuminousRadianceScene {
                         wrap: texture ? texture.wrapU + texture.wrapV * 4 : 0 };
                 });
                 const metadata = surfaces.flatMap(surface => [surface.indexStart, surface.indexCount,
-                    surface.emission ? 1 : 0, surface.emission?.r ?? 0, surface.emission?.g ?? 0, surface.emission?.b ?? 0,
+                    surface.emission ? 1 : 0,
                     surface.textureSource, surface.wrap, ...(surface.matrix ?? [])]);
+                const emissionValues = surfaces.flatMap(surface => [surface.emission?.r ?? 0, surface.emission?.g ?? 0, surface.emission?.b ?? 0]);
+                if (!emissionValues.every(Number.isFinite)) throw new Error("3D RC emission contains invalid colors");
                 const parts: ArrayLike<number>[] = [pose.signature, indices, world.m, metadata, ...surfaces.map(surface => surface.uvs ?? [])];
                 const previous = this.meshInputs.get(mesh);
-                if (previous?.snapshot.matches(parts)) { chunks.push(previous); continue; }
+                if (previous?.snapshot.matches(parts)) {
+                    if (previous.emissionSnapshot.matches([emissionValues])) { chunks.push(previous); continue; }
+                    // The geometry signature includes source selection, texture state/matrix and UV values.
+                    // Copy only RGB into the unchanged source-order records; no vertex transform/BLAS refit.
+                    const values = previous.triangles.slice();
+                    let offset = 12;
+                    for (const [index, surface] of surfaces.entries()) {
+                        const end = offset + surface.indexCount / 3 * RADIANCE_TRIANGLE_STRIDE;
+                        const r = emissionValues[index * 3] * 8, g = emissionValues[index * 3 + 1] * 8, b = emissionValues[index * 3 + 2] * 8;
+                        for (; offset < end; offset += RADIANCE_TRIANGLE_STRIDE) {
+                            values[offset] = r; values[offset + 1] = g; values[offset + 2] = b;
+                        }
+                    }
+                    const chunk = { ...previous, emissionSnapshot: new RadianceInputSnapshot([emissionValues]), triangles: values };
+                    this.meshInputs.set(mesh, chunk); chunks.push(chunk); continue;
+                }
                 const values = new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);
                 const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
                 let emitters = 0, writeOffset = 0;
@@ -100,7 +118,6 @@ export class LuminousRadianceScene {
                 }
                 for (const surface of surfaces) {
                     const { emission, uvs, textureSource, wrap, matrix: textureMatrix } = surface;
-                    if (emission && ![emission.r, emission.g, emission.b].every(Number.isFinite)) throw new Error("3D RC emission contains invalid colors");
                     for (let index = surface.indexStart; index < surface.indexStart + surface.indexCount; index += 3) {
                         for (let corner = 0; corner < 3; corner++) {
                             const vertex = indices[index + corner], offset = vertex * 3;
@@ -128,7 +145,8 @@ export class LuminousRadianceScene {
                         if (emission) emitters++;
                     }
                 }
-                const chunk = { key: mesh, snapshot: new RadianceInputSnapshot(parts), triangles: values, emitters, low, high };
+                const chunk = { key: mesh, snapshot: new RadianceInputSnapshot(parts), emissionSnapshot: new RadianceInputSnapshot([emissionValues]),
+                    geometryVersion: {}, triangles: values, emitters, low, high };
                 this.meshInputs.set(mesh, chunk); chunks.push(chunk);
             }
             for (const chunk of chunks) {

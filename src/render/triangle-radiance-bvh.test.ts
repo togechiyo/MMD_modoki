@@ -46,6 +46,25 @@ describe("world triangle radiance BVH", () => {
         expect(bvh.triangles.every(value => value === 0)).toBe(true);
         expect(bvh.nodes.every(Number.isFinite)).toBe(true);
     });
+    it("updates only emission through the existing sort order without refitting or changing other triangle fields", () => {
+        const input = geometry(21), bvh = new TriangleRadianceBvh(), reference = new TriangleRadianceBvh();
+        // Reverse source order so a direct sorted-index color write would attach light to the wrong face.
+        const reversed = new Float32Array(input.length);
+        for (let i = 0; i < 21; i++) reversed.set(input.subarray((20 - i) * STRIDE, (21 - i) * STRIDE), i * STRIDE);
+        bvh.update(reversed); reference.update(reversed);
+        const nodes = bvh.nodes, nodeBytes = nodes.slice();
+        for (const strength of [0, 0.13, 8]) {
+            const next = reversed.slice();
+            for (let i = 0; i < 21; i++) next.set([strength * i, strength / (i + 1), 0.3], i * STRIDE + 12);
+            bvh.updateEmission(next); reference.update(next);
+            expect(bvh.triangles).toEqual(reference.triangles);
+            expect(bvh.nodes).toBe(nodes); expect(nodes).toEqual(nodeBytes);
+        }
+        const before = bvh.triangles.slice(), invalid = reversed.slice(); invalid[12] = Infinity;
+        expect(() => bvh.updateEmission(invalid)).toThrow();
+        expect(() => bvh.updateEmission(geometry(20))).toThrow();
+        expect(bvh.triangles).toEqual(before); expect(nodes).toEqual(nodeBytes);
+    });
     it("keeps red, green and blue emitters on their triangles across sorting and color-only refit", () => {
         const source = geometry(12), input = new Float32Array(source.length);
         for (let index = 0; index < 12; index++) input.set(source.subarray((11 - index) * STRIDE, (12 - index) * STRIDE), index * STRIDE);

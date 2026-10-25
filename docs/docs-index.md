@@ -377,6 +377,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [Frame Graph の通常 Luminous と Luminous RC の分離 2026-10-25](./framegraph-luminous-rc-separation-2026-10-25.md)
 - [Luminous RC の遮蔽時の補間と発光色評価の削減 2026-10-25](./luminous-radiance-occluded-work-optimization-2026-10-25.md)
 - [ルミナス材質の多いステージPMX 2026-10-25](./luminous-stage-fixture-2026-10-25.md)
+- [Luminous RC の発光変更時のCPU更新削減 2026-10-25](./luminous-radiance-emission-update-optimization-2026-10-25.md)
 - [AL発光面 3D RC検証画面の実装・実機確認 2026-10-11](./radiance-cascade-al-lab-2026-10-11.md)
 - [既存 Luminous 材質への 3D RC 接続 2026-10-11](./luminous-radiance-integration-2026-10-11.md)
 - [3D RC の発光色・カメラ復元・境界帯の修正 2026-10-12](./luminous-radiance-color-camera-fix-2026-10-12.md)

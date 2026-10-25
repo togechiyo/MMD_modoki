@@ -69,3 +69,15 @@ material の初期化順と scene の構成に強く依存する。
 
 MMD modoki では、まず plugin を最初の描画前に仕込むことを優先し、
 その上で `enable` を切り替える実装が必要だった。
+
+## 2026-10-25: RSMのfragment出力不一致ログ
+
+所有者提供のローカルconsole log（Babylon.js 9.2.0 / WebGPU）では、21:55:22・frame 2341で`Color target has no corresponding fragment stage output`が発生した。対象は`targets[1]`。続く`RSMmrt_dirLight`のpipeline設定とcommand buffer送信が無効になり、複数frameで繰り返され、最後は警告数上限でconsole出力が停止している。警告の停止は描画の回復を意味しない。JavaScriptのTypeError / ReferenceErrorやdevice lostを示す記録は、このログにはない。
+
+RSMは位置・法線・fluxの3つの出力を生成する（[公式解説](https://doc.babylonjs.com/features/featuresDeepDive/lights/rsmgi/)）。依存中の`reflectiveShadowMap.js`でも3枚のMRTを確保し、`RSMCreatePluginMaterial`が3つのfragment出力を付加する。今回のログはその描画先と実際のfragment出力が一致しなかったことを示す。[WebGPUのfragment state検証](https://gpuweb.github.io/gpuweb/#fragment-state)も、writeMaskが0でない描画先に対応する出力を要求する。
+
+- エラーの発生箇所はRSM GIの描画passであり、Luminous RCのpassではない。2026-09-14の[単一材質fixtureでの同種エラー](./depth-effects-timeline-2026-09-14.md#fixtureでの切り分け)は今回のRC色変更より前に記録されている。ただし同じ発生条件と断定するものではない。
+- ログに材質名・mesh名・生成済みshaderがなく、どの材質のclone / plugin / defineが不整合になったかは未特定。所有者のモデルは探索・読み込みしていない。
+- 現行controllerは初期化時にRSMを生成する一方、OFF時は`giManager.enable = false`だけを設定する。依存中Babylon 9.2.0の`ReflectiveShadowMap`は生成時に`enable = true`でsceneのcustomRenderTargetsへ登録され、`GIRSMManager.enable`はこのRSMのenableを切り替えない。したがってコード上、GI合成のOFFとRSM描画の停止は連動していない。ログだけからGIボタンがONだったとは判断できず、OFFにするだけの回避も保証できない。
+
+今回はログと現行ソースの照合のみ。修正・再現E2Eは未実施。次に切り分ける際は配布可能なfixtureで実際のRSM描画有無と各材質のfragment出力を観測し、OFF時の停止と材質互換性を別々に確認する。

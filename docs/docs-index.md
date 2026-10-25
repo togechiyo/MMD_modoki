@@ -372,6 +372,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [Babylon RSM GI メモ](./babylon-rsm-gi-notes.md)
 - [LPV と DFAO の仕組み・制約・適用調査 2026-10-25](./lpv-dfao-research-2026-10-25.md)
 - [3D Radiance Cascades の仕組みと実現性 2026-10-11](./radiance-cascades-3d-research-2026-10-11.md)
+- [Radiance Cascades の GI・媒質・スペクトル応用と WebGPU 実装 2026-10-25](./radiance-cascades-applications-webgpu-research-2026-10-25.md)
 - [AL発光面 3D RC検証画面の実装・実機確認 2026-10-11](./radiance-cascade-al-lab-2026-10-11.md)
 - [既存 Luminous 材質への 3D RC 接続 2026-10-11](./luminous-radiance-integration-2026-10-11.md)
 - [3D RC の発光色・カメラ復元・境界帯の修正 2026-10-12](./luminous-radiance-color-camera-fix-2026-10-12.md)

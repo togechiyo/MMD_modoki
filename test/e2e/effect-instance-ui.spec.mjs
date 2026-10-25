@@ -69,6 +69,8 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
     await expect(row(b).locator(".effect-instance-actions button")).toHaveCount(1);
     await expect(row(b).locator('[data-instance-action="delete"]')).toBeVisible();
+    await expect(row(b).locator('[data-instance-action="delete"]')).toHaveText("削除");
+    await expect(row(b).locator('[data-instance-action="delete"]')).toHaveAttribute("title", "削除");
     await page.locator("#btn-kf-delete").click();
     expect(await effectRows()).toEqual([]);
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);

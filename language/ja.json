@@ -634,7 +634,7 @@
     "effect.instance.registerKeyframe": "キーフレーム登録",
     "effect.instance.suspend": "外す",
     "effect.instance.resume": "復帰",
-    "effect.instance.delete": "完全削除",
+    "effect.instance.delete": "削除",
     "effect.instance.up": "上へ移動",
     "effect.instance.down": "下へ移動",
     "effect.frameGraphPost.backendRequired":  "FrameGraphバックエンドが必要です",

@@ -634,7 +634,7 @@
     "effect.instance.registerKeyframe": "Register keyframe",
     "effect.instance.suspend": "Suspend",
     "effect.instance.resume": "Restore",
-    "effect.instance.delete": "Delete permanently",
+    "effect.instance.delete": "Delete",
     "effect.instance.up": "Move up",
     "effect.instance.down": "Move down",
     "effect.frameGraphPost.backendRequired":  "FrameGraph backend required",

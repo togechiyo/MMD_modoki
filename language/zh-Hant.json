@@ -634,7 +634,7 @@
     "effect.instance.registerKeyframe": "登錄關鍵影格",
     "effect.instance.suspend": "停用",
     "effect.instance.resume": "恢復",
-    "effect.instance.delete": "完全刪除",
+    "effect.instance.delete": "刪除",
     "effect.instance.up": "向上移動",
     "effect.instance.down": "向下移動",
     "effect.frameGraphPost.backendRequired":  "需要 FrameGraph 後端",

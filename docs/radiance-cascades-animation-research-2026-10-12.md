@@ -64,3 +64,7 @@ Voxel版の[report](https://github.com/creikey/voxel-radiance-cascades/blob/1722
 [論文abstract](https://arxiv.org/abs/2607.20384)と公開README、実装説明、trace / irradiance / triangle worldソースを読んだ。論文PDFとHTML本文は取得できなかったため、本文を読了したと扱わず、作者のコード・実装説明から分かった点と本リポジトリ向けの推論を分けた。
 
 今回の調査対象をローカルで実行したベンチマークや、任意PMXのSDEF / QDEF・モーフを保ったダンス再生の成功例は確認していない。公開側の速度は作者環境・その表現・解像度の値で、MMD_modokiのFPS改善幅へ換算しない。外部コードの再利用許諾は個別確認が必要で、今回の変更は文書のみ。
+
+## 2026-10-25 最適化の再調査
+
+[現行 Luminous RC と WebGPU の調査](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)で、その後に実装された mesh BVH / receiver 再利用を前提に、まだ残る重複を確認した。遮蔽時の field 補間省略、発光変更と形状更新の分離、probe 照度の共有と近距離 visibility、GPU timestamp の要求・有効化条件を整理した。新規の速度計測や実装変更は行っていない。

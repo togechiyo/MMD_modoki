@@ -99,6 +99,10 @@ DoFで誤って公開した距離指定・F値・焦点距離とmanual方式を�
 
 見出しドラッグ・右端キー登録アイコンの追加後は、unit **198 files / 1,186 tests**、lint、typecheck:criticalがPASS。通常typecheckは既存548診断の内容まで増減なし。関連GUIの4シナリオで、見出しの実ドラッグと通常クリック、閉じた個体の直接登録、未変更 / ♢ / ♦の切替、Undo / Redo、二個体の独立登録、固定値の非キー扱い、DoF対象参照、5言語、実ファイル保存 / 読込・Classic往復・再生中の制限を確認した。従来のタイムライン非表示条件、固定スライダー、DoF出力も再確認し、WebGPU validationは0。登録通知と履歴には個体IDではなく表示名を使う。
 
+2026-10-25はキーの前後関係を重点検証した。[境界のunit](../src/editor/effect-keyframe-boundaries.test.ts)を59件追加し、19種類すべての公開値について、最初のキーの前のbase値、キー直前 / 当該frame / 直後、キー間の数値補間、最後のキー以後の値保持、逆順・混在seek、登録順と時系列の独立、上書き、前のキーを越える移動、衝突拒否、先頭 / 中間 / 末尾 / 全キー削除、previewと再生・出力の分離を確認した。DoFの1frame刻みの対象・ON / OFF切替と、実Commandの移動・上書き・削除のUndo / RedoもPASS。
+
+[実GUIの境界シナリオ](../test/e2e/effect-keyframe-boundaries.spec.mjs)では、SSAO・Gamma・DoFを10 / 20 / 30frameへ順不同に登録し、37地点でSSAO / Gammaの実描画taskとUI表示、DoFの対象selectorを照合した。SSAOの20→21frame移動でONになる境界も21へ移り、キー直前はOFFを保つこと、先頭 / 中間 / 末尾の削除とUndo / Redo、前後キー移動ボタンの端での停止、DoF対象参照のstep切替、同種の未登録個体の独立、保存読込・Classic往復後の逆seekを確認した。再描画の通し番号を観測し、同一frameの再評価も新しい描画結果で検査する。未登録previewがある場合も登録値でPNG出力し、2回の確認とも比較差の平均は0.005 / channel未満（0～255）、WebGPU validationとpageerrorは0。今回の範囲ではアプリの不具合を検出せず、製品コードは変更していない。unit全体は **199 files / 1,245 tests**、lint、typecheck:criticalがPASS、通常typecheckは既存548診断のまま。任意モデル、多数個体、長尺動画での品質・性能までは本検証に含まない。
+
 後続候補は、個体構造・固定設定のMCP操作、色調補正・pencil等の新効果、DoFの品質選択や対象間blend。MCPの個体キー参照・編集には対応するが、追加・複製・順序等の構造操作はGUIから行う。パーティクルなどscene側の効果はこの19種類の個体化とは別枠で、没となった海の復活も含まない。タスクの正本は[基本タスクチェックリスト](./mmd-basic-task-checklist.md)。
 
 ## 詳細記録

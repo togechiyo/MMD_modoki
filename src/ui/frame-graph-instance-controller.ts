@@ -28,7 +28,6 @@ export class FrameGraphInstanceController {
         private readonly value: (instanceId: string, value: EffectValue) => void,
         private readonly fixedValue: (instanceId: string, field: InstanceFixedSliderField, value: number) => void,
         private readonly select: (instanceId: string) => void,
-        private readonly editKeys: (instanceId: string) => void,
         private readonly registerKeyframe: (instanceId: string) => void,
         private readonly keyframeState: (instanceId: string) => SectionKeyframeButtonState,
         private readonly commitValue: (before: SerializedEffectInstances) => void,
@@ -40,10 +39,9 @@ export class FrameGraphInstanceController {
             if (!id || !button || !host.isEffectInstance(id)) return;
             const action = button.dataset.instanceAction;
             if (action === "select") { select(id); return; }
-            if (action === "keyEdit") { editKeys(id); return; }
             if (action === "registerKeyframe") { registerKeyframe(id); return; }
             if (action === "lutFile") { loadLut(id); return; }
-            if (action === "duplicate" || action === "suspend" || action === "resume" || action === "delete") edit({ action, instanceId: id });
+            if (action === "resume" || action === "delete") edit({ action, instanceId: id });
         });
         root.addEventListener("input", event => {
             const input = event.target instanceof HTMLInputElement ? event.target : null;
@@ -113,7 +111,7 @@ export class FrameGraphInstanceController {
             <button type="button" class="section-kf-btn effect-instance-keyframe-button" data-instance-action="registerKeyframe" title="${keyTitle}" aria-label="${keyTitle}"></button></div>
             <div class="effect-layer-details"${expanded ? "" : " hidden"}>
             ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSelects}${fixedSliderControls}${lutControls}
-            <div class="effect-instance-actions">${button("keyEdit")}${button("duplicate")}${button(present ? "suspend" : "resume")}${button("delete")}</div>
+            <div class="effect-instance-actions">${present ? "" : button("resume")}${button("delete")}</div>
             ${present ? "" : `<span>${escape(t("timeline.effectSuspended"))}</span>`}</div></div>`;
     }
     installControls(): void {

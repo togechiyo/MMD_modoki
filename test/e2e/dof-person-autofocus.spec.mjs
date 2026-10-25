@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { expandEffectInstance, selectEffectInstance } from "./helpers/effect-instance-controls.mjs";
+import { expandEffectInstance, registerEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -28,7 +28,7 @@ test("DoF個体のオートフォーカス既定値・方式・言語・project�
     await mode.selectOption("model-target"); await row.locator('[data-dof-instance-field="targetModelInstanceId"]').selectOption(models[0].instanceId);
     await row.locator('[data-dof-instance-field="targetBoneName"]').selectOption("センター");
     await mode.selectOption("person-auto");
-    await selectEffectInstance(row); await page.locator("#btn-kf-add").click();
+    await registerEffectInstance(row);
     await expect(page.locator('[data-effect-key-field="focusDistance"], [data-effect-key-field="fStop"], [data-effect-key-field="focalLength"]')).toHaveCount(0);
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
     const instance = saved.effects.frameGraphInstances.instances.find(item => item.instanceId === id);

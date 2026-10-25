@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { expandEffectInstance, selectEffectInstance } from "./helpers/effect-instance-controls.mjs";
+import { expandEffectInstance, registerEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const difference = (a, b) => a.reduce((sum, value, i) => sum + (i % 4 === 3 ? 0 : Math.abs(value - b[i])), 0) / (a.length * 0.75);
@@ -57,9 +57,9 @@ test("Luminous instances own RC settings, resources and enabled keys", async ({}
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click(); await capture("redo-second-rc");
     expect((await diagnostics()).controller.instances.find(item => item.instanceId === b).radiance.emitters).toBeGreaterThan(0);
     const seek = async frame => { await page.locator("#current-frame").fill(String(frame)); await page.locator("#current-frame").press("Enter"); };
-    await row(b).locator('[data-instance-field="enabled"]').uncheck(); await selectEffectInstance(row(a));
-    await seek(0); await row(a).locator('[data-instance-field="enabled"]').uncheck(); await page.locator("#btn-kf-add").click();
-    await seek(20); await row(a).locator('[data-instance-field="enabled"]').check(); await page.locator("#btn-kf-add").click();
+    await row(b).locator('[data-instance-field="enabled"]').uncheck(); await expandEffectInstance(row(a));
+    await seek(0); await row(a).locator('[data-instance-field="enabled"]').uncheck(); await registerEffectInstance(row(a));
+    await seek(20); await row(a).locator('[data-instance-field="enabled"]').check(); await registerEffectInstance(row(a));
     const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
     await seek(0); expect(difference(dark, await capture("key-off"))).toBeLessThan(0.1);
     await seek(20); expect(difference(single, await capture("key-on"))).toBeLessThan(0.1);

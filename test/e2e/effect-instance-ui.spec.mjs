@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync } from "node:fs";
 import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
-import { dragEffectStackRow, selectEffectInstance, expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
+import { dragEffectStackRow, registerEffectInstance, expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test("automatic effect names and shared stack UI at narrow width", async ({}, testInfo) => {
@@ -41,8 +41,8 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     expect(await effectRows()).toEqual([]);
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("normal-effect-settings.png") });
-    await selectEffectInstance(row(b));
-    expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [] }]);
+    await expect(page.locator('[data-instance-action="keyEdit"], [data-instance-action="duplicate"], [data-instance-action="suspend"]')).toHaveCount(0);
+    expect(await effectRows()).toEqual([]);
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     await expect(row(b).locator(".effect-layer-name")).toHaveText("SSAO 2");
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
@@ -51,12 +51,11 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await expect(row(b).locator('[data-instance-field="color"], [data-instance-fixed="toonInfluence"]')).toHaveCount(0);
     await expect(row(b).locator('[data-instance-field="strength"], [data-instance-field="radius"]')).toHaveCount(2);
     await page.locator("#shader-panel").screenshot({ path: testInfo.outputPath("effect-panel.png") });
-    // Leaving an unregistered edit session drops its temporary row without making a key.
+    // Opening details and selecting another track never creates an empty effect row.
     await selectTimelineTrack(page, "camera", "Camera");
     expect(await effectRows()).toEqual([]);
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);
-    await selectEffectInstance(row(b));
-    await page.locator("#btn-kf-add").click();
+    await registerEffectInstance(row(b));
     await selectTimelineTrack(page, "camera", "Camera");
     expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [0] }]);
     const savedProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
@@ -68,6 +67,8 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await selectTimelineTrack(page, "effect", b);
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
+    await expect(row(b).locator(".effect-instance-actions button")).toHaveCount(1);
+    await expect(row(b).locator('[data-instance-action="delete"]')).toBeVisible();
     await page.locator("#btn-kf-delete").click();
     expect(await effectRows()).toEqual([]);
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);
@@ -129,7 +130,7 @@ test("fixed effect sliders preview continuously, commit one gesture and retain s
       await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click(); expect(await actual(id, field)).toBe(enteredValue);
     }
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
-    await selectEffectInstance(row(luminous)); await page.locator("#btn-kf-add").click();
+    await row(luminous).locator('[data-instance-field="enabled"]').uncheck(); await registerEffectInstance(row(luminous));
     expect(Object.keys((await state()).instances.find(item => item.instanceId === luminous).animation.tracks[0].keys[0].value).sort()).toEqual(["enabled", "intensity", "radius", "threshold"]);
     await page.locator("#viewport-seek-play-toggle").click();
     for (const [id, field] of specs) { const slider = row(id).locator(`[data-instance-fixed="${field}"]`); await expect(slider).toBeDisabled(); await expect(slider.locator("..").locator(".range-number-input")).toBeDisabled(); }

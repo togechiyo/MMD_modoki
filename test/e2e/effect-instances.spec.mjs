@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { expandEffectInstance, selectEffectInstance, dragEffectStackRow } from "./helpers/effect-instance-controls.mjs";
+import { expandEffectInstance, selectEffectInstance, registerEffectInstance, dragEffectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 async function menu(page, command) {
@@ -116,11 +116,13 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
     expect((await state()).instances.some(item => item.instanceId === b)).toBe(true);
     expect((await state()).instances.find(item => item.instanceId === b).settings.gamma).toBe(bValue);
-    await select(a);
+    await registerEffectInstance(row(b));
+    const savedB = (await state()).instances.find(item => item.instanceId === b).animation;
+    await expandEffectInstance(row(a));
     const slider = row(a).locator('[data-instance-field="gamma"]');
     for (const [frame, value] of [[0, 100], [20, 0]]) {
       await seek(page, frame); await slider.fill(String(value)); await slider.dispatchEvent("input");
-      await row(a).locator('[data-instance-field="enabled"]').setChecked(frame > 0); await page.locator("#btn-kf-add").click();
+      await row(a).locator('[data-instance-field="enabled"]').setChecked(frame > 0); await registerEffectInstance(row(a));
     }
     const savedA = (await state()).instances.find(item => item.instanceId === a).animation;
     expect(savedA.tracks[0].keys.map(key => key.frame)).toEqual([0, 20]);
@@ -133,7 +135,7 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await seek(page, 20); await expect(row(a).locator('[data-instance-field="enabled"]')).toBeChecked();
     await seek(page, 0); await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeDisabled();
-    await expect(row(a).locator('[data-instance-action="duplicate"]')).toBeDisabled();
+    await expect(row(a).locator('[data-instance-action="delete"]')).toBeDisabled();
     await expect(row(a).locator('[data-effect-stack-drag]')).toBeDisabled();
     await expect(row(a).locator('[data-effect-stack-drag]')).toHaveAttribute("draggable", "false");
     await expect.poll(async () => Number(await page.locator("#current-frame").inputValue())).toBeGreaterThan(12);
@@ -142,22 +144,19 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await expect(row(a).locator('[data-effect-stack-drag]')).toBeEnabled();
     await seek(page, 0); await select(a); await page.locator("#btn-kf-copy").click();
     await select(b); await seek(page, 40); await page.locator("#btn-kf-paste").click();
-    expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys[0].value.gamma).toBe(0.5);
+    expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys.find(key => key.frame === 40).value.gamma).toBe(0.5);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-    expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys).toEqual([]);
+    expect((await state()).instances.find(item => item.instanceId === b).animation).toEqual(savedB);
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
-    await expandEffectInstance(row(a)); await row(a).locator('[data-instance-action="duplicate"]').click();
+    await add("gamma");
     const c = (await state()).instances.find(item => ![a, b, bloom].includes(item.instanceId)).instanceId;
     await expect(row(c).locator(".effect-layer-name")).toHaveText("Gamma 3");
-    expect((await state()).instances.find(item => item.instanceId === c).animation.tracks[0].keys).toEqual(savedA.tracks[0].keys);
+    expect((await state()).instances.find(item => item.instanceId === c).animation.tracks).toEqual([]);
     await row(c).locator('[data-instance-action="delete"]').click();
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect((await state()).instances.some(item => item.instanceId === c)).toBe(true);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
     await select(a); await expect(row(a).locator(".effect-layer-name")).toHaveText("Gamma");
-    await row(a).locator('[data-instance-action="suspend"]').click();
-    await expect(row(a)).toContainText("スタックから外れています");
-    await row(a).locator('[data-instance-action="resume"]').click();
     await dragEffectStackRow(row(a), row(bloom), "after");
     expect((await state()).order).toEqual([a, bloom, b]);
     const capture = async name => {

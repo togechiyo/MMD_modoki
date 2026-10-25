@@ -35,8 +35,15 @@ test("Effect key boundaries survive reverse seeks, navigation, moves, deletion, 
     const redo = () => page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
     const keys = async id => (await state()).instances.find(item => item.instanceId === id).animation.tracks[0]?.keys ?? [];
     await row(dof).locator('[data-instance-field="enabled"]').uncheck();
-    // Preserve a distinct base before the first key by registering its defaults before overwriting it.
-    for (const id of [a, gamma, dof]) { await seek(10); await selectEffectInstance(row(id)); await page.locator("#btn-kf-add").click(); }
+    // A saved fixture supplies unchanged initial keys; subsequent registration and editing use the visible GUI.
+    await page.evaluate(async ids => {
+      const project = window.mmdModokiE2e.exportProjectState();
+      for (const instance of project.effects.frameGraphInstances.instances.filter(item => ids.includes(item.instanceId))) {
+        instance.animation = { version: 1, tracks: [{ effectId: instance.type, valueVersion: 1, base: { ...instance.settings }, keys: [{ frame: 10, value: { ...instance.settings } }] }] };
+      }
+      await window.mmdModokiE2e.importProjectState(project);
+    }, [a, gamma, dof]);
+    await showPost();
     for (const [frame, position, enabled] of [[10, 20, false], [30, 40, false], [20, 80, true]]) {
       await seek(frame); await number(a, "strength", position); await row(a).locator('[data-instance-field="enabled"]').setChecked(enabled); await key(a).click();
     }

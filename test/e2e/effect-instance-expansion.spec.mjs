@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { expandEffectInstance, selectEffectInstance, dragEffectStackRow } from "./helpers/effect-instance-controls.mjs";
+import { expandEffectInstance, selectEffectInstance, registerEffectInstance, dragEffectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const requestedGroup = process.env.MMD_INSTANCE_EFFECT_GROUP;
@@ -56,7 +56,8 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       active.push(a);
       expect(entries).toHaveLength(2); expect(entries[0].settings.enabled).toBe(true);
       if (type === "luminous") expect(entries[0].settings).toEqual({ enabled: true, intensity: 1, threshold: 0.15, radius: 48 });
-      await number(b, 0, 14); await row(b).locator('[data-instance-field="enabled"]').uncheck();
+      await seek(page, 0); await number(b, 0, 14); await row(b).locator('[data-instance-field="enabled"]').uncheck(); await registerEffectInstance(row(b));
+      const bAnimation = (await state()).instances.find(item => item.instanceId === b).animation;
       const bSettings = (await state()).instances.find(item => item.instanceId === b).settings;
       await number(a, 0, 10); await row(a).locator('[data-instance-field="enabled"]').uncheck();
       if (type === "bloom") {
@@ -92,8 +93,8 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       if (depthGroup && type !== "lut") {
         const color = row(a).locator('[data-instance-field="color"]'); await color.fill(type === "offsetShadow" ? "#402010" : "#80d0ff"); await color.dispatchEvent("change");
       }
-      await select(a); await seek(page, 0); await page.locator("#btn-kf-add").click();
-      await seek(page, 20); await number(a, 0, 90); await row(a).locator('[data-instance-field="enabled"]').check(); await page.locator("#btn-kf-add").click();
+      await expandEffectInstance(row(a)); await seek(page, 0); await registerEffectInstance(row(a));
+      await seek(page, 20); await number(a, 0, 90); await row(a).locator('[data-instance-field="enabled"]').check(); await registerEffectInstance(row(a));
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       const generation = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration);
       await seek(page, 10); await expect(row(a).locator(".range-number-input").first()).toHaveValue("50");
@@ -108,20 +109,13 @@ for (const group of groups) test(`${group === "depth" ? "LUT and depth effects" 
       if (type !== "motionBlur") expect(diff).toBeGreaterThan(0.001);
       report.effects.push({ type, difference: diff });
       await select(a); await page.locator("#btn-kf-copy").click(); await select(b); await seek(page, 40); await page.locator("#btn-kf-paste").click();
-      expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys.map(key => key.frame)).toEqual([40]);
+      expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys.map(key => key.frame)).toEqual([0, 40]);
       await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-      await expandEffectInstance(row(a)); await row(a).locator('[data-instance-action="duplicate"]').click();
-      const c = (await state()).instances.find(item => item.type === type && ![a, b].includes(item.instanceId)).instanceId;
-      const source = (await state()).instances.find(item => item.instanceId === a), copy = (await state()).instances.find(item => item.instanceId === c);
-      expect(copy.animation).toEqual(source.animation); expect(copy.bloomColor).toEqual(source.bloomColor);
-      expect(copy.fixedSettings).toEqual(source.fixedSettings);
-      await row(c).locator('[data-instance-action="delete"]').click(); await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
-      expect((await state()).instances.some(item => item.instanceId === c)).toBe(true);
-      await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
+      expect((await state()).instances.find(item => item.instanceId === b).animation).toEqual(bAnimation);
       await expandEffectInstance(row(a));
-      await row(a).locator('[data-instance-action="suspend"]').click();
+      await seek(page, 20); await row(a).locator('[data-instance-field="enabled"]').uncheck(); await registerEffectInstance(row(a));
     }
-    for (const id of active) { await expandEffectInstance(row(id)); await row(id).locator('[data-instance-action="resume"]').click(); }
+    for (const id of active) { await expandEffectInstance(row(id)); await seek(page, 20); await row(id).locator('[data-instance-field="enabled"]').check(); await registerEffectInstance(row(id)); }
     if (remainingGroup) {
       // Synthetic geometry is only a fixture for the individual shader comparisons.
       // Output/backend tests use the saved PMX scene, which survives runtime recreation.

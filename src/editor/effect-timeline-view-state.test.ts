@@ -13,36 +13,29 @@ describe("effect timeline view state", () => {
         expect(view.visibleTracks()).toEqual([camera, keyed, suspended]);
     });
 
-    it("temporarily shows only the effect explicitly chosen for key editing", () => {
+    it("does not expose empty rows after repeated settings updates", () => {
         const view = new EffectTimelineViewState(), a = effect("fx-a"), b = effect("fx-b");
         view.setTracks([camera, a, b]);
-        expect(view.beginEditing(a.name)).toBe(true);
-        expect(view.visibleTracks()).toEqual([camera, a]);
-        expect(view.selectTrack(a)).toBe(false);
         view.setTracks([camera, a, b]);
-        expect(view.visibleTracks()).toEqual([camera, a]);
-        view.beginEditing(b.name);
-        expect(view.visibleTracks()).toEqual([camera, b]);
-        expect(view.selectTrack(camera)).toBe(true);
         expect(view.visibleTracks()).toEqual([camera]);
     });
 
-    it("retains registered rows after editing ends, hides the last deleted key, and restores on undo", () => {
+    it("shows a registered row, hides the last deleted key, and restores on undo", () => {
         const view = new EffectTimelineViewState(), empty = effect("fx-a"), keyed = effect("fx-a", [0]);
-        view.setTracks([camera, empty]); view.beginEditing(empty.name);
-        view.setTracks([camera, keyed]); view.endEditing();
+        view.setTracks([camera, empty]);
+        view.setTracks([camera, keyed]);
         expect(view.visibleTracks()).toEqual([camera, keyed]);
         view.setTracks([camera, empty]); expect(view.visibleTracks()).toEqual([camera]);
         view.setTracks([camera, keyed]); expect(view.visibleTracks()).toEqual([camera, keyed]);
     });
 
-    it("drops transient editing when its effect is deleted or the scope changes", () => {
-        const view = new EffectTimelineViewState(), a = effect("fx-a");
-        view.setTracks([camera, a]); view.beginEditing(a.name);
+    it("reflects effect deletion and scope changes without keeping stale rows", () => {
+        const view = new EffectTimelineViewState(), a = effect("fx-a", [0]);
+        view.setTracks([camera, a]);
         view.setTracks([camera]);
-        expect(view.beginEditing("fx-missing")).toBe(false);
-        view.setTracks([camera, a]); expect(view.visibleTracks()).toEqual([camera]);
-        view.beginEditing(a.name); view.setTracks([]); view.setTracks([camera, a]);
+        expect(view.visibleTracks()).toEqual([camera]);
+        view.setTracks([]); expect(view.visibleTracks()).toEqual([]);
+        view.setTracks([camera, effect(a.name)]);
         expect(view.visibleTracks()).toEqual([camera]);
     });
 });

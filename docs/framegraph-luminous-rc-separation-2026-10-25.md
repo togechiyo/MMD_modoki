@@ -11,7 +11,7 @@ PostFX の追加メニューを「ルミナス」「ルミナス RC」の2項目
 | 項目 | ID | 計算・調整値 |
 | --- | --- | --- |
 | ルミナス | `luminous` | 発光マスク、core / halo blur、glare、合成。強度・しきい値・半径 |
-| ルミナス RC | `luminousRadiance` | 世界座標の発光面 / BVH、4段 cascade、receiver、材質色を使う照明合成。RC 強度・範囲 |
+| ルミナス RC | `luminousRadiance` | 世界座標の発光面 / BVH、4段 cascade、receiver、材質色を使う照明合成。RC 強度・範囲・[柔らかさ](./luminous-radiance-softness-2026-10-26.md) |
 
 各個体の ON/OFF、並び順、削除、Undo/Redo、enabled キーは独立する。RC 強度・範囲は従来どおり固定設定で、キーに含めない。新しい RC 個体は ON / 強度1 / 範囲12で追加する。通常 Luminous の詳細に RC の選択欄を残さない。
 

@@ -21,6 +21,7 @@ import { captureRadianceAlbedo } from "./luminous-radiance-albedo";
 import { radianceReceiverSize } from "./luminous-radiance-input-cache";
 import { LuminousRadianceHistory } from "./luminous-radiance-history";
 import { LUMINOUS_RADIANCE_CASCADE_WGSL, LUMINOUS_RADIANCE_RECEIVER_WGSL, LUMINOUS_RADIANCE_COMPOSITE_WGSL } from "./luminous-radiance-shaders";
+import { LUMINOUS_RADIANCE_SOFTEN_WGSL, RADIANCE_SOFTENING_STEPS } from "./luminous-radiance-softening";
 
 function storageTexture(graph: FrameGraph, name: string, width: number, height: number): FrameGraphTextureHandle {
     return graph.textureManager.createRenderTargetTexture(name, { size: { width, height }, sizeIsPercentage: false,
@@ -153,6 +154,31 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         params.updateFloat4("outputSize", width, height, settings.enabled ? settings.strength : 0, 0);
     };
     tasks.push(receiver);
+    // Filter only irradiance; source geometry, albedo and receiver history retain their original precision.
+    const softened = [0, 1].map(index => storageTexture(graph, `luminousRadianceSoft${index}`, width, height));
+    const softeners = RADIANCE_SOFTENING_STEPS.map((step, index) => {
+        const task = new FrameGraphComputeShaderTask(`luminousRadianceSoften${index}`, graph,
+            { computeSource: LUMINOUS_RADIANCE_SOFTEN_WGSL }, { bindingsMapping: {
+                params: { group: 0, binding: 0 }, inputLight: { group: 0, binding: 1 }, geometry: { group: 0, binding: 2 }, outputLight: { group: 0, binding: 3 },
+            } });
+        const filterParams = task.createUniformBuffer("params", { inverseProjection: 16, dimensions: 4, softening: 4 });
+        task.dispatchSize = new Vector3(Math.ceil(width / 8), Math.ceil(height / 8), 1);
+        task.dependencies = new Set([...outputs, ...geometryHistory, ...softened, depth]);
+        const bind = (context: Parameters<typeof receiver.execute>[0]) => {
+            task.setInternalTexture("inputLight", context.getTextureFromHandle(index ? softened[(index - 1) % 2] : outputs[outputIndex]));
+            task.setInternalTexture("geometry", context.getTextureFromHandle(geometryHistory[outputIndex]));
+            task.setInternalTexture("outputLight", context.getTextureFromHandle(softened[index % 2]));
+        };
+        task.onTexturesAllocatedObservable.add(bind);
+        task.execute = context => {
+            bind(context);
+            const fullDepth = context.getTextureFromHandle(depth), settings = normalizeLuminousRadiance(getSettings());
+            filterParams.updateMatrix("inverseProjection", inverseProjection);
+            filterParams.updateFloat4("dimensions", width, height, fullDepth.width, fullDepth.height);
+            filterParams.updateFloat4("softening", step, (settings.softness ?? 0) * data.volumeSize / 16, 0, 0);
+        };
+        tasks.push(task); return task;
+    });
     ShaderStore.ShadersStoreWGSL["mmdLuminousRadianceCompositePixelShader"] = LUMINOUS_RADIANCE_COMPOSITE_WGSL;
     const effect = new EffectWrapper({ engine: graph.engine, fragmentShader: "mmdLuminousRadianceComposite", useShaderStore: true,
         useAsPostProcess: true, shaderLanguage: ShaderLanguage.WGSL, uniforms: ["inverseProjection"],
@@ -161,13 +187,14 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     const record = composite.record.bind(composite);
     composite.record = (skip, execute, bindings) => {
         const pass = record(skip, execute, context => {
-            context.bindTextureHandle(effect.effect, "radianceSampler", outputs[outputIndex]);
+            const soft = (getSettings().softness ?? 0) > 0;
+            context.bindTextureHandle(effect.effect, "radianceSampler", soft ? softened[(RADIANCE_SOFTENING_STEPS.length - 1) % 2] : outputs[outputIndex]);
             context.bindTextureHandle(effect.effect, "albedoSampler", albedo);
             context.bindTextureHandle(effect.effect, "viewDepthSampler", depth);
             context.bindTextureHandle(effect.effect, "viewNormalSampler", normal);
             effect.effect.setMatrix("inverseProjection", inverseProjection); bindings?.(context);
         });
-        pass.addDependencies([...outputs, albedo, depth, normal]); return pass;
+        pass.addDependencies([...outputs, ...softened, albedo, depth, normal]); return pass;
     };
     tasks.push(composite);
     prepare.func = () => {
@@ -180,6 +207,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         allContactsDirty = textureRevision !== data.emissionTextureRevision || !Number.isFinite(data.bvh.changedMin[0]);
         for (const task of cascades) task.disabled = !refresh;
         receiver.disabled = !visible; composite.disabled = !visible;
+        for (const task of softeners) task.disabled = !visible || !(settings.softness && settings.softness > 0);
         if (refresh) {
             if (history.advanceField()) probeEpochs.clear();
             fieldRevision = data.revision; fieldRange = settings.range; textureRevision = data.emissionTextureRevision;

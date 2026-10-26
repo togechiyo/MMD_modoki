@@ -14,7 +14,11 @@ type FixedSlider = { field: InstanceFixedSliderField; panelField: FrameGraphEffe
 function fixedSliders(type: string, settings: InstanceFixedSettings = {}): FixedSlider[] {
     switch (type) {
         case "motionBlur": return [{ field: "samples", panelField: "motionBlurSamples", label: "effect.frameGraphPost.controls.samples", value: settings.samples ?? 32 }];
-        case "luminousRadiance": return [{ field: "radianceStrength", panelField: "luminousRadianceStrength", label: "effect.frameGraphPost.controls.luminousRadianceStrength", value: settings.radiance?.strength ?? 1 }, { field: "radianceRange", panelField: "luminousRadianceRange", label: "effect.frameGraphPost.controls.luminousRadianceRange", value: settings.radiance?.range ?? 12 }];
+        case "luminousRadiance": return [
+            { field: "radianceStrength", panelField: "luminousRadianceStrength", label: "effect.frameGraphPost.controls.luminousRadianceStrength", value: settings.radiance?.strength ?? 1 },
+            { field: "radianceRange", panelField: "luminousRadianceRange", label: "effect.frameGraphPost.controls.luminousRadianceRange", value: settings.radiance?.range ?? 12 },
+            { field: "radianceSoftness", panelField: "luminousRadianceSoftness", label: "effect.frameGraphPost.controls.luminousRadianceSoftness", value: settings.radiance?.softness ?? 0 },
+        ];
         default: return [];
     }
 }

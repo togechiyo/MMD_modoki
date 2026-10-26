@@ -48,7 +48,7 @@ test("legacy nested RC migrates to an independent row with its enabled keys", as
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
     await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), saved);
     expect((await state()).instances).toHaveLength(2);
-    expect((await state()).instances.find(item => item.type === "luminousRadiance").fixedSettings.radiance).toEqual({ enabled: true, strength: 2, range: 4 });
+    expect((await state()).instances.find(item => item.type === "luminousRadiance").fixedSettings.radiance).toEqual({ enabled: true, strength: 2, range: 4, softness: 0 });
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
     expect(errors).toEqual([]);

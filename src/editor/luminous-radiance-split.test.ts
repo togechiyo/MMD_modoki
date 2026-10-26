@@ -18,7 +18,7 @@ describe("independent Luminous RC migration", () => {
         if (!rc) throw new Error("RC instance missing");
         expect(store.order()).toEqual(["gamma", rc, "fx-light"]);
         expect(store.fixedSettings("fx-light")).toBeUndefined();
-        expect(store.fixedSettings(rc)?.radiance).toEqual({ enabled: true, strength: 2, range: 4 });
+        expect(store.fixedSettings(rc)?.radiance).toEqual({ enabled: true, strength: 2, range: 4, softness: 0 });
         expect(store.value(rc, 0).enabled).toBe(false); expect(store.value(rc, 20).enabled).toBe(true);
         const saved = store.serialize(); store.restore(saved); expect(store.serialize()).toEqual(saved);
     });

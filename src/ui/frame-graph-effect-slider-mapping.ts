@@ -23,6 +23,7 @@ export const FRAME_GRAPH_EFFECT_SLIDER_SPECS = {
     luminousRadius: { actualMin: 1, actualMax: 128, actualStep: 1 },
     luminousRadianceStrength: { actualMin: 0, actualMax: 8 },
     luminousRadianceRange: { actualMin: 1, actualMax: 100 },
+    luminousRadianceSoftness: { actualMin: 0, actualMax: 1 },
     dofFocusOffset: { actualMin: -20_000, actualMax: 20_000, actualStep: 100 },
     dofFocus: { actualMin: 1, actualMax: 1_000_000, actualStep: 1 },
     dofFStop: { actualMin: 0.01, actualMax: 32, actualStep: 0.01 },

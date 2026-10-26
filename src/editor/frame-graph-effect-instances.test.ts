@@ -6,8 +6,9 @@ import { applyEffectInstanceDiff, buildEffectInstanceDiff } from "../actions/eff
 describe("FrameGraph effect instances", () => {
     it.each([
         ["motionBlur", "samples", 47.6, { samples: 48 }],
-        ["luminousRadiance", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12 } }],
-        ["luminousRadiance", "radianceRange", 75.25, { radiance: { enabled: true, strength: 1, range: 75.25 } }],
+        ["luminousRadiance", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12, softness: 0 } }],
+        ["luminousRadiance", "radianceRange", 75.25, { radiance: { enabled: true, strength: 1, range: 75.25, softness: 0 } }],
+        ["luminousRadiance", "radianceSoftness", 0.65, { radiance: { enabled: true, strength: 1, range: 12, softness: 0.65 } }],
     ] as const)("previews %s %s independently of keys and undoes a gesture in one diff", (type, field, value, expected) => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, type);
         if (type === "luminousRadiance") store.setFixedSettings("fx-a", { radiance: { enabled: true, strength: 1, range: 12 } });

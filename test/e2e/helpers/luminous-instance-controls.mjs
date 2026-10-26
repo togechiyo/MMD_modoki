@@ -13,6 +13,7 @@ export function luminousInstanceControl(page, key) {
   if (key === "luminousRadianceEnabled") return row.locator('[data-instance-field="enabled"]');
   if (key === "luminousRadianceStrength") return row.locator('[data-instance-fixed="radianceStrength"]');
   if (key === "luminousRadianceRange") return row.locator('[data-instance-fixed="radianceRange"]');
+  if (key === "luminousRadianceSoftness") return row.locator('[data-instance-fixed="radianceSoftness"]');
   const field = { luminousIntensity: "intensity", luminousThreshold: "threshold", luminousRadius: "radius" }[key];
   if (!field) throw new Error(`Unsupported Luminous control: ${key}`);
   return row.locator(`[data-instance-field="${field}"]`);

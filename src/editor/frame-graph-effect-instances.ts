@@ -95,7 +95,7 @@ export class FrameGraphEffectInstances {
         const entry = this.get(id), settings = entry.fixedSettings ?? {};
         if (entry.type === "motionBlur" && field === "samples") this.setFixedSettings(id, { ...settings, samples: value });
         else if (entry.type === "luminousRadiance" && field !== "samples") this.setFixedSettings(id, { ...settings, radiance: {
-            ...settings.radiance ?? { enabled: false, strength: 1, range: 12 }, [field === "radianceStrength" ? "strength" : "range"]: value,
+            ...settings.radiance ?? { enabled: false, strength: 1, range: 12 }, [field === "radianceStrength" ? "strength" : field === "radianceRange" ? "range" : "softness"]: value,
         } });
         else throw new Error("Fixed slider does not belong to this effect");
     }

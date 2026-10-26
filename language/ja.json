@@ -959,6 +959,7 @@
     "effect.frameGraphPost.controls.luminousRadianceEnabled": "3D RC（実験）",
     "effect.frameGraphPost.controls.luminousRadianceStrength": "RC 強度",
     "effect.frameGraphPost.controls.luminousRadianceRange": "RC 範囲",
+    "effect.frameGraphPost.controls.luminousRadianceSoftness": "RC 柔らかさ",
     "radianceLab.note": "自作の発光面で色移りと遮蔽を比較する実験です。現在のモデル・ステージには適用されません。設定はこの実験専用で、プロジェクトとは別に保存できます。",
     "radianceLab.preview": "3D Radiance Cascades プレビュー",
     "radianceLab.emitterEnabled": "AL発光面を点灯",

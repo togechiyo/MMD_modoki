@@ -18,7 +18,7 @@ import { TriangleRadianceBvh } from "/src/render/triangle-radiance-bvh.ts";
 import { WebGPUPerfCounter } from "@babylonjs/core/Engines/WebGPU/webgpuPerfCounter";
 
 let latestGraph;
-const radianceTask = name => latestGraph.tasks.find(task => task.name === name || task.name.endsWith(`-${name}`));
+export const radianceTask = name => latestGraph.tasks.find(task => task.name === name || task.name.endsWith(`-${name}`));
 const executeGraph = FrameGraph.prototype.execute;
 FrameGraph.prototype.execute = function () { latestGraph = this; return executeGraph.call(this); };
 

@@ -739,7 +739,7 @@ export interface ProjectEffectState {
     colorCurvesSaturation?: number;
     colorCurvesExposure?: number;
     glowEnabled?: boolean;
-    luminousRadiance?: { enabled: boolean; strength: number; range: number; softness?: number };
+    luminousRadiance?: { enabled: boolean; strength: number; range: number; softness?: number; distanceSoftness?: boolean };
     luminousRadianceEncodingVersion?: 2;
     glowIntensity?: number;
     glowThreshold?: number;

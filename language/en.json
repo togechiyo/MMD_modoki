@@ -960,6 +960,7 @@
     "effect.frameGraphPost.controls.luminousRadianceStrength": "RC strength",
     "effect.frameGraphPost.controls.luminousRadianceRange": "RC range",
     "effect.frameGraphPost.controls.luminousRadianceSoftness": "RC softness",
+    "effect.frameGraphPost.controls.luminousRadianceDistanceSoftness": "RC distance softness",
     "radianceLab.note": "Compare color transfer and occlusion with a synthetic emitter. This experiment does not affect your models or stage. Its settings can be saved separately from projects.",
     "radianceLab.preview": "3D Radiance Cascades preview",
     "radianceLab.emitterEnabled": "AL emitter on",

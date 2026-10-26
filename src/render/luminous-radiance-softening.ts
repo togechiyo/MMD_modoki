@@ -6,6 +6,7 @@ struct Params { inverseProjection: mat4x4f, dimensions: vec4f, softening: vec4f 
 @group(0) @binding(1) var inputLight: texture_2d<f32>;
 @group(0) @binding(2) var geometry: texture_2d<f32>;
 @group(0) @binding(3) var outputLight: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(4) var nearLight: texture_2d<f32>;
 fn viewPosition(pixel: vec2i, depth: f32) -> vec3f {
     // Match the full-resolution geometry pixel selected by the half-resolution receiver.
     let fullPixel = min(floor((vec2f(pixel) + 0.5) / params.dimensions.xy * params.dimensions.zw), params.dimensions.zw - 1.0);
@@ -36,8 +37,12 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         if (alignment < 0.8 || planeDistance > planeTolerance * 4.0) { continue; }
         let kernel = select(1.0, 2.0, x == 0) * select(1.0, 2.0, y == 0);
         let weight = kernel * exp2(-dot(delta, delta) / radiusSquared - planeDistance / planeTolerance) * pow(alignment, 16.0);
-        light += textureLoad(inputLight, tap, 0).rgb * weight; total += weight;
+        var incoming = textureLoad(inputLight, tap, 0).rgb;
+        if (params.softening.z > 0.5) { incoming = max(incoming - textureLoad(nearLight, tap, 0).rgb, vec3f(0.0)); }
+        light += incoming * weight; total += weight;
     } }
-    textureStore(outputLight, pixel, vec4f(light / max(total, 0.000001), 0.0));
+    var result = light / max(total, 0.000001);
+    if (params.softening.w > 0.5) { result += textureLoad(nearLight, pixel, 0).rgb; }
+    textureStore(outputLight, pixel, vec4f(result, 0.0));
 }
 `;

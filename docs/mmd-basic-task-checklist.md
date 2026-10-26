@@ -65,6 +65,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] Luminous RCの発光RGB変更を形状更新から分け、頂点変換・BLAS/TLAS refit・node転送を省略。53万版の連続発光変更でCPU prepare153→27ms、提示間隔183→67〜72ms。比較PNG6枚一致・回帰10件を確認（[実装・比較](./luminous-radiance-emission-update-optimization-2026-10-25.md)）
 - [x] Luminous RCの発光色を2Dの白い芯・彩度補正・材質clampへ合わせ、texture・発光モーフ・色保持と独立ON/OFFを確認。実マスクRTとの色比較、回帰10件、53万版でRGB専用更新の維持を確認（[色の基準・検証](./luminous-radiance-2d-color-match-2026-10-25.md)）
 - [x] Luminous RCへ「RC 柔らかさ」を追加し、深度・法線で面を分けた多段照明filterで照り返しの細部を調整。0へのPNG復帰一致、保存・Undo/Redo・backend往復、回帰6件を確認。2026-10-26に所有者の実シーンで柔らかさ20〜30のルック・速度が良好との確認を得た（[実装・比較・実機確認・限界](./luminous-radiance-softness-2026-10-26.md)）
+- [x] Luminous RCに「RC 距離連動」を追加。既存の短距離traceで近接光を保持し、遠方の寄与だけを5段filterでぼかす近似。追加レイ・追加compute段なしで、固定ぼかしへの復帰・動的更新の履歴一致・GUI保存復元を確認（[方式・負荷比較・限界](./luminous-radiance-softness-2026-10-26.md)）
 - [x] RSM GIのMultiMaterial子材質に3つの描画出力がない不備を修正し、GI OFF時のRSM描画も停止。テクスチャ付きStandard / MMD / PBR、両backendのOFF・再開、ルミナス色合わせとPBRの回帰5件、既定smokeを確認（[再現・修正・検証](./babylon-rsm-gi-notes.md#2026-10-25-rsmのfragment出力不一致ログ)）
 - [x] 影調整
 - [x] 広域の影を比較できる6,000×6,000単位の自作PMXステージを追加し、近景から遠景へのCSM境界をカメラ移動で確認（[配置・使用方法と確認結果](../test/fixtures/shadow-stage/README.md)）

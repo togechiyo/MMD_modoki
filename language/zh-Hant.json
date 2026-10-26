@@ -960,6 +960,7 @@
     "effect.frameGraphPost.controls.luminousRadianceStrength": "RC 強度",
     "effect.frameGraphPost.controls.luminousRadianceRange": "RC 範圍",
     "effect.frameGraphPost.controls.luminousRadianceSoftness": "RC 柔和度",
+    "effect.frameGraphPost.controls.luminousRadianceDistanceSoftness": "RC 距離連動",
     "radianceLab.note": "使用自製發光面比較顏色傳遞與遮擋。本實驗不會影響目前模型或舞台。實驗設定可獨立於專案儲存。",
     "radianceLab.preview": "3D Radiance Cascades 預覽",
     "radianceLab.emitterEnabled": "開啟 AL 發光面",

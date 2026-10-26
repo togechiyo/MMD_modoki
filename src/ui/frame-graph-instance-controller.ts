@@ -72,6 +72,10 @@ export class FrameGraphInstanceController {
                 const radiance = host.getEffectInstanceState().instances.find(item => item.instanceId === id)?.fixedSettings?.radiance ?? { enabled: false, strength: 1, range: 12 };
                 this.editFixed(id, { radiance: { ...radiance, enabled: input.checked } });
             }
+            if (input.dataset.instanceFixedToggle === "radianceDistanceSoftness") {
+                const radiance = host.getEffectInstanceFixedSettings(id)?.radiance;
+                if (radiance) this.editFixed(id, { radiance: { ...radiance, distanceSoftness: input.checked } });
+            }
             if (input.dataset.instanceField === "color") {
                 const color = Number.parseInt(input.value.slice(1), 16);
                 const value = { r: (color >> 16 & 255) / 255, g: (color >> 8 & 255) / 255, b: (color & 255) / 255 };
@@ -103,6 +107,8 @@ export class FrameGraphInstanceController {
         const color = primaryColor ? this.renderColor("color", primaryColor) : "";
         const shadowColor = visibleFixed.includes("shadowColor") && instance?.fixedSettings?.shadowColor ? this.renderColor("shadowColor", instance.fixedSettings.shadowColor) : "";
         const fixedSliderControls = fixedSliders(instance?.type ?? "", instance?.fixedSettings).map(item => `<label class="effect-layer-control-row"><span class="effect-layer-control-label">${escape(t(item.label))}</span><input class="effect-layer-control-slider" type="range" min="0" max="100" step="1" data-instance-fixed="${item.field}" aria-label="${escape(t(item.label))}" value="${Math.round(toFrameGraphEffectSliderValue(item.panelField, item.value))}"><output class="effect-layer-control-value" data-instance-fixed-value="${item.field}">${item.value.toFixed(2)}</output></label>`).join("");
+        const distanceSoftnessLabel = escape(t("effect.frameGraphPost.controls.luminousRadianceDistanceSoftness"));
+        const distanceSoftnessControl = instance?.type === "luminousRadiance" ? `<label class="effect-layer-control-row"><span class="effect-layer-control-label">${distanceSoftnessLabel}</span><input type="checkbox" data-instance-fixed-toggle="radianceDistanceSoftness" aria-label="${distanceSoftnessLabel}"${instance.fixedSettings?.radiance?.distanceSoftness ? " checked" : ""}></label>` : "";
         const lut = instance?.fixedSettings?.lut;
         const lutControls = instance?.type === "lut" ? `<select class="effect-layer-control-select" data-instance-field="lutPreset" aria-label="${escape(t("shader.postfx.lutSource"))}">${INSTANCE_LUT_PRESETS.map(preset => `<option value="${preset.id}"${lut?.kind === "builtin" && lut.preset === preset.id ? " selected" : ""}>${preset.label}</option>`).join("")}${lut?.kind === "external" ? `<option value="external" selected>${escape(lut.name)}</option>` : ""}</select><button type="button" data-instance-action="lutFile">${escape(t("shader.postfx.lutFile"))}</button>` : "";
         const button = (action: string): string => `<button type="button" class="effect-layer-control-button" data-instance-action="${action}" title="${escape(t(`effect.instance.${action}`))}"${this.host.isPlaying ? " disabled" : ""}>${escape(t(`effect.instance.${action}`))}</button>`;
@@ -113,7 +119,7 @@ export class FrameGraphInstanceController {
             <button type="button" class="effect-layer-main" data-instance-action="select" aria-expanded="${expanded}"${present ? ` draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}"${this.host.isPlaying ? " disabled" : ""}` : ""}><span class="effect-layer-name">${label}</span></button>
             <button type="button" class="section-kf-btn effect-instance-keyframe-button" data-instance-action="registerKeyframe" title="${keyTitle}" aria-label="${keyTitle}"></button></div>
             <div class="effect-layer-details"${expanded ? "" : " hidden"}>
-            ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSliderControls}${lutControls}
+            ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSliderControls}${distanceSoftnessControl}${lutControls}
             <div class="effect-instance-actions">${present ? "" : button("resume")}${button("delete")}</div>
             ${present ? "" : `<span>${escape(t("timeline.effectSuspended"))}</span>`}</div></div>`;
     }
@@ -143,6 +149,7 @@ export class FrameGraphInstanceController {
                 if (input.classList.contains("range-number-input")) return;
                 input.disabled = this.host.isPlaying;
                 if (input.dataset.instanceField === "enabled") input.checked = value.enabled;
+                if (input.dataset.instanceFixedToggle === "radianceDistanceSoftness") input.checked = this.host.getEffectInstanceFixedSettings(id)?.radiance?.distanceSoftness === true;
                 const mapping = this.controls(id).find(item => item.field === input.dataset.instanceField);
                 if (mapping?.panelField) {
                     if (document.activeElement !== input) input.value = String(Math.round(toFrameGraphEffectSliderValue(mapping.panelField as FrameGraphEffectSliderField, Number(value[mapping.field]))));

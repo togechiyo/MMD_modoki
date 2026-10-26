@@ -8,7 +8,7 @@ function scene() {
   const handle = RawTexture.CreateRGBATexture(new Uint8Array(4), 1, 1, undefined, false, false);
   const current = handle.getScene(); handle.dispose(); return current;
 }
-export async function createLuminousSoftnessProbe() {
+export async function createLuminousSoftnessProbe({ nearReceiver = false } = {}) {
   await createRadianceProbe();
   const current = scene(), luminous = current.getMeshByName("rc-emitter").material;
   for (const mesh of current.meshes) mesh.setEnabled(false);
@@ -20,6 +20,7 @@ export async function createLuminousSoftnessProbe() {
   }
   box("softness-ceiling", [10, 0.1, 10], [0, 3, 0], receiver);
   box("softness-pillar", [0.3, 3, 0.3], [0, 1.5, 0], receiver);
+  if (nearReceiver) box("softness-near-ceiling", [2.2, 0.05, 2.2], [0, 1.6, 0], receiver);
   for (let index = 0; index < 48; index++) {
     const angle = index / 48 * Math.PI * 2;
     const mesh = box(`softness-ring-${index}`, [0.13, 0.06, 0.04], [Math.cos(angle) * 0.9, 1.4, Math.sin(angle) * 0.9], luminous);

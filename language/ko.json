@@ -960,6 +960,7 @@
     "effect.frameGraphPost.controls.luminousRadianceStrength": "RC 강도",
     "effect.frameGraphPost.controls.luminousRadianceRange": "RC 범위",
     "effect.frameGraphPost.controls.luminousRadianceSoftness": "RC 부드러움",
+    "effect.frameGraphPost.controls.luminousRadianceDistanceSoftness": "RC 거리 연동",
     "radianceLab.note": "자체 제작 발광면으로 색 전달과 차폐를 비교합니다. 현재 모델이나 스테이지에는 적용되지 않습니다. 실험 설정은 프로젝트와 별도로 저장할 수 있습니다.",
     "radianceLab.preview": "3D Radiance Cascades 미리보기",
     "radianceLab.emitterEnabled": "AL 발광면 켜기",

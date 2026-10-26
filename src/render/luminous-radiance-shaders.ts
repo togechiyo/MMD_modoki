@@ -37,8 +37,9 @@ fn direction(u: u32, v: u32, columns: u32, rows: u32) -> vec3f {
     let r = sqrt(max(0.0, 1.0 - y * y));
     return vec3f(r * cos(phi), y, r * sin(phi));
 }
-fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
-    if (params.shape.w < 0.5) { return vec4f(0.0, 0.0, 0.0, 1.0); }
+struct RadianceHit { light: vec4f, distance: f32 };
+fn traceHit(origin: vec3f, ray: vec3f, start: f32, end: f32) -> RadianceHit {
+    if (params.shape.w < 0.5) { return RadianceHit(vec4f(0.0, 0.0, 0.0, 1.0), end); }
     // Mesh top tree plus a BLAS can be deeper than the previous scene-wide tree.
     var stack: array<u32, 64>; stack[0] = 0u;
     var count = 1u;
@@ -73,8 +74,11 @@ fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
         }
     }
     // A closer candidate may replace this hit; evaluate its texture/color only once.
-    if (hitIndex != 0xffffffffu) { return vec4f(sourceColor(triangles[hitIndex], hitUv.x, hitUv.y), 0.0); }
-    return vec4f(0.0, 0.0, 0.0, 1.0);
+    if (hitIndex != 0xffffffffu) { return RadianceHit(vec4f(sourceColor(triangles[hitIndex], hitUv.x, hitUv.y), 0.0), nearest); }
+    return RadianceHit(vec4f(0.0, 0.0, 0.0, 1.0), end);
+}
+fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
+    return traceHit(origin, ray, start, end).light;
 }
 fn atlasPixel(probe: vec3u, angular: vec2u, grid: u32, columns: u32, rows: u32) -> vec2i {
     return vec2i(i32(probe.x * columns + angular.x), i32((probe.z * grid + probe.y) * rows + angular.y));
@@ -141,6 +145,8 @@ struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec
 @group(0) @binding(9) var previousGi: texture_2d<f32>;
 @group(0) @binding(10) var previousGeometry: texture_2d<f32>;
 @group(0) @binding(11) var outputGeometry: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(12) var previousNear: texture_2d<f32>;
+@group(0) @binding(13) var outputNear: texture_storage_2d<rgba16float, write>;
 ${COMMON}
 fn receiverEpoch(position: vec3f) -> u32 {
     let coordinate = clamp((position - params.volumeMin.xyz) / params.volumeSize.xyz * 16.0 - 0.5, vec3f(0.0), vec3f(15.0));
@@ -159,7 +165,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     let depth = textureLoad(viewDepth, pixel, 0).r;
     let viewN = textureLoad(viewNormal, pixel, 0).xyz;
     let geometry = vec4f(depth, viewN); textureStore(outputGeometry, vec2i(id.xy), geometry);
-    var result = vec3f(0.0); var epoch = 0u; var reused = false;
+    var result = vec3f(0.0); var nearLight = vec3f(0.0); var epoch = 0u; var reused = false;
     if (abs(depth) > 0.000001 && length(viewN) > 0.1 && params.outputSize.z > 0.0) {
         // Depth belongs to this full-resolution pixel's center, not the half-resolution output center.
         let depthUv = (vec2f(pixel) + 0.5) / vec2f(textureDimensions(viewDepth));
@@ -179,25 +185,38 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                 && all(position <= params.dirtyMax.xyz + params.interval.x);
             let reuse = params.interval.w > 0.5 && abs(previous.a) == f32(epoch) && !contactDirty
                 && all(geometry == textureLoad(previousGeometry, vec2i(id.xy), 0));
-            if (reuse) { result = previous.rgb; reused = true; }
+            if (reuse) {
+                result = previous.rgb; reused = true;
+                if (params.outputSize.w > 0.5) { nearLight = textureLoad(previousNear, vec2i(id.xy), 0).rgb; }
+            }
             else {
               for (var v = 0u; v < 4u; v++) { for (var u = 0u; u < 8u; u++) {
                 let ray = direction(u, v, 8u, 4u); let cosine = max(0.0, dot(normal, ray));
                 if (cosine > 0.0) {
-                    let contact = trace(position, ray, 0.0, params.interval.x);
+                    let hit = traceHit(position, ray, 0.0, params.interval.x);
+                    let contact = hit.light;
                     var light = contact.rgb;
+                    if (params.outputSize.w > 0.5) {
+                        // Preserve contact detail, fading continuously into the far bucket before the trace interval ends.
+                        let preserve = 1.0 - smoothstep(params.interval.x * 0.25, params.interval.x, hit.distance);
+                        nearLight += contact.rgb * preserve * cosine * (4.0 / 32.0);
+                    }
                     // Contact replaces the far field; gather only when the ray escapes.
                     if (contact.a > 0.0) { light = interpolate(radianceField, position, vec2u(u, v), 16u, 8u, 4u).rgb; }
                     result += light * cosine * (4.0 / 32.0);
                 }
             } }
             let edge = min(position - params.volumeMin.xyz, params.volumeMin.xyz + params.volumeSize.xyz - position);
-            result *= smoothstep(0.0, params.volumeSize.x / 16.0 * 2.0, min(min(edge.x, edge.y), edge.z)) * params.outputSize.z;
+            let scale = smoothstep(0.0, params.volumeSize.x / 16.0 * 2.0, min(min(edge.x, edge.y), edge.z)) * params.outputSize.z;
+            result *= scale; nearLight *= scale;
             }
         }
     }
     // Retain rgba16f light rounding. Signed epoch metadata records whether this value was reused.
     textureStore(outputGi, vec2i(id.xy), vec4f(radianceHalf(vec4f(result, 0.0)).rgb, select(f32(epoch), -f32(epoch), reused)));
+    if (params.outputSize.w > 0.5) {
+        textureStore(outputNear, vec2i(id.xy), vec4f(min(radianceHalf(vec4f(nearLight, 0.0)).rgb, radianceHalf(vec4f(result, 0.0)).rgb), 0.0));
+    }
 }
 `;
 

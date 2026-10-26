@@ -6,9 +6,9 @@ import { applyEffectInstanceDiff, buildEffectInstanceDiff } from "../actions/eff
 describe("FrameGraph effect instances", () => {
     it.each([
         ["motionBlur", "samples", 47.6, { samples: 48 }],
-        ["luminousRadiance", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12, softness: 0 } }],
-        ["luminousRadiance", "radianceRange", 75.25, { radiance: { enabled: true, strength: 1, range: 75.25, softness: 0 } }],
-        ["luminousRadiance", "radianceSoftness", 0.65, { radiance: { enabled: true, strength: 1, range: 12, softness: 0.65 } }],
+        ["luminousRadiance", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12, softness: 0, distanceSoftness: false } }],
+        ["luminousRadiance", "radianceRange", 75.25, { radiance: { enabled: true, strength: 1, range: 75.25, softness: 0, distanceSoftness: false } }],
+        ["luminousRadiance", "radianceSoftness", 0.65, { radiance: { enabled: true, strength: 1, range: 12, softness: 0.65, distanceSoftness: false } }],
     ] as const)("previews %s %s independently of keys and undoes a gesture in one diff", (type, field, value, expected) => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, type);
         if (type === "luminousRadiance") store.setFixedSettings("fx-a", { radiance: { enabled: true, strength: 1, range: 12 } });
@@ -31,6 +31,23 @@ describe("FrameGraph effect instances", () => {
         expect(() => store.setFixedSliderValue("fx-a", "radianceStrength", 2)).toThrow();
         expect(() => store.setFixedSliderValue("fx-a", "samples", Number.NaN)).toThrow();
         expect(store.serialize()).toEqual(before);
+    });
+    it("duplicates, restores and undoes RC distance softness independently of keys and other instances", () => {
+        const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, "luminousRadiance");
+        const before = store.serialize();
+        store.setFixedSettings("fx-a", { radiance: { enabled: true, strength: 2, range: 20, softness: 0.3, distanceSoftness: true } });
+        const changed = store.serialize(), diff = buildEffectInstanceDiff(before, changed);
+        if (!diff) throw new Error("Missing settings diff");
+        store.duplicate("fx-a", "fx-b");
+        expect(store.fixedSettings("fx-b")).toEqual(store.fixedSettings("fx-a"));
+        store.setFixedSettings("fx-b", { radiance: { enabled: true, strength: 2, range: 20, softness: 0.3, distanceSoftness: false } });
+        expect(store.fixedSettings("fx-a")?.radiance?.distanceSoftness).toBe(true);
+        const restored = new FrameGraphEffectInstances(); restored.restore(changed);
+        expect(restored.serialize()).toEqual(changed);
+        const reverted = applyEffectInstanceDiff(changed, diff, "revert");
+        expect(reverted).toEqual(before);
+        if (!reverted) throw new Error("Missing reverted state");
+        expect(applyEffectInstanceDiff(reverted, diff, "apply")).toEqual(changed);
     });
     it("automatically names the first instance without a number and keeps names stable and unique", () => {
         const store = new FrameGraphEffectInstances();

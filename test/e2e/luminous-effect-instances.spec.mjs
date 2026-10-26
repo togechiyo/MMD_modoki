@@ -41,6 +41,7 @@ test("legacy nested RC migrates to an independent row with its enabled keys", as
     await expandEffectInstance(row);
     await expect(row.locator('[data-instance-field="enabled"]')).not.toBeChecked();
     await expect(row.locator('[data-instance-fixed="radianceRange"]')).toHaveValue("3");
+    await expect(row.locator('[data-instance-fixed-toggle="radianceDistanceSoftness"]')).not.toBeChecked();
     await page.locator("#current-frame").fill("20"); await page.locator("#current-frame").press("Enter");
     await expect(row.locator('[data-instance-field="enabled"]')).toBeChecked();
     await page.locator('[data-effect-instance-row="fx-legacy"] [data-instance-field="enabled"]').uncheck();
@@ -48,7 +49,7 @@ test("legacy nested RC migrates to an independent row with its enabled keys", as
     const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
     await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), saved);
     expect((await state()).instances).toHaveLength(2);
-    expect((await state()).instances.find(item => item.type === "luminousRadiance").fixedSettings.radiance).toEqual({ enabled: true, strength: 2, range: 4, softness: 0 });
+    expect((await state()).instances.find(item => item.type === "luminousRadiance").fixedSettings.radiance).toEqual({ enabled: true, strength: 2, range: 4, softness: 0, distanceSoftness: false });
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
     expect(errors).toEqual([]);

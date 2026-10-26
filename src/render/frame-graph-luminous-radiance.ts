@@ -60,9 +60,12 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             width, height, Constants.TEXTURETYPE_FLOAT));
         for (let index = 0; index < 2; index++) owned.push(cachedStorageTexture(graph, `luminousRadianceGeometry${index}`,
             width, height, Constants.TEXTURETYPE_FLOAT));
+        for (let index = 0; index < 2; index++) owned.push(cachedStorageTexture(graph, `luminousRadianceNear${index}`,
+            width, height, Constants.TEXTURETYPE_HALF_FLOAT));
     } catch (error) { for (const texture of owned) texture.dispose(); data.dispose(); releaseAlbedo(); throw error; }
     const baseFields = owned.slice(0, 2).map(texture => texture.handle);
-    const outputs = owned.slice(2, 4).map(texture => texture.handle), geometryHistory = owned.slice(4).map(texture => texture.handle);
+    const outputs = owned.slice(2, 4).map(texture => texture.handle), geometryHistory = owned.slice(4, 6).map(texture => texture.handle);
+    const nearHistory = owned.slice(6, 8).map(texture => texture.handle);
     const probeEpochs = new StorageBuffer(graph.engine as WebGPUEngine, 16 ** 3 * 4);
     const history = new LuminousRadianceHistory();
     let outputIndex = 0, fieldRevision = -1, fieldRange = -1, textureRevision = -1, contactDirty = false, allContactsDirty = false;
@@ -114,6 +117,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 }, nodes: { group: 0, binding: 2 },
             radianceField: { group: 0, binding: 3 }, viewDepth: { group: 0, binding: 4 }, viewNormal: { group: 0, binding: 5 }, outputGi: { group: 0, binding: 6 }, emissionPixels: { group: 0, binding: 7 },
             probeEpochs: { group: 0, binding: 8 }, previousGi: { group: 0, binding: 9 }, previousGeometry: { group: 0, binding: 10 }, outputGeometry: { group: 0, binding: 11 },
+            previousNear: { group: 0, binding: 12 }, outputNear: { group: 0, binding: 13 },
         } });
     const params = receiver.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4, interval: 4,
         inverseProjection: 16, inverseView: 16, outputSize: 4, dirtyMin: 4, dirtyMax: 4 });
@@ -121,10 +125,11 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     receiver.setStorageBuffer("emissionPixels", data.emissionBuffer);
     receiver.setStorageBuffer("probeEpochs", probeEpochs);
     receiver.dispatchSize = new Vector3(Math.ceil(width / 8), Math.ceil(height / 8), 1);
-    receiver.dependencies = new Set([...baseFields, depth, normal, ...outputs, ...geometryHistory]);
+    receiver.dependencies = new Set([...baseFields, depth, normal, ...outputs, ...geometryHistory, ...nearHistory]);
     receiver.onTexturesAllocatedObservable.add(context => {
         for (const [name, handle] of [["radianceField", baseFields[0]], ["viewDepth", depth], ["viewNormal", normal],
-            ["outputGi", outputs[0]], ["previousGi", outputs[1]], ["previousGeometry", geometryHistory[1]], ["outputGeometry", geometryHistory[0]]] as const) {
+            ["outputGi", outputs[0]], ["previousGi", outputs[1]], ["previousGeometry", geometryHistory[1]], ["outputGeometry", geometryHistory[0]],
+            ["previousNear", nearHistory[1]], ["outputNear", nearHistory[0]]] as const) {
             receiver.setInternalTexture(name, context.getTextureFromHandle(handle));
         }
         history.reset(); fieldRevision = -1; fieldRange = -1;
@@ -133,17 +138,19 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     receiver.execute = context => {
         outputIndex = 1 - outputIndex;
         for (const [name, handle] of [["radianceField", baseFields[history.fieldIndex]], ["outputGi", outputs[outputIndex]],
-            ["previousGi", outputs[1 - outputIndex]], ["previousGeometry", geometryHistory[1 - outputIndex]], ["outputGeometry", geometryHistory[outputIndex]]] as const) {
+            ["previousGi", outputs[1 - outputIndex]], ["previousGeometry", geometryHistory[1 - outputIndex]], ["outputGeometry", geometryHistory[outputIndex]],
+            ["previousNear", nearHistory[1 - outputIndex]], ["outputNear", nearHistory[outputIndex]]] as const) {
             receiver.setInternalTexture(name, context.getTextureFromHandle(handle));
         }
         const settings = normalizeLuminousRadiance(getSettings());
+        const preserveNear = settings.distanceSoftness && (settings.softness ?? 0) > 0;
         receiver.setStorageBuffer("triangles", data.triangleBuffer); receiver.setStorageBuffer("nodes", data.nodeBuffer);
         receiver.setStorageBuffer("emissionPixels", data.emissionBuffer);
         params.updateFloat4("volumeMin", ...data.volumeMin as [number, number, number], 0);
         params.updateFloat4("volumeSize", data.volumeSize, data.volumeSize, data.volumeSize, 0);
         params.updateFloat4("shape", 16, 8, 4, data.bvh.triangleCount);
         camera.getProjectionMatrix().invertToRef(inverseProjection); camera.getViewMatrix().invertToRef(inverseView);
-        const reuse = history.canReuseReceiver([inverseProjection.m, inverseView.m, [...data.volumeMin, data.volumeSize, settings.strength]]);
+        const reuse = history.canReuseReceiver([inverseProjection.m, inverseView.m, [...data.volumeMin, data.volumeSize, settings.strength, preserveNear ? 1 : 0]]);
         params.updateFloat4("interval", data.volumeSize / 18, 0, 0, reuse ? 1 : 0);
         const dirtyMin = allContactsDirty ? data.volumeMin : data.bvh.changedMin;
         const dirtyMax = allContactsDirty ? data.volumeMin.map(value => value + data.volumeSize) : data.bvh.changedMax;
@@ -151,7 +158,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         params.updateFloat4("dirtyMin", ...(contactDirty ? dirtyMin : [0, 0, 0]) as [number, number, number], contactDirty ? 1 : 0);
         params.updateFloat4("dirtyMax", ...(contactDirty ? dirtyMax : [0, 0, 0]) as [number, number, number], 0);
         params.updateMatrix("inverseProjection", inverseProjection); params.updateMatrix("inverseView", inverseView);
-        params.updateFloat4("outputSize", width, height, settings.enabled ? settings.strength : 0, 0);
+        params.updateFloat4("outputSize", width, height, settings.enabled ? settings.strength : 0, preserveNear ? 1 : 0);
     };
     tasks.push(receiver);
     // Filter only irradiance; source geometry, albedo and receiver history retain their original precision.
@@ -160,14 +167,16 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         const task = new FrameGraphComputeShaderTask(`luminousRadianceSoften${index}`, graph,
             { computeSource: LUMINOUS_RADIANCE_SOFTEN_WGSL }, { bindingsMapping: {
                 params: { group: 0, binding: 0 }, inputLight: { group: 0, binding: 1 }, geometry: { group: 0, binding: 2 }, outputLight: { group: 0, binding: 3 },
+                nearLight: { group: 0, binding: 4 },
             } });
         const filterParams = task.createUniformBuffer("params", { inverseProjection: 16, dimensions: 4, softening: 4 });
         task.dispatchSize = new Vector3(Math.ceil(width / 8), Math.ceil(height / 8), 1);
-        task.dependencies = new Set([...outputs, ...geometryHistory, ...softened, depth]);
+        task.dependencies = new Set([...outputs, ...geometryHistory, ...softened, ...nearHistory, depth]);
         const bind = (context: Parameters<typeof receiver.execute>[0]) => {
             task.setInternalTexture("inputLight", context.getTextureFromHandle(index ? softened[(index - 1) % 2] : outputs[outputIndex]));
             task.setInternalTexture("geometry", context.getTextureFromHandle(geometryHistory[outputIndex]));
             task.setInternalTexture("outputLight", context.getTextureFromHandle(softened[index % 2]));
+            task.setInternalTexture("nearLight", context.getTextureFromHandle(nearHistory[outputIndex]));
         };
         task.onTexturesAllocatedObservable.add(bind);
         task.execute = context => {
@@ -175,7 +184,8 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             const fullDepth = context.getTextureFromHandle(depth), settings = normalizeLuminousRadiance(getSettings());
             filterParams.updateMatrix("inverseProjection", inverseProjection);
             filterParams.updateFloat4("dimensions", width, height, fullDepth.width, fullDepth.height);
-            filterParams.updateFloat4("softening", step, (settings.softness ?? 0) * data.volumeSize / 16, 0, 0);
+            filterParams.updateFloat4("softening", step, (settings.softness ?? 0) * data.volumeSize / 16,
+                settings.distanceSoftness && index === 0 ? 1 : 0, settings.distanceSoftness && index === RADIANCE_SOFTENING_STEPS.length - 1 ? 1 : 0);
         };
         tasks.push(task); return task;
     });

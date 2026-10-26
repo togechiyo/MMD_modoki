@@ -1,5 +1,7 @@
 # Luminous RCの照り返しの柔らかさ
 
+関連調査: [3D RCの補間・方向積分・時間蓄積・ringing対策との比較](./radiance-cascades-3d-filtering-research-2026-10-26.md)。本メモは実装と検証結果を扱う。
+
 ## 観測と調整対象
 
 所有者から、発光面と距離がある天井・柱の周囲に、くっきりした模様が出るという報告があった。添付は通常MMD / Frame Graph / WebGPU、Luminous RCと通常Luminousの併用で、表示は約19〜20 FPS。別の近接画像では髪にも細かな照射の変化が見える。所有者は最近景cascadeの精度が強すぎる可能性を挙げ、具合を調整したいと依頼した。

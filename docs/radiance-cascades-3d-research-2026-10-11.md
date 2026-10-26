@@ -2,6 +2,8 @@
 
 調査日: 2026-10-11
 
+2026-10-26追記: [3D RCの補間・filter調査](./radiance-cascades-3d-filtering-research-2026-10-26.md)でSplit RC v2の関連PDF本文・図を取得して確認した。以下の初回調査におけるabstractまでという確認範囲とは区別する。
+
 2026-10-25追記: [GI・参加媒質・太陽大気スペクトルの応用と WebGPU 実装の再調査](./radiance-cascades-applications-webgpu-research-2026-10-25.md)を追加した。TypeGPU HRC、DexRT の科学計算、Split RC の屋内・光漏れ対策をソースで確認し、公開 WebGPU デモの実描画も確認した。Split RC 論文 v2 の書誌情報と、実装・計測条件の違いは新メモを参照する。以下は初回調査時点の記録。
 
 Radiance Cascades は、距離ごとに空間解像度と方向解像度を変えて、間接光の計算結果を共有する方法である。ステージの色がモデルへ回り込む照明や、発光する面による拡散照明の実験候補になる。WebGPU の公開実装もあるが、MMD_modoki への本格導入では、PMX の変形を追跡用の形状へ同期する処理と、材質から正しい光の情報を取り出す処理が大きな課題になる。

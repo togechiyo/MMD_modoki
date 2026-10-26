@@ -34,12 +34,13 @@ test("distance softness preserves near light, smooths far light and restores GUI
     const capture = async name => {
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       report[name] = await page.evaluate(async name => (await import("/test/e2e/helpers/luminous-distance-softness-probe.mjs")).captureDistanceSoftness(name), name);
+      await expect(page.locator(".toast")).toHaveCount(0);
       await page.locator("#render-canvas").screenshot({ path: resolve(output, `${name}.png`) });
       writeFileSync(resolve(output, "report.json"), JSON.stringify({ ...report, errors }, null, 2));
     };
     await expect(toggle()).not.toBeChecked(); await capture("sharp");
     await toggle().check(); await capture("zero-distance");
-    expect(readFileSync(resolve(output, "zero-distance.png"))).toEqual(readFileSync(resolve(output, "sharp.png")));
+    expect(readFileSync(resolve(output, "zero-distance.png")).equals(readFileSync(resolve(output, "sharp.png")))).toBe(true);
     await toggle().uncheck(); await setLuminousInstancePosition(page, "luminousRadianceSoftness", 65); await capture("fixed");
     await toggle().check(); await capture("distance");
     report.comparison = await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-distance-softness-probe.mjs")).compareDistanceSoftness("fixed", "distance"));
@@ -55,7 +56,7 @@ test("distance softness preserves near light, smooths far light and restores GUI
     await capture("moved-cached");
     await page.evaluate(async () => (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).forceRadianceReceiverFull(true));
     await capture("moved-full");
-    expect(readFileSync(resolve(output, "moved-cached.png"))).toEqual(readFileSync(resolve(output, "moved-full.png")));
+    expect(readFileSync(resolve(output, "moved-cached.png")).equals(readFileSync(resolve(output, "moved-full.png")))).toBe(true);
     expect(report["moved-cached"].nearEnergy).not.toBe(report.distance.nearEnergy);
     await page.evaluate(async () => {
       (await import("/test/e2e/helpers/luminous-radiance-probe.mjs")).forceRadianceReceiverFull(false);
@@ -71,7 +72,7 @@ test("distance softness preserves near light, smooths far light and restores GUI
       report.completionMs.push({ enabled, ...times });
     }
     await toggle().uncheck(); await capture("restored-fixed");
-    expect(readFileSync(resolve(output, "restored-fixed.png"))).toEqual(readFileSync(resolve(output, "fixed.png")));
+    expect(readFileSync(resolve(output, "restored-fixed.png")).equals(readFileSync(resolve(output, "fixed.png")))).toBe(true);
     await toggle().check(); await setLuminousInstancePosition(page, "luminousRadianceSoftness", 30);
     const menu = async command => { await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click(); await page.locator(`[data-menu-command="${command}"]`).click(); };
     const saved = testInfo.outputPath("project.json");

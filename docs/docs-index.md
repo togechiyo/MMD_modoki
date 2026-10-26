@@ -381,6 +381,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [Luminous RCの発光色を2D Luminousへ合わせる 2026-10-25](./luminous-radiance-2d-color-match-2026-10-25.md)
 - [Luminous RCの照り返しの柔らかさ 2026-10-26](./luminous-radiance-softness-2026-10-26.md)
 - [3D Radiance Cascadesの補間・フィルタとルミナスRC 2026-10-26](./radiance-cascades-3d-filtering-research-2026-10-26.md)
+- [Luminous RCの受け側Hermite補間 2026-10-26](./luminous-radiance-hermite-interpolation-2026-10-26.md)
 - [AL発光面 3D RC検証画面の実装・実機確認 2026-10-11](./radiance-cascade-al-lab-2026-10-11.md)
 - [既存 Luminous 材質への 3D RC 接続 2026-10-11](./luminous-radiance-integration-2026-10-11.md)
 - [3D RC の発光色・カメラ復元・境界帯の修正 2026-10-12](./luminous-radiance-color-camera-fix-2026-10-12.md)

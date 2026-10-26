@@ -1,6 +1,26 @@
 import { RADIANCE_COMPOSITION_WGSL } from "./luminous-radiance-composition";
 import { RADIANCE_RECONSTRUCTION_WGSL } from "./luminous-radiance-reconstruction";
 
+export const RADIANCE_PROBE_INTERPOLATION_WGSL = `
+fn atlasPixel(probe: vec3u, angular: vec2u, grid: u32, columns: u32, rows: u32) -> vec2i {
+    return vec2i(i32(probe.x * columns + angular.x), i32((probe.z * grid + probe.y) * rows + angular.y));
+}
+fn interpolate(field: texture_2d<f32>, position: vec3f, angular: vec2u, grid: u32, columns: u32, rows: u32, hermite: bool) -> vec4f {
+    let coordinate = clamp((position - params.volumeMin.xyz) / params.volumeSize.xyz * f32(grid) - 0.5, vec3f(0.0), vec3f(f32(grid - 1u)));
+    let low = vec3u(floor(coordinate)); let linearFraction = fract(coordinate);
+    // Zero slope at probe centers makes the receiver's reconstruction C1 across cells.
+    // Cascade merge keeps linear weights; sample locations and the eight-probe support stay unchanged.
+    let fraction = select(linearFraction, linearFraction * linearFraction * (3.0 - 2.0 * linearFraction), hermite);
+    var result = vec4f(0.0);
+    for (var z = 0u; z < 2u; z++) { for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
+        let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(grid - 1u));
+        let weight = select(vec3f(1.0) - fraction, fraction, offset == vec3u(1u));
+        result += textureLoad(field, atlasPixel(probe, angular, grid, columns, rows), 0) * weight.x * weight.y * weight.z;
+    } } }
+    return result;
+}
+`;
+
 const COMMON = `
 struct Triangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f, uvAB: vec4f, uvSource: vec4f };
 struct Node { low: vec4f, high: vec4f, info: vec4f };
@@ -80,20 +100,7 @@ fn traceHit(origin: vec3f, ray: vec3f, start: f32, end: f32) -> RadianceHit {
 fn trace(origin: vec3f, ray: vec3f, start: f32, end: f32) -> vec4f {
     return traceHit(origin, ray, start, end).light;
 }
-fn atlasPixel(probe: vec3u, angular: vec2u, grid: u32, columns: u32, rows: u32) -> vec2i {
-    return vec2i(i32(probe.x * columns + angular.x), i32((probe.z * grid + probe.y) * rows + angular.y));
-}
-fn interpolate(field: texture_2d<f32>, position: vec3f, angular: vec2u, grid: u32, columns: u32, rows: u32) -> vec4f {
-    let coordinate = clamp((position - params.volumeMin.xyz) / params.volumeSize.xyz * f32(grid) - 0.5, vec3f(0.0), vec3f(f32(grid - 1u)));
-    let low = vec3u(floor(coordinate)); let fraction = fract(coordinate);
-    var result = vec4f(0.0);
-    for (var z = 0u; z < 2u; z++) { for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
-        let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(grid - 1u));
-        let weight = select(vec3f(1.0) - fraction, fraction, offset == vec3u(1u));
-        result += textureLoad(field, atlasPixel(probe, angular, grid, columns, rows), 0) * weight.x * weight.y * weight.z;
-    } } }
-    return result;
-}
+${RADIANCE_PROBE_INTERPOLATION_WGSL}
 `;
 
 export const LUMINOUS_RADIANCE_CASCADE_WGSL = `
@@ -117,7 +124,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     if (params.interval.z > 0.5 && local.a > 0.0) {
         var farther = vec4f(0.0);
         for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
-            farther += interpolate(parentField, position, angular * 2u + vec2u(x, y), grid / 2u, columns * 2u, rows * 2u) * 0.25;
+            farther += interpolate(parentField, position, angular * 2u + vec2u(x, y), grid / 2u, columns * 2u, rows * 2u, false) * 0.25;
         } }
         merged = vec4f(local.rgb + local.a * farther.rgb, local.a * farther.a);
     }
@@ -134,6 +141,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 `;
 
 export const LUMINOUS_RADIANCE_RECEIVER_WGSL = `
+const RADIANCE_RECEIVER_HERMITE = true;
 struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec4f,
     inverseProjection: mat4x4f, inverseView: mat4x4f, outputSize: vec4f, dirtyMin: vec4f, dirtyMax: vec4f };
 @group(0) @binding(0) var<uniform> params: Params;
@@ -202,7 +210,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                         nearLight += contact.rgb * preserve * cosine * (4.0 / 32.0);
                     }
                     // Contact replaces the far field; gather only when the ray escapes.
-                    if (contact.a > 0.0) { light = interpolate(radianceField, position, vec2u(u, v), 16u, 8u, 4u).rgb; }
+                    if (contact.a > 0.0) { light = interpolate(radianceField, position, vec2u(u, v), 16u, 8u, 4u, RADIANCE_RECEIVER_HERMITE).rgb; }
                     result += light * cosine * (4.0 / 32.0);
                 }
             } }

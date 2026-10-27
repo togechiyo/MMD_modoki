@@ -8,7 +8,7 @@
 
 参考にしたのは[Split RC WebGPUの受け側Hermite重み](https://github.com/wroughtinator/split-radiance-cascades-webgpu/blob/34255d334b1fc3880664d2580486bbd111f1be52/public/rc/shaders.js#L1229)。同実装のsurface key、接線上の近傍、irradiance事前積分を取り込んだものではなく、既存の世界座標8近傍へ重みだけを適用した。
 
-RCを有効にすると自動的に使う。新しいUI・保存項目はなく、既存の「RC 柔らかさ」「RC 距離連動」はそのまま使える。所有者が確認した柔らかさ20〜30で比較できる。柔らかさ0は引き続き画面filterを停止するが、受け側の基礎補間は今回のHermiteになる。
+RCを有効にすると自動的に使う。新しいUI・保存項目はなく、既存の「RC 柔らかさ」はそのまま使える。「RC 距離連動」は2026-10-27に所有者の指示でOFF固定・UI撤去とした（[変更内容](./luminous-radiance-softness-2026-10-26.md#2026-10-27-距離連動をoff固定にしてuiから外す)）。Hermiteは今回の撤去対象ではない。所有者が確認した柔らかさ20〜30で比較できる。柔らかさ0は引き続き画面filterを停止するが、受け側の基礎補間は今回のHermiteになる。
 
 変更範囲は以下に限定した。
 

@@ -32,17 +32,22 @@ describe("FrameGraph effect instances", () => {
         expect(() => store.setFixedSliderValue("fx-a", "samples", Number.NaN)).toThrow();
         expect(store.serialize()).toEqual(before);
     });
-    it("duplicates, restores and undoes RC distance softness independently of keys and other instances", () => {
+    it("keeps shelved RC distance softness OFF through restore, duplicate and undo while retaining other settings", () => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, "luminousRadiance");
         const before = store.serialize();
         store.setFixedSettings("fx-a", { radiance: { enabled: true, strength: 2, range: 20, softness: 0.3, distanceSoftness: true } });
         const changed = store.serialize(), diff = buildEffectInstanceDiff(before, changed);
+        expect(store.fixedSettings("fx-a")?.radiance).toEqual({ enabled: true, strength: 2, range: 20, softness: 0.3, distanceSoftness: false });
         if (!diff) throw new Error("Missing settings diff");
         store.duplicate("fx-a", "fx-b");
         expect(store.fixedSettings("fx-b")).toEqual(store.fixedSettings("fx-a"));
-        store.setFixedSettings("fx-b", { radiance: { enabled: true, strength: 2, range: 20, softness: 0.3, distanceSoftness: false } });
-        expect(store.fixedSettings("fx-a")?.radiance?.distanceSoftness).toBe(true);
-        const restored = new FrameGraphEffectInstances(); restored.restore(changed);
+        store.setFixedSettings("fx-b", { radiance: { enabled: true, strength: 2, range: 20, softness: 0.65, distanceSoftness: true } });
+        expect(store.fixedSettings("fx-a")?.radiance?.softness).toBe(0.3);
+        expect(store.fixedSettings("fx-b")?.radiance).toMatchObject({ softness: 0.65, distanceSoftness: false });
+        const legacy = structuredClone(changed);
+        if (!legacy.instances[0].fixedSettings?.radiance) throw new Error("Missing RC settings");
+        legacy.instances[0].fixedSettings.radiance.distanceSoftness = true;
+        const restored = new FrameGraphEffectInstances(); restored.restore(legacy);
         expect(restored.serialize()).toEqual(changed);
         const reverted = applyEffectInstanceDiff(changed, diff, "revert");
         expect(reverted).toEqual(before);

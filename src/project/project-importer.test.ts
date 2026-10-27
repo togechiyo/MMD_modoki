@@ -229,7 +229,7 @@ describe("importProjectState", () => {
         const project = createProject();
         project.effects.luminousRadiance = { enabled: true, strength: 2.5, range: 4, softness: 0.6, distanceSoftness: true };
         await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
-        expect(host.luminousRadianceSettings).toEqual(project.effects.luminousRadiance);
+        expect(host.luminousRadianceSettings).toEqual({ ...project.effects.luminousRadiance, distanceSoftness: false });
         await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], createProject());
         expect(host.luminousRadianceSettings).toEqual({ enabled: false, strength: 1, range: 12, softness: 0, distanceSoftness: false });
     });

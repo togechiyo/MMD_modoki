@@ -1,5 +1,7 @@
 # Luminous RCの照り返しの柔らかさ
 
+2026-10-27更新: 所有者の指示で「RC 距離連動」をOFF固定とし、UIから外した。現在は「RC 柔らかさ」で合計照明をぼかす。[変更内容](#2026-10-27-距離連動をoff固定にしてuiから外す)以降を参照し、下記の距離連動の操作・比較は導入時の記録として扱う。
+
 関連調査: [3D RCの補間・方向積分・時間蓄積・ringing対策との比較](./radiance-cascades-3d-filtering-research-2026-10-26.md)。本メモは実装と検証結果を扱う。
 
 ## 観測と調整対象
@@ -18,7 +20,7 @@ Luminous RC個体に「RC 柔らかさ」を追加。UIは0〜100、保存値は
 
 個体ごとの固定設定として保存・読込・複製・Undo/Redoに含め、backendの往復でも保持する。enabledと同様のキーを新設する変更ではない。5言語のラベルを追加した。
 
-### RC 距離連動（近距離／遠方の近似）
+### RC 距離連動の導入時仕様（2026-10-27にOFF固定）
 
 「RC 距離連動」をONにすると、光源に近い照り返しの細部を保ち、遠方の寄与へ「RC 柔らかさ」を適用する。まず柔らかさ20〜30のままON/OFFを比較する。保存値は個体の`fixedSettings.radiance.distanceSoftness`（boolean）。初期値・旧projectの復元はOFFとし、従来の固定ぼかしを維持する。柔らかさ0では距離連動のON/OFFにかかわらず未加工照明になる。設定は保存・読込、複製、Undo/Redo、Classic / Frame Graph往復で保持する。
 
@@ -90,6 +92,16 @@ OFFでは天井の照り返しがなじみ、ONでは柱の周囲に輪状の細
 距離連動は短距離寄与をfilterから除いて足し戻すため、残したい接近光の細部と、抑えたいsample由来の模様を区別しない。今回の見た目は、不要な模様も近距離保持側へ残るという実装上の制約と整合する。ただし画像だけでは模様の発生段階や個々の光路を確定できず、この実シーンのbuffer観測はしていない。
 
 比較したUIは距離連動であり、[Hermite補間](./luminous-radiance-hermite-interpolation-2026-10-26.md)のON / OFF比較ではない。近接部を残す仕組みが自作fixtureで動くことと、実シーンの見た目が改善することを分けて評価する。この報告から距離連動の全面撤去やHermiteの採否は推定しない。今回は実機結果の記録のみで、描画・初期値・保存値を変更していない。文書のリンク・差分を確認し、npmの検証は追加実行しない。
+
+### 2026-10-27 距離連動をOFF固定にしてUIから外す
+
+所有者が「距離連動のはOFFにしてUIしまってしまおう」と明示したため、エフェクトパネルのcheckbox・入力処理・表示同期を外した。共通の`normalizeLuminousRadiance`で`distanceSoftness`を常にfalseへ正規化し、新規設定だけでなく、ONだった旧保存値、RC個体の復元・複製・Undo/Redo、Classic / Frame Graph往復からも再有効化させない。再保存する値もfalseになる。強度・範囲・柔らかさ、RC自体の有効状態は保持する。
+
+保存互換のfieldと実験shaderは残す。runtimeも同じ正規化を使うため、近距離保持の集計・履歴コピーとfilterでの引き算／足し戻しは無効になる。今回nearHistoryの確保方式は変更していないので、OFF固定による追加のメモリ削減は行っていない。固定ぼかしとHermite補間の描画処理は変更しない。[所有者判断](../insights/decisions/shelve-luminous-rc-distance-softness.md)は距離連動のOFF固定・UI撤去の範囲に限定する。
+
+正規化・個体store・project import / exportの単体テストで、旧true入力がOFFになり他の値が保たれること、複製・復元・Undo/Redoの動作を確認した。単体203 files / 1,272 testsが成功。ローカルElectron / WebGPUでは旧ON保存値のGUI読込・再保存、柔らかさのUndo/Redo、backend往復後のUI非表示と設定保持を確認した。receiver UBOの近距離保持flagと5段filterの近距離分離・復帰flagはすべて0だった。画面・JSONはignoredな`artifacts/e2e/luminous-distance-softness-retired/`へ保存した。
+
+ローカルE2Eは4件成功し、上記に加え、旧Luminous内に入れ子だったRCのtrue保存値の移行、通常2D Luminousと複数RCの独立、固定ぼかしの模様低減・0への画像復帰・保存復元も確認した。WebGPU validation / page errorは0。lint・typecheck:criticalは成功し、通常typecheckの既知547 diagnosticsは位置を除いた内容・件数とも増加なし（TS2304 / TS2552は0）。起動導線・runtime初期化は変更していないため、独立したsmokeは追加実行していない。
 
 ## 限界
 

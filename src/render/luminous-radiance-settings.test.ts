@@ -9,11 +9,12 @@ it("keeps old projects OFF and normalizes experimental RC settings", () => {
     expect(normalizeLuminousRadiance({ enabled: true, strength: 0, range: 4 })).toEqual({ enabled: true, strength: 0, range: 4, softness: 0, distanceSoftness: false });
 });
 
-it("opts into distance softness only with a boolean and retains softness when disabled", () => {
-    for (const distanceSoftness of [undefined, null, "true", 1, false]) {
+it("keeps shelved distance softness OFF even for previously enabled projects without losing softness", () => {
+    for (const distanceSoftness of [undefined, null, "true", 1, false, true]) {
         expect(normalizeLuminousRadiance({ softness: 0.3, distanceSoftness })).toMatchObject({ softness: 0.3, distanceSoftness: false });
     }
-    expect(normalizeLuminousRadiance({ softness: 0.3, distanceSoftness: true })).toMatchObject({ softness: 0.3, distanceSoftness: true });
+    expect(normalizeLuminousRadiance({ enabled: true, strength: 2, range: 20, softness: 0.38, distanceSoftness: true }))
+        .toEqual({ enabled: true, strength: 2, range: 20, softness: 0.38, distanceSoftness: false });
 });
 
 it("defaults legacy RC to its original sharp appearance and clamps softness independently", () => {

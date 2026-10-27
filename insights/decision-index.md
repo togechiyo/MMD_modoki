@@ -80,6 +80,7 @@
 | --- | --- | --- |
 | deferred | [汎用オブジェクト形式の拡張は v0.2.3 より後へ送る](./decisions/defer-generic-object-format-expansion-beyond-v023.md) | v0.2.3の旧保留。2026-10-09に所有者がPLY・STLの静的アクセサリ対応を選び再開。他形式の全面採用へ広げない |
 | deferred | [IBL Shadows は保留する](./decisions/defer-ibl-shadows.md) | IBL Shadows の調査・再実装を検討する |
+| deferred | [Luminous RCの距離連動をOFF固定でUIから外す](./decisions/shelve-luminous-rc-distance-softness.md) | 距離連動の再公開や旧true保存値の復元を扱う。固定ぼかしとHermiteの撤去へ広げない |
 | deferred | [独立した開発者メニューの追加はいったん保留する](./decisions/defer-developer-menu-for-now.md) | PBR、外部WGSL、試験機能の公開導線をまとめ直す |
 | rejected | [海エフェクトは没としタイムライン化の対象から外す](./decisions/defer-ocean-effect-ui-until-quality-improves.md) | 海の再開・UI復帰・キー化を検討する。旧実装・保存互換の削除は別判断 |
 | deferred | [VMDU は VMD 出力要件が固まるまで保留する](./decisions/defer-vmdu-until-vmd-export-proves-requirements.md) | VMDU や VMD 差分形式を検討する |

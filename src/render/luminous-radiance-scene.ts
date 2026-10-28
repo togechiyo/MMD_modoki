@@ -18,13 +18,12 @@ export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: nu
 type MeshInput = { key: Mesh; snapshot: RadianceInputSnapshot; emissionSnapshot: RadianceInputSnapshot;
     geometryVersion: object; triangles: Float32Array; emitters: number; low: number[]; high: number[] };
 
-export class LuminousRadianceScene {
+// Range-independent scene input. One owner may serve several RC volumes in the same graph.
+export class LuminousRadianceSceneSource {
     public readonly bvh = new MeshRadianceBvh();
     public triangleBuffer: StorageBuffer;
     public nodeBuffer: StorageBuffer;
     public emissionBuffer: StorageBuffer;
-    public volumeMin = [-12, -12, -12];
-    public volumeSize = 24;
     public updates = 0;
     public revision = 0;
     public emitterTriangles = 0;
@@ -38,6 +37,8 @@ export class LuminousRadianceScene {
     private textureRevision = -1;
     private readonly textures = new LuminousRadianceTextures();
     private readonly triangleBudget: number;
+    private emitterLow = [Infinity, Infinity, Infinity];
+    private emitterHigh = [-Infinity, -Infinity, -Infinity];
 
     constructor(private readonly scene: Scene, private readonly readEmission: RadianceEmissionReader) {
         const engine = scene.getEngine() as WebGPUEngine;
@@ -50,7 +51,12 @@ export class LuminousRadianceScene {
     public get ready(): boolean { return this.textures.ready; }
     public get emissionTextureRevision(): number { return this.textureRevision; }
 
-    public update(settings: LuminousRadianceSettings): void {
+    public getVolume(range: number): { min: number[]; size: number } {
+        const size = this.emitterTriangles ? Math.max(...this.emitterHigh.map((value, axis) => value - this.emitterLow[axis])) + range * 2 : range * 2;
+        return { size, min: this.emitterLow.map((value, axis) => this.emitterTriangles ? (value + this.emitterHigh[axis] - size) / 2 : -range) };
+    }
+
+    public update(): void {
         const chunks: MeshInput[] = [];
         const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
         let emitters = 0;
@@ -161,8 +167,7 @@ export class LuminousRadianceScene {
             chunks.length = 0; emitters = 0;
         }
         this.emitterTriangles = emitters;
-        this.volumeSize = emitters ? Math.max(...high.map((value, axis) => value - low[axis])) + settings.range * 2 : settings.range * 2;
-        this.volumeMin = low.map((value, axis) => emitters ? (value + high[axis] - this.volumeSize) / 2 : -settings.range);
+        this.emitterLow = low; this.emitterHigh = high;
         if (this.textureRevision !== this.textures.revision) {
             if (this.textures.pixels.byteLength > this.emissionCapacity) {
                 this.emissionBuffer.dispose(); this.emissionCapacity = this.textures.pixels.byteLength;
@@ -187,4 +192,46 @@ export class LuminousRadianceScene {
     }
 
     public dispose(): void { this.triangleBuffer.dispose(); this.nodeBuffer.dispose(); this.emissionBuffer.dispose(); this.textures.dispose(); }
+}
+
+export interface LuminousRadianceSceneLease {
+    readonly source: LuminousRadianceSceneSource;
+    update(): void;
+    release(): void;
+}
+
+// Consumer-local volume and lifetime. Getters follow shared GPU buffer reallocations.
+export class LuminousRadianceScene {
+    public volumeMin = [-12, -12, -12];
+    public volumeSize = 24;
+    private readonly source: LuminousRadianceSceneSource;
+    private disposed = false;
+
+    constructor(scene: Scene, readEmission: RadianceEmissionReader, private readonly lease?: LuminousRadianceSceneLease) {
+        this.source = lease?.source ?? new LuminousRadianceSceneSource(scene, readEmission);
+    }
+
+    public get bvh(): MeshRadianceBvh { return this.source.bvh; }
+    public get triangleBuffer(): StorageBuffer { return this.source.triangleBuffer; }
+    public get nodeBuffer(): StorageBuffer { return this.source.nodeBuffer; }
+    public get emissionBuffer(): StorageBuffer { return this.source.emissionBuffer; }
+    public get updates(): number { return this.source.updates; }
+    public get revision(): number { return this.source.revision; }
+    public get emitterTriangles(): number { return this.source.emitterTriangles; }
+    public get error(): string | null { return this.source.error; }
+    public get ready(): boolean { return this.source.ready; }
+    public get emissionTextureRevision(): number { return this.source.emissionTextureRevision; }
+
+    public update(settings: LuminousRadianceSettings): void {
+        if (this.disposed) return;
+        if (this.lease) this.lease.update(); else this.source.update();
+        const volume = this.source.getVolume(settings.range);
+        this.volumeMin = volume.min; this.volumeSize = volume.size;
+    }
+
+    public dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+        if (this.lease) this.lease.release(); else this.source.dispose();
+    }
 }

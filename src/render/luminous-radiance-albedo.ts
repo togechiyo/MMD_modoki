@@ -20,7 +20,7 @@ fragData[PREPASS_ALBEDO_INDEX] = vec4f(baseColor.rgb, writeGeometryInfo);
 `;
 
 class RadianceAlbedoPlugin extends MaterialPluginBase {
-    public readonly passes = new Set<number>();
+    public readonly passes = new Map<number, number>();
     constructor(material: StandardMaterial) {
         super(material, "RadianceAlbedoCapture", 280, { RADIANCE_ALBEDO_CAPTURE: true }, true, false);
         this.doNotSerialize = true;
@@ -50,17 +50,30 @@ const plugins = new WeakMap<StandardMaterial, RadianceAlbedoPlugin>();
 
 export function captureRadianceAlbedo(scene: Scene, passId: number): () => void {
     let disposed = false;
+    const registered = new Map<StandardMaterial, () => void>();
     const register = (material: Material): void => {
-        if (disposed || !(material instanceof StandardMaterial)) return;
-        let plugin = plugins.get(material);
-        if (!plugin) { plugin = new RadianceAlbedoPlugin(material); plugins.set(material, plugin); }
-        plugin.passes.add(passId);
+        if (disposed || scene.isDisposed || !(material instanceof StandardMaterial)
+            || registered.has(material) || !scene.materials.includes(material)) return;
+        const plugin = plugins.get(material) ?? new RadianceAlbedoPlugin(material);
+        plugins.set(material, plugin);
+        plugin.passes.set(passId, (plugin.passes.get(passId) ?? 0) + 1);
+        const unregister = (): void => {
+            if (!registered.delete(material)) return;
+            const count = plugin.passes.get(passId) ?? 0;
+            if (count > 1) plugin.passes.set(passId, count - 1);
+            else plugin.passes.delete(passId);
+            material.onDisposeObservable.remove(materialDisposed);
+        };
+        const materialDisposed = material.onDisposeObservable.add(unregister);
+        registered.set(material, unregister);
     };
     for (const material of scene.materials) register(material);
-    // Material-added fires inside the base constructor; wait for Standard/MMD initialization to finish.
+    // Keep registration deferred until Standard/MMD initialization has finished. A queued
+    // notification may reach us after capture release, material disposal, or scene disposal.
     const observer = scene.onNewMaterialAddedObservable.add(material => queueMicrotask(() => register(material)));
     return () => {
+        if (disposed) return;
         disposed = true; scene.onNewMaterialAddedObservable.remove(observer);
-        for (const material of scene.materials) if (material instanceof StandardMaterial) plugins.get(material)?.passes.delete(passId);
+        for (const unregister of registered.values()) unregister();
     };
 }

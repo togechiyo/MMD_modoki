@@ -15,7 +15,8 @@ import type { FrameGraphTextureHandle } from "@babylonjs/core/FrameGraph/frameGr
 import type { Camera } from "@babylonjs/core/Cameras/camera";
 import type { Scene } from "@babylonjs/core/scene";
 import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
-import { LuminousRadianceScene, type RadianceEmissionReader } from "./luminous-radiance-scene";
+import type { LuminousRadianceScene, RadianceEmissionReader } from "./luminous-radiance-scene";
+import { acquireLuminousRadianceScene } from "./luminous-radiance-scene-pool";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "./luminous-radiance-settings";
 import { captureRadianceAlbedo } from "./luminous-radiance-albedo";
 import { radianceReceiverSize } from "./luminous-radiance-input-cache";
@@ -43,7 +44,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     depth: FrameGraphTextureHandle, normal: FrameGraphTextureHandle, albedo: FrameGraphTextureHandle, geometryPassId: number,
     getSettings: () => LuminousRadianceSettings, readEmission: RadianceEmissionReader,
 ): { tasks: FrameGraphTask[]; composite: FrameGraphPostProcessTask; data: LuminousRadianceScene } {
-    const data = new LuminousRadianceScene(scene, readEmission);
+    const data = acquireLuminousRadianceScene(graph, scene, readEmission);
     const releaseAlbedo = captureRadianceAlbedo(scene, geometryPassId);
     // Prime source texture readback before buildAsync waits for task readiness, including resized exports.
     data.update(normalizeLuminousRadiance(getSettings()));
@@ -69,6 +70,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     const probeEpochs = new StorageBuffer(graph.engine as WebGPUEngine, 16 ** 3 * 4);
     const history = new LuminousRadianceHistory();
     let outputIndex = 0, fieldRevision = -1, fieldRange = -1, textureRevision = -1, contactDirty = false, allContactsDirty = false;
+    let geometryUpdates = -1;
     const fields = layouts.map((layout, index) => index === 0
         ? baseFields[0]
         : storageTexture(graph, `luminousRadiance${index}`, layout.width, layout.height));
@@ -132,7 +134,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             ["previousNear", nearHistory[1]], ["outputNear", nearHistory[0]]] as const) {
             receiver.setInternalTexture(name, context.getTextureFromHandle(handle));
         }
-        history.reset(); fieldRevision = -1; fieldRange = -1;
+        history.reset(); fieldRevision = -1; fieldRange = -1; geometryUpdates = -1;
     });
     const inverseProjection = Matrix.Identity(), inverseView = Matrix.Identity();
     receiver.execute = context => {
@@ -214,13 +216,17 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         const visible = active && data.emitterTriangles > 0 && !data.error;
         const refresh = visible && (fieldRevision !== data.revision || fieldRange !== settings.range);
         contactDirty = refresh;
-        allContactsDirty = textureRevision !== data.emissionTextureRevision || !Number.isFinite(data.bvh.changedMin[0]);
+        // Shared dirty bounds cover the latest geometry update only. A paused consumer may
+        // have missed several updates, so its near-contact history must be invalidated in full.
+        allContactsDirty = fieldRange !== settings.range || textureRevision !== data.emissionTextureRevision
+            || data.updates > geometryUpdates + 1 || !Number.isFinite(data.bvh.changedMin[0]);
         for (const task of cascades) task.disabled = !refresh;
         receiver.disabled = !visible; composite.disabled = !visible;
         for (const task of softeners) task.disabled = !visible || !(settings.softness && settings.softness > 0);
         if (refresh) {
             if (history.advanceField()) probeEpochs.clear();
             fieldRevision = data.revision; fieldRange = settings.range; textureRevision = data.emissionTextureRevision;
+            geometryUpdates = data.updates;
         }
     };
     const dispose = prepare.dispose.bind(prepare);

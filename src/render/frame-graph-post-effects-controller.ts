@@ -87,6 +87,7 @@ import {
 import { FrameGraphDirectionalLightShaftsTask } from "./frame-graph-directional-light-shafts-task";
 import { ensureFrameGraphDirectionalLightShaftsShaders } from "./frame-graph-directional-light-shafts-shaders";
 import { createLuminousRadianceTasks } from "./frame-graph-luminous-radiance";
+import { beginLuminousRadianceFrame } from "./luminous-radiance-scene-pool";
 import type { RadianceEmissionReader, LuminousRadianceScene } from "./luminous-radiance-scene";
 import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
 
@@ -2029,6 +2030,7 @@ export class FrameGraphPostEffectsController {
     private connectedOrder: FrameGraphPostEffectId[] = [];
     private connectedLegacyEffects: FrameGraphPostEffectId[] = [];
     private luminousRadianceData: LuminousRadianceScene | null = null;
+    private luminousRadianceTasks: FrameGraphTask[] = [];
     private luminousRadianceCompositeTask: FrameGraphPostProcessTask | null = null;
 
     public getLuminousRadianceDiagnostics(): { triangles: number; emitters: number; updates: number; error: string | null } | null {
@@ -2921,6 +2923,7 @@ export class FrameGraphPostEffectsController {
             radiance.composite.sourceTexture = bloomSourceTexture;
             for (const task of radiance.tasks) deferEffectTask("luminousRadiance", task);
             this.luminousRadianceData = radiance.data;
+            this.luminousRadianceTasks = radiance.tasks;
             this.luminousRadianceCompositeTask = radiance.composite;
         }
         let luminousOutputTexture = bloomSourceTexture;
@@ -3496,6 +3499,7 @@ export class FrameGraphPostEffectsController {
             this.fxaaTask.disabled = !settings.antialiasEnabled;
         }
         try {
+            beginLuminousRadianceFrame(this.frameGraph);
             this.frameGraph.execute();
         } catch (err: unknown) {
             this.ready = false;
@@ -3894,6 +3898,9 @@ export class FrameGraphPostEffectsController {
     dispose(): void {
         for (const group of this.instanceTasks.values()) group.dispose();
         this.instanceTasks.clear();
+        // Babylon FrameGraph.dispose resets task records but does not dispose task-owned resources.
+        for (const task of this.luminousRadianceTasks) task.dispose();
+        this.luminousRadianceTasks = [];
         this.colorCorrectionEffect?.dispose();
         this.colorCorrectionEffect = null;
         this.gammaCorrectionEffect?.dispose();

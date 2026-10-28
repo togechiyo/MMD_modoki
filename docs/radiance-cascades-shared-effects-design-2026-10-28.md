@@ -4,6 +4,8 @@
 
 [応用分野の既存調査](./radiance-cascades-applications-webgpu-research-2026-10-25.md)を補い、今回は現行実装からの拡張と、重複計算を減らす境界に絞る。
 
+同日後続: 所有者の設計書作成依頼を受け、[推奨設定と段階的な実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)へ具体化した。新しいGI/天空遮蔽は固定順のシーン照明、既存Luminous RCは個体別PostFXとして扱う。以下の共有概念を、すべて自由に並べ替えられるPostFXという意味には広げない。
+
 ## 現在の出発点
 
 - [ray hit](../src/render/luminous-radiance-shaders.ts)は発光面のRGBを返す。非発光面は遮蔽物になるが、直接照明を反射した色は返さない。missは黒・透過率1で、天空の入力も反射の反復もない。

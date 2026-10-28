@@ -59,6 +59,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）
 - [x] 3D RCのGI・天空・反射・媒質への応用と複数エフェクトの共有境界を整理。現行の個体別BVH/field、非線形合成・寄与分離・visibility履歴の条件を記録（[設計案](./radiance-cascades-shared-effects-design-2026-10-28.md)。採用・実装・新規性能計測は未実施）
+- [x] RCの効果別UI・共通基盤を前提に、推奨初期値、描画前FrameGraphと材質への接続、GI/天空遮蔽の寄与分離、段階A〜Fと検証条件を文書化（[実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)。実装未着手）
+- [ ] 設計候補: RC共通基盤の段階A（scene/BVHの共有）を、既存Luminous RCの画像・保存値・個別合成を維持して比較する（[段階と完了条件](./radiance-cascades-lighting-implementation-plan-2026-10-28.md#8-段階的な実装と完了条件)。今回の依頼は設計書作成まで）
 - [x] 現行 Luminous RC と WebGPU の最適化を調査。不要な field 補間、発光と形状の更新分離、probe 照度集計、GPU timestamp の有効化条件と次の比較条件を記録（[調査メモ](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)。実装変更・新規性能計測は未実施）
 - [x] Frame Graph の通常 Luminous と Luminous RC を別個体・別task群へ分離。RC単独の資源、独立したenabledキー、旧保存値の移行を実装（[分離メモ](./framegraph-luminous-rc-separation-2026-10-25.md)）
 - [x] Luminous RCの遮蔽時の不要なfield補間と最終hit以外の発光色評価を削減。変更前PNG一致・回帰10件を確認。fixtureのreceiver単独wall timeは6.11→5.99ms、全体FPS改善は未確認（[実装・比較](./luminous-radiance-occluded-work-optimization-2026-10-25.md)）

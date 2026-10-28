@@ -1,8 +1,10 @@
 # RC共通基盤・拡散GI・天空遮蔽の実装案
 
-作成日: 2026-10-28。状態: 段階Aを実装・検証済み。B以降は設計案。
+作成日: 2026-10-28。状態: 段階A/Bを実装・検証済み。C以降は設計案。
 
 所有者の「おすすめ設定で実装案を書いて、ドキュメントとして置く」という依頼に基づく。[応用と共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を実装単位へ具体化する。その後の実装依頼により、[段階Aのscene/BVH共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ着手した。以下の新照明の数値、内部名、UI配置は引き続き推奨案であり、実機で調整済みの値や次版収録の決定ではない。
+
+続いて[段階Bの同条件の光場計算共有](./radiance-cascades-shared-field-implementation-2026-10-28.md)を実装。range変更時のrebuildを増やさないため固定の予備slotは残し、同条件のcascade計算とfield参照を共有する。fieldメモリ削減は今回の完了範囲に含めない。
 
 ## 1. 推奨構成と最初の範囲
 
@@ -187,4 +189,4 @@ pure helperの最小テストは共有group生成、consumer増減、normalizati
 
 外部方式の根拠は本会話で一次資料を照合した[応用調査](./radiance-cascades-applications-webgpu-research-2026-10-25.md)と[共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を参照する。Split RCの照度事前積分をそのまま採用する決定や、新しい外部APIが使えるという確認は今回行っていない。
 
-設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の段階Aの実装内容と検証結果は[実装メモ](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ分離して記録する。
+設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の実装内容と検証結果は、[段階A](./radiance-cascades-shared-scene-implementation-2026-10-28.md)と[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)の実装メモへ分離して記録する。

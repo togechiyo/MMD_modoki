@@ -2,6 +2,8 @@
 
 作成日: 2026-10-28。
 
+追記: 続く[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)で同条件の光場計算共有も実装済み。以下は段階A時点の境界と比較結果を記録する。
+
 [実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)の段階Aとして、既存Luminous RCのシーン入力を複数個体で共有する。個体別のrange、強度、softness、合成順、保存形式は維持する。GI・天空遮蔽・同条件の光場共有は後続段階であり、この変更では追加していない。
 
 ## 共有範囲と更新契約

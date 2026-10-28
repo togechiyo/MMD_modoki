@@ -17,6 +17,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
 import type { LuminousRadianceScene, RadianceEmissionReader } from "./luminous-radiance-scene";
 import { acquireLuminousRadianceScene } from "./luminous-radiance-scene-pool";
+import { registerLuminousRadianceField, type RadianceFieldSlot } from "./luminous-radiance-field-pool";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "./luminous-radiance-settings";
 import { captureRadianceAlbedo } from "./luminous-radiance-albedo";
 import { radianceReceiverSize } from "./luminous-radiance-input-cache";
@@ -68,8 +69,15 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     const outputs = owned.slice(2, 4).map(texture => texture.handle), geometryHistory = owned.slice(4, 6).map(texture => texture.handle);
     const nearHistory = owned.slice(6, 8).map(texture => texture.handle);
     const probeEpochs = new StorageBuffer(graph.engine as WebGPUEngine, 16 ** 3 * 4);
-    const history = new LuminousRadianceHistory();
-    let outputIndex = 0, fieldRevision = -1, fieldRange = -1, textureRevision = -1, contactDirty = false, allContactsDirty = false;
+    // Collect all candidate base fields before graph.build, including slots registered later.
+    // The fixed dependency set permits live range split/join without transient aliasing hazards.
+    const receiverDependencies = new Set<FrameGraphTextureHandle>([depth, normal, ...outputs, ...geometryHistory, ...nearHistory]);
+    const field = registerLuminousRadianceField(graph, data.bvh, { baseFields, probeEpochs },
+        candidate => candidate.baseFields.forEach(handle => receiverDependencies.add(handle)));
+    const fieldHistory = field.slot.history, receiverHistory = new LuminousRadianceHistory();
+    let selectedField = field.slot, lastField: RadianceFieldSlot | null = null, lastFieldGeneration = -1;
+    // These revisions describe this receiver's last input, independently of shared field dispatch.
+    let outputIndex = 0, receiverRevision = -1, receiverRange = -1, textureRevision = -1, contactDirty = false, allContactsDirty = false;
     let geometryUpdates = -1;
     const fields = layouts.map((layout, index) => index === 0
         ? baseFields[0]
@@ -97,8 +105,8 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         });
         task.execute = context => {
             if (index === 0) {
-                task.setInternalTexture("outputField", context.getTextureFromHandle(baseFields[history.fieldIndex]));
-                task.setInternalTexture("previousField", context.getTextureFromHandle(baseFields[1 - history.fieldIndex]));
+                task.setInternalTexture("outputField", context.getTextureFromHandle(baseFields[fieldHistory.fieldIndex]));
+                task.setInternalTexture("previousField", context.getTextureFromHandle(baseFields[1 - fieldHistory.fieldIndex]));
             }
             task.setStorageBuffer("triangles", data.triangleBuffer); task.setStorageBuffer("nodes", data.nodeBuffer);
             task.setStorageBuffer("emissionPixels", data.emissionBuffer);
@@ -106,7 +114,7 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             params.updateFloat4("volumeSize", data.volumeSize, data.volumeSize, data.volumeSize, 0);
             params.updateFloat4("shape", layout.grid, layout.directionsX, layout.directionsY, data.bvh.triangleCount);
             params.updateFloat4("interval", layout.start * data.volumeSize / 9, layout.end * data.volumeSize / 9, index < layouts.length - 1 ? 1 : 0, 0);
-            params.updateFloat4("cache", history.epoch, history.previousFieldValid ? 1 : 0, 0, 0);
+            params.updateFloat4("cache", fieldHistory.epoch, fieldHistory.previousFieldValid ? 1 : 0, 0, 0);
         };
         if (index === layouts.length - 1) {
             const isReady = task.isReady.bind(task);
@@ -127,19 +135,20 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
     receiver.setStorageBuffer("emissionPixels", data.emissionBuffer);
     receiver.setStorageBuffer("probeEpochs", probeEpochs);
     receiver.dispatchSize = new Vector3(Math.ceil(width / 8), Math.ceil(height / 8), 1);
-    receiver.dependencies = new Set([...baseFields, depth, normal, ...outputs, ...geometryHistory, ...nearHistory]);
+    receiver.dependencies = receiverDependencies;
     receiver.onTexturesAllocatedObservable.add(context => {
         for (const [name, handle] of [["radianceField", baseFields[0]], ["viewDepth", depth], ["viewNormal", normal],
             ["outputGi", outputs[0]], ["previousGi", outputs[1]], ["previousGeometry", geometryHistory[1]], ["outputGeometry", geometryHistory[0]],
             ["previousNear", nearHistory[1]], ["outputNear", nearHistory[0]]] as const) {
             receiver.setInternalTexture(name, context.getTextureFromHandle(handle));
         }
-        history.reset(); fieldRevision = -1; fieldRange = -1; geometryUpdates = -1;
+        field.invalidate(); receiverHistory.reset(); lastField = null; lastFieldGeneration = -1;
+        receiverRevision = -1; receiverRange = -1; geometryUpdates = -1;
     });
     const inverseProjection = Matrix.Identity(), inverseView = Matrix.Identity();
     receiver.execute = context => {
         outputIndex = 1 - outputIndex;
-        for (const [name, handle] of [["radianceField", baseFields[history.fieldIndex]], ["outputGi", outputs[outputIndex]],
+        for (const [name, handle] of [["radianceField", selectedField.resources.baseFields[selectedField.history.fieldIndex]], ["outputGi", outputs[outputIndex]],
             ["previousGi", outputs[1 - outputIndex]], ["previousGeometry", geometryHistory[1 - outputIndex]], ["outputGeometry", geometryHistory[outputIndex]],
             ["previousNear", nearHistory[1 - outputIndex]], ["outputNear", nearHistory[outputIndex]]] as const) {
             receiver.setInternalTexture(name, context.getTextureFromHandle(handle));
@@ -148,11 +157,12 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         const preserveNear = settings.distanceSoftness && (settings.softness ?? 0) > 0;
         receiver.setStorageBuffer("triangles", data.triangleBuffer); receiver.setStorageBuffer("nodes", data.nodeBuffer);
         receiver.setStorageBuffer("emissionPixels", data.emissionBuffer);
+        receiver.setStorageBuffer("probeEpochs", selectedField.resources.probeEpochs);
         params.updateFloat4("volumeMin", ...data.volumeMin as [number, number, number], 0);
         params.updateFloat4("volumeSize", data.volumeSize, data.volumeSize, data.volumeSize, 0);
         params.updateFloat4("shape", 16, 8, 4, data.bvh.triangleCount);
         camera.getProjectionMatrix().invertToRef(inverseProjection); camera.getViewMatrix().invertToRef(inverseView);
-        const reuse = history.canReuseReceiver([inverseProjection.m, inverseView.m, [...data.volumeMin, data.volumeSize, settings.strength, preserveNear ? 1 : 0]]);
+        const reuse = receiverHistory.canReuseReceiver([inverseProjection.m, inverseView.m, [...data.volumeMin, data.volumeSize, settings.strength, preserveNear ? 1 : 0]]);
         params.updateFloat4("interval", data.volumeSize / 18, 0, 0, reuse ? 1 : 0);
         const dirtyMin = allContactsDirty ? data.volumeMin : data.bvh.changedMin;
         const dirtyMax = allContactsDirty ? data.volumeMin.map(value => value + data.volumeSize) : data.bvh.changedMax;
@@ -214,22 +224,26 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
         const active = settings.enabled && settings.strength > 0.0001;
         if (active) data.update(settings);
         const visible = active && data.emitterTriangles > 0 && !data.error;
-        const refresh = visible && (fieldRevision !== data.revision || fieldRange !== settings.range);
-        contactDirty = refresh;
+        const claim = visible ? field.claim(settings.range, data.revision) : null;
+        if (claim) selectedField = claim.slot;
+        const ownerChanged = selectedField !== lastField || selectedField.generation !== lastFieldGeneration;
+        if (visible && ownerChanged) receiverHistory.reset();
+        contactDirty = visible && (ownerChanged || receiverRevision !== data.revision || receiverRange !== settings.range);
         // Shared dirty bounds cover the latest geometry update only. A paused consumer may
         // have missed several updates, so its near-contact history must be invalidated in full.
-        allContactsDirty = fieldRange !== settings.range || textureRevision !== data.emissionTextureRevision
+        allContactsDirty = ownerChanged || receiverRange !== settings.range || textureRevision !== data.emissionTextureRevision
             || data.updates > geometryUpdates + 1 || !Number.isFinite(data.bvh.changedMin[0]);
-        for (const task of cascades) task.disabled = !refresh;
+        for (const task of cascades) task.disabled = !claim?.refresh;
         receiver.disabled = !visible; composite.disabled = !visible;
         for (const task of softeners) task.disabled = !visible || !(settings.softness && settings.softness > 0);
-        if (refresh) {
-            if (history.advanceField()) probeEpochs.clear();
-            fieldRevision = data.revision; fieldRange = settings.range; textureRevision = data.emissionTextureRevision;
+        if (claim?.resetEpochs) selectedField.resources.probeEpochs.clear();
+        if (visible) {
+            receiverRevision = data.revision; receiverRange = settings.range; textureRevision = data.emissionTextureRevision;
             geometryUpdates = data.updates;
+            lastField = selectedField; lastFieldGeneration = selectedField.generation;
         }
     };
     const dispose = prepare.dispose.bind(prepare);
-    prepare.dispose = () => { dispose(); data.dispose(); releaseAlbedo(); probeEpochs.dispose(); for (const texture of owned) texture.dispose(); };
+    prepare.dispose = () => { dispose(); field.release(); data.dispose(); releaseAlbedo(); probeEpochs.dispose(); for (const texture of owned) texture.dispose(); };
     return { tasks, composite, data };
 }

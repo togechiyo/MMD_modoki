@@ -1,6 +1,7 @@
 import type { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
 import type { Scene } from "@babylonjs/core/scene";
 import { LuminousRadianceScene, LuminousRadianceSceneSource, type RadianceEmissionReader } from "./luminous-radiance-scene";
+import { beginLuminousRadianceFields } from "./luminous-radiance-field-pool";
 
 type Entry = { source: LuminousRadianceSceneSource; consumers: number; lastExecution: number };
 type GraphInputs = { execution: number; scenes: WeakMap<Scene, Map<RadianceEmissionReader, Entry>> };
@@ -17,6 +18,7 @@ function inputsFor(graph: FrameGraph): GraphInputs {
 export function beginLuminousRadianceFrame(graph: FrameGraph): void {
     const inputs = graphs.get(graph);
     if (inputs) inputs.execution++;
+    beginLuminousRadianceFields(graph);
 }
 
 export function acquireLuminousRadianceScene(graph: FrameGraph, scene: Scene, readEmission: RadianceEmissionReader): LuminousRadianceScene {

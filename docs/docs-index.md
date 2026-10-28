@@ -373,6 +373,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [LPV と DFAO の仕組み・制約・適用調査 2026-10-25](./lpv-dfao-research-2026-10-25.md)
 - [3D Radiance Cascades の仕組みと実現性 2026-10-11](./radiance-cascades-3d-research-2026-10-11.md)
 - [Radiance Cascades の GI・媒質・スペクトル応用と WebGPU 実装 2026-10-25](./radiance-cascades-applications-webgpu-research-2026-10-25.md)
+- [3D Radiance Cascades の応用候補と複数エフェクト間の共有設計 2026-10-28](./radiance-cascades-shared-effects-design-2026-10-28.md)
 - [Luminous RC と WebGPU の最適化調査 2026-10-25](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)
 - [Frame Graph の通常 Luminous と Luminous RC の分離 2026-10-25](./framegraph-luminous-rc-separation-2026-10-25.md)
 - [Luminous RC の遮蔽時の補間と発光色評価の削減 2026-10-25](./luminous-radiance-occluded-work-optimization-2026-10-25.md)

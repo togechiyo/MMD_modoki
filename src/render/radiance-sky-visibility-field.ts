@@ -9,6 +9,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
 import { SKY_VISIBILITY_CASCADE_WGSL, SKY_VISIBILITY_DIAGNOSTIC_WGSL } from "./radiance-sky-visibility-shaders";
+import { DEFAULT_SKY_RECONSTRUCTION, type SkyVisibilityReconstruction } from "./radiance-sky-reconstruction";
 
 export const SKY_VISIBILITY_VOLUME = { min: [-8, 0, -8] as const, size: 16, planeY: 0.05, resolution: 64 };
 const DISPLAY_WGSL = `
@@ -32,6 +33,7 @@ export class RadianceSkyVisibilityField {
     private readonly tasks: FrameGraphComputeShaderTask[] = [];
     private readonly textures: RawTexture[] = [];
     private displayMode = 0;
+    private reconstruction = DEFAULT_SKY_RECONSTRUCTION;
     private disposed = false;
 
     constructor(scene: Scene) {
@@ -62,7 +64,7 @@ export class RadianceSkyVisibilityField {
                 } });
                 this.tasks.push(task);
                 this.graph.addTask(task);
-                const params = task.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4, interval: 4 });
+                const params = task.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4, interval: 4, reconstruction: 4 });
                 const size = destination.texture.getSize();
                 task.dispatchSize = new Vector3(Math.ceil(size.width / 8), Math.ceil(size.height / 8), 1);
                 task.dependencies = new Set([input.handle, destination.handle]);
@@ -79,6 +81,7 @@ export class RadianceSkyVisibilityField {
                     params.updateFloat4("volumeSize", volume.size, volume.size, volume.size, 0);
                     params.updateFloat4("shape", shape[0], shape[1], shape[2], this.source.bvh.triangleCount);
                     params.updateFloat4("interval", interval[0], interval[1], interval[2], 0);
+                    params.updateFloat4("reconstruction", this.reconstruction.nearDistance, this.reconstruction.rejectOccludedProbes ? 1 : 0, this.reconstruction.sampleAtRayEnd ? 1 : 0, 0);
                 };
             };
             for (let i = layouts.length - 1; i >= 0; i--) {
@@ -106,8 +109,9 @@ export class RadianceSkyVisibilityField {
         } catch (error) { this.dispose(); throw error; }
     }
 
-    public execute(mode: number, updateField: boolean): number {
+    public execute(mode: number, updateField: boolean, reconstruction: SkyVisibilityReconstruction = DEFAULT_SKY_RECONSTRUCTION): number {
         this.displayMode = mode;
+        this.reconstruction = reconstruction;
         for (let i = 0; i < this.tasks.length - 1; i++) this.tasks[i].disabled = !updateField;
         this.graph.execute();
         return updateField ? this.tasks.length : 1;

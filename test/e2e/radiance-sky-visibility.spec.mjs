@@ -107,11 +107,10 @@ test("sky visibility lab: no emission, offscreen and distant occlusion, modes an
     expect(report.diagnostics.outdoor.rc).toBeCloseTo(1, 5); expect(report.diagnostics.outdoor.direct).toBeCloseTo(1, 5);
     await ready(page, await invoke(page, "skyFixture", "covered")); await capture("covered");
     expect(report.diagnostics.covered.direct).toBeLessThan(0.001);
-    // Stage C deliberately exposes the existing near-roof interpolation leak. Direct tracing is the
-    // zero-visibility oracle; record that the difference channel detects the known 0.125 RC residual.
-    // Revisit this approximation baseline before introducing the normal-material adapter in stage D.
-    expect(report.diagnostics.covered.rc).toBeGreaterThan(0.1); expect(report.diagnostics.covered.rc).toBeLessThan(0.15);
-    expect(report.diagnostics.covered.difference).toBeCloseTo(report.diagnostics.covered.rc, 5);
+    // The endpoint reconstruction fixes the old 0.125 residual for this low roof. The separate
+    // comparison suite retains the legacy candidate and tests higher roofs/openings as well.
+    expect(report.diagnostics.covered.rc).toBeLessThan(0.001);
+    expect(report.diagnostics.covered.difference).toBeLessThan(0.001);
     await ready(page, await invoke(page, "skyFixture", "distant")); await capture("distant-roof");
     expect(report.states["distant-roof"].diagnostics.sceneBounds.max[1]).toBeGreaterThan(100);
     expect(report.diagnostics["distant-roof"].rc).toBeLessThan(0.001);

@@ -7,6 +7,7 @@ import { logWarn } from "../app-logger";
 import { RADIANCE_LIGHTING_LAB_ENABLED } from "./radiance-sky-visibility-availability";
 import { RadianceSkyVisibilityField, SKY_VISIBILITY_VOLUME } from "./radiance-sky-visibility-field";
 import { markRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
+import { DEFAULT_SKY_RECONSTRUCTION, normalizeSkyReconstruction, type SkyVisibilityReconstruction } from "./radiance-sky-reconstruction";
 
 type ViewMode = "cascade" | "reference" | "difference";
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
@@ -30,6 +31,8 @@ export class RadianceSkyVisibilityLab {
     private fieldRevision = 0;
     private sourceRevision = -1;
     private lastPreparedSceneFrameId = -1;
+    private reconstruction = DEFAULT_SKY_RECONSTRUCTION;
+    private settingsRevision = 0;
 
     constructor(private readonly scene: Scene) {
         // Scene-level RTTs draw before the manager's pose-finalization hook. Invalidate at the
@@ -48,6 +51,7 @@ export class RadianceSkyVisibilityLab {
         const source = this.field?.source;
         return { status: this.status, reason: this.reason, resourcesAllocated: !!(this.field || this.pending),
             prepareCount: this.prepareCount, dispatchCount: this.dispatchCount, fieldRevision: this.fieldRevision,
+            reconstruction: { ...this.reconstruction }, settingsRevision: this.settingsRevision,
             sourceRevision: source?.revision ?? -1, lastPreparedSceneFrameId: this.lastPreparedSceneFrameId,
             triangleCount: source?.bvh.triangleCount ?? 0, emitterTriangles: source?.emitterTriangles ?? 0,
             volume: SKY_VISIBILITY_VOLUME,
@@ -56,6 +60,15 @@ export class RadianceSkyVisibilityLab {
 
     public setMode(mode: ViewMode): void {
         this.selectedMode = mode === "reference" || mode === "difference" ? mode : "cascade";
+    }
+
+    /** Comparison harness only. Changing reconstruction invalidates the field, not its GPU allocation. */
+    public setReconstruction(value: Partial<SkyVisibilityReconstruction>): void {
+        const next = normalizeSkyReconstruction(value);
+        if (next.nearDistance === this.reconstruction.nearDistance && next.rejectOccludedProbes === this.reconstruction.rejectOccludedProbes
+            && next.sampleAtRayEnd === this.reconstruction.sampleAtRayEnd) return;
+        this.reconstruction = next; this.settingsRevision++;
+        this.sourceRevision = -1; this.lastPreparedSceneFrameId = -1;
     }
 
     public async setEnabled(enabled: boolean): Promise<void> {
@@ -122,7 +135,7 @@ export class RadianceSkyVisibilityLab {
                 // Preserve the camera/export target already bound by Scene._renderForCamera.
                 const target = engine._currentRenderTarget, viewport = engine.currentViewport && { ...engine.currentViewport };
                 const passId = engine.currentRenderPassId;
-                try { this.dispatchCount += field.execute(["cascade", "reference", "difference"].indexOf(this.selectedMode), updateField); }
+                try { this.dispatchCount += field.execute(["cascade", "reference", "difference"].indexOf(this.selectedMode), updateField, this.reconstruction); }
                 finally {
                     if (target) engine.bindFramebuffer(target);
                     engine.currentRenderPassId = passId;

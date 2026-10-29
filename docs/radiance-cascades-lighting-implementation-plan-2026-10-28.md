@@ -1,10 +1,12 @@
 # RC共通基盤・拡散GI・天空遮蔽の実装案
 
-作成日: 2026-10-28。状態: 段階A/Bを実装・検証済み。C以降は設計案。
+作成日: 2026-10-28。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。段階D以降は設計案で、任意位置・法線queryと通常材質への適用は未実装。
 
 所有者の「おすすめ設定で実装案を書いて、ドキュメントとして置く」という依頼に基づく。[応用と共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を実装単位へ具体化する。その後の実装依頼により、[段階Aのscene/BVH共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ着手した。以下の新照明の数値、内部名、UI配置は引き続き推奨案であり、実機で調整済みの値や次版収録の決定ではない。
 
 続いて[段階Bの同条件の光場計算共有](./radiance-cascades-shared-field-implementation-2026-10-28.md)を実装。range変更時のrebuildを増やさないため固定の予備slotは残し、同条件のcascade計算とfield参照を共有する。fieldメモリ削減は今回の完了範囲に含めない。
+
+[段階Cの描画前producer・天空visibility表示](./radiance-cascades-sky-visibility-validation-2026-10-29.md)を初回実装し、[近距離分割・終点参照の比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)で全面屋根Y=2の漏れを0.125から0へ改善した。Y=4の残差と少数方向の誤差、有限屋根の高密度参照への誤差悪化は残る。[段階Dの材質adapter案](./radiance-cascades-material-adapter-plan-2026-10-29.md)では固定床の結果を通常材質へ投影せず、任意位置・法線queryを先に検証する。
 
 ## 1. 推奨構成と最初の範囲
 
@@ -159,7 +161,7 @@ SSGIは直前のsceneColorを入力とするためRCの寄与も再度集め得�
 | A | 既存RCのscene/BVHを共通所有へ分離 | RC 1個/2個でprepare/refit/uploadが重複せず、既存PNG・設定・破棄が一致 |
 | B | 同条件のemission field共有 | 同じrangeならfield更新はgroupごとに1回。異なるrange、強度、柔らかさ、合成順でも旧結果と一致 |
 | C | 描画前producerと天空visibilityの検証画面 | pose更新後・本描画前の同frame依存、発光なし、画面外屋根、有限miss、seek/直接PNGを確認 |
-| D | 通常MMDの残光adapterと天空遮蔽 | OFF/強度0で旧画像へ戻る。屋外→軒下→屋内、Toon境界、発光維持、薄壁を比較 |
+| D | 任意位置・法線query、通常MMDの残光adapterと天空遮蔽 | queryの漏れ・負荷を先に確認し、OFF/強度0で旧画像へ戻る。屋外→軒下→屋内、Toon境界、発光維持、薄壁を比較 |
 | E | 静的ステージの方向光1反射GI | 色壁・床の反射、黒い材質、画面外surface、遮蔽、Luminousとの寄与分離、直射変化を確認 |
 | F | PMX変形、正式な操作導線と保存/出力 | 骨・morph・physicsの当該pose、キー、Undo、project、backend、PNG/WebMまで一式で一致 |
 
@@ -189,4 +191,4 @@ pure helperの最小テストは共有group生成、consumer増減、normalizati
 
 外部方式の根拠は本会話で一次資料を照合した[応用調査](./radiance-cascades-applications-webgpu-research-2026-10-25.md)と[共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を参照する。Split RCの照度事前積分をそのまま採用する決定や、新しい外部APIが使えるという確認は今回行っていない。
 
-設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の実装内容と検証結果は、[段階A](./radiance-cascades-shared-scene-implementation-2026-10-28.md)、[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)、[段階Cの検証実装](./radiance-cascades-sky-visibility-validation-2026-10-29.md)のメモへ分離して記録する。段階Cで低い屋根をまたぐ再構成漏れを確認したため、段階Dの通常材質適用前にその改善比較を行う。
+設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の実装内容と検証結果は、[段階A](./radiance-cascades-shared-scene-implementation-2026-10-28.md)、[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)、[段階Cの初回検証](./radiance-cascades-sky-visibility-validation-2026-10-29.md)、[再構成の品質・費用比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)のメモへ分離して記録する。[段階Dの材質adapter案](./radiance-cascades-material-adapter-plan-2026-10-29.md)は未実装で、固定床以外のqueryと残る誤差を確認してから通常材質へ接続する。

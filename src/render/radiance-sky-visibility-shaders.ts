@@ -3,7 +3,7 @@ import { RADIANCE_PROBE_INTERPOLATION_WGSL } from "./luminous-radiance-shaders";
 // Keep the existing packed BVH layout, but never read emission or its texture source.
 // A negative visibility means the traversal/input could not prove an answer.
 const SKY_VISIBILITY_COMMON_WGSL = `
-struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec4f };
+struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec4f, reconstruction: vec4f };
 struct Triangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f, uvAB: vec4f, uvSource: vec4f };
 struct Node { low: vec4f, high: vec4f, info: vec4f };
 @group(0) @binding(0) var<uniform> params: Params;
@@ -77,19 +77,34 @@ fn skyTraceToExit(origin: vec3f, ray: vec3f, start: f32) -> f32 {
 ${RADIANCE_PROBE_INTERPOLATION_WGSL}
 // Plain interpolation would dilute the -1 sentinel into a plausible positive
 // visibility. Reject every contributing invalid tap before averaging alpha.
-fn skyFieldVisibility(field: texture_2d<f32>, position: vec3f, angular: vec2u, grid: u32, columns: u32, rows: u32) -> f32 {
+fn skyFieldVisibility(field: texture_2d<f32>, position: vec3f, angular: vec2u, grid: u32, columns: u32, rows: u32, start: f32) -> f32 {
     let coordinate = clamp((position - params.volumeMin.xyz) / params.volumeSize.xyz * f32(grid) - 0.5, vec3f(0.0), vec3f(f32(grid - 1u)));
-    let low = vec3u(floor(coordinate)); let fraction = fract(coordinate); var result = 0.0;
+    let low = vec3u(floor(coordinate)); let fraction = fract(coordinate); var result = 0.0; var weightSum = 0.0;
     for (var z = 0u; z < 2u; z++) { for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
         let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(grid - 1u));
         let weights = select(vec3f(1.0) - fraction, fraction, offset == vec3u(1u));
         let weight = weights.x * weights.y * weights.z;
         if (weight <= 0.0) { continue; }
+        if (params.reconstruction.y > 0.5) {
+            let probePosition = params.volumeMin.xyz + (vec3f(probe) + 0.5) / f32(grid) * params.volumeSize.xyz;
+            let segment = probePosition - position; let distance = length(segment);
+            if (distance > 0.0001) {
+                // Include a probe exactly on a surface despite triangle/length roundoff.
+                let connected = skyTraceInterval(position, segment / distance, 0.0, distance + 0.0001);
+                if (connected < 0.0) { return -1.0; }
+                // Do not interpolate through a roof/wall to a probe on the opposite side.
+                if (connected == 0.0) { continue; }
+            }
+        }
         let visibility = textureLoad(field, atlasPixel(probe, angular, grid, columns, rows), 0).a;
         if (visibility < 0.0) { return -1.0; }
         result += visibility * weight;
+        weightSum += weight;
     } } }
-    return result;
+    // No compatible probe: trace the queried direction from this position, preserving the
+    // field's interval start. A fully rejected neighborhood is neither open sky nor zero light.
+    if (weightSum <= 0.0) { return skyTraceToExit(position, skyDirection(angular.x, angular.y, columns, rows), start); }
+    return result / weightSum;
 }
 `;
 
@@ -104,7 +119,7 @@ fn skyCascadeVisibility(position: vec3f, angular: vec2u, grid: u32, columns: u32
     if (local <= 0.0) { return local; }
     var visibility = 0.0;
     for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
-        let farther = skyFieldVisibility(parentField, position, angular * 2u + vec2u(x, y), grid / 2u, columns * 2u, rows * 2u);
+        let farther = skyFieldVisibility(parentField, position, angular * 2u + vec2u(x, y), grid / 2u, columns * 2u, rows * 2u, params.interval.y);
         if (farther < 0.0) { return -1.0; }
         visibility += farther * 0.25;
     } }
@@ -126,16 +141,26 @@ export const SKY_VISIBILITY_DIAGNOSTIC_WGSL = `${SKY_VISIBILITY_COMMON_WGSL}
 @group(0) @binding(3) var baseField: texture_2d<f32>;
 @group(0) @binding(4) var output: texture_storage_2d<rgba32float, write>;
 fn skyCompareVisibility(position: vec3f) -> vec2f {
-    let nearDistance = params.volumeSize.x / 18.0;
+    let nearDistance = params.reconstruction.x;
     var sum = vec2f(0.0); var weightSum = 0.0;
-    // Match the base field's 32 sphere directions: its upper 16 rays isolate
-    // spatial/cascade reconstruction error without adding angular resampling.
+    // Match the base field's upper 16 angular centers. Merged RC bins still average
+    // finer directions, so differences include angular integration as well as spatial error.
     for (var v = 0u; v < 2u; v++) { for (var u = 0u; u < 8u; u++) {
         let ray = skyDirection(u, v, 8u, 4u); let weight = ray.y;
         let direct = skyTraceToExit(position, ray, 0.0);
         let near = skyTraceInterval(position, ray, 0.0, nearDistance);
         var rc = near;
-        if (near > 0.0) { rc = skyFieldVisibility(baseField, position, vec2u(u, v), 16u, 8u, 4u); }
+        if (near > 0.0) {
+            var samplePosition = position;
+            if (params.reconstruction.z > 0.5) { samplePosition += ray * nearDistance; }
+            if (any(samplePosition < params.volumeMin.xyz) || any(samplePosition > params.volumeMin.xyz + params.volumeSize.xyz)) {
+                // The remaining segment starts at D from the original query; never clamp a
+                // query outside the fixed field to unrelated boundary probes.
+                rc = skyTraceToExit(position, ray, nearDistance);
+            } else {
+                rc = skyFieldVisibility(baseField, samplePosition, vec2u(u, v), 16u, 8u, 4u, 0.0);
+            }
+        }
         if (direct < 0.0 || rc < 0.0) { return vec2f(-1.0); }
         sum += vec2f(rc, direct) * weight; weightSum += weight;
     } }

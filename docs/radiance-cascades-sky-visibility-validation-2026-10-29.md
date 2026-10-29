@@ -1,6 +1,6 @@
 # RC 天空 visibility・描画前 producer の検証実装
 
-作成日: 2026-10-29。状態: 段階 C の開発用実装とローカル Electron / WebGPU E2E を完了。低い屋根の再構成漏れは未解決で、通常材質への適用前の課題とする。
+作成日: 2026-10-29。本メモは **`814b2c7` 時点の段階 C 初回実装・検証記録**で、以下の数値と方式は当時の結果を保持する。後続の[再構成比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)で終点8を開発用labの既定にし、低い全面屋根Y=2の漏れは0.125から0へ改善した。Y=4の残差と少数方向の誤差は残り、[段階 D の材質adapter](./radiance-cascades-material-adapter-plan-2026-10-29.md)と任意位置・法線queryは未実装。
 
 関連: [照明実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)、[段階 A: scene 共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)、[段階 B: emission field 共有](./radiance-cascades-shared-field-implementation-2026-10-28.md)。
 
@@ -53,7 +53,7 @@ R/G とも base field の上半球 16 方向を使い、各方向の `ray.y` を
 
 この値は shader の区間からも説明できる。最下 probe の Y は段ごとに `0.5 → 1 → 2 → 4`。base の浅い方向 `ray.y=0.25` は parent の `0.375/0.125` を平均する。前者は屋根に当たるが、後者は次段へ進み、その probe は屋根内部または上側にあり、区間開始より手前の遮蔽物を見落とす。浅い方向に残る `0.5` と、その方向群の cosine 重み `0.25` の積が `0.125` となる。
 
-次の比較候補は、(1) receiver の近距離 trace を現行 `16/18` から `4 / 8` へ広げたときの誤差と追加時間、(2) child から parent tap までの遮蔽を調べて壁越しの tap を除外し、全 tap が使えない場合だけ child 位置・同じ区間開始から scene 出口まで trace する方式。いずれも未実装・未採用で、開口部の過暗化と BVH ray の追加費用を比較してから選ぶ。
+初回時点の比較候補は、(1) receiver の近距離 trace を `16/18` から `4 / 8` へ広げたときの誤差と追加時間、(2) child から parent tap までの遮蔽を調べて壁越しの tap を除外し、全 tap が使えない場合だけ child 位置・同じ区間開始から scene 出口まで trace する方式だった。当時はいずれも未実装・未採用。後続ではこれらに近距離終点でのfield参照を加え、[8 fixtureの品質・費用比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)を実施した。
 
 無効な traversal は `-1` を返し、重みが正の補間 tap に無効値があれば伝播する。通常の正値と平均して開放された空へ変換しない。診断出力の無効画素は `(-1, -1, 0, 0)`、表示は紫色とする。scene 全体の未対応構成・入力エラー・準備中も、古い emissive texture を外して紫色へ戻す。「中立」は通常材質の照明へ遮蔽を適用しないことを意味し、無効値を visibility の 0 または 1 として採用する意味ではない。
 
@@ -135,7 +135,7 @@ field は task を独自配列に保持して UBO を明示 dispose し、その
 | `node_modules/@babylonjs/core/Engines/WebGPU/webgpuBufferManager.js` | `readDataFromBuffer()` 99 行付近。float format は `Float32Array` へ読み出す |
 | `node_modules/@babylonjs/core/FrameGraph/Tasks/Rendering/geometryRendererTask.js` / `node_modules/@babylonjs/core/Materials/materialHelper.geometryrendering.js` | geometry pass ID ごとの PREPASS / MRT 出力設定。通常の StandardMaterial が利用する契約 |
 
-## 9. 検証記録
+## 9. `814b2c7` の初回検証記録
 
 2026-10-29、ローカル GPU を利用できる sandbox 外の Electron で確認した。対象は新規の天空検証 2 件と既存 Luminous 共有 field 回帰 1 件。天空の移動テスト成功後に、静止テストの保存比較・個体別 SSAO の待機条件を修正し、静止テストを再実行して成功した。
 
@@ -169,4 +169,4 @@ PNG の画像確認では、reference の離散方向による段差、differenc
 
 検証設定は project.effects に追加されず、OFF で receiver は 0 個、資源解放後は prepare 回数が増えない。保存値比較では、fixture の camera 移動から自動計算される既存 DoF の 3 値（焦点距離・合焦距離・レンズ歪み）を除外した。backend 再起動時は OFF に戻り、再有効化後の receiver は 1 個だった。
 
-配布可能な既存 fixture と test 内生成 geometry のみを使用し、ユーザー所有モデルは利用していない。検証ログ・JSON・PNG は ignored な `local-references/rc-sky-visibility-verification/` の `static-final/`、`moving-final/`、`luminous/` に保存した。通常材質への適用と、低い屋根の漏れ改善は未実装。
+配布可能な既存 fixture と test 内生成 geometry のみを使用し、ユーザー所有モデルは利用していない。初回の検証ログ・JSON・PNG は ignored な `local-references/rc-sky-visibility-verification/` の `static-final/`、`moving-final/`、`luminous/` に保存した。この時点では通常材質への適用と低い屋根の漏れ改善は未実装だった。後続の[再構成比較・既定値変更](./radiance-cascades-sky-reconstruction-2026-10-29.md)でも、[通常材質adapter](./radiance-cascades-material-adapter-plan-2026-10-29.md)は設計段階に留まる。

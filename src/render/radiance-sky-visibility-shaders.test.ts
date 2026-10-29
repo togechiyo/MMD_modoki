@@ -38,4 +38,19 @@ describe("sky visibility shader contracts", () => {
         expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("abs(visibility.x - visibility.y), 1.0");
         expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("any(position < params.volumeMin.xyz)");
     });
+
+    it("rejects wall-crossing taps and falls back from the query at the sampled field's interval start", () => {
+        expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("skyTraceInterval(position, segment / distance, 0.0, distance + 0.0001)");
+        expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("if (connected < 0.0) { return -1.0; }");
+        expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("if (connected == 0.0) { continue; }");
+        expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("skyDirection(angular.x, angular.y, columns, rows), start)");
+        expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("rows * 2u, params.interval.y)");
+        expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("16u, 8u, 4u, 0.0)");
+    });
+
+    it("can split the receiver ray at the near endpoint and traces outside-volume queries without clamping", () => {
+        expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("samplePosition += ray * nearDistance");
+        expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("any(samplePosition > params.volumeMin.xyz + params.volumeSize.xyz)");
+        expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("rc = skyTraceToExit(position, ray, nearDistance)");
+    });
 });

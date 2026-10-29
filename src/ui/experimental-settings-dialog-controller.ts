@@ -3,16 +3,19 @@ import { wgslRecoveryApi } from "../external-wgsl/recovery";
 import { mountAutomationSettings } from "./automation-settings-panel";
 import type { PopupContentController } from "./popup-dialog-controller";
 import { HdriSettingsDialogController, type HdriSettingsDialogControllerDeps } from "./hdri-settings-dialog-controller";
-import { createPopupFormButton, createPopupFormButtonRow } from "./popup-form-helpers";
+import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField } from "./popup-form-helpers";
 import { createExperimentalSection } from "./experimental-settings-layout";
+import { RADIANCE_LIGHTING_LAB_ENABLED } from "../render/radiance-sky-visibility-availability";
 
 export class ExperimentalSettingsDialogController implements PopupContentController {
     private busy = false;
     private disposeAutomation: (() => void) | undefined;
     private disposeWgsl: (() => void) | undefined;
+    private disposeRadianceSky: (() => void) | undefined;
     public unmount(): void {
         this.disposeAutomation?.(); this.disposeAutomation = undefined;
         this.disposeWgsl?.(); this.disposeWgsl = undefined;
+        this.disposeRadianceSky?.(); this.disposeRadianceSky = undefined;
     }
     constructor(private readonly deps: HdriSettingsDialogControllerDeps & { switchPbr: (enabled: boolean) => Promise<void> }) {}
 
@@ -120,8 +123,77 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         }));
         logs.append(heading, path, row);
         form.append(pbrSection, wgslSection);
+        if (RADIANCE_LIGHTING_LAB_ENABLED) this.mountRadianceSky(form);
         this.disposeAutomation = mountAutomationSettings(form);
         form.append(logs);
         container.append(form);
+    }
+
+    private mountRadianceSky(parent: HTMLElement): void {
+        const lab = this.deps.mmdManager.getRadianceSkyVisibilityLab();
+        const section = document.createElement("section");
+        section.className = "experimental-settings-section";
+        section.dataset.experimentSection = "radiance-sky";
+        const heading = document.createElement("h3");
+        heading.id = "experiment-radiance-sky-title";
+        heading.textContent = t("experiment.radianceSky.title");
+        section.setAttribute("aria-labelledby", heading.id);
+        const enabled = document.createElement("input");
+        enabled.type = "checkbox"; enabled.className = "popup-form-checkbox";
+        enabled.name = "radianceSkyEnabled";
+        const note = document.createElement("p");
+        note.className = "popup-form-note"; note.id = "experiment-radiance-sky-note";
+        note.textContent = t("experiment.radianceSky.note");
+        enabled.setAttribute("aria-describedby", note.id);
+        const mode = document.createElement("select");
+        mode.name = "radianceSkyMode"; mode.className = "popup-form-control";
+        for (const value of ["cascade", "reference", "difference"] as const) {
+            const option = document.createElement("option");
+            option.value = value; option.textContent = t(`experiment.radianceSky.${value}`);
+            mode.append(option);
+        }
+        const status = document.createElement("p");
+        status.className = "popup-form-note";
+        status.dataset.radianceSkyStatus = "true";
+        status.setAttribute("role", "status");
+        let pending = false;
+        const refresh = (): void => {
+            if (!pending) enabled.checked = lab.enabled;
+            enabled.disabled = pending;
+            mode.value = lab.mode;
+            mode.disabled = pending;
+            const info = lab.diagnostics;
+            status.dataset.state = info.status;
+            status.dataset.resourcesAllocated = String(info.resourcesAllocated);
+            status.dataset.prepareCount = String(info.prepareCount);
+            status.dataset.fieldRevision = String(info.fieldRevision);
+            const text = `${t(`experiment.radianceSky.status.${info.status}`)}${info.reason ? `: ${info.reason}` : ""}`
+                + ` · ${t("experiment.radianceSky.frames")} ${info.prepareCount}`
+                + ` · ${t("experiment.radianceSky.triangles")} ${info.triangleCount}`;
+            if (status.textContent !== text) status.textContent = text;
+        };
+        enabled.addEventListener("change", () => {
+            pending = true; this.busy = true;
+            const requested = enabled.checked;
+            refresh();
+            void lab.setEnabled(requested).catch((error: unknown) => {
+                window.electronAPI.logError("ui", "Radiance sky visibility lab toggle failed", {
+                    message: error instanceof Error ? error.message : String(error),
+                });
+                this.deps.showToast(t("experiment.radianceSky.failed"), "error");
+            }).finally(() => {
+                pending = false; this.busy = false; refresh();
+            });
+        });
+        mode.addEventListener("change", () => {
+            if (mode.value === "cascade" || mode.value === "reference" || mode.value === "difference") lab.setMode(mode.value);
+            refresh();
+        });
+        section.append(heading, createPopupFormField(t("experiment.radianceSky.enabled"), enabled), note,
+            createPopupFormField(t("experiment.radianceSky.mode"), mode), status);
+        parent.append(section);
+        refresh();
+        const timer = window.setInterval(refresh, 250);
+        this.disposeRadianceSky = () => window.clearInterval(timer);
     }
 }

@@ -59,9 +59,11 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）
 - [x] 3D RCのGI・天空・反射・媒質への応用と複数エフェクトの共有境界を整理。現行の個体別BVH/field、非線形合成・寄与分離・visibility履歴の条件を記録（[設計案](./radiance-cascades-shared-effects-design-2026-10-28.md)。採用・実装・新規性能計測は未実施）
-- [x] RCの効果別UI・共通基盤を前提に、推奨初期値、描画前FrameGraphと材質への接続、GI/天空遮蔽の寄与分離、段階A〜Fと検証条件を文書化（[実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)。C以降は設計段階）
+- [x] RCの効果別UI・共通基盤を前提に、推奨初期値、描画前FrameGraphと材質への接続、GI/天空遮蔽の寄与分離、段階A〜Fと検証条件を文書化（[実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)。D以降は設計段階）
 - [x] RC共通基盤の段階A（scene/BVHの共有）を実装。2 RCでBVH更新・形状転送を半減し、比較PNG10枚の照明領域一致、個体設定・保存読込・破棄・PNG出力を確認（[実装・検証](./radiance-cascades-shared-scene-implementation-2026-10-28.md)）
-- [x] 段階Bとして同rangeの光場計算・参照を共有。2 RCのcascade dispatchを8→4本/frameに削減し、異なる強度/softness・range分離/再共有・先頭OFF・順序・削除Undo・PNGを確認。新規15枚＋既存10枚の照明領域一致（[実装・検証](./radiance-cascades-shared-field-implementation-2026-10-28.md)。予備slot確保は維持、fieldメモリ削減・GI/天空遮蔽は未実装）
+- [x] 段階Bとして同rangeの光場計算・参照を共有。2 RCのcascade dispatchを8→4本/frameに削減し、異なる強度/softness・range分離/再共有・先頭OFF・順序・削除Undo・PNGを確認。新規15枚＋既存10枚の照明領域一致（[実装・検証](./radiance-cascades-shared-field-implementation-2026-10-28.md)。予備slot確保は維持、fieldメモリ削減・GI/通常材質への天空遮蔽は未実装）
+- [x] 段階Cの描画前producer・天空visibility比較表示を実装。発光なし、画面外/遠方屋根、同frameの骨/morph、seek直後PNG、表示切替・OFF解放・backend往復・SSAO併用をGPUで確認（[実装・検証](./radiance-cascades-sky-visibility-validation-2026-10-29.md)。低い屋根の漏れと通常材質適用は未解決）
+- [ ] 段階Dの通常材質適用前に、低い屋根をまたぐRC再構成漏れを改善比較する。現行fixtureはdirect=0 / RC=0.125（[残課題と比較案](./radiance-cascades-sky-visibility-validation-2026-10-29.md#3-診断値と近似)）
 - [x] 現行 Luminous RC と WebGPU の最適化を調査。不要な field 補間、発光と形状の更新分離、probe 照度集計、GPU timestamp の有効化条件と次の比較条件を記録（[調査メモ](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)。実装変更・新規性能計測は未実施）
 - [x] Frame Graph の通常 Luminous と Luminous RC を別個体・別task群へ分離。RC単独の資源、独立したenabledキー、旧保存値の移行を実装（[分離メモ](./framegraph-luminous-rc-separation-2026-10-25.md)）
 - [x] Luminous RCの遮蔽時の不要なfield補間と最終hit以外の発光色評価を削減。変更前PNG一致・回帰10件を確認。fixtureのreceiver単独wall timeは6.11→5.99ms、全体FPS改善は未確認（[実装・比較](./luminous-radiance-occluded-work-optimization-2026-10-25.md)）

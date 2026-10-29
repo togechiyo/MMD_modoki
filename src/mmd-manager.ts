@@ -190,6 +190,7 @@ import {
 import { resolveFrameGraphBackendRebuildAction } from "./render/frame-graph-backend-rebuild-state";
 import { resolveModelEdgeWidth } from "./render/model-edge-settings";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "./render/luminous-radiance-settings";
+import { RadianceSkyVisibilityLab } from "./render/radiance-sky-visibility-lab";
 import {
     applyImportedMaterialShaderStates as applyImportedMaterialShaderStatesImpl,
     getExternalWgslToonShaderPath as getExternalWgslToonShaderPathImpl,
@@ -1850,6 +1851,7 @@ ${beforeFogAppendBlock}
     private readonly requestedPostEffectBackend = readPostEffectBackendLocalStorage();
     private postEffectBackend: PostEffectBackend = this.requestedPostEffectBackend;
     private frameGraphPostEffectsController: FrameGraphPostEffectsController | null = null;
+    private radianceSkyVisibilityLab: RadianceSkyVisibilityLab | null = null;
     private frameGraphPostEffectsRebuildPending = false;
     private frameGraphPostEffectsRebuildScheduled = false;
     private sceneInstrumentation: SceneInstrumentation | null = null;
@@ -8396,6 +8398,7 @@ ${beforeFogAppendBlock}
                 this.morphPreviewCapacity.update(entry.model);
             }
             this.enforceUniformModelEdgeWidthsBeforeRender();
+            this.radianceSkyVisibilityLab?.prepareFrame();
         });
 
         this.scene.onBeforeRenderObservable.add(() => {
@@ -13062,6 +13065,10 @@ ${beforeFogAppendBlock}
         if (rebuild) this.refreshFrameGraphPostEffectsBackendForStackStateChange();
     }
     public getLuminousRadianceDiagnostics() { return this.frameGraphPostEffectsController?.getLuminousRadianceDiagnostics() ?? null; }
+
+    public getRadianceSkyVisibilityLab(): RadianceSkyVisibilityLab {
+        return this.radianceSkyVisibilityLab ??= new RadianceSkyVisibilityLab(this.scene);
+    }
 
     get postEffectGlowEnabled(): boolean {
         return this.effectSceneTracks.evaluate("luminous", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectGlowEnabledValue;

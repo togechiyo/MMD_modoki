@@ -18,7 +18,7 @@ const pluginConfig = {
   ],
 };
 
-export async function launchMmdModoki(repoRoot, { effectTimeline = false } = {}) {
+export async function launchMmdModoki(repoRoot, { effectTimeline = false, radianceLightingLab = false } = {}) {
   const tempDir = mkdtempSync(join(tmpdir(), "mmd-modoki-e2e-"));
   const devServers = [];
   const generator = new ViteConfigGenerator(pluginConfig, repoRoot, false);
@@ -26,7 +26,21 @@ export async function launchMmdModoki(repoRoot, { effectTimeline = false } = {})
   try {
     for (const config of await generator.getRendererConfig()) {
       const server = await vite.createServer({ configFile: false, ...config,
-        define: { ...config.define, "import.meta.env.VITE_MMD_EFFECT_TIMELINE": JSON.stringify(effectTimeline ? "1" : "0") },
+        optimizeDeps: { ...config.optimizeDeps, include: [...(config.optimizeDeps?.include ?? []),
+          // Keep RC fixture imports stable across ordinary/lab runs and discover them before Electron
+          // opens, so a cold cache or feature-flag switch cannot trigger a mid-setup Vite reload.
+          "@babylonjs/core/Materials/Textures/rawTexture", "@babylonjs/core/Materials/Textures/renderTargetTexture",
+          "@babylonjs/core/Materials/Textures/texture", "@babylonjs/core/Materials/standardMaterial",
+          "@babylonjs/core/Meshes/Builders/boxBuilder", "@babylonjs/core/Meshes/Builders/groundBuilder",
+          "@babylonjs/core/Meshes/Builders/sphereBuilder", "@babylonjs/core/FrameGraph/frameGraph",
+          "@babylonjs/core/Buffers/buffer", "@babylonjs/core/Bones/skeleton", "@babylonjs/core/Bones/bone",
+          "@babylonjs/core/Morph/morphTarget", "@babylonjs/core/Morph/morphTargetManager", "@babylonjs/core/Maths/math.vector",
+          "@babylonjs/core/Instrumentation/engineInstrumentation", "@babylonjs/core/Engines/WebGPU/webgpuPerfCounter",
+        ] },
+        define: { ...config.define,
+          "import.meta.env.VITE_MMD_EFFECT_TIMELINE": JSON.stringify(effectTimeline ? "1" : "0"),
+          "import.meta.env.VITE_MMD_RADIANCE_LIGHTING_LAB": JSON.stringify(radianceLightingLab ? "1" : "0"),
+        },
       });
       await server.listen();
       devServers.push(server);

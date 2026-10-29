@@ -377,6 +377,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [RC共通基盤・拡散GI・天空遮蔽の実装案 2026-10-28](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)
 - [RC共通基盤の段階A: scene/BVH共有 2026-10-28](./radiance-cascades-shared-scene-implementation-2026-10-28.md)
 - [RC共通基盤の段階B: 同条件の光場計算共有 2026-10-28](./radiance-cascades-shared-field-implementation-2026-10-28.md)
+- [RC 天空 visibility・描画前 producer の検証実装 2026-10-29](./radiance-cascades-sky-visibility-validation-2026-10-29.md)
 - [Luminous RC と WebGPU の最適化調査 2026-10-25](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)
 - [Frame Graph の通常 Luminous と Luminous RC の分離 2026-10-25](./framegraph-luminous-rc-separation-2026-10-25.md)
 - [Luminous RC の遮蔽時の補間と発光色評価の削減 2026-10-25](./luminous-radiance-occluded-work-optimization-2026-10-25.md)

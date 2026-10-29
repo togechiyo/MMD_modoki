@@ -189,4 +189,4 @@ pure helperの最小テストは共有group生成、consumer増減、normalizati
 
 外部方式の根拠は本会話で一次資料を照合した[応用調査](./radiance-cascades-applications-webgpu-research-2026-10-25.md)と[共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を参照する。Split RCの照度事前積分をそのまま採用する決定や、新しい外部APIが使えるという確認は今回行っていない。
 
-設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の実装内容と検証結果は、[段階A](./radiance-cascades-shared-scene-implementation-2026-10-28.md)と[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)の実装メモへ分離して記録する。
+設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の実装内容と検証結果は、[段階A](./radiance-cascades-shared-scene-implementation-2026-10-28.md)、[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)、[段階Cの検証実装](./radiance-cascades-sky-visibility-validation-2026-10-29.md)のメモへ分離して記録する。段階Cで低い屋根をまたぐ再構成漏れを確認したため、段階Dの通常材質適用前にその改善比較を行う。

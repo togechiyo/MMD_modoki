@@ -13,6 +13,7 @@ import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { RadianceInputSnapshot } from "./luminous-radiance-input-cache";
 import { LuminousRadiancePoseCache } from "./luminous-radiance-pose-cache";
 import { logWarn } from "../app-logger";
+import { isRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
 
 export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: number; g: number; b: number; texture?: Texture | null } | null;
 type MeshInput = { key: Mesh; snapshot: RadianceInputSnapshot; emissionSnapshot: RadianceInputSnapshot;
@@ -64,7 +65,7 @@ export class LuminousRadianceSceneSource {
             // Count eligible surfaces before skinning or packing. A rejected scene must not allocate
             // oversized geometry again each frame, or warm emission textures it cannot use.
             const meshes = this.scene.meshes.flatMap(mesh => {
-                if (!(mesh instanceof Mesh) || !mesh.isVisible || !mesh.isEnabled() || mesh.visibility <= 0
+                if (!(mesh instanceof Mesh) || isRadianceDiagnosticMesh(mesh) || !mesh.isVisible || !mesh.isEnabled() || mesh.visibility <= 0
                     || mesh.getClassName() === "LinesMesh" || !mesh.material || mesh.material.getClassName() === "BackgroundMaterial") return [];
                 const indices = mesh.getIndices();
                 if (!indices?.length) return [];

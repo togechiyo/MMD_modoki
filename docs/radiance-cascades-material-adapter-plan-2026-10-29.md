@@ -54,6 +54,10 @@ D の前提は、directional atlas、volume、valid、revision を参照する v
 
 近傍・probe 接続補正が BVH trace を要するなら、fragment の storage-buffer binding と traversal の負荷も増える。床64×64の時間から全材質の時間を推定しない。任意位置・法線での漏れと負荷を確認して、直接参照か事前集計かを選ぶ。旧 Luminous receiver の置換は同時に行わない。
 
+2026-10-29の追加調査では、同梱Babylon 9.2の `WebGPUShaderProcessorWGSL._processCustomBuffers()` が通常材質の `var<storage, read>` 宣言へbindingを割り当て、`WebGPUEngine.setStorageBuffer()` が現在のdraw contextへbufferを渡すことを一次実装で確認した。`CUSTOM_FRAGMENT_DEFINITIONS`へgroup/bindingを固定せず宣言し、`hardBindForSubMesh`で最新BVHを渡す接続が候補になる。BVHをtextureへ変換する実装は、この接続だけを目的として追加しない。材質への組込みとGPU実証は未実施である。
+
+最初の負荷確認は、実際の表示解像度で16方向の近距離探索とfield参照を行う場合を対象とする。高負荷なら補正済みdirectional visibilityの事前計算を比較するが、壁をまたぐ補間誤差を再検証する。API上の接続が可能なことと、通常モデルで使用可能な速度・品質に達したことを分ける。
+
 ## 5. binding・UI・保存の境界
 
 plugin は `doNotSerialize=true` とし、scene ごとの provider から現在の field と設定を得る。[albedo capture plugin](../src/render/luminous-radiance-albedo.ts) 同様に `hardBindForSubMesh` を使い、材質キャッシュ中も更新する。static texture や古い handle へ依存させない。
@@ -61,6 +65,16 @@ plugin は `doNotSerialize=true` とし、scene ごとの provider から現在�
 OFF・backend 離脱・無効・破棄では、係数1と fallback binding へ戻してから資源を解放する。Babylon の `MaterialPluginBase._enable(false)` は plugin を解除しない。非同期初期化、遅延登録、preset 切替、再有効化も同じ契約で扱う。
 
 比較は dev flag 内の **設定 → 実験設定**、初期OFF・非保存に限定する候補。公開時は `effects.rcLighting` を独立追加し、normalize、旧 project のOFF既定、保存/読込、Action・Undo・キー、Classic 休止・Frame Graph 復帰、出力まで揃える。既存 PostFX 個体 ID・並び順へ混ぜない。
+
+### 実装前に確認した接続点
+
+2026-10-29時点の読み取り調査。以下は**未実装・テスト未実施**であり、最初の1効果の完成範囲にキー対応を含める方針は維持する。
+
+- UI候補は [experimental-settings-dialog-controller.ts](../src/ui/experimental-settings-dialog-controller.ts) の124行付近。既存のdev用天空診断（132行以降）とは別の小controllerを置けば、通常材質へ適用する設定と固定床の診断を区別できる。照明欄の候補は [index.html](../index.html) の934行付近だが、既存の照明キー登録は色・方向だけを対象とするため、そのボタンへ設定を追加するだけでは不足する。
+- 保存先の追加候補は [types.ts](../src/types.ts) の `ProjectLightingState`（593行付近）に置く `lighting.rcSkyOcclusion`。独立したscene照明として、`{ enabled: false, strength: 0.75, minimum: 0.2, volume: null }` を既定とし、固定volumeはminのXYZと立方体のsizeを持つ案。これは現行計画の **`effects.rcLighting` と異なる未採用候補**であり、保存位置・名称の決定ではない。正規化、clone、旧projectのOFF既定をpure helperへ集約し、[project-serializer.ts](../src/project/project-serializer.ts) の442行付近と [project-importer.ts](../src/project/project-importer.ts) の994行付近が照明保存・復元の接続候補になる。
+- runtime設定のgetter/setterとcontroller保持は [mmd-manager.ts](../src/mmd-manager.ts) の13066行付近、描画前prepareは8401行付近が候補。保存する設定と、現在有効か・資源を確保したかというruntime状態を分け、OFF・backend切替・復元でも調整値を保持する。
+- Undoは設定のbefore/afterだけを持つ専用差分を [command-types.ts](../src/actions/command-types.ts) の `CommandDiff`、[command-executor.ts](../src/actions/command-executor.ts) のdispatch、[ui-controller.ts](../src/ui-controller.ts) の `createCommandExecutionContext()`（8037行付近）へ接続する案。UIはActionを渡し、スライダーの中間previewを履歴へ積まず操作確定時に1件登録する。SSGI個体用の `effect.instances` 差分は使わない。
+- キーは専用singletonの接続が未実装事項。旧 `effectSceneTracks` は [effect-timeline-availability.ts](../src/editor/effect-timeline-availability.ts) のdev flagに従い、現行の個体キーは [mmd-manager.ts](../src/mmd-manager.ts) の6577行以降でFrameGraph stackと結合している。`EffectId`追加だけでは通常アプリで動かないため、singletonのtrack/store、capture/read/apply/remove/move、seek時評価、保存復元、UI登録を接続し、共有keyframe transactionのUndoを再利用する。`enabled`はstep、`strength`・`minimum`はlinear、volumeは固定設定とする候補。RSMの独立controllerにも保存・Undo・キーの全経路は揃っておらず、そのままの流用では完成しない。
 
 ## 6. 実装判断に必要な比較
 

@@ -64,7 +64,7 @@ export function canExecuteEditorAction(
         case "keyframe.registerGravity":
             return true;
         case "keyframe.registerEffect":
-            return /^fx-[a-zA-Z0-9-]{1,190}$/.test(action.instanceId);
+            return action.instanceId === "rcSkyOcclusion" || /^fx-[a-zA-Z0-9-]{1,190}$/.test(action.instanceId);
         case "keyframe.toggleAutoKey":
         case "keyframe.setAutoKeyScope":
         case "keyframe.insertEmptyFrame":
@@ -260,6 +260,8 @@ export function canExecuteEditorAction(
         case "effect.chooseExternalLut":
             return true;
         case "effect.instanceEdit":
+        case "effect.setRcSkyOcclusion":
+        case "effect.recalculateRcSkyOcclusionVolume":
         case "effect.instanceValue":
         case "effect.instanceFixedValue":
             return true;

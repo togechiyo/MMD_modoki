@@ -1,4 +1,5 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
+import { normalizeRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
 import { FrameGraphEffectInstances } from "../editor/frame-graph-effect-instances";
 import { splitLuminousRadianceProject } from "../editor/luminous-radiance-split";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
@@ -148,6 +149,7 @@ type ProjectImportHost = {
     setBackgroundMediaVisible?: (visible: boolean) => boolean;
     clearBackgroundMedia(): void;
     lightIntensity: number;
+    setRcSkyOcclusionSettings?: (settings: Partial<RcSkyOcclusionSettings>) => void;
     ambientIntensity: number;
     lightColorTemperature: number;
     setLightColor(r: number, g: number, b: number): void;
@@ -417,6 +419,13 @@ function finalizeImportedRenderState(
     host.applyToonShadowInfluenceToAllModels?.();
     host.syncLuminousGlowLayer?.();
     host.engine?.releaseEffects?.();
+}
+
+export function restoreProjectRcSkyOcclusionSettings(
+    host: Pick<ProjectImportHost, "setRcSkyOcclusionSettings">,
+    lighting: Pick<MmdModokiProjectFileV1["lighting"], "rcSkyOcclusion">,
+): void {
+    host.setRcSkyOcclusionSettings?.(normalizeRcSkyOcclusionSettings(lighting.rcSkyOcclusion));
 }
 
 export async function importProjectState(
@@ -992,6 +1001,7 @@ export async function importProjectState(
         host.setLightDirection(lightDirectionX, lightDirectionY, lightDirectionZ);
     }
     host.lightIntensity = data.lighting.intensity;
+    restoreProjectRcSkyOcclusionSettings(host, data.lighting);
     host.ambientIntensity = data.lighting.ambientIntensity;
     host.lightColorTemperature = data.lighting.temperatureKelvin;
     if (data.lighting.lightColor &&

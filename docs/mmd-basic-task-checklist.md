@@ -64,9 +64,10 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 段階Bとして同rangeの光場計算・参照を共有。2 RCのcascade dispatchを8→4本/frameに削減し、異なる強度/softness・range分離/再共有・先頭OFF・順序・削除Undo・PNGを確認。新規15枚＋既存10枚の照明領域一致（[実装・検証](./radiance-cascades-shared-field-implementation-2026-10-28.md)。予備slot確保は維持、fieldメモリ削減・GI/通常材質への天空遮蔽は未実装）
 - [x] 段階Cの描画前producer・天空visibility比較表示を実装。発光なし、画面外/遠方屋根、同frameの骨/morph、seek直後PNG、表示切替・OFF解放・backend往復・SSAO併用をGPUで確認（[`814b2c7`の初回記録](./radiance-cascades-sky-visibility-validation-2026-10-29.md)。通常材質適用は未実装）
 - [x] 段階Cの再構成を8 fixture・10方式で比較し、終点8・probe接続判定OFFをlab既定にした。全面屋根Y=2の漏れ0.125→0、Y=4はMAE 0.031420残存。独立CPU16方向の327,680値一致・高密度200点比較、品質/既存E2E3件・性能4件を確認（[品質・費用・精度の限界](./radiance-cascades-sky-reconstruction-2026-10-29.md)。有限屋根の高密度参照への誤差悪化とdirect fallbackの寄与を保持）
-- [x] 段階Dの通常MMD材質adapterについて、残光のみの補正、ambient/sphere/発光を保つ境界、binding・無効化と検証条件を整理（[未実装の接続案](./radiance-cascades-material-adapter-plan-2026-10-29.md)）
-- [ ] 段階Dへ進む前に、任意world位置・法線の天空visibility queryを実装して漏れ・負荷を比較する。固定床64×64結果のXZ投影で通常材質へ適用せず、残る方向誤差と屋根Y=4の再構成残差を確認する（[材質adapterの前提](./radiance-cascades-material-adapter-plan-2026-10-29.md#4-固定床の結果は材質へ流用できない)）
-- [ ] RC天空遮蔽を1エフェクトとして材質・UI・初期値・保存/読込・Undo/キー・backend切替・変形更新・PNG/WebMまで仕上げ、アプリ内のON/OFF比較手順と確認済み範囲を提示する（[D＋天空遮蔽に必要なF](./radiance-cascades-lighting-implementation-plan-2026-10-28.md#8-効果単位の実装順と完了条件)）
+- [x] 段階Dの通常MMD材質adapterについて、残光のみの補正、ambient/sphere/発光を保つ境界、binding・無効化と検証条件を整理（[実装前の接続調査](./radiance-cascades-material-adapter-plan-2026-10-29.md)）
+- [ ] 任意world位置・法線の天空visibility queryの漏れ・負荷を継続比較する。query接続と通常材質fixtureのGPU描画は確認済み。固定床64×64結果のXZ投影は使わず、残る方向誤差と屋根Y=4の再構成残差、高解像度での費用を確認する（[実装範囲と限界](./rc-sky-occlusion-implementation-2026-10-29.md#対象と残る制約)）
+- [x] RC天空遮蔽を最初の1エフェクトとして材質・UI・初期値・保存/読込・Undo/キー・backend切替・骨/モーフ・PNG/WebMまで実装しfixtureで検証。通常の設定→実験設定、lighting保存、enabled/strengthのsingletonキーを接続し、対象GPU 5件を確認。WebMの暗化差はdirty field提出境界で解消し、PNGとの絶対MAE<1で再検証（[実装・検証・ON/OFF比較手順](./rc-sky-occlusion-implementation-2026-10-29.md)、[D＋天空遮蔽に必要なF](./radiance-cascades-lighting-implementation-plan-2026-10-28.md#8-効果単位の実装順と完了条件)）
+- [ ] RC天空遮蔽のユーザー実モデルでの目視評価、physics追従と大規模PMXの性能を確認する。少数方向の階調・範囲境界・対象材質の制約を[実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md)と照合する。
 - [ ] 天空遮蔽をアプリで目視比較できる区切りの後に、方向光1反射のRC GIを材質・UI・保存・出力まで仕上げる。Luminousの寄与分離と天空遮蔽併用を確認する（[E＋GIに必要なF](./radiance-cascades-lighting-implementation-plan-2026-10-28.md#8-効果単位の実装順と完了条件)。agentの提案順で、GI完成を意味しない）
 - [x] 現行 Luminous RC と WebGPU の最適化を調査。不要な field 補間、発光と形状の更新分離、probe 照度集計、GPU timestamp の有効化条件と次の比較条件を記録（[調査メモ](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)。実装変更・新規性能計測は未実施）
 - [x] Frame Graph の通常 Luminous と Luminous RC を別個体・別task群へ分離。RC単独の資源、独立したenabledキー、旧保存値の移行を実装（[分離メモ](./framegraph-luminous-rc-separation-2026-10-25.md)）

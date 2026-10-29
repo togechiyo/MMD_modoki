@@ -2,7 +2,7 @@ import { getEffectDefinition, interpolateEffectValue, isEffectId, makeEffectPayl
 import { moveSceneKeyframe, removeSceneKeyframe, upsertSceneKeyframe, type SceneKeyframeTrack } from "./scene-keyframe-track";
 
 export type SerializedEffectAnimations = { version: number; tracks: unknown[] };
-type Entry = { track: SceneKeyframeTrack<EffectValue>; preview?: { frame: number; value: EffectValue }; revision: number; cache?: { frame: number; revision: number; value: EffectValue } };
+type Entry = { track: SceneKeyframeTrack<EffectValue>; preview?: { frame: number; value: EffectValue }; revision: number; cache?: { frame: number; revision: number; value: EffectValue }; enabledCache?: { revision: number; value: boolean } };
 const frameNumber = (frame: number): number => Math.max(0, Math.floor(Number.isFinite(frame) ? frame : 0));
 
 /** Owns authored values. Evaluation never mutates base values, keys or previews. */
@@ -10,15 +10,27 @@ export class EffectSceneTrackStore {
     private readonly entries = new Map<EffectId, Entry>();
     private unknownTracks: unknown[] = [];
     private unknownBlock: SerializedEffectAnimations | null = null;
+    private retainedBlockFields: Record<string, unknown> = {};
 
-    constructor(private readonly enabled = true) {}
+    constructor(private readonly enabled = true, private readonly enabledIds: readonly EffectId[] = []) {}
+
+    private accepts(id: EffectId): boolean { return this.enabled || this.enabledIds.includes(id); }
 
     has(id: EffectId): boolean { return this.entries.has(id); }
     ids(): EffectId[] { return [...this.entries.keys()]; }
     frames(id: EffectId): Uint32Array { return new Uint32Array(this.entries.get(id)?.track.keyframes.map(key => key.frame) ?? []); }
     base(id: EffectId): EffectValue | null { const value = this.entries.get(id)?.track.baseValue; return value ? { ...value } : null; }
+    /** Prewarm keyed resources before an OFF -> ON transition; a preview cannot hide authored demand. */
+    canBeEnabled(id: EffectId): boolean {
+        const entry = this.entries.get(id);
+        if (!entry) return false;
+        if (entry.enabledCache?.revision === entry.revision) return entry.enabledCache.value;
+        const value = entry.track.baseValue.enabled || entry.track.keyframes.some(key => key.value.enabled);
+        entry.enabledCache = { revision: entry.revision, value };
+        return value;
+    }
     ensure(id: EffectId, base: unknown): void {
-        if (!this.enabled) return;
+        if (!this.accepts(id)) return;
         if (this.unknownBlock) throw new Error("This project uses a newer effect animation format");
         if (!this.entries.has(id)) this.entries.set(id, { track: { id, interpolation: "linear", baseValue: normalizeEffectValue(getEffectDefinition(id), base), keyframes: [] }, revision: 0 });
     }
@@ -92,25 +104,48 @@ export class EffectSceneTrackStore {
         entry.cache = { frame, revision: entry.revision, value };
         return { ...value };
     }
+    /** A single authored track, including preview absence, for setting Command undo/redo. */
+    snapshot(id: EffectId): unknown | null {
+        const entry = this.entries.get(id);
+        return entry ? structuredClone({ base: entry.track.baseValue, keys: entry.track.keyframes,
+            ...(entry.preview ? { preview: entry.preview } : {}) }) : null;
+    }
+    restoreSnapshot(id: EffectId, snapshot: unknown | null): boolean {
+        if (!this.accepts(id)) return false;
+        if (snapshot === null) { this.entries.delete(id); return true; }
+        if (this.unknownBlock) throw new Error("This project uses a newer effect animation format");
+        if (typeof snapshot !== "object" || !Array.isArray((snapshot as { keys?: unknown }).keys)) return false;
+        const restored = new EffectSceneTrackStore();
+        restored.restore({ version: 1, tracks: [{ ...snapshot, effectId: id, valueVersion: 1 }] });
+        const entry = restored.entries.get(id);
+        if (!entry) return false;
+        this.entries.set(id, entry);
+        return true;
+    }
     serialize(): SerializedEffectAnimations {
         if (this.unknownBlock && !this.entries.size) return structuredClone(this.unknownBlock);
-        return { version: 1, tracks: [ ...this.unknownTracks.map(track => structuredClone(track)), ...[...this.entries].map(([effectId, entry]) => ({
+        return { ...structuredClone(this.retainedBlockFields), version: 1, tracks: [ ...this.unknownTracks.map(track => structuredClone(track)), ...[...this.entries].map(([effectId, entry]) => ({
             effectId, valueVersion: 1, base: { ...entry.track.baseValue }, keys: entry.track.keyframes.map(key => ({ frame: key.frame, value: { ...key.value } })),
             ...(entry.preview ? { preview: structuredClone(entry.preview) } : {}),
         })) ] };
     }
     restore(data: unknown, staticValue?: (id: EffectId) => EffectValue): void {
-        this.entries.clear(); this.unknownTracks = []; this.unknownBlock = null;
+        this.entries.clear(); this.unknownTracks = []; this.unknownBlock = null; this.retainedBlockFields = {};
         if (!data || typeof data !== "object") return;
         const block = data as SerializedEffectAnimations;
         if (!Array.isArray(block.tracks)) return;
         // Disabled features retain the original block verbatim without evaluating
         // or normalizing its keys, previews, or future fields.
-        if (!this.enabled || block.version !== 1) { this.unknownBlock = structuredClone(block); return; }
+        if ((!this.enabled && !this.enabledIds.length) || block.version !== 1) { this.unknownBlock = structuredClone(block); return; }
+        // Selectively enabled scene lighting must not revive or rewrite shelved post-effect data.
+        if (!this.enabled) this.retainedBlockFields = structuredClone(Object.fromEntries(Object.entries(block).filter(([key]) => key !== "version" && key !== "tracks")));
         for (const raw of block.tracks) {
-            if (!raw || typeof raw !== "object") continue;
+            if (!raw || typeof raw !== "object") {
+                if (!this.enabled) this.unknownTracks.push(structuredClone(raw));
+                continue;
+            }
             const item = raw as { effectId?: string; valueVersion?: number; base?: unknown; keys?: Array<{ frame: number; value: unknown }>; preview?: { frame: number; value: unknown } };
-            if (!item.effectId || !isEffectId(item.effectId) || item.valueVersion !== 1) { this.unknownTracks.push(structuredClone(raw)); continue; }
+            if (!item.effectId || !isEffectId(item.effectId) || !this.accepts(item.effectId) || item.valueVersion !== 1) { this.unknownTracks.push(structuredClone(raw)); continue; }
             const id = item.effectId;
             this.ensure(id, normalizeEffectValue(getEffectDefinition(id), item.base, staticValue?.(id)));
             const base = this.base(id);

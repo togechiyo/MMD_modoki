@@ -192,6 +192,8 @@ export type EditAction =
     | { type: "edit.morphValueChanged"; source: ActionSource; frameIndex: number | null };
 
 export type EffectAction =
+    | { type: "effect.setRcSkyOcclusion"; source: ActionSource; settings: Partial<import("../render/rc-sky-occlusion-settings").RcSkyOcclusionSettings> }
+    | { type: "effect.recalculateRcSkyOcclusionVolume"; source: ActionSource }
     | { type: "effect.instanceEdit"; source: ActionSource; operation: import("../editor/effect-instance-operations").EffectInstanceOperation }
     | { type: "effect.instanceValue"; source: ActionSource; instanceId: string; value: import("../editor/effect-keyframe-definitions").EffectValue }
     | { type: "effect.instanceFixedValue"; source: ActionSource; instanceId: string; field: import("../editor/frame-graph-instance-fixed-settings").InstanceFixedSliderField; value: number }

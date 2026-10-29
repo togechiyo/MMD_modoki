@@ -1,8 +1,10 @@
 # RC 天空 visibility の通常 MMD 材質 adapter 案
 
-作成日: 2026-10-29。状態: **読み取り調査に基づく未実装・未採用候補**。
+作成日: 2026-10-29。状態: **実装前の読み取り調査を保存する設計メモ**。同日、[RC天空遮蔽の通常材質・設定・キー接続](./rc-sky-occlusion-implementation-2026-10-29.md)へ着手した。以下の「候補」「未実装」は調査時点の記述で、現在の実装範囲・検証状態は実装メモを参照する。
 
-[照明実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)の段階 D に向けた最小案。段階 C の[再構成比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)では endpoint8 を開発用labの既定にし、低い全面屋根Y=2の漏れを0.125から0へ減らした。一方、Y=4の残差と有限屋根の高密度参照への誤差悪化が残る。任意のworld位置・法線で読むqueryは未実装で、材質への適用もまだ行っていない。
+[照明実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)の段階 D に向けた最小案。段階 C の[再構成比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)では endpoint8 を開発用labの既定にし、低い全面屋根Y=2の漏れを0.125から0へ減らした。一方、Y=4の残差と有限屋根の高密度参照への誤差悪化が残る。調査時点では任意のworld位置・法線で読むqueryと材質への適用は未実装だった。
+
+実装時には、通常の **設定 → 実験設定…**、保存先`lighting.rcSkyOcclusion`、`enabled`のstepキーと`strength`のlinearキーへ具体化した。`minimum`と`volume`は固定設定とし、自動範囲はruntimeで解決して保存値`null`を維持する。下記のdev flag内・非保存・`effects.rcLighting`・最低残光キーの候補は今回使わない。通常材質・設定/保存・骨/モーフ・PNGとlab回帰のGPU 5件を確認し、WebMの暗化差もdirty fieldの提出境界で修正して絶対画像差を再検証した。最初の1効果の実装・fixture検証結果は[実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md#検証記録)に記録する。ユーザー実モデルの目視と大規模PMX性能は未確認。
 
 ## 1. 最初に対象とする材質
 
@@ -54,7 +56,7 @@ D の前提は、directional atlas、volume、valid、revision を参照する v
 
 近傍・probe 接続補正が BVH trace を要するなら、fragment の storage-buffer binding と traversal の負荷も増える。床64×64の時間から全材質の時間を推定しない。任意位置・法線での漏れと負荷を確認して、直接参照か事前集計かを選ぶ。旧 Luminous receiver の置換は同時に行わない。
 
-2026-10-29の追加調査では、同梱Babylon 9.2の `WebGPUShaderProcessorWGSL._processCustomBuffers()` が通常材質の `var<storage, read>` 宣言へbindingを割り当て、`WebGPUEngine.setStorageBuffer()` が現在のdraw contextへbufferを渡すことを一次実装で確認した。`CUSTOM_FRAGMENT_DEFINITIONS`へgroup/bindingを固定せず宣言し、`hardBindForSubMesh`で最新BVHを渡す接続が候補になる。BVHをtextureへ変換する実装は、この接続だけを目的として追加しない。材質への組込みとGPU実証は未実施である。
+2026-10-29の追加調査では、同梱Babylon 9.2の `WebGPUShaderProcessorWGSL._processCustomBuffers()` が通常材質の `var<storage, read>` 宣言へbindingを割り当て、`WebGPUEngine.setStorageBuffer()` が現在のdraw contextへbufferを渡すことを一次実装で確認した。`CUSTOM_FRAGMENT_DEFINITIONS`へgroup/bindingを固定せず宣言し、`hardBindForSubMesh`で最新BVHを渡す接続を、その後の実装で採用してfixtureのGPU描画を確認した。BVHをtextureへ変換する実装は、この接続だけを目的として追加していない。具体的な確認範囲は[実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md#検証記録)を参照する。
 
 最初の負荷確認は、実際の表示解像度で16方向の近距離探索とfield参照を行う場合を対象とする。高負荷なら補正済みdirectional visibilityの事前計算を比較するが、壁をまたぐ補間誤差を再検証する。API上の接続が可能なことと、通常モデルで使用可能な速度・品質に達したことを分ける。
 
@@ -97,4 +99,4 @@ OFF・backend 離脱・無効・破棄では、係数1と fallback binding へ�
 - `node_modules/@babylonjs/core/Materials/standardMaterial.js`: 908行付近の `bindForSubMesh()` と毎回の hard-bind 通知。
 - `node_modules/@babylonjs/core/Materials/materialPluginBase.js`: `_enable()` の動作。
 
-このメモ作成では読み取り調査と文書確認のみを行い、描画コードの編集・GPU 実行・材質 adapter の採用判断は行っていない。
+このメモの初回作成では読み取り調査と文書確認のみを行った。その後の描画コード・状態経路の変更と検証結果は[実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md)へ分離する。

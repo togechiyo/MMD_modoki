@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { importProjectState } from "./project-importer";
+import { importProjectState, restoreProjectRcSkyOcclusionSettings } from "./project-importer";
 import type { MmdModokiProjectFileV1 } from "../types";
+import type { RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
 import { DEFAULT_SKYDOME_BACKGROUND_STYLE } from "../shared/skydome-background-style";
 
 function createProject(overrides: Partial<MmdModokiProjectFileV1> = {}): MmdModokiProjectFileV1 {
@@ -203,6 +204,16 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores RC sky settings and resets a subsequent legacy project to OFF", () => {
+        const setRcSkyOcclusionSettings = vi.fn<(settings: Partial<RcSkyOcclusionSettings>) => void>();
+        const host = { setRcSkyOcclusionSettings };
+        const project = createProject();
+        project.lighting.rcSkyOcclusion = { enabled: true, strength: 0.6, minimum: 0.1, volume: { min: [-8, 0, -8], size: 16 } };
+        restoreProjectRcSkyOcclusionSettings(host, project.lighting);
+        expect(setRcSkyOcclusionSettings).toHaveBeenLastCalledWith(project.lighting.rcSkyOcclusion);
+        restoreProjectRcSkyOcclusionSettings(host, createProject().lighting);
+        expect(setRcSkyOcclusionSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 0.75, minimum: 0.2, volume: null });
+    });
     it("restores v2 effect instances and validates unsupported blocks before touching the scene", async () => {
         const setSerializedEffectInstances = vi.fn();
         const host = { ...createHost(), setSerializedEffectInstances };

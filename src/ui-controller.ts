@@ -74,6 +74,7 @@ import { ActionDispatcher } from "./actions/action-dispatcher";
 import type { ActionSource, AutoKeyScope } from "./actions/types";
 import { executeCommand, type CommandExecutionContext, type CommandSelectedKeyRef } from "./actions/command-executor";
 import { HistoryManager } from "./actions/history-manager";
+import { buildRcSkyOcclusionCommandDiff, canApplyRcSkyOcclusionEditState, rcSkyOcclusionEditStatesEqual, type RcSkyOcclusionEditState } from "./actions/rc-sky-occlusion-command";
 import {
     buildKeyframeCommand,
     createCommandTrackKey,
@@ -2578,7 +2579,7 @@ export class UIController {
             this.registerGravityKeyframeAtCurrentFrame();
         });
         this.actionDispatcher.register("keyframe.registerEffect", action => {
-            if (this.mmdManager.isEffectInstance(action.instanceId)) this.registerEffectKeyframeAtCurrentFrame(action.instanceId);
+            if (action.instanceId === "rcSkyOcclusion" || this.mmdManager.isEffectInstance(action.instanceId)) this.registerEffectKeyframeAtCurrentFrame(action.instanceId);
         });
         this.actionDispatcher.register("interpolation.copy", () => this.copyInterpolationCurves());
         this.actionDispatcher.register("interpolation.paste", () => this.pasteInterpolationCurves());
@@ -2886,6 +2887,12 @@ export class UIController {
             this.colorPostFxController?.setGammaOffsetPercent(action.offsetPercent);
         });
         this.actionDispatcher.register("effect.instanceEdit", action => this.editFrameGraphInstance(action.operation));
+        this.actionDispatcher.register("effect.setRcSkyOcclusion", action => {
+            this.editRcSkyOcclusion(() => this.mmdManager.setRcSkyOcclusionSettings(action.settings));
+        });
+        this.actionDispatcher.register("effect.recalculateRcSkyOcclusionVolume", () => {
+            this.editRcSkyOcclusion(() => this.mmdManager.recalculateRcSkyOcclusionVolume());
+        });
         this.actionDispatcher.register("effect.instanceValue", action => {
             const before = this.mmdManager.captureCurrentEffectKeyframePayload(action.instanceId).value;
             this.mmdManager.setEffectInstanceValue(action.instanceId, action.value);
@@ -5540,6 +5547,20 @@ export class UIController {
         } catch (error) { this.showToast(error instanceof Error ? error.message : t("status.lutLoadFailed"), "error"); }
     }
 
+    private captureRcSkyOcclusionEditState(): RcSkyOcclusionEditState {
+        return { settings: this.mmdManager.getStaticRcSkyOcclusionSettings(), track: this.mmdManager.getRcSkyOcclusionTrackState() };
+    }
+
+    private editRcSkyOcclusion(edit: () => void): void {
+        if (this.mmdManager.isPlaying) return;
+        const before = this.captureRcSkyOcclusionEditState();
+        edit();
+        const diff = buildRcSkyOcclusionCommandDiff(before, this.captureRcSkyOcclusionEditState());
+        if (!diff) return;
+        this.commandHistory.push({ id: crypto.randomUUID(), label: t("experiment.rcSkyOcclusion.title"), scope: "effect", createdAtMs: Date.now(), diff });
+        this.updateTimelineEditState();
+    }
+
     private editFrameGraphInstance(operation: EffectInstanceOperation): void {
         if (this.mmdManager.isPlaying || this.getConfiguredPostEffectBackend() !== "frameGraph") return;
         const before = this.mmdManager.getEffectInstanceState(), next = new FrameGraphEffectInstances();
@@ -8067,6 +8088,22 @@ export class UIController {
                 if (applied) { this.refreshFrameGraphPostAddUi(); this.updateTimelineEditState(); }
                 return applied;
             },
+            applyRcSkyOcclusion: (diff, direction) => {
+                if (this.mmdManager.isPlaying) return false;
+                const from = direction === "apply" ? diff.before : diff.after;
+                const to = direction === "apply" ? diff.after : diff.before;
+                const current = this.captureRcSkyOcclusionEditState();
+                if (!canApplyRcSkyOcclusionEditState(current, from)) return false;
+                this.mmdManager.setRcSkyOcclusionSettings(to.settings);
+                this.mmdManager.setRcSkyOcclusionTrackState(to.track);
+                if (!rcSkyOcclusionEditStatesEqual(this.captureRcSkyOcclusionEditState(), to)) {
+                    this.mmdManager.setRcSkyOcclusionSettings(current.settings);
+                    this.mmdManager.setRcSkyOcclusionTrackState(current.track);
+                    return false;
+                }
+                this.updateTimelineEditState();
+                return true;
+            },
             applyObjectState: (diff, direction) => this.executeObjectStateCommand(diff, direction),
             applyExternalWgsl: (changes, direction) => this.mmdManager.restoreExternalWgsl(changes, direction),
             applyBonePoseBatch: (diff, direction) => this.executeBonePoseBatchCommand(diff, direction),
@@ -8405,7 +8442,7 @@ export class UIController {
 
     private refreshEffectKeyframeUi(): void {
         const track = this.getSelectedTimelineTrack();
-        const id = track?.category === "effect" && (this.mmdManager.isEffectInstance(track.name) || (EFFECT_TIMELINE_ENABLED && isEffectId(track.name))) ? track.name : null;
+        const id = track?.category === "effect" && (track.name === "rcSkyOcclusion" || this.mmdManager.isEffectInstance(track.name) || (EFFECT_TIMELINE_ENABLED && isEffectId(track.name))) ? track.name : null;
         const instanceUnsupported = id && this.mmdManager.isEffectInstance(id) && this.getConfiguredPostEffectBackend() !== "frameGraph";
         this.frameGraphInstanceController?.refresh();
         if (id) this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying || Boolean(instanceUnsupported);

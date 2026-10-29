@@ -6,18 +6,22 @@ import { HdriSettingsDialogController, type HdriSettingsDialogControllerDeps } f
 import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField } from "./popup-form-helpers";
 import { createExperimentalSection } from "./experimental-settings-layout";
 import { RADIANCE_LIGHTING_LAB_ENABLED } from "../render/radiance-sky-visibility-availability";
+import { mountRcSkyOcclusionSettings } from "./rc-sky-occlusion-settings-panel";
+import type { EditorAction } from "../actions/types";
 
 export class ExperimentalSettingsDialogController implements PopupContentController {
     private busy = false;
     private disposeAutomation: (() => void) | undefined;
     private disposeWgsl: (() => void) | undefined;
     private disposeRadianceSky: (() => void) | undefined;
+    private disposeRcSkyOcclusion: (() => void) | undefined;
     public unmount(): void {
         this.disposeAutomation?.(); this.disposeAutomation = undefined;
         this.disposeWgsl?.(); this.disposeWgsl = undefined;
         this.disposeRadianceSky?.(); this.disposeRadianceSky = undefined;
+        this.disposeRcSkyOcclusion?.(); this.disposeRcSkyOcclusion = undefined;
     }
-    constructor(private readonly deps: HdriSettingsDialogControllerDeps & { switchPbr: (enabled: boolean) => Promise<void> }) {}
+    constructor(private readonly deps: HdriSettingsDialogControllerDeps & { switchPbr: (enabled: boolean) => Promise<void>; dispatchAction: (action: EditorAction) => boolean }) {}
 
     public canClose(): boolean { return !this.busy; }
 
@@ -123,6 +127,7 @@ export class ExperimentalSettingsDialogController implements PopupContentControl
         }));
         logs.append(heading, path, row);
         form.append(pbrSection, wgslSection);
+        this.disposeRcSkyOcclusion = mountRcSkyOcclusionSettings(form, this.deps.mmdManager, this.deps.dispatchAction);
         if (RADIANCE_LIGHTING_LAB_ENABLED) this.mountRadianceSky(form);
         this.disposeAutomation = mountAutomationSettings(form);
         form.append(logs);

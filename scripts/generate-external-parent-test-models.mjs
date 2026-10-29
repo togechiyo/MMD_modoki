@@ -384,7 +384,7 @@ export function writePmx(model) {
         writer.vector(vertex.normal);
         writer.vector(vertex.uv);
         writer.uint8(0); // BDEF1
-        writer.int8(0); // center bone
+        writer.int8(vertex.boneIndex ?? 0); // BDEF1; existing fixtures default to center
         writer.float32(1); // edge scale
     }
 

@@ -3,9 +3,10 @@ import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Scene } from "@babylonjs/core/scene";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { Material } from "@babylonjs/core/Materials/material";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
-import { LuminousRadianceScene } from "./luminous-radiance-scene";
+import { LuminousRadianceScene, LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { TriangleRadianceBvh } from "./triangle-radiance-bvh";
 
@@ -30,6 +31,25 @@ function fixture() {
 }
 
 describe("RC separates emission and geometry input", () => {
+    it("lets sky consumers exclude cutout/blended blockers and invalidates their geometry when transparency changes", () => {
+        const { scene, mesh, data } = fixture();
+        const material = mesh.material as StandardMaterial;
+        material.diffuseTexture = new Texture(null, scene); material.diffuseTexture.hasAlpha = true;
+        const sky = new LuminousRadianceSceneSource(scene, () => null,
+            candidate => !candidate.needAlphaTesting() && !candidate.needAlphaBlending());
+        for (const mode of [Material.MATERIAL_OPAQUE, Material.MATERIAL_ALPHATEST, Material.MATERIAL_ALPHABLEND, Material.MATERIAL_OPAQUE]) {
+            material.transparencyMode = mode; sky.update(); data.update(settings);
+            expect(sky.bvh.triangleCount).toBe(mode === Material.MATERIAL_OPAQUE ? 12 : 0);
+            expect(data.bvh.triangleCount).toBe(12);
+            const revision = sky.revision; sky.update(); expect(sky.revision).toBe(revision);
+        }
+        material.transparencyMode = null; material.diffuseTexture = null;
+        material.opacityTexture = new Texture(null, scene); sky.update(); data.update(settings);
+        expect(sky.bvh.triangleCount).toBe(0); expect(data.bvh.triangleCount).toBe(12);
+        material.opacityTexture = null; sky.update(); expect(sky.bvh.triangleCount).toBe(12);
+        sky.dispose(); data.dispose();
+    });
+
     it("matches full packing at each color/strength change while reusing geometry and source bounds", () => {
         const { scene, state, data, read } = fixture(), refit = vi.spyOn(TriangleRadianceBvh.prototype, "update");
         const nodes = data.bvh.nodes.slice(), bounds = [...data.volumeMin, data.volumeSize];

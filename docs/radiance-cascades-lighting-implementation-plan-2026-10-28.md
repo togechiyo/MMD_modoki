@@ -1,6 +1,6 @@
 # RC共通基盤・拡散GI・天空遮蔽の実装案
 
-作成日: 2026-10-28。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。段階D以降は設計案で、任意位置・法線queryと通常材質への適用は未実装。
+作成日: 2026-10-28。2026-10-29更新。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)は最初の1効果として通常材質・設定/保存・Undo/キー・backend・骨/モーフ・PNG/WebMを実装し、対象GPU 5件とWebMの絶対画像差をfixtureで確認済み。ユーザー実モデルの目視評価と大規模PMX性能は未確認。GIは設計案。
 
 所有者の「おすすめ設定で実装案を書いて、ドキュメントとして置く」という依頼に基づく。[応用と共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を実装単位へ具体化する。その後の実装依頼により、[段階Aのscene/BVH共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ着手した。以下の新照明の数値、内部名、UI配置は引き続き推奨案であり、実機で調整済みの値や次版収録の決定ではない。
 
@@ -8,7 +8,7 @@
 
 [段階Cの描画前producer・天空visibility表示](./radiance-cascades-sky-visibility-validation-2026-10-29.md)を初回実装し、[近距離分割・終点参照の比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)で全面屋根Y=2の漏れを0.125から0へ改善した。Y=4の残差と少数方向の誤差、有限屋根の高密度参照への誤差悪化は残る。[段階Dの材質adapter案](./radiance-cascades-material-adapter-plan-2026-10-29.md)では固定床の結果を通常材質へ投影せず、任意位置・法線queryを先に検証する。
 
-2026-10-29、所有者は[アプリから確認できる1エフェクト単位で完成させ、目視しやすく区切る方針](../insights/decisions/complete-rc-effects-one-at-a-time-for-visual-review.md)を明示した。これを受けたagentの作業計画は、まずRC天空遮蔽を材質・UI・保存・出力まで接続して目視比較できる状態にし、その後にGIを同じ単位で進める。天空先という具体的な順序と以下の完了条件はagent計画であり、所有者が個別の方式を採用済みという意味ではない。どちらの効果も現時点では完成していない。
+2026-10-29、所有者は[アプリから確認できる1エフェクト単位で完成させ、目視しやすく区切る方針](../insights/decisions/complete-rc-effects-one-at-a-time-for-visual-review.md)を明示した。これを受けたagentの作業計画は、まずRC天空遮蔽を材質・UI・保存・出力まで接続して目視比較できる状態にし、その後にGIを同じ単位で進める。天空先という具体的な順序と以下の完了条件はagent計画であり、所有者が個別の方式を採用済みという意味ではない。天空遮蔽はfixtureでの実装・検証を終え、所有者がアプリから目視比較できる区切りに達した。GIは未実装。
 
 ## 1. 推奨構成と最初の範囲
 
@@ -19,12 +19,12 @@
 | 通常ルミナス `luminous` | 発光の芯・にじみ・glare | 現在のPostFX個体・並び順を維持 |
 | ルミナスRC `luminousRadiance` | 発光面から表面へ届く光 | 現在のPostFX個体・複数配置・合成位置を維持 |
 | RC GI `rcDiffuseGi`（仮称） | メイン方向光を受けた面からの1反射 | 独立したシーン照明設定。初回は1シーン1個、適用順固定 |
-| RC 天空遮蔽 `rcSkyOcclusion`（仮称） | 空への可視性で環境光・通常MMDの影側残光を抑える | 独立したシーン照明設定。初回は1シーン1個、適用順固定 |
+| RC 天空遮蔽 `rcSkyOcclusion` | 空への可視性で通常MMDの影側残光を抑える | 独立したシーン照明設定。1シーン1個、適用順固定 |
 | RC共通設定 | 新しいGI/天空遮蔽の計算範囲・品質 | 設定の共有。単独のエフェクトや追加のmaster ON/OFFにはしない |
 
-新しい2効果はEffectパネルの固定「照明」欄へ置く案とし、各効果が使える段階で個別に追加する。天空遮蔽の公開を未完成のGIとまとめて待たせず、GIの操作項目だけを先に出さない。その下の既存PostFX一覧は従来どおり並べ替える。照明欄には「シーンの照明に適用」と表示し、実行順が変わるようなドラッグハンドルを付けない。既存の`frameGraphPostStack`へ新IDを足して順番だけ無視する実装にはしない。
+当初の固定「照明」欄案から、最初の天空遮蔽は通常の **設定 → 実験設定…** に独立項目を置く実装へ具体化した。天空遮蔽の公開を未完成のGIとまとめて待たせず、GIの操作項目だけを先に出さない。既存PostFX一覧は従来どおり並べ替え、天空遮蔽には実行順が変わるドラッグハンドルを付けない。既存の`frameGraphPostStack`へ新IDを足して順番だけ無視する実装にはしない。
 
-初回対応はFrame Graph / WebGPUと通常MMDのopaque材質。検証用のStandard材質adapterも用意する。PBR、独自WGSL、Skin等の別lighting経路、透明・alpha-test材質の正確な遮蔽、複数反射、天空の反射、発光の追加反射、粗い鏡面反射、霧は後続の範囲とする。対象外材質は元の表示を維持し、全材質へ適用済みと表示しない。
+初回対応はFrame Graph / WebGPUと通常MMDのopaque材質。通常Standard材質へのadapterは今回追加しない。PBR、独自WGSL、Skin等の別lighting経路、透明・alpha-test材質の正確な遮蔽、複数反射、天空の反射、発光の追加反射、粗い鏡面反射、霧は後続の範囲とする。対象外材質は元の表示を維持し、全材質へ適用済みと表示しない。
 
 機能完成前は開発用の有効化条件内に置き、通常の操作項目として追加する時点で保存・Undo・キー・backend往復・出力まで揃える。既存ルミナスRCを隠したり、通常ルミナスとの分離を戻したりしない。
 
@@ -54,13 +54,13 @@
 
 ## 3. 計算範囲と遮蔽物
 
-新しいGI/天空遮蔽のvolumeは発光面に依存させない。初回の有効化時に、現在読み込まれている対象モデル・ステージのboundsから受け取り範囲を作り、余白付きのworld-space boxとしてprojectへ保存する。skydome、背景、gizmo、helperは対象から除く。カメラ移動や毎フレームのposeに追従して自動伸縮させない。
+新しいGI/天空遮蔽のvolumeは発光面に依存させない。天空遮蔽の初期実装は`volume: null`を自動範囲として保存し、現在読み込まれている対象通常MMDのboundsから余白付きのworld-space boxをruntime内で解決する。描画準備で保存値を変更せず、明示的な再計算・数値編集だけを固定範囲として保存する。skydome、背景、gizmo、helperは対象から除く。カメラ移動や毎フレームのposeに追従して自動伸縮させない。
 
 範囲は「現在のシーンから範囲を再計算」と数値編集で変更できる。初期計算は最大軸の長さへ両端10%ずつの余白を付ける案とし、空シーンでは未設定のまま準備待ちにする。巨大ステージを自動で細かく照らせるとは扱わず、セル幅を診断表示し、受け取り範囲の調整を可能にする。数値・空bounds・非有限値の正規化をpure helperで扱う。
 
 **光場を配置する範囲と、遮蔽物の収集範囲を分ける。** BVHは画面外・volume外を含むシーンの対象opaque形状を保持する。新しい照明のalpha-test/透過は未対応と明示し、既存Luminousの材質選択規則を共有化のついでに変更しない。
 
-天空visibilityは、最後の区間が有限距離でmissしただけで1にしない。対象scene boundsの外まで遮蔽物がないことを調べる。上限超過・不完全な入力は「空が見える」と置換せず、そのconsumerを中立化して理由を診断する。範囲外の受け手はGI寄与0・天空補正なしとし、範囲境界には2セルを目安とする連続的な遷移を置く。既存Luminousのvolume/range計算はそのまま保持する。
+天空visibilityは、最後の区間が有限距離でmissしただけで1にしない。対象scene boundsの外まで遮蔽物がないことを調べる。上限超過・不完全な入力は「空が見える」と置換せず、そのconsumerを中立化して理由を診断する。範囲外の受け手はGI寄与0・天空補正なしとする。範囲境界の2セルを目安とする連続的な遷移は後続課題で、今回の材質接続には未実装。既存Luminousのvolume/range計算はそのまま保持する。
 
 ## 4. FrameGraphの実行段階
 
@@ -143,7 +143,7 @@ scene/engineごとの所有者は一つにし、共有snapshotを同じframeで�
 
 ## 7. 状態・保存・backend・既存GI
 
-新しいproject設定は`effects.rcLighting`（仮称）にencoding version、共通profile/volume、GI/天空遮蔽の値を持つ。既存`luminousRadiance`の個体ID・固定値・enabledキー・並び順・削除状態は移動しない。新しい共通profileを旧Luminous個体へ暗黙適用しない。
+最初の天空遮蔽は`lighting.rcSkyOcclusion`へ`enabled / strength / minimum / volume`を保存する。キーは`keyframes.effectAnimations`の専用singletonを使う。当初の`effects.rcLighting`統合案は今回採用せず、GIの保存構造は後続の実装時に決める。既存`luminousRadiance`の個体ID・固定値・enabledキー・並び順・削除状態は移動しない。新しい共通profileを旧Luminous個体へ暗黙適用しない。
 
 - 新設定がない旧projectは新機能OFF。既存Luminousの現在の保存値と復元規則を維持する。非有限値・未知enumをnormalizeし、normalizeを繰り返しても値や個体が増えない。
 - OFFは値を保持し、削除/無効化をload時に復活させない。texture、BVH、cache key、GPU handleは保存しない。
@@ -200,4 +200,4 @@ pure helperの最小テストは共有group生成、consumer増減、normalizati
 
 外部方式の根拠は本会話で一次資料を照合した[応用調査](./radiance-cascades-applications-webgpu-research-2026-10-25.md)と[共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を参照する。Split RCの照度事前積分をそのまま採用する決定や、新しい外部APIが使えるという確認は今回行っていない。
 
-設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の実装内容と検証結果は、[段階A](./radiance-cascades-shared-scene-implementation-2026-10-28.md)、[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)、[段階Cの初回検証](./radiance-cascades-sky-visibility-validation-2026-10-29.md)、[再構成の品質・費用比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)のメモへ分離して記録する。[段階Dの材質adapter案](./radiance-cascades-material-adapter-plan-2026-10-29.md)は未実装で、固定床以外のqueryと残る誤差を確認してから通常材質へ接続する。
+設計書作成時はローカルコード・既存文書の照合、設計レビュー、文書リンク・差分確認のみ。描画コード、設定の既定値、GPU資源、依存packageは変更していない。その後の実装内容と検証結果は、[段階A](./radiance-cascades-shared-scene-implementation-2026-10-28.md)、[段階B](./radiance-cascades-shared-field-implementation-2026-10-28.md)、[段階Cの初回検証](./radiance-cascades-sky-visibility-validation-2026-10-29.md)、[再構成の品質・費用比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)のメモへ分離して記録する。[段階Dの材質adapter調査](./radiance-cascades-material-adapter-plan-2026-10-29.md)を経た[RC天空遮蔽実装・検証記録](./rc-sky-occlusion-implementation-2026-10-29.md)には、unit 212ファイル・1,316件、lint、critical型検査、WebGPU起動と対象GPU 5件の結果を記録した。通常typecheckは既知547件・追加0件。WebMの暗化差はdirty fieldの提出境界で解消を確認し、絶対MAE条件でも再検証した。ユーザー実モデルの目視と大規模PMX性能は別途確認する。

@@ -41,7 +41,8 @@ export class LuminousRadianceSceneSource {
     private emitterLow = [Infinity, Infinity, Infinity];
     private emitterHigh = [-Infinity, -Infinity, -Infinity];
 
-    constructor(private readonly scene: Scene, private readonly readEmission: RadianceEmissionReader) {
+    constructor(private readonly scene: Scene, private readonly readEmission: RadianceEmissionReader,
+        private readonly acceptsOccluder: (material: Material) => boolean = () => true) {
         const engine = scene.getEngine() as WebGPUEngine;
         this.triangleBudget = radianceTriangleBudget(engine.currentLimits.maxStorageBufferBindingSize, engine.currentLimits.maxBufferSize);
         this.triangleBuffer = new StorageBuffer(engine, this.triangleCapacity);
@@ -71,7 +72,7 @@ export class LuminousRadianceSceneSource {
                 if (!indices?.length) return [];
                 const surfaces = mesh.subMeshes.flatMap(subMesh => {
                     const material = subMesh.getMaterial();
-                    return material && material.alpha >= 0.99
+                    return material && material.alpha >= 0.99 && this.acceptsOccluder(material)
                         ? [{ indexStart: subMesh.indexStart, indexCount: subMesh.indexCount, material }] : [];
                 });
                 return [{ mesh, indices, surfaces }];

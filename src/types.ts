@@ -592,6 +592,7 @@ export interface ProjectRgbColor {
 }
 
 export interface ProjectLightingState {
+    rcSkyOcclusion?: import("./render/rc-sky-occlusion-settings").RcSkyOcclusionSettings;
     x: number;
     y: number;
     z: number;

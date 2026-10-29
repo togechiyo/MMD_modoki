@@ -191,6 +191,8 @@ import { resolveFrameGraphBackendRebuildAction } from "./render/frame-graph-back
 import { resolveModelEdgeWidth } from "./render/model-edge-settings";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "./render/luminous-radiance-settings";
 import { RadianceSkyVisibilityLab } from "./render/radiance-sky-visibility-lab";
+import { RcSkyOcclusionController } from "./render/rc-sky-occlusion-controller";
+import { normalizeRcSkyOcclusionSettings, cloneRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "./render/rc-sky-occlusion-settings";
 import {
     applyImportedMaterialShaderStates as applyImportedMaterialShaderStatesImpl,
     getExternalWgslToonShaderPath as getExternalWgslToonShaderPathImpl,
@@ -1423,6 +1425,9 @@ let litMask=geometricLitMask;
 let shadowMask=1.0-litMask;
 let toonShadowBand=mix(shadowTint,toonRaw,toonInfluence);
 let shadowTerm=info.diffuse*mix(one,toonShadowBand,shadowMask);
+#ifdef RC_SKY_OCCLUSION
+rcSkyResidual+=info.diffuse*toonShadowBand*shadowMask;
+#endif
 let lightBoost=max(lightTint-one,vec3f(0.0));
 let boostEnergy=max(lightBoost.r,max(lightBoost.g,lightBoost.b));
 toonFlatLightMask=litMask*clamp(boostEnergy*(0.9+flatStrength*2.6),0.0,1.0);
@@ -1852,6 +1857,8 @@ ${beforeFogAppendBlock}
     private postEffectBackend: PostEffectBackend = this.requestedPostEffectBackend;
     private frameGraphPostEffectsController: FrameGraphPostEffectsController | null = null;
     private radianceSkyVisibilityLab: RadianceSkyVisibilityLab | null = null;
+    private rcSkyOcclusionController: RcSkyOcclusionController | null = null;
+    private rcSkyOcclusionSettingsValue = normalizeRcSkyOcclusionSettings(null);
     private frameGraphPostEffectsRebuildPending = false;
     private frameGraphPostEffectsRebuildScheduled = false;
     private sceneInstrumentation: SceneInstrumentation | null = null;
@@ -1993,7 +2000,7 @@ ${beforeFogAppendBlock}
     private gravitySceneTrack: SceneKeyframeTrack<GravitySceneKeyframeValue> | null = null;
     private lastEvaluatedGravitySceneFrame: number | null = null;
     public onEffectKeyframePreviewChanged: (() => void) | null = null;
-    private readonly effectSceneTracks = new EffectSceneTrackStore(EFFECT_TIMELINE_ENABLED);
+    private readonly effectSceneTracks = new EffectSceneTrackStore(EFFECT_TIMELINE_ENABLED, ["rcSkyOcclusion"]);
     private readonly effectInstances = new FrameGraphEffectInstances();
     private readonly effectInstanceRuntimeDuration = new EffectInstanceRuntimeDuration();
     private effectCaptureDepth = 0;
@@ -6536,13 +6543,14 @@ ${beforeFogAppendBlock}
         return new Uint32Array([...new Set([...this.effectSceneTracks.ids().flatMap(effect => [...this.effectSceneTracks.frames(effect)]), ...this.effectInstances.ids().flatMap(effect => [...this.effectInstances.frames(effect)])])].sort((a, b) => a - b));
     }
     public getEffectTimelineTracks(): KeyframeTrack[] {
-        const legacy = EFFECT_TIMELINE_ENABLED ? EFFECT_KEYFRAME_DEFINITIONS
-            .filter(definition => definition.id !== "dof" && definition.id !== "motionBlur")
-            .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) })) : [];
+        const legacy = EFFECT_KEYFRAME_DEFINITIONS
+            .filter(definition => (EFFECT_TIMELINE_ENABLED || definition.id === "rcSkyOcclusion") && definition.id !== "dof" && definition.id !== "motionBlur")
+            .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
         const ids = [...this.effectInstances.order().filter(id => this.effectInstances.has(id)), ...this.effectInstances.ids().filter(id => !this.effectInstances.present(id))];
         return [...legacy, ...ids.map(id => ({ name: id, category: "effect" as const, frames: this.effectInstances.frames(id), effectInstance: { type: this.effectInstances.type(id), label: this.effectInstances.label(id), suspended: !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph" } }))];
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
+        if (id === "rcSkyOcclusion") return { enabled: this.rcSkyOcclusionSettingsValue.enabled, strength: this.rcSkyOcclusionSettingsValue.strength };
         if (id === "ssao" || id === "ssgi" || id === "ssr") {
             const value = this.getStaticScreenSpacePostEffects()[id];
             return { ...value, enabled: this.frameGraphPostEffectStackEnabledValue.get(id) ?? value.enabled };
@@ -6567,12 +6575,24 @@ ${beforeFogAppendBlock}
     public captureCurrentEffectKeyframePayload(id: string): EffectKeyframePayload {
         if (this.effectInstances.has(id)) return this.effectInstances.capture(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
         if (!isEffectId(id)) throw new Error(`Unsupported effect key: ${id}`);
-        return makeEffectPayload(id, this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying) ?? this.getStaticEffectValue(id));
+        return makeEffectPayload(id, this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0) ?? this.getStaticEffectValue(id));
+    }
+    public getRcSkyOcclusionAnimatedValue(): { enabled: boolean; strength: number } {
+        const value = this.effectSceneTracks.evaluate("rcSkyOcclusion", this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
+        return { enabled: value?.enabled ?? this.rcSkyOcclusionSettingsValue.enabled,
+            strength: Number(value?.strength ?? this.rcSkyOcclusionSettingsValue.strength) };
+    }
+    public getRcSkyOcclusionTrackState(): unknown | null { return this.effectSceneTracks.snapshot("rcSkyOcclusion"); }
+    public setRcSkyOcclusionTrackState(state: unknown | null): void {
+        if (!this.effectSceneTracks.restoreSnapshot("rcSkyOcclusion", state)) throw new Error("Invalid RC sky occlusion track state");
+        this.effectSceneTracksChanged();
+        this.onEffectKeyframePreviewChanged?.();
     }
     public hasEffectSceneTrack(id: string): boolean { return this.effectInstances.has(id) ? this.effectInstances.hasTrack(id) : isEffectId(id) && this.effectSceneTracks.has(id); }
     public isEffectTrackSuspended(id: string): boolean {
+        if (id === "rcSkyOcclusion") return this.postEffectBackend !== "frameGraph";
         if (this.effectInstances.has(id)) return !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph";
-        return isEffectId(id) && this.effectSceneTracks.has(id) && !this.getFrameGraphPostEffectStackIds().includes(id);
+        return isEffectId(id) && id !== "rcSkyOcclusion" && this.effectSceneTracks.has(id) && !this.getFrameGraphPostEffectStackIds().includes(id);
     }
     public setEffectScenePreview(id: string, value: unknown): void {
         if (this.effectInstances.has(id)) {
@@ -6582,12 +6602,12 @@ ${beforeFogAppendBlock}
             return;
         }
         if (!isEffectId(id)) return;
-        if (!EFFECT_TIMELINE_ENABLED) return;
+        if (!EFFECT_TIMELINE_ENABLED && id !== "rcSkyOcclusion") return;
         if (this.isPlaying) return;
         const first = !this.effectSceneTracks.has(id);
         this.effectSceneTracks.preview(id, this._currentFrame, value, this.getStaticEffectValue(id));
-        if (first) this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(this.getFrameGraphPostEffectStackIds(), id));
-        if (first) this.applyDefaultPipelinePostProcessSettings();
+        if (first && id !== "rcSkyOcclusion") this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(this.getFrameGraphPostEffectStackIds(), id));
+        if (first && id !== "rcSkyOcclusion") this.applyDefaultPipelinePostProcessSettings();
         this.evaluateEffectTracks(this._currentFrame);
         this.onEffectKeyframePreviewChanged?.();
     }
@@ -6598,7 +6618,7 @@ ${beforeFogAppendBlock}
     private effectSceneTracksChanged(): void {
         this.evaluateEffectTracks(this._currentFrame);
         refreshTotalFramesFromContentImpl(this);
-        this.effectInstanceRuntimeDuration.setDuration(this.effectInstances.ids().some(id => this.effectInstances.frames(id).length > 0) ? this._totalFrames : 0);
+        this.effectInstanceRuntimeDuration.setDuration(this.getEffectSceneKeyframeFrames().length > 0 ? this._totalFrames : 0);
         emitMergedKeyframeTracksImpl(this);
     }
     public applyEffectSceneKeyframePayload(id: string, frame: number, payload: EffectKeyframePayload | null): boolean {
@@ -6611,7 +6631,7 @@ ${beforeFogAppendBlock}
         if (!isEffectId(id)) return false;
         const first = !this.effectSceneTracks.has(id);
         if (!this.effectSceneTracks.apply(id, frame, payload, this.getStaticEffectValue(id))) return false;
-        if (first) {
+        if (first && id !== "rcSkyOcclusion") {
             this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(this.getFrameGraphPostEffectStackIds(), id));
             this.applyDefaultPipelinePostProcessSettings();
         }
@@ -6676,17 +6696,18 @@ ${beforeFogAppendBlock}
     }
     public setSerializedEffectSceneTracks(data: unknown): void {
         this.effectSceneTracks.restore(data, id => this.getStaticEffectValue(id));
-        if (!EFFECT_TIMELINE_ENABLED) return;
-        this.applyDefaultPipelinePostProcessSettings();
-        this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        if (EFFECT_TIMELINE_ENABLED) {
+            this.applyDefaultPipelinePostProcessSettings();
+            this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        }
         this.effectSceneTracksChanged();
     }
     public isEffectKeyframePrepared(id: EffectId): boolean {
-        return this.effectSceneTracks.has(id) && this.getFrameGraphPostEffectStackIds().includes(id);
+        return this.effectSceneTracks.has(id) && (id === "rcSkyOcclusion" ? this.postEffectBackend === "frameGraph" : this.getFrameGraphPostEffectStackIds().includes(id));
     }
     public getEffectScalarRenderValue(id: EffectId, field: string, fallback: number): number {
         return scalarEffectRenderValue(this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0),
-            field, this.getFrameGraphPostEffectStackIds().includes(id), fallback);
+            field, id === "rcSkyOcclusion" ? this.postEffectBackend === "frameGraph" : this.getFrameGraphPostEffectStackIds().includes(id), fallback);
     }
     /** Shape parameters retain their authored value even while the effect is OFF. */
     public getEffectParameterRenderValue(id: EffectId, field: string, fallback: number): number {
@@ -8399,6 +8420,7 @@ ${beforeFogAppendBlock}
             }
             this.enforceUniformModelEdgeWidthsBeforeRender();
             this.radianceSkyVisibilityLab?.prepareFrame();
+            this.rcSkyOcclusionController?.prepareFrame();
         });
 
         this.scene.onBeforeRenderObservable.add(() => {
@@ -10130,7 +10152,7 @@ ${beforeFogAppendBlock}
 
     play(): void {
         if (!this.currentModel || this.effectPlaybackPreparation.pending) return;
-        if ((this.effectSceneTracks.ids().length || this.effectInstances.ids().length) && !this.isPostEffectBackendReadyForCapture()) {
+        if ((this.effectSceneTracks.ids().length || this.effectInstances.ids().length || this.needsRcSkyOcclusionResources()) && !this.isPostEffectBackendReadyForCapture()) {
             this.effectSceneTracks.clearPreviews();
             this.effectInstances.clearPreviews();
             this.effectPlaybackPreparation.run(
@@ -13069,6 +13091,53 @@ ${beforeFogAppendBlock}
     public getRadianceSkyVisibilityLab(): RadianceSkyVisibilityLab {
         return this.radianceSkyVisibilityLab ??= new RadianceSkyVisibilityLab(this.scene);
     }
+
+    private needsRcSkyOcclusionResources(): boolean {
+        return this.postEffectBackend === "frameGraph" && this.frameGraphPostEffectsEnabledValue
+            && (this.rcSkyOcclusionSettingsValue.enabled || this.effectSceneTracks.canBeEnabled("rcSkyOcclusion"));
+    }
+
+    private getRcSkyOcclusionController(): RcSkyOcclusionController {
+        return this.rcSkyOcclusionController ??= new RcSkyOcclusionController(this.scene,
+            () => this.getRcSkyOcclusionSettings(),
+            () => this.postEffectBackend === "frameGraph" && this.frameGraphPostEffectsEnabledValue,
+            material => {
+                const preset = this.materialShaderPresetByMaterial.get(material) ?? "wgsl-mmd-standard";
+                return material instanceof MmdStandardMaterial && !material.disableLighting && material.alpha >= 0.99
+                    && !material.needAlphaTesting() && !material.needAlphaBlending()
+                    && !material.diffuseFresnelParameters?.isEnabled && !material.lightmapTexture
+                    && (preset === "wgsl-mmd-standard" || preset === "wgsl-light-and-shadow")
+                    && !MmdManager.externalWgslToonFragmentByMaterial.has(material)
+                    && !MmdManager.presetWgslToonFragmentByMaterial.has(material);
+            }, () => this.needsRcSkyOcclusionResources());
+    }
+
+    public getStaticRcSkyOcclusionSettings(): RcSkyOcclusionSettings {
+        return cloneRcSkyOcclusionSettings(this.rcSkyOcclusionSettingsValue);
+    }
+
+    public getRcSkyOcclusionSettings(): RcSkyOcclusionSettings {
+        const settings = this.getStaticRcSkyOcclusionSettings(), animated = this.getRcSkyOcclusionAnimatedValue();
+        return animated ? { ...settings, enabled: animated.enabled, strength: Number(animated.strength) } : settings;
+    }
+
+    public setRcSkyOcclusionSettings(value: Partial<RcSkyOcclusionSettings>): void {
+        const next = normalizeRcSkyOcclusionSettings({ ...this.rcSkyOcclusionSettingsValue, ...value });
+        this.rcSkyOcclusionSettingsValue = next;
+        if (this.effectSceneTracks.has("rcSkyOcclusion") && (value.enabled !== undefined || value.strength !== undefined)) {
+            const current = this.getRcSkyOcclusionAnimatedValue();
+            this.setEffectScenePreview("rcSkyOcclusion", { enabled: value.enabled === undefined ? current?.enabled ?? next.enabled : next.enabled,
+                strength: value.strength === undefined ? current?.strength ?? next.strength : next.strength });
+        }
+        this.getRcSkyOcclusionController().settingsChanged();
+    }
+
+    public recalculateRcSkyOcclusionVolume(): void {
+        const controller = this.getRcSkyOcclusionController(), volume = controller.fitVolume();
+        if (volume) this.setRcSkyOcclusionSettings({ volume });
+    }
+
+    public getRcSkyOcclusionDiagnostics() { return this.getRcSkyOcclusionController().diagnostics; }
 
     get postEffectGlowEnabled(): boolean {
         return this.effectSceneTracks.evaluate("luminous", this._currentFrame, !this.isPlaying)?.enabled ?? this.postEffectGlowEnabledValue;
@@ -16241,6 +16310,7 @@ ${beforeFogAppendBlock}
     }
 
     public isPostEffectBackendReadyForCapture(): boolean {
+        if (this.needsRcSkyOcclusionResources() && !this.getRcSkyOcclusionController().isReadyForCapture) return false;
         if (this.postEffectBackend === "classic" && this.effectKeyframeBloomPrepared
             && !this.standaloneBloomEffect?._isReady()) return false;
         if (this.postEffectBackend === "classic" && this.isEffectKeyframePrepared("lut")
@@ -16255,8 +16325,27 @@ ${beforeFogAppendBlock}
     }
 
     public async waitForPostEffectBackendReadyForCapture(timeoutMs = 8_000): Promise<boolean> {
+        const startedAt = performance.now();
+        const timeout = Math.max(1, timeoutMs);
+        // Prewarm every authored ON interval before the export loop freezes rendering.
+        // The controller retains these resources through OFF keys, so each later ON
+        // frame can synchronously update the field for its own pose before material draws.
+        if (this.needsRcSkyOcclusionResources()) {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            try {
+                const ready = await Promise.race([
+                    this.getRcSkyOcclusionController().prewarm(),
+                    new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), timeout); }),
+                ]);
+                if (!ready) return false;
+            } finally { if (timer !== undefined) clearTimeout(timer); }
+        }
         const isReady = (): boolean => {
             if (!this.isPostEffectBackendReadyForCapture()) return false;
+            // Installing the lighting plugin invalidates material programs. Check the
+            // capture pass even when there are no PostFX tasks to warm it indirectly.
+            if (this.needsRcSkyOcclusionResources() && (!this.scene.isReady()
+                || (this.exportRenderSurface && !this.exportRenderSurface.renderTarget.isReadyForRendering()))) return false;
             if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) return true;
             // Graph effects can be ready before the scene-color pass has compiled
             // newly restored background materials for its render pass.
@@ -16266,8 +16355,6 @@ ${beforeFogAppendBlock}
             return true;
         }
 
-        const startedAt = performance.now();
-        const timeout = Math.max(1, timeoutMs);
         while (performance.now() - startedAt < timeout) {
             await new Promise<void>((resolve) => {
                 requestAnimationFrame(() => resolve());

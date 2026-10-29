@@ -21,6 +21,7 @@ export type EffectValueById = {
     lut: { enabled: boolean; intensity: number };
     luminous: { enabled: boolean; intensity: number; threshold: number; radius: number };
     luminousRadiance: { enabled: boolean };
+    rcSkyOcclusion: { enabled: boolean; strength: number };
 };
 export type EffectId = keyof EffectValueById;
 export type ScreenSpaceEffectValues = Pick<EffectValueById, "ssao" | "ssgi" | "ssr">;
@@ -81,6 +82,8 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
     { id: "lut", fixedSettingsLabelKey: "timeline.lutFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 1, min: 0, max: 1 } },
         sliders: [{ field: "intensity", panelField: "lutIntensity", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 }] },
     { id: "luminousRadiance", fields: { enabled: { kind: "step", default: false } }, sliders: [] },
+    { id: "rcSkyOcclusion", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0.75, min: 0, max: 1 } },
+        sliders: [{ field: "strength", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 }] },
     { id: "luminous", fixedSettingsLabelKey: "timeline.luminousFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0.5, min: 0, max: 4 }, threshold: { kind: "linear", default: 0.5, min: 0, max: 1.5 }, radius: { kind: "linear", default: 20, min: 1, max: 128 } },
         sliders: [
             { field: "intensity", panelField: "luminousIntensity", labelKey: "effect.frameGraphPost.controls.intensity", min: 0, max: 400, toValue: position => position / 100, toPosition: value => value * 100 },
@@ -188,10 +191,11 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : field.kind === "discrete" ? z.string().refine(value => validDiscrete(value, field.values)) : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["motionBlur", "dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous", "luminousRadiance"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
+    kind: z.literal("effect"), effectId: z.enum(["motionBlur", "dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous", "luminousRadiance", "rcSkyOcclusion"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
     instanceId: z.string().regex(/^fx-[a-zA-Z0-9-]{1,190}$/).optional(),
 }).strict().superRefine((payload, context) => {
     if (["dof", "motionBlur"].includes(payload.effectId) && !payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "These keys require an effect instance" });
+    if (payload.effectId === "rcSkyOcclusion" && payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "Sky occlusion is a scene singleton" });
     const parsed = valueSchema(payload.effectId).safeParse(payload.value);
     if (!parsed.success) context.addIssue({ code: "custom", path: ["value"], message: "Effect values do not match the effect definition" });
 }).transform(payload => payload as EffectKeyframePayload);

@@ -1,4 +1,5 @@
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
+import { normalizeRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
 import type {
     MmdModokiProjectFileV1,
     ProjectAccessoryState,
@@ -45,6 +46,8 @@ type ProjectExportSceneModel = {
 };
 
 type ProjectExportHost = {
+    getRcSkyOcclusionSettings?: () => RcSkyOcclusionSettings;
+    getStaticRcSkyOcclusionSettings?: () => RcSkyOcclusionSettings;
     getMmdMaterialPipelinePreset?: () => MmdMaterialPipelinePreset;
     sceneModels: ProjectExportSceneModel[];
     activeModelInfo: { instanceId: string; path: string } | null;
@@ -440,6 +443,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             })(),
         },
         lighting: {
+            rcSkyOcclusion: normalizeRcSkyOcclusionSettings(host.getStaticRcSkyOcclusionSettings?.() ?? host.getRcSkyOcclusionSettings?.()),
             ...lightDirection,
             intensity: host.lightIntensity,
             ambientIntensity: host.ambientIntensity,

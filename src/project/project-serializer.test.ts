@@ -300,6 +300,15 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("saves static RC sky settings and copies its volume independently of keyed preview", () => {
+        const settings = { enabled: false, strength: 0.6, minimum: 0.15, volume: { min: [-4, 1, -4] as [number, number, number], size: 8 } };
+        const host = { ...createHost(), getRcSkyOcclusionSettings: () => ({ ...settings, enabled: true }), getStaticRcSkyOcclusionSettings: () => settings };
+        const project = exportProjectState(host);
+        expect(project.lighting.rcSkyOcclusion).toEqual(settings);
+        settings.volume.min[0] = 100;
+        expect(project.lighting.rcSkyOcclusion?.volume?.min[0]).toBe(-4);
+        expect(exportProjectState(createHost()).lighting.rcSkyOcclusion).toEqual({ enabled: false, strength: 0.75, minimum: 0.2, volume: null });
+    });
     it("uses project v2 only when authored effect instances are present", () => {
         const block = { version: 1 as const, order: ["fx-a"], instances: [{ instanceId: "fx-a", type: "gamma" as const, label: "A", settings: { enabled: true, gamma: 2 }, animation: { version: 1, tracks: [] } }] };
         const project = exportProjectState({ ...createHost(), getSerializedEffectInstances: () => block });

@@ -15,6 +15,7 @@ export type CommandSelectedKeyRef = {
 };
 
 export type CommandExecutionContext = {
+    applyRcSkyOcclusion?(diff: import("./rc-sky-occlusion-command").RcSkyOcclusionCommandDiff, direction: CommandDirection): boolean;
     applyEffectInstances?(diff: import("./effect-instance-command").EffectInstanceDiff, direction: CommandDirection): boolean;
     applyExternalWgsl?(changes: import("../external-wgsl/contract").EffectChange[], direction: CommandDirection): boolean;
     applyModelMotionClear?(diff: Extract<EditCommandDiff, { type: "edit.modelMotionClear" }>, direction: CommandDirection): boolean;
@@ -48,6 +49,8 @@ export function executeCommand(
     context: CommandExecutionContext,
 ): boolean {
     switch (command.diff.type) {
+        case "effect.rcSkyOcclusion":
+            return context.applyRcSkyOcclusion?.(command.diff, direction) ?? false;
         case "effect.instances":
             return context.applyEffectInstances?.(command.diff, direction) ?? false;
         case "effect.externalWgsl":

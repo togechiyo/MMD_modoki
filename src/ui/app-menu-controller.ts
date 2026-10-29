@@ -673,6 +673,7 @@ export class AppMenuController {
                     id: "experimental-settings", surface: "modal", size: "md",
                     title: t("menu.tools.experimentalSettings"), restoreFocusTo: invoker ?? null,
                     content: new ExperimentalSettingsDialogController({
+                        dispatchAction: this.dispatchAction,
                         switchPbr: this.switchExperimentalPbr,
                         mmdManager: this.mmdManager,
                         setStatus: this.setStatus,

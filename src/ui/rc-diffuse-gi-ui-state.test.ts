@@ -3,6 +3,13 @@ import { DEFAULT_RC_DIFFUSE_GI_SETTINGS } from "../render/rc-diffuse-gi-settings
 import { getRcDiffuseGiUiState } from "./rc-diffuse-gi-ui-state";
 
 const translate = (key: string) => key;
+it("explains known zero contribution while enabled and hides stale reasons while off", () => {
+    for (const [reason, key] of [["Zero strength", "zeroStrength"], ["No direct light", "noDirectLight"]]) {
+        const state = getRcDiffuseGiUiState(DEFAULT_RC_DIFFUSE_GI_SETTINGS, { status: "ready", reason, volume: null }, translate);
+        expect(state.statusText).toContain(`reason.${key}`);
+        expect(getRcDiffuseGiUiState(DEFAULT_RC_DIFFUSE_GI_SETTINGS, { status: "off", reason, volume: null }, translate).statusText).toBe("experiment.rcDiffuseGi.status.off");
+    }
+});
 it("displays resolved automatic bounds while retaining saved volume null", () => {
     const settings = { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS, enabled: true };
     const diagnostics = { status: "ready" as const, reason: null, volume: { min: [-8, 0, -8] as [number, number, number], size: 16 } };

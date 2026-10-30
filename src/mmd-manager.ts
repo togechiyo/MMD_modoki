@@ -194,6 +194,7 @@ import { RadianceSkyVisibilityLab } from "./render/radiance-sky-visibility-lab";
 import { RcSkyOcclusionController } from "./render/rc-sky-occlusion-controller";
 import { normalizeRcSkyOcclusionSettings, cloneRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "./render/rc-sky-occlusion-settings";
 import { RcDiffuseGiController } from "./render/rc-diffuse-gi-controller";
+import { isRcDiffuseGiPresetEligible } from "./render/rc-diffuse-gi-material-eligibility";
 import { normalizeRcDiffuseGiSettings, cloneRcDiffuseGiSettings, type RcDiffuseGiSettings } from "./render/rc-diffuse-gi-settings";
 import {
     applyImportedMaterialShaderStates as applyImportedMaterialShaderStatesImpl,
@@ -13166,9 +13167,9 @@ ${beforeFogAppendBlock}
         return material instanceof MmdStandardMaterial && (source || !material.disableLighting) && material.alpha >= 0.99
             && !material.needAlphaTesting() && !material.needAlphaBlending()
             && !material.diffuseFresnelParameters?.isEnabled && !material.lightmapTexture
-            && (preset === "wgsl-mmd-standard" || preset === "wgsl-light-and-shadow" || (source && preset === "wgsl-autoluminous"))
-            && !MmdManager.externalWgslToonFragmentByMaterial.has(material)
-            && !MmdManager.presetWgslToonFragmentByMaterial.has(material);
+            && isRcDiffuseGiPresetEligible({ preset, source,
+                hasExternalShader: MmdManager.externalWgslToonFragmentByMaterial.has(material),
+                hasPresetShader: MmdManager.presetWgslToonFragmentByMaterial.has(material) });
     }
 
     private getRcDiffuseGiController(): RcDiffuseGiController {

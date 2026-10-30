@@ -1,6 +1,6 @@
 # RC GI: 方向光1反射の通常MMD材質への実装
 
-作成日: 2026-10-30。状態: **初版を設定・保存・キー・PNG/WebMまで実装し、fixtureで検証済み。所有者の実モデルでの目視確認はこれから**。所有者の「次はGIの方を進めて」という依頼に基づき、[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)に続く1エフェクトとして実装した。[実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)のE＋GIに必要なFに相当する。
+作成日: 2026-10-30。状態: **初版の「適用中でも効きが薄い・止まっているように見える」との目視NGに対して、対応材質・自動範囲・近距離区間・反射光量を修正し、fixtureで改善を確認した。所有者の実モデルでの再確認は待ち**。所有者の「次はGIの方を進めて」という依頼に基づき、[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)に続く1エフェクトとして実装した。[実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)のE＋GIに必要なFに相当する。以下の実装説明は仕上げ修正を反映し、初版`89f5659`の数値は検証履歴として分けて残す。
 
 ## 操作と保存
 
@@ -15,7 +15,9 @@
 
 固定値は`lighting.rcDiffuseGi`、キーは`keyframes.effectAnimations`の`rcDiffuseGi` singletonへ保存する。設定編集はAction→Command→Undo/Redoを通し、trackのbase・keys・previewも一緒に復元する。値がない旧projectの見た目は変えない。ClassicとFrame Graph全体OFFでは設定・キーを保持して実行を休止する。
 
-自動範囲は対応する通常MMD meshのboundsに20%の余白を付けた立方体。保存値を勝手に固定せず、`null`のままruntimeで保持する。「範囲を再計算」と数値欄のEnterで固定し、「自動範囲」で戻す。毎フレームの変形・カメラ移動には追従しないため、大きく動くモデルや離れたステージ部品には範囲を調整する。
+自動範囲は、対象材質のsubMeshが参照する変形済み頂点をworld座標へ変換し、最大軸の長さに20%の余白を付けた立方体とする。MMD loaderはmeshと全subMeshの描画用boundsへ共通の余白を付けるため、そのboundsをそのまま使わない。反射率が確実に0の黒い材質は自動範囲から除くが、BVHの遮蔽物には残す。保存値を勝手に固定せず、`null`のままruntimeで保持する。「範囲を再計算」と数値欄のEnterで固定し、「自動範囲」で戻す。mesh・geometry・対象材質・subMeshのindex範囲が変わったときは自動範囲を無効化する。毎フレームの変形・カメラ移動には追従しないため、大きく動くモデルや離れたステージ部品には範囲を調整する。
+
+「適用中」は計算と材質接続の準備状態であり、画素に見える寄与があることまでは保証しない。強度0とメイン方向光の光量0は、それぞれ理由を表示する。対象材質がない状態では、固定volumeが保存されていても適用中にしない。
 
 SSGI / RSM GIの設定は自動変更しない。併用時は反射光が重なるため、最初の比較ではこれらをOFFにしてRC GI単体を確認する。天空遮蔽とは別の強度・有効キーを持つ。
 
@@ -38,9 +40,9 @@ flowchart TD
     M --> A[受光面の反射率を掛けて線形空間で加算]
 ```
 
-4段のprobe gridは`16³ / 8³ / 4³ / 2³`、方向数は`32 / 128 / 512 / 2048`。最遠区間はシーンの遮蔽物まで探索し、画面外・volume外の反射面と遮蔽物も入力へ含める。missは反射光0となり、背景色や発光を代入しない。
+4段のprobe gridは`16³ / 8³ / 4³ / 2³`、方向数は`32 / 128 / 512 / 2048`。距離区間はGI専用とし、最細格子のセル幅を単位に`[0,4] / [4,20] / [20,84] / [84,340]`とする。最初の4セルを最細格子で扱い、近い反射面の寄与が早く粗いcascadeへ移ることを抑える。初版のLuminous由来の距離設定は使わず、既存Luminous側の区間は変更しない。最遠区間は名目上の終端を超えてシーンの遮蔽物まで探索し、画面外・volume外の反射面と遮蔽物も入力へ含める。missは反射光0となり、背景色や発光を代入しない。
 
-rayが当たった面でUV付き反射率、面の幾何法線、方向光との角度、面から光へのBVH遮蔽を評価する。法線はray側へ向け、薄い面は両面の拡散反射として扱う。sourceの放射輝度は`albedo × lightColor × max(dot(normal, directionToLight), 0) / π`。既存raster影のCSM・bias・影距離は変更しない。
+rayが当たった面でUV付き反射率、面の幾何法線、方向光との角度、面から光へのBVH遮蔽を評価する。法線はray側へ向け、薄い面は両面の拡散反射として扱う。sourceへ入れる反射RGBは`albedo × lightColor × max(dot(normal, directionToLight), 0)`とし、既存Standard/MMDの方向光の強度規約に合わせる。既存raster影のCSM・bias・影距離は変更しない。
 
 base gridの32方向を`+X / -X / +Y / -Y / +Z / -Z`の6軸へcos重みで正規化し、照度/πとして保存する。材質側は法線の符号で3軸を選び、法線成分の二乗で混ぜる。三線形補間と受光面前方への重み付けを行い、各probeの近傍2三角形で接続の遮蔽を判定する。遮られたprobeの重みは分母へ残し、その寄与を0にする。
 
@@ -52,11 +54,13 @@ source revision・範囲・方向光snapshotを更新条件とする。ライト
 
 反射率は通常MMDのdiffuse色と、`applyAmbientColorToDiffuse`有効時の`scene.ambientColor × material.ambientColor`を合わせた色から作る。diffuse textureは既存の64×64静的cacheを再利用し、UV変換・UV2・wrap・texture levelを反映する。linear化は既存cacheと同じ2.2乗近似。画像は読み込み時に一度readbackし、出力前にも準備を確認する。
 
-Luminousのscene source実装を再利用するが、GIは独立したsourceを所有する。packed color欄には反射率を入れ、Luminous固有の8倍gainを適用しない。発光色・sphere・Toon照明・完成画像・前frameのGIはsourceに戻さない。通常MMD / Light and ShadowとLuminous presetのdiffuse反射を入力とし、Luminousの発光自体は既存RC側だけに残す。
+Luminousのscene source実装を再利用するが、GIは独立したsourceを所有する。packed color欄には反射率を入れ、Luminous固有の8倍gainを適用しない。発光色・sphere・Toon照明・完成画像・前frameのGIはsourceに戻さない。対応する通常材質presetとLuminous presetのdiffuse反射を入力とし、Luminousの発光自体は既存RC側だけに残す。
 
-受光側は通常MMD / Light and Shadowのopaque材質に限定する。材質pluginは通常の直接光・sphere・specularの合成後、fogとimage processingの前に入り、`linear(元の色) + strength × linear(受光面の反射率) × field`を加えて表示色へ戻す。天空遮蔽の係数をGIへ掛けず、通常材質の照明を別の方式で置換しない。GIが0の画素は色空間の往復もせず、元の色を保つ。
+受光側はMmdStandardMaterialを使うopaque材質のうち、通常MMD、Light and Shadow、Stage Standard、Accessory Toon、OBJ Untextured、OBJ MTLの既知presetを対象とする。外部shaderや想定外のcustom shaderを持つ材質へ、preset IDだけを理由に適用しない。Luminous presetは反射元だけを許可する。材質pluginは通常の直接光・sphere・specularの合成後、fogとimage processingの前に入り、`linear(元の色) + strength × linear(受光面の反射率) × field`を加えて表示色へ戻す。天空遮蔽の係数をGIへ掛けず、通常材質の照明を別の方式で置換しない。GIが0の画素は色空間の往復もせず、元の色を保つ。
 
-sourceの物理式の`/π`は維持する。Babylon 9.2.0のStandard/MMD直射は`diffuse × getScaledIntensity()`を基にしたdisplay-space合成で、Lambert/Toonの直接寄与に同じ`/π`を入れていない。そのため、現在のGIは既存直射の見た目と同じ強度尺度ではない。cos正規化した入射fieldは照度/πなので受光側でさらにπ除算する必要はなく、現在の式を二重除算とは扱わない。また、粗いcascadeの空間・角度平均では有限の反射面が周囲の黒い方向と混ざり、寄与が弱まり得る。実装の強度係数だけで物理精度や既存Toonとの一致を保証せず、任意gainによる補正も追加していない。
+初版はsourceに物理的なLambert反射の`/π`を入れていた。一方、Babylon 9.2.0のStandard/MMD直射は`diffuse × getScaledIntensity()`を基にしたdisplay-space合成で、Lambert/Toonの直接寄与に同じ`/π`を入れていない。今回の仕上げではsource側の`/π`を除き、この既存照明の強度規約に合わせた。この除算だけを変え、距離区間と他の条件を固定すれば、clampや丸め前のsource RGBとその線形輸送の値はπ倍になる。画面の8bit差分や、自動範囲・距離区間も変更した今回の比較値がπ倍になるとは限らない。強度の初期値0.5と範囲0〜2は変更しない。
+
+cos正規化した入射fieldは照度/πに相当する平均で、定数の入射RGBを保持する。初版のsourceの`/π`とこの平均は異なる役割なので、変更理由を「πの二重除算バグ」とは扱わない。また、直射のdisplay-space合成やToon段階とGIのlinear加算は異なり、変更後も物理単位の一致や既存Toonの見た目の完全一致は保証しない。粗いcascadeの空間・角度平均では有限の反射面が周囲の黒い方向と混ざり、寄与が弱まり得る。距離区間と自動範囲の修正も含め、光量だけを根拠に近似精度が改善したとは判断しない。
 
 ## 主な実装箇所
 
@@ -66,6 +70,7 @@ sourceの物理式の`/π`は維持する。Babylon 9.2.0のStandard/MMD直射�
 | 独立UI・Action/Undo | [設定panel](../src/ui/rc-diffuse-gi-settings-panel.ts)、[Command差分](../src/actions/rc-diffuse-gi-command.ts) |
 | dirty判定・描画前更新・capture準備・資源寿命 | [rc-diffuse-gi-controller.ts](../src/render/rc-diffuse-gi-controller.ts) |
 | light snapshot・反射率source | [ライト](../src/render/rc-diffuse-gi-light.ts)、[反射率](../src/render/rc-diffuse-gi-source.ts) |
+| 自動範囲・対応preset・GI専用距離区間 | [範囲](../src/render/rc-diffuse-gi-volume.ts)、[対応材質](../src/render/rc-diffuse-gi-material-eligibility.ts)、[距離区間](../src/render/rc-diffuse-gi-intervals.ts) |
 | 専用FrameGraph・RC輸送・照度集計 | [field](../src/render/rc-diffuse-gi-field.ts)、[cascade shader](../src/render/rc-diffuse-gi-shaders.ts)、[6軸集計](../src/render/rc-diffuse-gi-irradiance.ts) |
 | 材質参照・合成・中立fallback | [query](../src/render/mmd-radiance-gi-query-wgsl.ts)、[plugin](../src/render/mmd-radiance-diffuse-gi-plugin.ts) |
 
@@ -81,7 +86,43 @@ FrameGraphのtask順序・ready・破棄は[公式のtask lifecycle](https://doc
 - 天空遮蔽・LuminousとのGPU source/field共有は未実装。併用するとCPU変形・BVH更新も各sourceで行う。小さいfixtureの費用を密なPMXや低性能PCの全体FPSへ換算しない。
 - 今回のGI実描画で動かした形状はbone付き遮光板。morph/physicsは既存の共通pose入力を利用するが、GIを有効にした個別の実描画比較は未実施。
 
-## 検証
+## 仕上げ修正と再検証（2026-10-30）
+
+所有者の目視NGを受け、対応presetの不足、描画用boundsの余白と無関係な黒い部品によるprobe密度低下、GI専用の近距離区間、既存照明との強度規約、寄与0の理由表示を修正した。画素ごとのBVH探索は追加せず、既定強度・格子数・6 task・材質の固定参照数は維持する。全対象を隠した間に移動し、再表示した場合も自動範囲を取り直す。
+
+配布可能な36三角形fixtureを使い、[visibility E2E](../test/e2e/rc-diffuse-gi-visibility.spec.mjs)で既定強度0.5の画像を比較した。直接光を受けない床は、Light and Shadowの影色とToon残留だけをGUIで0にして作る。CSMやshadow generatorの設定は変更しない。受光面7,014画素のON−OFF平均は次のとおり。自動→固定→自動の復元画像差は0、GPU validation・page error・console errorも0件。
+
+| 受光条件 | 範囲 | RGB平均増分 |
+| --- | --- | --- |
+| 通常MMD・通常照明 | 自動、一辺7.2 | `[4.45195, 0, 0]` |
+| 通常MMD・通常照明 | 固定、一辺16 | `[3.71243, 0, 0]` |
+| Light and Shadow・直接光なし | 自動、一辺7.2 | `[43.45694, 1, 1]` |
+| Light and Shadow・直接光なし | 固定、一辺16 | `[39.28315, 1.04691, 1.03821]` |
+| Stage Standard・通常照明 | 自動、一辺7.2 | `[5.23810, 0, 0]` |
+
+通常MMD・固定16の初版は`[1,0,0]`であり、この同条件で赤い反射が約3.7倍の階調差になった。自動範囲は初版の57.84から7.2へ縮小し、同じ16³格子を受光面へ集中できた。黒い遮蔽板とloaderの余白は範囲から除かれるが、遮蔽判定は維持する。暗所OFFの床は`[0,0,0]`で、今回はGIだけの反射が見えることを確認した。Stageのsource/receiverはGUIから適用した。Accessory/OBJはPMXのメニューに存在しないため、この実描画テストには含めず、対応判定のunitとshader経路の確認に限定する。
+
+強度0・主光量0の理由表示と復帰も同じGUIテストで確認した。完全な停止を検出する画素readback監視は追加していないため、「適用中」は有意な光量や全画素の正しさを保証する表示ではない。
+
+性能5条件も成功した。測定方法・adapter・fixture・固定volume・warm-up/40frame集計は下の初版計測と同じ。全条件40/40frameでtimestampを取得し、各GPU validationとpage errorは0件。
+
+| 条件 | GPU描画pass合計（ms） | GPU compute合計（ms） | CPU controller（ms） | field更新 / 40frame |
+| --- | ---: | ---: | ---: | ---: |
+| 640×360・静止OFF | 0.185139 | 0 | 0.005625 | 0 |
+| 640×360・静止ON | 0.303514 | 0 | 0.225250 | 0 |
+| 1280×720・静止ON | 0.332698 | 0 | 0.207125 | 0 |
+| 640×360・変形ON | 0.303770 | 0.162048 | 0.505500 | 40 |
+| 1280×720・変形ON | 0.336384 | 0.166502 | 0.496625 | 40 |
+
+近距離区間を延ばした後のcomputeは初版の約0.14msから約0.16〜0.17msとなった。格子・サンプル数・6 dispatch/frame・材質参照数は増やしていないが、探索距離を変えるためproducerの実費用が完全に同じとはしない。静止時のfield再利用は維持する。低性能PC・密な実モデルの性能保証ではなく、所有者の実モデルでの見た目の了承は再確認待ち。
+
+全unitは**225ファイル・1,383件成功**、全lintと`typecheck:critical`も成功。通常typecheckは既知547件で、初版baselineから行・列を正規化して比較した追加は0件。範囲のpadding・morph/world・黒面と材質変更、非表示/再表示、未使用材質の誤検出、preset判定、距離区間、理由表示をunitで確認した。対象GPU E2Eは性能5・設定1・visibility1・輸送3の10件が成功し、赤/黒/texture・光への遮蔽・Luminous/天空遮蔽との分離・保存/Undo/キー/backend・PNGの回帰を確認した。
+
+最終の非表示/再表示修正後、設定E2Eを`MMD_RC_GI_SETTINGS_WEBM=1`で、visibility E2Eと併せて再実行し、2件成功した。自動描画を停止したcaptureと隔離WebM rendererでも、enabled/strengthキーのOFF/ON差、PNGとの一致条件、GPU validationを確認した（`webm-final.txt` / `webm-final-images/`）。
+
+途中の暗所テストでは、ライトYのGUI操作時に他軸の値も更新され、意図した`[-1,0,0]`ではなく`[+0.39,0,+0.65]`になっていた。これは反射元の受光側を照らさない条件であり、初版の微小な赤増分や新区間での0を、意図した暗所照明の改善・回帰の比較には使えない。3軸すべてをGUIで明示設定し、保存されたライト値をassertする条件へ直して再検証した。記録先は`local-references/rc-diffuse-gi-finish-2026-10-30/`、`e2e-final.txt` / `final-images/`、`performance/*.json`、`unit-final.txt`、`lint-final.txt`、`typecheck-final.txt`、`critical-final.txt`。
+
+## 初版の検証履歴（89f5659、仕上げ修正前）
 
 配布可能な[専用fixture](../test/fixtures/rc-diffuse-gi-stage/README.md)とGUI E2Eを使用し、ユーザー所有モデルは検証に使っていない。2026-10-30、全unitは**221ファイル・1,349件成功**、全lintと`typecheck:critical`も成功した。最終の反射率・ライト・pluginのunit 3ファイル12件も成功。通常typecheckは既知547件で失敗するが、天空遮蔽の最終baselineと行・列を正規化して比較した追加は0件。記録は`local-references/rc-diffuse-gi-2026-10-30/`の`unit-first.txt`、`unit-final-focused.txt`、`lint-final.txt`、`typecheck-final.txt`。
 
@@ -107,7 +148,7 @@ GUIで赤・黒・texture付き赤の3条件を実行し、3件が成功した�
 
 検証中には設定E2Eの全画面平均が小さいGI寄与を薄めたため受光面のROI判定へ変更し、backend切替のrenderer再起動待ちを修正した。Vite optimizer cacheの競合による504もあったため、E2E helperへ任意の`MMD_E2E_VITE_CACHE_DIR`を追加して実行中editorとcacheを分離した。上記の成功結果は修正・再検証後の記録で、途中の失敗を成功件数に含めない。
 
-## 性能計測（2026-10-30、fixture確認）
+## 初版の性能計測履歴（2026-10-30、仕上げ修正前）
 
 [性能E2E](../test/e2e/rc-diffuse-gi-performance.spec.mjs)の5条件が成功した。36三角形のオリジナルfixture、同じcameraと固定volume（最小`[-8, -2, -8]`、一辺16）を使い、条件ごとに独立したElectron processで測定した。GPU adapter情報は`vendor=nvidia`、`architecture=ampere`で、device名・descriptionは空欄。診断用deviceでtimestamp-queryを有効にし、**12フレームのwarm-up後の40フレームの算術平均**を記録する。
 

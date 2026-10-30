@@ -1,6 +1,6 @@
 # RC共通基盤・拡散GI・天空遮蔽の実装案
 
-作成日: 2026-10-28。2026-10-30更新。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)は最初の1効果として通常材質・設定/保存・Undo/キー・backend・骨/モーフ・PNG/WebMまで実装し、負荷軽減後のGPU 11件をfixtureで確認した。同日、所有者から実機の見た目・軽さのOKと「これでいったんいい」との判断を得て、今回の天空遮蔽を一区切りとする。密なモデル・低性能PC・physicsなどの未確認条件は残存制約として保留する。その後の依頼により[RC GIの初版](./rc-diffuse-gi-implementation-2026-10-30.md)を実装し、方向光1反射・通常MMD材質・UI/保存/キー・backend・PNG/WebM、静止/骨変形時の費用をfixtureで確認した。所有者の実モデルでのGIの目視確認はこれから。
+作成日: 2026-10-28。2026-10-30更新。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)は最初の1効果として通常材質・設定/保存・Undo/キー・backend・骨/モーフ・PNG/WebMまで実装し、負荷軽減後のGPU 11件をfixtureで確認した。同日、所有者から実機の見た目・軽さのOKと「これでいったんいい」との判断を得て、今回の天空遮蔽を一区切りとする。密なモデル・低性能PC・physicsなどの未確認条件は残存制約として保留する。その後の依頼により[RC GI](./rc-diffuse-gi-implementation-2026-10-30.md)を実装した。初版の「適用中でも効きが薄い」との目視NGに対し、自動範囲・近距離区間・光量・対応材質を修正し、fixtureで寄与改善と費用を確認した。所有者の実モデルでの再確認は待ち。
 
 所有者の「おすすめ設定で実装案を書いて、ドキュメントとして置く」という依頼に基づく。[応用と共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を実装単位へ具体化する。その後の実装依頼により、[段階Aのscene/BVH共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ着手した。以下は当初の推奨案を含む設計記録であり、現在の構成・初期値・UI・検証結果は[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)と[GI](./rc-diffuse-gi-implementation-2026-10-30.md)の実装メモを正本とする。GIと天空/LuminousのGPU source/field共有は未実装で、共通source実装を独立所有している。
 
@@ -58,6 +58,8 @@
 
 範囲は「現在のシーンから範囲を再計算」と数値編集で変更できる。初期計算は最大軸の長さへ両端10%ずつの余白を付ける案とし、空シーンでは未設定のまま準備待ちにする。巨大ステージを自動で細かく照らせるとは扱わず、セル幅を診断表示し、受け取り範囲の調整を可能にする。数値・空bounds・非有限値の正規化をpure helperで扱う。
 
+2026-10-30のGI仕上げ修正では、MMD loaderが拡張した描画用boundsを使わず、対象subMeshのindexが参照する変形済みworld頂点へ20%の余白を付けて自動範囲を決める。反射率0と判定できる黒い材質は範囲から除くが、遮蔽物からは除かない。mesh・geometry・対象材質・subMesh index範囲の変更で再計算し、毎frameのposeには追従しない。固定volumeが保存されていても対象材質がなければ適用中にしない。このGI固有の修正を天空遮蔽・Luminousの範囲規則へ一括適用しない。
+
 **光場を配置する範囲と、遮蔽物の収集範囲を分ける。** BVHは画面外・volume外を含むシーンの対象opaque形状を保持する。新しい照明のalpha-test/透過は未対応と明示し、既存Luminousの材質選択規則を共有化のついでに変更しない。
 
 天空visibilityは、最後の区間が有限距離でmissしただけで1にしない。対象scene boundsの外まで遮蔽物がないことを調べる。上限超過・不完全な入力は「空が見える」と置換せず、そのconsumerを中立化して理由を診断する。範囲外の受け手はGI寄与0・天空補正なしとする。範囲境界の2セルを目安とする連続的な遷移は後続課題で、今回の材質接続には未実装。既存Luminousのvolume/range計算はそのまま保持する。
@@ -97,10 +99,14 @@ flowchart TD
 | 成分 | 入力・意味 | 適用先 |
 | --- | --- | --- |
 | emission | 現在のLuminous材質の発光色。2Dとの色合わせを維持 | 既存Luminous RCの合成のみ |
-| directBounce | 非発光の反射成分も含むsurfaceの`albedo / π × メイン方向光の直接照度`。light方向の遮蔽を含む | RC GIの拡散寄与 |
+| directBounce | surfaceの`albedo × lightColor × max(dot(normal, directionToLight), 0)`。既存MMDの方向光の強度規約とlight方向の遮蔽を使う | RC GIの拡散寄与 |
 | skyVisibility | 空方向への通過率。既存の発光RGBとは別 | 対応する環境光・通常MMDの影側残光の抑制 |
 
 GIのrayが当たった面ではworld法線、UV付き反射率、直接光を評価する。初期版はhitで直接評価する参照実装から始め、費用を測ってsurface sourceのcache/事前集計を比較する。画面内G-bufferだけを反射入力にすると画面外の面を失うため、それを唯一の入力にしない。完成色、Bloom、前回のGI、既存Luminous RCの合成結果をsourceへ戻さない。
+
+初版は物理的なLambert反射の`/π`をsourceへ入れていたが、仕上げ修正では同じ除算をしないStandard/MMD直射の強度規約に合わせて除いた。cos正規化した6軸fieldはそのまま保持し、既定強度0.5も変更しない。初版は二重π除算のバグではなく、変更後もdisplay-spaceのToon直射とlinear加算のGIが物理的・視覚的に完全一致するわけではない。距離区間はGI専用とし、最細格子の4セルを最初の区間で評価する。材質の8probe固定参照と近傍2三角形の接続遮蔽を維持し、画素ごとのBVH探索は追加しない。
+
+対応するMmdStandardMaterialのopaque presetは通常MMD / Light and Shadow / Stage Standard / Accessory Toon / OBJ Untextured / OBJ MTLへ広げる。Luminousはdiffuse反射元だけに含める。外部shaderや特殊lighting経路は一括対応とせず、対象外を維持する。強度0とメイン方向光の光量0には理由表示を追加するが、「適用中」を見える光量の保証とは扱わない。
 
 この分担では、発光面から直接届く寄与はLuminous RC、方向光を面で1回反射した寄与はRC GIが担当する。同じ発光面でも方向光を反射する成分は別であり、emissionをGIのsourceへ再加算しない。天空による1反射や発光の追加反射は別成分として後続追加する。
 
@@ -174,7 +180,7 @@ SSGIは直前のsceneColorを入力とするためRCの寄与も再度集め得�
 1. **共通基盤・診断（A/B/C）**: 完了した共有化と検証経路を土台にし、天空遮蔽に必要な修正へ範囲を絞る。
 2. **RC天空遮蔽を1効果として仕上げる（D＋天空遮蔽に必要なF、今回完了）**: 任意位置・法線query、通常MMD材質への適用、アプリの操作導線、初期値・保存/読込、Undo/キー、backend切替、同frameの骨/モーフ更新、PNG/WebMを通した。OFF/強度0の旧表示復帰、直射・発光の維持、屋外・庇下の比較と残る制約を実装メモに記録した。
 3. **天空遮蔽をアプリで目視比較する区切り（所有者確認済み）**: アプリ内の入口とON/OFFの比較手順、対象材質・範囲、確認済み項目と残る制約を提示し、2026-10-30に所有者が実機の見た目・軽さを確認して一区切りとした。
-4. **RC GIを1効果として仕上げる（E＋GIに必要なF、初版実装・fixture検証済み）**: 2026-10-30、方向光1反射GIを通常MMD材質・設定→実験設定・保存・Undo/キー・backend・PNG/WebMまで接続した。既定OFF・強度0.5、enabled/strengthのsingletonキー、独立volume。赤/黒/texture・画面外source・光への遮蔽物・光変更、Luminous/天空遮蔽との独立性と3効果同時ONを確認した。静止時field更新0、骨付き遮光板の変形時更新とGPU/CPU費用を記録。アプリで目視比較できる区切りとし、実モデル・低性能PC・morph/physicsのGI描画比較は未確認として[実装メモ](./rc-diffuse-gi-implementation-2026-10-30.md)へ残す。
+4. **RC GIを1効果として仕上げる（E＋GIに必要なF、修正・fixture検証済み、実機再確認待ち）**: 2026-10-30、方向光1反射GIを通常MMD材質・設定→実験設定・保存・Undo/キー・backend・PNG/WebMまで接続した。目視NGへの仕上げで、自動範囲、GI専用距離区間、MMD方向光の強度規約、対応preset、寄与0の理由表示を修正。既定OFF・強度0.5、singletonキー、独立volume、16³格子は維持する。通常照明・直接光のない床・Stage Standard、固定/自動範囲、保存・出力・静止/変形時費用を検証し、低性能PCや実モデルへ一般化しない数値を[実装メモ](./rc-diffuse-gi-implementation-2026-10-30.md)へ記録した。
 
 効果を実装する際は、材質・render順序に未解決の制約があれば対象範囲と完了条件を明示し、内部計算だけを複数効果へ広げない。今回の天空遮蔽では既知の近似誤差と未確認条件を残存制約として保留し、所有者が確認した区切りを完了とする。採用済みのprobe照度事前集計を超える変更、疎なprobe、GPU変形/refit、反射・媒質は、必要が生じた時の別の比較単位とする。
 

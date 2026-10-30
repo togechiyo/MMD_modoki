@@ -111,7 +111,9 @@ fn giLocalRadiance(origin: vec3f, ray: vec3f) -> vec4f {
     let shadow = giTrace(position + normal * bias, params.lightDirection.xyz, 0.0, 1e30, hit.index, true);
     if (shadow.valid == 0u) { return vec4f(0.0, 0.0, 0.0, -1.0); }
     if (shadow.index != MISS) { return vec4f(0.0); }
-    return vec4f(albedo.rgb * params.lightColor.rgb * (cosine / PI), 0.0);
+    // Match the existing Standard/MMD direct-light intensity convention (no /PI).
+    // The receiving cosine integral is already normalized; strength stays artistic.
+    return vec4f(albedo.rgb * params.lightColor.rgb * cosine, 0.0);
 }
 fn giParent(position: vec3f, angular: vec2u, grid: u32, columns: u32, rows: u32) -> vec4f {
     let coordinate = clamp((position - params.volumeMin.xyz) / params.volumeSize.xyz * f32(grid) - 0.5, vec3f(0.0), vec3f(f32(grid - 1u)));

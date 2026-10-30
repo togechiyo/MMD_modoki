@@ -7,6 +7,8 @@ const REASON_KEYS: Readonly<Record<string, string>> = {
     "Multiple / rig cameras": "cameras",
     "PrePass": "prePass",
     "Main directional light": "mainLight",
+    "Zero strength": "zeroStrength",
+    "No direct light": "noDirectLight",
     "対象の通常MMD材質を読み込んでください": "noMaterials",
 };
 
@@ -16,7 +18,7 @@ export function getRcDiffuseGiUiState(settings: RcDiffuseGiSettings, diagnostics
     const reason = diagnostics.reason?.replace(/\s+/g, " ").trim() ?? "";
     const translatedReason = REASON_KEYS[reason] ? translate(`experiment.rcDiffuseGi.reason.${REASON_KEYS[reason]}`) : reason;
     const shortReason = translatedReason.length > 120 ? `${translatedReason.slice(0, 119)}…` : translatedReason;
-    const showReason = diagnostics.status === "preparing" || diagnostics.status === "unsupported" || diagnostics.status === "error";
+    const showReason = diagnostics.status !== "off";
     return {
         automaticVolume: settings.volume === null,
         volume: volume ? { min: [...volume.min] as [number, number, number], size: volume.size } : null,

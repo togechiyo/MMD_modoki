@@ -8,6 +8,7 @@ import { isRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
 import { RcDiffuseGiField } from "./rc-diffuse-gi-field";
 import { registerMmdRadianceDiffuseGi, type MmdRadianceDiffuseGiView } from "./mmd-radiance-diffuse-gi-plugin";
 import type { RcDiffuseGiSettings, RcDiffuseGiVolume } from "./rc-diffuse-gi-settings";
+import { fitRcDiffuseGiVolume, getRcDiffuseGiVolumeMembership } from "./rc-diffuse-gi-volume";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcDiffuseGiDiagnostics = {
@@ -50,9 +51,12 @@ export class RcDiffuseGiController {
     }
 
     public get diagnostics(): RcDiffuseGiDiagnostics {
+        const materials = new Set(this.receivers().flatMap(mesh => mesh.subMeshes.flatMap(sub => {
+            const material = sub.getMaterial(); return material && this.acceptsMaterial(material) ? [material] : [];
+        })));
         return { status: this.status, reason: this.reason, volume: this.settings().volume ?? this.automaticVolume,
             triangleCount: this.field?.source.bvh.triangleCount ?? 0, fieldRevision: this.fieldRevision,
-            supportedMaterialCount: this.scene.materials.filter(this.acceptsMaterial).length };
+            supportedMaterialCount: materials.size };
     }
 
     private receivers(): Mesh[] {
@@ -65,20 +69,9 @@ export class RcDiffuseGiController {
         });
     }
 
-    /** Receiver bounds only: an offscreen distant blocker must not enlarge the sampling volume. */
+    /** Pose geometry only; culling margins and nonreceiving submeshes do not consume probes. */
     public fitVolume(meshes = this.receivers()): RcDiffuseGiVolume | null {
-        const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
-        for (const mesh of meshes) {
-            mesh.computeWorldMatrix(true);
-            const bounds = mesh.getBoundingInfo().boundingBox;
-            const min = bounds.minimumWorld.asArray(), max = bounds.maximumWorld.asArray();
-            if (![...min, ...max].every(Number.isFinite)) continue;
-            for (let axis = 0; axis < 3; axis++) { low[axis] = Math.min(low[axis], min[axis]); high[axis] = Math.max(high[axis], max[axis]); }
-        }
-        if (!low.every(Number.isFinite)) return null;
-        const size = Math.max(1, ...high.map((value, axis) => value - low[axis])) * 1.2;
-        if (size > 100000) return null;
-        return { min: low.map((value, axis) => (value + high[axis] - size) / 2) as [number, number, number], size };
+        return fitRcDiffuseGiVolume(meshes, this.acceptsMaterial);
     }
 
     public settingsChanged(): void {
@@ -93,10 +86,11 @@ export class RcDiffuseGiController {
 
     private resolveVolume(): RcDiffuseGiVolume | null {
         const receivers = this.receivers();
-        const membership = receivers.map(mesh => `${mesh.uniqueId}:${mesh.geometry?.uniqueId}`).join(",");
+        const membership = getRcDiffuseGiVolumeMembership(receivers, this.acceptsMaterial);
         // PMX receives geometry, materials and its enabled state in separate async steps.
-        // Refitting membership changes supports loading without chasing every pose.
+        // Also refit changed receiving surfaces, without chasing every pose or positive color edit.
         if (membership !== this.receiverMembership) { this.automaticVolume = null; this.receiverMembership = membership; }
+        if (!receivers.length) return null;
         return this.settings().volume ?? (this.automaticVolume ??= this.fitVolume(receivers));
     }
 
@@ -159,6 +153,9 @@ export class RcDiffuseGiController {
             if (!this.pending && this.status !== "error") void this.prewarm();
             return;
         }
+        if (settings.strength <= 0) {
+            this.view = null; this.status = "ready"; this.reason = "Zero strength"; this.frameId = -1; return;
+        }
         const field = this.field, frameId = this.scene.getFrameId();
         if (this.frameId === frameId) return;
         try {
@@ -168,6 +165,9 @@ export class RcDiffuseGiController {
             if (!field.source.ready || !field.graph.isReady()) { this.view = null; this.status = "preparing"; return; }
             const light = readRcDiffuseGiLight(this.mainLight());
             if (!light) { this.view = null; this.status = "unsupported"; this.reason = "Main directional light"; return; }
+            if (light.color.every(value => value <= 0)) {
+                this.view = null; this.status = "ready"; this.reason = "No direct light"; this.frameId = -1; return;
+            }
             const volumeKey = JSON.stringify(volume), lightKey = JSON.stringify(light);
             const update = field.source.revision !== this.sourceRevision || volumeKey !== this.volumeKey || lightKey !== this.lightKey;
             if (update) {

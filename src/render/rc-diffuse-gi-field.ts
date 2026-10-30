@@ -12,6 +12,7 @@ import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
 import { SKY_NEAREST_SURFACE_WGSL } from "./radiance-sky-nearest-surface-shaders";
 import { RC_DIFFUSE_GI_CASCADE_WGSL } from "./rc-diffuse-gi-shaders";
 import { RC_DIFFUSE_GI_GRID, RC_DIFFUSE_GI_IRRADIANCE_WGSL } from "./rc-diffuse-gi-irradiance";
+import { createRcDiffuseGiIntervals } from "./rc-diffuse-gi-intervals";
 import { readRcDiffuseGiReflectance } from "./rc-diffuse-gi-source";
 import type { RcDiffuseGiLight } from "./rc-diffuse-gi-light";
 
@@ -27,11 +28,13 @@ export class RcDiffuseGiField {
     private readonly tasks: FrameGraphComputeShaderTask[] = [];
     private readonly textures: RawTexture[] = [];
     private volume: Volume;
+    private intervals: ReturnType<typeof createRcDiffuseGiIntervals>;
     private light: RcDiffuseGiLight = { directionToLight: [0, 1, 0], color: [0, 0, 0] };
     private disposed = false;
 
     constructor(scene: Scene, options: { volume: Volume; acceptsMaterial?: (material: Material) => boolean }) {
         this.volume = options.volume;
+        this.intervals = createRcDiffuseGiIntervals(options.volume.size);
         this.graph = new FrameGraph(scene); this.graph.name = "rcDiffuseGi";
         this.source = new LuminousRadianceSceneSource(scene, () => null,
             material => !material.needAlphaTesting() && !material.needAlphaBlending(),
@@ -73,11 +76,11 @@ export class RcDiffuseGiField {
                 task.onTexturesAllocatedObservable.add(bind);
                 task.execute = () => {
                     bind();
-                    const volume = this.volume, scale = volume.size / 9;
+                    const volume = this.volume, interval = this.intervals[i];
                     params.updateFloat4("volumeMin", ...volume.min, 0);
                     params.updateFloat4("volumeSize", volume.size, volume.size, volume.size, 0);
                     params.updateFloat4("shape", layout.grid, layout.directionsX, layout.directionsY, this.source.bvh.triangleCount);
-                    params.updateFloat4("interval", layout.start * scale, layout.end * scale, i < layouts.length - 1 ? 1 : 0, 0);
+                    params.updateFloat4("interval", interval.start, interval.end, i < layouts.length - 1 ? 1 : 0, 0);
                     params.updateFloat4("lightDirection", ...this.light.directionToLight, 0);
                     params.updateFloat4("lightColor", ...this.light.color, 0);
                 };
@@ -121,7 +124,10 @@ export class RcDiffuseGiField {
         } catch (error) { this.dispose(); throw error; }
     }
 
-    public setVolume(volume: Volume): void { this.volume = volume; }
+    public setVolume(volume: Volume): void {
+        this.volume = volume;
+        this.intervals = createRcDiffuseGiIntervals(volume.size);
+    }
 
     public execute(light: RcDiffuseGiLight, updateField = true): number {
         if (!updateField || this.disposed) return 0;

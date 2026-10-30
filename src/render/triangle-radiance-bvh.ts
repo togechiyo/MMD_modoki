@@ -2,12 +2,23 @@
 // 96 MB at this ceiling, below WebGPU's default 128 MiB storage binding limit.
 export const MAX_RADIANCE_TRIANGLES = 1000000;
 export const RADIANCE_TRIANGLE_STRIDE = 24;
+// Match the existing stack traversal: push left then right, so visit right first.
+// info.y is the node to visit after this subtree; -1 terminates the traversal.
+export function threadRadianceBvh(nodes: Float32Array, index = 0, escape = -1): void {
+    const offset = index * 12;
+    nodes[offset + 9] = escape;
+    if (nodes[offset + 7] === 0) {
+        const left = nodes[offset + 3], right = nodes[offset + 8];
+        threadRadianceBvh(nodes, right, left);
+        threadRadianceBvh(nodes, left, escape);
+    }
+}
 export function radianceTriangleBudget(maxStorageBufferBindingSize: number, maxBufferSize: number): number {
     return Math.min(MAX_RADIANCE_TRIANGLES, Math.floor(Math.min(maxStorageBufferBindingSize, maxBufferSize)
         / (RADIANCE_TRIANGLE_STRIDE * Float32Array.BYTES_PER_ELEMENT)));
 }
 export class TriangleRadianceBvh {
-    public nodes = new Float32Array(12);
+    public nodes = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0]);
     public triangles = new Float32Array(RADIANCE_TRIANGLE_STRIDE);
     public triangleCount = 0;
     private order: number[] = [];
@@ -62,6 +73,8 @@ export class TriangleRadianceBvh {
             };
             if (count) build(0, count);
             this.nodes = new Float32Array(Math.max(12, nodes.length)); this.nodes.set(nodes);
+            if (count) threadRadianceBvh(this.nodes);
+            else this.nodes[9] = -1;
             this.triangles = new Float32Array(Math.max(stride, input.length));
         }
         for (let index = 0; index < count; index++) this.triangles.set(input.subarray(this.order[index] * stride, (this.order[index] + 1) * stride), index * stride);

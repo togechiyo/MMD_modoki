@@ -9,6 +9,29 @@ function geometry(count: number, shift = 0): Float32Array {
     }).flat());
 }
 
+function verifyEscapes(nodes: Float32Array): void {
+    const nodeCount = nodes.length / 12;
+    for (let skipped = -1; skipped < nodeCount; skipped++) {
+        const expected: number[] = [];
+        const visit = (index: number): void => {
+            expected.push(index);
+            if (nodes[index * 12 + 7] === 0 && index !== skipped) {
+                visit(nodes[index * 12 + 8]); visit(nodes[index * 12 + 3]);
+            }
+        };
+        visit(0);
+        const actual: number[] = [];
+        let index = 0;
+        while (index >= 0) {
+            if (!Number.isInteger(index) || index >= nodeCount || actual.length >= nodeCount) throw new Error("Invalid BVH escape or cycle");
+            actual.push(index);
+            index = nodes[index * 12 + 7] === 0 && index !== skipped ? nodes[index * 12 + 8] : nodes[index * 12 + 9];
+        }
+        expect(index).toBe(-1);
+        expect(actual).toEqual(expected);
+    }
+}
+
 function verifyTree(bvh: MeshRadianceBvh, inputs: Float32Array[]): void {
     const visited = new Set<number>(), leaves: number[] = [];
     const visit = (index: number): void => {
@@ -40,9 +63,29 @@ function verifyTree(bvh: MeshRadianceBvh, inputs: Float32Array[]): void {
     const records = (arrays: Float32Array[]): string[] => arrays.flatMap(array => Array.from({ length: array.length / STRIDE },
         (_, index) => JSON.stringify(Array.from(array.subarray(index * STRIDE, (index + 1) * STRIDE))))).sort();
     expect(records([bvh.triangles])).toEqual(records(inputs));
+    verifyEscapes(bvh.nodes);
 }
 
 describe("mesh radiance acceleration updates", () => {
+    it("keeps cross-mesh escapes valid when packed order differs from tree order and one BLAS is refitted", () => {
+        const right = { key: {}, triangles: geometry(17, 300) };
+        const left = { key: {}, triangles: geometry(33, -300) };
+        const middle = { key: {}, triangles: geometry(9) };
+        const bvh = new MeshRadianceBvh();
+        bvh.update([right, left, middle]);
+        const mirror = bvh.nodes.slice();
+        const escapes = bvh.nodes.filter((_, index) => index % 12 === 9);
+        verifyTree(bvh, [right.triangles, left.triangles, middle.triangles]);
+        for (const shift of [-600, 600, -100]) {
+            left.triangles = geometry(33, shift);
+            const changes = bvh.update([right, left, middle]);
+            for (const range of changes.nodes) mirror.set(range.data, range.byteOffset / 4);
+            expect(mirror).toEqual(bvh.nodes);
+            expect(bvh.nodes.filter((_, index) => index % 12 === 9)).toEqual(escapes);
+            verifyTree(bvh, [right.triangles, left.triangles, middle.triangles]);
+            verifyEscapes(mirror);
+        }
+    });
     it("uploads color-only changes without a BLAS/TLAS refit while invalidating the source bounds", () => {
         const source = { key: {}, geometryVersion: {}, triangles: geometry(21, -100) };
         const stage = { key: {}, geometryVersion: {}, triangles: geometry(200, 1000) };
@@ -116,7 +159,10 @@ describe("mesh radiance acceleration updates", () => {
             const changes = bvh.update(inputs);
             expect(changes.triangles).toHaveLength(1); expect(changes.nodes).toHaveLength(1);
             if (inputs.length) verifyTree(bvh, inputs.map(input => input.triangles));
-            else { expect(bvh.triangleCount).toBe(0); expect(bvh.triangles.every(value => value === 0)).toBe(true); }
+            else {
+                expect(bvh.triangleCount).toBe(0); expect(bvh.triangles.every(value => value === 0)).toBe(true);
+                expect(bvh.nodes[9]).toBe(-1);
+            }
         }
         bvh.update([a, b]); a.triangles = geometry(33, 800);
         bvh.update([a, b]); verifyTree(bvh, [a.triangles, b.triangles]);

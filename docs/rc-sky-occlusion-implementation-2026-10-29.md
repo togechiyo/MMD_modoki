@@ -1,6 +1,6 @@
 # RC 天空遮蔽: 通常MMD材質・設定・キーの実装
 
-作成日: 2026-10-29。状態: **最初の1効果として実装・fixture検証済み。通常材質・設定/キー・変形・PNG/WebMを確認。ユーザーによる実モデルの目視評価と大規模PMXの性能確認は未実施**。
+作成日: 2026-10-29。更新日: 2026-10-30。状態: **実使用の負荷NGを受け、5方向集計＋probe近傍2三角形の接続遮蔽を実装し、fixtureでの性能比較と最終GPU 11件を確認した。集計だけの案で失った低屋根への反応を回復し、静止時のGPU描画費用を削減した。過暗化などの近似誤差は残り、密な実モデル・低〜中性能PCでの実機評価とphysics追従は未確認**。
 
 [RC実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)の段階Dと、天空遮蔽に必要な操作・保存経路をまとめた最初の1効果。GIは今回追加しない。[固定床の診断](./radiance-cascades-sky-visibility-validation-2026-10-29.md)と[再構成比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)の結果を、そのまま通常材質や実モデルでの成功として扱わない。
 
@@ -25,15 +25,21 @@ Classic・Frame Graph全体OFFでは値とキーを保持して計算を休止�
 
 ## 計算と材質への接続
 
-[専用controller](../src/render/rc-sky-occlusion-controller.ts)が、pose確定後・active mesh評価前の共通hookからsourceを更新する。source revisionまたは範囲が変わったとき、描画前の専用FrameGraphでvisibility fieldを再計算する。静止fieldは再利用し、強度は材質のquery側へ渡す。画面の完成色や当該frameのdepthをproducer入力にしない。
+[専用controller](../src/render/rc-sky-occlusion-controller.ts)が、pose確定後・active mesh評価前の共通hookからsourceを更新する。source revisionまたは範囲が変わったとき、描画前の専用FrameGraphでvisibility fieldと材質用の集計textureを再計算する。静止fieldは再利用し、強度は材質のquery側へ渡す。画面の完成色や当該frameのdepthをproducer入力にしない。dirtyなfieldの実行後に`engine.flushFramebuffer()`でGPU処理を提出する境界は維持し、CPU待機やreadbackは追加しない。
 
 fieldは4段、probe grid `16³ / 8³ / 4³ / 2³`、方向数 `32 / 128 / 512 / 2048`。発光RGBと別のalpha通過率を保持し、最遠区間は対象sceneのBVH root boundsを抜けるまで調べる。遮蔽物はfield範囲外・画面外も収集する。Luminousのsource実装を再利用するが、現段階の天空field/sourceは独立所有であり、既存LuminousとのGPU資源共有・費用削減を達成したとは扱わない。
 
-[材質query](../src/render/mmd-radiance-sky-query-wgsl.ts)は任意のworld位置・法線で、world上半球16方向を法線とのcos重みで積分する。各方向で範囲一辺の半分を近距離として直接探索し、遮蔽がなければ終点のfieldを補間する。終点が範囲外なら同じrayをscene boundsの出口まで直接探索する。probe接続線分による除外は使わない。固定床textureのXZ投影は行わない。
+2026-10-30の軽減実装では、`materialIrradiance`指定時に4 cascadeの後ろへ集計と近傍三角形の2 taskを追加した。[集計shader](../src/render/radiance-sky-irradiance-shaders.ts)がbase gridの各probeについて上半球16方向を読み、`+X / -X / +Y / +Z / -Z`の5軸それぞれの正のcos重みで正規化したvisibilityを作る。`16³` probeを1 probeあたり2 texelへ詰め、`32×256 / RGBA16F`へ保存する。
 
-負のfield値・不正な探索・無効法線・有効な半球重みなし・受け手が範囲外の場合は、材質の補正を行わない。真下を向く法線も中立となる。無効値を「空が見えた」という検証結果へ読み替えない。
+[近傍surface shader](../src/render/radiance-sky-nearest-surface-shaders.ts)は各probeから半径`√3 × cell幅`内の近い2三角形を探し、ID+1をRG、validityをBへ保存する。0のIDは候補なしを表す。`16×256 / RGBA32F`とし、100万三角形の上限内ではIDを正確に保持できる。追加textureの画素payloadは集計64 KiB＋近傍surface64 KiB＝**計128 KiB**であり、既存field・BVH等を含む総メモリ量ではない。通常の天空遮蔽はdirty時に4 cascade＋集計＋近傍探索の6 taskを実行し、静止時には再利用する。診断labはこれら2 taskを使わず従来の方向別fieldを保つ。
 
-[MaterialPlugin](../src/render/mmd-radiance-sky-occlusion-plugin.ts)はBabylon 9.2のWGSL storage buffer bindingを利用し、各drawのhard bindでBVHとfieldを更新する。対応する通常Toonの影側残光だけを分離し、次の係数でfinalDiffuseへの入力を抑える。
+近傍探索はBVH nodeの既存`info.y`（float offset 9）に置くescape先を使い、stackなしで右優先に辿る。nodeのbyte数は増やさない。CPU側は再構築時に木全体を接続し、meshごとのrefitでBLASを再配置するときも外側へのescapeを保持する。sourceの収集・CPU変形・geometry更新方式は維持する。
+
+[材質query](../src/render/mmd-radiance-sky-query-wgsl.ts)は任意のworld位置・法線から、近隣8 probeを最大3 textureLoadずつ読み、各probeにつき近傍2三角形との線分交差を検査する。上限は**24 textureLoad＋16個の固定三角形判定**であり、材質内でBVH探索を行わない。法線の各軸への正の成分を二乗し、集計に用いた軸ごとのcos重み総和を掛けて5方向を正規化合成する。空間重みには三線形補間とsurface前方のprobeを優先する係数を使う。接続が遮られたprobeは分母の重みを残して寄与を0とし、全probeが屋根の上にある場合に明るい値へ再正規化されることを防ぐ。これは近距離16方向を直接追う旧方式とは異なる近似であり、固定床textureのXZ投影は行わない。
+
+集計元の16方向に無効値があるprobeは別のvalidity値で無効化し、材質補間から除外する。近傍候補なしはvalidity=1、探索異常は0と区別し、明るいprobeの接続判定に無効な候補集合を使わない。有効なprobe重みが残らない、無効法線、元の上半球16方向に寄与する方向がない、受け手が範囲外の場合は材質の補正を行わない。真下を向く法線も中立となる。無効値を「空が見えた」という検証結果へ読み替えない。
+
+[MaterialPlugin](../src/render/mmd-radiance-sky-occlusion-plugin.ts)は各drawのhard bindで集計texture・近傍surface texture・三角形bufferと範囲・強度・最低残光を渡し、BVH node bufferは材質へbindしない。対応する通常Toonの影側残光だけを分離し、次の係数でfinalDiffuseへの入力を抑える。
 
 ```text
 skyFactor = 1 - strength * (1 - (minimum + (1 - minimum) * visibility))
@@ -42,17 +48,20 @@ adjustedDiffuseBase = diffuseBase - shadowResidual * (1 - skyFactor)
 
 初期値では完全遮蔽時の係数が0.4になる。これは演出値で、物理的な残留光の推定ではない。元の`diffuseBase`はsphere合成へ残し、emissive・specular・直射明部・明部boostへ天空係数を重ねない。独立ambient加算や半球光全体を遮蔽する実装ではない。通常MMDのambient→diffuse合成は維持する。
 
-providerの無効化後もpluginは中立texture/bufferを参照でき、scene破棄時にfallbackを解放する。静的OFFでONキーもない場合とbackend離脱時にはfield公開を止めて資源を解放し、非同期構築中の世代変更でも古い資源を再公開しない。ONになるbase/keyがある場合はOFF区間でも資源を保持し、再生・出力開始前にfieldと材質・出力passの準備完了を待つ。途中のONフレームは当該poseで同期更新してから描画する。
+providerの無効化後もpluginは中立textureとdummy三角形bufferを参照でき、scene破棄時にfallbackを解放する。静的OFFでONキーもない場合とbackend離脱時にはfield公開を止めて資源を解放し、非同期構築中の世代変更でも古い資源を再公開しない。ONになるbase/keyがある場合はOFF区間でも資源を保持し、再生・出力開始前にfieldと材質・出力passの準備完了を待つ。途中のONフレームは当該poseで同期更新してから描画する。
+
+この変更は材質用の参照方式、任意の2 taskとBVHのescape metadataに限定し、UI、初期値、保存形式、キーの契約は変更していない。taskの接続は[公式Frame Graph Task List](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/frameGraph/frameGraphClassFramework/frameGraphTaskList.md)のcompute task説明と、ローカルBabylon **9.2.0**の`FrameGraph/Tasks/Misc/computeShaderTask.js`を照合した。`FrameGraphComputeShaderTask`のtexture binding、dispatch、実行前の更新とtask破棄の契約を使い、独立したGPU実行経路を追加しない。
 
 ## 対象と残る制約
 
-通常材質の初期GPU確認では、補間の8tap重み合計がFloat32誤差で1を超え、中立へ戻る画素が点状ノイズとなった。重み合計による正規化とclampで解消を確認した。比較用の一定係数ではノイズがなく、受光面からray原点をずらす試験では改善しなかったため、そのbiasは採用していない。壁面に残る大きな段階状の陰影は16方向の近似による制約であり、現段階では滑らかな高品質GIとして扱わない。
+2026-10-29の変更前方式の初期GPU確認では、補間の8tap重み合計がFloat32誤差で1を超え、中立へ戻る画素が点状ノイズとなった。重み合計による正規化とclampで解消を確認した。比較用の一定係数ではノイズがなく、受光面からray原点をずらす試験では改善しなかったため、そのbiasは採用していない。これは変更前の調査履歴であり、新しい5方向集計方式の画質保証とはしない。
 
 - WebGPUかつFrame Graph有効、単一の通常カメラを対象とする。scene custom render target、複数・rig camera、PrePass構成では休止する。RSM GI等による追加render targetとの併用も、この休止条件を確認する。
 - 受け手はopaqueな`MmdStandardMaterial`の通常MMD / Light and Shadow。PBR、特殊preset、外部WGSL、透明・alpha-test、lightmap、diffuse Fresnel、照明無効材質は対象外。通常Standard材質用adapterは追加していない。
 - 透明・alpha-testを正確に透過する天空輸送、天空色、方向光の反射GIは未対応。天空の明るさは一様という近似である。
-- 少数方向と粗いfieldの再構成誤差は残る。[段階CのY=4屋根残差・有限屋根の高密度参照誤差](./radiance-cascades-sky-reconstruction-2026-10-29.md)が、今回の材質接続で解決したとは扱わない。受け手の範囲境界には計画した連続fadeをまだ入れておらず、境界をまたぐと補正が切り替わる。
-- 各fragmentで最大16方向のBVH探索とfield参照を行う。範囲外終点のdirect fallbackもあるため、床64×64の計測から通常解像度・大規模PMXの速度を推定しない。sourceのCPU変形とSDEF/QDEF、instance/thin instance等の一致は個別確認が必要。
+- 粗いprobeの空間補間と5方向の法線近似による誤差は残る。2候補の接続遮蔽は低屋根の取り逃しを抑える一方、遮られたprobeを暗く扱うため、屋根端・窓際の過暗化やhaloがあり得る。最終比較でも旧16方向queryより暗くなる条件を確認した。候補は別triangle indexの2件だけで、同一平面の2三角形が枠を使う場合もあり、3番目以降の面の遮蔽は取り逃し得る。
+- 近距離直接探索＋終点field参照の旧方式とは異なる近似であり、[段階Cの屋根・高密度参照比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)の精度を維持する保証はない。低屋根fixtureの成功を、密な実モデル・薄壁全般での品質確認へ広げない。
+- 受け手の範囲境界には計画した連続fadeをまだ入れておらず、境界をまたぐと補正が切り替わる。集計textureの参照が軽くなったことだけから、アプリ全体の速度向上を断定しない。sourceのCPU変形・BVH更新と4 cascadeの費用は残り、SDEF/QDEF、instance/thin instance等の一致も個別確認が必要。
 - 自動boundsは表示meshのboundsに依存する。静的boundsを大きく離れるbone/morph、広大なステージでは、受け取り範囲とprobe密度を確認する。表示された対象材質数は各fragmentの有効性や品質を保証しない。
 
 ## fixtureでの比較手順
@@ -67,6 +76,8 @@ providerの無効化後もpluginは中立texture/bufferを参照でき、scene�
 6. 同じframe・cameraでPNGを出力し、previewと庇下の差を比較する。キー付き短尺WebMと変形fixtureも別途確認する。この静的fixtureだけでは骨・morph・physicsの追従確認を代替しない。
 
 ## 検証記録
+
+以下は**2026-10-29の変更前方式**に対する検証記録である。設定・保存・出力の契約の参照として残すが、2026-10-30の5方向集計方式の画質・性能・全経路の成功へ読み替えない。新方式の確認結果は後述の性能比較・再検証欄へ分ける。
 
 2026-10-29、全unitは212ファイル・1,316件成功、全lint成功。`typecheck:critical`は成功し、通常typecheckは既知547件で失敗したが、行・列番号を正規化した既存baselineとの追加差分は0件。`TS2304` / `TS2552`もない。`smoke:launch`はElectronのrenderer初期化と`engine=WebGPU`まで成功した。記録は`local-references/rc-sky-effect-verification/`の`unit-final.txt`、`lint-final.txt`、`typecheck-import-test-fix.txt`、`typecheck-export-gate.txt`、`smoke-final.txt`。
 
@@ -86,3 +97,45 @@ WebMの初回比較では、0/20/40/60フレームのOFF区間のMAEが約0.39�
 修正は、**sourceまたはvolumeが変わってfieldを再計算した場合だけ、`field.execute()`直後に`engine.flushFramebuffer()`でGPU処理を提出する**局所的な境界とした。CPU待機・readbackは追加せず、同じfieldを再利用する描画ではflushしない。この修正後、ON区間のPNG対WebMのMAEは20フレームで約0.4035、60フレームで約0.4049まで改善し、OFF区間の約0.393と同程度になった。decode画像の比較と強化したテストの成功を確認した。調査ログは`e2e-flush-trial.txt`。Babylon内部のどの状態が初回の差を生んだかまでは分離できておらず、確認済みなのはこの提出境界による出力差の解消である。
 
 送信境界の修正後も、全lintと`typecheck:critical`は成功し、通常typecheckは同じ既知547件・追加0件だった（`lint-final-flush.txt`、`typecheck-final-flush.txt`）。これにより、通常材質・操作・保存・Undo/キー・backend・骨/モーフ・PNG/WebMをfixtureで確認した最初の1効果として区切る。ユーザーによるアプリ上の実モデル目視評価、physicsを含む変形追従、通常解像度・大規模PMXでの全体性能は別の未確認事項として残す。
+
+## 実機負荷の報告と次回の作業
+
+2026-10-29、実装提示後に所有者から「さすがに重すぎるので次回は負荷軽減やるか」と報告があった。操作可能な実装とfixture検証の区切りは達成したが、実使用の負荷はNGとして扱い、次回は天空遮蔽の負荷軽減を優先する。使用シーン・解像度・FPS・支配的な処理は未計測であり、画質の了承や特定の原因の確定とは扱わない。
+
+2026-10-29は報告と次回方針の記録のみとした。2026-10-30、所有者は[低〜中性能PCのアマチュアMMD利用者向けに軽量でシンプルな既定動作](./mmd-project-positioning-note.md#想定利用者と既定動作2026-10-30-所有者指定)を重視すると明示し、天空遮蔽の負荷軽減への着手を指定した。GIなど新しい効果への展開より先に扱う。
+
+2026-10-30は5方向集計＋2候補の接続遮蔽を実装し、固定fixtureの静止・変形再生についてGPU render/computeとCPU source更新を分けて計測した。光漏れ・過暗化・動く遮蔽物・OFF復帰・PNG/WebMも比較した。次の確認は密な実モデル、想定する低〜中性能PC、physicsを含む動作であり、CPUの変形・BVH更新、field更新、材質query、全体frame timeを分けて評価する。全体の数値目標は未決定で、今回のfixture結果を実使用の負荷NG解消や所有者による画質了承とは扱わない。
+
+## 負荷軽減の性能比較・再検証（2026-10-30）
+
+**近傍候補のvalidityを含む最終構成で、GPU 11件が成功した。** 静止ONのGPU render pass合計の中央値は次のとおり。単位はms。
+
+| 解像度 | 変更前・静止ON | 最終・静止ON | OFF参考値（変更前 / 先行確認） |
+| --- | ---: | ---: | ---: |
+| 640×360 | 11.515904 | 0.401408 | 0.204800 / 0.185344 |
+| 1280×720 | 13.450240 | 0.448512 | 0.221184 / 0.220160 |
+
+OFFは最終batchで再計測しておらず、変更前と先行確認の約0.2msを参考として併記する。最終の変形ONは、各項目の中央値を個別に記録した。
+
+| 解像度 | GPU render（ms） | GPU compute（ms） | CPU source更新（ms） | field更新 / 測定frame |
+| --- | ---: | ---: | ---: | ---: |
+| 640×360 | 0.409600 | 0.401408 | 0.160 | 60 / 60 |
+| 1280×720 | 0.456704 | 0.403456 | 0.175 | 60 / 60 |
+
+84三角形のオリジナルfixture、同じcameraと固定範囲を使い、条件ごとに独立processで12 frameのwarm-up後に60 frameを測った。GPUはadapter情報が`nvidia / ampere`の実機で、診断用timestamp queryを有効化した。GPU render値は**描画pass合計の中央値**であり、アプリ全体のframe time、RCだけの費用、低性能PCでのFPSではない。CPU source更新もアプリ全体のCPU時間ではない。静止測定中はfield更新とcompute dispatchが0回で、初期生成・変形追従の費用を含まない。変形ONの変更前測定は計測後のPNGで診断timerの終了処理が失敗したため、正式な前後比較から除外する。最終4条件のGPU validationはすべて0件だった。
+
+全unit 213ファイル・1,320件、lint、`typecheck:critical`が成功し、通常typecheckは既知547件・追加0件。最終GPU 11件の内訳は性能4件、低屋根1件、通常材質1件、骨/モーフ1件、設定/保存/backend/WebM1件、診断lab2件、Luminous共有scene回帰1件で、6.1分で成功した。設定復元と自動再描画OFFの直接PNGは各基準画像との差0。WebMと対応PNGのMAEは0/20/40/60フレームでそれぞれ0.3932 / 0.4015 / 0.3954 / 0.4039だった。骨対等価モーフのMAEは0.00046、逆seekは0.00260で、各GPU validationは0件。
+
+最終の低屋根比較では、receiver上面のON/OFF画像の暗化差が、開放時28.71に対しgap 0.2 cellで132.33となり、集計だけの案で失われた遮蔽反応を回復した。この条件のCPU16方向参照visibilityは0。ただし暗化差は8bit RGBの差で、visibilityの線形推定値ではない。gap 0.5 / 0.9 cellでも132.33となり、旧16方向queryの約119.02 / 115.67より暗い。45度回転を含むPNGもagentが目視確認し、既定強度の表示と強度1で狭い隙間が黒くなる状態を確認した。過暗化を含む近似として扱い、正確な天空遮蔽や所有者の画質了承とはしない。
+
+最終記録は`local-references/rc-sky-performance-2026-10-30/`の`final-e2e.txt`、`final/`（性能4条件のJSON）、`final-images/`（各E2EのPNG・report）に保持する。以下の試行履歴も同directory配下に残す。
+
+### 比較履歴: 集計のみ・stacklessのみ
+
+5方向の集計だけを使う最初の案は、640×360の静止ONが0.248832ms、1280×720が0.270336msまで低下した。しかしgap 0.2 cellの上面暗化差は約28.58で開放時28.71とほぼ同じになり、低屋根の遮蔽を取り逃した。このため通常経路の案として採用しない。性能記録は`preintegrated-results/`、品質画像は`preintegrated-recheck-images/`に残す。0.25msなどの値を現在の構成の成功値として使わない。
+
+次に旧16方向の近距離queryを保ち、fragmentの64要素stackをCPU escape linkによるstackless探索へ変えた試行は、640×360の静止ONが10.054656msだった。変更前11.515904msに対する削減は約13%に留まり、今回求める軽減には不足と判断した。性能と低屋根比較は`stackless-trial-images/`に残す。escape metadataは現在のdirty時近傍探索へ再利用している。
+
+集計のみの段階では、全unit 213ファイル・1,319件、lint、`typecheck:critical`が成功し、通常typecheckは既知547件・追加0件だった。通常材質・骨/モーフ・診断lab2件・設定/保存/backend/WebMの計5 E2Eも成功し、WebMの対応PNGとのMAEは約0.393〜0.395だった。これは当該試作の操作・出力経路の記録であり、低屋根の品質や現在の接続遮蔽付き構成の最終成功を意味しない。ログは`unit-full.txt`、`lint.txt`、`typecheck-critical.txt`、`prototype-visual.txt`、`after-e2e.txt`に保持する。
+
+途中の変形ON計測では、区間内のvalidationは0件だったが、計測後のPNGで破棄済みQuerySet参照が出た。Babylon 9.2.0の共有compute pass descriptorにtimestampWritesが残る経路を確認し、診断用timingの終了処理を修正した。低屋根比較の最初のキー対象選択も修正して再実行した。上記の最終batchでは出力まで成功したが、終了処理に失敗した変更前の変形計測は正式比較に使わない。

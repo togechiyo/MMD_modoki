@@ -67,7 +67,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 段階Dの通常MMD材質adapterについて、残光のみの補正、ambient/sphere/発光を保つ境界、binding・無効化と検証条件を整理（[実装前の接続調査](./radiance-cascades-material-adapter-plan-2026-10-29.md)）
 - [ ] 任意world位置・法線の天空visibility queryの漏れ・負荷を継続比較する。query接続と通常材質fixtureのGPU描画は確認済み。固定床64×64結果のXZ投影は使わず、残る方向誤差と屋根Y=4の再構成残差、高解像度での費用を確認する（[実装範囲と限界](./rc-sky-occlusion-implementation-2026-10-29.md#対象と残る制約)）
 - [x] RC天空遮蔽を最初の1エフェクトとして材質・UI・初期値・保存/読込・Undo/キー・backend切替・骨/モーフ・PNG/WebMまで実装しfixtureで検証。通常の設定→実験設定、lighting保存、enabled/strengthのsingletonキーを接続し、対象GPU 5件を確認。WebMの暗化差はdirty field提出境界で解消し、PNGとの絶対MAE<1で再検証（[実装・検証・ON/OFF比較手順](./rc-sky-occlusion-implementation-2026-10-29.md)、[D＋天空遮蔽に必要なF](./radiance-cascades-lighting-implementation-plan-2026-10-28.md#8-効果単位の実装順と完了条件)）
-- [ ] RC天空遮蔽のユーザー実モデルでの目視評価、physics追従と大規模PMXの性能を確認する。少数方向の階調・範囲境界・対象材質の制約を[実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md)と照合する。
+- [x] RC天空遮蔽の局所的な負荷軽減を実装しfixtureで検証。2026-10-30、5方向集計＋probe近傍2三角形の接続遮蔽で低屋根への反応を保ち、84三角形の静止GPU描画pass中央値は640×360で11.52→0.40ms、1280×720で13.45→0.45ms。最終GPU 11件、unit 1,320件、lint・critical gateを確認。全体FPSの改善とは扱わない（[計測条件・比較履歴](./rc-sky-occlusion-implementation-2026-10-29.md#負荷軽減の性能比較再検証2026-10-30)）。
+- [ ] **RC天空遮蔽の実使用評価を継続。** 密な実モデル・低〜中性能PCでの全体性能とphysics追従を確認する。低屋根への反応は回復したが、2候補による取り逃し、屋根端・窓際の過暗化、5方向近似の誤差は残る。fixture成功を所有者の負荷NG解消や画質了承としない（[実装範囲と限界](./rc-sky-occlusion-implementation-2026-10-29.md#対象と残る制約)）。
 - [ ] 天空遮蔽をアプリで目視比較できる区切りの後に、方向光1反射のRC GIを材質・UI・保存・出力まで仕上げる。Luminousの寄与分離と天空遮蔽併用を確認する（[E＋GIに必要なF](./radiance-cascades-lighting-implementation-plan-2026-10-28.md#8-効果単位の実装順と完了条件)。agentの提案順で、GI完成を意味しない）
 - [x] 現行 Luminous RC と WebGPU の最適化を調査。不要な field 補間、発光と形状の更新分離、probe 照度集計、GPU timestamp の有効化条件と次の比較条件を記録（[調査メモ](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)。実装変更・新規性能計測は未実施）
 - [x] Frame Graph の通常 Luminous と Luminous RC を別個体・別task群へ分離。RC単独の資源、独立したenabledキー、旧保存値の移行を実装（[分離メモ](./framegraph-luminous-rc-separation-2026-10-25.md)）

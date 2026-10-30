@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/radiance-cascades
 confidence: high
-last_verified: 2026-10-29
+last_verified: 2026-10-30
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-10-29
@@ -12,6 +12,7 @@ evidence:
   - conversation-explicit-instruction
 source_docs:
   - ../../docs/radiance-cascades-lighting-implementation-plan-2026-10-28.md
+  - ../../docs/rc-sky-occlusion-implementation-2026-10-29.md
 superseded_by: null
 ---
 
@@ -27,6 +28,10 @@ RC共通基盤の後に、天空遮蔽・GIなどの派生効果の作業単位�
 
 天空遮蔽を先に進める順序や、UI・保存・出力を含む具体的な完了条件は、参照先のagent実装計画として扱う。この指示だけから個別方式の採用や実装完了を推定しない。
 
+2026-10-29の追加指定では、次回は天空遮蔽の負荷軽減を優先する。これは次の作業順の指定であり、具体的な最適化方式や性能目標への了承ではない。実機負荷の報告内容と未計測事項は実装メモへ分離して記録する。
+
+2026-10-30に負荷軽減への着手が指定された。[軽量なリアルタイムMMDの既定動作](./prioritize-lightweight-realtime-mmd-defaults.md)を設計条件にし、GIなど次の効果への展開より先に扱う。完了済み・性能改善済みという意味にはしない。
+
 ## 避けること
 
 - 複数効果の内部計算だけを先に広げ、アプリ上で比較できる効果がないまま進める。
@@ -37,6 +42,10 @@ RC共通基盤の後に、天空遮蔽・GIなどの派生効果の作業単位�
 ## 根拠
 
 2026-10-29、所有者はアプリから確認できる1エフェクト単位で完成させ、目視しやすい進め方にするよう明示した。これは開発の区切りに関する選択であり、天空遮蔽やGIの実装結果を確認した証拠ではない。
+
+同日、天空遮蔽の実装提示後に所有者は「次回は負荷軽減やるか」と次の作業を指定した。
+
+2026-10-30、所有者は想定利用者とPCに沿う軽量な既定動作を明示し、天空遮蔽の負荷軽減へ着手するよう指定した。
 
 ## 再確認条件
 

@@ -174,8 +174,9 @@ export class RcSkyOcclusionController {
                 }
                 this.sourceRevision = field.source.revision; this.volumeKey = volumeKey; this.fieldRevision++;
             }
-            this.view = { field: field.baseField, triangles: field.source.triangleBuffer, nodes: field.source.nodeBuffer,
-                triangleCount: field.source.bvh.triangleCount, volume, nearDistance, strength: settings.strength, minimum: settings.minimum };
+            this.view = field.irradianceField && field.nearestSurfaceField
+                ? { field: field.irradianceField, nearestSurface: field.nearestSurfaceField, triangles: field.source.triangleBuffer,
+                    volume, strength: settings.strength, minimum: settings.minimum } : null;
             this.frameId = frameId; this.status = "ready"; this.reason = null;
         } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
@@ -196,7 +197,7 @@ export class RcSkyOcclusionController {
         const generation = ++this.generation;
         let candidate: RadianceSkyVisibilityField | null = null;
         try {
-            candidate = new RadianceSkyVisibilityField(this.scene, { volume, diagnostic: false, opaqueOccludersOnly: true });
+            candidate = new RadianceSkyVisibilityField(this.scene, { volume, diagnostic: false, opaqueOccludersOnly: true, materialIrradiance: true });
             this.pending = candidate;
             const cancelled = new Promise<void>(resolve => { this.cancelPending = resolve; });
             await Promise.race([candidate.graph.buildAsync(), cancelled]);

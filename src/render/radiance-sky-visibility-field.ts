@@ -10,6 +10,8 @@ import { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
 import { SKY_VISIBILITY_CASCADE_WGSL, SKY_VISIBILITY_DIAGNOSTIC_WGSL } from "./radiance-sky-visibility-shaders";
 import { DEFAULT_SKY_RECONSTRUCTION, type SkyVisibilityReconstruction } from "./radiance-sky-reconstruction";
+import { SKY_IRRADIANCE_GRID, SKY_IRRADIANCE_INTEGRATE_WGSL } from "./radiance-sky-irradiance-shaders";
+import { SKY_NEAREST_SURFACE_WGSL } from "./radiance-sky-nearest-surface-shaders";
 
 export const SKY_VISIBILITY_VOLUME = { min: [-8, 0, -8] as const, size: 16, planeY: 0.05, resolution: 64 };
 export type SkyVisibilityBounds = { min: readonly [number, number, number]; size: number };
@@ -32,6 +34,8 @@ export class RadianceSkyVisibilityField {
     public readonly output: RawTexture;
     public readonly display: RawTexture;
     public readonly baseField: RawTexture;
+    public readonly irradianceField: RawTexture | null = null;
+    public readonly nearestSurfaceField: RawTexture | null = null;
     private readonly tasks: FrameGraphComputeShaderTask[] = [];
     private readonly textures: RawTexture[] = [];
     private displayMode = 0;
@@ -40,7 +44,7 @@ export class RadianceSkyVisibilityField {
     private volume: SkyVisibilityBounds;
     private readonly diagnostic: boolean;
 
-    constructor(scene: Scene, options: { volume?: SkyVisibilityBounds; diagnostic?: boolean; opaqueOccludersOnly?: boolean } = {}) {
+    constructor(scene: Scene, options: { volume?: SkyVisibilityBounds; diagnostic?: boolean; opaqueOccludersOnly?: boolean; materialIrradiance?: boolean } = {}) {
         this.volume = options.volume ?? SKY_VISIBILITY_VOLUME;
         this.diagnostic = options.diagnostic ?? true;
         this.graph = new FrameGraph(scene);
@@ -98,6 +102,46 @@ export class RadianceSkyVisibilityField {
                 const layout = layouts[i], parent = fields[i + 1];
                 addTask(`skyVisibilityCascade${i}`, SKY_VISIBILITY_CASCADE_WGSL, "parentField", "outputField", parent ?? dummy, fields[i],
                     [layout.grid, layout.directionsX, layout.directionsY], [layout.start, layout.end, parent ? 1 : 0]);
+            }
+            if (options.materialIrradiance) {
+                const grid = SKY_IRRADIANCE_GRID;
+                const irradiance = allocate("skyVisibilityIrradiance", grid * 2, grid * grid, Constants.TEXTURETYPE_HALF_FLOAT);
+                this.irradianceField = irradiance.texture;
+                const integrate = new FrameGraphComputeShaderTask("skyVisibilityIrradiance", this.graph,
+                    { computeSource: SKY_IRRADIANCE_INTEGRATE_WGSL }, { bindingsMapping: {
+                        directionalField: { group: 0, binding: 0 }, irradiance: { group: 0, binding: 1 },
+                    } });
+                this.tasks.push(integrate); this.graph.addTask(integrate);
+                integrate.dispatchSize = new Vector3(Math.ceil(grid / 4), Math.ceil(grid / 4), Math.ceil(grid / 4));
+                integrate.dependencies = new Set([fields[0].handle, irradiance.handle]);
+                integrate.onTexturesAllocatedObservable.add(() => {
+                    integrate.setInternalTexture("directionalField", fields[0].internal);
+                    integrate.setInternalTexture("irradiance", irradiance.internal);
+                });
+                const nearest = allocate("skyVisibilityNearestSurface", grid, grid * grid, Constants.TEXTURETYPE_FLOAT);
+                this.nearestSurfaceField = nearest.texture;
+                const guard = new FrameGraphComputeShaderTask("skyVisibilityNearestSurface", this.graph,
+                    { computeSource: SKY_NEAREST_SURFACE_WGSL }, { bindingsMapping: {
+                        params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 },
+                        nodes: { group: 0, binding: 2 }, nearestSurface: { group: 0, binding: 3 },
+                    } });
+                this.tasks.push(guard); this.graph.addTask(guard);
+                const params = guard.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4 });
+                guard.dispatchSize = new Vector3(Math.ceil(grid / 4), Math.ceil(grid / 4), Math.ceil(grid / 4));
+                guard.dependencies = new Set([nearest.handle]);
+                const bind = () => {
+                    guard.setStorageBuffer("triangles", this.source.triangleBuffer);
+                    guard.setStorageBuffer("nodes", this.source.nodeBuffer);
+                    guard.setInternalTexture("nearestSurface", nearest.internal);
+                };
+                guard.onTexturesAllocatedObservable.add(bind);
+                guard.execute = () => {
+                    bind();
+                    const volume = this.volume;
+                    params.updateFloat4("volumeMin", ...volume.min, 0);
+                    params.updateFloat4("volumeSize", volume.size, volume.size, volume.size, 0);
+                    params.updateFloat4("shape", grid, 0, 0, this.source.bvh.triangleCount);
+                };
             }
             if (this.diagnostic) addTask("skyVisibilityDiagnostic", SKY_VISIBILITY_DIAGNOSTIC_WGSL, "baseField", "output", fields[0], output,
                 [16, 8, 4], [SKY_VISIBILITY_VOLUME.planeY, diagnosticSize, diagnosticSize], false);

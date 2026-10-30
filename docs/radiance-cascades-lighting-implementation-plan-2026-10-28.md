@@ -169,6 +169,8 @@ SSGIは直前のsceneColorを入力とするためRCの寄与も再度集め得�
 
 具体的な実行順は次のとおり。
 
+2026-10-29の天空遮蔽提示後、所有者から実使用の負荷NGと次回の負荷軽減の意向が示された。2026-10-30には、[低〜中性能PCのアマチュアMMD利用者向けの軽量でシンプルな既定動作](./mmd-project-positioning-note.md#想定利用者と既定動作2026-10-30-所有者指定)を設計条件として、負荷軽減への着手が指定された。agentは5方向集計＋probe近傍2三角形の接続遮蔽を実装し、固定fixtureの性能比較と最終GPU 11件を確認した。密な実モデル・低〜中性能PC・physicsの実使用評価は残り、下記4のGI展開より先に扱う。性能の数値目標は未設定で、fixture成功を所有者の画質了承とは扱わない（[実機報告と比較範囲](./rc-sky-occlusion-implementation-2026-10-29.md#実機負荷の報告と次回の作業)）。
+
 1. **共通基盤・診断（A/B/C）**: 完了した共有化と検証経路を土台にし、天空遮蔽に必要な修正へ範囲を絞る。
 2. **RC天空遮蔽を1効果として仕上げる（D＋天空遮蔽に必要なF）**: 任意位置・法線query、通常MMD材質への適用、アプリの操作導線、初期値・保存/読込、Undo/キー、backend切替、同frameの変形更新、PNG/WebMを通す。OFF/強度0の旧表示復帰、直射・発光の維持、屋外・庇下・室内の差と残る制約を確認する。
 3. **天空遮蔽の目視比較ができる区切りを提示する**: アプリ内の入口とON/OFFの比較手順、対象材質・範囲、確認済み項目と残る制約を示す。診断床だけの状態を効果完成として報告しない。
@@ -182,7 +184,7 @@ pure helperの最小テストは共有group生成、consumer増減、normalizati
 
 ローカルElectron/WebGPUのfixtureでは、同条件/異なるrangeのRC複数配置、強度・柔らかさ・合成順、全OFF/削除/再追加、初期OFFキー、Undo/Redo、保存読込、Classic往復、出力解像度変更を確認する。新照明は箱・庇・薄壁・色壁と、配布可能な骨/morph fixtureで調べる。GUI導線はGUI操作で最終状態まで検証し、GPU E2Eはsandbox外のローカル権限で実行する。
 
-静止、camera移動、骨/morph変形、発光だけの変更、直接光だけの変更を分け、CPU prepare/refit/upload、GPU field/再構成/合成、メモリ、全体frame timeの中央値/p95を比較する。GPU timestampを取れない場合はN/Aを残し、submission完了までのwall timeと混ぜない。高速化率の目標値は現在の未測定状態で置かない。
+静止、camera移動、骨/morph変形、発光だけの変更、直接光だけの変更を分け、CPU prepare/refit/upload、GPU field/再構成/合成、メモリ、全体frame timeの中央値/p95を比較する。GPU timestampを取れない場合はN/Aを残し、submission完了までのwall timeと混ぜない。天空遮蔽の2026-10-30の計測条件と結果は[実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md#負荷軽減の性能比較再検証2026-10-30)に記録し、未計測のPC・モデル規模に一般化した高速化率や目標値は置かない。
 
 同じ確定pose・light・設定について、直接seek後と再生後、previewとPNG/WebMの照明を比較する。physics自体の再生履歴差はRC cacheの問題と分ける。共有化A/Bは元画像との一致、新照明は固定fixtureと低解像度の直接ray評価を参照に、暗部・光漏れ・動いた直後の残光を確認する。
 

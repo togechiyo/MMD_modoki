@@ -1,8 +1,8 @@
-import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh } from "./triangle-radiance-bvh";
+import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh, threadRadianceBvh } from "./triangle-radiance-bvh";
 
 // Reuse geometryVersion only when every field except inline emission RGB is unchanged.
 type Input = { key: object; triangles: Float32Array; geometryVersion?: object };
-type Entry = Input & { bvh: TriangleRadianceBvh; triangleOffset: number; nodeOffset: number };
+type Entry = Input & { bvh: TriangleRadianceBvh; triangleOffset: number; nodeOffset: number; escape: number };
 export type RadianceBufferRange = { byteOffset: number; data: Float32Array };
 type Changes = { triangles: RadianceBufferRange[]; nodes: RadianceBufferRange[] };
 const NODE_STRIDE = 12;
@@ -10,7 +10,7 @@ const NODE_STRIDE = 12;
 // Mesh inputs are immutable chunks. Only a changed mesh is refitted/repacked; the top tree
 // joins ordinary BLAS roots, so the GPU still traverses one tree starting at node zero.
 export class MeshRadianceBvh {
-    public nodes = new Float32Array(NODE_STRIDE);
+    public nodes = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0]);
     public triangles = new Float32Array(RADIANCE_TRIANGLE_STRIDE);
     public triangleCount = 0;
     public changedMin = [Infinity, Infinity, Infinity];
@@ -38,7 +38,7 @@ export class MeshRadianceBvh {
                     if (old && input.geometryVersion && input.geometryVersion === old.geometryVersion) bvh.updateEmission(input.triangles);
                     else bvh.update(input.triangles);
                 }
-                return { ...input, bvh, triangleOffset: 0, nodeOffset: 0 };
+                return { ...input, bvh, triangleOffset: 0, nodeOffset: 0, escape: -1 };
             });
             this.topCount = Math.max(0, this.entries.length - 1);
             let triangleOffset = 0, nodeOffset = this.topCount;
@@ -74,10 +74,20 @@ export class MeshRadianceBvh {
             for (let offset = nodeOffset; offset < nodeOffset + entry.bvh.nodes.length; offset += NODE_STRIDE) {
                 if (this.nodes[offset + 7]) this.nodes[offset + 3] += entry.triangleOffset;
                 else { this.nodes[offset + 3] += entry.nodeOffset; this.nodes[offset + 8] += entry.nodeOffset; }
+                const escape = this.nodes[offset + 9];
+                this.nodes[offset + 9] = escape < 0 ? entry.escape : escape + entry.nodeOffset;
             }
             changes.nodes.push(this.range(this.nodes, nodeOffset, entry.bvh.nodes.length));
         }
         if (rebuild && this.topCount) this.buildTop();
+        if (rebuild) {
+            if (count) {
+                threadRadianceBvh(this.nodes);
+                // Refit copies local BLAS nodes again. Retain the outer continuation for
+                // every local -1 escape, including the complete terminal path of a BLAS.
+                for (const entry of this.entries) entry.escape = this.nodes[entry.nodeOffset * NODE_STRIDE + 9];
+            } else this.nodes[9] = -1;
+        }
         if ((rebuild || refitted.size) && this.topCount) {
             for (let node = this.topCount - 1; node >= 0; node--) {
                 const offset = node * NODE_STRIDE, left = this.nodes[offset + 3] * NODE_STRIDE, right = this.nodes[offset + 8] * NODE_STRIDE;

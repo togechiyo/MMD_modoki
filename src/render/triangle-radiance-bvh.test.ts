@@ -8,6 +8,30 @@ function geometry(count: number, shift = 0): Float32Array {
     }).flat());
 }
 
+function verifyEscapes(nodes: Float32Array): void {
+    const nodeCount = nodes.length / 12;
+    // Skip each subtree in turn, as a ray missing its bounds would do.
+    for (let skipped = -1; skipped < nodeCount; skipped++) {
+        const expected: number[] = [];
+        const visit = (index: number): void => {
+            expected.push(index);
+            if (nodes[index * 12 + 7] === 0 && index !== skipped) {
+                visit(nodes[index * 12 + 8]); visit(nodes[index * 12 + 3]);
+            }
+        };
+        visit(0);
+        const actual: number[] = [];
+        let index = 0;
+        while (index >= 0) {
+            if (!Number.isInteger(index) || index >= nodeCount || actual.length >= nodeCount) throw new Error("Invalid BVH escape or cycle");
+            actual.push(index);
+            index = nodes[index * 12 + 7] === 0 && index !== skipped ? nodes[index * 12 + 8] : nodes[index * 12 + 9];
+        }
+        expect(index).toBe(-1);
+        expect(actual).toEqual(expected);
+    }
+}
+
 describe("world triangle radiance BVH", () => {
     it("supports dense scenes within both enabled device limits and a bounded ceiling", () => {
         expect(radianceTriangleBudget(128 * 1024 * 1024, 256 * 1024 * 1024)).toBe(1000000);
@@ -38,6 +62,7 @@ describe("world triangle radiance BVH", () => {
             };
             visit(0);
             expect(visited.sort((a, b) => a - b)).toEqual(Array.from({ length: 21 }, (_, index) => index));
+            verifyEscapes(bvh.nodes);
         }
     });
     it("clears stale emitters when topology becomes empty", () => {
@@ -45,6 +70,17 @@ describe("world triangle radiance BVH", () => {
         expect(bvh.triangleCount).toBe(0);
         expect(bvh.triangles.every(value => value === 0)).toBe(true);
         expect(bvh.nodes.every(Number.isFinite)).toBe(true);
+        expect(bvh.nodes[9]).toBe(-1);
+    });
+    it("threads a single leaf and preserves escape links through deformation", () => {
+        const bvh = new TriangleRadianceBvh();
+        expect(bvh.nodes[9]).toBe(-1);
+        for (const count of [1, 8, 9, 33]) {
+            bvh.update(geometry(count)); verifyEscapes(bvh.nodes);
+            const escapes = bvh.nodes.filter((_, index) => index % 12 === 9);
+            bvh.update(geometry(count, -300)); verifyEscapes(bvh.nodes);
+            expect(bvh.nodes.filter((_, index) => index % 12 === 9)).toEqual(escapes);
+        }
     });
     it("updates only emission through the existing sort order without refitting or changing other triangle fields", () => {
         const input = geometry(21), bvh = new TriangleRadianceBvh(), reference = new TriangleRadianceBvh();

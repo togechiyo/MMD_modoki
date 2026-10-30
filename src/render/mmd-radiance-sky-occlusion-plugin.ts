@@ -4,7 +4,6 @@ import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { StorageBuffer } from "@babylonjs/core/Buffers/storageBuffer";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
-import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import type { Material } from "@babylonjs/core/Materials/material";
 import type { MaterialDefines } from "@babylonjs/core/Materials/materialDefines";
 import type { UniformBuffer } from "@babylonjs/core/Materials/uniformBuffer";
@@ -16,12 +15,12 @@ import { MMD_RADIANCE_SKY_QUERY_WGSL, MMD_RADIANCE_SKY_BEFORE_LIGHTS_WGSL,
     MMD_RADIANCE_SKY_FINAL_DIFFUSE_PATTERN, MMD_RADIANCE_SKY_FINAL_DIFFUSE_PATCH } from "./mmd-radiance-sky-query-wgsl";
 
 export type MmdRadianceSkyOcclusionView = Readonly<{
-    field: BaseTexture; triangles: StorageBuffer; nodes: StorageBuffer; triangleCount: number;
+    field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer;
     volume: { min: readonly [number, number, number]; size: number };
-    strength: number; minimum: number; nearDistance: number;
+    strength: number; minimum: number;
 }>;
 type Registration = { provider: () => MmdRadianceSkyOcclusionView | null; acceptsMaterial: (material: Material) => boolean };
-type Fallback = { field: RawTexture; triangles: StorageBuffer; nodes: StorageBuffer };
+type Fallback = { field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer };
 const fallbacks = new WeakMap<Scene, Fallback>();
 const plugins = new WeakMap<MmdStandardMaterial, MmdRadianceSkyOcclusionPlugin>();
 
@@ -29,24 +28,25 @@ function fallbackFor(scene: Scene): Fallback {
     const previous = fallbacks.get(scene);
     if (previous) return previous;
     const engine = scene.getEngine() as WebGPUEngine;
-    const field = RawTexture.CreateRGBATexture(new Uint8Array([0, 0, 0, 255]), 1, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE);
+    const field = RawTexture.CreateRGBATexture(new Uint8Array([255, 255, 255, 255]), 1, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE);
     field.name = "rcSkyNeutralField";
-    const triangles = new StorageBuffer(engine, 96), nodes = new StorageBuffer(engine, 48);
-    triangles.update(new Float32Array(24)); nodes.update(new Float32Array(12));
-    const fallback = { field, triangles, nodes }; fallbacks.set(scene, fallback);
+    const nearestSurface = RawTexture.CreateRGBATexture(new Uint8Array(4), 1, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE);
+    nearestSurface.name = "rcSkyNeutralSurface";
+    const triangles = new StorageBuffer(engine, 96);
+    triangles.update(new Float32Array(24));
+    const fallback = { field, nearestSurface, triangles }; fallbacks.set(scene, fallback);
     // Plugins remain installed after a registration is released. Their neutral bindings
     // must outlive the lighting provider and can be released with the scene itself.
     scene.onDisposeObservable.addOnce(() => {
-        fallbacks.delete(scene); field.dispose(); triangles.dispose(); nodes.dispose();
+        fallbacks.delete(scene); field.dispose(); nearestSurface.dispose(); triangles.dispose();
     });
     return fallback;
 }
 
 function usableView(view: MmdRadianceSkyOcclusionView | null): view is MmdRadianceSkyOcclusionView {
-    return view !== null && view.field.isReady() && Boolean(view.triangles.getBuffer()) && Boolean(view.nodes.getBuffer())
-        && Number.isInteger(view.triangleCount) && view.triangleCount >= 0
-        && [view.volume.size, ...view.volume.min, view.strength, view.minimum, view.nearDistance].every(Number.isFinite)
-        && view.volume.size > 0 && view.strength > 0 && view.nearDistance >= 0;
+    return view !== null && view.field.isReady() && view.nearestSurface.isReady() && Boolean(view.triangles.getBuffer())
+        && [view.volume.size, ...view.volume.min, view.strength, view.minimum].every(Number.isFinite)
+        && view.volume.size > 0 && view.strength > 0;
 }
 
 class MmdRadianceSkyOcclusionPlugin extends MaterialPluginBase {
@@ -61,7 +61,7 @@ class MmdRadianceSkyOcclusionPlugin extends MaterialPluginBase {
     public override prepareDefines(defines: MaterialDefines): void {
         (defines as MaterialDefines & { RC_SKY_OCCLUSION: boolean }).RC_SKY_OCCLUSION = true;
     }
-    public override getSamplers(samplers: string[]): void { samplers.push("rcSkyField"); }
+    public override getSamplers(samplers: string[]): void { samplers.push("rcSkyField", "rcSkyNearestSurface"); }
     public override getUniforms(): { ubo: Array<{ name: string; size: number; type: string }> } {
         return { ubo: [{ name: "rcSkyVolume", size: 4, type: "vec4" }, { name: "rcSkyControl", size: 4, type: "vec4" }] };
     }
@@ -79,10 +79,11 @@ class MmdRadianceSkyOcclusionPlugin extends MaterialPluginBase {
         const source = view ?? this.fallback;
         buffer.updateFloat4("rcSkyVolume", ...(view?.volume.min ?? [0, 0, 0]) as [number, number, number], view?.volume.size ?? 1);
         buffer.updateFloat4("rcSkyControl", view ? Math.min(1, view.strength) : 0,
-            view ? Math.min(1, Math.max(0, view.minimum)) : 1, view?.nearDistance ?? 0, view?.triangleCount ?? 0);
+            view ? Math.min(1, Math.max(0, view.minimum)) : 1, 0, 0);
         buffer.setTexture("rcSkyField", source.field);
+        buffer.setTexture("rcSkyNearestSurface", source.nearestSurface);
         const gpu = engine as WebGPUEngine;
-        gpu.setStorageBuffer("rcSkyTriangles", source.triangles); gpu.setStorageBuffer("rcSkyNodes", source.nodes);
+        gpu.setStorageBuffer("rcSkyTriangles", source.triangles);
     }
     public override getCustomCode(type: string): Record<string, string> | null {
         return type === "fragment" ? {

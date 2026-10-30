@@ -1,8 +1,40 @@
 # RC 天空遮蔽: 通常MMD材質・設定・キーの実装
 
-作成日: 2026-10-29。更新日: 2026-10-30。状態: **実使用の負荷NGを受け、5方向集計＋probe近傍2三角形の接続遮蔽を実装し、fixtureでの性能比較と最終GPU 11件を確認した。集計だけの案で失った低屋根への反応を回復し、静止時のGPU描画費用を削減した。過暗化などの近似誤差は残り、密な実モデル・低〜中性能PCでの実機評価とphysics追従は未確認**。
+作成日: 2026-10-29。更新日: 2026-10-30。状態: **軽量化後の実装を所有者が実機で確認し、見た目・軽さともにOK。天空遮蔽は今回の実装でいったん完了とする。** 5方向集計＋probe近傍2三角形の接続遮蔽を採用し、fixtureでの性能比較と最終GPU 11件も確認済み。既知の近似誤差と未確認条件は下記に残す。
 
 [RC実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)の段階Dと、天空遮蔽に必要な操作・保存経路をまとめた最初の1効果。GIは今回追加しない。[固定床の診断](./radiance-cascades-sky-visibility-validation-2026-10-29.md)と[再構成比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)の結果を、そのまま通常材質や実モデルでの成功として扱わない。
+
+## 実装の概要
+
+庇下・壁際などで空が見えにくい部分を調べ、通常MMD材質の**影側に残る明るさ**を抑える。直射の明部・発光・specular・sphereを保ち、画面外の遮蔽物も計算に含める。完成色へのPostFXではなく、描画前の専用FrameGraphで作った天空visibilityを材質から参照する照明機能である。
+
+```text
+評価済みpose → scene geometry / BVH更新
+  → sourceまたは範囲が変わったときだけ専用FrameGraphを実行
+    → 4段の天空visibility → 5方向集計 ＋ probe近傍2三角形
+  → 通常MMD材質が近隣8 probeを参照し、影側残光だけを補正
+```
+
+重かった画素ごとのBVH探索を外し、5方向への集計と近傍三角形の探索をfield更新時へ移した。材質側は最大24 textureLoad＋16個の固定三角形判定に収め、静止時はfieldを再利用する。集計・近傍情報の追加textureは計128 KiBの画素payload。小規模fixtureの静止GPU描画pass中央値は640×360で11.52→0.40ms、1280×720で13.45→0.45msとなった。計測範囲と動的更新の費用は後述する。
+
+| 担当 | 主な実装 |
+| --- | --- |
+| pose後の更新・dirty判定・資源寿命 | [rc-sky-occlusion-controller.ts](../src/render/rc-sky-occlusion-controller.ts) |
+| scene geometry・CPU変形・BVH source | [luminous-radiance-scene.ts](../src/render/luminous-radiance-scene.ts)（実装を再利用。既存LuminousとのGPU資源共有は未実装） |
+| 専用FrameGraph・texture確保・task接続 | [radiance-sky-visibility-field.ts](../src/render/radiance-sky-visibility-field.ts) |
+| 天空visibility・5方向集計・近傍2候補 | [visibility shader](../src/render/radiance-sky-visibility-shaders.ts)、[集計shader](../src/render/radiance-sky-irradiance-shaders.ts)、[近傍shader](../src/render/radiance-sky-nearest-surface-shaders.ts) |
+| world位置・法線での参照と接続遮蔽 | [mmd-radiance-sky-query-wgsl.ts](../src/render/mmd-radiance-sky-query-wgsl.ts) |
+| 通常MMD材質へのbinding・残光補正・中立化 | [mmd-radiance-sky-occlusion-plugin.ts](../src/render/mmd-radiance-sky-occlusion-plugin.ts) |
+
+通常材質・UI・保存・キー・出力の初回実装は`3196ab1`、軽量化後の構成は`e87e755`。以下を現在の実装の正本とし、当初の設計案や試作の性能値とは区別する。
+
+## 所有者の実機確認と今回の区切り（2026-10-30）
+
+軽量化の提示後、所有者からスクリーンショット2枚とともに「いいルックにいい軽さです。天空遮蔽はこれでいったんいいでしょう。実装をドキュメントにまとめといて」と確認・指示があった。**所有者が試したシーン・実機での見た目と体感負荷はOK**として記録し、天空遮蔽の追加調整はいったん終了する。この区切りの判断は[所有者決定](../insights/decisions/complete-rc-effects-one-at-a-time-for-visual-review.md)にも反映する。
+
+添付画像では同じ構図の壁・庇下などの暗さに差があり、どちらもWebGPU・60 FPS表示を確認できる。ただし設定欄は写っていないため、画像ごとのON/OFFや設定値は断定しない。FPS表示は撮影時点の表示であり、持続性能や天空遮蔽単体の処理時間の計測には使わない。画像やモデル本体はリポジトリへ追加しない。
+
+この確認を全モデル・全PC・physicsの保証には広げない。密なモデルや低〜中性能PCでの定量比較、physics追従、下記の近似誤差は残存制約として保留し、問題の再現や対応範囲を広げる際に再検証する。これらを今回の完了の前提には戻さず、GIなど次の効果は別の作業単位とする。
 
 ## 操作と保存
 
@@ -96,15 +128,15 @@ WebMの初回比較では、0/20/40/60フレームのOFF区間のMAEが約0.39�
 
 修正は、**sourceまたはvolumeが変わってfieldを再計算した場合だけ、`field.execute()`直後に`engine.flushFramebuffer()`でGPU処理を提出する**局所的な境界とした。CPU待機・readbackは追加せず、同じfieldを再利用する描画ではflushしない。この修正後、ON区間のPNG対WebMのMAEは20フレームで約0.4035、60フレームで約0.4049まで改善し、OFF区間の約0.393と同程度になった。decode画像の比較と強化したテストの成功を確認した。調査ログは`e2e-flush-trial.txt`。Babylon内部のどの状態が初回の差を生んだかまでは分離できておらず、確認済みなのはこの提出境界による出力差の解消である。
 
-送信境界の修正後も、全lintと`typecheck:critical`は成功し、通常typecheckは同じ既知547件・追加0件だった（`lint-final-flush.txt`、`typecheck-final-flush.txt`）。これにより、通常材質・操作・保存・Undo/キー・backend・骨/モーフ・PNG/WebMをfixtureで確認した最初の1効果として区切る。ユーザーによるアプリ上の実モデル目視評価、physicsを含む変形追従、通常解像度・大規模PMXでの全体性能は別の未確認事項として残す。
+送信境界の修正後も、全lintと`typecheck:critical`は成功し、通常typecheckは同じ既知547件・追加0件だった（`lint-final-flush.txt`、`typecheck-final-flush.txt`）。これにより、通常材質・操作・保存・Undo/キー・backend・骨/モーフ・PNG/WebMをfixtureで確認した最初の1効果として区切った。この時点では、ユーザーによるアプリ上の実モデル目視評価、physicsを含む変形追従、通常解像度・大規模PMXでの全体性能は未確認だった。後日の所有者確認は前述の欄に分けて記録する。
 
 ## 実機負荷の報告と次回の作業
 
-2026-10-29、実装提示後に所有者から「さすがに重すぎるので次回は負荷軽減やるか」と報告があった。操作可能な実装とfixture検証の区切りは達成したが、実使用の負荷はNGとして扱い、次回は天空遮蔽の負荷軽減を優先する。使用シーン・解像度・FPS・支配的な処理は未計測であり、画質の了承や特定の原因の確定とは扱わない。
+2026-10-29、実装提示後に所有者から「さすがに重すぎるので次回は負荷軽減やるか」と報告があった。操作可能な実装とfixture検証の区切りは達成したが、この時点の実使用の負荷はNGとして扱い、次回は天空遮蔽の負荷軽減を優先することにした。使用シーン・解像度・FPS・支配的な処理は未計測であり、この報告だけを画質の了承や特定の原因の確定とは扱わない。
 
-2026-10-29は報告と次回方針の記録のみとした。2026-10-30、所有者は[低〜中性能PCのアマチュアMMD利用者向けに軽量でシンプルな既定動作](./mmd-project-positioning-note.md#想定利用者と既定動作2026-10-30-所有者指定)を重視すると明示し、天空遮蔽の負荷軽減への着手を指定した。GIなど新しい効果への展開より先に扱う。
+2026-10-29は報告と次回方針の記録のみとした。2026-10-30、所有者は[低〜中性能PCのアマチュアMMD利用者向けに軽量でシンプルな既定動作](./mmd-project-positioning-note.md#想定利用者と既定動作2026-10-30-所有者指定)を重視すると明示し、天空遮蔽の負荷軽減への着手を指定した。GIなど新しい効果への展開より先に扱った。
 
-2026-10-30は5方向集計＋2候補の接続遮蔽を実装し、固定fixtureの静止・変形再生についてGPU render/computeとCPU source更新を分けて計測した。光漏れ・過暗化・動く遮蔽物・OFF復帰・PNG/WebMも比較した。次の確認は密な実モデル、想定する低〜中性能PC、physicsを含む動作であり、CPUの変形・BVH更新、field更新、材質query、全体frame timeを分けて評価する。全体の数値目標は未決定で、今回のfixture結果を実使用の負荷NG解消や所有者による画質了承とは扱わない。
+2026-10-30は5方向集計＋2候補の接続遮蔽を実装し、固定fixtureの静止・変形再生についてGPU render/computeとCPU source更新を分けて計測した。光漏れ・過暗化・動く遮蔽物・OFF復帰・PNG/WebMも比較した。その後、同日の所有者の実機確認で見た目と軽さがOKとなり、今回の天空遮蔽は一区切りとした。fixtureの計測と所有者の実使用評価は別の証拠であり、全体の数値目標は未決定のまま。今後ほかの条件で負荷が問題になった場合は、CPU変形・BVH更新、field更新、材質query、全体frame timeを分けて再評価する。
 
 ## 負荷軽減の性能比較・再検証（2026-10-30）
 
@@ -126,7 +158,7 @@ OFFは最終batchで再計測しておらず、変更前と先行確認の約0.2
 
 全unit 213ファイル・1,320件、lint、`typecheck:critical`が成功し、通常typecheckは既知547件・追加0件。最終GPU 11件の内訳は性能4件、低屋根1件、通常材質1件、骨/モーフ1件、設定/保存/backend/WebM1件、診断lab2件、Luminous共有scene回帰1件で、6.1分で成功した。設定復元と自動再描画OFFの直接PNGは各基準画像との差0。WebMと対応PNGのMAEは0/20/40/60フレームでそれぞれ0.3932 / 0.4015 / 0.3954 / 0.4039だった。骨対等価モーフのMAEは0.00046、逆seekは0.00260で、各GPU validationは0件。
 
-最終の低屋根比較では、receiver上面のON/OFF画像の暗化差が、開放時28.71に対しgap 0.2 cellで132.33となり、集計だけの案で失われた遮蔽反応を回復した。この条件のCPU16方向参照visibilityは0。ただし暗化差は8bit RGBの差で、visibilityの線形推定値ではない。gap 0.5 / 0.9 cellでも132.33となり、旧16方向queryの約119.02 / 115.67より暗い。45度回転を含むPNGもagentが目視確認し、既定強度の表示と強度1で狭い隙間が黒くなる状態を確認した。過暗化を含む近似として扱い、正確な天空遮蔽や所有者の画質了承とはしない。
+最終の低屋根比較では、receiver上面のON/OFF画像の暗化差が、開放時28.71に対しgap 0.2 cellで132.33となり、集計だけの案で失われた遮蔽反応を回復した。この条件のCPU16方向参照visibilityは0。ただし暗化差は8bit RGBの差で、visibilityの線形推定値ではない。gap 0.5 / 0.9 cellでも132.33となり、旧16方向queryの約119.02 / 115.67より暗い。45度回転を含むPNGもagentが目視確認し、既定強度の表示と強度1で狭い隙間が黒くなる状態を確認した。過暗化を含む近似として扱い、正確な天空遮蔽とはしない。このfixture比較から所有者の画質了承を推定せず、実使用でのOKは前述の本人確認を根拠にする。
 
 最終記録は`local-references/rc-sky-performance-2026-10-30/`の`final-e2e.txt`、`final/`（性能4条件のJSON）、`final-images/`（各E2EのPNG・report）に保持する。以下の試行履歴も同directory配下に残す。
 

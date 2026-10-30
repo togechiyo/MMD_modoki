@@ -31,7 +31,7 @@
 
 これはアプリ全体の設計条件であり、RCだけの一時的な調整方針ではない。一方、最低動作環境、目標FPS、画質の削減幅、個別の最適化方式まで決定したものではない。性能改善の達成は、代表条件での計測と操作・見た目の比較によって別途確かめる。
 
-直近では、負荷NGが報告されたRC天空遮蔽の軽減へ着手する。詳しい比較範囲は[RC天空遮蔽の実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md#実機負荷の報告と次回の作業)、判断の再利用は[所有者決定](../insights/decisions/prioritize-lightweight-realtime-mmd-defaults.md)を参照する。
+RC天空遮蔽ではこの条件に沿って負荷を軽減し、2026-10-30に所有者が実機で見た目・軽さを確認して一区切りとした。比較条件と残存制約は[RC天空遮蔽の実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md)、判断の再利用は[軽量な既定動作の所有者決定](../insights/decisions/prioritize-lightweight-realtime-mmd-defaults.md)を参照する。
 
 ## 形式ごとの現時点評価
 

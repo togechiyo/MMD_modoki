@@ -1,6 +1,6 @@
 # RC 天空遮蔽: 通常MMD材質・設定・キーの実装
 
-作成日: 2026-10-29。更新日: 2026-10-30。状態: **軽量化後の実装を所有者が実機で確認し、見た目・軽さともにOK。天空遮蔽は今回の実装でいったん完了とする。** 5方向集計＋probe近傍2三角形の接続遮蔽を採用し、fixtureでの性能比較と最終GPU 11件も確認済み。既知の近似誤差と未確認条件は下記に残す。
+作成日: 2026-10-29。更新日: 2026-10-30。状態: **軽量化後の実装を所有者が実機で確認し、見た目・軽さともにOK。天空遮蔽の描画調整はいったん完了。続く所有者指定による右側FrameGraphエフェクト欄へのUI移動も実装・検証済み。** 5方向集計＋probe近傍2三角形の接続遮蔽を採用し、fixtureでの性能比較と最終GPU 11件も確認済み。既知の近似誤差と未確認条件は下記に残す。
 
 [RC実装案](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)の段階Dと、天空遮蔽に必要な操作・保存経路をまとめた最初の1効果。GIは今回追加しない。[固定床の診断](./radiance-cascades-sky-visibility-validation-2026-10-29.md)と[再構成比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)の結果を、そのまま通常材質や実モデルでの成功として扱わない。
 
@@ -38,22 +38,26 @@
 
 ## 操作と保存
 
-通常の **設定 → 実験設定… → RC 天空遮蔽** に置く。開発用の天空診断や旧effect timelineのdev flagを有効にする必要はない。Frame GraphのPostFX個体一覧へ追加する方式ではなく、シーンごとに1つの照明設定とする。
+入口は **右側のEffect → FrameGraph / Post → 追加 → RC 天空遮蔽**。実験設定の本番項目は撤去し、開発用の天空診断は分離したまま残す。各1枚のsingletonとして追加・OFF・削除を扱い、一覧での位置は照明の実行順を変えない。旧effect timelineのdev flagは不要で、複数配置できるPostFX個体には変換しない。
 
 | 項目 | 初期値 | キー・保存 |
 | --- | --- | --- |
-| 有効 | OFF | `enabled`をstep補間 |
+| 有効 | OFF | `enabled`をstep補間。新規・設定のない旧projectは未追加。欄への追加時はON |
 | 強度 | 0.75（UI 75%） | `strength`を実値で線形補間 |
 | 最低残光 | 0.2（UI 20%） | キーにしない固定設定。UIで変更可能 |
 | 範囲 | `null`（自動範囲） | キーにしない固定設定。固定する場合はworld最小XYZと一辺 |
 
-固定設定は `lighting.rcSkyOcclusion`、キーは既存の `keyframes.effectAnimations` の `rcSkyOcclusion` singletonへ保存する。新設定がない旧projectはOFFに正規化する。`frameGraphPostStack`やPostFX個体IDへ混ぜず、既存Luminous RCの個体・順序・保存値は維持する。
+固定設定は `lighting.rcSkyOcclusion`、キーは既存の `keyframes.effectAnimations` の `rcSkyOcclusion` singletonへの保存を維持する。欄への追加状態・表示位置だけをstack側で管理し、追加は既存設定を保持してONにする。個別OFFでは欄・値・キーを保持する。削除は既定OFFへ戻してtrackと欄を除去し、Undoで静的設定・trackのbase/keys/preview・元のstack位置をまとめて復元する。照明値・キーをPostFX個体へ変換せず、既存Luminous RCの個体・順序・保存値も維持する。
+
+保存には`effects.rcSceneEffectsInStack: true`を追加し、markerがない旧projectだけ、保存済みenabledまたはRC track（全OFFを含む）から欄を補完する。stackのない旧形式でもBloom等の既存効果を保持する。現行形式の削除済み効果は読み込みで復活させず、新設定がない旧projectはOFFに正規化する。通常操作は見出しの有効・キー登録と強度を使い、最低残光は強度の直下、計算範囲だけを折り畳み詳細に置く。
 
 自動範囲は、対象の通常MMD材質を持つ表示meshのboundsから立方体を作り、一辺に20%の余白を付けてruntime内で保持する。**自動解決で保存値を変更せず、`volume: null`のまま保存する。** 「範囲を再計算」はその時点の範囲を固定設定として保存する編集操作。「自動範囲」で`null`に戻せる。数値欄はEnterで確定する。カメラや毎フレームのposeに合わせた自動追従ではないため、大きく動く対象には固定範囲を調整する。
 
 設定変更はAction→Command→Undo/Redoを通し、静的設定と当該trackのbase・keys・previewをまとめて復元する。キー登録は現在フレームの有効と強度を一緒に登録し、移動・上書き・削除は既存のキーtransactionを使う。停止中の未登録previewと、再生・capture時のキー評価を区別する。旧 `effectSceneTracks` が無効な通常構成でもRC天空だけを許可し、休止した旧singleton効果は復活させない。
 
-Classic・Frame Graph全体OFFでは値とキーを保持して計算を休止する。準備中・未対応・エラー時も中立化し、設定欄へ状態と理由を表示する。
+Classic・Frame Graph全体OFFでは値・キー・追加状態を保持して計算を休止する。Classicでのキー登録・削除・移動も同じ条件で休止する。準備中・未対応・エラー時も中立化し、設定欄へ状態と理由を表示する。
+
+UI移動後の専用カード・天空設定・GI設定/WebMの3ケースが成功し、独立操作、削除Undo/Redo、保存・移行、Classic往復、PNG/WebMを確認した。GPU validation・page/console errorは0件。全unit226ファイル・1,396件、全lint、critical gateを確認し、通常typecheckは既存547件から追加0件。旧stackなしBloom保持の追加検査も対象2ファイル・67件成功。[共通の操作契約・検証記録](./framegraph-post-stack-current-spec-2026-07-01.md#2026-10-30-追記-rc天空遮蔽giのエフェクト欄への移動)を参照。
 
 ## 計算と材質への接続
 
@@ -101,7 +105,7 @@ providerの無効化後もpluginは中立textureとdummy三角形bufferを参照
 配布可能なオリジナルPMX [rc-sky-stage.pmx](../test/fixtures/rc-sky-stage/rc-sky-stage.pmx) を使う。[説明と再生成手順](../test/fixtures/rc-sky-stage/README.md)のとおり、左の庇と壁、右の屋外、屋根上に同材質の箱がある。ユーザー所有モデルは自動検証に使わない。
 
 1. Frame Graphを有効にし、fixtureを読み込む。通常MMD材質のまま、庇下・屋外・屋根上の箱が同時に見える角度にする。比較中のcamera、照明、Toon設定を固定する。
-2. 設定 → 実験設定…でRC 天空遮蔽を開く。初期OFFを確認し、有効にして「適用中」を待つ。強度75%・最低残光20%で、庇下と壁の影側残光、屋外、屋根上、直射明部を比較する。
+2. 右側のEffect → FrameGraph / PostからRC 天空遮蔽を追加し、「適用中」を待つ。強度75%・最低残光20%で、庇下と壁の影側残光、屋外、屋根上、直射明部を比較する。
 3. 強度0%、元の75%、OFF、再ONを比較する。0%とOFFで元画像へ戻ること、範囲数値と自動表示が勝手に固定保存へ変わらないことを見る。数値で範囲を狭くした場合は、範囲外が元表示になることも確認する。
 4. 0フレームと30フレームで有効・強度を変えてキー登録し、中間seek、逆seek、再生、キー移動・削除とUndo/Redoを確認する。最低残光と範囲は全フレーム共通であることを見る。
 5. project保存・再読込、自動範囲/固定範囲の復元、設定変更のUndo/Redo、Classic往復を確認する。PostFX一覧に天空の個体や順序項目が増えないことを見る。

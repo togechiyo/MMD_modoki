@@ -17,6 +17,21 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 - プロジェクト保存 / 読み込みでは、stack の順序と enabled 状態を `effects.frameGraphPostStack` として復元する。
 - 旧 project などで stack がない場合は、既存の各 post effect state から canonical order で復元する。
 
+## 2026-10-30 追記: RC天空遮蔽・GIのエフェクト欄への移動
+
+所有者指定で、[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)と[RC GI](./rc-diffuse-gi-implementation-2026-10-30.md)を実験設定から右側のFrameGraphエフェクト欄へ移した。追加・削除・履歴・旧保存形式・backend往復・PNG/WebMをローカルElectron/WebGPUで確認済み。
+
+- `rcSkyOcclusion` / `rcDiffuseGi`は各1枚のlegacy stack singleton。追加は既存値を保持してONにし、未追加なら末尾へ置く。複数配置できるPostFX個体IDは発行しない。
+- チェックOFFは欄・設定・キーを保持する。削除は当該設定を既定OFFへ戻し、trackと欄を除去する。Action/Commandのsnapshotに`stackIndex: number | null`を含め、Undoで設定・track・追加状態・元の位置を復元する。
+- 表示位置はstackで保存するが、両効果は本描画前のfield計算と材質への照明適用を使う。並べ替えは照明phaseやPostFXとの合成位置を変えない。既存Luminous RCの順序・複数個体・合成は維持する。
+- 照明値は`lighting.rcSkyOcclusion` / `lighting.rcDiffuseGi`、キーは既存`keyframes.effectAnimations`のscene singletonを維持する。`effects.rcSceneEffectsInStack: true`で移行済みを識別し、markerのない旧projectだけ保存済みenabledまたはRC track（全OFFを含む）から欄を補完する。stack自体のない旧形式では、Bloom等の既存パラメーターからの補完も維持する。現行形式で削除済みの効果は復活させない。
+- 全体OFFとClassicへの切替では値・キー・追加状態を保持して実行を止める。ClassicではRCのキー登録・削除・移動を同じ条件で休止し、削除だけできてUndoで戻せない状態にしない。欄に存在しない効果は、保存された有効値やキーだけでは実行しない。
+- 通常操作は見出しのチェック・キー登録と強度へまとめ、天空遮蔽の最低残光は強度の直下、計算範囲だけを折り畳み詳細へ置く。実験設定の本番2項目は撤去し、開発用の天空診断は残す。stackの再描画前に専用UIをdisposeし、再描画後にmountしてイベントと更新timerを重複させない。非表示panel/tabでは更新を省き、カードを閉じている間は材質の診断走査を省く。
+
+検証は[RCカード専用E2E](../test/e2e/rc-lighting-effect-stack.spec.mjs)、[天空遮蔽の設定E2E](../test/e2e/rc-sky-occlusion-settings.spec.mjs)、[GI設定・WebM E2E](../test/e2e/rc-diffuse-gi-settings.spec.mjs)の3ケースが成功。両効果の追加・独立操作・OFF保持・キー/補間・削除Undo/RedoとPNG、全体OFF復帰、旧project移行・再保存、Classic往復、削除済み効果の非復活を確認した。GPU validation・page error・console errorは0件。GIの0/20/40/60frameのWebMと対応PNGの全画面MAEは0.190 / 0.259 / 0.195 / 0.256階調（8bit）で、ON/OFF遷移を保持した。今回のUI検証をGI全般の描画品質保証へは広げない。
+
+全unitは226ファイル・1,396件成功。その後に追加したstack未保存の旧形式でBloomを保持する検査を含め、対象2ファイル・67件も成功した。全lintはwarningなしで成功、通常typecheckは既存547件と行・列を除いた比較で一致し、critical gateも成功。検証途中のGI保存完了待機、閉じた詳細内の削除ボタンのassert、任意のinstance順序を前提とした比較はtest側を修正し、上記は最終成功結果とする。証拠はignoredな`local-references/rc-effect-panel-2026-10-30/`の`stack-lifecycle/`（report・panel screenshot）と`gi-settings/`に保持する。
+
 ## 2026-08-11 追記: 詳細スライダーの操作値
 
 FrameGraph stack の詳細パネルにある数値スライダーは、効果ごとの内部単位にかかわらず、UI 上の操作値を `0..100` に統一する。
@@ -62,7 +77,7 @@ SSGI の UI 表示名は仮の `GI（実験的）` から単純な `SSGI` へ変
 
 ## 順序の扱い
 
-UI の stack order が runtime order になる。たとえば `Offset Rim -> Bloom` の順に並べると、Offset Rim の白いリムに Bloom がかかる。これは 2026-07-01 に実機で確認済み。
+画面に合成するPostFXでは、UI の stack order が runtime order になる。たとえば `Offset Rim -> Bloom` の順に並べると、Offset Rim の白いリムに Bloom がかかる。これは 2026-07-01 に実機で確認済み。RC天空遮蔽・GIのscene照明は上記のとおり、一覧位置によらず本描画前の照明phaseを使う。
 
 WebGPU FrameGraph では、task の `sourceTexture` / `outputTexture` の依存関係は build 後に固定される。順序変更や未確保resourceを必要とする有効化は、FrameGraph post backendを再構築する。2026-09-08以降、接続済みtask・確保済みresource内の個別ON/OFFは、記録済みdisabled passで切り替える。入力textureのlive reconnectは行わない。見出しの全体ON/OFFは、個別値を保持した資源解放・再構築として使い分ける（[詳細・検証](./framegraph-master-toggle-2026-09-08.md)）。
 

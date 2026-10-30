@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | adopted | [低〜中性能PCで使いやすい軽量なリアルタイムMMDを優先する](./decisions/prioritize-lightweight-realtime-mmd-defaults.md) | アマチュアMMD利用者向けの既定動作、品質と負荷、操作の複雑さを判断する。具体的な方式・FPS・最低動作環境は別途確認 |
 | accepted-with-constraints | [3D RC は通常 Luminous から分離して最適化を再開する](./decisions/defer-further-radiance-cascade-optimization.md) | 2026-10-25の再開依頼。Frame Graphの通常GlowとRCを分け、保存互換と独立動作を先に揃える |
-| adopted | [RCはアプリから目視できる1エフェクト単位で完成させる](./decisions/complete-rc-effects-one-at-a-time-for-visual-review.md) | 共通基盤後の派生効果を、アプリで操作・目視比較できる単位へ仕上げる。2026-10-30、天空遮蔽を実機確認後に一区切りとし、続けて次の対象をGIとして着手指定。GIの完成・品質・性能への了承とは区別する |
+| adopted | [RCはアプリから目視できる1エフェクト単位で完成させる](./decisions/complete-rc-effects-one-at-a-time-for-visual-review.md) | 共通基盤後の派生効果を、アプリで操作・目視比較できる単位へ仕上げる。2026-10-30、天空遮蔽を一区切りとしGIへ着手指定。GI調整後は両効果を実験設定から右側FrameGraphエフェクト欄へ移動する。実機コメントとGI全般の品質了承は区別する |
 | adopted | [RC GIは推しモデルが映える強い演出を許容する](./decisions/rc-gi-allows-strong-effects-for-favorite-models.md) | GIの効きが見分けにくい場合に、くどいくらい強い演出も許容して調整する。全効果の無条件増幅や軽量方針の撤回には広げない |
 | adopted | [Luminous RCの発光色は2D Luminousを基準にする](./decisions/rc-emission-color-follows-2d-luminous.md) | 2DとRCの色を揃える。補正前の材質色を別基準として固定しない |
 | adopted | [FrameGraph SSAOはシンプル階調に一本化する](./decisions/framegraph-ssao-uses-simple-tone.md) | 強度は線形0〜2、色合成を維持し、従来階調・切替UI・保存フラグを復活させない |

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
 import { camera, capture, closeGi, difference, giInput, giKeys, giSection, giSettings, giSlider, giStatus,
   initialState, openGi, project, receiverDifference, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
 
@@ -13,7 +14,7 @@ async function menu(page, command) {
   await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click(); await page.locator(`[data-menu-command="${command}"]`).click();
 }
 async function history(page, action) { await page.locator(`.app-menu-quick-button[data-menu-command="edit.${action}"]`).click(); }
-async function register(page) { await giSection(page).getByRole("button", { name: /キー登録|キーを更新|Register key|Update key/ }).click(); }
+async function register(page) { await registerRcLighting(page, "rcDiffuseGi"); }
 
 test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and optional WebM", async ({}, testInfo) => {
   test.setTimeout(withWebm ? 300000 : 180000);
@@ -81,6 +82,7 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] });
     }, path);
     await menu(page, "file.saveProject"); await expect.poll(() => existsSync(path)).toBe(true);
+    await expect(page.locator("#status-text")).toHaveText("Project saved");
     const saved = JSON.parse(readFileSync(path, "utf8")); expect(saved.camera).toEqual(report.camera);
     expect(saved.lighting.rcDiffuseGi.volume).toEqual(fixed);
     expect(saved.keyframes.effectAnimations.tracks.find(track => track.effectId === "rcDiffuseGi").keys).toEqual(expectedKeys);
@@ -97,8 +99,12 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
       // Backend changes reload the renderer; wait through the gap before its test API exists.
       await page.waitForFunction(value => window.mmdModokiE2e?.getFrameGraphPostEffectsState().backend===value,backend);
       await expect.poll(restoredState).toEqual(expected);
-      await openGi(page); await expect(giInput(page,"Enabled")).toBeChecked(); await expect(giInput(page,"Strength")).toHaveValue("25");
-      await expect(giStatus(page)).toHaveAttribute("data-state",backend==="classic"?"unsupported":"ready",{timeout:45000}); await closeGi(page);
+      if (backend === "classic") {
+        await expect(giSection(page)).toHaveCount(0);
+      } else {
+        await openGi(page); await expect(giInput(page,"Enabled")).toBeChecked(); await expect(giInput(page,"Strength")).toHaveValue("25");
+        await expect(giStatus(page)).toHaveAttribute("data-state","ready",{timeout:45000}); await closeGi(page);
+      }
     }
     await seek(page,20); const restored=await capture(page,testInfo,report,"restored-key-20");
     report.restoredDifference=difference(png20,restored); expect(report.restoredDifference).toBeLessThan(0.15);

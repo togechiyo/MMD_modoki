@@ -5,9 +5,20 @@ import { executeCommand, type CommandExecutionContext } from "./command-executor
 import { EffectSceneTrackStore } from "../editor/effect-scene-track-store";
 import { makeEffectPayload } from "../editor/effect-keyframe-definitions";
 
+it("records card deletion and rejects stale presence while preserving settings and keys for undo", () => {
+    const before: RcDiffuseGiEditState = { stackIndex: 2, settings: { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS, enabled: true },
+        track: { base: { enabled: false, strength: 0.5 }, keys: [{ frame: 10, value: { enabled: true, strength: 1 } }] } };
+    const after: RcDiffuseGiEditState = { stackIndex: null, settings: { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS }, track: null };
+    const diff = buildRcDiffuseGiCommandDiff(before, after);
+    expect(diff?.before).toEqual(before); expect(diff?.after).toEqual(after);
+    expect(canApplyRcDiffuseGiEditState({ ...after, stackIndex: 0 }, after)).toBe(false);
+    expect(canApplyRcDiffuseGiEditState(after, after)).toBe(true);
+    expect(buildRcDiffuseGiCommandDiff(after, { ...after, stackIndex: 2 })).not.toBeNull();
+});
+
 it("does not record unchanged RC edits and preserves exact absence of a keyed preview", () => {
-    const before: RcDiffuseGiEditState = { settings: { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS }, track: null };
-    const after: RcDiffuseGiEditState = { settings: { ...before.settings, volume: { min: [-8, 0, -8], size: 16 } }, track: { preview: { frame: 3, value: { enabled: true, strength: 0.5 } } } };
+    const before: RcDiffuseGiEditState = { stackIndex: 0, settings: { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS }, track: null };
+    const after: RcDiffuseGiEditState = { stackIndex: 0, settings: { ...before.settings, volume: { min: [-8, 0, -8], size: 16 } }, track: { preview: { frame: 3, value: { enabled: true, strength: 0.5 } } } };
     expect(buildRcDiffuseGiCommandDiff(before, before)).toBeNull();
     const diff = buildRcDiffuseGiCommandDiff(before, after);
     expect(diff?.before.track).toBeNull();
@@ -17,8 +28,8 @@ it("does not record unchanged RC edits and preserves exact absence of a keyed pr
 });
 
 it("routes apply and revert through the same RC settings command boundary", () => {
-    const before = { settings: { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS }, track: null };
-    const after = { settings: { ...before.settings, strength: 0.4 }, track: null };
+    const before = { stackIndex: 0, settings: { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS }, track: null };
+    const after = { stackIndex: 0, settings: { ...before.settings, strength: 0.4 }, track: null };
     const diff = buildRcDiffuseGiCommandDiff(before, after);
     if (!diff) throw new Error("Expected a settings change");
     let state = before;
@@ -38,24 +49,24 @@ it("allows undo after seek discards preview, but rejects newer authored keys or 
     const store = new EffectSceneTrackStore(false, ["rcDiffuseGi"]);
     store.apply("rcDiffuseGi", 0, makeEffectPayload("rcDiffuseGi", { enabled: true, strength: 0.5 }), settings);
     store.preview("rcDiffuseGi", 10, { enabled: true, strength: 0.2 }, settings);
-    const expected = { settings, track: store.snapshot("rcDiffuseGi") };
+    const expected = { stackIndex: 0, settings, track: store.snapshot("rcDiffuseGi") };
     store.clearPreviewsOutside(11);
-    expect(canApplyRcDiffuseGiEditState({ settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(true);
+    expect(canApplyRcDiffuseGiEditState({ stackIndex: 0, settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(true);
     store.preview("rcDiffuseGi", 10, { enabled: true, strength: 0.9 }, settings);
-    expect(canApplyRcDiffuseGiEditState({ settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(false);
+    expect(canApplyRcDiffuseGiEditState({ stackIndex: 0, settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(false);
     store.clearPreviews();
     store.apply("rcDiffuseGi", 20, makeEffectPayload("rcDiffuseGi", { enabled: false, strength: 0.8 }), settings);
-    expect(canApplyRcDiffuseGiEditState({ settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(false);
+    expect(canApplyRcDiffuseGiEditState({ stackIndex: 0, settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(false);
 });
 
 it("allows setting undo after undoing the first key, without treating a different base as absent", () => {
     const settings = { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS, enabled: true };
     const store = new EffectSceneTrackStore(false, ["rcDiffuseGi"]);
-    const expected = { settings, track: null };
+    const expected = { stackIndex: 0, settings, track: null };
     const base = { enabled: settings.enabled, strength: settings.strength };
     store.apply("rcDiffuseGi", 0, makeEffectPayload("rcDiffuseGi", base), base);
     store.apply("rcDiffuseGi", 0, null, base);
-    expect(canApplyRcDiffuseGiEditState({ settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(true);
-    expect(canApplyRcDiffuseGiEditState({ settings, track: { base: { ...base, strength: 0.1 }, keys: [] } }, expected)).toBe(false);
-    expect(canApplyRcDiffuseGiEditState({ settings: { ...settings, strength: 0.8 }, track: null }, expected)).toBe(false);
+    expect(canApplyRcDiffuseGiEditState({ stackIndex: 0, settings, track: store.snapshot("rcDiffuseGi") }, expected)).toBe(true);
+    expect(canApplyRcDiffuseGiEditState({ stackIndex: 0, settings, track: { base: { ...base, strength: 0.1 }, keys: [] } }, expected)).toBe(false);
+    expect(canApplyRcDiffuseGiEditState({ stackIndex: 0, settings: { ...settings, strength: 0.8 }, track: null }, expected)).toBe(false);
 });

@@ -17,7 +17,7 @@ describe("RC GI scene keys", () => {
         expect(normalizeEffectValue(definition, {})).toEqual(base);
         expect(slider.toValue(25)).toBe(0.5); expect(slider.toPosition(2)).toBe(100);
         expect(normalizeEffectValue(definition, { enabled: true, strength: 9 })).toEqual({ enabled: true, strength: 2 });
-        expect(isFrameGraphPostEffectId(id)).toBe(false);
+        expect(isFrameGraphPostEffectId(id)).toBe(true);
         expect(FRAME_GRAPH_INSTANCE_EFFECT_TYPES).not.toContain(id);
         const first = payload(true, 1.4);
         expect(effectKeyframePayloadSchema.safeParse(first).success).toBe(true);

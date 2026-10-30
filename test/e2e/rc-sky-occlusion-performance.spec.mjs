@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
+import { closeRcLighting, openRcLighting, rcLightingRow } from "./helpers/rc-lighting-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), fixture = resolve(root, "test/fixtures/rc-sky-stage/rc-sky-stage.pmx");
 const label = process.env.MMD_RC_SKY_PERF_LABEL ?? "current";
@@ -70,12 +71,11 @@ for (const configuration of configurations) test(`RC sky realtime performance: $
     await page.locator("#info-model-select").selectOption("__camera__");
     for (const [key, value] of Object.entries({ tx: 0, ty: 1.5, tz: 0, rx: -20, ry: -38, rz: 0, camDistance: 31 })) await number(key, value);
     await page.locator("#current-frame").fill("0"); await page.locator("#current-frame").press("Enter");
-    await page.locator('.app-menu-group:has([data-menu-command="tools.experimentalSettings"]) > .app-menu-trigger').click();
-    await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
-    const dialog = page.locator('[data-popup-id="experimental-settings"]'), section = dialog.locator('[data-experiment-section="rc-sky-occlusion"]');
+    await openRcLighting(page, "rcSkyOcclusion");
+    const section = rcLightingRow(page, "rcSkyOcclusion");
     await section.locator('[name="rcSkyOcclusionEnabled"]').setChecked(configuration.enabled);
     await expect(section.locator("[data-rc-sky-occlusion-status]")).toHaveAttribute("data-state", configuration.enabled ? "ready" : "off", { timeout: 45000 });
-    await dialog.locator(".app-menu-dialog-close").click();
+    await closeRcLighting(page);
     report.prepared = await invoke(page, "prepareRcSkyPerformance", configuration);
     expect(report.prepared.size).toEqual([configuration.width, configuration.height]);
     report.validationBeforeMeasurement = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());

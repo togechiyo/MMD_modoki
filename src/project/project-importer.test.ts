@@ -204,6 +204,38 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("preserves inferred legacy Bloom when adding RC to a project without a saved stack", async () => {
+        const host = { ...createHost(), postEffectBloomEnabled: false,
+            getFrameGraphPostEffectStackEntries: vi.fn(() => host.postEffectBloomEnabled ? [{ id: "bloom" as const, enabled: true }] : []) };
+        const project = createProject();
+        project.effects.bloomEnabled = true;
+        project.lighting.rcDiffuseGi = { enabled: true, strength: 0.5, volume: null };
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(host.getFrameGraphPostEffectStackEntries).toHaveBeenCalledOnce();
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenLastCalledWith([
+            { id: "bloom", enabled: true }, { id: "rcDiffuseGi", enabled: true },
+        ]);
+        // An explicitly authored stack remains authoritative, even in the old format.
+        host.getFrameGraphPostEffectStackEntries.mockClear();
+        project.effects.frameGraphPostStack = [];
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(host.getFrameGraphPostEffectStackEntries).not.toHaveBeenCalled();
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenLastCalledWith([{ id: "rcDiffuseGi", enabled: true }]);
+    });
+    it("restores old keyed RC lighting cards and respects explicit current deletion", async () => {
+        const host = createHost(), project = createProject();
+        project.lighting.rcSkyOcclusion = { enabled: true, strength: 0.6, minimum: 0.2, volume: null };
+        project.keyframes = { modelAnimations: [], cameraAnimation: null, effectAnimations: { version: 1, tracks: [{ effectId: "rcDiffuseGi", valueVersion: 1,
+            base: { enabled: false, strength: 0.5 }, keys: [{ frame: 20, value: { enabled: true, strength: 1 } }] }] } };
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenLastCalledWith([
+            { id: "rcSkyOcclusion", enabled: true }, { id: "rcDiffuseGi", enabled: false },
+        ]);
+        project.effects.rcSceneEffectsInStack = true;
+        project.effects.frameGraphPostStack = [];
+        await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
+        expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenLastCalledWith([]);
+    });
     it("restores GI separately and resets a subsequent legacy project to OFF", () => {
         const setRcDiffuseGiSettings = vi.fn();
         const host = { setRcDiffuseGiSettings }, project = createProject();

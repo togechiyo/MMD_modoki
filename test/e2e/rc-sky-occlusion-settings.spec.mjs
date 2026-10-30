@@ -3,12 +3,12 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { closeRcLighting, openRcLighting, rcLightingRow, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-sky-stage/rc-sky-stage.pmx");
 const withWebm = process.env.MMD_RC_SKY_SETTINGS_WEBM === "1";
-const dialog = page => page.locator('[data-popup-id="experimental-settings"]');
-const section = page => dialog(page).locator('[data-experiment-section="rc-sky-occlusion"]');
+const section = page => rcLightingRow(page, "rcSkyOcclusion");
 const input = (page, field) => section(page).locator(`[name="rcSkyOcclusion${field}"]`);
 const status = page => section(page).locator("[data-rc-sky-occlusion-status]");
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
@@ -16,11 +16,9 @@ const settings = async page => (await project(page)).lighting.rcSkyOcclusion;
 const keys = async page => (await project(page)).keyframes?.effectAnimations?.tracks.find(track => track.effectId === "rcSkyOcclusion");
 
 async function open(page) {
-  await page.locator('.app-menu-group:has([data-menu-command="tools.experimentalSettings"]) > .app-menu-trigger').click();
-  await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
-  await expect(input(page, "Enabled")).toBeVisible();
+  await openRcLighting(page, "rcSkyOcclusion");
 }
-async function close(page) { await dialog(page).locator(".app-menu-dialog-close").click(); }
+const close = closeRcLighting;
 async function menu(page, command) {
   await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
   await page.locator(`[data-menu-command="${command}"]`).click();
@@ -31,7 +29,7 @@ async function seek(page, frame) {
   await expect(page.locator("#current-frame")).toHaveValue(String(frame));
 }
 async function history(page, operation) { await page.locator(`.app-menu-quick-button[data-menu-command="edit.${operation}"]`).click(); }
-async function register(page) { await section(page).getByRole("button", { name: /キー登録|キーを更新|Register key|Update key/ }).click(); }
+async function register(page) { await registerRcLighting(page, "rcSkyOcclusion"); }
 async function automatic(page) { await section(page).getByRole("button", { name: /^(自動範囲|Automatic volume)$/ }).click(); }
 function difference(a, b) {
   expect(a.length).toBe(b.length);
@@ -82,7 +80,7 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
     };
 
     await open(page);
-    await expect(dialog(page).locator('[data-experiment-section="radiance-sky"]')).toHaveCount(0);
+    await expect(page.locator('[data-experiment-section="radiance-sky"]')).toHaveCount(0);
     expect(await settings(page)).toEqual({ enabled: false, strength: 0.75, minimum: 0.2, volume: null });
     await input(page, "Enabled").check();
     await expect(status(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
@@ -107,8 +105,8 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
     expect((await settings(page)).volume).toEqual(fixedVolume);
     await input(page, "MinX").fill("-99"); await input(page, "MinX").press("Escape");
     expect((await settings(page)).volume).toEqual(fixedVolume);
-    // Numeric Escape cancels the edit, then the shared popup Escape handler closes the dialog.
-    await expect(dialog(page)).not.toBeVisible();
+    // The effect card is not a popup; Escape cancels the number edit in place.
+    await close(page);
     await history(page, "undo"); expect((await settings(page)).volume).toBeNull();
     await history(page, "redo"); expect((await settings(page)).volume).toEqual(fixedVolume);
     await open(page); await automatic(page); await close(page);
@@ -160,6 +158,7 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
     }, file);
     await menu(page, "file.saveProject"); await expect.poll(() => existsSync(file)).toBe(true);
+    await expect(page.locator("#status-text")).toHaveText("Project saved");
     const saved = JSON.parse(readFileSync(file, "utf8"));
     expect(saved.camera).toEqual(report.camera);
     const expectSavedState = async () => expect.poll(async () => {
@@ -180,10 +179,13 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
       await page.locator('select[data-postfx-select="backend"]').selectOption(backend, { force: true });
       await page.waitForFunction(value => window.mmdModokiE2e?.getFrameGraphPostEffectsState().backend === value, backend);
       await expectSavedState();
-      await open(page); await expect(input(page, "Enabled")).toBeChecked(); await expect(input(page, "Strength")).toHaveValue("50");
-      await expect(status(page)).toHaveAttribute("data-state", backend === "classic" ? "unsupported" : "ready", { timeout: 45000 });
-      if (backend === "classic") await expect(status(page)).toContainText(/Frame Graph|WebGPU/);
-      await close(page); await validation(backend);
+      if (backend === "classic") {
+        await expect(section(page)).toHaveCount(0);
+      } else {
+        await open(page); await expect(input(page, "Enabled")).toBeChecked(); await expect(input(page, "Strength")).toHaveValue("50");
+        await expect(status(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 }); await close(page);
+      }
+      await validation(backend);
     }
     await seek(page, 20); const restored = await capture("roundtrip-key-20");
     report.restoredDifference = difference(png20, restored); expect(report.restoredDifference).toBeLessThan(0.15);

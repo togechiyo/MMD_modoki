@@ -5,9 +5,20 @@ import { executeCommand, type CommandExecutionContext } from "./command-executor
 import { EffectSceneTrackStore } from "../editor/effect-scene-track-store";
 import { makeEffectPayload } from "../editor/effect-keyframe-definitions";
 
+it("records card deletion and rejects stale presence while preserving settings and keys for undo", () => {
+    const before: RcSkyOcclusionEditState = { stackIndex: 2, settings: { ...DEFAULT_RC_SKY_OCCLUSION_SETTINGS, enabled: true },
+        track: { base: { enabled: false, strength: 0.5 }, keys: [{ frame: 10, value: { enabled: true, strength: 1 } }] } };
+    const after: RcSkyOcclusionEditState = { stackIndex: null, settings: { ...DEFAULT_RC_SKY_OCCLUSION_SETTINGS }, track: null };
+    const diff = buildRcSkyOcclusionCommandDiff(before, after);
+    expect(diff?.before).toEqual(before); expect(diff?.after).toEqual(after);
+    expect(canApplyRcSkyOcclusionEditState({ ...after, stackIndex: 0 }, after)).toBe(false);
+    expect(canApplyRcSkyOcclusionEditState(after, after)).toBe(true);
+    expect(buildRcSkyOcclusionCommandDiff(after, { ...after, stackIndex: 2 })).not.toBeNull();
+});
+
 it("does not record unchanged RC edits and preserves exact absence of a keyed preview", () => {
-    const before: RcSkyOcclusionEditState = { settings: { ...DEFAULT_RC_SKY_OCCLUSION_SETTINGS }, track: null };
-    const after: RcSkyOcclusionEditState = { settings: { ...before.settings, volume: { min: [-8, 0, -8], size: 16 } }, track: { preview: { frame: 3, value: { enabled: true, strength: 0.5 } } } };
+    const before: RcSkyOcclusionEditState = { stackIndex: 0, settings: { ...DEFAULT_RC_SKY_OCCLUSION_SETTINGS }, track: null };
+    const after: RcSkyOcclusionEditState = { stackIndex: 0, settings: { ...before.settings, volume: { min: [-8, 0, -8], size: 16 } }, track: { preview: { frame: 3, value: { enabled: true, strength: 0.5 } } } };
     expect(buildRcSkyOcclusionCommandDiff(before, before)).toBeNull();
     const diff = buildRcSkyOcclusionCommandDiff(before, after);
     expect(diff?.before.track).toBeNull();
@@ -17,8 +28,8 @@ it("does not record unchanged RC edits and preserves exact absence of a keyed pr
 });
 
 it("routes apply and revert through the same RC settings command boundary", () => {
-    const before = { settings: { ...DEFAULT_RC_SKY_OCCLUSION_SETTINGS }, track: null };
-    const after = { settings: { ...before.settings, minimum: 0.4 }, track: null };
+    const before = { stackIndex: 0, settings: { ...DEFAULT_RC_SKY_OCCLUSION_SETTINGS }, track: null };
+    const after = { stackIndex: 0, settings: { ...before.settings, minimum: 0.4 }, track: null };
     const diff = buildRcSkyOcclusionCommandDiff(before, after);
     if (!diff) throw new Error("Expected a settings change");
     let state = before;
@@ -38,24 +49,24 @@ it("allows undo after seek discards preview, but rejects newer authored keys or 
     const store = new EffectSceneTrackStore(false, ["rcSkyOcclusion"]);
     store.apply("rcSkyOcclusion", 0, makeEffectPayload("rcSkyOcclusion", { enabled: true, strength: 0.5 }), settings);
     store.preview("rcSkyOcclusion", 10, { enabled: true, strength: 0.2 }, settings);
-    const expected = { settings, track: store.snapshot("rcSkyOcclusion") };
+    const expected = { stackIndex: 0, settings, track: store.snapshot("rcSkyOcclusion") };
     store.clearPreviewsOutside(11);
-    expect(canApplyRcSkyOcclusionEditState({ settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(true);
+    expect(canApplyRcSkyOcclusionEditState({ stackIndex: 0, settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(true);
     store.preview("rcSkyOcclusion", 10, { enabled: true, strength: 0.9 }, settings);
-    expect(canApplyRcSkyOcclusionEditState({ settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(false);
+    expect(canApplyRcSkyOcclusionEditState({ stackIndex: 0, settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(false);
     store.clearPreviews();
     store.apply("rcSkyOcclusion", 20, makeEffectPayload("rcSkyOcclusion", { enabled: false, strength: 0.8 }), settings);
-    expect(canApplyRcSkyOcclusionEditState({ settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(false);
+    expect(canApplyRcSkyOcclusionEditState({ stackIndex: 0, settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(false);
 });
 
 it("allows setting undo after undoing the first key, without treating a different base as absent", () => {
     const settings = { ...DEFAULT_RC_SKY_OCCLUSION_SETTINGS, enabled: true };
     const store = new EffectSceneTrackStore(false, ["rcSkyOcclusion"]);
-    const expected = { settings, track: null };
+    const expected = { stackIndex: 0, settings, track: null };
     const base = { enabled: settings.enabled, strength: settings.strength };
     store.apply("rcSkyOcclusion", 0, makeEffectPayload("rcSkyOcclusion", base), base);
     store.apply("rcSkyOcclusion", 0, null, base);
-    expect(canApplyRcSkyOcclusionEditState({ settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(true);
-    expect(canApplyRcSkyOcclusionEditState({ settings, track: { base: { ...base, strength: 0.1 }, keys: [] } }, expected)).toBe(false);
-    expect(canApplyRcSkyOcclusionEditState({ settings: { ...settings, minimum: 0.8 }, track: null }, expected)).toBe(false);
+    expect(canApplyRcSkyOcclusionEditState({ stackIndex: 0, settings, track: store.snapshot("rcSkyOcclusion") }, expected)).toBe(true);
+    expect(canApplyRcSkyOcclusionEditState({ stackIndex: 0, settings, track: { base: { ...base, strength: 0.1 }, keys: [] } }, expected)).toBe(false);
+    expect(canApplyRcSkyOcclusionEditState({ stackIndex: 0, settings: { ...settings, minimum: 0.8 }, track: null }, expected)).toBe(false);
 });

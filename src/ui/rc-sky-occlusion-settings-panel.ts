@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import type { RcSkyOcclusionSettings, RcSkyOcclusionVolume } from "../render/rc-sky-occlusion-settings";
 import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField, createPopupFormRange, createPopupFormValueText } from "./popup-form-helpers";
 import { getRcSkyOcclusionUiState } from "./rc-sky-occlusion-ui-state";
+import { createRcLightingEffectCard, type RcLightingEffectCardOptions } from "./rc-lighting-effect-card";
 
 type Host = {
     isPlaying: boolean;
@@ -13,23 +14,15 @@ type Host = {
 };
 
 /** Persistent scene lighting settings; the separate fixed-floor developer lab is unchanged. */
-export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dispatch: (action: EditorAction) => boolean): () => void {
-    const section = document.createElement("section");
-    section.className = "experimental-settings-section";
-    section.dataset.experimentSection = "rc-sky-occlusion";
-    const heading = document.createElement("h3");
-    const headingLabel = document.createElement("label");
-    headingLabel.className = "experimental-settings-heading-toggle";
-    const enabled = document.createElement("input");
-    enabled.type = "checkbox"; enabled.className = "popup-form-checkbox"; enabled.name = "rcSkyOcclusionEnabled";
-    const title = document.createElement("span");
-    title.id = "experiment-rc-sky-occlusion-title"; title.textContent = t("experiment.rcSkyOcclusion.title");
-    headingLabel.append(enabled, title); heading.append(headingLabel);
-    section.setAttribute("aria-labelledby", title.id);
+export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dispatch: (action: EditorAction) => boolean, options: RcLightingEffectCardOptions): () => void {
+    const card = createRcLightingEffectCard(parent, "rcSkyOcclusion", options);
+    const { enabled, register } = card;
     const note = document.createElement("p");
-    note.className = "popup-form-note"; note.textContent = t("experiment.rcSkyOcclusion.note");
+    note.className = "popup-form-note"; note.textContent = t("effect.rcLighting.rcSkyOcclusionNote");
     const details = document.createElement("fieldset");
-    details.className = "experimental-settings-subsection";
+    details.className = "rc-lighting-effect-controls";
+    const volumeControls = document.createElement("fieldset");
+    volumeControls.className = "rc-lighting-effect-controls";
     const numberControls: HTMLInputElement[] = [];
     let activeSlider: HTMLInputElement | null = null;
     const sliders = (["strength", "minimum"] as const).map(field => {
@@ -48,7 +41,7 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     });
     const rangeNote = document.createElement("p");
     rangeNote.className = "popup-form-note"; rangeNote.textContent = t("experiment.rcSkyOcclusion.volumeNote");
-    details.append(rangeNote);
+    volumeControls.append(rangeNote);
     for (const field of ["minX", "minY", "minZ", "size"] as const) {
         const input = document.createElement("input");
         input.type = "number"; input.step = "0.1"; input.className = "popup-form-control";
@@ -67,7 +60,7 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
             input.blur(); refresh();
         });
         numberControls.push(input);
-        details.append(createPopupFormField(t(`experiment.rcSkyOcclusion.${field}`), input));
+        volumeControls.append(createPopupFormField(t(`experiment.rcSkyOcclusion.${field}`), input));
     }
     const recalculate = createPopupFormButton(t("experiment.rcSkyOcclusion.recalculate"), "secondary");
     recalculate.addEventListener("click", () => {
@@ -77,8 +70,7 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     automatic.addEventListener("click", () => {
         dispatch({ type: "effect.setRcSkyOcclusion", source: "panel", settings: { volume: null } }); refresh();
     });
-    details.append(createPopupFormButtonRow([recalculate, automatic]));
-    const register = createPopupFormButton(t("experiment.rcSkyOcclusion.registerKey"), "secondary");
+    volumeControls.append(createPopupFormButtonRow([recalculate, automatic]));
     register.addEventListener("click", () => {
         dispatch({ type: "keyframe.registerEffect", source: "panel", instanceId: "rcSkyOcclusion" }); refresh();
     });
@@ -87,15 +79,16 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     const status = document.createElement("p");
     status.className = "popup-form-note"; status.setAttribute("role", "status"); status.dataset.rcSkyOcclusionStatus = "true";
     const refresh = (): void => {
+        if (card.section.getClientRects().length === 0) return;
         const settings = host.getRcSkyOcclusionSettings();
-        const diagnostics = host.getRcSkyOcclusionDiagnostics();
-        const uiState = getRcSkyOcclusionUiState(settings, diagnostics, t);
-        enabled.checked = settings.enabled; enabled.disabled = host.isPlaying;
-        details.disabled = !settings.enabled || host.isPlaying;
-        register.disabled = host.isPlaying;
+        card.refresh(settings.enabled, host.isPlaying);
         const hasCurrentKey = host.getEffectSceneKeyframeFrames("rcSkyOcclusion").includes(Math.floor(host.currentFrame));
         register.dataset.hasCurrentKey = String(hasCurrentKey);
-        register.textContent = t(`experiment.rcSkyOcclusion.${hasCurrentKey ? "updateKey" : "registerKey"}`);
+        if (card.content.hidden) return;
+        const diagnostics = host.getRcSkyOcclusionDiagnostics();
+        const uiState = getRcSkyOcclusionUiState(settings, diagnostics, t);
+        details.disabled = !settings.enabled || host.isPlaying;
+        volumeControls.disabled = !settings.enabled || host.isPlaying;
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * 100));
             slider.value.textContent = `${slider.input.value}%`;
@@ -115,8 +108,10 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     enabled.addEventListener("change", () => {
         dispatch({ type: "effect.setRcSkyOcclusion", source: "panel", settings: { enabled: enabled.checked } }); refresh();
     });
-    section.append(heading, note, details, createPopupFormButtonRow([register]), keyNote, status);
-    parent.append(section);
+    const phaseNote = document.createElement("p");
+    phaseNote.className = "popup-form-note"; phaseNote.textContent = t("effect.rcLighting.phaseNote");
+    card.advanced.append(volumeControls, keyNote, phaseNote);
+    card.content.append(note, details, status, card.advanced, card.remove);
     refresh();
     const timer = window.setInterval(refresh, 250);
     return () => window.clearInterval(timer);

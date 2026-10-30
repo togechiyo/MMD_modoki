@@ -4,18 +4,17 @@ import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki, selectCenterBone, selectTimelineTrack } from "./electron-app.mjs";
 import { integrateSkyReferencePoints } from "./helpers/radiance-sky-reference.mjs";
+import { closeRcLighting, openRcLighting, rcLightingRow } from "./helpers/rc-lighting-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), fixture = resolve(root, "test/fixtures/rc-sky-stage/rc-sky-stage.pmx");
 const width = 1280, height = 720, volume = { min: [-12, -8, -12], size: 32 }, cell = volume.size / 16;
 const poses = [{ name: "open", x: 16, bottom: 4 }, { name: "original", x: 0, bottom: 4 },
   ...[0.2, 0.5, 0.9].map(gapCells => ({ name: `gap-${gapCells}-cell`, x: 0, bottom: 1.5 + gapCells * cell, gapCells }))];
-const dialog = page => page.locator('[data-popup-id="experimental-settings"]');
-const section = page => dialog(page).locator('[data-experiment-section="rc-sky-occlusion"]');
+const section = page => rcLightingRow(page, "rcSkyOcclusion");
 async function open(page) {
-  await page.locator('.app-menu-group:has([data-menu-command="tools.experimentalSettings"]) > .app-menu-trigger').click();
-  await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
+  await openRcLighting(page, "rcSkyOcclusion");
 }
-async function close(page) { await dialog(page).locator(".app-menu-dialog-close").click(); }
+const close = closeRcLighting;
 // These seven opaque AABBs match generate-rc-sky-stage.mjs. Only the roof is bone-weighted;
 // the gold marker originally above it stays at its authored height when the roof moves.
 function boxes(pose) {

@@ -1,6 +1,6 @@
 import { cloneRcDiffuseGiSettings, type RcDiffuseGiSettings } from "../render/rc-diffuse-gi-settings";
 
-export type RcDiffuseGiEditState = { settings: RcDiffuseGiSettings; track: unknown | null };
+export type RcDiffuseGiEditState = { settings: RcDiffuseGiSettings; track: unknown | null; stackIndex: number | null };
 export type RcDiffuseGiCommandDiff = {
     type: "effect.rcDiffuseGi";
     before: RcDiffuseGiEditState;
@@ -8,7 +8,7 @@ export type RcDiffuseGiCommandDiff = {
 };
 
 export function cloneRcDiffuseGiEditState(state: RcDiffuseGiEditState): RcDiffuseGiEditState {
-    return { settings: cloneRcDiffuseGiSettings(state.settings), track: structuredClone(state.track) };
+    return { settings: cloneRcDiffuseGiSettings(state.settings), track: structuredClone(state.track), stackIndex: state.stackIndex };
 }
 
 export function rcDiffuseGiEditStatesEqual(a: RcDiffuseGiEditState, b: RcDiffuseGiEditState): boolean {
@@ -17,6 +17,7 @@ export function rcDiffuseGiEditStatesEqual(a: RcDiffuseGiEditState, b: RcDiffuse
 
 /** Seek/play can discard preview, and undoing a first key leaves an empty track. Neither is an authored conflict. */
 export function canApplyRcDiffuseGiEditState(current: RcDiffuseGiEditState, expected: RcDiffuseGiEditState): boolean {
+    if (current.stackIndex !== expected.stackIndex) return false;
     if (JSON.stringify(current.settings) !== JSON.stringify(expected.settings)) return false;
     if (JSON.stringify(current.track) === JSON.stringify(expected.track)) return true;
     const record = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value)

@@ -1,10 +1,10 @@
 # RC GI: 方向光1反射の通常MMD材質への実装
 
-作成日: 2026-10-30。状態: **実ステージ監査後の演出調整を実装、所有者の次の目視確認待ち**。`ee0aa7e`の修正後もGIが見えにくいとの報告を受け、[実ステージ検証](./rc-diffuse-gi-real-stage-audit-2026-10-30.md)で弱い寄与と静止中の費用を確認した。その後、所有者が「推しモデルを映えさせる」目的で強いGIを許可したため、可視probeの正規化と受光側の演出gainを修正した。全モデルでの仕上がりや低性能PCの性能保証には一般化しない。
+作成日: 2026-10-30。状態: **実ステージ監査後の演出調整を実装し、所有者実機で効果の変化と快調な速度を確認。右側FrameGraphエフェクト欄へのUI移動も実装・検証済み**。`ee0aa7e`の修正後もGIが見えにくいとの報告を受け、[実ステージ検証](./rc-diffuse-gi-real-stage-audit-2026-10-30.md)で弱い寄与と静止中の費用を確認した。その後、所有者が「推しモデルを映えさせる」目的で強いGIを許可したため、可視probeの正規化と受光側の演出gainを修正した。全モデルでの仕上がりや低性能PCの性能保証には一般化しない。
 
 所有者の「次はGIの方を進めて」という依頼に基づき、[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)に続く1エフェクトとして実装した。[実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)のE＋GIに必要なFに相当する。以下は現在の実装説明と過去の検証履歴。実ステージ監査だけの区切り`1d7444e`と、その後の演出調整を区別する。
 
-## 実ステージ監査後の演出調整と次の目視点
+## 実ステージ監査後の演出調整と実機確認
 
 [推しモデルが映える強いGIを許容する所有者判断](../insights/decisions/rc-gi-allows-strong-effects-for-favorite-models.md)に基づき、遮られたprobeを照度補間の分母から除き、受光側の反射光を8倍の演出gainで加える。単なる強度不足だけでなく、壁際で有効な反射光が平均に埋もれる問題を修正する。格子・方向数・texture数・dispatch数は増やしていない。対象surfaceのないmeshのpose/snapshot点検も省いた。
 
@@ -34,20 +34,26 @@
 
 検証は実ステージ2・キャラ1・輸送3・visibility1・設定/出力1のGPU **8ケース成功**。GIの黒い反射元、反射元への遮蔽、ライト色/消灯、Luminous/天空遮蔽との分離、保存・Undo・キー・backend復帰も確認した。WebMの0/20/40/60frameは対応PNGとの全画面MAE約0.19〜0.26で、ON/OFF遷移を保持。全unit **225ファイル・1,386件成功**、全lint・追加MJS lint成功、通常typecheckは既存547件から追加0、critical gate成功。unitはsandboxの一時ファイル/localhost制約で実行失敗後、ローカル権限の同じ全suiteで成功した。起動コードは変更していないため別のsmokeは追加せず、実Electron/WebGPU E2Eで起動・validationを確認した。キャラE2Eは環境変数`MMD_RC_GI_CHARACTER_REFERENCE=1`を明示した場合だけ実行し、通常条件でskipすることも確認済み。
 
-次の目視は **設定→実験設定→RC GI、強度25%→50%→100%** とOFFを、同じカメラで比較する。光が当たる色付きの壁・床のそばで、顔と服の色移り、明部の白飛び、モデル移動時の明暗の跳ねを確認する。現行の近傍2三角形近似では遮蔽漏れや採用probeの切替が目立つ可能性が残る。天空遮蔽の完成判断をGIへ流用しない。
+演出調整の提示後、所有者は見た目について「まあまあ変化ある」、速度について「快調でいい」と報告した。これは所有者が試したシーン・実機での効果と体感負荷の確認として記録し、GI全般の品質了承や、以前の街モデルの6fps問題を同条件で解消した証拠には広げない。続いて、天空遮蔽とGIを実験設定から右側FrameGraphエフェクト欄へ移すよう指定があった（[所有者決定](../insights/decisions/complete-rc-effects-one-at-a-time-for-visual-review.md)）。
+
+今後の比較では、同じカメラで強度25%→50%→100%とOFFを切り替え、光が当たる色付きの壁・床のそばで顔と服の色移り、白飛び、移動時の明暗の跳ねを見る。近傍2三角形近似による遮蔽漏れ、採用probeの切替、広域volumeと透明材質の制約は残る。
 
 ## 操作と保存
 
-入口は **設定 → 実験設定… → RC GI**。Frame Graph / WebGPU専用のシーン照明設定で、PostFXの個体一覧や並べ替えには追加しない。
+入口は **右側のEffect → FrameGraph / Post → 追加 → RC GI**。実験設定の本番GI項目は撤去し、右欄の各1枚のsingletonとして追加・OFF・削除を扱う。照明は本描画の材質へ適用するため、一覧での位置は照明の実行順を変えない。複数配置できるLuminous RCのPostFX個体とは区別する。
 
 | 項目 | 初期値 | 編集・保存 |
 | --- | --- | --- |
-| 有効 | OFF | `enabled`はstepキー。旧projectではOFF |
+| 有効 | OFF | `enabled`はstepキー。新規・設定のない旧projectは未追加。欄への追加時はON |
 | 強度 | 実値0.5、範囲0〜2 | UI 0〜100の25に対応。キーは実値の線形補間 |
 | 範囲 | `null`（自動） | world最小XYZと一辺を固定保存できる。キー対象外 |
 | 反射 | メイン方向光から1回 | 固定。天空・発光の反射、複数反射は含めない |
 
-固定値は`lighting.rcDiffuseGi`、キーは`keyframes.effectAnimations`の`rcDiffuseGi` singletonへ保存する。設定編集はAction→Command→Undo/Redoを通し、trackのbase・keys・previewも一緒に復元する。値がない旧projectの見た目は変えない。ClassicとFrame Graph全体OFFでは設定・キーを保持して実行を休止する。
+固定値は`lighting.rcDiffuseGi`、キーは`keyframes.effectAnimations`の`rcDiffuseGi` singletonへの保存を維持する。欄への追加状態・表示位置はstack側で管理し、追加は既存設定を保持してONにする。個別OFFでは欄・値・キーを保持する。削除は既定OFFへ戻してtrackと欄を除去し、Undoで静的設定・trackのbase/keys/preview・元のstack位置をまとめて復元する。照明値・キーをPostFX個体へ変換しない。
+
+保存には`effects.rcSceneEffectsInStack: true`を追加し、このmarkerがない旧projectだけ、保存済みenabledまたはRC track（全OFFを含む）から欄を補完する。stackのない旧形式でもBloom等の既存効果を保持する。現行形式の削除済み効果は読み込みで復活させず、新設定のない旧projectの見た目も変えない。ClassicとFrame Graph全体OFFでは値・キー・追加状態を保持して実行を休止し、Classicでのキー登録・削除・移動も休止する。通常操作は見出しの有効・キー登録と強度に絞り、普段は自動の計算範囲を折り畳み詳細へ置く。
+
+UI移動後の専用カード・天空設定・GI設定/WebMの3ケースが成功し、独立操作、削除Undo/Redo、保存・移行、Classic往復、PNG/WebMを確認した。GPU validation・page/console errorは0件。全unit226ファイル・1,396件、全lint、critical gateを確認し、通常typecheckは既存547件から追加0件。旧stackなしBloom保持の追加検査も対象2ファイル・67件成功。[共通の操作契約・検証記録](./framegraph-post-stack-current-spec-2026-07-01.md#2026-10-30-追記-rc天空遮蔽giのエフェクト欄への移動)を参照。
 
 自動範囲は、対象材質のsubMeshが参照する変形済み頂点をworld座標へ変換し、最大軸の長さに20%の余白を付けた立方体とする。MMD loaderはmeshと全subMeshの描画用boundsへ共通の余白を付けるため、そのboundsをそのまま使わない。反射率が確実に0の黒い材質は自動範囲から除くが、BVHの遮蔽物には残す。保存値を勝手に固定せず、`null`のままruntimeで保持する。「範囲を再計算」と数値欄のEnterで固定し、「自動範囲」で戻す。mesh・geometry・対象材質・subMeshのindex範囲が変わったときは自動範囲を無効化する。毎フレームの変形・カメラ移動には追従しないため、大きく動くモデルや離れたステージ部品には範囲を調整する。
 

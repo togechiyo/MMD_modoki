@@ -650,6 +650,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
                 colorC: { r: 1, g: 1, b: 1 },
             },
             frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.(),
+            rcSceneEffectsInStack: true,
             ...(effectInstances ? { frameGraphInstances: effectInstances } : {}),
             frameGraphPostEnabled: host.getFrameGraphPostEffectsEnabled?.() ?? true,
             gammaEncodingVersion: 2,

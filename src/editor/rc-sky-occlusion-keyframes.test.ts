@@ -61,7 +61,7 @@ describe("RC sky occlusion scene keys", () => {
             expect(restored.evaluate(id, frame)?.strength).toBeCloseTo(expected.strength);
         }
         expect(restored.serialize()).toEqual(saved);
-        expect(isFrameGraphPostEffectId(id)).toBe(false);
+        expect(isFrameGraphPostEffectId(id)).toBe(true);
         expect(FRAME_GRAPH_INSTANCE_EFFECT_TYPES).not.toContain(id);
         expect(effectKeyframePayloadSchema.safeParse(first).success).toBe(true);
         expect(effectKeyframePayloadSchema.safeParse({ ...first, instanceId: "fx-sky" }).success).toBe(false);

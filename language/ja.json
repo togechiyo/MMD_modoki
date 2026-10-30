@@ -1,5 +1,9 @@
 ﻿{
     "experiment.mcp.title": "AI連携",
+    "effect.rcLighting.volume": "計算範囲・詳細",
+    "effect.rcLighting.rcSkyOcclusionNote": "空が遮られる場所を落ち着かせ、モデルやステージに奥行きを付けます。",
+    "effect.rcLighting.rcDiffuseGiNote": "周囲からの反射光でモデルやステージを明るく彩ります。SSGIなどとの併用時は強度を調整してください。",
+    "effect.rcLighting.phaseNote": "RC照明は各1つ。並べ替えても照明の計算順は変わりません。通常MMDの対応する不透明材質に適用します。",
     "experiment.mcp.enabled": "MCPを有効にする",
     "experiment.mcp.sharingNote": "このウィンドウの画像・元パス・キー情報とボーン・モーフ・材質の名前一覧を公開します。モデルファイル・メッシュ・テクスチャ原本は提供しません。起動時はOFFです。",
     "experiment.mcp.detailNote": "許可すると、要求された対象のボーン初期位置・IK・モーフ属性・材質・剛体・ジョイント設定をMCPクライアントへ提供します。接続先によってはクラウドAIへ送信されます。1回につき1対象ですが、繰り返し取得で構造情報が蓄積する可能性があります。モデルファイル・メッシュ・頂点ウェイト・モーフ頂点差分・テクスチャ原本は提供しません。MCPをOFFにすると許可もOFFになります。",

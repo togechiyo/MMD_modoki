@@ -3840,7 +3840,9 @@ export class FrameGraphPostEffectsController {
                     }
                     break;
                 case "ringParticles":
-                    // Scene-space particles are already present in sceneColor.
+                case "rcSkyOcclusion":
+                case "rcDiffuseGi":
+                    // Scene lighting and particles are already present in sceneColor.
                     break;
                 case "motionBlur":
                     if (this.motionBlurTask) {

@@ -154,6 +154,8 @@ import { canReuseProjectWindow, classifyProjectDrop, projectDropSnapshot } from 
 
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { FrameGraphInstanceController } from "./ui/frame-graph-instance-controller";
+import { mountRcSkyOcclusionSettings } from "./ui/rc-sky-occlusion-settings-panel";
+import { mountRcDiffuseGiSettings } from "./ui/rc-diffuse-gi-settings-panel";
 import { editEffectInstances, type EffectInstanceOperation } from "./editor/effect-instance-operations";
 import { FrameGraphEffectInstances } from "./editor/frame-graph-effect-instances";
 import { isEffectInstanceType } from "./editor/frame-graph-instance-effects";
@@ -313,6 +315,18 @@ type FrameGraphPostAddEffect = {
 };
 
 const FRAME_GRAPH_POST_ADD_EFFECTS: readonly FrameGraphPostAddEffect[] = [
+    {
+        id: "rcSkyOcclusion",
+        labelKey: "effect.frameGraphPost.effects.rcSkyOcclusion",
+        isActive: manager => manager.getRcSkyOcclusionSettings().enabled,
+        setActive: (manager, enabled) => manager.setRcSkyOcclusionSettings({ enabled }),
+    },
+    {
+        id: "rcDiffuseGi",
+        labelKey: "effect.frameGraphPost.effects.rcDiffuseGi",
+        isActive: manager => manager.getRcDiffuseGiSettings().enabled,
+        setActive: (manager, enabled) => manager.setRcDiffuseGiSettings({ enabled }),
+    },
     {
         id: "ssr",
         labelKey: "effect.frameGraphPost.effects.ssr",
@@ -599,6 +613,7 @@ export class UIController {
     private colorPostFxController: ColorPostFxController | null = null;
     private refreshLensEffectKeyframeUi: (() => void) | null = null;
     private frameGraphInstanceController: FrameGraphInstanceController | null = null;
+    private rcLightingCardDisposers: (() => void)[] = [];
     private dofPanelController: DofPanelController | null = null;
     private effectPanelShellController: EffectPanelShellController | null = null;
     private experimentalPostFxController: ExperimentalPostFxController | null = null;
@@ -1147,6 +1162,7 @@ export class UIController {
                 return;
             }
             this.exportUiController?.dispose();
+            this.rcLightingCardDisposers.forEach(dispose => dispose());
             this.layoutUiController?.dispose();
             document.removeEventListener("app:locale-changed", this.onLocaleChanged as EventListener);
         });
@@ -5555,11 +5571,11 @@ export class UIController {
     }
 
     private captureRcSkyOcclusionEditState(): RcSkyOcclusionEditState {
-        return { settings: this.mmdManager.getStaticRcSkyOcclusionSettings(), track: this.mmdManager.getRcSkyOcclusionTrackState() };
+        return { settings: this.mmdManager.getStaticRcSkyOcclusionSettings(), track: this.mmdManager.getRcSkyOcclusionTrackState(), stackIndex: this.mmdManager.getRcSceneEffectStackIndex("rcSkyOcclusion") };
     }
 
     private captureRcDiffuseGiEditState(): RcDiffuseGiEditState {
-        return { settings: this.mmdManager.getStaticRcDiffuseGiSettings(), track: this.mmdManager.getRcDiffuseGiTrackState() };
+        return { settings: this.mmdManager.getStaticRcDiffuseGiSettings(), track: this.mmdManager.getRcDiffuseGiTrackState(), stackIndex: this.mmdManager.getRcSceneEffectStackIndex("rcDiffuseGi") };
     }
 
     private editRcDiffuseGi(edit: () => void): void {
@@ -5607,6 +5623,14 @@ export class UIController {
             return;
         }
 
+        if (effectId === "rcSkyOcclusion" || effectId === "rcDiffuseGi") {
+            const edit = (): void => this.mmdManager.addRcSceneEffect(effectId);
+            if (effectId === "rcSkyOcclusion") this.editRcSkyOcclusion(edit);
+            else this.editRcDiffuseGi(edit);
+            this.expandedFrameGraphPostEffectId = effectId;
+            this.refreshFrameGraphPostAddUi();
+            return;
+        }
         if (isEffectInstanceType(effectId) && !EFFECT_TIMELINE_ENABLED) {
             this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation: { action: "add", effectType: effectId } });
             return;
@@ -5679,6 +5703,14 @@ export class UIController {
     }
 
     private removeFrameGraphPostEffect(effectId: FrameGraphPostAddEffectId): void {
+        if (effectId === "rcSkyOcclusion" || effectId === "rcDiffuseGi") {
+            const edit = (): void => this.mmdManager.removeRcSceneEffect(effectId);
+            if (effectId === "rcSkyOcclusion") this.editRcSkyOcclusion(edit);
+            else this.editRcDiffuseGi(edit);
+            this.refreshVisibleTimelineTracks();
+            this.refreshFrameGraphPostAddUi();
+            return;
+        }
         const currentStackIds = [...this.mmdManager.getFrameGraphPostEffectStackIds()];
         if (!currentStackIds.includes(effectId)) {
             return;
@@ -6941,6 +6973,8 @@ export class UIController {
     }
 
     private renderFrameGraphPostStack(frameGraphReady: boolean): void {
+        this.rcLightingCardDisposers.forEach(dispose => dispose());
+        this.rcLightingCardDisposers = [];
         if (!this.postEffectStackList) return;
         const stackEffectIds = [...this.mmdManager.getFrameGraphPostEffectStackIds()];
         const effectById = new Map(FRAME_GRAPH_POST_ADD_EFFECTS.map((effect) => [effect.id, effect]));
@@ -6974,6 +7008,9 @@ export class UIController {
         }
 
         const legacyRows = new Map<FrameGraphPostEffectId, string>(stackEffects.map((effect): [FrameGraphPostEffectId, string] => {
+            if (effect.id === "rcSkyOcclusion" || effect.id === "rcDiffuseGi") {
+                return [effect.id, `<div data-rc-lighting-mount="${effect.id}"></div>`];
+            }
             const rowId: string = effect.id;
             const expanded = effect.id === this.expandedFrameGraphPostEffectId;
             const enabled = effect.isActive(this.mmdManager);
@@ -7002,6 +7039,19 @@ export class UIController {
             ? this.frameGraphInstanceController?.render(id, true, id === this.expandedFrameGraphPostEffectId) ?? "" : legacyRows.get(id as FrameGraphPostEffectId) ?? "").join("")
             + instanceState.instances.filter(item => !instanceState.order.includes(item.instanceId)).map(item => this.frameGraphInstanceController?.render(item.instanceId, false, item.instanceId === this.expandedFrameGraphPostEffectId) ?? "").join("");
         this.frameGraphInstanceController?.installControls();
+        for (const id of ["rcSkyOcclusion", "rcDiffuseGi"] as const) {
+            const parent = this.postEffectStackList.querySelector<HTMLElement>(`[data-rc-lighting-mount="${id}"]`);
+            if (!parent) continue;
+            const mount = id === "rcSkyOcclusion" ? mountRcSkyOcclusionSettings : mountRcDiffuseGiSettings;
+            this.rcLightingCardDisposers.push(mount(parent, this.mmdManager, action => this.actionDispatcher.dispatch(action), {
+                expanded: id === this.expandedFrameGraphPostEffectId,
+                keyframeState: () => {
+                    const registered = this.mmdManager.readEffectSceneKeyframePayload(id, this.mmdManager.currentFrame)?.value;
+                    return registered && keyframeValuesEqual(registered, this.mmdManager.captureCurrentEffectKeyframePayload(id).value)
+                        ? "registered" : "dirty";
+                },
+            }));
+        }
     }
 
     private installPostEffectBackendControls(root: HTMLElement): void {
@@ -8117,11 +8167,15 @@ export class UIController {
                 if (!canApplyRcSkyOcclusionEditState(current, from)) return false;
                 this.mmdManager.setRcSkyOcclusionSettings(to.settings);
                 this.mmdManager.setRcSkyOcclusionTrackState(to.track);
+                this.mmdManager.setRcSceneEffectStackIndex("rcSkyOcclusion", to.stackIndex);
                 if (!rcSkyOcclusionEditStatesEqual(this.captureRcSkyOcclusionEditState(), to)) {
                     this.mmdManager.setRcSkyOcclusionSettings(current.settings);
                     this.mmdManager.setRcSkyOcclusionTrackState(current.track);
+                    this.mmdManager.setRcSceneEffectStackIndex("rcSkyOcclusion", current.stackIndex);
                     return false;
                 }
+                this.refreshFrameGraphPostAddUi();
+                this.refreshVisibleTimelineTracks();
                 this.updateTimelineEditState();
                 return true;
             },
@@ -8133,11 +8187,15 @@ export class UIController {
                 if (!canApplyRcDiffuseGiEditState(current, from)) return false;
                 this.mmdManager.setRcDiffuseGiSettings(to.settings);
                 this.mmdManager.setRcDiffuseGiTrackState(to.track);
+                this.mmdManager.setRcSceneEffectStackIndex("rcDiffuseGi", to.stackIndex);
                 if (!rcDiffuseGiEditStatesEqual(this.captureRcDiffuseGiEditState(), to)) {
                     this.mmdManager.setRcDiffuseGiSettings(current.settings);
                     this.mmdManager.setRcDiffuseGiTrackState(current.track);
+                    this.mmdManager.setRcSceneEffectStackIndex("rcDiffuseGi", current.stackIndex);
                     return false;
                 }
+                this.refreshFrameGraphPostAddUi();
+                this.refreshVisibleTimelineTracks();
                 this.updateTimelineEditState();
                 return true;
             },
@@ -8480,7 +8538,8 @@ export class UIController {
     private refreshEffectKeyframeUi(): void {
         const track = this.getSelectedTimelineTrack();
         const id = track?.category === "effect" && (track.name === "rcSkyOcclusion" || track.name === "rcDiffuseGi" || this.mmdManager.isEffectInstance(track.name) || (EFFECT_TIMELINE_ENABLED && isEffectId(track.name))) ? track.name : null;
-        const instanceUnsupported = id && this.mmdManager.isEffectInstance(id) && this.getConfiguredPostEffectBackend() !== "frameGraph";
+        const instanceUnsupported = id && (this.mmdManager.isEffectInstance(id) || id === "rcSkyOcclusion" || id === "rcDiffuseGi")
+            && this.mmdManager.isEffectTrackSuspended(id);
         this.frameGraphInstanceController?.refresh();
         if (id) this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying || Boolean(instanceUnsupported);
         if (!EFFECT_TIMELINE_ENABLED) return;
@@ -10852,7 +10911,8 @@ export class UIController {
         if (this.mmdManager.isPlaying) return;
         const track = instanceId ? { name: instanceId, category: "effect" as const } : this.getSelectedTimelineTrack();
         if (track?.category !== "effect" || (!isEffectId(track.name) && !this.mmdManager.isEffectInstance(track.name))) return;
-        if (this.mmdManager.isEffectInstance(track.name) && this.getConfiguredPostEffectBackend() !== "frameGraph") return;
+        if ((this.mmdManager.isEffectInstance(track.name) || track.name === "rcSkyOcclusion" || track.name === "rcDiffuseGi")
+            && this.mmdManager.isEffectTrackSuspended(track.name)) return;
         const frame = Math.max(0, Math.floor(this.mmdManager.currentFrame));
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentEffectKeyframePayload(track.name);

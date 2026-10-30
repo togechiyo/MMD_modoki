@@ -792,6 +792,8 @@ export interface ProjectEffectState {
     fogColor?: ProjectRgbColor;
     ringParticles?: ProjectRingParticleState;
     frameGraphPostStack?: FrameGraphPostEffectStackEntry[];
+    /** RC singleton card presence is authoritative, including explicit removal. */
+    rcSceneEffectsInStack?: true;
     frameGraphInstances?: import("./editor/frame-graph-effect-instances").SerializedEffectInstances;
     frameGraphPostEnabled?: boolean;
     gammaEncodingVersion?: 2;

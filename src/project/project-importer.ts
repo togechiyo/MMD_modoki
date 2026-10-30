@@ -1,6 +1,7 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
 import { normalizeRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
 import { normalizeRcDiffuseGiSettings, type RcDiffuseGiSettings } from "../render/rc-diffuse-gi-settings";
+import { migrateRcSceneEffectStack } from "../editor/rc-scene-effect-stack";
 import { FrameGraphEffectInstances } from "../editor/frame-graph-effect-instances";
 import { splitLuminousRadianceProject } from "../editor/luminous-radiance-split";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
@@ -24,7 +25,6 @@ import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imagePro
 import { createCameraAnimationFromTrack, deserializeCameraTrack, deserializeModelAnimation } from "./project-codec";
 import {
     addFrameGraphPostEffectId,
-    normalizeFrameGraphPostEffectStack,
     type FrameGraphPostEffectId,
     type FrameGraphPostEffectStackEntry,
 } from "../shared/frame-graph-post-effect-stack";
@@ -322,6 +322,7 @@ type ProjectImportHost = {
     setRingParticleSettings?(settings: ProjectRingParticleState): void;
     setPostEffectFogColor(r: number, g: number, b: number): void;
     setFrameGraphPostEffectStackIds?: (ids: readonly FrameGraphPostEffectId[]) => void;
+    getFrameGraphPostEffectStackEntries?: () => FrameGraphPostEffectStackEntry[];
     setFrameGraphPostEffectStackEntries?: (entries: readonly FrameGraphPostEffectStackEntry[]) => void;
     setSerializedEffectInstances?: (state: unknown) => void;
     setFrameGraphPostEffectsEnabled?: (enabled: boolean) => void;
@@ -1533,8 +1534,17 @@ export async function importProjectState(
             b: readFiniteNumber(ringParticles?.colorC?.b, ringParticleColorB.b),
         },
     });
-    if (Array.isArray(data.effects.frameGraphPostStack) || ringParticles?.enabled || waterSurfaceSettings.enabled) {
-        const stackEntries = normalizeFrameGraphPostEffectStack(data.effects.frameGraphPostStack ?? []);
+    const rcStackEntries = migrateRcSceneEffectStack({ rcSceneEffectsInStack: data.effects.rcSceneEffectsInStack,
+        stack: data.effects.frameGraphPostStack, lighting: data.lighting, animations: data.keyframes?.effectAnimations });
+    if (!Array.isArray(data.effects.frameGraphPostStack) && data.effects.rcSceneEffectsInStack !== true && rcStackEntries.length) {
+        // Before RC gained cards, an absent stack kept the manager's canonical
+        // parameter-derived entries. Preserve those before making presence explicit.
+        const existingIds = new Set(rcStackEntries.map(entry => entry.id));
+        rcStackEntries.unshift(...(host.getFrameGraphPostEffectStackEntries?.() ?? []).filter(entry => !existingIds.has(entry.id)));
+    }
+    if (Array.isArray(data.effects.frameGraphPostStack) || data.effects.rcSceneEffectsInStack === true
+        || rcStackEntries.length || ringParticles?.enabled || waterSurfaceSettings.enabled) {
+        const stackEntries = rcStackEntries;
         if (ringParticles?.enabled && !stackEntries.some((entry) => entry.id === "ringParticles")) {
             stackEntries.push({ id: "ringParticles", enabled: true });
         }

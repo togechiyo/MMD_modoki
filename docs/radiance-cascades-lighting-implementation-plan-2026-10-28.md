@@ -1,6 +1,6 @@
 # RC共通基盤・拡散GI・天空遮蔽の実装案
 
-作成日: 2026-10-28。2026-10-30更新。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)は通常材質・設定/保存・Undo/キー・backend・骨/モーフ・PNG/WebMまで実装し、負荷軽減後のGPU 11件を確認、所有者が実機の見た目・軽さを了承して一区切りとした。[RC GI](./rc-diffuse-gi-implementation-2026-10-30.md)は[実ステージ監査](./rc-diffuse-gi-real-stage-audit-2026-10-30.md)後、所有者の強い演出許可に基づき可視probe正規化・受光側8倍gain・空source mesh省略を実装した。実ステージとキャラで寄与の増加を確認し、次の所有者目視待ち。広域volume・透明材質・強い設定の白飛びなどは残存制約。
+作成日: 2026-10-28。2026-10-30更新。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)は通常材質・設定/保存・Undo/キー・backend・骨/モーフ・PNG/WebMまで実装し、負荷軽減後のGPU 11件を確認、所有者が実機の見た目・軽さを了承して一区切りとした。[RC GI](./rc-diffuse-gi-implementation-2026-10-30.md)は[実ステージ監査](./rc-diffuse-gi-real-stage-audit-2026-10-30.md)後に演出調整を実装し、実ステージとキャラで寄与の増加を確認した。所有者実機でも「まあまあ変化ある」「快調でいい」と確認があり、続く指定で両効果を右側FrameGraphエフェクト欄へ移して操作・保存・出力を検証した。GI全般の品質了承とはせず、広域volume・透明材質・強い設定の白飛びなどは残存制約。
 
 所有者の「おすすめ設定で実装案を書いて、ドキュメントとして置く」という依頼に基づく。[応用と共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を実装単位へ具体化する。その後の実装依頼により、[段階Aのscene/BVH共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ着手した。以下は当初の推奨案を含む設計記録であり、現在の構成・初期値・UI・検証結果は[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)と[GI](./rc-diffuse-gi-implementation-2026-10-30.md)の実装メモを正本とする。GIと天空/LuminousのGPU source/field共有は未実装で、共通source実装を独立所有している。
 
@@ -22,7 +22,7 @@
 | RC 天空遮蔽 `rcSkyOcclusion` | 空への可視性で通常MMDの影側残光を抑える | 独立したシーン照明設定。1シーン1個、適用順固定 |
 | RC共通設定 | 新しいGI/天空遮蔽の計算範囲・品質 | 設定の共有。単独のエフェクトや追加のmaster ON/OFFにはしない |
 
-当初の固定「照明」欄案から、最初の天空遮蔽は通常の **設定 → 実験設定…** に独立項目を置く実装へ具体化した。天空遮蔽の公開を未完成のGIとまとめて待たせず、GIの操作項目だけを先に出さない。既存PostFX一覧は従来どおり並べ替え、天空遮蔽には実行順が変わるドラッグハンドルを付けない。既存の`frameGraphPostStack`へ新IDを足して順番だけ無視する実装にはしない。
+初回は通常の **設定 → 実験設定…** に独立項目を置き、天空遮蔽とGIを1効果ずつ仕上げた。2026-10-30の所有者指定により、入口を右側の **Effect → FrameGraph / Post** へ移した。現在の追加・OFF・削除操作と揃えるため、agent実装では各1枚のlegacy stack singletonとして扱い、表示位置と追加状態をstackへ載せる。これは当初の固定欄案からの変更であり、照明値・キーを複数配置できるPostFX個体へ移すものではない。本描画前の照明phaseは固定し、一覧の位置が照明順を変えないことを注記する。[操作・保存・履歴・出力の検証](./framegraph-post-stack-current-spec-2026-07-01.md#2026-10-30-追記-rc天空遮蔽giのエフェクト欄への移動)も完了した。
 
 初回対応はFrame Graph / WebGPUと通常MMDのopaque材質。通常Standard材質へのadapterは今回追加しない。PBR、独自WGSL、Skin等の別lighting経路、透明・alpha-test材質の正確な遮蔽、複数反射、天空の反射、発光の追加反射、粗い鏡面反射、霧は後続の範囲とする。対象外材質は元の表示を維持し、全材質へ適用済みと表示しない。
 
@@ -151,12 +151,14 @@ scene/engineごとの所有者は一つにし、共有snapshotを同じframeで�
 
 最初の天空遮蔽は`lighting.rcSkyOcclusion`へ`enabled / strength / minimum / volume`を保存する。GIは独立した`lighting.rcDiffuseGi`へ`enabled / strength / volume`を保存し、minimumは持たない。両方ともキーは`keyframes.effectAnimations`の専用singletonを使う。当初の`effects.rcLighting`統合案は採用しない。既存`luminousRadiance`の個体ID・固定値・enabledキー・並び順・削除状態は移動しない。新しい共通profileを旧Luminous個体へ暗黙適用しない。
 
+2026-10-30のエフェクト欄への移動では、追加状態・表示位置をstackに持たせる。各1枚で追加時は既存値を保ってON、個別OFFは値・キー・欄を保持する。削除は既定OFFへ戻してキーと欄を除き、Undoで設定・track・元の位置を復元する。`effects.rcSceneEffectsInStack: true`のない旧projectだけ保存済みenabledまたはRC track（全OFFを含む）から欄を補完し、既存効果の補完を保ちながら現行形式で削除した効果を再出現させない。Classicでのキー登録・削除・移動は休止する。
+
 - 新設定がない旧projectは新機能OFF。既存Luminousの現在の保存値と復元規則を維持する。非有限値・未知enumをnormalizeし、normalizeを繰り返しても値や個体が増えない。
 - OFFは値を保持し、削除/無効化をload時に復活させない。texture、BVH、cache key、GPU handleは保存しない。
 - 新しいGI/天空遮蔽もAction→Command→差分→Undo/Redoを使う。enabledはstep、強度は実値の線形補間を初回のキー対象とし、共通範囲・品質・最低残光は固定値にする。scene照明trackとして扱い、既存PostFX個体の順序とは分離する。
 - Classicでは設定とキーを保持して新RC照明の実行を休止する。Frame Graphへ戻したときに一度だけ再構築し、材質adapterや旧PostProcessを二重に残さない。
 - 確保済み依存内のON/OFF・強度キーはrebuildしない。追加/削除、品質・format・接続変更はrebuildする。範囲変更は形状の確保が同じならfieldを無効化するだけにし、再構築の要否をpure planで判定する。
-- 順序・依存・最終表示は[FrameGraphの現行仕様](./framegraph-post-stack-current-spec-2026-07-01.md)と[構造変更の契約](../insights/policies/framegraph-structure-changes-require-rebuild.md)へ合わせ、新しい固定照明欄との境界を実装時に現行仕様へ追記する。
+- 順序・依存・最終表示は[FrameGraphの現行仕様](./framegraph-post-stack-current-spec-2026-07-01.md)と[構造変更の契約](../insights/policies/framegraph-structure-changes-require-rebuild.md)へ合わせる。2026-10-30のUI移動ではstack上の追加状態・表示位置と、固定された描画前の照明phaseを区別する。
 
 SSGIは直前のsceneColorを入力とするためRCの寄与も再度集め得る。RSM GIは[独立controller](../src/render/global-illumination-controller.ts)と材質pluginを使い、PostFX列から外すだけでは停止しない。比較用プリセット以外では既存設定を自動変更せず、併用中の寄与重複を詳細欄へ短く表示する。RSMをOFFにする操作では既存のmanager/RSM両方の停止契約を使う。SSAOは近接陰影の補助として併用比較し、天空遮蔽と同じ全体暗化を二重に掛けない。
 
@@ -180,7 +182,7 @@ SSGIは直前のsceneColorを入力とするためRCの寄与も再度集め得�
 1. **共通基盤・診断（A/B/C）**: 完了した共有化と検証経路を土台にし、天空遮蔽に必要な修正へ範囲を絞る。
 2. **RC天空遮蔽を1効果として仕上げる（D＋天空遮蔽に必要なF、今回完了）**: 任意位置・法線query、通常MMD材質への適用、アプリの操作導線、初期値・保存/読込、Undo/キー、backend切替、同frameの骨/モーフ更新、PNG/WebMを通した。OFF/強度0の旧表示復帰、直射・発光の維持、屋外・庇下の比較と残る制約を実装メモに記録した。
 3. **天空遮蔽をアプリで目視比較する区切り（所有者確認済み）**: アプリ内の入口とON/OFFの比較手順、対象材質・範囲、確認済み項目と残る制約を提示し、2026-10-30に所有者が実機の見た目・軽さを確認して一区切りとした。
-4. **RC GIを1効果として仕上げる（E＋GIに必要なF、演出調整後の所有者目視待ち）**: 2026-10-30、通常材質・設定/保存・Undo/キー・backend・PNG/WebMまで接続。実ステージの弱い寄与を監査後、[強いGIを許容する所有者判断](../insights/decisions/rc-gi-allows-strong-effects-for-favorite-models.md)に基づき可視probe正規化と受光側gainを調整し、対象外meshのCPU点検を省いた。実ステージ2種とキャラの色移り、OFF/0復帰、出力を再確認した。格子・方向数は増やさず、カメラ局所volumeは今回導入しない。強い設定の白飛びや広域の粗さを含めて次の目視で判断する（[数値・制約・比較手順](./rc-diffuse-gi-implementation-2026-10-30.md)）。
+4. **RC GIを1効果として仕上げる（E＋GIに必要なF、演出調整の実機確認・UI移動の検証済み）**: 2026-10-30、通常材質・設定/保存・Undo/キー・backend・PNG/WebMまで接続。実ステージ監査後、[強いGIを許容する所有者判断](../insights/decisions/rc-gi-allows-strong-effects-for-favorite-models.md)に基づき可視probe正規化と受光側gainを調整し、対象外meshのCPU点検を省いた。実ステージ2種とキャラの色移り、OFF/0復帰、出力を再確認し、所有者実機でも効果と体感速度のコメントを得た。続く指定でエフェクト欄へ移し、追加・削除/Undo・旧project移行・backend・出力を確認した。全般的なGI品質への了承には広げず、白飛び・広域の粗さ等の制約を残す（[数値・制約・比較手順](./rc-diffuse-gi-implementation-2026-10-30.md)）。
 
 効果を実装する際は、材質・render順序に未解決の制約があれば対象範囲と完了条件を明示し、内部計算だけを複数効果へ広げない。今回の天空遮蔽では既知の近似誤差と未確認条件を残存制約として保留し、所有者が確認した区切りを完了とする。採用済みのprobe照度事前集計を超える変更、疎なprobe、GPU変形/refit、反射・媒質は、必要が生じた時の別の比較単位とする。
 

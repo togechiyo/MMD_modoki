@@ -1,5 +1,9 @@
 ﻿{
     "experiment.mcp.title": "AI 연동",
+    "effect.rcLighting.volume": "계산 범위 및 상세",
+    "effect.rcLighting.rcSkyOcclusionNote": "하늘이 가려진 곳을 어둡게 하여 모델과 스테이지에 깊이를 더합니다.",
+    "effect.rcLighting.rcDiffuseGiNote": "주변의 반사광으로 모델과 스테이지를 밝히고 색감을 더합니다. SSGI 등과 함께 사용할 때는 강도를 조절하세요.",
+    "effect.rcLighting.phaseNote": "RC 조명은 종류별 하나씩 사용합니다. 순서를 바꿔도 조명 계산 순서는 바뀌지 않습니다. 지원되는 불투명 MMD 재질에 적용됩니다.",
     "experiment.mcp.enabled": "MCP 활성화",
     "experiment.mcp.sharingNote": "이 창의 이미지, 원본 경로, 키프레임 정보와 본·모프·재질 이름 목록을 제공합니다. 모델 파일, 메시, 원본 텍스처는 제공하지 않습니다. 시작 시에는 꺼져 있습니다.",
     "experiment.mcp.detailNote": "허용하면 요청된 대상의 본 초기 위치, IK, 모프 속성, 재질, 강체 및 조인트 설정을 MCP 클라이언트에 제공합니다. 클라이언트에 따라 클라우드 AI로 전송될 수 있습니다. 요청당 한 대상만 제공하지만 반복 요청으로 구조 정보가 축적될 수 있습니다. 모델 파일, 메시, 정점 가중치, 모프 정점 변위 및 원본 텍스처는 제공하지 않습니다. MCP를 끄면 이 권한도 해제됩니다.",

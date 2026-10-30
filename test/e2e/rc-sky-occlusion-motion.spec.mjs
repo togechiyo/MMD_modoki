@@ -3,19 +3,17 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
+import { closeRcLighting, openRcLighting, rcLightingRow } from "./helpers/rc-lighting-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), fixture = resolve(root, "test/fixtures/rc-sky-stage/rc-sky-stage.pmx");
-const dialog = page => page.locator('[data-popup-id="experimental-settings"]');
-const section = page => dialog(page).locator('[data-experiment-section="rc-sky-occlusion"]');
+const section = page => rcLightingRow(page, "rcSkyOcclusion");
 const enabled = page => section(page).locator('[name="rcSkyOcclusionEnabled"]');
 const invoke = (page, name) => page.evaluate(async name =>
   (await import("/test/e2e/helpers/rc-sky-occlusion-motion-probe.mjs"))[name](), name);
 async function open(page) {
-  await page.locator('.app-menu-group:has([data-menu-command="tools.experimentalSettings"]) > .app-menu-trigger').click();
-  await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
-  await expect(enabled(page)).toBeVisible();
+  await openRcLighting(page, "rcSkyOcclusion");
 }
-async function close(page) { await dialog(page).locator(".app-menu-dialog-close").click(); }
+const close = closeRcLighting;
 async function seek(page, frame) {
   await page.locator("#current-frame").fill(String(frame)); await page.locator("#current-frame").press("Enter");
   await expect(page.locator("#current-frame")).toHaveValue(String(frame));

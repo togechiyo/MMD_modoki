@@ -1,5 +1,9 @@
 ﻿{
     "experiment.mcp.title": "AI integration",
+    "effect.rcLighting.volume": "Volume and details",
+    "effect.rcLighting.rcSkyOcclusionNote": "Shade areas blocked from the sky to add depth to models and stages.",
+    "effect.rcLighting.rcDiffuseGiNote": "Brighten and color models and stages with bounced light. Adjust strength when combining with SSGI or other GI effects.",
+    "effect.rcLighting.phaseNote": "One of each RC lighting effect per scene. Reordering does not change lighting computation. Applies to supported opaque MMD materials.",
     "experiment.mcp.enabled": "Enable MCP",
     "experiment.mcp.sharingNote": "Shares images from this window, source paths, keyframe information, and lists of bone, morph and material names. Model files, meshes and original textures are not shared. Off at startup.",
     "experiment.mcp.detailNote": "When allowed, requested bone rest positions, IK, morph properties, material, rigid body and joint settings are shared with the MCP client. Depending on the client, they may be sent to cloud AI. Each request covers one target, but repeated requests may accumulate structural information. Model files, meshes, vertex weights, morph vertex offsets and original textures are not shared. Turning MCP off also revokes this permission.",

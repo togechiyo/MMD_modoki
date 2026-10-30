@@ -3386,6 +3386,42 @@ body.png-capture-mode .model-comment-notice {
   min-width: 0;
 }
 
+.rc-lighting-effect-controls {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+}
+
+.rc-lighting-effect .popup-form-field {
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.rc-lighting-effect .popup-form-note {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+.rc-lighting-effect input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  height: 14px;
+  accent-color: #94a3b8;
+}
+
+.rc-lighting-effect .popup-form-range-row {
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+
+.rc-lighting-effect summary {
+  padding: 5px 0;
+  cursor: pointer;
+}
+
 .effect-layer-control-row {
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr) 34px;

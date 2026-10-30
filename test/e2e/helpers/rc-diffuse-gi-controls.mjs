@@ -1,21 +1,19 @@
 import { expect } from "@playwright/test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { PNG } from "playwright-core/lib/utilsBundle";
+import { closeRcLighting, openRcLighting, rcLightingRow } from "./rc-lighting-controls.mjs";
 
 export const giVolume = { min: [-8, -2, -8], size: 16 };
-export const dialog = page => page.locator('[data-popup-id="experimental-settings"]');
-export const giSection = page => dialog(page).locator('[data-experiment-section="rc-diffuse-gi"]');
+export const giSection = page => rcLightingRow(page, "rcDiffuseGi");
 export const giInput = (page, field) => giSection(page).locator(`[name="rcDiffuseGi${field}"]`);
 export const giStatus = page => giSection(page).locator('[data-rc-diffuse-gi-status]');
 export const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
 export const giSettings = async page => (await project(page)).lighting.rcDiffuseGi;
 export const giKeys = async page => (await project(page)).keyframes?.effectAnimations?.tracks.find(track => track.effectId === "rcDiffuseGi");
 export async function openGi(page) {
-  await page.locator('.app-menu-group:has([data-menu-command="tools.experimentalSettings"]) > .app-menu-trigger').click();
-  await page.locator('[data-menu-command="tools.experimentalSettings"]').click();
-  await expect(giInput(page, "Enabled")).toBeVisible();
+  await openRcLighting(page, "rcDiffuseGi");
 }
-export async function closeGi(page) { await dialog(page).locator(".app-menu-dialog-close").click(); }
+export const closeGi = closeRcLighting;
 export async function seek(page, frame) { await page.locator("#current-frame").fill(String(frame)); await page.locator("#current-frame").press("Enter"); }
 export async function numberControl(page, key, value) {
   const field = page.locator(`#bone-controls input[data-control-key='${key}']`);

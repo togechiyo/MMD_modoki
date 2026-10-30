@@ -300,6 +300,15 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("marks RC card presence authoritative while retaining OFF cards", () => {
+        const project = exportProjectState({ ...createHost(), getFrameGraphPostEffectStackEntries: () => [
+            { id: "rcSkyOcclusion" as const, enabled: false }, { id: "rcDiffuseGi" as const, enabled: true },
+        ] });
+        expect(project.effects.rcSceneEffectsInStack).toBe(true);
+        expect(project.effects.frameGraphPostStack).toEqual([
+            { id: "rcSkyOcclusion", enabled: false }, { id: "rcDiffuseGi", enabled: true },
+        ]);
+    });
     it("saves GI static settings without baking the keyed preview or sharing the sky volume", () => {
         const settings = { enabled: false, strength: 1.6, volume: { min: [-3, 1, -3] as [number, number, number], size: 6 } };
         const host = { ...createHost(), getRcDiffuseGiSettings: () => ({ ...settings, enabled: true, strength: 0 }), getStaticRcDiffuseGiSettings: () => settings };

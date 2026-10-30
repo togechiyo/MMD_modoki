@@ -48,6 +48,12 @@ function createActivationSettings(
 }
 
 describe("frame graph post effect stack helpers", () => {
+    it("keeps RC lighting cards in the stack without allocating image post tasks", () => {
+        const ids = ["rcSkyOcclusion", "rcDiffuseGi"] as const;
+        expect(normalizeFrameGraphPostEffectIds([...ids, ...ids])).toEqual(ids);
+        for (const id of ids) expect(isFrameGraphPostEffectActiveInSettings(createActivationSettings(), id)).toBe(false);
+        expect(getActiveFrameGraphPostEffectIdsFromSettings(createActivationSettings())).not.toContain("rcDiffuseGi");
+    });
     it("normalizes ids and appends active ids in canonical order", () => {
         expect(normalizeFrameGraphPostEffectIds(
             ["grain", "unknown", "lut", "grain"],

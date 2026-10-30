@@ -4,8 +4,9 @@ import { resolve } from "node:path";
 import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
 import { ensureLuminousRadianceInstance, getLuminousInstanceRuntime, luminousInstanceControl,
   setLuminousInstancePosition } from "./helpers/luminous-instance-controls.mjs";
-import { camera, capture, closeGi, dialog, difference, giInput, giSlider, initialState, numberControl,
+import { camera, capture, closeGi, difference, giInput, giSlider, initialState, numberControl,
   openGi, projectPoints, receiverDifference, setGi } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { setRcLightingEnabled } from "./helpers/rc-lighting-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = variant => resolve(root, `test/fixtures/rc-diffuse-gi-stage/rc-diffuse-gi-${variant}.pmx`);
@@ -71,13 +72,9 @@ for (const variant of ["red", "black", "textured-red"]) test(`RC diffuse GI tran
     await lightExtreme(page, "light-direction-x", true);
     const reversed = await pair("light-reversed"); expect(reversed.redExcess).toBeLessThan(base.redExcess * 0.65);
     await lightExtreme(page, "light-direction-x", false);
-    await openGi(page);
-    const sky = dialog(page).locator('[data-experiment-section="rc-sky-occlusion"]');
-    await sky.locator('[name="rcSkyOcclusionEnabled"]').check();
-    await expect(sky.locator("[data-rc-sky-occlusion-status]")).toHaveAttribute("data-state", "ready", { timeout: 45000 });
-    await closeGi(page);
+    await setRcLightingEnabled(page, "rcSkyOcclusion", true);
     const combined = await pair("sky-combined"); expect(combined.redExcess).toBeGreaterThan(0.3);
-    await openGi(page); await sky.locator('[name="rcSkyOcclusionEnabled"]').uncheck(); await closeGi(page);
+    await setRcLightingEnabled(page, "rcSkyOcclusion", false);
 
     await page.locator("#info-model-select").selectOption("0");
     if (!await page.locator("#shader-panel").isVisible()) await page.locator("#btn-toggle-shader-panel").click();
@@ -108,13 +105,12 @@ for (const variant of ["red", "black", "textured-red"]) test(`RC diffuse GI tran
       await page.locator("#btn-toggle-shader-panel").click();
     };
     await toggleEmission(true);
-    await openGi(page); await sky.locator('[name="rcSkyOcclusionEnabled"]').check();
-    await expect(sky.locator("[data-rc-sky-occlusion-status]")).toHaveAttribute("data-state", "ready", { timeout: 45000 });
+    await setRcLightingEnabled(page, "rcSkyOcclusion", true); await openGi(page);
     await expect(giInput(page, "Enabled")).toBeChecked(); await closeGi(page);
     await capture(page, testInfo, report, "all-three-on");
     report.allThreeRuntime = await getLuminousInstanceRuntime(page);
     // Preserve the standalone GI color/zero-light assertions below.
-    await toggleEmission(false); await openGi(page); await sky.locator('[name="rcSkyOcclusionEnabled"]').uncheck(); await closeGi(page);
+    await toggleEmission(false); await setRcLightingEnabled(page, "rcSkyOcclusion", false);
 
     await lightExtreme(page, "light-color-r", false); await lightExtreme(page, "light-color-g", true); await lightExtreme(page, "light-color-b", false);
     const greenLight = await pair("green-light");
@@ -125,8 +121,7 @@ for (const variant of ["red", "black", "textured-red"]) test(`RC diffuse GI tran
     // The source remains visibly emissive, but GI must contain only reflected direct light.
     expect(report.noDirectLightDifference).toBeLessThan(0.1);
 
-    await toggleEmission(true); await openGi(page); await sky.locator('[name="rcSkyOcclusionEnabled"]').check();
-    await expect(sky.locator("[data-rc-sky-occlusion-status]")).toHaveAttribute("data-state", "ready", { timeout: 45000 });
+    await toggleEmission(true); await setRcLightingEnabled(page, "rcSkyOcclusion", true); await openGi(page);
     await expect(giInput(page, "Enabled")).toBeChecked(); await closeGi(page);
     const darkThree = await capture(page, testInfo, report, "all-three-on-no-direct-light");
     report.darkThreeRuntime = await getLuminousInstanceRuntime(page);
@@ -141,7 +136,7 @@ for (const variant of ["red", "black", "textured-red"]) test(`RC diffuse GI tran
     // the source while its cosine against the receiver's +Y normal is zero.
     // The MMD fallback toon may retain display-space residual; record absolute
     // receiver values rather than presuming it becomes black or imposing a gain.
-    await openGi(page); await sky.locator('[name="rcSkyOcclusionEnabled"]').uncheck(); await closeGi(page);
+    await setRcLightingEnabled(page, "rcSkyOcclusion", false);
     await page.locator("#info-model-select").selectOption("0");
     if (!await page.locator("#shader-panel").isVisible()) await page.locator("#btn-toggle-shader-panel").click();
     await page.locator('[data-effect-tab="materials"]').click();

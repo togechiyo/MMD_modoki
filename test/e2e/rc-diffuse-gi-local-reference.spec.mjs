@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { camera, capture, closeGi, giInput, giSlider, openGi, setGi } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { camera, capture, closeGi, giInput, giSection, giSlider, openGi, setGi } from "./helpers/rc-diffuse-gi-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const references = [
@@ -99,7 +99,7 @@ for (const reference of references) test(`RC GI local reference: ${reference.id}
     report.closeCamera = await camera(page, { tx: close.center[0], ty: close.center[1], tz: close.center[2], rx: -15, ry: -25, camDistance: close.distance });
     const closeOff = await capture(page, testInfo, report, "close-off");
     await openGi(page); await giInput(page, "Enabled").check();
-    await page.locator('[data-experiment-section="rc-diffuse-gi"]').getByRole("button", { name: /^(自動範囲|Automatic volume)$/ }).click();
+    await giSection(page).getByRole("button", { name: /^(自動範囲|Automatic volume)$/ }).click();
     await closeGi(page);
     const closeAuto = await capture(page, testInfo, report, "close-auto-25"); report.cases.closeAuto25 = compare(closeOff, closeAuto);
     report.closeVolume = await fixVolume(close.center, close.size);

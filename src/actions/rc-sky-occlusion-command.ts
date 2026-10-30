@@ -1,6 +1,6 @@
 import { cloneRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
 
-export type RcSkyOcclusionEditState = { settings: RcSkyOcclusionSettings; track: unknown | null };
+export type RcSkyOcclusionEditState = { settings: RcSkyOcclusionSettings; track: unknown | null; stackIndex: number | null };
 export type RcSkyOcclusionCommandDiff = {
     type: "effect.rcSkyOcclusion";
     before: RcSkyOcclusionEditState;
@@ -8,7 +8,7 @@ export type RcSkyOcclusionCommandDiff = {
 };
 
 export function cloneRcSkyOcclusionEditState(state: RcSkyOcclusionEditState): RcSkyOcclusionEditState {
-    return { settings: cloneRcSkyOcclusionSettings(state.settings), track: structuredClone(state.track) };
+    return { settings: cloneRcSkyOcclusionSettings(state.settings), track: structuredClone(state.track), stackIndex: state.stackIndex };
 }
 
 export function rcSkyOcclusionEditStatesEqual(a: RcSkyOcclusionEditState, b: RcSkyOcclusionEditState): boolean {
@@ -17,6 +17,7 @@ export function rcSkyOcclusionEditStatesEqual(a: RcSkyOcclusionEditState, b: RcS
 
 /** Seek/play can discard preview, and undoing a first key leaves an empty track. Neither is an authored conflict. */
 export function canApplyRcSkyOcclusionEditState(current: RcSkyOcclusionEditState, expected: RcSkyOcclusionEditState): boolean {
+    if (current.stackIndex !== expected.stackIndex) return false;
     if (JSON.stringify(current.settings) !== JSON.stringify(expected.settings)) return false;
     if (JSON.stringify(current.track) === JSON.stringify(expected.track)) return true;
     const record = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value)

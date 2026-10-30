@@ -49,8 +49,11 @@ fn rcGiIrradiance(worldPosition: vec3f, worldNormal: vec3f) -> vec3f {
         let irradiance = a.rgb * normalWeights.x + b.rgb * normalWeights.y + c.rgb * normalWeights.z;
         let surface = textureLoad(rcGiNearestSurface, pixel, 0);
         if (!(surface.z > 0.5)) { continue; }
+        // Blocked probes are unavailable lighting samples, not black light.
+        // Renormalize the visible set so a nearby wall cannot dilute the bounce.
+        if (rcGiProbeBlocked(worldPosition, probePosition, surface.xy)) { continue; }
         weightSum += weight;
-        if (!rcGiProbeBlocked(worldPosition, probePosition, surface.xy)) { result += irradiance * weight; }
+        result += irradiance * weight;
     } } }
     if (!(weightSum > 0.00001)) { return vec3f(0.0); }
     return max(result / weightSum, vec3f(0.0));
@@ -68,7 +71,9 @@ export const MMD_RADIANCE_GI_BEFORE_FOG_WGSL = `
 if (uniforms.rcGiControl.x > 0.0) {
     let gi = rcGiIrradiance(fragmentInputs.vPositionW, normalW);
     let reflectance = toLinearSpaceVec3(clamp(diffuseColor * baseColor.rgb, vec3f(0.0), vec3f(1.0)));
-    let bounce = gi * reflectance * uniforms.rcGiControl.x;
+    // MMD's strong ambient/toon fill hides a physically small single bounce.
+    // Artistic gain with no extra samples or producer updates; a zero field stays zero.
+    let bounce = gi * reflectance * uniforms.rcGiControl.x * 8.0;
     // Keep zero input bit-for-bit neutral instead of round-tripping the old color.
     if (any(bounce > vec3f(0.0))) {
         color = vec4f(toGammaSpaceVec3(toLinearSpaceVec3(max(color.rgb, vec3f(0.0))) + bounce), color.a);

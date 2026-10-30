@@ -76,11 +76,14 @@ export class LuminousRadianceSceneSource {
                 const indices = mesh.getIndices();
                 if (!indices?.length) return [];
                 const surfaces = mesh.subMeshes.flatMap(subMesh => {
+                    if (subMesh.indexCount === 0) return [];
                     const material = subMesh.getMaterial();
                     return material && material.alpha >= 0.99 && this.acceptsOccluder(material)
                         ? [{ indexStart: subMesh.indexStart, indexCount: subMesh.indexCount, material }] : [];
                 });
-                return [{ mesh, indices, surfaces }];
+                // Re-evaluate eligibility every update, but never deform or snapshot a mesh
+                // whose surfaces contribute no geometry to this consumer's BVH.
+                return surfaces.length ? [{ mesh, indices, surfaces }] : [];
             });
             const triangleCount = meshes.reduce((total, entry) => total + entry.surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0), 0);
             if (triangleCount > this.triangleBudget) {

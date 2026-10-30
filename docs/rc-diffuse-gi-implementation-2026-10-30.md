@@ -1,8 +1,40 @@
 # RC GI: 方向光1反射の通常MMD材質への実装
 
-作成日: 2026-10-30。状態: **実装・fixture検証済みだが、実ステージの見た目と負荷は未達**。`ee0aa7e`の修正後も所有者から、GIのON/OFFが目視で分からず、FPSは下がるとの報告を受けた。[実ステージ検証](./rc-diffuse-gi-real-stage-audit-2026-10-30.md)で許可済みlocal referenceのPMX/OBJをローカルPlaywrightで比較し、既定強度での弱い寄与と静止中のCPU/GPU費用を再現した。小さいfixtureでの改善を、実モデルの仕上がりへ一般化しない。
+作成日: 2026-10-30。状態: **実ステージ監査後の演出調整を実装、所有者の次の目視確認待ち**。`ee0aa7e`の修正後もGIが見えにくいとの報告を受け、[実ステージ検証](./rc-diffuse-gi-real-stage-audit-2026-10-30.md)で弱い寄与と静止中の費用を確認した。その後、所有者が「推しモデルを映えさせる」目的で強いGIを許可したため、可視probeの正規化と受光側の演出gainを修正した。全モデルでの仕上がりや低性能PCの性能保証には一般化しない。
 
-所有者の「次はGIの方を進めて」という依頼に基づき、[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)に続く1エフェクトとして実装した。[実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)のE＋GIに必要なFに相当する。以下は現在の実装説明と過去の検証履歴。今回の実ステージ調査では本体の描画設定・shaderは変更せず、再現テストと診断を追加した。
+所有者の「次はGIの方を進めて」という依頼に基づき、[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)に続く1エフェクトとして実装した。[実装計画](./radiance-cascades-lighting-implementation-plan-2026-10-28.md)のE＋GIに必要なFに相当する。以下は現在の実装説明と過去の検証履歴。実ステージ監査だけの区切り`1d7444e`と、その後の演出調整を区別する。
+
+## 実ステージ監査後の演出調整と次の目視点
+
+[推しモデルが映える強いGIを許容する所有者判断](../insights/decisions/rc-gi-allows-strong-effects-for-favorite-models.md)に基づき、遮られたprobeを照度補間の分母から除き、受光側の反射光を8倍の演出gainで加える。単なる強度不足だけでなく、壁際で有効な反射光が平均に埋もれる問題を修正する。格子・方向数・texture数・dispatch数は増やしていない。対象surfaceのないmeshのpose/snapshot点検も省いた。
+
+補間と可視率を区別する際は、[DDGI一次論文 §5.2](https://jcgt.org/published/0008/02/01/paper-lowres.pdf)の可視性を考慮した重み付け・正規化を参照した。本実装の近傍2三角形guardは同論文の可視性表現とは異なり、同等の精度を保証するものではない。
+
+同じローカルPlaywright条件での前景RGB平均絶対差（8bit、0〜255）は次のとおり。画像は640×360、強度25%・自動範囲。元のPNG自体を目視確認した。
+
+| 対象・カメラ | 監査時 | 今回 |
+| --- | ---: | ---: |
+| 灯台・近景 | 0.0272 | 0.7411 |
+| PowerPlant・近景 | 0.7157 | 5.1958 |
+| 灯台・広域 | 0.0281 | 0.1995 |
+| PowerPlant・広域 | 0.6018 | 4.2418 |
+
+灯台の塔への緑系の回り込み、PowerPlantの床・壁の暖色寄与が増えた。両対象でOFF復帰画像との差は0。広大な海面を含む灯台の全景は依然として寄与が小さく、全sceneを16³へ収める限界は解決していない。カメラ追従の局所volumeは、範囲端とseek/動画の一致へ影響するため今回導入しない。
+
+キャラクター確認には許可済みlocal referenceのAliciaと、自作の赤壁fixtureを5倍にしたsceneを使う。[任意実行E2E](../test/e2e/rc-diffuse-gi-character-reference.spec.mjs)でGUIから有効・強度・カメラ・骨・方向光を操作し、顔付近を固定撮影する。キャラクターの材質は変更しない。壁の赤→青だけは自作fixture準備helperで変更し、同じOFF顔が完全一致することを確認する。集計はproducerの変形済み三角形から作ったCPU画素maskで背景を除くが、透明な髪などの重なりを完全に分離する材質ID passではない。
+
+- 顔中心領域のOFF/ON平均差: 赤壁25%で11.43、青壁25%で15.63、赤壁100%で25.54階調。
+- 赤壁ONから青壁ONへ変更すると、同じ顔領域の平均Rは約3.67低下、Bは約16.26増加。単なる一様な明るさ変更だけではなく、反射元の色が届くことを確認した。赤壁時のRGB増分は白い床など他の反射と肌の明部飽和も含むため、赤増分が最大になるとはしない。
+- 袖・胸元の赤/青の色変化を目視確認した。顔・服は100%で白飛びが強く、25%でも明るい肌が飽和する部分がある。最適な見た目として確定せず、所有者の好みで強さを判断する次の比較点とする。
+- 強度0・OFFは元のPNGと一致。透明扱いの髪などは現行GIの対象外のまま。
+
+実ステージの静止計測は前回と同じ1280×720、8 warm-up＋24 frame。GPU render平均は灯台1.85→1.86ms、PowerPlant2.66→2.61msで、今回の観測では同程度。CPU source平均は灯台4.04→3.03ms、PowerPlant2.80→2.86ms。灯台の空の7 meshを点検から除けた一方、対象meshの全量比較は残る。両対象ともfield更新0/24、compute dispatch0。独立した統計的な速度保証や低性能PCのFPS保証へは使わない。所有者の街モデルの6fps問題は未再現のまま。
+
+証拠はignoredな`local-references/rc-gi-look-2026-10-30/`に保持する。灯台は`visible-weight-images/`、PowerPlantと輸送回帰は`regression-images/`、設定・PNG/WebMは`character-output-images/`、キャラクターの最終色応答検査は`character-final-images/`。参照asset・PNG・動画はGitへ追加しない。
+
+検証は実ステージ2・キャラ1・輸送3・visibility1・設定/出力1のGPU **8ケース成功**。GIの黒い反射元、反射元への遮蔽、ライト色/消灯、Luminous/天空遮蔽との分離、保存・Undo・キー・backend復帰も確認した。WebMの0/20/40/60frameは対応PNGとの全画面MAE約0.19〜0.26で、ON/OFF遷移を保持。全unit **225ファイル・1,386件成功**、全lint・追加MJS lint成功、通常typecheckは既存547件から追加0、critical gate成功。unitはsandboxの一時ファイル/localhost制約で実行失敗後、ローカル権限の同じ全suiteで成功した。起動コードは変更していないため別のsmokeは追加せず、実Electron/WebGPU E2Eで起動・validationを確認した。キャラE2Eは環境変数`MMD_RC_GI_CHARACTER_REFERENCE=1`を明示した場合だけ実行し、通常条件でskipすることも確認済み。
+
+次の目視は **設定→実験設定→RC GI、強度25%→50%→100%** とOFFを、同じカメラで比較する。光が当たる色付きの壁・床のそばで、顔と服の色移り、明部の白飛び、モデル移動時の明暗の跳ねを確認する。現行の近傍2三角形近似では遮蔽漏れや採用probeの切替が目立つ可能性が残る。天空遮蔽の完成判断をGIへ流用しない。
 
 ## 操作と保存
 
@@ -46,11 +78,13 @@ flowchart TD
 
 rayが当たった面でUV付き反射率、面の幾何法線、方向光との角度、面から光へのBVH遮蔽を評価する。法線はray側へ向け、薄い面は両面の拡散反射として扱う。sourceへ入れる反射RGBは`albedo × lightColor × max(dot(normal, directionToLight), 0)`とし、既存Standard/MMDの方向光の強度規約に合わせる。既存raster影のCSM・bias・影距離は変更しない。
 
-base gridの32方向を`+X / -X / +Y / -Y / +Z / -Z`の6軸へcos重みで正規化し、照度/πとして保存する。材質側は法線の符号で3軸を選び、法線成分の二乗で混ぜる。三線形補間と受光面前方への重み付けを行い、各probeの近傍2三角形で接続の遮蔽を判定する。遮られたprobeの重みは分母へ残し、その寄与を0にする。
+base gridの32方向を`+X / -X / +Y / -Y / +Z / -Z`の6軸へcos重みで正規化し、照度/πとして保存する。材質側は法線の符号で3軸を選び、法線成分の二乗で混ぜる。三線形補間と受光面前方への重み付けを行い、各probeの近傍2三角形で接続の遮蔽を判定する。遮られたprobeは分子・分母から除き、採用できるprobeの重みだけで正規化する。全probeが遮蔽・無効なら0。以前は遮られた重みも分母へ残していたため、採用可能な反射光まで薄まっていた。天空遮蔽の集計規則は変更しない。
 
 材質内でBVH探索は行わず、最大**32 textureLoad＋16個の固定三角形判定**。集計atlasは`96×256 / RGBA16F`で192 KiB、近傍情報は`16×256 / RGBA32F`で64 KiB、計256 KiBの追加画素payloadとなる。4段field・BVH・反射率texture cacheのメモリは別に必要。入力が変わったときだけ4 cascade＋集計＋近傍探索の6 taskを実行し、静止時には再利用する。強度だけの変更はfieldへ焼き込まない。
 
 source revision・範囲・方向光snapshotを更新条件とする。ライトのparent変換、色・強度・有効状態も反映する。同frameのpose確定後・active mesh評価前に実行し、dirty fieldの後だけ`flushFramebuffer()`で提出してから材質を描画する。GPU完了待ちや毎フレームreadbackは追加しない。
+
+source収集では、対象surfaceがないmeshとindexCountが0のsurfaceをpose取得・頂点snapshotより前で除外する。採否は毎回調べるため、材質の透明→不透明、対象外→対象内への変更時には現在の形状で戻る。対象meshの値比較・骨やモーフの点検自体は残る。
 
 ## 色と既存効果の分離
 
@@ -58,7 +92,9 @@ source revision・範囲・方向光snapshotを更新条件とする。ライト
 
 Luminousのscene source実装を再利用するが、GIは独立したsourceを所有する。packed color欄には反射率を入れ、Luminous固有の8倍gainを適用しない。発光色・sphere・Toon照明・完成画像・前frameのGIはsourceに戻さない。対応する通常材質presetとLuminous presetのdiffuse反射を入力とし、Luminousの発光自体は既存RC側だけに残す。
 
-受光側はMmdStandardMaterialを使うopaque材質のうち、通常MMD、Light and Shadow、Stage Standard、Accessory Toon、OBJ Untextured、OBJ MTLの既知presetを対象とする。外部shaderや想定外のcustom shaderを持つ材質へ、preset IDだけを理由に適用しない。Luminous presetは反射元だけを許可する。材質pluginは通常の直接光・sphere・specularの合成後、fogとimage processingの前に入り、`linear(元の色) + strength × linear(受光面の反射率) × field`を加えて表示色へ戻す。天空遮蔽の係数をGIへ掛けず、通常材質の照明を別の方式で置換しない。GIが0の画素は色空間の往復もせず、元の色を保つ。
+受光側はMmdStandardMaterialを使うopaque材質のうち、通常MMD、Light and Shadow、Stage Standard、Accessory Toon、OBJ Untextured、OBJ MTLの既知presetを対象とする。外部shaderや想定外のcustom shaderを持つ材質へ、preset IDだけを理由に適用しない。Luminous presetは反射元だけを許可する。材質pluginは通常の直接光・sphere・specularの合成後、fogとimage processingの前に入り、`linear(元の色) + 8 × strength × linear(受光面の反射率) × field`を加えて表示色へ戻す。8は演出的な強さの調整値で、物理単位や欠けていた定数の修復ではない。sourceへは戻さず、光場が0なら新しい光を作らない。天空遮蔽の係数をGIへ掛けず、通常材質の照明を別の方式で置換しない。GIが0の画素は色空間の往復もせず、元の色を保つ。
+
+保存する強度0〜2とUIの0〜100%は変更しない。**既存projectでGIをONにしていた場合も見た目は強くなる**。弱くしたい場合は強度を下げる。8倍は線形加算する反射光の係数であり、表示画像の明るさが8倍になる意味ではない。強い設定では明部の白飛びや既存の粗いprobe補間・遮蔽漏れも見えやすくなるため、25%から顔・服・壁際を比較する。
 
 初版はsourceに物理的なLambert反射の`/π`を入れていた。一方、Babylon 9.2.0のStandard/MMD直射は`diffuse × getScaledIntensity()`を基にしたdisplay-space合成で、Lambert/Toonの直接寄与に同じ`/π`を入れていない。今回の仕上げではsource側の`/π`を除き、この既存照明の強度規約に合わせた。この除算だけを変え、距離区間と他の条件を固定すれば、clampや丸め前のsource RGBとその線形輸送の値はπ倍になる。画面の8bit差分や、自動範囲・距離区間も変更した今回の比較値がπ倍になるとは限らない。強度の初期値0.5と範囲0〜2は変更しない。
 

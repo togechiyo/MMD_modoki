@@ -8,6 +8,7 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { LuminousRadianceScene, LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
+import { LuminousRadiancePoseCache } from "./luminous-radiance-pose-cache";
 import { TriangleRadianceBvh } from "./triangle-radiance-bvh";
 
 // Keep the actual Mesh/material/UV/transform and BVH logic; replace only the GPU buffer boundary.
@@ -31,6 +32,52 @@ function fixture() {
 }
 
 describe("RC separates emission and geometry input", () => {
+    it.each(["alpha", "consumer", "empty-index"] as const)("skips all geometry work for a mesh excluded by %s and restores its current pose when eligible", reason => {
+        const { scene, mesh, data, read } = fixture();
+        const material = mesh.material as StandardMaterial;
+        const surface = mesh.subMeshes[0], indexCount = surface.indexCount;
+        let accepted = true;
+        const exclude = (excluded: boolean) => {
+            material.alpha = reason === "alpha" && excluded ? 0.5 : 1;
+            accepted = !(reason === "consumer" && excluded);
+            surface.indexCount = reason === "empty-index" && excluded ? 0 : indexCount;
+        };
+        const color = vi.fn(read), poses = vi.spyOn(LuminousRadiancePoseCache.prototype, "read");
+        const transform = vi.spyOn(mesh, "computeWorldMatrix");
+        const source = new LuminousRadianceSceneSource(scene, color, () => accepted);
+        exclude(true); source.update();
+        const emptyRevision = source.revision;
+        source.update();
+        expect(source.bvh.triangleCount).toBe(0);
+        expect(source.revision).toBe(emptyRevision);
+        expect(poses).not.toHaveBeenCalled();
+        expect(transform).not.toHaveBeenCalled();
+        expect(color).not.toHaveBeenCalled();
+
+        // Movement while excluded must still be reflected on the first eligible update.
+        mesh.position.x = 3; scene.incrementRenderId();
+        exclude(false); source.update();
+        expect(source.bvh.triangleCount).toBe(12);
+        expect(source.bvh.nodes[0]).toBeCloseTo(2.5, 3);
+        expect(poses).toHaveBeenCalledTimes(1);
+        expect(color).toHaveBeenCalledTimes(1);
+        const includedRevision = source.revision;
+        poses.mockClear(); transform.mockClear(); color.mockClear();
+        exclude(true); source.update();
+        expect(source.bvh.triangleCount).toBe(0);
+        expect(source.revision).toBeGreaterThan(includedRevision);
+        expect(poses).not.toHaveBeenCalled();
+        expect(transform).not.toHaveBeenCalled();
+        expect(color).not.toHaveBeenCalled();
+        mesh.position.x = 5; scene.incrementRenderId();
+        exclude(false); source.update();
+        expect(source.bvh.triangleCount).toBe(12);
+        expect(source.bvh.nodes[0]).toBeCloseTo(4.5, 3);
+        expect(poses).toHaveBeenCalledTimes(1);
+        expect(source.error).toBeNull();
+        source.dispose(); data.dispose();
+    });
+
     it("packs GI reflectance independently without emission gain and preserves RGB-only updates", () => {
         const { scene, data } = fixture();
         const emission = vi.fn(() => ({ r: 100, g: 0, b: 0 }));

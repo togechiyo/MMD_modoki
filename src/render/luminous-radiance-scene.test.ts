@@ -31,6 +31,21 @@ function fixture() {
 }
 
 describe("RC separates emission and geometry input", () => {
+    it("packs GI reflectance independently without emission gain and preserves RGB-only updates", () => {
+        const { scene, data } = fixture();
+        const emission = vi.fn(() => ({ r: 100, g: 0, b: 0 }));
+        let reflectance = { r: 0.1, g: 0.5, b: 0.75 };
+        const gi = new LuminousRadianceSceneSource(scene, emission, () => true, () => reflectance);
+        gi.update();
+        expect(emission).not.toHaveBeenCalled();
+        expect(Array.from(gi.bvh.triangles.subarray(12, 15))).toEqual([Math.fround(0.1), 0.5, 0.75]);
+        const nodes = gi.bvh.nodes.slice(), refit = vi.spyOn(TriangleRadianceBvh.prototype, "update");
+        reflectance = { r: 0.25, g: 0, b: 1 }; gi.update();
+        expect(refit).not.toHaveBeenCalled(); expect(gi.bvh.nodes).toEqual(nodes);
+        expect(Array.from(gi.bvh.triangles.subarray(12, 15))).toEqual([0.25, 0, 1]);
+        expect(data.bvh.triangles[12]).toBe(8);
+        gi.dispose(); data.dispose();
+    });
     it("lets sky consumers exclude cutout/blended blockers and invalidates their geometry when transparency changes", () => {
         const { scene, mesh, data } = fixture();
         const material = mesh.material as StandardMaterial;

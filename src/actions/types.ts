@@ -192,6 +192,8 @@ export type EditAction =
     | { type: "edit.morphValueChanged"; source: ActionSource; frameIndex: number | null };
 
 export type EffectAction =
+    | { type: "effect.setRcDiffuseGi"; source: ActionSource; settings: Partial<import("../render/rc-diffuse-gi-settings").RcDiffuseGiSettings> }
+    | { type: "effect.recalculateRcDiffuseGiVolume"; source: ActionSource }
     | { type: "effect.setRcSkyOcclusion"; source: ActionSource; settings: Partial<import("../render/rc-sky-occlusion-settings").RcSkyOcclusionSettings> }
     | { type: "effect.recalculateRcSkyOcclusionVolume"; source: ActionSource }
     | { type: "effect.instanceEdit"; source: ActionSource; operation: import("../editor/effect-instance-operations").EffectInstanceOperation }

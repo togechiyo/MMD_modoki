@@ -15,6 +15,7 @@ export type CommandSelectedKeyRef = {
 };
 
 export type CommandExecutionContext = {
+    applyRcDiffuseGi?(diff: import("./rc-diffuse-gi-command").RcDiffuseGiCommandDiff, direction: CommandDirection): boolean;
     applyRcSkyOcclusion?(diff: import("./rc-sky-occlusion-command").RcSkyOcclusionCommandDiff, direction: CommandDirection): boolean;
     applyEffectInstances?(diff: import("./effect-instance-command").EffectInstanceDiff, direction: CommandDirection): boolean;
     applyExternalWgsl?(changes: import("../external-wgsl/contract").EffectChange[], direction: CommandDirection): boolean;
@@ -49,6 +50,8 @@ export function executeCommand(
     context: CommandExecutionContext,
 ): boolean {
     switch (command.diff.type) {
+        case "effect.rcDiffuseGi":
+            return context.applyRcDiffuseGi?.(command.diff, direction) ?? false;
         case "effect.rcSkyOcclusion":
             return context.applyRcSkyOcclusion?.(command.diff, direction) ?? false;
         case "effect.instances":

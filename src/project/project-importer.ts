@@ -1,5 +1,6 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
 import { normalizeRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
+import { normalizeRcDiffuseGiSettings, type RcDiffuseGiSettings } from "../render/rc-diffuse-gi-settings";
 import { FrameGraphEffectInstances } from "../editor/frame-graph-effect-instances";
 import { splitLuminousRadianceProject } from "../editor/luminous-radiance-split";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
@@ -150,6 +151,7 @@ type ProjectImportHost = {
     clearBackgroundMedia(): void;
     lightIntensity: number;
     setRcSkyOcclusionSettings?: (settings: Partial<RcSkyOcclusionSettings>) => void;
+    setRcDiffuseGiSettings?: (settings: Partial<RcDiffuseGiSettings>) => void;
     ambientIntensity: number;
     lightColorTemperature: number;
     setLightColor(r: number, g: number, b: number): void;
@@ -426,6 +428,13 @@ export function restoreProjectRcSkyOcclusionSettings(
     lighting: Pick<MmdModokiProjectFileV1["lighting"], "rcSkyOcclusion">,
 ): void {
     host.setRcSkyOcclusionSettings?.(normalizeRcSkyOcclusionSettings(lighting.rcSkyOcclusion));
+}
+
+export function restoreProjectRcDiffuseGiSettings(
+    host: Pick<ProjectImportHost, "setRcDiffuseGiSettings">,
+    lighting: Pick<MmdModokiProjectFileV1["lighting"], "rcDiffuseGi">,
+): void {
+    host.setRcDiffuseGiSettings?.(normalizeRcDiffuseGiSettings(lighting.rcDiffuseGi));
 }
 
 export async function importProjectState(
@@ -1002,6 +1011,7 @@ export async function importProjectState(
     }
     host.lightIntensity = data.lighting.intensity;
     restoreProjectRcSkyOcclusionSettings(host, data.lighting);
+    restoreProjectRcDiffuseGiSettings(host, data.lighting);
     host.ambientIntensity = data.lighting.ambientIntensity;
     host.lightColorTemperature = data.lighting.temperatureKelvin;
     if (data.lighting.lightColor &&

@@ -592,6 +592,7 @@ export interface ProjectRgbColor {
 }
 
 export interface ProjectLightingState {
+    rcDiffuseGi?: import("./render/rc-diffuse-gi-settings").RcDiffuseGiSettings;
     rcSkyOcclusion?: import("./render/rc-sky-occlusion-settings").RcSkyOcclusionSettings;
     x: number;
     y: number;

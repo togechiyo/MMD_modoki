@@ -300,6 +300,16 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("saves GI static settings without baking the keyed preview or sharing the sky volume", () => {
+        const settings = { enabled: false, strength: 1.6, volume: { min: [-3, 1, -3] as [number, number, number], size: 6 } };
+        const host = { ...createHost(), getRcDiffuseGiSettings: () => ({ ...settings, enabled: true, strength: 0 }), getStaticRcDiffuseGiSettings: () => settings };
+        const project = exportProjectState(host);
+        expect(project.lighting.rcDiffuseGi).toEqual(settings);
+        settings.volume.min[0] = 100;
+        expect(project.lighting.rcDiffuseGi?.volume?.min[0]).toBe(-3);
+        expect(project.lighting.rcSkyOcclusion?.volume).toBeNull();
+        expect(exportProjectState(createHost()).lighting.rcDiffuseGi).toEqual({ enabled: false, strength: 0.5, volume: null });
+    });
     it("saves static RC sky settings and copies its volume independently of keyed preview", () => {
         const settings = { enabled: false, strength: 0.6, minimum: 0.15, volume: { min: [-4, 1, -4] as [number, number, number], size: 8 } };
         const host = { ...createHost(), getRcSkyOcclusionSettings: () => ({ ...settings, enabled: true }), getStaticRcSkyOcclusionSettings: () => settings };

@@ -147,7 +147,7 @@ export type EditCommandDiff =
         after: CameraTransformCommandSnapshot;
     };
 
-export type CommandDiff = KeyframeCommandDiff | EditCommandDiff | import("./effect-instance-command").EffectInstanceDiff | import("./rc-sky-occlusion-command").RcSkyOcclusionCommandDiff | { type: "effect.externalWgsl"; changes: import("../external-wgsl/contract").EffectChange[] };
+export type CommandDiff = KeyframeCommandDiff | EditCommandDiff | import("./effect-instance-command").EffectInstanceDiff | import("./rc-sky-occlusion-command").RcSkyOcclusionCommandDiff | import("./rc-diffuse-gi-command").RcDiffuseGiCommandDiff | { type: "effect.externalWgsl"; changes: import("../external-wgsl/contract").EffectChange[] };
 
 export type BuiltCommand = {
     id: string;

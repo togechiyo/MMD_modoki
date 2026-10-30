@@ -26,6 +26,9 @@ export async function launchMmdModoki(repoRoot, { effectTimeline = false, radian
   try {
     for (const config of await generator.getRendererConfig()) {
       const server = await vite.createServer({ configFile: false, ...config,
+        // A running editor can use the same Vite dependencies. Allow GPU suites to
+        // isolate their optimizer cache instead of invalidating each other's URLs.
+        cacheDir: process.env.MMD_E2E_VITE_CACHE_DIR ?? config.cacheDir,
         optimizeDeps: { ...config.optimizeDeps, include: [...(config.optimizeDeps?.include ?? []),
           // Keep RC fixture imports stable across ordinary/lab runs and discover them before Electron
           // opens, so a cold cache or feature-flag switch cannot trigger a mid-setup Vite reload.

@@ -1,14 +1,14 @@
 # RC共通基盤・拡散GI・天空遮蔽の実装案
 
-作成日: 2026-10-28。2026-10-30更新。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)は最初の1効果として通常材質・設定/保存・Undo/キー・backend・骨/モーフ・PNG/WebMまで実装し、負荷軽減後のGPU 11件をfixtureで確認した。同日、所有者から実機の見た目・軽さのOKと「これでいったんいい」との判断を得て、今回の天空遮蔽を一区切りとする。密なモデル・低性能PC・physicsなどの未確認条件は残存制約として保留する。GIは未実装の設計案で、今回は着手しない。
+作成日: 2026-10-28。2026-10-30更新。状態: 段階A/Bと段階Cの開発用検証を実装・確認済み。Cの再構成比較で終点8をlab既定にした。[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)は最初の1効果として通常材質・設定/保存・Undo/キー・backend・骨/モーフ・PNG/WebMまで実装し、負荷軽減後のGPU 11件をfixtureで確認した。同日、所有者から実機の見た目・軽さのOKと「これでいったんいい」との判断を得て、今回の天空遮蔽を一区切りとする。密なモデル・低性能PC・physicsなどの未確認条件は残存制約として保留する。その後の依頼により[RC GIの初版](./rc-diffuse-gi-implementation-2026-10-30.md)を実装し、方向光1反射・通常MMD材質・UI/保存/キー・backend・PNG/WebM、静止/骨変形時の費用をfixtureで確認した。所有者の実モデルでのGIの目視確認はこれから。
 
-所有者の「おすすめ設定で実装案を書いて、ドキュメントとして置く」という依頼に基づく。[応用と共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を実装単位へ具体化する。その後の実装依頼により、[段階Aのscene/BVH共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ着手した。以下は当初の推奨案を含む設計記録であり、現在の天空遮蔽の構成・初期値・UI・検証結果は[実装メモ](./rc-sky-occlusion-implementation-2026-10-29.md)を正本とする。未実装GIの数値・内部名・UI配置や次版収録は決定していない。
+所有者の「おすすめ設定で実装案を書いて、ドキュメントとして置く」という依頼に基づく。[応用と共有境界の調査](./radiance-cascades-shared-effects-design-2026-10-28.md)を実装単位へ具体化する。その後の実装依頼により、[段階Aのscene/BVH共有](./radiance-cascades-shared-scene-implementation-2026-10-28.md)へ着手した。以下は当初の推奨案を含む設計記録であり、現在の構成・初期値・UI・検証結果は[天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)と[GI](./rc-diffuse-gi-implementation-2026-10-30.md)の実装メモを正本とする。GIと天空/LuminousのGPU source/field共有は未実装で、共通source実装を独立所有している。
 
 続いて[段階Bの同条件の光場計算共有](./radiance-cascades-shared-field-implementation-2026-10-28.md)を実装。range変更時のrebuildを増やさないため固定の予備slotは残し、同条件のcascade計算とfield参照を共有する。fieldメモリ削減は今回の完了範囲に含めない。
 
 [段階Cの描画前producer・天空visibility表示](./radiance-cascades-sky-visibility-validation-2026-10-29.md)を初回実装し、[近距離分割・終点参照の比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)で全面屋根Y=2の漏れを0.125から0へ改善した。Y=4の残差と少数方向の誤差、有限屋根の高密度参照への誤差悪化は残る。[段階Dの材質adapter案](./radiance-cascades-material-adapter-plan-2026-10-29.md)では固定床の結果を通常材質へ投影せず、任意位置・法線queryを先に検証する。
 
-2026-10-29、所有者は[アプリから確認できる1エフェクト単位で完成させ、目視しやすく区切る方針](../insights/decisions/complete-rc-effects-one-at-a-time-for-visual-review.md)を明示した。これを受けたagentの作業計画は、まずRC天空遮蔽を材質・UI・保存・出力まで接続して目視比較できる状態にし、その後の候補としてGIを同じ単位で進めるものだった。天空先という具体的な順序と以下の完了条件はagent計画として区別する。2026-10-30には天空遮蔽の負荷軽減と実機の見た目・軽さが所有者に確認され、今回の効果の区切りを完了した。GIは次候補に留める。
+2026-10-29、所有者は[アプリから確認できる1エフェクト単位で完成させ、目視しやすく区切る方針](../insights/decisions/complete-rc-effects-one-at-a-time-for-visual-review.md)を明示した。これを受けたagentの作業計画は、まずRC天空遮蔽を材質・UI・保存・出力まで接続して目視比較できる状態にし、その後の候補としてGIを同じ単位で進めるものだった。天空先という当初の順序と以下の完了条件はagent計画として区別する。2026-10-30には天空遮蔽の負荷軽減と実機の見た目・軽さが所有者に確認され、今回の効果の区切りを完了した。その後、所有者が次の対象をGIと明示して実装を依頼した。これは順序・着手の指定であり、GIの実装結果や性能への了承ではない。
 
 ## 1. 推奨構成と最初の範囲
 
@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | 通常ルミナス `luminous` | 発光の芯・にじみ・glare | 現在のPostFX個体・並び順を維持 |
 | ルミナスRC `luminousRadiance` | 発光面から表面へ届く光 | 現在のPostFX個体・複数配置・合成位置を維持 |
-| RC GI `rcDiffuseGi`（仮称） | メイン方向光を受けた面からの1反射 | 独立したシーン照明設定。初回は1シーン1個、適用順固定 |
+| RC GI `rcDiffuseGi` | メイン方向光を受けた面からの1反射 | 独立したシーン照明設定。初回は1シーン1個、適用順固定 |
 | RC 天空遮蔽 `rcSkyOcclusion` | 空への可視性で通常MMDの影側残光を抑える | 独立したシーン照明設定。1シーン1個、適用順固定 |
 | RC共通設定 | 新しいGI/天空遮蔽の計算範囲・品質 | 設定の共有。単独のエフェクトや追加のmaster ON/OFFにはしない |
 
@@ -143,7 +143,7 @@ scene/engineごとの所有者は一つにし、共有snapshotを同じframeで�
 
 ## 7. 状態・保存・backend・既存GI
 
-最初の天空遮蔽は`lighting.rcSkyOcclusion`へ`enabled / strength / minimum / volume`を保存する。キーは`keyframes.effectAnimations`の専用singletonを使う。当初の`effects.rcLighting`統合案は今回採用せず、GIの保存構造は後続の実装時に決める。既存`luminousRadiance`の個体ID・固定値・enabledキー・並び順・削除状態は移動しない。新しい共通profileを旧Luminous個体へ暗黙適用しない。
+最初の天空遮蔽は`lighting.rcSkyOcclusion`へ`enabled / strength / minimum / volume`を保存する。GIは独立した`lighting.rcDiffuseGi`へ`enabled / strength / volume`を保存し、minimumは持たない。両方ともキーは`keyframes.effectAnimations`の専用singletonを使う。当初の`effects.rcLighting`統合案は採用しない。既存`luminousRadiance`の個体ID・固定値・enabledキー・並び順・削除状態は移動しない。新しい共通profileを旧Luminous個体へ暗黙適用しない。
 
 - 新設定がない旧projectは新機能OFF。既存Luminousの現在の保存値と復元規則を維持する。非有限値・未知enumをnormalizeし、normalizeを繰り返しても値や個体が増えない。
 - OFFは値を保持し、削除/無効化をload時に復活させない。texture、BVH、cache key、GPU handleは保存しない。
@@ -174,7 +174,7 @@ SSGIは直前のsceneColorを入力とするためRCの寄与も再度集め得�
 1. **共通基盤・診断（A/B/C）**: 完了した共有化と検証経路を土台にし、天空遮蔽に必要な修正へ範囲を絞る。
 2. **RC天空遮蔽を1効果として仕上げる（D＋天空遮蔽に必要なF、今回完了）**: 任意位置・法線query、通常MMD材質への適用、アプリの操作導線、初期値・保存/読込、Undo/キー、backend切替、同frameの骨/モーフ更新、PNG/WebMを通した。OFF/強度0の旧表示復帰、直射・発光の維持、屋外・庇下の比較と残る制約を実装メモに記録した。
 3. **天空遮蔽をアプリで目視比較する区切り（所有者確認済み）**: アプリ内の入口とON/OFFの比較手順、対象材質・範囲、確認済み項目と残る制約を提示し、2026-10-30に所有者が実機の見た目・軽さを確認して一区切りとした。
-4. **次候補: RC GIを1効果として仕上げる（E＋GIに必要なF、未着手）**: 方向光1反射GIを材質・UI・保存・出力まで同様に通す案。着手時はLuminousとの寄与分離、色壁・床・画面外surface、直射変更、天空遮蔽との併用を確認し、再びアプリで目視できる区切りを作る。今回の天空遮蔽の完了に続けて自動的に着手しない。
+4. **RC GIを1効果として仕上げる（E＋GIに必要なF、初版実装・fixture検証済み）**: 2026-10-30、方向光1反射GIを通常MMD材質・設定→実験設定・保存・Undo/キー・backend・PNG/WebMまで接続した。既定OFF・強度0.5、enabled/strengthのsingletonキー、独立volume。赤/黒/texture・画面外source・光への遮蔽物・光変更、Luminous/天空遮蔽との独立性と3効果同時ONを確認した。静止時field更新0、骨付き遮光板の変形時更新とGPU/CPU費用を記録。アプリで目視比較できる区切りとし、実モデル・低性能PC・morph/physicsのGI描画比較は未確認として[実装メモ](./rc-diffuse-gi-implementation-2026-10-30.md)へ残す。
 
 効果を実装する際は、材質・render順序に未解決の制約があれば対象範囲と完了条件を明示し、内部計算だけを複数効果へ広げない。今回の天空遮蔽では既知の近似誤差と未確認条件を残存制約として保留し、所有者が確認した区切りを完了とする。採用済みのprobe照度事前集計を超える変更、疎なprobe、GPU変形/refit、反射・媒質は、必要が生じた時の別の比較単位とする。
 

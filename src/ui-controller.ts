@@ -75,6 +75,7 @@ import type { ActionSource, AutoKeyScope } from "./actions/types";
 import { executeCommand, type CommandExecutionContext, type CommandSelectedKeyRef } from "./actions/command-executor";
 import { HistoryManager } from "./actions/history-manager";
 import { buildRcSkyOcclusionCommandDiff, canApplyRcSkyOcclusionEditState, rcSkyOcclusionEditStatesEqual, type RcSkyOcclusionEditState } from "./actions/rc-sky-occlusion-command";
+import { buildRcDiffuseGiCommandDiff, canApplyRcDiffuseGiEditState, rcDiffuseGiEditStatesEqual, type RcDiffuseGiEditState } from "./actions/rc-diffuse-gi-command";
 import {
     buildKeyframeCommand,
     createCommandTrackKey,
@@ -2579,7 +2580,7 @@ export class UIController {
             this.registerGravityKeyframeAtCurrentFrame();
         });
         this.actionDispatcher.register("keyframe.registerEffect", action => {
-            if (action.instanceId === "rcSkyOcclusion" || this.mmdManager.isEffectInstance(action.instanceId)) this.registerEffectKeyframeAtCurrentFrame(action.instanceId);
+            if (action.instanceId === "rcSkyOcclusion" || action.instanceId === "rcDiffuseGi" || this.mmdManager.isEffectInstance(action.instanceId)) this.registerEffectKeyframeAtCurrentFrame(action.instanceId);
         });
         this.actionDispatcher.register("interpolation.copy", () => this.copyInterpolationCurves());
         this.actionDispatcher.register("interpolation.paste", () => this.pasteInterpolationCurves());
@@ -2892,6 +2893,12 @@ export class UIController {
         });
         this.actionDispatcher.register("effect.recalculateRcSkyOcclusionVolume", () => {
             this.editRcSkyOcclusion(() => this.mmdManager.recalculateRcSkyOcclusionVolume());
+        });
+        this.actionDispatcher.register("effect.setRcDiffuseGi", action => {
+            this.editRcDiffuseGi(() => this.mmdManager.setRcDiffuseGiSettings(action.settings));
+        });
+        this.actionDispatcher.register("effect.recalculateRcDiffuseGiVolume", () => {
+            this.editRcDiffuseGi(() => this.mmdManager.recalculateRcDiffuseGiVolume());
         });
         this.actionDispatcher.register("effect.instanceValue", action => {
             const before = this.mmdManager.captureCurrentEffectKeyframePayload(action.instanceId).value;
@@ -5551,6 +5558,20 @@ export class UIController {
         return { settings: this.mmdManager.getStaticRcSkyOcclusionSettings(), track: this.mmdManager.getRcSkyOcclusionTrackState() };
     }
 
+    private captureRcDiffuseGiEditState(): RcDiffuseGiEditState {
+        return { settings: this.mmdManager.getStaticRcDiffuseGiSettings(), track: this.mmdManager.getRcDiffuseGiTrackState() };
+    }
+
+    private editRcDiffuseGi(edit: () => void): void {
+        if (this.mmdManager.isPlaying) return;
+        const before = this.captureRcDiffuseGiEditState();
+        edit();
+        const diff = buildRcDiffuseGiCommandDiff(before, this.captureRcDiffuseGiEditState());
+        if (!diff) return;
+        this.commandHistory.push({ id: crypto.randomUUID(), label: t("experiment.rcDiffuseGi.title"), scope: "effect", createdAtMs: Date.now(), diff });
+        this.updateTimelineEditState();
+    }
+
     private editRcSkyOcclusion(edit: () => void): void {
         if (this.mmdManager.isPlaying) return;
         const before = this.captureRcSkyOcclusionEditState();
@@ -8104,6 +8125,22 @@ export class UIController {
                 this.updateTimelineEditState();
                 return true;
             },
+            applyRcDiffuseGi: (diff, direction) => {
+                if (this.mmdManager.isPlaying) return false;
+                const from = direction === "apply" ? diff.before : diff.after;
+                const to = direction === "apply" ? diff.after : diff.before;
+                const current = this.captureRcDiffuseGiEditState();
+                if (!canApplyRcDiffuseGiEditState(current, from)) return false;
+                this.mmdManager.setRcDiffuseGiSettings(to.settings);
+                this.mmdManager.setRcDiffuseGiTrackState(to.track);
+                if (!rcDiffuseGiEditStatesEqual(this.captureRcDiffuseGiEditState(), to)) {
+                    this.mmdManager.setRcDiffuseGiSettings(current.settings);
+                    this.mmdManager.setRcDiffuseGiTrackState(current.track);
+                    return false;
+                }
+                this.updateTimelineEditState();
+                return true;
+            },
             applyObjectState: (diff, direction) => this.executeObjectStateCommand(diff, direction),
             applyExternalWgsl: (changes, direction) => this.mmdManager.restoreExternalWgsl(changes, direction),
             applyBonePoseBatch: (diff, direction) => this.executeBonePoseBatchCommand(diff, direction),
@@ -8442,7 +8479,7 @@ export class UIController {
 
     private refreshEffectKeyframeUi(): void {
         const track = this.getSelectedTimelineTrack();
-        const id = track?.category === "effect" && (track.name === "rcSkyOcclusion" || this.mmdManager.isEffectInstance(track.name) || (EFFECT_TIMELINE_ENABLED && isEffectId(track.name))) ? track.name : null;
+        const id = track?.category === "effect" && (track.name === "rcSkyOcclusion" || track.name === "rcDiffuseGi" || this.mmdManager.isEffectInstance(track.name) || (EFFECT_TIMELINE_ENABLED && isEffectId(track.name))) ? track.name : null;
         const instanceUnsupported = id && this.mmdManager.isEffectInstance(id) && this.getConfiguredPostEffectBackend() !== "frameGraph";
         this.frameGraphInstanceController?.refresh();
         if (id) this.btnKeyframeAdd.disabled = this.mmdManager.isPlaying || Boolean(instanceUnsupported);

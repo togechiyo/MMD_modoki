@@ -42,7 +42,8 @@ export class LuminousRadianceSceneSource {
     private emitterHigh = [-Infinity, -Infinity, -Infinity];
 
     constructor(private readonly scene: Scene, private readonly readEmission: RadianceEmissionReader,
-        private readonly acceptsOccluder: (material: Material) => boolean = () => true) {
+        private readonly acceptsOccluder: (material: Material) => boolean = () => true,
+        private readonly readReflectance?: RadianceEmissionReader) {
         const engine = scene.getEngine() as WebGPUEngine;
         this.triangleBudget = radianceTriangleBudget(engine.currentLimits.maxStorageBufferBindingSize, engine.currentLimits.maxBufferSize);
         this.triangleBuffer = new StorageBuffer(engine, this.triangleCapacity);
@@ -59,6 +60,10 @@ export class LuminousRadianceSceneSource {
     }
 
     public update(): void {
+        // GI owns a separate source: the same packed color/UV slots carry reflectance,
+        // without the historical Luminous gain. Existing consumers keep their encoding.
+        const readColor = this.readReflectance ?? this.readEmission;
+        const colorScale = this.readReflectance ? 1 : 8;
         const chunks: MeshInput[] = [];
         const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
         let emitters = 0;
@@ -86,7 +91,7 @@ export class LuminousRadianceSceneSource {
                 if (!positions) continue;
                 const world = mesh.computeWorldMatrix();
                 const surfaces = opaqueSurfaces.map(({ indexStart, indexCount, material }) => {
-                    const emission = this.readEmission(mesh, material), texture = emission?.texture;
+                    const emission = readColor(mesh, material), texture = emission?.texture;
                     const uvs = texture ? mesh.getVerticesData(texture.coordinatesIndex === 1 ? VertexBuffer.UV2Kind : VertexBuffer.UVKind) : null;
                     return { indexStart, indexCount, emission, uvs,
                         textureSource: texture ? this.textures.source(texture) : -1, matrix: texture?.getTextureMatrix().m,
@@ -107,7 +112,7 @@ export class LuminousRadianceSceneSource {
                     let offset = 12;
                     for (const [index, surface] of surfaces.entries()) {
                         const end = offset + surface.indexCount / 3 * RADIANCE_TRIANGLE_STRIDE;
-                        const r = emissionValues[index * 3] * 8, g = emissionValues[index * 3 + 1] * 8, b = emissionValues[index * 3 + 2] * 8;
+                        const r = emissionValues[index * 3] * colorScale, g = emissionValues[index * 3 + 1] * colorScale, b = emissionValues[index * 3 + 2] * colorScale;
                         for (; offset < end; offset += RADIANCE_TRIANGLE_STRIDE) {
                             values[offset] = r; values[offset + 1] = g; values[offset + 2] = b;
                         }
@@ -137,7 +142,7 @@ export class LuminousRadianceSceneSource {
                             }
                             values[writeOffset++] = 0;
                         }
-                        values.set([(emission?.r ?? 0) * 8, (emission?.g ?? 0) * 8, (emission?.b ?? 0) * 8, 0], writeOffset); writeOffset += 4;
+                        values.set([(emission?.r ?? 0) * colorScale, (emission?.g ?? 0) * colorScale, (emission?.b ?? 0) * colorScale, 0], writeOffset); writeOffset += 4;
                         if (textureMatrix) {
                             for (let corner = 0; corner < 3; corner++) {
                                 const vertex = indices[index + corner];

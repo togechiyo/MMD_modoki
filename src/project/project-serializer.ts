@@ -1,5 +1,6 @@
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
 import { normalizeRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
+import { normalizeRcDiffuseGiSettings, type RcDiffuseGiSettings } from "../render/rc-diffuse-gi-settings";
 import type {
     MmdModokiProjectFileV1,
     ProjectAccessoryState,
@@ -46,6 +47,8 @@ type ProjectExportSceneModel = {
 };
 
 type ProjectExportHost = {
+    getRcDiffuseGiSettings?: () => RcDiffuseGiSettings;
+    getStaticRcDiffuseGiSettings?: () => RcDiffuseGiSettings;
     getRcSkyOcclusionSettings?: () => RcSkyOcclusionSettings;
     getStaticRcSkyOcclusionSettings?: () => RcSkyOcclusionSettings;
     getMmdMaterialPipelinePreset?: () => MmdMaterialPipelinePreset;
@@ -443,6 +446,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             })(),
         },
         lighting: {
+            rcDiffuseGi: normalizeRcDiffuseGiSettings(host.getStaticRcDiffuseGiSettings?.() ?? host.getRcDiffuseGiSettings?.()),
             rcSkyOcclusion: normalizeRcSkyOcclusionSettings(host.getStaticRcSkyOcclusionSettings?.() ?? host.getRcSkyOcclusionSettings?.()),
             ...lightDirection,
             intensity: host.lightIntensity,

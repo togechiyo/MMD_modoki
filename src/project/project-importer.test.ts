@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { importProjectState, restoreProjectRcSkyOcclusionSettings } from "./project-importer";
+import { importProjectState, restoreProjectRcDiffuseGiSettings, restoreProjectRcSkyOcclusionSettings } from "./project-importer";
 import type { MmdModokiProjectFileV1 } from "../types";
 import type { RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
 import { DEFAULT_SKYDOME_BACKGROUND_STYLE } from "../shared/skydome-background-style";
@@ -204,6 +204,15 @@ function createHost() {
 }
 
 describe("importProjectState", () => {
+    it("restores GI separately and resets a subsequent legacy project to OFF", () => {
+        const setRcDiffuseGiSettings = vi.fn();
+        const host = { setRcDiffuseGiSettings }, project = createProject();
+        project.lighting.rcDiffuseGi = { enabled: true, strength: 1.6, volume: { min: [-8, 0, -8], size: 16 } };
+        restoreProjectRcDiffuseGiSettings(host, project.lighting);
+        expect(setRcDiffuseGiSettings).toHaveBeenLastCalledWith(project.lighting.rcDiffuseGi);
+        restoreProjectRcDiffuseGiSettings(host, createProject().lighting);
+        expect(setRcDiffuseGiSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 0.5, volume: null });
+    });
     it("restores RC sky settings and resets a subsequent legacy project to OFF", () => {
         const setRcSkyOcclusionSettings = vi.fn<(settings: Partial<RcSkyOcclusionSettings>) => void>();
         const host = { setRcSkyOcclusionSettings };

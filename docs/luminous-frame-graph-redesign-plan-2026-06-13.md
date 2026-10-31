@@ -1,5 +1,7 @@
 # Luminous / AutoLuminous 代替 FrameGraph 再設計メモ 2026-06-13
 
+> 2026-10-31: 所有者から通常LuminousとLuminous RCを本家にできるだけ寄せるための調査依頼を受け、[AutoLuminous 4.2原典コード調査・互換差分](./autoluminous-original-code-audit-2026-10-31.md) を作成した。以下の現行実装説明・初期案と、原典の正確な入力仕様を区別する。LightBlink/BSの値は本家では周期だが現行では混合率であり、追加UV・sequence等も未対応。今回の調査でruntimeは変更していない。
+
 ## 目的
 
 現行の `LuminousGlow` は Babylon.js `GlowLayer` を使った AutoLuminous-lite として実装されている。

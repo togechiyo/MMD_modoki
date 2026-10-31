@@ -4,6 +4,8 @@
 
 2026-10-25: [通常 Luminous と Luminous RC を独立した効果へ分離](./framegraph-luminous-rc-separation-2026-10-25.md)した。以下の内包 UI・キー連動は導入時の仕様として残す。旧保存値は新構成へ移行する。
 
+2026-10-25の[発光色合わせ](./luminous-radiance-2d-color-match-2026-10-25.md)で、RCの色比は2D maskの白い芯・彩度補正・clamp後を基準に変更した。以下の「補正前の色」は導入時の仕様。2026-10-31時点の原典互換・モーフ入力の対応範囲は [AutoLuminousコード調査](./autoluminous-original-code-audit-2026-10-31.md) に整理した。
+
 既存の Luminous / AutoLuminous 対象材質を世界座標の発光面として使い、床や壁に発光色を加える実験経路を追加した。Frame Graph の既存 Luminous 内に配置し、別の効果 ID は増やしていない。[独立検証画面](./radiance-cascade-al-lab-2026-10-11.md) はそのまま残す。
 
 2026-10-12 の実機報告を受け、発光テクスチャの入力、geometry RT の上下方向と世界座標復元、計算範囲の境界、PNG の texture 準備待ちを修正した。[発光色・カメラ復元・境界帯の修正](./luminous-radiance-color-camera-fix-2026-10-12.md) を参照。

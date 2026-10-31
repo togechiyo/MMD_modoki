@@ -1,5 +1,7 @@
 # AutoLuminous風エフェクト実装メモ 2026-04-23
 
+> 2026-10-31補足: 本書は旧GlowLayer実装の履歴です。本家を「画面の明るい部分の抽出」とだけ説明した箇所は不正確でした。専用発光源とHDR明部抽出の違い、点滅の周期指定、材質・追加UVモーフの対応差は [AutoLuminous 4.2原典コード調査](./autoluminous-original-code-audit-2026-10-31.md) を参照してください。材質モーフ追従の記述も、texture係数やshininess低下による消灯までの完全対応を意味しません。
+
 対象: `Babylon.js GlowLayer` を使って、`MMD_modoki` に `AutoLuminous` 風の発光表現を入れられるか整理する。
 
 関連:

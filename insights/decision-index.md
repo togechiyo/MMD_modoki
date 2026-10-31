@@ -13,6 +13,7 @@
 | adopted | [RCはアプリから目視できる1エフェクト単位で完成させる](./decisions/complete-rc-effects-one-at-a-time-for-visual-review.md) | 共通基盤後の派生効果を、アプリで操作・目視比較できる単位へ仕上げる。2026-10-30、天空遮蔽を一区切りとしGIへ着手指定。GI調整後は両効果を右側FrameGraphエフェクト欄へ移動。2026-10-31、説明と操作行の数値欄を撤去しラベル＋スライダーへ簡素化。詳細範囲入力・他効果は維持。実機コメントとGI全般の品質了承は区別する |
 | adopted | [RC GIは推しモデルが映える強い演出を許容する](./decisions/rc-gi-allows-strong-effects-for-favorite-models.md) | GIの効きが見分けにくい場合に、くどいくらい強い演出も許容して調整する。全効果の無条件増幅や軽量方針の撤回には広げない |
 | adopted | [Luminous RCの発光色は2D Luminousを基準にする](./decisions/rc-emission-color-follows-2d-luminous.md) | 2DとRCの色を揃える。補正前の材質色を別基準として固定しない |
+| adopted | [Luminous / RCの入力挙動をAutoLuminousへ寄せる](./decisions/luminous-inputs-follow-autoluminous.md) | 発光条件・モーフ・点滅を原典コードで照合する。今回の範囲は調査文書化で、移行方法や原典不整合の再現は未決定 |
 | adopted | [FrameGraph SSAOはシンプル階調に一本化する](./decisions/framegraph-ssao-uses-simple-tone.md) | 強度は線形0〜2、色合成を維持し、従来階調・切替UI・保存フラグを復活させない |
 | adopted | [FrameGraphの重ねがけとタイムラインを同時に設計する](./decisions/design-framegraph-layering-and-timeline-together.md) | 既存効果を新個体方式へ展開し、DoF対象キーも含める。個体は自動命名し、見出しでドラッグ・右端の♢ / ♦でキー登録する。公開項目だけをキー対象にし、詳細入力は右のエフェクト欄へ集約する。「キー編集」「複製」「外す」ボタンは置かず、削除の文言は「削除」とする。旧singleton・旧17種キーの移行と復帰は対象外 |
 | adopted | [モーフ描画容量は最低8・余裕4で試行する](./decisions/morph-preview-capacity-keeps-headroom.md) | 未登録モーフのpreview容量、再bind、再コンパイル頻度を変更する |

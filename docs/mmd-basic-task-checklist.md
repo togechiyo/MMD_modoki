@@ -142,6 +142,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - FrameGraph Post stack の現行仕様は [FrameGraph Post Stack 現行仕様メモ 2026-07-01](./framegraph-post-stack-current-spec-2026-07-01.md) を参照。
 - FrameGraph / PostFX の既知制約は [FrameGraph / PostFX 危険メモ 2026-07-01](./framegraph-postfx-risk-note-2026-07-01.md) を参照。
 - Luminous は AutoLuminous 資産を拾う補助発光として実装中。現行仕様は [Luminous / AutoLuminous 代替 FrameGraph 再設計メモ](./luminous-frame-graph-redesign-plan-2026-06-13.md) を参照。
+- [x] 借用AutoLuminous 4.2の原典コードを読解。材質発光、9種の制御モーフ、点滅式、追加UV / sphere sequence、2D / RCの互換差分と段階的対応案を記録。作者同梱PMXを静的解析し、旧メモの明部抽出に関する説明を訂正（[原典調査](./autoluminous-original-code-audit-2026-10-31.md)、2026-10-31。runtime変更・原典実機比較は未実施）。
 
 ## 3. タイムライン・キーフレーム編集
 

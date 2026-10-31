@@ -3426,7 +3426,8 @@ body.png-capture-mode .model-comment-notice {
   gap: 6px;
 }
 
-.effect-layer-control-row--fixed {
+.effect-layer-control-row--fixed,
+.effect-layer-control-row--slider-only {
   grid-template-columns: minmax(58px, 0.35fr) minmax(72px, 1fr);
   gap: 6px;
 }
@@ -3440,7 +3441,8 @@ body.png-capture-mode .model-comment-notice {
   white-space: nowrap;
 }
 
-.effect-layer-control-row.range-has-number .effect-layer-control-label {
+.effect-layer-control-row.range-has-number .effect-layer-control-label,
+.effect-layer-control-row--slider-only .effect-layer-control-label {
   font-size: 11px;
 }
 

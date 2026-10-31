@@ -4,19 +4,18 @@ import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from ".
 export type RcLightingEffectCardOptions = {
     expanded: boolean;
     keyframeState: () => SectionKeyframeButtonState;
-    syncSlider: (slider: HTMLInputElement) => void;
 };
 
-/** Use the same row and Enter-commit number control as the other FrameGraph effects. */
+/** Share the effect slider style, with the remaining row width devoted to dragging. */
 export function createRcLightingSlider(name: string, labelText: string) {
     const row = document.createElement("div");
-    row.className = "effect-layer-control-row";
+    row.className = "effect-layer-control-row effect-layer-control-row--slider-only";
     const label = document.createElement("span");
     label.className = "effect-layer-control-label"; label.textContent = labelText;
     const input = document.createElement("input");
     input.type = "range"; input.className = "effect-layer-control-slider";
     input.name = name; input.min = "0"; input.max = "100"; input.step = "1";
-    input.dataset.rcLightingSlider = "true";
+    input.dataset.rangeNumberInput = "false";
     input.setAttribute("aria-label", labelText);
     row.append(label, input);
     return { row, input };

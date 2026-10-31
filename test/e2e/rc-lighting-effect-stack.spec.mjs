@@ -10,7 +10,6 @@ import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 const root = resolve(import.meta.dirname, "../.."), ids = ["rcSkyOcclusion", "rcDiffuseGi"];
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
 const history = (page, operation) => page.locator(`.app-menu-quick-button[data-menu-command="edit.${operation}"]`).click();
-const rcNumber = (page, id, field) => rcLightingInput(page, id, field).locator("..").locator(".range-number-input");
 const tracks = state => state.keyframes?.effectAnimations?.tracks.filter(track => ids.includes(track.effectId)) ?? [];
 const rcState = state => ({ settings: Object.fromEntries(ids.map(id => [id, state.lighting[id]])), tracks: tracks(state),
   stack: state.effects.frameGraphPostStack?.filter(entry => ids.includes(entry.id)),
@@ -45,9 +44,11 @@ async function controlGeometry(range) {
   await expect(range.locator("..")).toHaveClass(/effect-layer-control-row/);
   return range.evaluate(input => {
     const row = input.closest(".effect-layer-control-row"), origin = row.getBoundingClientRect();
-    const rect = element => { const box = element.getBoundingClientRect(); return { x: box.x - origin.x, y: box.y - origin.y, width: box.width, height: box.height }; };
+    const rect = element => { if (!element) return null; const box = element.getBoundingClientRect(); return { x: box.x - origin.x, y: box.y - origin.y, width: box.width, height: box.height }; };
+    const label = row.querySelector(".effect-layer-control-label"), labelStyle = getComputedStyle(label);
     return { width: origin.width, scrollWidth: row.scrollWidth, clientWidth: row.clientWidth,
-      label: rect(row.querySelector(".effect-layer-control-label")), range: rect(input), number: rect(row.querySelector(".range-number-input")) };
+      label: rect(label), labelFont: { family: labelStyle.fontFamily, size: labelStyle.fontSize, weight: labelStyle.fontWeight },
+      range: rect(input), number: rect(row.querySelector(".range-number-input")) };
   });
 }
 
@@ -92,57 +93,64 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await page.screenshot({ path: testInfo.outputPath("rc-lighting-panel.png") });
     expect((await project(page)).lighting.rcSkyOcclusion).toEqual({ enabled: true, strength: .75, minimum: .2, volume: null });
     expect((await project(page)).lighting.rcDiffuseGi).toEqual({ enabled: true, strength: .5, volume: null });
-    report.numericEdits = [];
+    report.sliderEdits = [];
     for (const [id, field, setting, position, scale] of [["rcSkyOcclusion", "Strength", "strength", 75, 100],
       ["rcSkyOcclusion", "Minimum", "minimum", 20, 100], ["rcDiffuseGi", "Strength", "strength", 25, 50]]) {
       await openRcLighting(page, id);
       await expect(rcLightingRow(page, id).locator("p:not([role='status'])")).toHaveCount(0);
-      const range = rcLightingInput(page, id, field), number = rcNumber(page, id, field), before = rcState(await project(page));
+      const range = rcLightingInput(page, id, field), before = rcState(await project(page));
       await expect(range.locator("..")).toHaveClass(/effect-layer-control-row/);
-      for (const control of [range, number]) {
-        await expect(control).toHaveAttribute("min", "0"); await expect(control).toHaveAttribute("max", "100");
-        await expect(control).toHaveValue(String(position));
-      }
-      await number.fill("42");
-      // Keep the draft through two 250ms UI refresh ticks; this delay exercises
-      // overwrite protection rather than waiting for renderer readiness.
-      await page.waitForTimeout(550);
-      expect(rcState(await project(page))).toEqual(before); await expect(range).toHaveValue(String(position));
-      await expect(number).toHaveValue("42"); await number.press("Enter");
-      await expect(range).toHaveValue("42"); await expect(number).toHaveValue("42");
-      expect((await project(page)).lighting[id][setting]).toBe(42 / scale);
-      const committed = rcState(await project(page));
-      await number.fill("99"); expect(rcState(await project(page))).toEqual(committed);
-      await number.press("Escape"); await expect(number).toHaveValue("42"); await expect(range).toHaveValue("42");
-      expect(rcState(await project(page))).toEqual(committed);
-      await number.fill("88"); await range.focus();
-      await expect(number).toHaveValue("42"); expect(rcState(await project(page))).toEqual(committed);
+      await expect(rcLightingRow(page, id).locator(".range-number-input")).toHaveCount(0);
+      await expect(range).toHaveAttribute("min", "0"); await expect(range).toHaveAttribute("max", "100");
+      await expect(range).toHaveValue(String(position));
+      await range.focus(); await range.press("ArrowRight");
+      await expect(range).toHaveValue(String(position + 1));
+      expect((await project(page)).lighting[id][setting]).toBe((position + 1) / scale);
       await history(page, "undo"); expect(rcState(await project(page))).toEqual(before);
-      await expect(range).toHaveValue(String(position)); await expect(number).toHaveValue(String(position));
-      report.numericEdits.push({ id, field, initialPosition: position, committedPosition: 42, committedValue: 42 / scale });
+      await expect(range).toHaveValue(String(position));
+      const edit = { id, field, initialPosition: position, keyboardPosition: position + 1, keyboardValue: (position + 1) / scale };
+      if (id === "rcDiffuseGi") {
+        const box = await range.boundingBox(), thumbInset = 8;
+        await page.mouse.move(box.x + thumbInset + (box.width - 2 * thumbInset) * position / 100, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * .75, box.y + box.height / 2, { steps: 5 });
+        await page.mouse.up();
+        edit.dragPosition = Number(await range.inputValue()); edit.dragValue = (await project(page)).lighting[id][setting];
+        expect(edit.dragPosition).toBeGreaterThan(position + 20); expect(edit.dragValue).toBe(edit.dragPosition / scale);
+        await history(page, "undo"); expect(rcState(await project(page))).toEqual(before);
+        await expect(range).toHaveValue(String(position));
+      }
+      report.sliderEdits.push(edit);
     }
     // Compare the actual RC controls with an ordinary effect at the same narrow GUI panel width.
     await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="gamma"]').click();
     const gamma = page.locator("[data-effect-instance-row]").filter({ has: page.locator('[data-instance-field="gamma"]') });
     await setPanelWidth(page, 260); await expandEffectInstance(gamma);
+    await expect(gamma.locator(".range-number-input")).toBeVisible();
     report.narrowControls = { gamma: await controlGeometry(gamma.locator('[data-instance-field="gamma"]')) };
     await page.screenshot({ path: testInfo.outputPath("rc-lighting-narrow-gamma.png") });
     for (const id of ids) {
       await openRcLighting(page, id);
       await rcLightingRow(page, id).locator(`[data-rc-volume-controls="${id}"] > summary`).click();
       report.narrowControls[id] = await controlGeometry(rcLightingInput(page, id, "Strength"));
-      await expect(rcNumber(page, id, "Strength")).toBeInViewport();
+      await expect(rcLightingRow(page, id).locator(".range-number-input")).toHaveCount(0);
+      await expect(rcLightingInput(page, id, "Strength")).toBeInViewport();
       await page.screenshot({ path: testInfo.outputPath(`rc-lighting-narrow-${id}.png`) });
     }
     for (const dimensions of Object.values(report.narrowControls)) {
       expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
-      for (const control of ["label", "range", "number"]) {
+      for (const control of ["label", "range", "number"].filter(control => dimensions[control])) {
         expect(dimensions[control].x).toBeGreaterThanOrEqual(0);
         expect(dimensions[control].x + dimensions[control].width).toBeLessThanOrEqual(dimensions.width + 1);
-        for (const dimension of ["x", "width", "height"]) {
-          expect(Math.abs(dimensions[control][dimension] - report.narrowControls.gamma[control][dimension])).toBeLessThan(1.1);
-        }
       }
+    }
+    for (const id of ids) {
+      const dimensions = report.narrowControls[id], ordinary = report.narrowControls.gamma;
+      expect(dimensions.number).toBeNull(); expect(dimensions.labelFont).toEqual(ordinary.labelFont);
+      for (const dimension of ["x", "height"]) expect(Math.abs(dimensions.label[dimension] - ordinary.label[dimension])).toBeLessThan(1.1);
+      expect(Math.abs(dimensions.range.height - ordinary.range.height)).toBeLessThan(1.1);
+      expect(dimensions.range.width).toBeGreaterThan(ordinary.range.width + 40);
+      expect(Math.abs(dimensions.range.x + dimensions.range.width - dimensions.width)).toBeLessThan(1.1);
     }
     await expandEffectInstance(gamma); await gamma.locator('[data-instance-action="delete"]').click();
     await expect(gamma).toHaveCount(0); await setPanelWidth(page, report.panelBounds.width);
@@ -173,7 +181,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await seek(page, 10);
     for (const id of ids) {
       await openRcLighting(page, id); await expect(rcLightingInput(page, id, "Strength")).toHaveValue("50");
-      await expect(rcNumber(page, id, "Strength")).toHaveValue("50");
+      await expect(rcLightingRow(page, id).locator(".range-number-input")).toHaveCount(0);
     }
     await seek(page, 20); await closeRcLighting(page);
     const both = await capture(page, testInfo, report, "both-key-20"), saved = await project(page);

@@ -82,7 +82,6 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * 100));
             slider.input.disabled = details.disabled;
-            options.syncSlider(slider.input);
         }
         const volume = uiState.volume;
         if (!numberControls.includes(document.activeElement as HTMLInputElement)) {

@@ -82,7 +82,6 @@ export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispat
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * 50));
             slider.input.disabled = details.disabled;
-            options.syncSlider(slider.input);
         }
         const volume = uiState.volume;
         if (!numberControls.includes(document.activeElement as HTMLInputElement)) {

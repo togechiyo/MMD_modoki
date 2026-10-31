@@ -6,6 +6,8 @@
 
 ## 実ステージ監査後の演出調整と実機確認
 
+2026-10-31追記: 3効果のCPU変形/座標変換共有とBVH軽量化に加え、GI近傍guardを形状・範囲変更時だけ更新し、消灯中の形状準備を省いた。強度・演出gain・解像度は維持した。[性能・画像比較と回帰確認](./radiance-cascades-performance-2026-10-31.md)を参照。
+
 [推しモデルが映える強いGIを許容する所有者判断](../insights/decisions/rc-gi-allows-strong-effects-for-favorite-models.md)に基づき、遮られたprobeを照度補間の分母から除き、受光側の反射光を8倍の演出gainで加える。単なる強度不足だけでなく、壁際で有効な反射光が平均に埋もれる問題を修正する。格子・方向数・texture数・dispatch数は増やしていない。対象surfaceのないmeshのpose/snapshot点検も省いた。
 
 補間と可視率を区別する際は、[DDGI一次論文 §5.2](https://jcgt.org/published/0008/02/01/paper-lowres.pdf)の可視性を考慮した重み付け・正規化を参照した。本実装の近傍2三角形guardは同論文の可視性表現とは異なり、同等の精度を保証するものではない。

@@ -9,6 +9,8 @@ const root = resolve(import.meta.dirname, "../.."), fixture = resolve(root, "tes
 const section = page => rcLightingRow(page, "rcSkyOcclusion");
 const enabled = page => section(page).locator('[name="rcSkyOcclusionEnabled"]');
 const invoke = (page, name) => page.evaluate(async name =>
+  // Browser-only helper served from the repository root by Vite.
+  // eslint-disable-next-line import/no-unresolved
   (await import("/test/e2e/helpers/rc-sky-occlusion-motion-probe.mjs"))[name](), name);
 async function open(page) {
   await openRcLighting(page, "rcSkyOcclusion");
@@ -36,6 +38,7 @@ function stationaryReceiverChange(off0, off10, on0, on10) {
   return { pixels, difference: pixels ? sum / (pixels * 3) : 0 };
 }
 
+// eslint-disable-next-line no-empty-pattern -- Playwright requires its fixture argument to be destructured.
 test("RC sky occlusion follows GUI bone/morph keys on the first direct PNG after manual seeks", async ({}, testInfo) => {
   test.setTimeout(180000);
   const launched = await launchMmdModoki(root), report = { errors: [], captures: {}, traces: [], normalPose: {}, comparisons: {} };
@@ -81,7 +84,10 @@ test("RC sky occlusion follows GUI bone/morph keys on the first direct PNG after
     const normal = [];
     for (const frame of [0, 10, 20, 0]) {
       await seek(page, frame); normal.push(await capture(`normal-${frame}-${normal.length}`));
-      report.normalPose[`${frame}-${normal.length}`] = await invoke(page, "rcSkyMotionState");
+      const normalState = await invoke(page, "rcSkyMotionState");
+      report.normalPose[`${frame}-${normal.length}`] = normalState;
+      expect(normalState.diagnostics.status).toBe("off");
+      expect(normalState.providerReady).toBe(false);
     }
     expect(difference(normal[0], normal[1])).toBeGreaterThan(0.5);
     expect(difference(normal[1], normal[2])).toBeLessThan(0.15);

@@ -124,8 +124,10 @@ describe("world triangle radiance BVH", () => {
     });
     it("rejects malformed, nonfinite and excessive geometry before changing the tree", () => {
         const bvh = new TriangleRadianceBvh(); bvh.update(geometry(1));
+        const nodes = bvh.nodes.slice(), triangles = bvh.triangles.slice();
         for (const invalid of [new Float32Array(3), new Float32Array(STRIDE).fill(NaN), new Float32Array((MAX_RADIANCE_TRIANGLES + 1) * STRIDE)]) {
             expect(() => bvh.update(invalid)).toThrow(); expect(bvh.triangleCount).toBe(1);
+            expect(bvh.nodes).toEqual(nodes); expect(bvh.triangles).toEqual(triangles);
         }
     });
 });

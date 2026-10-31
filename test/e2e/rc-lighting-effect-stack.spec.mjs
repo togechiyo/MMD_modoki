@@ -75,6 +75,28 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
       await expect(rcLightingInput(page, id, "Enabled")).toBeChecked();
       await expect(rcLightingStatus(page, id)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     }
+    // Camera selection rebuilds the cards while their panel is hidden. Inspect
+    // authored initial values immediately; no visible 250ms refresh can fix them.
+    await closeRcLighting(page);
+    await page.locator("#info-model-select").selectOption("0");
+    await page.locator("#info-model-select").selectOption("__camera__");
+    await expect(page.locator("#shader-panel")).toBeHidden();
+    report.hiddenInitialValues = await page.evaluate(ids => Object.fromEntries(ids.map(id => {
+      const row = document.querySelector(`[data-effect-stack-row="${id}"]`);
+      return [id, { visible: row.getClientRects().length > 0,
+        enabled: row.querySelector(`[name="${id}Enabled"]`).checked,
+        strength: row.querySelector(`[name="${id}Strength"]`).value,
+        minimum: row.querySelector(`[name="${id}Minimum"]`)?.value ?? null }];
+    })), ids);
+    expect(report.hiddenInitialValues).toEqual({
+      rcSkyOcclusion: { visible: false, enabled: true, strength: "75", minimum: "20" },
+      rcDiffuseGi: { visible: false, enabled: true, strength: "25", minimum: null },
+    });
+    await openRcLighting(page, "rcDiffuseGi");
+    await rcLightingInput(page, "rcDiffuseGi", "Enabled").uncheck();
+    expect((await project(page)).lighting.rcDiffuseGi.enabled).toBe(false);
+    await history(page, "undo");
+    expect((await project(page)).lighting.rcDiffuseGi.enabled).toBe(true);
     await verifyRows(page);
     // Review the ordinary card layout at the app's default panel width.
     for (const id of ids) {

@@ -4,14 +4,13 @@ import type { Material } from "@babylonjs/core/Materials/material";
 import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Scene } from "@babylonjs/core/scene";
 import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
 import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE } from "./triangle-radiance-bvh";
 import { MeshRadianceBvh } from "./mesh-radiance-bvh";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { RadianceInputSnapshot } from "./luminous-radiance-input-cache";
-import { LuminousRadiancePoseCache } from "./luminous-radiance-pose-cache";
+import { acquireRadianceGeometry, type RadianceGeometryLease } from "./radiance-geometry-cache";
 import { logWarn } from "../app-logger";
 import { isRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
 
@@ -27,10 +26,12 @@ export class LuminousRadianceSceneSource {
     public emissionBuffer: StorageBuffer;
     public updates = 0;
     public revision = 0;
+    /** Packed geometry/triangle IDs only; source RGB and texture pixels do not invalidate nearest surfaces. */
+    public geometryRevision = 0;
     public emitterTriangles = 0;
     public error: string | null = null;
     private readonly meshInputs = new WeakMap<Mesh, MeshInput>();
-    private readonly poses = new LuminousRadiancePoseCache();
+    private readonly geometry: RadianceGeometryLease;
     private chunks: MeshInput[] = [];
     private triangleCapacity = RADIANCE_TRIANGLE_STRIDE * 4;
     private nodeCapacity = 48;
@@ -49,6 +50,7 @@ export class LuminousRadianceSceneSource {
         this.triangleBuffer = new StorageBuffer(engine, this.triangleCapacity);
         this.nodeBuffer = new StorageBuffer(engine, this.nodeCapacity);
         this.emissionBuffer = new StorageBuffer(engine, this.emissionCapacity);
+        this.geometry = acquireRadianceGeometry(scene);
     }
 
     public get ready(): boolean { return this.textures.ready; }
@@ -90,7 +92,7 @@ export class LuminousRadianceSceneSource {
                 throw new Error(`3D RC triangle budget exceeded (${triangleCount} opaque triangles; limit ${this.triangleBudget})`);
             }
             for (const { mesh, indices, surfaces: opaqueSurfaces } of meshes) {
-                const pose = this.poses.read(mesh), positions = pose.positions;
+                const pose = this.geometry.readPose(mesh), positions = pose.positions;
                 if (!positions) continue;
                 const world = mesh.computeWorldMatrix();
                 const surfaces = opaqueSurfaces.map(({ indexStart, indexCount, material }) => {
@@ -126,14 +128,11 @@ export class LuminousRadianceSceneSource {
                 const values = new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);
                 const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
                 let emitters = 0, writeOffset = 0;
-                const transformed = new Float32Array(positions.length);
-                const point = Vector3.Zero();
-                for (let vertex = 0; vertex < positions.length; vertex += 3) {
-                    Vector3.TransformCoordinatesFromFloatsToRef(positions[vertex], positions[vertex + 1], positions[vertex + 2], world, point);
-                    transformed.set([point.x, point.y, point.z], vertex);
-                }
+                const transformed = this.geometry.readWorldPositions(mesh, pose, world);
+                if (!transformed) continue;
                 for (const surface of surfaces) {
                     const { emission, uvs, textureSource, wrap, matrix: textureMatrix } = surface;
+                    const r = (emission?.r ?? 0) * colorScale, g = (emission?.g ?? 0) * colorScale, b = (emission?.b ?? 0) * colorScale;
                     for (let index = surface.indexStart; index < surface.indexStart + surface.indexCount; index += 3) {
                         for (let corner = 0; corner < 3; corner++) {
                             const vertex = indices[index + corner], offset = vertex * 3;
@@ -145,7 +144,7 @@ export class LuminousRadianceSceneSource {
                             }
                             values[writeOffset++] = 0;
                         }
-                        values.set([(emission?.r ?? 0) * colorScale, (emission?.g ?? 0) * colorScale, (emission?.b ?? 0) * colorScale, 0], writeOffset); writeOffset += 4;
+                        values[writeOffset++] = r; values[writeOffset++] = g; values[writeOffset++] = b; values[writeOffset++] = 0;
                         if (textureMatrix) {
                             for (let corner = 0; corner < 3; corner++) {
                                 const vertex = indices[index + corner];
@@ -188,6 +187,7 @@ export class LuminousRadianceSceneSource {
         if (chunks.length === this.chunks.length && chunks.every((chunk, index) => chunk === this.chunks[index]) && this.updates) return;
         this.chunks = chunks;
         const changes = this.bvh.update(chunks);
+        if (changes.nodes.length > 0) this.geometryRevision++;
         if (this.bvh.triangles.byteLength > this.triangleCapacity) {
             this.triangleBuffer.dispose(); this.triangleCapacity = this.bvh.triangles.byteLength;
             this.triangleBuffer = new StorageBuffer(this.scene.getEngine() as WebGPUEngine, this.triangleCapacity);
@@ -201,7 +201,7 @@ export class LuminousRadianceSceneSource {
         this.updates++; this.revision++;
     }
 
-    public dispose(): void { this.triangleBuffer.dispose(); this.nodeBuffer.dispose(); this.emissionBuffer.dispose(); this.textures.dispose(); }
+    public dispose(): void { this.triangleBuffer.dispose(); this.nodeBuffer.dispose(); this.emissionBuffer.dispose(); this.textures.dispose(); this.geometry.release(); }
 }
 
 export interface LuminousRadianceSceneLease {

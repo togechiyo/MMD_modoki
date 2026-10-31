@@ -146,6 +146,11 @@ export class RcSkyOcclusionController {
             if (!this.pending && this.status !== "error") void this.prewarm();
             return;
         }
+        // Preserve the last field without advancing its input revisions while the
+        // material contribution is neutral. Reactivation must read the current pose.
+        if (settings.strength <= 0 || settings.minimum >= 1) {
+            this.view = null; this.status = "ready"; this.reason = null; this.frameId = -1; return;
+        }
         const field = this.field, frameId = this.scene.getFrameId();
         if (this.frameId === frameId) return;
         try {

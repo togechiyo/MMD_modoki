@@ -5,6 +5,7 @@ import { launchMmdModoki } from "./electron-app.mjs";
 import { ensureLuminousRadianceInstance, luminousInstanceControl, setLuminousInstancePosition } from "./helpers/luminous-instance-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), output = resolve(root, "artifacts/e2e/luminous-distance-softness-retired");
+// eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
 test("shelved RC distance softness stays OFF and hidden after legacy load, undo and backend changes", async ({}, testInfo) => {
   const launched = await launchMmdModoki(root), errors = [], report = {};
   mkdirSync(output, { recursive: true });
@@ -14,6 +15,7 @@ test("shelved RC distance softness stays OFF and hidden after legacy load, undo 
     await page.evaluate(async () => {
       const state = window.mmdModokiE2e.exportProjectState(); state.physics.enabled = false;
       await window.mmdModokiE2e.importProjectState(state);
+      // eslint-disable-next-line import/no-unresolved -- Browser test module served by Vite.
       await import("/test/e2e/helpers/luminous-radiance-probe.mjs");
     });
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
@@ -29,9 +31,14 @@ test("shelved RC distance softness stays OFF and hidden after legacy load, undo 
       await expect(hiddenToggle).toHaveCount(0);
       await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
       report[name] = await page.evaluate(async () => {
+        // eslint-disable-next-line import/no-unresolved -- Browser test module served by Vite.
         const { radianceTask } = await import("/test/e2e/helpers/luminous-radiance-probe.mjs");
         for (let frame = 0; frame < 8; frame++) await new Promise(resolve => requestAnimationFrame(resolve));
-        const uniform = radianceTask("luminousRadianceReceiver").getUniformBuffer("params");
+        const receiver = radianceTask("luminousRadianceReceiver"), uniform = receiver.getUniformBuffer("params");
+        const previousNear = receiver.computeShader._bindings.previousNear.object;
+        const outputNear = receiver.computeShader._bindings.outputNear.object;
+        const nearHistory = { previous: [previousNear.width, previousNear.height], output: [outputNear.width, outputNear.height],
+          distinct: previousNear !== outputNear };
         // Read actual UBO fields by their runtime offsets instead of inspecting WGSL text.
         const preserveNear = uniform.getData()[uniform._uniformLocations.outputSize + 3];
         const filters = [0, 1, 2, 3, 4].map(index => {
@@ -39,10 +46,11 @@ test("shelved RC distance softness stays OFF and hidden after legacy load, undo 
           return Array.from(params.getData().slice(params._uniformLocations.softening + 2, params._uniformLocations.softening + 4));
         });
         const state = window.mmdModokiE2e.exportProjectState();
-        return { preserveNear, filters, legacy: state.effects.luminousRadiance,
+        return { preserveNear, filters, nearHistory, legacy: state.effects.luminousRadiance,
           settings: state.effects.frameGraphInstances.instances.find(item => item.type === "luminousRadiance").fixedSettings.radiance };
       });
       expect(report[name]).toMatchObject({ preserveNear: 0, filters: Array(5).fill([0, 0]), legacy: { distanceSoftness: false },
+        nearHistory: { previous: [1, 1], output: [1, 1], distinct: true },
         settings: { enabled: true, strength: 6, softness: 0.38, distanceSoftness: false } });
       expect(report[name].settings.range).toBeCloseTo(3.97);
       await expect(luminousInstanceControl(page, "luminousRadianceSoftness")).toHaveValue("38");

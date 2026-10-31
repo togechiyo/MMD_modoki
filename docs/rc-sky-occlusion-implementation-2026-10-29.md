@@ -6,6 +6,8 @@
 
 ## 実装の概要
 
+2026-10-31追記: Luminous・天空遮蔽・GIの3効果でCPU変形/座標変換を共有し、BVH更新loopと中立設定時の更新を軽量化した。描画条件を維持した32 PNG一致と骨/morph・PNG/WebM回帰は[3種のRC併用時の負荷軽減](./radiance-cascades-performance-2026-10-31.md)を参照。
+
 庇下・壁際などで空が見えにくい部分を調べ、通常MMD材質の**影側に残る明るさ**を抑える。直射の明部・発光・specular・sphereを保ち、画面外の遮蔽物も計算に含める。完成色へのPostFXではなく、描画前の専用FrameGraphで作った天空visibilityを材質から参照する照明機能である。
 
 ```text

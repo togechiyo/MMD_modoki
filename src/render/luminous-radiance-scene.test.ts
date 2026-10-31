@@ -6,6 +6,9 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Material } from "@babylonjs/core/Materials/material";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
+import { Skeleton } from "@babylonjs/core/Bones/skeleton";
+import { Bone } from "@babylonjs/core/Bones/bone";
+import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { LuminousRadianceScene, LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { LuminousRadiancePoseCache } from "./luminous-radiance-pose-cache";
@@ -32,6 +35,37 @@ function fixture() {
 }
 
 describe("RC separates emission and geometry input", () => {
+    it("shares deformation across independent emission, sky and diffuse sources while retaining their own colors and buffers", () => {
+        const { scene, mesh, data } = fixture();
+        mesh.skeleton = new Skeleton("bones", "bones", scene);
+        const bone = new Bone("root", mesh.skeleton, null, Matrix.Identity());
+        mesh.setVerticesData(VertexBuffer.MatricesIndicesKind, new Float32Array(mesh.getTotalVertices() * 4));
+        const weights = new Float32Array(mesh.getTotalVertices() * 4);
+        for (let i = 0; i < weights.length; i += 4) weights[i] = 1;
+        mesh.setVerticesData(VertexBuffer.MatricesWeightsKind, weights);
+        const sky = new LuminousRadianceSceneSource(scene, () => null);
+        const gi = new LuminousRadianceSceneSource(scene, () => null, () => true, () => ({ r: 0.25, g: 0.5, b: 0.75 }));
+        const deform = vi.spyOn(mesh, "getPositionData");
+        for (const x of [2, -3, 0]) {
+            bone.setPosition(new Vector3(x, 1, 0)); mesh.skeleton.prepare(true); deform.mockClear();
+            data.update(settings); sky.update(); gi.update();
+            expect(deform).toHaveBeenCalledTimes(1);
+            expect(sky.bvh.nodes).toEqual(gi.bvh.nodes); expect(sky.bvh.nodes).toEqual(data.bvh.nodes);
+            expect(sky.triangleBuffer).not.toBe(gi.triangleBuffer);
+            for (let triangle = 0; triangle < data.bvh.triangleCount; triangle++) {
+                const offset = triangle * 24;
+                expect(sky.bvh.triangles.slice(offset, offset + 12)).toEqual(data.bvh.triangles.slice(offset, offset + 12));
+                expect(gi.bvh.triangles.slice(offset, offset + 12)).toEqual(data.bvh.triangles.slice(offset, offset + 12));
+                expect(Array.from(gi.bvh.triangles.slice(offset + 12, offset + 15))).toEqual([0.25, 0.5, 0.75]);
+                expect(Array.from(sky.bvh.triangles.slice(offset + 12, offset + 15))).toEqual([0, 0, 0]);
+                expect(data.bvh.triangles[offset + 12]).toBe(8);
+            }
+        }
+        sky.dispose(); sky.dispose(); bone.setPosition(new Vector3(4, 0, 0)); mesh.skeleton.prepare(true);
+        gi.update(); data.update(settings);
+        expect(gi.bvh.nodes).toEqual(data.bvh.nodes);
+        gi.dispose(); data.dispose();
+    });
     it.each(["alpha", "consumer", "empty-index"] as const)("skips all geometry work for a mesh excluded by %s and restores its current pose when eligible", reason => {
         const { scene, mesh, data, read } = fixture();
         const material = mesh.material as StandardMaterial;
@@ -91,6 +125,27 @@ describe("RC separates emission and geometry input", () => {
         expect(refit).not.toHaveBeenCalled(); expect(gi.bvh.nodes).toEqual(nodes);
         expect(Array.from(gi.bvh.triangles.subarray(12, 15))).toEqual([0.25, 0, 1]);
         expect(data.bvh.triangles[12]).toBe(8);
+        gi.dispose(); data.dispose();
+    });
+    it("invalidates geometric candidates for moved or removed surfaces while retaining them across RGB edits", () => {
+        const { scene, mesh, data } = fixture();
+        let reflectance = { r: 0.1, g: 0.5, b: 0.75 };
+        const gi = new LuminousRadianceSceneSource(scene, () => null, () => true, () => reflectance);
+        gi.update();
+        const initial = gi.geometryRevision, radiance = gi.revision;
+        expect(initial).toBeGreaterThan(0);
+        gi.update(); expect(gi.geometryRevision).toBe(initial); expect(gi.revision).toBe(radiance);
+        reflectance = { r: 0.25, g: 0, b: 1 }; gi.update();
+        expect(gi.geometryRevision).toBe(initial); expect(gi.revision).toBeGreaterThan(radiance);
+        mesh.position.x = 2; scene.incrementRenderId(); gi.update();
+        const moved = gi.geometryRevision;
+        expect(moved).toBeGreaterThan(initial);
+        mesh.isVisible = false; gi.update();
+        const removed = gi.geometryRevision;
+        expect(removed).toBeGreaterThan(moved); expect(gi.bvh.triangleCount).toBe(0);
+        gi.update(); expect(gi.geometryRevision).toBe(removed);
+        mesh.position.x = 4; mesh.isVisible = true; scene.incrementRenderId(); gi.update();
+        expect(gi.geometryRevision).toBeGreaterThan(removed); expect(gi.bvh.nodes[0]).toBeCloseTo(3.5, 3);
         gi.dispose(); data.dispose();
     });
     it("lets sky consumers exclude cutout/blended blockers and invalidates their geometry when transparency changes", () => {

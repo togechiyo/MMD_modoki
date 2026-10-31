@@ -68,13 +68,13 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     });
     const status = document.createElement("p");
     status.className = "popup-form-note"; status.setAttribute("role", "status"); status.dataset.rcSkyOcclusionStatus = "true";
-    const refresh = (): void => {
-        if (card.section.getClientRects().length === 0) return;
+    const refresh = (initial = false): void => {
+        if (!initial && card.section.getClientRects().length === 0) return;
         const settings = host.getRcSkyOcclusionSettings();
         card.refresh(settings.enabled, host.isPlaying);
         const hasCurrentKey = host.getEffectSceneKeyframeFrames("rcSkyOcclusion").includes(Math.floor(host.currentFrame));
         register.dataset.hasCurrentKey = String(hasCurrentKey);
-        if (card.content.hidden) return;
+        if (!initial && card.content.hidden) return;
         const diagnostics = host.getRcSkyOcclusionDiagnostics();
         const uiState = getRcSkyOcclusionUiState(settings, diagnostics, t);
         details.disabled = !settings.enabled || host.isPlaying;
@@ -100,7 +100,9 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     });
     card.advanced.append(volumeControls);
     card.content.append(details, status, card.advanced, card.remove);
-    refresh();
+    // Hidden camera-panel rebuilds must not expose unchecked/default controls
+    // before the next visible timer tick, even when the saved effect is enabled.
+    refresh(true);
     const timer = window.setInterval(refresh, 250);
     return () => window.clearInterval(timer);
 }

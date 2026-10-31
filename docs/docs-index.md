@@ -383,6 +383,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [RC 天空遮蔽: 通常MMD材質・設定・キーの実装 2026-10-29](./rc-sky-occlusion-implementation-2026-10-29.md)
 - [RC GI: 方向光1反射の通常MMD材質への実装 2026-10-30](./rc-diffuse-gi-implementation-2026-10-30.md)
 - [RC GI: 実ステージでの画像差・負荷の検証 2026-10-30](./rc-diffuse-gi-real-stage-audit-2026-10-30.md)
+- [3種のRC併用時の負荷軽減 2026-10-31](./radiance-cascades-performance-2026-10-31.md)
 - [Luminous RC と WebGPU の最適化調査 2026-10-25](./luminous-radiance-webgpu-optimization-research-2026-10-25.md)
 - [Frame Graph の通常 Luminous と Luminous RC の分離 2026-10-25](./framegraph-luminous-rc-separation-2026-10-25.md)
 - [Luminous RC の遮蔽時の補間と発光色評価の削減 2026-10-25](./luminous-radiance-occluded-work-optimization-2026-10-25.md)

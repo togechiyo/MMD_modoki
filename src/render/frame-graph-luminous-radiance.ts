@@ -62,8 +62,10 @@ export function createLuminousRadianceTasks(graph: FrameGraph, scene: Scene, cam
             width, height, Constants.TEXTURETYPE_FLOAT));
         for (let index = 0; index < 2; index++) owned.push(cachedStorageTexture(graph, `luminousRadianceGeometry${index}`,
             width, height, Constants.TEXTURETYPE_FLOAT));
+        // Distance softness is normalized OFF. Keep distinct read/write bindings
+        // without full-size unused histories; restore their size if it is re-enabled.
         for (let index = 0; index < 2; index++) owned.push(cachedStorageTexture(graph, `luminousRadianceNear${index}`,
-            width, height, Constants.TEXTURETYPE_HALF_FLOAT));
+            1, 1, Constants.TEXTURETYPE_HALF_FLOAT));
     } catch (error) { for (const texture of owned) texture.dispose(); data.dispose(); releaseAlbedo(); throw error; }
     const baseFields = owned.slice(0, 2).map(texture => texture.handle);
     const outputs = owned.slice(2, 4).map(texture => texture.handle), geometryHistory = owned.slice(4, 6).map(texture => texture.handle);

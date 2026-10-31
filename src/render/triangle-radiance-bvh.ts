@@ -44,7 +44,9 @@ export class TriangleRadianceBvh {
         const stride = RADIANCE_TRIANGLE_STRIDE;
         const count = input.length / stride;
         if (!Number.isInteger(count) || count > MAX_RADIANCE_TRIANGLES) throw new Error("3D RC triangle budget exceeded or invalid geometry");
-        if (input.some(value => !Number.isFinite(value))) throw new Error("3D RC geometry contains non-finite values");
+        for (let i = 0; i < input.length; i++) {
+            if (!Number.isFinite(input[i])) throw new Error("3D RC geometry contains non-finite values");
+        }
         if (count !== this.triangleCount) {
             this.triangleCount = count;
             this.order = Array.from({ length: count }, (_, index) => index);
@@ -77,16 +79,20 @@ export class TriangleRadianceBvh {
             else this.nodes[9] = -1;
             this.triangles = new Float32Array(Math.max(stride, input.length));
         }
-        for (let index = 0; index < count; index++) this.triangles.set(input.subarray(this.order[index] * stride, (this.order[index] + 1) * stride), index * stride);
+        for (let index = 0; index < count; index++) {
+            const source = this.order[index] * stride, target = index * stride;
+            for (let component = 0; component < stride; component++) this.triangles[target + component] = input[source + component];
+        }
         // Refit for skinning, morphs and rigid transforms; rebuild when triangle count changes.
         for (let index = this.nodes.length / 12 - 1; index >= 0; index--) {
             const base = index * 12, first = this.nodes[base + 3], leafCount = this.nodes[base + 7];
             for (let axis = 0; axis < 3; axis++) {
                 let low = Infinity, high = -Infinity;
                 if (leafCount) {
-                    for (let triangle = first; triangle < first + leafCount; triangle++) for (const vertex of [0, 4, 8]) {
-                        const value = this.triangles[triangle * stride + vertex + axis];
-                        low = Math.min(low, value); high = Math.max(high, value);
+                    for (let triangle = first; triangle < first + leafCount; triangle++) {
+                        const offset = triangle * stride + axis;
+                        const a = this.triangles[offset], b = this.triangles[offset + 4], c = this.triangles[offset + 8];
+                        low = Math.min(low, a, b, c); high = Math.max(high, a, b, c);
                     }
                 } else if (count) {
                     const right = this.nodes[base + 8];

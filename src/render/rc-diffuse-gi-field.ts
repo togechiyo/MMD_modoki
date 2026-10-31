@@ -30,6 +30,9 @@ export class RcDiffuseGiField {
     private volume: Volume;
     private intervals: ReturnType<typeof createRcDiffuseGiIntervals>;
     private light: RcDiffuseGiLight = { directionToLight: [0, 1, 0], color: [0, 0, 0] };
+    private nearestTask: FrameGraphComputeShaderTask;
+    private nearestGeometryRevision = -1;
+    private nearestVolumeKey = "";
     private disposed = false;
 
     constructor(scene: Scene, options: { volume: Volume; acceptsMaterial?: (material: Material) => boolean }) {
@@ -105,6 +108,7 @@ export class RcDiffuseGiField {
                     params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 },
                     nodes: { group: 0, binding: 2 }, nearestSurface: { group: 0, binding: 3 },
                 } });
+            this.nearestTask = guard;
             this.tasks.push(guard); this.graph.addTask(guard);
             const params = guard.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4 });
             guard.dispatchSize = new Vector3(Math.ceil(grid / 4), Math.ceil(grid / 4), Math.ceil(grid / 4));
@@ -131,7 +135,17 @@ export class RcDiffuseGiField {
 
     public execute(light: RcDiffuseGiLight, updateField = true): number {
         if (!updateField || this.disposed) return 0;
-        this.light = light; this.graph.execute(); return this.tasks.length;
+        const volumeKey = `${this.volume.min.join(",")}:${this.volume.size}`;
+        const updateNearest = this.nearestGeometryRevision !== this.source.geometryRevision || this.nearestVolumeKey !== volumeKey;
+        // The disabled compute pass is a no-op. Its imported RawTexture remains owned
+        // by this field, so light/albedo edits can reuse the same triangle candidates.
+        this.nearestTask.disabled = !updateNearest;
+        this.light = light; this.graph.execute();
+        if (updateNearest) {
+            this.nearestGeometryRevision = this.source.geometryRevision;
+            this.nearestVolumeKey = volumeKey;
+        }
+        return this.tasks.length - (updateNearest ? 0 : 1);
     }
 
     public dispose(): void {

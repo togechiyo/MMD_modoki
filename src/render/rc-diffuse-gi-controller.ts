@@ -159,15 +159,15 @@ export class RcDiffuseGiController {
         const field = this.field, frameId = this.scene.getFrameId();
         if (this.frameId === frameId) return;
         try {
+            const light = readRcDiffuseGiLight(this.mainLight());
+            if (!light) { this.view = null; this.status = "unsupported"; this.reason = "Main directional light"; this.frameId = -1; return; }
+            if (light.color.every(value => value <= 0)) {
+                this.view = null; this.status = "ready"; this.reason = "No direct light"; this.frameId = -1; return;
+            }
             for (const skeleton of new Set(this.scene.meshes.filter(mesh => mesh.isEnabled()).flatMap(mesh => mesh.skeleton ? [mesh.skeleton] : []))) skeleton.prepare(true);
             field.source.update();
             if (field.source.error) throw new Error(field.source.error);
             if (!field.source.ready || !field.graph.isReady()) { this.view = null; this.status = "preparing"; return; }
-            const light = readRcDiffuseGiLight(this.mainLight());
-            if (!light) { this.view = null; this.status = "unsupported"; this.reason = "Main directional light"; return; }
-            if (light.color.every(value => value <= 0)) {
-                this.view = null; this.status = "ready"; this.reason = "No direct light"; this.frameId = -1; return;
-            }
             const volumeKey = JSON.stringify(volume), lightKey = JSON.stringify(light);
             const update = field.source.revision !== this.sourceRevision || volumeKey !== this.volumeKey || lightKey !== this.lightKey;
             if (update) {

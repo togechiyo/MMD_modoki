@@ -126,12 +126,25 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
     await particleRow.locator('[data-effect-stack-control="ringParticleColorC"]').fill("#0000ff");
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="luminous"]').click();
-    await page.waitForFunction(() => {
-      const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();
-      return state.backend === "frameGraph" && state.ready && state.stack.includes("luminous");
-    });
-
     const state = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    const luminousInstances = state.effects.frameGraphInstances.instances.filter(instance => instance.type === "luminous");
+    expect(luminousInstances).toHaveLength(1);
+    const luminousInstance = luminousInstances[0];
+    expect(luminousInstance.settings.enabled).toBe(true);
+    expect(state.effects.frameGraphInstances.order).toContain(luminousInstance.instanceId);
+    await expect(page.locator(`[data-effect-instance-row="${luminousInstance.instanceId}"] [data-instance-field="enabled"]`)).toBeChecked();
+    // Independent effect instances are separate from the legacy state.stack list.
+    // Verify the authored instance is connected to its emission mask and render tasks.
+    await page.waitForFunction(instanceId => {
+      const runtime = window.mmdModokiE2e.getFrameGraphPostEffectsState();
+      const diagnostics = window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects;
+      const instance = diagnostics.controller?.instances.find(item => item.instanceId === instanceId);
+      return runtime.backend === "frameGraph" && runtime.enabled && runtime.ready && runtime.resourcesAllocated
+        && diagnostics.resourcePlan?.needsLuminousMask && diagnostics.resources.luminousMask
+        && diagnostics.controller.connectedOrder.includes("luminous") && instance?.type === "luminous"
+        && ["-extract", "-composite"].every(suffix => instance.taskNames.some(name => name.endsWith(suffix)));
+    }, luminousInstance.instanceId);
+
     expect(state.effects.ringParticles).toMatchObject({
       enabled: true,
       count: 180,
@@ -158,17 +171,18 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
     expect(frame240.pixelChecksum).not.toBe(frame120.pixelChecksum);
 
     const exportProject = structuredClone(state);
-    exportProject.effects.ringParticles.speed = 0.5;
+    // A short clip with visible motion is enough to compare the same output time.
+    exportProject.effects.ringParticles.speed = 1.5;
     const pngPrefix = "ring_particle_webm_sync";
     const pngStartPath = resolve(launched.tempDir, `${pngPrefix}_0000.png`);
-    const pngExpectedPath = resolve(launched.tempDir, `${pngPrefix}_0054.png`);
+    const pngExpectedPath = resolve(launched.tempDir, `${pngPrefix}_0018.png`);
     const pngLaunch = await page.evaluate(async ({ project, outputDirectoryPath, prefix }) => (
       window.electronAPI.startPngSequenceExportWindow({
         project,
         outputDirectoryPath,
         startFrame: 0,
-        endFrame: 54,
-        step: 54,
+        endFrame: 18,
+        step: 18,
         prefix,
         fps: 30,
         precision: 1,
@@ -182,12 +196,19 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
     await waitForExportFile(page, pngExpectedPath);
 
     const webmPath = resolve(launched.tempDir, "ring_particle_webm_sync.webm");
+    await page.evaluate(() => {
+      const diagnostics = { progress: null, result: null };
+      window.__ringParticleWebmDiagnostics = diagnostics;
+      const disposeProgress = window.electronAPI.onWebmExportProgress(progress => { diagnostics.progress = progress; });
+      const disposeResult = window.electronAPI.onWebmExportResult(result => { diagnostics.result = result; });
+      window.__disposeRingParticleWebmDiagnostics = () => { disposeProgress(); disposeResult(); };
+    });
     const webmLaunch = await page.evaluate(async ({ project, outputFilePath }) => (
       window.electronAPI.startWebmExportWindow({
         project,
         outputFilePath,
         startFrame: 0,
-        endFrame: 60,
+        endFrame: 24,
         fps: 30,
         outputWidth: 320,
         outputHeight: 180,
@@ -197,14 +218,21 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
       })
     ), { project: exportProject, outputFilePath: webmPath });
     expect(webmLaunch?.jobId).toBeTruthy();
-    await waitForExportFile(page, webmPath, 1_000);
+    try {
+      await waitForExportFile(page, webmPath, 1_000);
+    } catch (error) {
+      console.log("[ring-particle-webm-wait-failure]", await page.evaluate(() => window.__ringParticleWebmDiagnostics));
+      throw error;
+    } finally {
+      await page.evaluate(() => window.__disposeRingParticleWebmDiagnostics());
+    }
 
     const exportComparison = await comparePngFramesWithWebm(
       page,
       pngStartPath,
       pngExpectedPath,
       webmPath,
-      1.8,
+      0.6,
     );
     console.log(`[ring-particle-webm-sync] ${JSON.stringify(exportComparison)}`);
     expect(exportComparison.pngStartToExpected).toBeGreaterThan(0.5);

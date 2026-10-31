@@ -366,6 +366,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [ライト / フェイス回りの調査メモ](./full-light-face-investigation-2026-03-13.md)
 - [現行MMD AutoLuminous 調査メモ](./mmd-autoluminous-research.md)
 - [AutoLuminous 4.2 原典コード調査・Luminous / RCの互換差分 2026-10-31](./autoluminous-original-code-audit-2026-10-31.md)
+- [2D Luminousの材質発光条件・材質モーフ消灯 2026-10-31](./luminous-2d-material-conditions-2026-10-31.md)
 - [AutoLuminous GlowLayer implementation note](./autoluminous-glowlayer-implementation-note-2026-04-23.md)
 - [Blob shadow contact plan](./blob-shadow-contact-plan-2026-05-08.md)
 - [セルフ影の横縞メモ](./self-shadow-horizontal-banding-note.md)

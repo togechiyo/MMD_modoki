@@ -217,7 +217,7 @@ const AUTO_LUMINOUS_TINT_STRENGTH = 0.72;
 const LUMINOUS_GLOW_MIN_SHININESS = 100;
 const LUMINOUS_GLOW_AMBIENT_WEIGHT = 1;
 const LUMINOUS_GLOW_MAX_COLOR = 2;
-const LUMINOUS_GLOW_MAX_SPECULAR_LENGTH = 0.02;
+const LUMINOUS_GLOW_MAX_SPECULAR_LENGTH = 0.01;
 const LUMINOUS_GLOW_OCCLUDER_ALPHA = 1;
 const LUMINOUS_GLOW_MAIN_TEXTURE_RATIO = 0.5;
 const LUMINOUS_GLOW_MAIN_TEXTURE_SAMPLES = 4;
@@ -741,7 +741,7 @@ function lerpNumber(from: number, to: number, amount: number): number {
     return from + (to - from) * clampUnit(amount);
 }
 
-function createLuminousGlowOccluderState(texture: Texture | null): {
+function createLuminousGlowOccluderState(texture: Texture | null, alpha = LUMINOUS_GLOW_OCCLUDER_ALPHA): {
     emission: Color3;
     coreColor: Color3;
     haloColor: Color3;
@@ -753,7 +753,7 @@ function createLuminousGlowOccluderState(texture: Texture | null): {
         emission: Color3.Black(),
         coreColor: Color3.Black(),
         haloColor: Color3.Black(),
-        alpha: LUMINOUS_GLOW_OCCLUDER_ALPHA,
+        alpha,
         texture,
         luminous: false,
     };
@@ -899,27 +899,20 @@ export function getFrameGraphLuminousMaskMaterialState(
     mesh: MaterialShaderMesh,
     material: MaterialShaderMaterial,
 ): FrameGraphLuminousMaskMaterialState | null {
-    const glowState = getLuminousGlowMaterialState(host, material, { allowManualHeuristic: false });
+    const glowState = getLuminousGlowMaterialState(host, material);
     if (!glowState) {
         return null;
     }
-    if (!glowState.luminous) {
-        return {
-            color: Color3.Black(),
-            alpha: glowState.alpha,
-            texture: null,
-        };
-    }
-
-    const morphScale = getLuminousGlowMorphScaleForMesh(host, mesh);
-    if (morphScale <= 1e-4) {
-        return null;
-    }
+    // A light switched off is still a surface. Keep its depth and alpha mask so
+    // another luminous object behind it does not shine through.
+    const morphScale = glowState.luminous ? getLuminousGlowMorphScaleForMesh(host, mesh) : 0;
+    const emits = morphScale > 1e-4;
 
     return {
-        color: getLuminousMaskColor(glowState, morphScale),
+        color: emits ? getLuminousMaskColor(glowState, morphScale) : Color3.Black(),
         alpha: glowState.alpha,
-        texture: glowState.texture,
+        // Black surfaces need texture sampling only for transparency.
+        texture: emits || glowState.texture?.hasAlpha ? glowState.texture : null,
     };
 }
 
@@ -980,8 +973,13 @@ function isLuminousGlowPresetMaterial(host: MaterialShaderHost, material: Materi
         || hasAutoLuminousMaterialName(host, material);
 }
 
+function isExplicitLuminous2dMaterial(host: MaterialShaderHost, material: MaterialShaderMaterial): boolean {
+    return material.mmdLuminousExplicitSource === true
+        || getWgslMaterialShaderPresetForMaterial(host, material) === "wgsl-autoluminous";
+}
+
 function getLuminousGlowMaterialState(host: MaterialShaderHost, material: MaterialShaderMaterial, options?: {
-    allowManualHeuristic?: boolean;
+    sourcePolicy?: "legacyRadiance";
 }): {
     emission: Color3;
     coreColor: Color3;
@@ -995,30 +993,31 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
         return null;
     }
 
-    const defaults = ensureMaterialShaderDefaults(host, material);
-    const currentShininess = Number(material.specularPower);
-    const defaultShininess = Number(defaults.specularPower);
-    const shininess = Number.isFinite(currentShininess) && Number.isFinite(defaultShininess)
-        ? Math.max(currentShininess, defaultShininess)
-        : (Number.isFinite(currentShininess) ? currentShininess : defaultShininess);
+    ensureMaterialShaderDefaults(host, material);
+    // Use the evaluated material, including material morphs. Taking the maximum
+    // with the initial value prevents shininess morphs from turning a light off.
+    const shininess = Number(material.specularPower);
     const texture = readMaterialTexture(material, ["diffuseTexture", "albedoTexture"]);
     const baseAlpha = Number.isFinite(Number(material.alpha))
         ? Math.max(0, Math.min(1, Number(material.alpha)))
         : 1;
-    const manualGlow = host.hasEffectSceneTrack?.("luminous") ? host.isEffectKeyframePrepared?.("luminous") === true
-        : Boolean(host.postEffectGlowEnabledValue) && Number(host.postEffectGlowIntensityValue) > 1e-6;
-    const presetLuminous = isLuminousGlowPresetMaterial(host, material);
-    const allowHeuristicGlow = options?.allowManualHeuristic ?? manualGlow;
+    // RC keeps its existing name/preset selection while 2D adopts AL's material
+    // conditions. Explicit app presets/particles remain intentional overrides.
+    const legacyRadiance = options?.sourcePolicy === "legacyRadiance";
+    const presetLuminous = legacyRadiance
+        ? isLuminousGlowPresetMaterial(host, material)
+        : isExplicitLuminous2dMaterial(host, material);
     const specularColor = readMaterialColor(material, ["specularColor", "reflectivityColor"]);
     const specularLength = computeColorLength(specularColor);
-    if (!presetLuminous && !allowHeuristicGlow) {
-        return createLuminousGlowOccluderState(texture);
-    }
-    if (!presetLuminous && (!Number.isFinite(shininess) || shininess < LUMINOUS_GLOW_MIN_SHININESS)) {
-        return createLuminousGlowOccluderState(texture);
-    }
-    if (!presetLuminous && specularLength > LUMINOUS_GLOW_MAX_SPECULAR_LENGTH) {
-        return createLuminousGlowOccluderState(texture);
+    const materialLuminous = !legacyRadiance && Number.isFinite(shininess)
+        && shininess > LUMINOUS_GLOW_MIN_SHININESS
+        // PMX stores float32. Its representation of 0.01 must stay at the
+        // excluded boundary, as it does in the original float shader.
+        && specularColor !== null && Math.fround(specularLength) < Math.fround(LUMINOUS_GLOW_MAX_SPECULAR_LENGTH);
+    const alpha = legacyRadiance ? Math.max(0.05, baseAlpha) : baseAlpha;
+    if (!legacyRadiance && alpha <= 0) return null;
+    if (!presetLuminous && !materialLuminous) {
+        return createLuminousGlowOccluderState(texture, alpha);
     }
 
     const preserveChroma = material.mmdLuminousPreserveChroma === true;
@@ -1038,12 +1037,12 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
     );
     const maxChannel = Math.max(combined.r, combined.g, combined.b);
     if (maxChannel <= 1e-4) {
-        return createLuminousGlowOccluderState(texture);
+        return createLuminousGlowOccluderState(texture, alpha);
     }
 
     const strength = presetLuminous
         ? 1.25
-        : Math.min(16, Math.max(0.5, (shininess - LUMINOUS_GLOW_MIN_SHININESS) * LUMINOUS_GLOW_AL_SPECULAR_POWER_SCALE));
+        : (shininess - LUMINOUS_GLOW_MIN_SHININESS) * LUMINOUS_GLOW_AL_SPECULAR_POWER_SCALE;
     const luminousColor = new Color3(
         combined.r * strength,
         combined.g * strength,
@@ -1064,7 +1063,7 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
         emission: combined.toLinearSpace().scale(strength),
         coreColor,
         haloColor,
-        alpha: Math.max(0.05, baseAlpha),
+        alpha,
         texture,
         luminous: true,
     };
@@ -1073,7 +1072,7 @@ function getLuminousGlowMaterialState(host: MaterialShaderHost, material: Materi
 /** Transport the 2D luminous source hue in linear RGB while retaining RC's independent peak energy. */
 export function getLuminousRadianceEmission(host: unknown, mesh: object, material: object): (Color3 & { texture: Texture | null }) | null {
     const typedHost = host as MaterialShaderHost;
-    const state = getLuminousGlowMaterialState(typedHost, material as MaterialShaderMaterial, { allowManualHeuristic: false });
+    const state = getLuminousGlowMaterialState(typedHost, material as MaterialShaderMaterial, { sourcePolicy: "legacyRadiance" });
     if (!state?.luminous) return null;
     const morphScale = getLuminousGlowMorphScaleForMesh(typedHost, mesh as MaterialShaderMesh);
     const mask = getLuminousMaskColor(state, morphScale);
@@ -1231,7 +1230,9 @@ function beginLuminousGlowLayerAlphaCutOverride(host: MaterialShaderHost, materi
     }
 
     const glowState = getLuminousGlowMaterialState(host, material);
-    if (!glowState || glowState.luminous) {
+    // Glow's alpha test includes material alpha. Forcing cutout on a fading
+    // surface can discard every pixel instead of blending its black occlusion.
+    if (!glowState || glowState.luminous || glowState.alpha < 1) {
         return null;
     }
 
@@ -1530,7 +1531,7 @@ function collectLuminousMaterials(host: MaterialShaderHost): Set<object> {
             if (host.isMaterialVisible?.(materialEntry.material) === false) {
                 continue;
             }
-            if (!isLuminousGlowPresetMaterial(host, materialEntry.material)) {
+            if (!isExplicitLuminous2dMaterial(host, materialEntry.material)) {
                 continue;
             }
             luminousMaterials.add(materialEntry.material as object);
@@ -1587,7 +1588,7 @@ export function syncLuminousGlowLayer(host: MaterialShaderHost): void {
                 }
                 const morphScale = glowState.luminous ? getLuminousGlowMorphScaleForMesh(host, mesh) : 1;
                 if (glowState.luminous && morphScale <= 1e-4) {
-                    result.set(0, 0, 0, LUMINOUS_GLOW_OCCLUDER_ALPHA);
+                    result.set(0, 0, 0, glowState.alpha);
                     return;
                 }
                 const glowColor = kind === "core" ? glowState.coreColor : glowState.haloColor;

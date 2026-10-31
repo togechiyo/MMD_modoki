@@ -213,7 +213,7 @@ export class RingParticleController {
             material.alphaMode = Constants.ALPHA_COMBINE;
             material.specularColor = Color3.Black();
             material.ambientColor = Color3.Black();
-            (material as StandardMaterial & { mmdLuminousPreserveChroma: boolean }).mmdLuminousPreserveChroma = true;
+            Object.assign(material, { mmdLuminousExplicitSource: true, mmdLuminousPreserveChroma: true });
             return material;
         }) as [StandardMaterial, StandardMaterial, StandardMaterial];
         this.meshes = [0, 1, 2].map((group) => {
@@ -268,7 +268,7 @@ export class RingParticleController {
         for (let group = 0; group < 3; group++) {
             const material = this.materials[group];
             const state = resolveRingParticleMaterialState(colors[group], this.settings.intensity);
-            // Always eligible for the existing Classic / FrameGraph Luminous mask.
+            // Explicitly opted into Classic / FrameGraph Luminous at construction.
             // Without Luminous this remains a colored alpha-blended emissive particle.
             material.name = `AutoLuminous ring particle ${group}`;
             // disableLighting materials need an emissive contribution to remain

@@ -143,6 +143,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - FrameGraph / PostFX の既知制約は [FrameGraph / PostFX 危険メモ 2026-07-01](./framegraph-postfx-risk-note-2026-07-01.md) を参照。
 - Luminous は AutoLuminous 資産を拾う補助発光として実装中。現行仕様は [Luminous / AutoLuminous 代替 FrameGraph 再設計メモ](./luminous-frame-graph-redesign-plan-2026-06-13.md) を参照。
 - [x] 借用AutoLuminous 4.2の原典コードを読解。材質発光、9種の制御モーフ、点滅式、追加UV / sphere sequence、2D / RCの互換差分と段階的対応案を記録。作者同梱PMXを静的解析し、旧メモの明部抽出に関する説明を訂正（[原典調査](./autoluminous-original-code-audit-2026-10-31.md)、2026-10-31。runtime変更・原典実機比較は未実施）。
+- [x] 2D Luminousの材質発光を現在のshininess>100・specular長<0.01へ変更。材質モーフでの消灯と遮蔽、alpha、明示プリセット・光粒を確認し、RCの従来選択を維持。unit1,433件、材質条件・既存個体・色合わせ・光粒のローカルGPU確認（[実装と確認限界](./luminous-2d-material-conditions-2026-10-31.md)、2026-10-31）。
+- [ ] 単発PNGで発光マスクが一度欠落した観測の再現・原因確認。最終ROI確認2回では再現せず、既存capture時の置換マスク材質の準備待ちを候補として記録（[残る確認事項](./luminous-2d-material-conditions-2026-10-31.md#残る確認事項)）。
 
 ## 3. タイムライン・キーフレーム編集
 

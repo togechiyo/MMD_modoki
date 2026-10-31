@@ -122,6 +122,132 @@ function createHost() {
     };
 }
 
+function readLuminous2dState(host: ReturnType<typeof createHost>, backend: "frameGraph" | "classic") {
+    const typedHost = host as unknown as Parameters<typeof getFrameGraphLuminousMaskMaterialState>[0];
+    if (backend === "frameGraph") {
+        return getFrameGraphLuminousMaskMaterialState(typedHost, host.mesh, host.material);
+    }
+    syncLuminousGlowLayer(typedHost);
+    type SelectorLayer = {
+        customEmissiveColorSelector: (mesh: object, subMesh: null, material: object,
+            result: { set(r: number, g: number, b: number, a: number): void }) => void;
+        customEmissiveTextureSelector: (mesh: object, subMesh: null, material: object) => unknown;
+    };
+    const layer = host.luminousGlowLayer as unknown as SelectorLayer;
+    const state = { color: Color3.Black(), alpha: 0, texture: null as unknown };
+    layer.customEmissiveColorSelector(host.mesh, null, host.material, {
+        set(r, g, b, a) { state.color.set(r, g, b); state.alpha = a; },
+    });
+    state.texture = layer.customEmissiveTextureSelector(host.mesh, null, host.material);
+    return state;
+}
+
+describe.each(["frameGraph", "classic"] as const)("AutoLuminous material selection in 2D %s", (backend) => {
+    it.each([
+        { shininess: 99.9, specular: [0, 0, 0], emits: false },
+        { shininess: 100, specular: [0, 0, 0], emits: false },
+        { shininess: 100.1, specular: [0, 0, 0], emits: true },
+        { shininess: 110, specular: [0.009, 0, 0], emits: true },
+        { shininess: 110, specular: [0.01, 0, 0], emits: false },
+        { shininess: 110, specular: [Math.fround(0.01), 0, 0], emits: false },
+        { shininess: 110, specular: [0.011, 0, 0], emits: false },
+        { shininess: 110, specular: [0.006, 0.006, 0.006], emits: false },
+        { shininess: Number.NaN, specular: [0, 0, 0], emits: false },
+        { shininess: 110, specular: [Number.NaN, 0, 0], emits: false },
+    ])("uses strict current material boundaries: $shininess / $specular", ({ shininess, specular, emits }) => {
+        const host = createHost();
+        Object.assign(host.material, { specularPower: shininess,
+            specularColor: new Color3(specular[0], specular[1], specular[2]) });
+        host.postEffectGlowEnabledValue = true;
+        host.postEffectGlowIntensityValue = 1;
+
+        const state = readLuminous2dState(host, backend);
+
+        expect(state).not.toBeNull();
+        expect((state?.color.r ?? 0) > 0).toBe(emits);
+        if (!emits) expect(state?.color.asArray()).toEqual([0, 0, 0]);
+    });
+
+    it("uses current shininess for material-morph off/on and proportional near-threshold gain", () => {
+        const host = createHost();
+        Object.assign(host.material, { specularPower: 110, specularColor: Color3.Black() });
+        host.postEffectGlowEnabledValue = true;
+        host.postEffectGlowIntensityValue = 1;
+        const original = readLuminous2dState(host, backend)?.color.clone();
+        expect(original?.r).toBeGreaterThan(0);
+        for (const shininess of [100, 99]) {
+            host.material.specularPower = shininess;
+            expect(readLuminous2dState(host, backend)?.color.asArray()).toEqual([0, 0, 0]);
+        }
+        host.material.specularPower = 100.1;
+        expect(readLuminous2dState(host, backend)?.color.r).toBeCloseTo((original?.r ?? 0) * 0.01, 8);
+        host.material.specularPower = 110;
+        expect(readLuminous2dState(host, backend)?.color.asArray()).toEqual(original?.asArray());
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)).toBeNull();
+    });
+
+    it("retains a black alpha-textured surface when non-emitting or switched off", () => {
+        const host = createHost();
+        const texture = { hasAlpha: true };
+        Object.assign(host.material, { specularPower: 110, specularColor: Color3.Black(),
+            alpha: 0.35, diffuseTexture: texture });
+        host.postEffectGlowEnabledValue = true;
+        host.postEffectGlowIntensityValue = 1;
+        const emitting = readLuminous2dState(host, backend);
+        expect(emitting?.color.r).toBeGreaterThan(0);
+        expect(emitting?.alpha).toBe(0.35);
+        host.morphWeights.set("LightOff", 1);
+        host.luminousGlowMorphRevision++;
+        const off = readLuminous2dState(host, backend);
+        expect(off?.color.asArray()).toEqual([0, 0, 0]);
+        expect(off?.alpha).toBe(0.35);
+        expect(off?.texture).toBe(texture);
+        host.morphWeights.set("LightOff", 0);
+        host.luminousGlowMorphRevision++;
+        host.material.specularPower = 100;
+        const nonEmitting = readLuminous2dState(host, backend);
+        expect(nonEmitting?.color.asArray()).toEqual([0, 0, 0]);
+        expect(nonEmitting?.alpha).toBe(0.35);
+        expect(nonEmitting?.texture).toBe(texture);
+    });
+
+    it("keeps current material alpha without an emission floor and restores after alpha zero", () => {
+        const host = createHost();
+        Object.assign(host.material, { specularPower: 110, specularColor: Color3.Black(), alpha: 0.01 });
+        host.postEffectGlowEnabledValue = true;
+        host.postEffectGlowIntensityValue = 1;
+        expect(readLuminous2dState(host, backend)?.alpha).toBe(0.01);
+        Object.assign(host.material, { alpha: 0 });
+        const transparent = readLuminous2dState(host, backend);
+        if (backend === "frameGraph") expect(transparent).toBeNull();
+        else expect([...(transparent?.color.asArray() ?? []), transparent?.alpha]).toEqual([0, 0, 0, 0]);
+        Object.assign(host.material, { alpha: 0.8 });
+        const restored = readLuminous2dState(host, backend);
+        expect(restored?.alpha).toBe(0.8);
+        expect(restored?.color.r).toBeGreaterThan(0);
+    });
+
+    it("requires an explicit source marker rather than a luminous-looking name or color-preservation hint", () => {
+        const host = createHost();
+        host.material.name = "AutoLuminous ring particle 0";
+        host.material.diffuseColor.set(0, 0, 0);
+        host.material.emissiveColor.set(0, 1, 0);
+        Object.assign(host.material, { mmdLuminousPreserveChroma: true });
+        host.postEffectGlowEnabledValue = true;
+        host.postEffectGlowIntensityValue = 1;
+        const rcBefore = getLuminousRadianceEmission(host, host.mesh, host.material)?.asArray();
+        expect(rcBefore).toEqual([0, 1.25, 0]);
+        expect(readLuminous2dState(host, backend)?.color.asArray()).toEqual([0, 0, 0]);
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.asArray()).toEqual(rcBefore);
+        Object.assign(host.material, { mmdLuminousExplicitSource: true });
+        const explicit = readLuminous2dState(host, backend);
+        expect(explicit?.color.g).toBeGreaterThan((explicit?.color.r ?? 0) * 3);
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.asArray()).toEqual(rcBefore);
+        host.material.name = "particle";
+        expect(readLuminous2dState(host, backend)?.color.asArray()).toEqual(explicit?.color.asArray());
+    });
+});
+
 describe("material shader preset restore", () => {
     it("shares Luminous selection and LightOff with RC independently of Glow's enabled state", () => {
         const host = createHost();
@@ -647,7 +773,7 @@ describe("material shader preset restore", () => {
         expect(brightResult.values[0]).toBeGreaterThan(dimResult.values[0]);
     });
 
-    it("keeps an opaque black occluder pass when shininess is below the AutoLuminous threshold", () => {
+    it("keeps the material alpha and texture on a black occluder below the AutoLuminous threshold", () => {
         const host = createHost();
         const fakeTexture = { name: "diffuse" };
         host.material.specularPower = 99;
@@ -676,13 +802,13 @@ describe("material shader preset restore", () => {
         };
         host.luminousGlowCoreLayer.customEmissiveColorSelector(null, null, host.material, coreResult);
 
-        expect(result.values).toEqual([0, 0, 0, 1]);
-        expect(coreResult.values).toEqual([0, 0, 0, 1]);
+        expect(result.values).toEqual([0, 0, 0, 0.8]);
+        expect(coreResult.values).toEqual([0, 0, 0, 0.8]);
         expect(host.luminousGlowLayer.customEmissiveTextureSelector(null, null, host.material)).toBe(fakeTexture);
         expect(host.luminousGlowCoreLayer.customEmissiveTextureSelector(null, null, host.material)).toBe(fakeTexture);
     });
 
-    it("treats explicit AutoLuminous-style material names as luminous sources", () => {
+    it("keeps legacy named sources in RC without automatically enabling Classic 2D glow", () => {
         const host = createHost();
         host.sceneModels[0].materials[0].name = "AL_hair_light";
         host.material.specularPower = 32;
@@ -690,18 +816,39 @@ describe("material shader preset restore", () => {
         host.material.diffuseColor = new Color3(0.2, 0.8, 0.7);
         host.material.ambientColor = new Color3(0.1, 0.1, 0.1);
 
+        const haloLayer = host.luminousGlowLayer;
+        const coreLayer = host.luminousGlowCoreLayer;
+        const before = getLuminousRadianceEmission(host, host.mesh, host.material)?.asArray();
+        expect(before?.some(value => value > 0)).toBe(true);
         syncLuminousGlowLayer(host);
 
-        const result = {
-            values: [0, 0, 0, 0],
-            set(r: number, g: number, b: number, a: number) {
-                this.values = [r, g, b, a];
-            },
-        };
-        host.luminousGlowLayer.customEmissiveColorSelector(host.mesh, null, host.material, result);
-        expect(result.values[0]).toBeGreaterThan(0);
-        expect(result.values[1]).toBeGreaterThan(0.7);
-        expect(result.values[2]).toBeGreaterThan(0.6);
+        expect(host.luminousGlowLayer).toBeNull();
+        expect(host.luminousGlowCoreLayer).toBeNull();
+        expect(haloLayer.dispose).toHaveBeenCalledOnce();
+        expect(coreLayer.dispose).toHaveBeenCalledOnce();
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)?.asArray()).toEqual(before);
+    });
+
+    it("does not automatically enable Classic glow from material values alone", () => {
+        const host = createHost();
+        Object.assign(host.material, { specularPower: 110, specularColor: Color3.Black() });
+
+        syncLuminousGlowLayer(host as unknown as Parameters<typeof syncLuminousGlowLayer>[0]);
+
+        expect(host.luminousGlowLayer).toBeNull();
+        expect(host.luminousGlowCoreLayer).toBeNull();
+    });
+
+    it("automatically enables Classic glow for an explicit source without using its name", () => {
+        const host = createHost();
+        Object.assign(host.material, { mmdLuminousExplicitSource: true });
+
+        syncLuminousGlowLayer(host as unknown as Parameters<typeof syncLuminousGlowLayer>[0]);
+
+        expect(host.luminousGlowLayer.customEmissiveColorSelector).toBeTypeOf("function");
+        expect(host.luminousGlowCoreLayer.customEmissiveColorSelector).toBeTypeOf("function");
+        expect(readLuminous2dState(host, "frameGraph")?.color.r).toBeGreaterThan(0);
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)).toBeNull();
     });
 
     it("keeps opt-in particle hue in the FrameGraph Luminous mask core", () => {
@@ -710,7 +857,7 @@ describe("material shader preset restore", () => {
         host.material.diffuseColor = Color3.Black();
         host.material.emissiveColor = new Color3(0.24, 1, 0.32);
         host.material.ambientColor = Color3.Black();
-        Object.assign(host.material, { mmdLuminousPreserveChroma: true });
+        Object.assign(host.material, { mmdLuminousPreserveChroma: true, mmdLuminousExplicitSource: true });
 
         const state = getFrameGraphLuminousMaskMaterialState(host, host.mesh, host.material);
 
@@ -720,7 +867,7 @@ describe("material shader preset restore", () => {
         expect(state.color.g).toBeGreaterThan(state.color.b * 2.5);
     });
 
-    it("keeps FrameGraph Luminous mask heuristic from lighting ordinary shiny materials", () => {
+    it("selects unnamed AutoLuminous materials for the FrameGraph mask without changing RC selection", () => {
         const host = createHost();
         host.material.specularPower = 120;
         host.material.specularColor = new Color3(0, 0, 0);
@@ -731,10 +878,11 @@ describe("material shader preset restore", () => {
 
         const state = getFrameGraphLuminousMaskMaterialState(host, host.mesh, host.material);
 
-        expect(state?.color.r).toBe(0);
-        expect(state?.color.g).toBe(0);
-        expect(state?.color.b).toBe(0);
+        expect(state?.color.r).toBeGreaterThan(0);
+        expect(state?.color.g).toBeGreaterThan(0);
+        expect(state?.color.b).toBeGreaterThan(0);
         expect(state?.texture).toBeNull();
+        expect(getLuminousRadianceEmission(host, host.mesh, host.material)).toBeNull();
     });
 
     it("keeps ordinary shiny materials as occluders when specular color is not dark", () => {
@@ -818,7 +966,9 @@ describe("material shader preset restore", () => {
 
         host.morphWeights.set("LightOff", 1);
         host.luminousGlowMorphRevision += 1;
-        expect(getFrameGraphLuminousMaskMaterialState(host, host.mesh, host.material)).toBeNull();
+        const off = getFrameGraphLuminousMaskMaterialState(host, host.mesh, host.material);
+        expect(off?.color.asArray()).toEqual([0, 0, 0]);
+        expect(off?.alpha).toBe(0.75);
     });
 
     it("keeps heuristic glow after clearing the Luminous preset back to the standard shader", () => {
@@ -857,7 +1007,7 @@ describe("material shader preset restore", () => {
         expect(clearedResult.values[3]).toBeGreaterThan(0);
     });
 
-    it("applies heuristic glow even for nonstandard explicit shader presets when AL conditions are met", () => {
+    it("evaluates the current material values after a non-luminous shader preset changes shininess", () => {
         const host = createHost();
         host.material.diffuseColor = new Color3(0.2, 0.8, 1);
         host.material.ambientColor = new Color3(0.05, 0.1, 0.15);
@@ -874,6 +1024,11 @@ describe("material shader preset restore", () => {
                 this.values = [r, g, b, a];
             },
         };
+        host.luminousGlowLayer.customEmissiveColorSelector(host.mesh, null, host.material, result);
+
+        expect(host.material.specularPower).toBe(0);
+        expect(result.values).toEqual([0, 0, 0, 1]);
+        host.material.specularPower = 160;
         host.luminousGlowLayer.customEmissiveColorSelector(host.mesh, null, host.material, result);
 
         expect(result.values[0]).toBeGreaterThan(0.1);

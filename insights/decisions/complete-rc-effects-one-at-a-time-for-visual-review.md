@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/radiance-cascades
 confidence: high
-last_verified: 2026-10-30
+last_verified: 2026-10-31
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-10-29
@@ -14,6 +14,7 @@ source_docs:
   - ../../docs/radiance-cascades-lighting-implementation-plan-2026-10-28.md
   - ../../docs/rc-sky-occlusion-implementation-2026-10-29.md
   - ../../docs/rc-diffuse-gi-implementation-2026-10-30.md
+  - ../../docs/framegraph-post-stack-current-spec-2026-07-01.md
 superseded_by: null
 ---
 
@@ -39,6 +40,8 @@ RC共通基盤の後に、天空遮蔽・GIなどの派生効果の作業単位�
 
 同日のGI調整後、所有者はRC天空遮蔽とRC GIの入口を実験設定から右側のFrameGraphエフェクト欄へ移すよう指定した。通常のエフェクト操作から両効果を扱う導線へ変更する。具体的な追加・削除・保存の契約は実装メモへ分け、このUI移動の指示をGIの全般的な品質了承や、他の実験機能の公開指定へ広げない。
 
+2026-10-31、所有者はRCのスライダーを他のエフェクトと揃え、説明を撤去してシンプルにするよう指定した。RCカードでは共通の操作行を使い、常設の説明文を戻さない。数値確定・状態表示・折り畳みの具体的な契約は[FrameGraph仕様](../../docs/framegraph-post-stack-current-spec-2026-07-01.md)を参照し、この表示の簡素化を設定・キー・保存値の削除へ広げない。
+
 ## 避けること
 
 - 複数効果の内部計算だけを先に広げ、アプリ上で比較できる効果がないまま進める。
@@ -60,6 +63,8 @@ RC共通基盤の後に、天空遮蔽・GIなどの派生効果の作業単位�
 同日の天空遮蔽の文書化後、所有者は「次はGIの方を進めて」と次の効果への着手を明示した。
 
 同日のGI調整後、所有者はRC天空遮蔽とRC GIを実験設定から右側のFrameGraphエフェクト欄へ移すよう明示した。併せて示された見た目・体感速度のコメントは、[GI実装メモ](../../docs/rc-diffuse-gi-implementation-2026-10-30.md)に実機確認の証拠として記録する。
+
+2026-10-31の所有者指定は、他のエフェクトと同じスライダーと説明撤去による簡素化。採用判断として記録し、変更後のテスト成功や描画品質の確認とは区別する。
 
 ## 再確認条件
 

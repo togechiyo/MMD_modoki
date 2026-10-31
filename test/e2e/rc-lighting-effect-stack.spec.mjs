@@ -5,10 +5,12 @@ import { launchMmdModoki } from "./electron-app.mjs";
 import { camera, capture, difference, initialState, receiverDifference, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
 import { addRcLighting, closeRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow,
   rcLightingStatus, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
+import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), ids = ["rcSkyOcclusion", "rcDiffuseGi"];
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
 const history = (page, operation) => page.locator(`.app-menu-quick-button[data-menu-command="edit.${operation}"]`).click();
+const rcNumber = (page, id, field) => rcLightingInput(page, id, field).locator("..").locator(".range-number-input");
 const tracks = state => state.keyframes?.effectAnimations?.tracks.filter(track => ids.includes(track.effectId)) ?? [];
 const rcState = state => ({ settings: Object.fromEntries(ids.map(id => [id, state.lighting[id]])), tracks: tracks(state),
   stack: state.effects.frameGraphPostStack?.filter(entry => ids.includes(entry.id)),
@@ -30,6 +32,23 @@ async function verifyRows(page) {
   await page.locator("#btn-effect-add-post").click();
   for (const id of ids) await expect(page.locator(`[data-effect-add-post="${id}"]`)).toBeDisabled();
   await page.locator("#btn-effect-add-post").click();
+}
+async function setPanelWidth(page, width) {
+  const panel = await page.locator("#shader-panel").boundingBox(), handle = await page.locator("#shader-resizer").boundingBox();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + panel.width - width, handle.y + handle.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.abs((await page.locator("#shader-panel").boundingBox()).width - width)).toBeLessThan(1.1);
+}
+async function controlGeometry(range) {
+  await expect(range.locator("..")).toHaveClass(/effect-layer-control-row/);
+  return range.evaluate(input => {
+    const row = input.closest(".effect-layer-control-row"), origin = row.getBoundingClientRect();
+    const rect = element => { const box = element.getBoundingClientRect(); return { x: box.x - origin.x, y: box.y - origin.y, width: box.width, height: box.height }; };
+    return { width: origin.width, scrollWidth: row.scrollWidth, clientWidth: row.clientWidth,
+      label: rect(row.querySelector(".effect-layer-control-label")), range: rect(input), number: rect(row.querySelector(".range-number-input")) };
+  });
 }
 
 // eslint-disable-next-line no-empty-pattern -- Playwright requires its fixture argument to be destructured.
@@ -73,6 +92,60 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await page.screenshot({ path: testInfo.outputPath("rc-lighting-panel.png") });
     expect((await project(page)).lighting.rcSkyOcclusion).toEqual({ enabled: true, strength: .75, minimum: .2, volume: null });
     expect((await project(page)).lighting.rcDiffuseGi).toEqual({ enabled: true, strength: .5, volume: null });
+    report.numericEdits = [];
+    for (const [id, field, setting, position, scale] of [["rcSkyOcclusion", "Strength", "strength", 75, 100],
+      ["rcSkyOcclusion", "Minimum", "minimum", 20, 100], ["rcDiffuseGi", "Strength", "strength", 25, 50]]) {
+      await openRcLighting(page, id);
+      await expect(rcLightingRow(page, id).locator("p:not([role='status'])")).toHaveCount(0);
+      const range = rcLightingInput(page, id, field), number = rcNumber(page, id, field), before = rcState(await project(page));
+      await expect(range.locator("..")).toHaveClass(/effect-layer-control-row/);
+      for (const control of [range, number]) {
+        await expect(control).toHaveAttribute("min", "0"); await expect(control).toHaveAttribute("max", "100");
+        await expect(control).toHaveValue(String(position));
+      }
+      await number.fill("42");
+      // Keep the draft through two 250ms UI refresh ticks; this delay exercises
+      // overwrite protection rather than waiting for renderer readiness.
+      await page.waitForTimeout(550);
+      expect(rcState(await project(page))).toEqual(before); await expect(range).toHaveValue(String(position));
+      await expect(number).toHaveValue("42"); await number.press("Enter");
+      await expect(range).toHaveValue("42"); await expect(number).toHaveValue("42");
+      expect((await project(page)).lighting[id][setting]).toBe(42 / scale);
+      const committed = rcState(await project(page));
+      await number.fill("99"); expect(rcState(await project(page))).toEqual(committed);
+      await number.press("Escape"); await expect(number).toHaveValue("42"); await expect(range).toHaveValue("42");
+      expect(rcState(await project(page))).toEqual(committed);
+      await number.fill("88"); await range.focus();
+      await expect(number).toHaveValue("42"); expect(rcState(await project(page))).toEqual(committed);
+      await history(page, "undo"); expect(rcState(await project(page))).toEqual(before);
+      await expect(range).toHaveValue(String(position)); await expect(number).toHaveValue(String(position));
+      report.numericEdits.push({ id, field, initialPosition: position, committedPosition: 42, committedValue: 42 / scale });
+    }
+    // Compare the actual RC controls with an ordinary effect at the same narrow GUI panel width.
+    await page.locator("#btn-effect-add-post").click(); await page.locator('[data-effect-add-post="gamma"]').click();
+    const gamma = page.locator("[data-effect-instance-row]").filter({ has: page.locator('[data-instance-field="gamma"]') });
+    await setPanelWidth(page, 260); await expandEffectInstance(gamma);
+    report.narrowControls = { gamma: await controlGeometry(gamma.locator('[data-instance-field="gamma"]')) };
+    await page.screenshot({ path: testInfo.outputPath("rc-lighting-narrow-gamma.png") });
+    for (const id of ids) {
+      await openRcLighting(page, id);
+      await rcLightingRow(page, id).locator(`[data-rc-volume-controls="${id}"] > summary`).click();
+      report.narrowControls[id] = await controlGeometry(rcLightingInput(page, id, "Strength"));
+      await expect(rcNumber(page, id, "Strength")).toBeInViewport();
+      await page.screenshot({ path: testInfo.outputPath(`rc-lighting-narrow-${id}.png`) });
+    }
+    for (const dimensions of Object.values(report.narrowControls)) {
+      expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+      for (const control of ["label", "range", "number"]) {
+        expect(dimensions[control].x).toBeGreaterThanOrEqual(0);
+        expect(dimensions[control].x + dimensions[control].width).toBeLessThanOrEqual(dimensions.width + 1);
+        for (const dimension of ["x", "width", "height"]) {
+          expect(Math.abs(dimensions[control][dimension] - report.narrowControls.gamma[control][dimension])).toBeLessThan(1.1);
+        }
+      }
+    }
+    await expandEffectInstance(gamma); await gamma.locator('[data-instance-action="delete"]').click();
+    await expect(gamma).toHaveCount(0); await setPanelWidth(page, report.panelBounds.width);
     await openRcLighting(page, "rcDiffuseGi"); await rcLightingInput(page, "rcDiffuseGi", "Enabled").uncheck();
     await expect(rcLightingRow(page, "rcDiffuseGi")).toHaveCount(1);
     expect((await project(page)).lighting.rcSkyOcclusion.enabled).toBe(true);
@@ -98,7 +171,10 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
       ]);
     }
     await seek(page, 10);
-    for (const id of ids) { await openRcLighting(page, id); await expect(rcLightingInput(page, id, "Strength")).toHaveValue("50"); }
+    for (const id of ids) {
+      await openRcLighting(page, id); await expect(rcLightingInput(page, id, "Strength")).toHaveValue("50");
+      await expect(rcNumber(page, id, "Strength")).toHaveValue("50");
+    }
     await seek(page, 20); await closeRcLighting(page);
     const both = await capture(page, testInfo, report, "both-key-20"), saved = await project(page);
     report.authored = rcState(saved);

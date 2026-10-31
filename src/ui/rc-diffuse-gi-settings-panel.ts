@@ -1,9 +1,9 @@
 import type { EditorAction } from "../actions/types";
 import { t } from "../i18n";
 import type { RcDiffuseGiSettings, RcDiffuseGiVolume } from "../render/rc-diffuse-gi-settings";
-import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField, createPopupFormRange, createPopupFormValueText } from "./popup-form-helpers";
+import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField } from "./popup-form-helpers";
 import { getRcDiffuseGiUiState } from "./rc-diffuse-gi-ui-state";
-import { createRcLightingEffectCard, type RcLightingEffectCardOptions } from "./rc-lighting-effect-card";
+import { createRcLightingEffectCard, createRcLightingSlider, type RcLightingEffectCardOptions } from "./rc-lighting-effect-card";
 
 type Host = {
     isPlaying: boolean;
@@ -17,8 +17,6 @@ type Host = {
 export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispatch: (action: EditorAction) => boolean, options: RcLightingEffectCardOptions): () => void {
     const card = createRcLightingEffectCard(parent, "rcDiffuseGi", options);
     const { enabled, register } = card;
-    const note = document.createElement("p");
-    note.className = "popup-form-note"; note.textContent = t("effect.rcLighting.rcDiffuseGiNote");
     const details = document.createElement("fieldset");
     details.className = "rc-lighting-effect-controls";
     const volumeControls = document.createElement("fieldset");
@@ -26,22 +24,16 @@ export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispat
     const numberControls: HTMLInputElement[] = [];
     let activeSlider: HTMLInputElement | null = null;
     const sliders = (["strength"] as const).map(field => {
-        const input = document.createElement("input");
-        input.type = "range"; input.min = "0"; input.max = "100"; input.step = "1";
-        input.name = "rcDiffuseGiStrength";
-        const value = createPopupFormValueText();
-        input.addEventListener("input", () => { activeSlider = input; value.textContent = `${input.value}%`; });
+        const { row, input } = createRcLightingSlider("rcDiffuseGiStrength", t(`experiment.rcDiffuseGi.${field}`));
+        input.addEventListener("input", () => { activeSlider = input; });
         input.addEventListener("change", () => {
             activeSlider = null;
             dispatch({ type: "effect.setRcDiffuseGi", source: "panel", settings: { [field]: Number(input.value) / 50 } });
             refresh();
         });
-        details.append(createPopupFormField(t(`experiment.rcDiffuseGi.${field}`), createPopupFormRange(input, value)));
-        return { input, value, field };
+        details.append(row);
+        return { input, field };
     });
-    const rangeNote = document.createElement("p");
-    rangeNote.className = "popup-form-note"; rangeNote.textContent = t("experiment.rcDiffuseGi.volumeNote");
-    volumeControls.append(rangeNote);
     for (const field of ["minX", "minY", "minZ", "size"] as const) {
         const input = document.createElement("input");
         input.type = "number"; input.step = "0.1"; input.className = "popup-form-control";
@@ -74,8 +66,6 @@ export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispat
     register.addEventListener("click", () => {
         dispatch({ type: "keyframe.registerEffect", source: "panel", instanceId: "rcDiffuseGi" }); refresh();
     });
-    const keyNote = document.createElement("p");
-    keyNote.className = "popup-form-note"; keyNote.textContent = t("experiment.rcDiffuseGi.keyNote");
     const status = document.createElement("p");
     status.className = "popup-form-note"; status.setAttribute("role", "status"); status.dataset.rcDiffuseGiStatus = "true";
     const refresh = (): void => {
@@ -91,7 +81,8 @@ export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispat
         volumeControls.disabled = !settings.enabled || host.isPlaying;
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * 50));
-            slider.value.textContent = `${slider.input.value}%`;
+            slider.input.disabled = details.disabled;
+            options.syncSlider(slider.input);
         }
         const volume = uiState.volume;
         if (!numberControls.includes(document.activeElement as HTMLInputElement)) {
@@ -103,15 +94,13 @@ export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispat
         status.dataset.fieldRevision = String(diagnostics.fieldRevision);
         status.dataset.supportedMaterialCount = String(diagnostics.supportedMaterialCount);
         status.dataset.automaticVolume = String(uiState.automaticVolume);
-        status.textContent = `${uiState.statusText} · ${t("experiment.rcDiffuseGi.materials")} ${diagnostics.supportedMaterialCount}`;
+        status.textContent = uiState.statusText;
     };
     enabled.addEventListener("change", () => {
         dispatch({ type: "effect.setRcDiffuseGi", source: "panel", settings: { enabled: enabled.checked } }); refresh();
     });
-    const phaseNote = document.createElement("p");
-    phaseNote.className = "popup-form-note"; phaseNote.textContent = t("effect.rcLighting.phaseNote");
-    card.advanced.append(volumeControls, keyNote, phaseNote);
-    card.content.append(note, details, status, card.advanced, card.remove);
+    card.advanced.append(volumeControls);
+    card.content.append(details, status, card.advanced, card.remove);
     refresh();
     const timer = window.setInterval(refresh, 250);
     return () => window.clearInterval(timer);

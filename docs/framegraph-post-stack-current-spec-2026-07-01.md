@@ -32,6 +32,16 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 
 全unitは226ファイル・1,396件成功。その後に追加したstack未保存の旧形式でBloomを保持する検査を含め、対象2ファイル・67件も成功した。全lintはwarningなしで成功、通常typecheckは既存547件と行・列を除いた比較で一致し、critical gateも成功。検証途中のGI保存完了待機、閉じた詳細内の削除ボタンのassert、任意のinstance順序を前提とした比較はtest側を修正し、上記は最終成功結果とする。証拠はignoredな`local-references/rc-effect-panel-2026-10-30/`の`stack-lifecycle/`（report・panel screenshot）と`gi-settings/`に保持する。
 
+## 2026-10-31 追記: RC操作欄の簡素化
+
+所有者の指定により、RC天空遮蔽の強度・最低残光とRC GIの強度は、他のエフェクトと同じラベル・スライダー・数値入力の行へ揃える。RCの数値入力は操作値`0..100`を表示し、Enterで確定、Escapeと未確定のblurで取消とする。編集中の文字列・caretとスライダードラッグ中の値は、定期的なruntime同期で上書きしない。
+
+効果概要・計算範囲・キー登録・照明の適用順に関する4種類の説明文はカードから撤去する。「適用中」などの状態と必要な理由は残し、対象材質数は表示しない。計算範囲の折り畳み、各設定、キー、保存値は維持する。操作値から内部値への変換も従来どおり、天空遮蔽は`0..1`、GI強度は`0..2`とする。
+
+ローカルGPUのPlaywright Electron E2E（`rc-lighting-effect-stack.spec.mjs`）は成功。3つの操作欄でEnter確定、Escape・blur取消、定期同期をまたぐ入力中の値の保持、Undo、キーのseek同期を確認した。パネル幅260pxでGammaとラベル・スライダー・数値欄の位置と寸法が一致し、横にはみ出さないことを検査し、天空遮蔽・GIのスクリーンショットも確認済み。追加・削除、全体ON/OFF、保存互換、backend切替、PNG出力も同じシナリオで成功し、runtime・console・WebGPU validationのエラーは0件だった。
+
+全lintと対象E2Eファイルのlintは成功。通常typecheckは既存547件と行・列を除いた比較で一致し、critical gateも成功した。描画計算やpure helperの変更はないため、今回はunit全体の再実行はしていない。証拠はignoredな`local-references/rc-controls-2026-10-31/`のreportとスクリーンショットに保持する。
+
 ## 2026-08-11 追記: 詳細スライダーの操作値
 
 FrameGraph stack の詳細パネルにある数値スライダーは、効果ごとの内部単位にかかわらず、UI 上の操作値を `0..100` に統一する。

@@ -1,9 +1,9 @@
 import type { EditorAction } from "../actions/types";
 import { t } from "../i18n";
 import type { RcSkyOcclusionSettings, RcSkyOcclusionVolume } from "../render/rc-sky-occlusion-settings";
-import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField, createPopupFormRange, createPopupFormValueText } from "./popup-form-helpers";
+import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField } from "./popup-form-helpers";
 import { getRcSkyOcclusionUiState } from "./rc-sky-occlusion-ui-state";
-import { createRcLightingEffectCard, type RcLightingEffectCardOptions } from "./rc-lighting-effect-card";
+import { createRcLightingEffectCard, createRcLightingSlider, type RcLightingEffectCardOptions } from "./rc-lighting-effect-card";
 
 type Host = {
     isPlaying: boolean;
@@ -17,8 +17,6 @@ type Host = {
 export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dispatch: (action: EditorAction) => boolean, options: RcLightingEffectCardOptions): () => void {
     const card = createRcLightingEffectCard(parent, "rcSkyOcclusion", options);
     const { enabled, register } = card;
-    const note = document.createElement("p");
-    note.className = "popup-form-note"; note.textContent = t("effect.rcLighting.rcSkyOcclusionNote");
     const details = document.createElement("fieldset");
     details.className = "rc-lighting-effect-controls";
     const volumeControls = document.createElement("fieldset");
@@ -26,22 +24,16 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     const numberControls: HTMLInputElement[] = [];
     let activeSlider: HTMLInputElement | null = null;
     const sliders = (["strength", "minimum"] as const).map(field => {
-        const input = document.createElement("input");
-        input.type = "range"; input.min = "0"; input.max = "100"; input.step = "1";
-        input.name = `rcSkyOcclusion${field === "strength" ? "Strength" : "Minimum"}`;
-        const value = createPopupFormValueText();
-        input.addEventListener("input", () => { activeSlider = input; value.textContent = `${input.value}%`; });
+        const { row, input } = createRcLightingSlider(`rcSkyOcclusion${field === "strength" ? "Strength" : "Minimum"}`, t(`experiment.rcSkyOcclusion.${field}`));
+        input.addEventListener("input", () => { activeSlider = input; });
         input.addEventListener("change", () => {
             activeSlider = null;
             dispatch({ type: "effect.setRcSkyOcclusion", source: "panel", settings: { [field]: Number(input.value) / 100 } });
             refresh();
         });
-        details.append(createPopupFormField(t(`experiment.rcSkyOcclusion.${field}`), createPopupFormRange(input, value)));
-        return { input, value, field };
+        details.append(row);
+        return { input, field };
     });
-    const rangeNote = document.createElement("p");
-    rangeNote.className = "popup-form-note"; rangeNote.textContent = t("experiment.rcSkyOcclusion.volumeNote");
-    volumeControls.append(rangeNote);
     for (const field of ["minX", "minY", "minZ", "size"] as const) {
         const input = document.createElement("input");
         input.type = "number"; input.step = "0.1"; input.className = "popup-form-control";
@@ -74,8 +66,6 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
     register.addEventListener("click", () => {
         dispatch({ type: "keyframe.registerEffect", source: "panel", instanceId: "rcSkyOcclusion" }); refresh();
     });
-    const keyNote = document.createElement("p");
-    keyNote.className = "popup-form-note"; keyNote.textContent = t("experiment.rcSkyOcclusion.keyNote");
     const status = document.createElement("p");
     status.className = "popup-form-note"; status.setAttribute("role", "status"); status.dataset.rcSkyOcclusionStatus = "true";
     const refresh = (): void => {
@@ -91,7 +81,8 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
         volumeControls.disabled = !settings.enabled || host.isPlaying;
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * 100));
-            slider.value.textContent = `${slider.input.value}%`;
+            slider.input.disabled = details.disabled;
+            options.syncSlider(slider.input);
         }
         const volume = uiState.volume;
         if (!numberControls.includes(document.activeElement as HTMLInputElement)) {
@@ -103,15 +94,13 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
         status.dataset.fieldRevision = String(diagnostics.fieldRevision);
         status.dataset.supportedMaterialCount = String(diagnostics.supportedMaterialCount);
         status.dataset.automaticVolume = String(uiState.automaticVolume);
-        status.textContent = `${uiState.statusText} · ${t("experiment.rcSkyOcclusion.materials")} ${diagnostics.supportedMaterialCount}`;
+        status.textContent = uiState.statusText;
     };
     enabled.addEventListener("change", () => {
         dispatch({ type: "effect.setRcSkyOcclusion", source: "panel", settings: { enabled: enabled.checked } }); refresh();
     });
-    const phaseNote = document.createElement("p");
-    phaseNote.className = "popup-form-note"; phaseNote.textContent = t("effect.rcLighting.phaseNote");
-    card.advanced.append(volumeControls, keyNote, phaseNote);
-    card.content.append(note, details, status, card.advanced, card.remove);
+    card.advanced.append(volumeControls);
+    card.content.append(details, status, card.advanced, card.remove);
     refresh();
     const timer = window.setInterval(refresh, 250);
     return () => window.clearInterval(timer);

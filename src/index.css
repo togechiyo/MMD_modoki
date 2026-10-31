@@ -3388,10 +3388,10 @@ body.png-capture-mode .model-comment-notice {
 
 .rc-lighting-effect-controls {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   margin: 0;
-  padding: 4px 0;
+  padding: 0;
   border: 0;
 }
 
@@ -3403,18 +3403,6 @@ body.png-capture-mode .model-comment-notice {
 .rc-lighting-effect .popup-form-note {
   margin: 3px 0;
   overflow-wrap: anywhere;
-}
-
-.rc-lighting-effect input[type="range"] {
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  height: 14px;
-  accent-color: #94a3b8;
-}
-
-.rc-lighting-effect .popup-form-range-row {
-  grid-template-columns: minmax(0, 1fr) 36px;
 }
 
 .rc-lighting-effect summary {

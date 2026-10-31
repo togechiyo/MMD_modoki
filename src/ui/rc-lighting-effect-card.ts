@@ -4,7 +4,23 @@ import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from ".
 export type RcLightingEffectCardOptions = {
     expanded: boolean;
     keyframeState: () => SectionKeyframeButtonState;
+    syncSlider: (slider: HTMLInputElement) => void;
 };
+
+/** Use the same row and Enter-commit number control as the other FrameGraph effects. */
+export function createRcLightingSlider(name: string, labelText: string) {
+    const row = document.createElement("div");
+    row.className = "effect-layer-control-row";
+    const label = document.createElement("span");
+    label.className = "effect-layer-control-label"; label.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "range"; input.className = "effect-layer-control-slider";
+    input.name = name; input.min = "0"; input.max = "100"; input.step = "1";
+    input.dataset.rcLightingSlider = "true";
+    input.setAttribute("aria-label", labelText);
+    row.append(label, input);
+    return { row, input };
+}
 
 /** Scene lighting shares the effect list, but keeps one field and one key track per effect. */
 export function createRcLightingEffectCard(parent: HTMLElement, id: "rcSkyOcclusion" | "rcDiffuseGi", options: RcLightingEffectCardOptions) {

@@ -4686,7 +4686,7 @@ export class UIController {
                 }
 
                 slider.dispatchEvent(new Event("input", { bubbles: true }));
-                if (slider.dataset.instanceField || slider.dataset.instanceFixed) slider.dispatchEvent(new Event("change", { bubbles: true }));
+                if (slider.dataset.instanceField || slider.dataset.instanceFixed || slider.dataset.rcLightingSlider) slider.dispatchEvent(new Event("change", { bubbles: true }));
                 this.syncRangeNumberInput(slider);
             };
 
@@ -7045,6 +7045,9 @@ export class UIController {
             const mount = id === "rcSkyOcclusion" ? mountRcSkyOcclusionSettings : mountRcDiffuseGiSettings;
             this.rcLightingCardDisposers.push(mount(parent, this.mmdManager, action => this.actionDispatcher.dispatch(action), {
                 expanded: id === this.expandedFrameGraphPostEffectId,
+                syncSlider: slider => {
+                    if (!this.isRangeInputEditing(slider) || this.mmdManager.isPlaying) this.syncRangeNumberInput(slider);
+                },
                 keyframeState: () => {
                     const registered = this.mmdManager.readEffectSceneKeyframePayload(id, this.mmdManager.currentFrame)?.value;
                     return registered && keyframeValuesEqual(registered, this.mmdManager.captureCurrentEffectKeyframePayload(id).value)

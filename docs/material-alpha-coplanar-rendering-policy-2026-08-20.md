@@ -37,10 +37,11 @@ MMD モデルやアクセサリの描画崩れを、モデル名、材質名、�
 | 条件 | 分類 | Babylon.js 設定 | 主な想定 |
 | --- | --- | --- | --- |
 | 材質 diffuse alpha が `1 - 0.001` 未満 | Blend | `MATERIAL_ALPHABLEND` | ガラス、明示的な半透明面 |
+| 材質は不透明で、diffuse PNGの全画素alpha255を読み込み時に確認できた | Opaque | texture alphaを使わない | 不透明PNGの通常面、RC GI / 天空遮蔽 |
 | 材質は不透明で、alpha 対応形式の diffuse texture を持つ | Cutout | `MATERIAL_ALPHATEST`, `alphaCutOff = 0.5` | 葉、柵、抜き文字、板ポリゴン |
 | 上記以外 | Opaque | 透明設定を追加しない | 通常の不透明面 |
 
-alpha 対応形式は現時点で PNG / BMP / TGA / WebP とする。この判定は用途別の個別対応ではないが、画像をデコードした実 alpha 分布ではなく拡張子による簡易判定である。
+alpha 対応形式は PNG / BMP / TGA / WebP とする。2026-11-01から、静的PNGは材質生成前にCPUで全画素alphaを確認し、不透明と確認できた場合だけOpaqueへ分類する。同一import内の同一URLは結果を共有する。透明画素あり・判定失敗・上限超過・APNG、および他形式は従来の拡張子によるCutout分類を維持する。[XアクセサリのRC対応と検証](./rc-x-accessory-support-2026-11-01.md)を参照。
 
 ### Alpha Test の実行設定
 
@@ -72,18 +73,18 @@ Babylon.js の Alpha Test はしきい値未満の画素を破棄し、残った
 ### 現行判定の制約
 
 - 材質 alpha が `1` のまま、テクスチャの中間 alpha だけでガラスを表すデータは Cutout と判定される可能性がある。
-- alpha channel を持たない不透明 PNG 等も Cutout shader になる。画素 alpha がすべて `1` なら表示結果は不透明と同じだが、不要な shader variant になる。
+- 不透明PNGでも判定不能や上限超過ならCutoutを維持する。BMP/TGA/WebPの実alpha分類は未対応。
 - BMP の alpha 解釈は bit depth と decoder に左右されるため、実画像による継続確認が必要である。
 
-将来はテクスチャ読み込み後に alpha 分布を取得し、次のデータ駆動分類へ置き換える余地がある。
+PNGの完全不透明判定以外は、将来次のデータ駆動分類へ拡張する余地がある。
 
 | 実 alpha 分布 | 将来分類候補 |
 | --- | --- |
-| ほぼ全画素が `1` | Opaque |
+| 全画素が `1` | Opaque（静的PNGは実装済み。他形式は候補） |
 | `0` と `1` が中心で、中間値が少ない | Alpha Test |
 | 中間 alpha が一定量ある | Alpha Blend または Test + Blend |
 
-GPU readback を読み込みごとに行うと負荷や WebGPU 同期が増えるため、実装時は decoder 側の情報、CPU decode cache、低解像度サンプルの順に検討する。
+GPU readbackは行わない。PNGは読み込み時のCPU decodeと原寸128行ずつの走査を使う。縮小や間引きでは小さな透明部分を見逃すため、Opaque判定の根拠にしない。
 
 ## 同一平面補正
 
@@ -186,6 +187,8 @@ world AABB を使用する `.x` では、任意角度へ傾いた平面の AABB 
 
 - `src/shared/x-material-render-policy.ts`
   - `.x` の Opaque / Cutout / Blend 分類
+- `src/shared/x-texture-alpha.ts` / `src/scene/x-texture-alpha-inspection.ts`
+  - 静的PNGの全画素alpha判定、import単位cache、デコード失敗時の保守的fallback
 - `src/x-file-loader.ts`
   - `.x` 材質と texture alpha 設定
 - `src/shared/mmd-render-order.ts`
@@ -209,7 +212,7 @@ world AABB を使用する `.x` では、任意角度へ傾いた平面の AABB 
 
 ## 今後の候補
 
-1. 実 alpha 分布による Opaque / Cutout / Blend 分類
+1. PNG以外の実 alpha 分類、および中間alphaのBlend判定
 2. 判定した alpha policy と `zOffsetUnits` の材質診断表示
 3. 傾いた大型面向けの oriented plane 判定
 4. WebGPU / WebGL2、shadow map、PNG / WebM 出力での比較

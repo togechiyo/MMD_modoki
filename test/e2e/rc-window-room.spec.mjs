@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { launchMmdModoki } from "./electron-app.mjs";
 import { camera, capture, difference, projectPoints } from "./helpers/rc-diffuse-gi-controls.mjs";
-import { closeRcLighting, openRcLighting, rcLightingInput, rcLightingStatus } from "./helpers/rc-lighting-controls.mjs";
+import { closeRcLighting, openRcLighting, rcLightingInput, rcLightingRow, rcLightingStatus } from "./helpers/rc-lighting-controls.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = file => resolve(root, "test/fixtures/rc-window-room", file);
@@ -15,6 +15,10 @@ const regions = {
   deepFloor: [[-.8,0,-.5],[.8,0,-.5],[.8,0,.5],[-.8,0,.5]],
 };
 const read = page => page.evaluate(() => window.rcRoomProbe.roomState());
+const installProbe = page => page.evaluate(async () => {
+  // eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
+  window.rcRoomProbe = await import("/test/e2e/helpers/rc-window-room-probe.mjs");
+});
 
 function regionDelta(off, on, view, points) {
   const polygon = projectPoints(view, points);
@@ -52,9 +56,8 @@ async function setup(page, file) {
       lightColor:{r:1,g:1,b:1}, rcDiffuseGi:{enabled:false,strength:.5,volume},
       rcSkyOcclusion:{enabled:false,strength:.5,minimum:.2,volume} });
     await window.mmdModokiE2e.importProjectState(state);
-    // eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
-    window.rcRoomProbe=await import("/test/e2e/helpers/rc-window-room-probe.mjs");
   },volume);
+  await installProbe(page);
   expect(await page.evaluate(path => path.endsWith(".pmx") ? window.mmdModokiE2e.loadModel(path) : window.mmdModokiE2e.loadAccessory(path),fixture(file))).toBeTruthy();
   if(file.endsWith(".x")) await matchXScale(page,0);
   const view=await camera(page,{tx:0,ty:1.5,tz:3,rx:-10.62,ry:0,rz:0,camDistance:8.14,camFov:60});
@@ -122,60 +125,123 @@ async function pair(page,testInfo,report,view,id,label,expected="ready") {
   return {off,on,result};
 }
 
+async function menu(page, command) {
+  await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+  await page.locator(`[data-menu-command="${command}"]`).click();
+}
+
+async function opaqueRoundtrip(page, launched, testInfo, report) {
+  await lightDirection(page,[0,-1,-1]);
+  await effect(page,gi,true); await effect(page,sky,true);
+  const reference=await capture(page,testInfo,report,"opaque-combined-before-save");
+  const path=testInfo.outputPath("opaque-room-project.json");
+  await launched.app.evaluate(({dialog},filePath)=>{
+    dialog.showSaveDialog=async()=>({canceled:false,filePath});
+    dialog.showOpenDialog=async()=>({canceled:false,filePaths:[filePath]});
+  },path);
+  await menu(page,"file.saveProject");
+  let saved;
+  await expect.poll(()=>{
+    try { saved=JSON.parse(readFileSync(path,"utf8")); return Boolean(saved.accessories?.length); }
+    catch(error) { if(error.code==="ENOENT" || error instanceof SyntaxError)return false; throw error; }
+  }).toBe(true);
+  const stored=async()=>page.evaluate(()=>{
+    const state=window.mmdModokiE2e.exportProjectState();
+    return JSON.parse(JSON.stringify({gi:state.lighting.rcDiffuseGi,sky:state.lighting.rcSkyOcclusion,
+      accessories:state.accessories,camera:state.camera}));
+  });
+  const expected={gi:saved.lighting.rcDiffuseGi,sky:saved.lighting.rcSkyOcclusion,accessories:saved.accessories,camera:saved.camera};
+  expect(expected.gi).toEqual({enabled:true,strength:.5,volume});
+  expect(expected.sky).toEqual({enabled:true,strength:.5,minimum:.2,volume});
+  await effect(page,gi,false); await effect(page,sky,false);
+  await menu(page,"file.loadProject");
+  await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
+  await expect.poll(stored).toEqual(expected);
+  const checkUi=async()=>{
+    for(const [id,strength] of [[gi,"25"],[sky,"50"]]) {
+      await openRcLighting(page,id); await expect(rcLightingInput(page,id,"Enabled")).toBeChecked();
+      await expect(rcLightingInput(page,id,"Strength")).toHaveValue(strength);
+      await expect(rcLightingStatus(page,id)).toHaveAttribute("data-state","ready",{timeout:45000});
+    }
+    await closeRcLighting(page);
+    const state=await read(page); expect(state.materials.every(m=>m.preset==="wgsl-accessory-toon" && !m.alphaTesting && !m.alphaBlending
+      && m.giReceiver && m.skyReceiver)).toBe(true);
+  };
+  await checkUi();
+  report.savedRestoreDifference=difference(reference,await capture(page,testInfo,report,"opaque-after-load"));
+  expect(report.savedRestoreDifference).toBeLessThan(.15);
+  for(const backend of ["classic","frameGraph"]) {
+    if(!await page.locator("#shader-panel").isVisible())await page.locator("#btn-toggle-shader-panel").click();
+    await page.locator('[data-effect-tab="post"]').click();
+    await page.locator('select[data-postfx-select="backend"]').selectOption(backend,{force:true});
+    await page.waitForFunction(value=>window.mmdModokiE2e?.getFrameGraphPostEffectsState().backend===value,backend);
+    await expect.poll(stored).toEqual(expected);
+    if(backend==="classic") { await expect(rcLightingRow(page,gi)).toHaveCount(0); await expect(rcLightingRow(page,sky)).toHaveCount(0); }
+    else { await installProbe(page); await checkUi(); }
+  }
+  report.backendRestoreDifference=difference(reference,await capture(page,testInfo,report,"opaque-after-backend"));
+  expect(report.backendRestoreDifference).toBeLessThan(.15);
+  await openRcLighting(page,gi); await expect(rcLightingStatus(page,gi)).toHaveAttribute("data-state","ready",{timeout:45000});
+  await closeRcLighting(page);
+  // Capture recreates the viewport graph. Start only after four observed stable frames.
+  await expect.poll(async()=>{
+    const state=await page.evaluate(()=>window.rcRoomProbe.observeStaticRoomFrames(4));
+    return state.snapshots.every(value=>JSON.stringify(value)===JSON.stringify(state.before));
+  },{timeout:45000}).toBe(true);
+  report.staticFrames=await page.evaluate(()=>window.rcRoomProbe.observeStaticRoomFrames(30));
+  expect(report.staticFrames.frames).toBe(30);
+  for(const id of ["gi","sky"]) {
+    expect(report.staticFrames.before[id].sourceRevision).not.toBeNull();
+    expect(report.staticFrames.before[id].fieldRevision).toBeGreaterThan(0);
+  }
+  for(const state of report.staticFrames.snapshots)expect(state).toEqual(report.staticFrames.before);
+  expect(report.staticFrames.after).toEqual(report.staticFrames.before);
+  await effect(page,gi,false); await effect(page,sky,false); await lightDirection(page,[0,0,-1]);
+}
+
 for (const variant of ["pmx","plain","opaque-png","opaque-jpg"]) {
   // eslint-disable-next-line no-empty-pattern -- Playwright requires its fixture argument to be a destructured object.
   test(`RC window room: ${variant} material eligibility and indoor light`,async({},testInfo)=>{
     test.setTimeout(300000);
     const launched=await launchMmdModoki(root);
     const report={variant,errors:[],consoleErrors:[],captures:{},cases:{},
-      scope:"Original identical 26-triangle room. GUI effect/preset/light changes. Fixed volume. Known unsupported cases are diagnosed, not claimed as support."};
+      scope:"Original identical 26-triangle room. GUI effects, default AccessoryToon, opaque texture classification and transport. PMX noToon stays neutral for Sky."};
     try {
       const page=await launched.app.firstWindow();
       page.on("pageerror",e=>report.errors.push(e.stack??e.message));
       page.on("console",m=>{if(m.type()==="error") report.consoleErrors.push(m.text());});
       const file=variant==="pmx"?"window-room.pmx":`window-room-${variant}.x`;
       const view=await setup(page,file); report.camera=view;
-      const png=variant==="opaque-png";
       report.initial=await read(page);
       assertBounds(report.initial.meshes,[-6,0,-6],[6,6,6]);
       const materials=report.initial.materials;
       expect(materials.length).toBeGreaterThanOrEqual(2);
-      expect(materials.every(m=>m.alpha===1 && m.alphaTesting===png && !m.alphaBlending)).toBe(true);
-      expect(materials.every(m=>m.giReceiver===!png && m.giSource===!png)).toBe(true);
-      // Sky with a fixed volume can report ready with zero accepted receivers;
-      // GI instead remains preparing. Neither label proves visible contribution.
-      const giOpen=await pair(page,testInfo,report,view,gi,"gi-open",png?"preparing":"ready");
-      if(png) {
-        expect(giOpen.result.difference).toBeLessThan(.1);
-        expect(giOpen.result.state.gi.view).toBe(false);
-        expect(giOpen.result.state.gi.diagnostics.supportedMaterialCount).toBe(0);
-      }
-      else {
-        expect(giOpen.result.state.gi.diagnostics.triangleCount).toBe(26);
-        expect(giOpen.result.regions.bounceWall.rgb[0]).toBeGreaterThan(1);
-      }
+      expect(materials.every(m=>m.alpha===1 && !m.alphaTesting && !m.alphaBlending)).toBe(true);
+      expect(materials.every(m=>m.giReceiver && m.giSource)).toBe(true);
+      if(variant!=="pmx")expect(materials.every(m=>m.preset==="wgsl-accessory-toon")).toBe(true);
+      if(variant.startsWith("opaque-"))expect(materials.every(m=>m.textureReady && m.textureHasAlpha===false
+        && !m.useAlphaFromDiffuseTexture)).toBe(true);
+      const giOpen=await pair(page,testInfo,report,view,gi,"gi-open");
+      expect(giOpen.result.state.gi.diagnostics.triangleCount).toBe(26);
+      expect(giOpen.result.regions.bounceWall.rgb[0]).toBeGreaterThan(1);
       await lightDirection(page,[0,0,-1]);
       const skyDefault=await pair(page,testInfo,report,view,sky,"sky-default");
       if(variant!=="pmx") {
-        expect(materials.every(m=>!m.skyReceiver)).toBe(true);
-        expect(skyDefault.result.difference).toBeLessThan(.1);
+        expect(skyDefault.result.state.materials.every(m=>m.skyReceiver && m.preset==="wgsl-accessory-toon")).toBe(true);
+        expect(skyDefault.result.state.sky.diagnostics.triangleCount).toBe(26);
+        expect(skyDefault.result.regions.deepFloor.rgb[0]).toBeLessThan(-1);
       } else {
         // This minimal PMX deliberately has no toon texture. Sky subtracts only
         // toon shadow residual; an eligible material alone cannot supply it.
         expect(materials.every(m=>!m.toonTexture)).toBe(true);
         expect(skyDefault.result.difference).toBeLessThan(.1);
       }
+      if(variant==="opaque-png")await opaqueRoundtrip(page,launched,testInfo,report);
       await applyStandard(page,variant!=="pmx");
       const skyOpen=await pair(page,testInfo,report,view,sky,variant==="pmx"?"sky-light-shadow":"sky-standard");
-      if(png) {
-        expect(skyOpen.result.state.materials.every(m=>!m.skyReceiver && !m.giReceiver)).toBe(true);
-        expect(skyOpen.result.state.sky.diagnostics.triangleCount).toBe(0);
-        expect(skyOpen.result.difference).toBeLessThan(.1);
-      } else {
-        expect(skyOpen.result.state.materials.every(m=>m.skyReceiver)).toBe(true);
-        expect(skyOpen.result.state.sky.diagnostics.triangleCount).toBe(26);
-        expect(skyOpen.result.regions.deepFloor.rgb[0]).toBeLessThan(-1);
-      }
+      expect(skyOpen.result.state.materials.every(m=>m.skyReceiver)).toBe(true);
+      expect(skyOpen.result.state.sky.diagnostics.triangleCount).toBe(26);
+      expect(skyOpen.result.regions.deepFloor.rgb[0]).toBeLessThan(-1);
 
       // Full geometric open/closed/reopened audit for PMX and untextured .x.
       if(variant==="pmx"||variant==="plain") {
@@ -216,6 +282,94 @@ for (const variant of ["pmx","plain","opaque-png","opaque-jpg"]) {
       expect(report.validation.count).toBe(0); expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
     } finally {
       mkdirSync(testInfo.outputDir,{recursive:true}); writeFileSync(testInfo.outputPath("report.json"),JSON.stringify(report,null,2));
+      await launched.close();
+    }
+  });
+}
+
+const transparencyRegions = {
+  clear: [[2.8,2.8,6],[3.2,2.8,6],[3.2,3.2,6],[2.8,3.2,6]],
+  solid: [[4.8,2.8,6],[5.2,2.8,6],[5.2,3.2,6],[4.8,3.2,6]],
+};
+function transparencyRegion(image,view,points) {
+  const polygon=projectPoints(view,points),rgb=[0,0,0],rgbOverBlack=[0,0,0];
+  for(const [x,y,depth] of polygon) {
+    expect(depth).toBeGreaterThan(0);expect(x).toBeGreaterThanOrEqual(0);expect(x).toBeLessThan(640);
+    expect(y).toBeGreaterThanOrEqual(0);expect(y).toBeLessThan(360);
+  }
+  let pixels=0,alphaSum=0,opaquePixels=0,transparentPixels=0,blackOpaquePixels=0;
+  for(let y=0;y<360;y++)for(let x=0;x<640;x++) {
+    let positive=false,negative=false;
+    for(let j=0;j<4;j++) {
+      const a=polygon[j],b=polygon[(j+1)%4],side=(b[0]-a[0])*(y+.5-a[1])-(b[1]-a[1])*(x+.5-a[0]);
+      positive ||= side>0;negative ||= side<0;
+    }
+    if(positive&&negative)continue;
+    const i=(y*640+x)*4,alpha=image.data[i+3];pixels++;alphaSum+=alpha;
+    if(alpha>=250) {opaquePixels++;if(Math.max(image.data[i],image.data[i+1],image.data[i+2])<2)blackOpaquePixels++;}
+    if(alpha<=1)transparentPixels++;
+    for(let c=0;c<3;c++) {rgb[c]+=image.data[i+c];rgbOverBlack[c]+=image.data[i+c]*alpha/255;}
+  }
+  expect(pixels,"Transparency ROI must contain enough in-frame pixels").toBeGreaterThan(30);
+  return {polygon,pixels,rgb:rgb.map(v=>v/pixels),rgbOverBlack:rgbOverBlack.map(v=>v/pixels),
+    alphaMean:alphaSum/pixels,opaquePixels,transparentPixels,blackOpaquePixels};
+}
+for(const variant of ["alpha254","cutout","blend"]) {
+  // eslint-disable-next-line no-empty-pattern -- Playwright fixture argument.
+  test(`RC window room: ${variant} transparency is preserved and excluded`,async({},testInfo)=>{
+    test.setTimeout(180000);
+    const launched=await launchMmdModoki(root),report={variant,errors:[],consoleErrors:[],captures:{},cases:{}};
+    try {
+      const page=await launched.app.firstWindow();
+      page.on("pageerror",e=>report.errors.push(e.stack??e.message));
+      page.on("console",m=>{if(m.type()==="error")report.consoleErrors.push(m.text());});
+      const view=await setup(page,`window-room-${variant}.x`); report.camera=view; report.initial=await read(page);
+      assertBounds(report.initial.meshes,[-6,0,-6],[6,6,6]);
+      expect(report.initial.materials).toHaveLength(2);
+      for(const material of report.initial.materials) {
+        expect(material.preset).toBe("wgsl-accessory-toon");
+        expect(material.alpha).toBe(variant==="blend"?.5:1);
+        expect(material.alphaTesting).toBe(variant!=="blend");
+        expect(material.alphaBlending).toBe(variant==="blend");
+        expect(material.giReceiver).toBe(false);expect(material.giSource).toBe(false);expect(material.skyReceiver).toBe(false);
+        if(variant!=="blend") {expect(material.textureHasAlpha).toBe(true);expect(material.useAlphaFromDiffuseTexture).toBe(true);}
+      }
+      const giPair=await pair(page,testInfo,report,view,gi,"excluded-gi","preparing");
+      expect(giPair.result.state.gi.diagnostics.supportedMaterialCount).toBe(0);
+      expect(giPair.result.state.gi.view).toBe(false);expect(giPair.result.difference).toBeLessThan(.1);
+      const skyPair=await pair(page,testInfo,report,view,sky,"excluded-sky");
+      expect(skyPair.result.state.sky.diagnostics.supportedMaterialCount).toBe(0);
+      expect(skyPair.result.difference).toBeLessThan(.1);
+      report.captureBackground="captureSinglePngSurfaceToPath uses opaque composition over the authored black background";
+      report.transparency=Object.fromEntries(Object.entries(transparencyRegions).map(([name,points])=>
+        [name,transparencyRegion(giPair.off,view,points)]));
+      expect(Math.max(...report.transparency.solid.rgbOverBlack)).toBeGreaterThan(20);
+      expect(report.transparency.solid.opaquePixels).toBe(report.transparency.solid.pixels);
+      if(variant==="cutout") {
+        // The left half of this front wall samples alpha0 and opens onto the black background.
+        const clear=report.transparency.clear;
+        expect(clear.transparentPixels+clear.blackOpaquePixels).toBe(clear.pixels);
+        expect(Math.max(...clear.rgbOverBlack)).toBeLessThan(2);
+      } else if(variant==="alpha254") {
+        // The only nonopaque pixel is outside these ROIs: full-image classification
+        // must retain cutout without making the otherwise opaque room disappear.
+        expect(Math.max(...report.transparency.clear.rgbOverBlack)).toBeGreaterThan(20);
+      } else {
+        // Obtain a same-process opaque reference through the actual accessory GUI.
+        await page.locator("#info-model-select").selectOption("__accessory__:0");
+        page.once("dialog",dialog=>dialog.accept()); await page.locator("#btn-accessory-delete").click();
+        await expect(page.locator('#info-model-select option[value^="__accessory__:"]')).toHaveCount(0);
+        expect(await page.evaluate(path=>window.mmdModokiE2e.loadAccessory(path),fixture("window-room-plain.x"))).toBe(true);
+        const option=page.locator('#info-model-select option[value^="__accessory__:"]');await expect(option).toHaveCount(1);
+        await matchXScale(page,Number((await option.getAttribute("value")).split(":")[1]));
+        const opaque=await capture(page,testInfo,report,"blend-opaque-reference");
+        report.blendReference=regionDelta(giPair.off,opaque,view,transparencyRegions.solid);
+        for(const change of report.blendReference.rgb)expect(change).toBeGreaterThan(5);
+      }
+      report.validation=await page.evaluate(()=>window.mmdModokiE2e.getWebGpuValidationDiagnostics());
+      expect(report.validation.count).toBe(0);expect(report.errors).toEqual([]);expect(report.consoleErrors).toEqual([]);
+    } finally {
+      mkdirSync(testInfo.outputDir,{recursive:true});writeFileSync(testInfo.outputPath("report.json"),JSON.stringify(report,null,2));
       await launched.close();
     }
   });

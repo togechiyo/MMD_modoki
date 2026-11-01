@@ -2,6 +2,8 @@
 
 確認日: 2026-10-31。所有者依頼による、`.x`受光・遮蔽と室内の窓開閉の調査。アプリの描画実装はこの作業で変更しない。
 
+2026-11-01追記: 不透明PNGとAccessory Toonの天空遮蔽は[後続の対応記録](./rc-x-accessory-support-2026-11-01.md)を参照。以下の数値・未対応表記は修正前の調査結果として残す。
+
 ## 再現入力と比較条件
 
 - [自作fixture](../test/fixtures/rc-window-room/README.md): 同じ26三角形の部屋をPMX、textureなしX、完全不透明PNG付きX、白JPEG付きXで用意。黒い遮光板は2三角形。第三者assetなし、MIT。

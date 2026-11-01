@@ -6,6 +6,8 @@
 
 ## 実装の概要
 
+2026-11-01追記: [Xアクセサリの不透明PNGとAccessory Toonの天空遮蔽](./rc-x-accessory-support-2026-11-01.md)に対応。既存の遮蔽計算・品質設定は維持する。
+
 2026-10-31追記: Luminous・天空遮蔽・GIの3効果でCPU変形/座標変換を共有し、BVH更新loopと中立設定時の更新を軽量化した。描画条件を維持した32 PNG一致と骨/morph・PNG/WebM回帰は[3種のRC併用時の負荷軽減](./radiance-cascades-performance-2026-10-31.md)を参照。
 
 庇下・壁際などで空が見えにくい部分を調べ、通常MMD材質の**影側に残る明るさ**を抑える。直射の明部・発光・specular・sphereを保ち、画面外の遮蔽物も計算に含める。完成色へのPostFXではなく、描画前の専用FrameGraphで作った天空visibilityを材質から参照する照明機能である。
@@ -95,7 +97,7 @@ providerの無効化後もpluginは中立textureとdummy三角形bufferを参照
 2026-10-29の変更前方式の初期GPU確認では、補間の8tap重み合計がFloat32誤差で1を超え、中立へ戻る画素が点状ノイズとなった。重み合計による正規化とclampで解消を確認した。比較用の一定係数ではノイズがなく、受光面からray原点をずらす試験では改善しなかったため、そのbiasは採用していない。これは変更前の調査履歴であり、新しい5方向集計方式の画質保証とはしない。
 
 - WebGPUかつFrame Graph有効、単一の通常カメラを対象とする。scene custom render target、複数・rig camera、PrePass構成では休止する。RSM GI等による追加render targetとの併用も、この休止条件を確認する。
-- 受け手はopaqueな`MmdStandardMaterial`の通常MMD / Light and Shadow。PBR、特殊preset、外部WGSL、透明・alpha-test、lightmap、diffuse Fresnel、照明無効材質は対象外。通常Standard材質用adapterは追加していない。
+- 受け手はopaqueな`MmdStandardMaterial`の通常MMD / Light and Shadow / Accessory Toon。Accessory Toonと不透明PNGのX対応は[2026-11-01の実装・検証](./rc-x-accessory-support-2026-11-01.md)を参照。PBR、その他の特殊preset、外部WGSL、透明・alpha-test、lightmap、diffuse Fresnel、照明無効材質は対象外。通常Standard材質用adapterは追加していない。
 - 透明・alpha-testを正確に透過する天空輸送、天空色、方向光の反射GIは未対応。天空の明るさは一様という近似である。
 - 粗いprobeの空間補間と5方向の法線近似による誤差は残る。2候補の接続遮蔽は低屋根の取り逃しを抑える一方、遮られたprobeを暗く扱うため、屋根端・窓際の過暗化やhaloがあり得る。最終比較でも旧16方向queryより暗くなる条件を確認した。候補は別triangle indexの2件だけで、同一平面の2三角形が枠を使う場合もあり、3番目以降の面の遮蔽は取り逃し得る。
 - 近距離直接探索＋終点field参照の旧方式とは異なる近似であり、[段階Cの屋根・高密度参照比較](./radiance-cascades-sky-reconstruction-2026-10-29.md)の精度を維持する保証はない。低屋根fixtureの成功を、密な実モデル・薄壁全般での品質確認へ広げない。

@@ -22,6 +22,8 @@ import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial"
 import { MmdPluginMaterialSphereTextureBlendMode } from "babylon-mmd/esm/Loader/mmdPluginMaterial";
 import { resolveXMaterialRenderPolicy } from "./shared/x-material-render-policy";
 import { findRedundantXFaceIndices } from "./shared/x-face-deduplication";
+import { createXTextureAlphaCache } from "./shared/x-texture-alpha";
+import { inspectXTextureAlpha } from "./scene/x-texture-alpha-inspection";
 
 type Tok = { t: "id" | "num" | "str" | "sym"; v: string };
 type XMat = {
@@ -32,6 +34,7 @@ type XMat = {
     emissive: Color3;
     texture: string | null;
     textureUrl: string | null;
+    textureIsOpaque?: boolean;
     sphereTexture: string | null;
     sphereTextureUrl: string | null;
     sphereTextureMode: "multiply" | "add" | null;
@@ -792,10 +795,17 @@ function gatherMaterials(parsed: XScene): XMat[] {
     return Array.from(set);
 }
 
-async function resolveSceneTextureUrls(rootUrl: string, parsed: XScene): Promise<void> {
+async function resolveSceneTextureUrls(scene: Scene, rootUrl: string, parsed: XScene): Promise<void> {
     const materials = gatherMaterials(parsed);
+    const inspectAlpha = createXTextureAlphaCache(url => inspectXTextureAlpha(url, scene));
     for (const material of materials) {
         await resolveTextureUrlForMaterial(rootUrl, material);
+        // Complete before building materials: preset defaults must capture the final alpha mode.
+        // BMP/TGA/WebP and explicit material translucency keep their established policy.
+        if (material.textureUrl && /\.png(?:[?#]|$)/i.test(material.textureUrl)
+            && resolveXMaterialRenderPolicy(material.diffuse.a, false) !== "blend") {
+            material.textureIsOpaque = await inspectAlpha(material.textureUrl) === "opaque";
+        }
     }
 }
 
@@ -812,14 +822,14 @@ function buildMat(scene: Scene, m: XMat, cache: Map<XMat, MmdStandardMaterial>):
     mat.specularColor = m.specular.clone();
     mat.emissiveColor = m.emissive.clone();
     mat.backFaceCulling = false;
-    const hasAlphaCapableTexture = Boolean(m.textureUrl && isAlphaCapableTextureUrl(m.textureUrl));
+    const hasAlphaCapableTexture = Boolean(m.textureUrl && isAlphaCapableTextureUrl(m.textureUrl) && !m.textureIsOpaque);
     const renderPolicy = resolveXMaterialRenderPolicy(m.diffuse.a, hasAlphaCapableTexture);
     if (m.textureUrl) {
         const diffuseTexture = new Texture(m.textureUrl, scene, false, true);
         mat.diffuseTexture = diffuseTexture;
 
         // .x accessories bypass babylon-mmd's PMX alpha evaluation path, so
-        // enable alpha usage explicitly for common alpha-capable texture formats.
+        // enable alpha usage for confirmed/unknown alpha, except verified opaque PNGs.
         // Opaque .x materials use alpha test for texture cutouts so foliage and
         // fences participate in the depth buffer instead of unstable mesh-level
         // alpha blending. Explicit material translucency remains alpha blended.
@@ -993,7 +1003,7 @@ export async function loadXIntoScene(
     rootUrl: string,
 ): Promise<ISceneLoaderAsyncResult> {
     const parsed = parseX(dataToText(data));
-    await resolveSceneTextureUrls(rootUrl, parsed);
+    await resolveSceneTextureUrls(scene, rootUrl, parsed);
     const built = buildScene(scene, parsed);
     return {
         meshes: built.meshes,

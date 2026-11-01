@@ -45,10 +45,13 @@ export function roomState() {
         if (!materials.has(material.uniqueId)) materials.set(material.uniqueId, {
           id: material.uniqueId, name: material.name, preset, className: material.getClassName(),
           alpha: material.alpha, alphaTesting: material.needAlphaTesting(), alphaBlending: material.needAlphaBlending(),
+          transparencyMode: material.transparencyMode, alphaCutOff: material.alphaCutOff,
+          useAlphaFromDiffuseTexture: material.useAlphaFromDiffuseTexture,
           giReceiver: manager.acceptsRcDiffuseGiMaterial(material), giSource: manager.acceptsRcDiffuseGiMaterial(material, true),
           skyReceiver: manager.rcSkyOcclusionController?.acceptsMaterial(material) ?? false,
           diffuse: material.diffuseColor?.asArray?.(), textureReady: material.diffuseTexture?.isReady() ?? null,
           textureHasAlpha: material.diffuseTexture?.hasAlpha ?? null,
+          textureUrl: material.diffuseTexture?.url ?? null,
           toonTexture: Boolean(material.toonTexture),
         });
         return { materialId: material.uniqueId, triangles: sub.indexCount / 3 };
@@ -58,6 +61,23 @@ export function roomState() {
   return { gi: controllerState(manager.rcDiffuseGiController), sky: controllerState(manager.rcSkyOcclusionController),
     materials: [...materials.values()], meshes,
     light: { direction: manager.dirLight.direction.asArray(), intensity: manager.dirLight.getScaledIntensity() } };
+}
+
+/** Observe actual render events; never request a render or invalidate a producer. */
+export async function observeStaticRoomFrames(frameCount = 30) {
+  if (!manager) throw new Error("Room manager is not observed");
+  const snapshots = [];
+  const snapshot = () => Object.fromEntries([["gi", manager.rcDiffuseGiController], ["sky", manager.rcSkyOcclusionController]]
+    .map(([name, controller]) => [name, { fieldRevision: controller?.diagnostics.fieldRevision ?? null,
+      sourceRevision: controller?.field?.source?.revision ?? null }]));
+  const before = snapshot();
+  await new Promise(resolve => {
+    const observer = manager.scene.onAfterRenderObservable.add(() => {
+      snapshots.push(snapshot());
+      if (snapshots.length >= frameCount) { manager.scene.onAfterRenderObservable.remove(observer); resolve(); }
+    });
+  });
+  return { frames: snapshots.length, before, after: snapshot(), snapshots };
 }
 
 export function disposeRoomProbe() {

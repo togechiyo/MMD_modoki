@@ -89,7 +89,7 @@ export function encodeRcWindowRoomPmx(model) {
 const sequence = (values, format, indent = "  ") => values.map((value, index) =>
   `${indent}${format(value)}${index === values.length - 1 ? ";" : ","}`).join("\n");
 
-export function encodeRcWindowRoomX(model, texture = null) {
+export function encodeRcWindowRoomX(model, texture = null, alpha = 1) {
   const triangles = model.materials.flatMap((material, materialIndex) => {
     const faces = [];
     for (let i = 0; i < material.indices.length; i += 3) faces.push({ indices: material.indices.slice(i, i + 3), materialIndex });
@@ -119,7 +119,7 @@ ${sequence(model.vertices, vertex => `${vertex.uv[0]};${1 - vertex.uv[1]};`, "  
     ${triangles.length};
 ${sequence(triangles, face => String(face.materialIndex), "    ")}
 ${model.materials.map(material => `    Material ${material.name} {
-      ${material.diffuse.join(";")};1;;
+      ${material.diffuse.join(";")};${alpha};;
       0;
       0;0;0;;
       0;0;0;;${texture ? `
@@ -150,7 +150,7 @@ async function validateFixtures(files, models) {
   try {
     const { PmxReader } = await vite.ssrLoadModule("/node_modules/babylon-mmd/esm/Loader/Parser/pmxReader.js");
     const { parseFixtureX, triangulateFixtureX } = await vite.ssrLoadModule("/src/x-file-loader.ts");
-    for (const [file, model] of files) {
+    for (const [file, model, texture = null, alpha = 1] of files) {
       const bytes = await readFile(resolve(directory, file));
       const expected = geometryRows(model);
       if (file.endsWith(".pmx")) {
@@ -179,10 +179,10 @@ async function validateFixtures(files, models) {
         });
         assert.deepEqual(actual, expected, file);
         for (const [i, material] of mesh.mats.entries()) {
-          assert.deepEqual(material.diffuse.asArray(), [...model.materials[i].diffuse, 1]);
+          assert.deepEqual(material.diffuse.asArray(), [...model.materials[i].diffuse, alpha]);
           assert.equal(material.power, 0); assert.deepEqual(material.specular.asArray(), [0, 0, 0]);
           assert.deepEqual(material.emissive.asArray(), [0, 0, 0]);
-          assert.equal(material.texture, file.includes("opaque-png") ? "white.png" : file.includes("opaque-jpg") ? "white.jpg" : null);
+          assert.equal(material.texture, texture);
         }
       }
     }
@@ -201,13 +201,15 @@ async function validateFixtures(files, models) {
 export async function generateRcWindowRoomFixture() {
   await mkdir(directory, { recursive: true });
   const room = createRcWindowRoom(), shutter = createRcWindowRoom(true), files = [];
-  for (const [file, model, texture] of [
+  for (const [file, model, texture, alpha = 1] of [
     ["window-room.pmx", room], ["window-room-plain.x", room],
     ["window-room-opaque-png.x", room, "white.png"], ["window-room-opaque-jpg.x", room, "white.jpg"],
+    ["window-room-alpha254.x", room, "white-alpha254.png"], ["window-room-cutout.x", room, "white-cutout.png"],
+    ["window-room-blend.x", room, null, 0.5],
     ["window-shutter.pmx", shutter], ["window-shutter.x", shutter],
   ]) {
-    await writeFile(resolve(directory, file), file.endsWith(".pmx") ? encodeRcWindowRoomPmx(model) : encodeRcWindowRoomX(model, texture));
-    files.push([file, model]);
+    await writeFile(resolve(directory, file), file.endsWith(".pmx") ? encodeRcWindowRoomPmx(model) : encodeRcWindowRoomX(model, texture, alpha));
+    files.push([file, model, texture, alpha]);
   }
   const white = { width: 8, height: 8, data: Buffer.alloc(8 * 8 * 4, 255) };
   const png = PNG.sync.write(white, { colorType: 6 }), jpg = jpegjs.encode(white, 100).data;
@@ -216,9 +218,22 @@ export async function generateRcWindowRoomFixture() {
     assert.ok(decoded.data.every(value => value === 255), `${name} must decode to opaque white`);
     await writeFile(resolve(directory, name), bytes);
   }
+  const almostOpaque = { width: 32, height: 32, data: Buffer.alloc(32 * 32 * 4, 255) };
+  almostOpaque.data[almostOpaque.data.length - 1] = 254; // Last pixel: a coarse/early sample must not classify this as opaque.
+  const cutout = { width: 8, height: 8, data: Buffer.alloc(8 * 8 * 4, 255) };
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) cutout.data[(y * 8 + x) * 4 + 3] = 0;
+  for (const [name, image, expectedAlpha] of [["white-alpha254.png", almostOpaque, { 254: 1, 255: 1023 }],
+    ["white-cutout.png", cutout, { 0: 32, 255: 32 }]]) {
+    const bytes = PNG.sync.write(image, { colorType: 6 }), decoded = PNG.sync.read(bytes), alphaCounts = {};
+    for (let i = 0; i < decoded.data.length; i += 4) {
+      assert.deepEqual([...decoded.data.subarray(i, i + 3)], [255, 255, 255]);
+      const alpha = decoded.data[i + 3]; alphaCounts[alpha] = (alphaCounts[alpha] ?? 0) + 1;
+    }
+    assert.deepEqual(alphaCounts, expectedAlpha); await writeFile(resolve(directory, name), bytes);
+  }
   await validateFixtures(files, [room, shutter]);
-  return { directory, files: [...files.map(([file]) => file), "white.png", "white.jpg"], roomTriangles: 26,
-    shutterTriangles: 2, staticParseAndMatchingGeometry: "passed", textureDecode: "opaque white 8x8 passed" };
+  return { directory, files: [...files.map(([file]) => file), "white.png", "white.jpg", "white-alpha254.png", "white-cutout.png"], roomTriangles: 26,
+    shutterTriangles: 2, staticParseAndMatchingGeometry: "passed", textureDecode: "opaque white and exact alpha histograms passed" };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

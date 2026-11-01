@@ -37,6 +37,8 @@ test-results/
 
 ElectronとWebGPUは同時実行時にGPU・プロセス資源を競合しやすいため、当面は1 workerで直列実行する。
 
+実行中はsource・specだけでなく、`docs/`やfixture README等の監視対象も編集しない。Tailwindのscan対象asset変更からViteのfull reloadが入り、sceneや設定が初期化される場合がある。2026-11-01の[RC X検証](./rc-x-accessory-support-2026-11-01.md#確認)では文書更新と初期化の時刻が一致し、全編集停止で通常cache・新規cacheとも再試験が成功した。テストと文書更新は直列にする。
+
 ## 実行方法
 
 Electron / WebGPU E2E は GPU を利用できるローカル環境で、リポジトリに導入済みの Playwright を使って実行する。Codex の実行 sandbox 内では Electron の GPU process が利用できず、renderer 初期化前の終了や `window.mmdModokiE2e` 待機の timeout になり得るため、E2E を試行しない。agent が実行する場合は最初から GUI 実行権限付きのローカルコマンドとして起動する。

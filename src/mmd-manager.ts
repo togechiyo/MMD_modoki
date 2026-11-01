@@ -13176,7 +13176,7 @@ ${beforeFogAppendBlock}
                 return material instanceof MmdStandardMaterial && !material.disableLighting && material.alpha >= 0.99
                     && !material.needAlphaTesting() && !material.needAlphaBlending()
                     && !material.diffuseFresnelParameters?.isEnabled && !material.lightmapTexture
-                    && (preset === "wgsl-mmd-standard" || preset === "wgsl-light-and-shadow")
+                    && (preset === "wgsl-mmd-standard" || preset === "wgsl-light-and-shadow" || preset === "wgsl-accessory-toon")
                     && !MmdManager.externalWgslToonFragmentByMaterial.has(material)
                     && !MmdManager.presetWgslToonFragmentByMaterial.has(material);
             }, () => this.needsRcSkyOcclusionResources());

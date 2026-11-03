@@ -24,8 +24,11 @@ function visibleMotion(first, second) {
   }
   return { pixels, maximum };
 }
-for (const enabled of [false, true]) {
-  const id = enabled ? "gi-sky-on" : "gi-sky-off";
+const cases = [{ id: "gi-sky-off", gi: false, sky: false }, { id: "gi-sky-on", gi: true, sky: true }];
+if (process.env.MMD_RC_PLAYBACK_SINGLE_EFFECTS === "1") {
+  cases.push({ id: "gi-only", gi: true, sky: false }, { id: "sky-only", gi: false, sky: true });
+}
+for (const { id, gi, sky } of cases) {
   // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
   test(`RC normal playback: ${id}`, async ({}, testInfo) => {
     test.setTimeout(240000);
@@ -65,7 +68,8 @@ for (const enabled of [false, true]) {
         await numberControl(page, "tx", x); await page.locator("#btn-bone-keyframe").click();
       }
       await seek(page, 0); report.camera = await camera(page);
-      for (const effect of ["rcDiffuseGi", "rcSkyOcclusion"]) await setRcLightingEnabled(page, effect, enabled);
+      await setRcLightingEnabled(page, "rcDiffuseGi", gi);
+      await setRcLightingEnabled(page, "rcSkyOcclusion", sky);
       report.fixture = await invoke(page, "createRcPlaybackFixture");
       report.prepared = await invoke(page, "prepareCombinedPerformance", { width: 1280, height: 720 });
       expect(report.prepared.size).toEqual([1280, 720]);
@@ -78,9 +82,11 @@ for (const enabled of [false, true]) {
       expect(new Set(realtime.samples.map(row => row.frame)).size).toBeGreaterThan(10);
       expect(realtime.samples.at(-1).frame).toBeGreaterThan(realtime.samples[0].frame);
       if (realtime.state.deviceTimestampQuery) expect(realtime.gpu.completeFrames).toBe(80);
-      if (enabled) {
-        expect(realtime.state.gi.triangleCount).toBeGreaterThanOrEqual(50000);
-        expect(realtime.state.sky.triangleCount).toBeGreaterThanOrEqual(50000);
+      for (const [effect, active] of [["gi", gi], ["sky", sky]]) {
+        expect(realtime.state[effect].status).toBe(active ? "ready" : "off");
+        if (active) expect(realtime.state[effect].triangleCount).toBeGreaterThanOrEqual(50000);
+      }
+      if (gi || sky) {
         expect(realtime.counts.sourceUpdates).toBeGreaterThan(0);
         expect(realtime.counts.computeDispatches).toBeGreaterThan(0);
       } else {

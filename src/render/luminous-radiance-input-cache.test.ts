@@ -29,4 +29,16 @@ describe("RC input caching", () => {
         expect(new RadianceInputSnapshot([new Float32Array([NaN])]).matches([new Float32Array([NaN])])).toBe(false);
         expect(new RadianceInputSnapshot([[0.1]]).matches([new Float32Array([0.1])])).toBe(false);
     });
+    it("tracks mesh indices exactly across integer widths and in-place edits", () => {
+        const small = new Uint16Array([0, 65535]);
+        const large = new Uint32Array([65536, 16777217]);
+        const snapshot = new RadianceInputSnapshot([small, large]);
+        expect(snapshot.matches([Uint32Array.from(small), Array.from(large)])).toBe(true);
+        expect(snapshot.matches([small, Uint16Array.from(large)])).toBe(false);
+        large[1]--;
+        expect(snapshot.matches([small, large])).toBe(false);
+        large[1]++;
+        small[1]--;
+        expect(snapshot.matches([small, large])).toBe(false);
+    });
 });

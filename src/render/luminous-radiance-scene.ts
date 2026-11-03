@@ -15,8 +15,9 @@ import { logWarn } from "../app-logger";
 import { isRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
 
 export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: number; g: number; b: number; texture?: Texture | null } | null;
-type MeshInput = { key: Mesh; snapshot: RadianceInputSnapshot; emissionSnapshot: RadianceInputSnapshot;
-    geometryVersion: object; triangles: Float32Array; emitters: number; low: number[]; high: number[] };
+type MeshInput = { key: Mesh; poseSnapshot: RadianceInputSnapshot; surfaceSnapshot: RadianceInputSnapshot;
+    emissionSnapshot: RadianceInputSnapshot; geometryVersion: object; attributesVersion: object;
+    triangles: Float32Array; emitters: number; low: number[]; high: number[] };
 
 // Range-independent scene input. One owner may serve several RC volumes in the same graph.
 export class LuminousRadianceSceneSource {
@@ -107,11 +108,13 @@ export class LuminousRadianceSceneSource {
                     surface.textureSource, surface.wrap, ...(surface.matrix ?? [])]);
                 const emissionValues = surfaces.flatMap(surface => [surface.emission?.r ?? 0, surface.emission?.g ?? 0, surface.emission?.b ?? 0]);
                 if (!emissionValues.every(Number.isFinite)) throw new Error("3D RC emission contains invalid colors");
-                const parts: ArrayLike<number>[] = [pose.signature, indices, world.m, metadata, ...surfaces.map(surface => surface.uvs ?? [])];
+                const poseParts = [pose.signature, world.m];
+                const surfaceParts = [indices, metadata, ...surfaces.map(surface => surface.uvs ?? [])];
                 const previous = this.meshInputs.get(mesh);
-                if (previous?.snapshot.matches(parts)) {
-                    if (previous.emissionSnapshot.matches([emissionValues])) { chunks.push(previous); continue; }
-                    // The geometry signature includes source selection, texture state/matrix and UV values.
+                const sameSurfaces = previous?.surfaceSnapshot.matches(surfaceParts);
+                const sameAttributes = sameSurfaces && previous?.emissionSnapshot.matches([emissionValues]);
+                if (previous && sameSurfaces && previous.poseSnapshot.matches(poseParts)) {
+                    if (sameAttributes) { chunks.push(previous); continue; }
                     // Copy only RGB into the unchanged source-order records; no vertex transform/BLAS refit.
                     const values = previous.triangles.slice();
                     let offset = 12;
@@ -122,10 +125,15 @@ export class LuminousRadianceSceneSource {
                             values[offset] = r; values[offset + 1] = g; values[offset + 2] = b;
                         }
                     }
-                    const chunk = { ...previous, emissionSnapshot: new RadianceInputSnapshot([emissionValues]), triangles: values };
+                    const chunk = { ...previous, emissionSnapshot: new RadianceInputSnapshot([emissionValues]),
+                        attributesVersion: {}, triangles: values };
                     this.meshInputs.set(mesh, chunk); chunks.push(chunk); continue;
                 }
-                const values = new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);
+                // Preserve the old immutable chunk until the BVH consumes this replacement.
+                // With identical topology, material inputs and UVs, only nine coordinates can differ.
+                const poseOnly = sameAttributes ? previous : undefined;
+                const values = poseOnly?.triangles.slice()
+                    ?? new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);
                 const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
                 let emitters = 0, writeOffset = 0;
                 const transformed = this.geometry.readWorldPositions(mesh, pose, world);
@@ -142,8 +150,10 @@ export class LuminousRadianceSceneSource {
                                 values[writeOffset++] = value;
                                 if (emission) { low[axis] = Math.min(low[axis], value); high[axis] = Math.max(high[axis], value); }
                             }
-                            values[writeOffset++] = 0;
+                            writeOffset++; // Padding is zero in both the new and copied records.
                         }
+                        if (emission) emitters++;
+                        if (poseOnly) { writeOffset += RADIANCE_TRIANGLE_STRIDE - 12; continue; }
                         values[writeOffset++] = r; values[writeOffset++] = g; values[writeOffset++] = b; values[writeOffset++] = 0;
                         if (textureMatrix) {
                             for (let corner = 0; corner < 3; corner++) {
@@ -157,11 +167,12 @@ export class LuminousRadianceSceneSource {
                             }
                         } else writeOffset += 6;
                         values[writeOffset++] = textureSource; values[writeOffset++] = wrap;
-                        if (emission) emitters++;
                     }
                 }
-                const chunk = { key: mesh, snapshot: new RadianceInputSnapshot(parts), emissionSnapshot: new RadianceInputSnapshot([emissionValues]),
-                    geometryVersion: {}, triangles: values, emitters, low, high };
+                const chunk = { key: mesh, poseSnapshot: new RadianceInputSnapshot(poseParts),
+                    surfaceSnapshot: sameSurfaces && previous ? previous.surfaceSnapshot : new RadianceInputSnapshot(surfaceParts),
+                    emissionSnapshot: poseOnly?.emissionSnapshot ?? new RadianceInputSnapshot([emissionValues]),
+                    geometryVersion: {}, attributesVersion: poseOnly?.attributesVersion ?? {}, triangles: values, emitters, low, high };
                 this.meshInputs.set(mesh, chunk); chunks.push(chunk);
             }
             for (const chunk of chunks) {

@@ -7,11 +7,17 @@ function matchesNumbers(snapshot: ArrayLike<number>, input: ArrayLike<number>): 
     return true;
 }
 
+function matchesIndices(snapshot: Uint16Array | Uint32Array, input: Uint16Array | Uint32Array): boolean {
+    for (let i = 0; i < input.length; i++) if (input[i] !== snapshot[i]) return false;
+    return true;
+}
+
 /** Compare numeric inputs by value: transforms and vertex arrays can be mutated in place. */
 export class RadianceInputSnapshot {
-    private readonly parts: Array<Float32Array | Float64Array>;
+    private readonly parts: Array<Float32Array | Float64Array | Uint16Array | Uint32Array>;
     constructor(parts: readonly ArrayLike<number>[]) {
-        this.parts = parts.map(part => part instanceof Float32Array ? part.slice() : Float64Array.from(part));
+        this.parts = parts.map(part => part instanceof Float32Array || part instanceof Uint16Array || part instanceof Uint32Array
+            ? part.slice() : Float64Array.from(part));
     }
     public matches(parts: readonly ArrayLike<number>[]): boolean {
         return parts.length === this.parts.length && parts.every((part, index) => {
@@ -19,8 +25,10 @@ export class RadianceInputSnapshot {
             if (part.length !== snapshot.length) return false;
             // Keep the long f32 streams in their own monomorphic loop. Mixing JS arrays,
             // f32 vertices and f64 snapshots in one indexed loop makes dense comparisons costly.
-            return snapshot instanceof Float32Array && part instanceof Float32Array
-                ? matchesFloat32(snapshot, part) : matchesNumbers(snapshot, part);
+            if (snapshot instanceof Float32Array && part instanceof Float32Array) return matchesFloat32(snapshot, part);
+            if ((snapshot instanceof Uint16Array && part instanceof Uint16Array)
+                || (snapshot instanceof Uint32Array && part instanceof Uint32Array)) return matchesIndices(snapshot, part);
+            return matchesNumbers(snapshot, part);
         });
     }
 }

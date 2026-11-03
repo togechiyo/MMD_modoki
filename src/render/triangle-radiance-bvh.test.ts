@@ -101,6 +101,31 @@ describe("world triangle radiance BVH", () => {
         expect(() => bvh.updateEmission(geometry(20))).toThrow();
         expect(bvh.triangles).toEqual(before); expect(nodes).toEqual(nodeBytes);
     });
+    it("preserves full-refit triangle and node bytes when only positions change", () => {
+        const count = 21, original = geometry(count), input = new Float32Array(original.length);
+        for (let i = 0; i < count; i++) {
+            const source = (count - 1 - i) * STRIDE;
+            input.set(original.subarray(source, source + STRIDE), i * STRIDE);
+            input.set([i * 0.1, i * 0.2, 0, 1, 1, 0, i, 3], i * STRIDE + 16);
+        }
+        const actual = new TriangleRadianceBvh(), full = new TriangleRadianceBvh();
+        actual.update(input); full.update(input);
+        for (const scale of [-1, 0.8, 1]) {
+            const pose = input.slice();
+            for (let i = 0; i < count; i++) for (let vertex = 0; vertex < 12; vertex += 4) {
+                const offset = i * STRIDE + vertex;
+                pose[offset] *= scale; pose[offset + 1] -= (i + vertex) * scale; pose[offset + 2] += 0.1 * scale;
+            }
+            actual.updatePositions(pose); full.update(pose);
+            expect(new Uint8Array(actual.triangles.buffer)).toEqual(new Uint8Array(full.triangles.buffer));
+            expect(new Uint8Array(actual.nodes.buffer)).toEqual(new Uint8Array(full.nodes.buffer));
+        }
+        const before = actual.triangles.slice(), nodes = actual.nodes.slice();
+        const invalid = input.slice(); invalid[input.length - STRIDE + 10] = Infinity;
+        expect(() => actual.updatePositions(invalid)).toThrow();
+        expect(() => actual.updatePositions(input.subarray(STRIDE))).toThrow();
+        expect(actual.triangles).toEqual(before); expect(actual.nodes).toEqual(nodes);
+    });
     it("keeps red, green and blue emitters on their triangles across sorting and color-only refit", () => {
         const source = geometry(12), input = new Float32Array(source.length);
         for (let index = 0; index < 12; index++) input.set(source.subarray((11 - index) * STRIDE, (12 - index) * STRIDE), index * STRIDE);

@@ -182,21 +182,46 @@ describe("RC separates emission and geometry input", () => {
         expect(data.error).toBeNull(); data.dispose();
     });
 
-    it("falls back to geometry packing on transforms, source selection and in-place UV/matrix changes", () => {
-        const { scene, mesh, state, data } = fixture();
+    it("reuses packed attributes only when deformation leaves all surface inputs unchanged", () => {
+        const { scene, mesh, state, data, read } = fixture();
         vi.spyOn(LuminousRadianceTextures.prototype, "source").mockReturnValue(0);
         state.texture = new Texture(null, mesh.getScene()); data.update(settings);
         const refit = vi.spyOn(TriangleRadianceBvh.prototype, "update");
-        const changes: Array<[string, () => void]> = [
-            ["transform", () => { mesh.position.x += 2; }],
-            ["UV", () => { const uv = mesh.getVerticesData(VertexBuffer.UVKind); if (uv) uv[0] += 0.2; }],
-            ["texture matrix", () => { if (state.texture) state.texture.uOffset += 0.1; }],
-            ["source off", () => { state.selected = false; }],
-            ["source on", () => { state.selected = true; }],
+        const updatePositions = vi.spyOn(TriangleRadianceBvh.prototype, "updatePositions");
+        const changes: Array<[string, boolean, () => void]> = [
+            ["transform", true, () => { mesh.position.x += 2; }],
+            ["in-place vertex edit", true, () => {
+                const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+                if (positions) positions[0] += 0.2;
+            }],
+            ["pose and UV", false, () => {
+                mesh.position.x += 1;
+                const uv = mesh.getVerticesData(VertexBuffer.UVKind);
+                if (uv) uv[0] += 0.2;
+            }],
+            ["pose and RGB", false, () => { mesh.position.y += 1; state.emission.g += 0.3; }],
+            ["in-place topology", false, () => {
+                const indices = mesh.getIndices();
+                if (indices) [indices[0], indices[1]] = [indices[1], indices[0]];
+            }],
+            ["texture matrix", false, () => { if (state.texture) state.texture.uOffset += 0.1; }],
+            ["source off", false, () => { state.selected = false; }],
+            ["source on", false, () => { state.selected = true; }],
         ];
-        for (const [name, change] of changes) {
-            refit.mockClear(); change(); scene.incrementRenderId(); data.update(settings);
-            expect(refit.mock.calls.length, name).toBe(1); expect(data.error).toBeNull();
+        // A fresh build can choose a different spatial order after deformation.
+        // Compare complete records and emitter bounds independently of that order.
+        const records = (values: Float32Array): string[] => Array.from({ length: values.length / 24 }, (_, i) =>
+            Array.from(values.subarray(i * 24, (i + 1) * 24)).join(",")).sort();
+        for (const [name, positionOnly, change] of changes) {
+            refit.mockClear(); updatePositions.mockClear();
+            change(); scene.incrementRenderId(); data.update(settings);
+            expect(updatePositions.mock.calls.length, name).toBe(positionOnly ? 1 : 0);
+            expect(refit.mock.calls.length, name).toBe(positionOnly ? 0 : 1); expect(data.error).toBeNull();
+            const reference = new LuminousRadianceScene(scene, read); reference.update(settings);
+            expect(records(data.bvh.triangles), name).toEqual(records(reference.bvh.triangles));
+            expect(data.emitterTriangles, name).toBe(reference.emitterTriangles);
+            expect([...data.volumeMin, data.volumeSize], name).toEqual([...reference.volumeMin, reference.volumeSize]);
+            reference.dispose();
         }
         mesh.isVisible = false; data.update(settings); expect(data.bvh.triangleCount).toBe(0);
         mesh.isVisible = true; data.update(settings); expect(data.bvh.triangleCount).toBe(12);

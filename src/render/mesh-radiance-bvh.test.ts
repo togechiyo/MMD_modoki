@@ -86,6 +86,28 @@ describe("mesh radiance acceleration updates", () => {
             verifyEscapes(mirror);
         }
     });
+    it("writes the same triangle and node ranges as a full refit for a moving actor and fixed stage", () => {
+        const actor = { key: {}, triangles: geometry(17), attributesVersion: {} };
+        const stage = { key: {}, triangles: geometry(200, 1000) };
+        const actual = new MeshRadianceBvh(), full = new MeshRadianceBvh();
+        const fullActor = () => ({ key: actor.key, triangles: actor.triangles });
+        actual.update([stage, actor]); full.update([stage, fullActor()]);
+        for (const y of [2, -5, 0]) {
+            const pose = actor.triangles.slice();
+            for (let i = 0; i < pose.length; i += STRIDE) {
+                pose[i + 1] = y; pose[i + 5] = y * 2; pose[i + 9] = y + 1;
+            }
+            actor.triangles = pose;
+            const changes = actual.update([stage, actor]), expected = full.update([stage, fullActor()]);
+            for (const key of ["triangles", "nodes"] as const) {
+                expect(changes[key].map(r => [r.byteOffset, r.data.byteLength])).toEqual(expected[key].map(r => [r.byteOffset, r.data.byteLength]));
+                expect(new Uint8Array(actual[key].buffer)).toEqual(new Uint8Array(full[key].buffer));
+            }
+            expect(changes.triangles).toHaveLength(1);
+            expect(changes.triangles[0].byteOffset).toBe(stage.triangles.byteLength);
+            expect(actual.changedMin).toEqual(full.changedMin); expect(actual.changedMax).toEqual(full.changedMax);
+        }
+    });
     it("uploads color-only changes without a BLAS/TLAS refit while invalidating the source bounds", () => {
         const source = { key: {}, geometryVersion: {}, triangles: geometry(21, -100) };
         const stage = { key: {}, geometryVersion: {}, triangles: geometry(200, 1000) };

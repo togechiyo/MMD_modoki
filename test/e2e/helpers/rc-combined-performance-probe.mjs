@@ -53,11 +53,31 @@ export async function createCombinedDenseFixture({ subdivisions = 96 } = {}) {
 }
 function pose(frame) {
   manager.seekTo(frame);
+  deformDense(frame);
+}
+function deformDense(frame) {
   if (!dense) return;
   const phase = frame * .04;
   dense.skeleton.bones[0].setPosition(new Vector3(Math.sin(phase) * .4, 0, 0));
   dense.skeleton.bones[1].setRotation(new Vector3(0, 0, Math.sin(phase * .7) * .08));
   dense.morphTargetManager.getTarget(0).influence = frame === 0 ? 0 : (Math.sin(phase * .8) + 1) * .25;
+}
+export async function createRcPlaybackFixture() {
+  const moving = await createCombinedDenseFixture({ subdivisions: 128 });
+  const { scene } = context();
+  dense.scaling.set(.30, 1, .35);
+  dense.position.y = 1;
+  const stage = CreateGround("rc-static-playback-stage", { width: 16, height: 12, subdivisions: 96 }, scene);
+  stage.position.y = -.7;
+  stage.material = dense.material;
+  // The real PMX motion drives the playback clock. This synthetic skinned surface
+  // adds a reproducible character-sized workload without a third-party model.
+  const observer = scene.onBeforeRenderObservable.add(() => {
+    if (manager.isPlaying) deformDense(manager.mmdRuntime.currentFrameTime);
+  });
+  scene.onDisposeObservable.addOnce(() => scene.onBeforeRenderObservable.remove(observer));
+  await scene.whenReadyAsync();
+  return { moving, staticTriangles: stage.getTotalIndices() / 3 };
 }
 export function setCombinedReferencePose(frame) { manager.setAutoRenderEnabled(false); pose(frame); return combinedPerformanceState(); }
 export async function prepareCombinedPerformance({ width = 1280, height = 720 } = {}) {
@@ -72,7 +92,7 @@ export async function measureCombinedPerformance({ moving = false, warmFrames = 
   const { scene, engine, post, sky, gi, graphs, sources } = context(), restores = [], loops = engine.activeRenderLoops.slice();
   const wasAuto = manager.isAutoRenderEnabled(), gpuNames = new Map(), sourceNames = new Map([...sources].map(([source, names]) => [source, names.join("+")]));
   let current = null, rows = [], byFrame = new Map(), phase = null, observed = 0, motionStep = 0, previousStart = null;
-  let activeSource = null, pendingSeekMs = 0, resolveWindow = null, measurement = null;
+  let activeSource = null, pendingSeekMs = 0, resolveWindow = null, measurement = null, frameStart = 0;
   const add = (name, value = 1) => { if (current) current.counts[name] = (current.counts[name] ?? 0) + value; };
   const time = (name, duration) => { if (current) current.cpu[name] = (current.cpu[name] ?? 0) + duration; };
   const wrap = (object, key, replacement) => { const original = object[key]; object[key] = replacement(original); restores.push(() => { object[key] = original; }); };
@@ -138,10 +158,13 @@ export async function measureCombinedPerformance({ moving = false, warmFrames = 
   });
   const after = scene.onAfterRenderObservable.add(() => { if (current) current.cpu.scene = performance.now() - current.start; });
   const begin = engine.onBeginFrameObservable.add(() => {
-    current = null; pendingSeekMs = 0;
+    frameStart = performance.now(); current = null; pendingSeekMs = 0;
     if (phase && moving) { const cycle = (motionStep++ * 3) % 120, start = performance.now(); pose(cycle <= 60 ? cycle : 120 - cycle); pendingSeekMs = performance.now() - start; }
   });
-  const end = engine.onEndFrameObservable.add(() => { if (current) current.cpu.renderSubmit = performance.now() - current.start; if (phase && rows.length === phase.frames) resolveWindow?.(); });
+  const end = engine.onEndFrameObservable.add(() => {
+    if (current) { current.cpu.renderSubmit = performance.now() - current.start; current.cpu.engineFrame = performance.now() - frameStart; }
+    if (phase && rows.length === phase.frames) resolveWindow?.();
+  });
   restores.push(() => { scene.onBeforeRenderObservable.remove(before); scene.onAfterRenderObservable.remove(after); engine.onBeginFrameObservable.remove(begin); engine.onEndFrameObservable.remove(end); });
   const reset = count => { current = null; rows = []; byFrame = new Map(); observed = 0; motionStep = 0; previousStart = null; phase = { frames: count }; };
   const result = () => {
@@ -167,6 +190,9 @@ export async function measureCombinedPerformance({ moving = false, warmFrames = 
     phase = null; current = null; resolveWindow = null; await engine._device.queue.onSubmittedWorkDone();
     for (let i = 0; i < 4; i++) await new Promise(resolve => requestAnimationFrame(resolve));
     const realtime = result();
+    if (completionFrames === 0) {
+      measurement = { realtime, validationAfterCleanup: null }; return measurement;
+    }
     manager.setAutoRenderEnabled(false); engine.stopRenderLoop(); engine.flushFramebuffer(); await engine._device.queue.onSubmittedWorkDone();
     reset(completionFrames);
     for (let i = 0; i < warmFrames + completionFrames; i++) {

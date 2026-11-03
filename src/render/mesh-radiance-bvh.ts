@@ -1,7 +1,7 @@
 import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh, threadRadianceBvh } from "./triangle-radiance-bvh";
 
-// Reuse geometryVersion only when every field except inline emission RGB is unchanged.
-type Input = { key: object; triangles: Float32Array; geometryVersion?: object };
+// geometryVersion certifies all fields except RGB; attributesVersion certifies all except position XYZ.
+type Input = { key: object; triangles: Float32Array; geometryVersion?: object; attributesVersion?: object };
 type Entry = Input & { bvh: TriangleRadianceBvh; triangleOffset: number; nodeOffset: number; escape: number };
 export type RadianceBufferRange = { byteOffset: number; data: Float32Array };
 type Changes = { triangles: RadianceBufferRange[]; nodes: RadianceBufferRange[] };
@@ -56,8 +56,13 @@ export class MeshRadianceBvh {
                 if (entry.triangles === input.triangles) continue;
                 this.includeBounds(entry.bvh.nodes, 0);
                 if (input.geometryVersion && input.geometryVersion === entry.geometryVersion) entry.bvh.updateEmission(input.triangles);
-                else { entry.bvh.update(input.triangles); refitted.add(entry); }
-                entry.triangles = input.triangles; entry.geometryVersion = input.geometryVersion; changed.push(entry);
+                else {
+                    if (input.attributesVersion && input.attributesVersion === entry.attributesVersion) entry.bvh.updatePositions(input.triangles);
+                    else entry.bvh.update(input.triangles);
+                    refitted.add(entry);
+                }
+                entry.triangles = input.triangles; entry.geometryVersion = input.geometryVersion;
+                entry.attributesVersion = input.attributesVersion; changed.push(entry);
             }
         }
         this.triangleCount = count;

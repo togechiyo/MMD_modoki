@@ -40,6 +40,28 @@ export class TriangleRadianceBvh {
         }
     }
 
+    /** Caller certifies that topology and every non-position attribute still match. */
+    public updatePositions(input: Float32Array): void {
+        const stride = RADIANCE_TRIANGLE_STRIDE;
+        if (input.length !== this.triangleCount * stride) throw new Error("3D RC position update topology mismatch");
+        for (let offset = 0; offset < input.length; offset += stride) {
+            for (let vertex = offset; vertex < offset + 12; vertex += 4) {
+                if (!Number.isFinite(input[vertex]) || !Number.isFinite(input[vertex + 1]) || !Number.isFinite(input[vertex + 2])) {
+                    throw new Error("3D RC geometry contains non-finite values");
+                }
+            }
+        }
+        for (let index = 0; index < this.triangleCount; index++) {
+            const source = this.order[index] * stride, target = index * stride;
+            for (let vertex = 0; vertex < 12; vertex += 4) {
+                this.triangles[target + vertex] = input[source + vertex];
+                this.triangles[target + vertex + 1] = input[source + vertex + 1];
+                this.triangles[target + vertex + 2] = input[source + vertex + 2];
+            }
+        }
+        this.refit();
+    }
+
     public update(input: Float32Array): void {
         const stride = RADIANCE_TRIANGLE_STRIDE;
         const count = input.length / stride;
@@ -83,7 +105,11 @@ export class TriangleRadianceBvh {
             const source = this.order[index] * stride, target = index * stride;
             for (let component = 0; component < stride; component++) this.triangles[target + component] = input[source + component];
         }
-        // Refit for skinning, morphs and rigid transforms; rebuild when triangle count changes.
+        this.refit();
+    }
+
+    private refit(): void {
+        const count = this.triangleCount, stride = RADIANCE_TRIANGLE_STRIDE;
         for (let index = this.nodes.length / 12 - 1; index >= 0; index--) {
             const base = index * 12, first = this.nodes[base + 3], leafCount = this.nodes[base + 7];
             for (let axis = 0; axis < 3; axis++) {

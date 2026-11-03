@@ -5,6 +5,7 @@ import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
+import type { FloatArray } from "@babylonjs/core/types";
 import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
 import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE } from "./triangle-radiance-bvh";
 import { MeshRadianceBvh } from "./mesh-radiance-bvh";
@@ -15,9 +16,27 @@ import { logWarn } from "../app-logger";
 import { isRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
 
 export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: number; g: number; b: number; texture?: Texture | null } | null;
+type Bounds = { low: number[]; high: number[] };
 type MeshInput = { key: Mesh; poseSnapshot: RadianceInputSnapshot; surfaceSnapshot: RadianceInputSnapshot;
     emissionSnapshot: RadianceInputSnapshot; geometryVersion: object; attributesVersion: object;
-    triangles: Float32Array; emitters: number; low: number[]; high: number[] };
+    triangles: Float32Array; emitters: number; emitterRanges: Array<[number, number]>; emitterBounds?: Bounds };
+
+function emptyBounds(): Bounds { return { low: [Infinity, Infinity, Infinity], high: [-Infinity, -Infinity, -Infinity] }; }
+
+function measureEmitterBounds(chunk: MeshInput): Bounds {
+    const bounds = emptyBounds();
+    for (const [start, end] of chunk.emitterRanges) {
+        for (let tri = start; tri < end; tri += RADIANCE_TRIANGLE_STRIDE) {
+            for (let axis = 0; axis < 3; axis++) {
+                const offset = tri + axis;
+                const a = chunk.triangles[offset], b = chunk.triangles[offset + 4], c = chunk.triangles[offset + 8];
+                bounds.low[axis] = Math.min(bounds.low[axis], a, b, c);
+                bounds.high[axis] = Math.max(bounds.high[axis], a, b, c);
+            }
+        }
+    }
+    return bounds;
+}
 
 // Range-independent scene input. One owner may serve several RC volumes in the same graph.
 export class LuminousRadianceSceneSource {
@@ -40,8 +59,7 @@ export class LuminousRadianceSceneSource {
     private textureRevision = -1;
     private readonly textures = new LuminousRadianceTextures();
     private readonly triangleBudget: number;
-    private emitterLow = [Infinity, Infinity, Infinity];
-    private emitterHigh = [-Infinity, -Infinity, -Infinity];
+    private emitterBounds?: Bounds;
 
     constructor(private readonly scene: Scene, private readonly readEmission: RadianceEmissionReader,
         private readonly acceptsOccluder: (material: Material) => boolean = () => true,
@@ -58,8 +76,23 @@ export class LuminousRadianceSceneSource {
     public get emissionTextureRevision(): number { return this.textureRevision; }
 
     public getVolume(range: number): { min: number[]; size: number } {
-        const size = this.emitterTriangles ? Math.max(...this.emitterHigh.map((value, axis) => value - this.emitterLow[axis])) + range * 2 : range * 2;
-        return { size, min: this.emitterLow.map((value, axis) => this.emitterTriangles ? (value + this.emitterHigh[axis] - size) / 2 : -range) };
+        if (!this.emitterTriangles) return { size: range * 2, min: [-range, -range, -range] };
+        // Only Luminous requests an emitter-centered volume. GI and sky already own their bounds.
+        if (!this.emitterBounds) {
+            const bounds = emptyBounds();
+            for (const chunk of this.chunks) {
+                if (!chunk.emitters) continue;
+                const part = chunk.emitterBounds ??= measureEmitterBounds(chunk);
+                for (let axis = 0; axis < 3; axis++) {
+                    bounds.low[axis] = Math.min(bounds.low[axis], part.low[axis]);
+                    bounds.high[axis] = Math.max(bounds.high[axis], part.high[axis]);
+                }
+            }
+            this.emitterBounds = bounds;
+        }
+        const { low, high } = this.emitterBounds;
+        const size = Math.max(...high.map((value, axis) => value - low[axis])) + range * 2;
+        return { size, min: low.map((value, axis) => (value + high[axis] - size) / 2) };
     }
 
     public update(): void {
@@ -68,8 +101,6 @@ export class LuminousRadianceSceneSource {
         const readColor = this.readReflectance ?? this.readEmission;
         const colorScale = this.readReflectance ? 1 : 8;
         const chunks: MeshInput[] = [];
-        const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
-        let emitters = 0;
         try {
             // Count eligible surfaces before skinning or packing. A rejected scene must not allocate
             // oversized geometry again each frame, or warm emission textures it cannot use.
@@ -96,20 +127,25 @@ export class LuminousRadianceSceneSource {
                 const pose = this.geometry.readPose(mesh), positions = pose.positions;
                 if (!positions) continue;
                 const world = mesh.computeWorldMatrix();
+                // Multiple PMX materials on this mesh can sample the same complete UV stream.
+                const uvChannels: Array<FloatArray | null | undefined> = [];
                 const surfaces = opaqueSurfaces.map(({ indexStart, indexCount, material }) => {
                     const emission = readColor(mesh, material), texture = emission?.texture;
-                    const uvs = texture ? mesh.getVerticesData(texture.coordinatesIndex === 1 ? VertexBuffer.UV2Kind : VertexBuffer.UVKind) : null;
-                    return { indexStart, indexCount, emission, uvs,
+                    const uvChannel = texture ? (texture.coordinatesIndex === 1 ? 1 : 0) : -1;
+                    if (uvChannel >= 0 && uvChannels[uvChannel] === undefined) {
+                        uvChannels[uvChannel] = mesh.getVerticesData(uvChannel === 1 ? VertexBuffer.UV2Kind : VertexBuffer.UVKind);
+                    }
+                    return { indexStart, indexCount, emission, uvChannel, uvs: uvChannels[uvChannel],
                         textureSource: texture ? this.textures.source(texture) : -1, matrix: texture?.getTextureMatrix().m,
                         wrap: texture ? texture.wrapU + texture.wrapV * 4 : 0 };
                 });
                 const metadata = surfaces.flatMap(surface => [surface.indexStart, surface.indexCount,
                     surface.emission ? 1 : 0,
-                    surface.textureSource, surface.wrap, ...(surface.matrix ?? [])]);
+                    surface.textureSource, surface.wrap, surface.uvChannel, ...(surface.matrix ?? [])]);
                 const emissionValues = surfaces.flatMap(surface => [surface.emission?.r ?? 0, surface.emission?.g ?? 0, surface.emission?.b ?? 0]);
                 if (!emissionValues.every(Number.isFinite)) throw new Error("3D RC emission contains invalid colors");
                 const poseParts = [pose.signature, world.m];
-                const surfaceParts = [indices, metadata, ...surfaces.map(surface => surface.uvs ?? [])];
+                const surfaceParts = [indices, metadata, uvChannels[0] ?? [], uvChannels[1] ?? []];
                 const previous = this.meshInputs.get(mesh);
                 const sameSurfaces = previous?.surfaceSnapshot.matches(surfaceParts);
                 const sameAttributes = sameSurfaces && previous?.emissionSnapshot.matches([emissionValues]);
@@ -134,25 +170,22 @@ export class LuminousRadianceSceneSource {
                 const poseOnly = sameAttributes ? previous : undefined;
                 const values = poseOnly?.triangles.slice()
                     ?? new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);
-                const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
+                const emitterRanges: Array<[number, number]> = [];
                 let emitters = 0, writeOffset = 0;
                 const transformed = this.geometry.readWorldPositions(mesh, pose, world);
                 if (!transformed) continue;
                 for (const surface of surfaces) {
+                    const surfaceStart = writeOffset;
                     const { emission, uvs, textureSource, wrap, matrix: textureMatrix } = surface;
                     const r = (emission?.r ?? 0) * colorScale, g = (emission?.g ?? 0) * colorScale, b = (emission?.b ?? 0) * colorScale;
                     for (let index = surface.indexStart; index < surface.indexStart + surface.indexCount; index += 3) {
                         for (let corner = 0; corner < 3; corner++) {
                             const vertex = indices[index + corner], offset = vertex * 3;
-                            for (let axis = 0; axis < 3; axis++) {
-                                const value = transformed[offset + axis];
-                                if (!Number.isFinite(value)) throw new Error("3D RC geometry contains invalid vertices");
-                                values[writeOffset++] = value;
-                                if (emission) { low[axis] = Math.min(low[axis], value); high[axis] = Math.max(high[axis], value); }
-                            }
-                            writeOffset++; // Padding is zero in both the new and copied records.
+                            const x = transformed[offset], y = transformed[offset + 1], z = transformed[offset + 2];
+                            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) throw new Error("3D RC geometry contains invalid vertices");
+                            values[writeOffset] = x; values[writeOffset + 1] = y; values[writeOffset + 2] = z;
+                            writeOffset += 4; // Padding is zero in both the new and copied records.
                         }
-                        if (emission) emitters++;
                         if (poseOnly) { writeOffset += RADIANCE_TRIANGLE_STRIDE - 12; continue; }
                         values[writeOffset++] = r; values[writeOffset++] = g; values[writeOffset++] = b; values[writeOffset++] = 0;
                         if (textureMatrix) {
@@ -168,26 +201,24 @@ export class LuminousRadianceSceneSource {
                         } else writeOffset += 6;
                         values[writeOffset++] = textureSource; values[writeOffset++] = wrap;
                     }
+                    if (emission) {
+                        emitterRanges.push([surfaceStart, writeOffset]);
+                        emitters += (writeOffset - surfaceStart) / RADIANCE_TRIANGLE_STRIDE;
+                    }
                 }
                 const chunk = { key: mesh, poseSnapshot: new RadianceInputSnapshot(poseParts),
                     surfaceSnapshot: sameSurfaces && previous ? previous.surfaceSnapshot : new RadianceInputSnapshot(surfaceParts),
                     emissionSnapshot: poseOnly?.emissionSnapshot ?? new RadianceInputSnapshot([emissionValues]),
-                    geometryVersion: {}, attributesVersion: poseOnly?.attributesVersion ?? {}, triangles: values, emitters, low, high };
+                    geometryVersion: {}, attributesVersion: poseOnly?.attributesVersion ?? {}, triangles: values, emitters, emitterRanges };
                 this.meshInputs.set(mesh, chunk); chunks.push(chunk);
-            }
-            for (const chunk of chunks) {
-                emitters += chunk.emitters;
-                for (let axis = 0; axis < 3; axis++) { low[axis] = Math.min(low[axis], chunk.low[axis]); high[axis] = Math.max(high[axis], chunk.high[axis]); }
             }
             this.error = null;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             if (this.error !== message) logWarn("render", "luminous radiance geometry rejected; illumination cleared", { message });
             this.error = message;
-            chunks.length = 0; emitters = 0;
+            chunks.length = 0;
         }
-        this.emitterTriangles = emitters;
-        this.emitterLow = low; this.emitterHigh = high;
         if (this.textureRevision !== this.textures.revision) {
             if (this.textures.pixels.byteLength > this.emissionCapacity) {
                 this.emissionBuffer.dispose(); this.emissionCapacity = this.textures.pixels.byteLength;
@@ -197,6 +228,8 @@ export class LuminousRadianceSceneSource {
         }
         if (chunks.length === this.chunks.length && chunks.every((chunk, index) => chunk === this.chunks[index]) && this.updates) return;
         this.chunks = chunks;
+        this.emitterTriangles = chunks.reduce((count, chunk) => count + chunk.emitters, 0);
+        this.emitterBounds = undefined;
         const changes = this.bvh.update(chunks);
         if (changes.nodes.length > 0) this.geometryRevision++;
         if (this.bvh.triangles.byteLength > this.triangleCapacity) {

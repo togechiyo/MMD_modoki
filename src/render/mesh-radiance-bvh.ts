@@ -2,7 +2,7 @@ import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh, 
 
 // geometryVersion certifies all fields except RGB; attributesVersion certifies all except position XYZ.
 type Input = { key: object; triangles: Float32Array; geometryVersion?: object; attributesVersion?: object };
-type Entry = Input & { bvh: TriangleRadianceBvh; triangleOffset: number; nodeOffset: number; escape: number };
+type Entry = Input & { bvh: TriangleRadianceBvh; triangleOffset: number; nodeOffset: number };
 export type RadianceBufferRange = { byteOffset: number; data: Float32Array };
 type Changes = { triangles: RadianceBufferRange[]; nodes: RadianceBufferRange[] };
 const NODE_STRIDE = 12;
@@ -13,6 +13,8 @@ export class MeshRadianceBvh {
     public nodes = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0]);
     public triangles = new Float32Array(RADIANCE_TRIANGLE_STRIDE);
     public triangleCount = 0;
+    /** Changes whenever triangle IDs or threaded traversal order may have been reassigned. */
+    public layoutRevision = 0;
     public changedMin = [Infinity, Infinity, Infinity];
     public changedMax = [-Infinity, -Infinity, -Infinity];
     private entries: Entry[] = [];
@@ -38,7 +40,7 @@ export class MeshRadianceBvh {
                     if (old && input.geometryVersion && input.geometryVersion === old.geometryVersion) bvh.updateEmission(input.triangles);
                     else bvh.update(input.triangles);
                 }
-                return { ...input, bvh, triangleOffset: 0, nodeOffset: 0, escape: -1 };
+                return { ...input, bvh, triangleOffset: 0, nodeOffset: 0 };
             });
             this.topCount = Math.max(0, this.entries.length - 1);
             let triangleOffset = 0, nodeOffset = this.topCount;
@@ -75,23 +77,29 @@ export class MeshRadianceBvh {
             // Emission still dirties contact lighting inside these bounds, but cannot move a tree node.
             if (!rebuild && !refitted.has(entry)) continue;
             const nodeOffset = entry.nodeOffset * NODE_STRIDE;
-            this.nodes.set(entry.bvh.nodes, nodeOffset);
-            for (let offset = nodeOffset; offset < nodeOffset + entry.bvh.nodes.length; offset += NODE_STRIDE) {
-                if (this.nodes[offset + 7]) this.nodes[offset + 3] += entry.triangleOffset;
-                else { this.nodes[offset + 3] += entry.nodeOffset; this.nodes[offset + 8] += entry.nodeOffset; }
-                const escape = this.nodes[offset + 9];
-                this.nodes[offset + 9] = escape < 0 ? entry.escape : escape + entry.nodeOffset;
+            const local = entry.bvh.nodes;
+            if (rebuild) {
+                this.nodes.set(local, nodeOffset);
+                for (let offset = nodeOffset; offset < nodeOffset + local.length; offset += NODE_STRIDE) {
+                    if (this.nodes[offset + 7]) this.nodes[offset + 3] += entry.triangleOffset;
+                    else { this.nodes[offset + 3] += entry.nodeOffset; this.nodes[offset + 8] += entry.nodeOffset; }
+                }
+            } else {
+                // A refit keeps the existing leaf starts, child links and cross-mesh escapes.
+                for (let offset = 0; offset < local.length; offset += NODE_STRIDE) {
+                    const target = nodeOffset + offset;
+                    for (let axis = 0; axis < 3; axis++) {
+                        this.nodes[target + axis] = local[offset + axis];
+                        this.nodes[target + 4 + axis] = local[offset + 4 + axis];
+                    }
+                }
             }
             changes.nodes.push(this.range(this.nodes, nodeOffset, entry.bvh.nodes.length));
         }
         if (rebuild && this.topCount) this.buildTop();
         if (rebuild) {
-            if (count) {
-                threadRadianceBvh(this.nodes);
-                // Refit copies local BLAS nodes again. Retain the outer continuation for
-                // every local -1 escape, including the complete terminal path of a BLAS.
-                for (const entry of this.entries) entry.escape = this.nodes[entry.nodeOffset * NODE_STRIDE + 9];
-            } else this.nodes[9] = -1;
+            if (count) threadRadianceBvh(this.nodes);
+            else this.nodes[9] = -1;
         }
         if ((rebuild || refitted.size) && this.topCount) {
             for (let node = this.topCount - 1; node >= 0; node--) {
@@ -103,7 +111,10 @@ export class MeshRadianceBvh {
             }
             changes.nodes.unshift(this.range(this.nodes, 0, this.topCount * NODE_STRIDE));
         }
-        if (rebuild) return { triangles: [this.range(this.triangles, 0, this.triangles.length)], nodes: [this.range(this.nodes, 0, this.nodes.length)] };
+        if (rebuild) {
+            this.layoutRevision++;
+            return { triangles: [this.range(this.triangles, 0, this.triangles.length)], nodes: [this.range(this.nodes, 0, this.nodes.length)] };
+        }
         return changes;
     }
 

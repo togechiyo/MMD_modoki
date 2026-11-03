@@ -4,6 +4,8 @@ import { Scene } from "@babylonjs/core/scene";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Material } from "@babylonjs/core/Materials/material";
+import { MultiMaterial } from "@babylonjs/core/Materials/multiMaterial";
+import { SubMesh } from "@babylonjs/core/Meshes/subMesh";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { Skeleton } from "@babylonjs/core/Bones/skeleton";
@@ -126,6 +128,35 @@ describe("RC separates emission and geometry input", () => {
         expect(Array.from(gi.bvh.triangles.subarray(12, 15))).toEqual([0.25, 0, 1]);
         expect(data.bvh.triangles[12]).toBe(8);
         gi.dispose(); data.dispose();
+    });
+    it("reads shared UVs once and preserves per-surface channel selection and black-emitter bounds", () => {
+        const { scene, mesh, data } = fixture();
+        mesh.setVerticesData(VertexBuffer.PositionKind, [0, 0, 0, 2, 0, 0, 0, 2, 0, 10, 0, 0, 12, 0, 0, 10, 2, 0]);
+        mesh.setVerticesData(VertexBuffer.UVKind, new Float32Array(12).fill(0.25));
+        const uv2 = new Float32Array(12).fill(0.75);
+        mesh.setVerticesData(VertexBuffer.UV2Kind, uv2); mesh.setIndices([0, 1, 2, 3, 4, 5]);
+        const first = new StandardMaterial("first", scene), second = new StandardMaterial("second", scene);
+        const multi = new MultiMaterial("multi", scene); multi.subMaterials = [first, second]; mesh.material = multi;
+        mesh.releaseSubMeshes(); new SubMesh(0, 0, 3, 0, 3, mesh); new SubMesh(1, 3, 3, 3, 3, mesh);
+        const a = new Texture(null, scene), b = new Texture(null, scene);
+        let secondEmits = true;
+        vi.spyOn(LuminousRadianceTextures.prototype, "source").mockReturnValue(0);
+        const source = new LuminousRadianceSceneSource(scene, (_mesh, material) =>
+            material === second && !secondEmits ? null : { r: 0, g: 0, b: 0, texture: material === first ? a : b });
+        const read = vi.spyOn(mesh, "getVerticesData");
+        source.update();
+        expect(read.mock.calls.filter(([kind]) => kind === VertexBuffer.UVKind)).toHaveLength(1);
+        expect(source.getVolume(1)).toEqual({ min: [-1, -6, -7], size: 14 });
+
+        b.coordinatesIndex = 1; source.update();
+        expect(source.bvh.triangles[16]).toBe(0.25); expect(source.bvh.triangles[24 + 16]).toBe(0.75);
+        uv2[6] = 0.5; source.update();
+        expect(source.bvh.triangles[24 + 16]).toBe(0.5);
+        secondEmits = false; source.update();
+        expect(source.emitterTriangles).toBe(1); expect(source.getVolume(1)).toEqual({ min: [-1, -1, -2], size: 4 });
+        mesh.position.x = 3; scene.incrementRenderId(); source.update();
+        expect(source.getVolume(1)).toEqual({ min: [2, -1, -2], size: 4 });
+        source.dispose(); data.dispose();
     });
     it("invalidates geometric candidates for moved or removed surfaces while retaining them across RGB edits", () => {
         const { scene, mesh, data } = fixture();

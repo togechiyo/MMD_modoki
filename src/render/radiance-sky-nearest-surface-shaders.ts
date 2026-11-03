@@ -1,13 +1,14 @@
 // Store two local geometry candidates per probe. This bounded candidate set is a
 // connection guard for field interpolation, not a general visibility solution.
 export const SKY_NEAREST_SURFACE_WGSL = `
-struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f };
+struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, dirtyMin: vec4f, dirtyMax: vec4f };
 struct Triangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f, uvAB: vec4f, uvSource: vec4f };
 struct Node { low: vec4f, high: vec4f, info: vec4f };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> triangles: array<Triangle>;
 @group(0) @binding(2) var<storage, read> nodes: array<Node>;
 @group(0) @binding(3) var nearestSurface: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(4) var<storage, read_write> candidates: array<vec2u>;
 
 fn skyPointSegmentDistanceSquared(point: vec3f, a: vec3f, b: vec3f) -> f32 {
     let edge = b - a; let lengthSquared = dot(edge, edge);
@@ -72,14 +73,37 @@ fn skyNearestTriangles(point: vec3f, radiusSquared: f32) -> vec3f {
     return vec3f(vec2f(ids), 1.0);
 }
 
+// Two distinct triangles provide an upper bound on the second-nearest distance.
+// Evaluate both in the *current* pose; the normal search still selects both IDs
+// in its original order, including equal-distance ties.
+fn skySearchRadius(point: vec3f, radiusSquared: f32, ids: vec2u) -> f32 {
+    let count = min(u32(params.shape.w), arrayLength(&triangles));
+    if (ids.x == ids.y || any(ids == vec2u(0u)) || any(ids > vec2u(count))) { return radiusSquared; }
+    let a = triangles[ids.x - 1u]; let b = triangles[ids.y - 1u];
+    let da = skyPointTriangleDistanceSquared(point, a.a.xyz, a.b.xyz, a.c.xyz);
+    let db = skyPointTriangleDistanceSquared(point, b.a.xyz, b.b.xyz, b.c.xyz);
+    if (!(da >= 0.0 && db >= 0.0)) { return radiusSquared; }
+    return min(radiusSquared, max(da, db) + radiusSquared * 0.00001);
+}
+
 @compute @workgroup_size(4, 4, 4)
 fn main(@builtin(global_invocation_id) id: vec3u) {
     let grid = u32(params.shape.x);
     if (any(id >= vec3u(grid))) { return; }
     let cellSize = params.volumeSize.x / f32(grid);
     let position = params.volumeMin.xyz + (vec3f(id) + 0.5) * cellSize;
+    let index = (id.z * grid + id.y) * grid + id.x;
+    var radiusSquared = 3.0 * cellSize * cellSize;
+    // Only triangles within sqrt(3) cell widths can enter the candidate pair.
+    // Two cells conservatively cover that radius around both the old and new mesh bounds.
+    if (params.dirtyMin.w > 0.5) {
+        let margin = vec3f(2.0 * cellSize);
+        if (any(position < params.dirtyMin.xyz - margin) || any(position > params.dirtyMax.xyz + margin)) { return; }
+        radiusSquared = skySearchRadius(position, radiusSquared, candidates[index]);
+    }
     // Any segment from a trilinear receiver to one of its eight probes fits in this radius.
-    let nearest = skyNearestTriangles(position, 3.0 * cellSize * cellSize);
+    let nearest = skyNearestTriangles(position, radiusSquared);
+    candidates[index] = vec2u(nearest.xy);
     // B distinguishes a valid empty candidate set from an invalid traversal.
     textureStore(nearestSurface, vec2i(i32(id.x), i32(id.z * grid + id.y)), vec4f(nearest, 0.0));
 }

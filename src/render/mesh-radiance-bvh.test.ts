@@ -67,6 +67,26 @@ function verifyTree(bvh: MeshRadianceBvh, inputs: Float32Array[]): void {
 }
 
 describe("mesh radiance acceleration updates", () => {
+    it("changes the layout revision only after a successful repack", () => {
+        const actor = { key: {}, triangles: geometry(17), attributesVersion: {} };
+        const stage = { key: {}, triangles: geometry(9, 10) }, bvh = new MeshRadianceBvh();
+        bvh.update([stage, actor]);
+        const first = bvh.layoutRevision, packed = bvh.triangles;
+        actor.triangles = actor.triangles.slice(); actor.triangles[0] += 30;
+        bvh.update([stage, actor]);
+        expect(bvh.layoutRevision).toBe(first); expect(bvh.triangles).toBe(packed);
+        const invalid = { key: {}, triangles: new Float32Array(STRIDE).fill(Infinity) };
+        expect(() => bvh.update([stage, actor, invalid])).toThrow();
+        expect(bvh.layoutRevision).toBe(first); expect(bvh.triangles).toBe(packed);
+        bvh.update([actor, stage]);
+        expect(bvh.layoutRevision).toBe(first + 1); expect(bvh.triangles).not.toBe(packed);
+        verifyTree(bvh, [actor.triangles, stage.triangles]);
+        bvh.update([]);
+        expect(bvh.layoutRevision).toBe(first + 2);
+        bvh.update([]);
+        expect(bvh.layoutRevision).toBe(first + 2);
+    });
+
     it("keeps cross-mesh escapes valid when packed order differs from tree order and one BLAS is refitted", () => {
         const right = { key: {}, triangles: geometry(17, 300) };
         const left = { key: {}, triangles: geometry(33, -300) };

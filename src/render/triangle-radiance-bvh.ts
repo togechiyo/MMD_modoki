@@ -51,15 +51,7 @@ export class TriangleRadianceBvh {
                 }
             }
         }
-        for (let index = 0; index < this.triangleCount; index++) {
-            const source = this.order[index] * stride, target = index * stride;
-            for (let vertex = 0; vertex < 12; vertex += 4) {
-                this.triangles[target + vertex] = input[source + vertex];
-                this.triangles[target + vertex + 1] = input[source + vertex + 1];
-                this.triangles[target + vertex + 2] = input[source + vertex + 2];
-            }
-        }
-        this.refit();
+        this.refit(input);
     }
 
     public update(input: Float32Array): void {
@@ -108,24 +100,40 @@ export class TriangleRadianceBvh {
         this.refit();
     }
 
-    private refit(): void {
+    private refit(positions?: Float32Array): void {
         const count = this.triangleCount, stride = RADIANCE_TRIANGLE_STRIDE;
-        for (let index = this.nodes.length / 12 - 1; index >= 0; index--) {
-            const base = index * 12, first = this.nodes[base + 3], leafCount = this.nodes[base + 7];
-            for (let axis = 0; axis < 3; axis++) {
-                let low = Infinity, high = -Infinity;
-                if (leafCount) {
-                    for (let triangle = first; triangle < first + leafCount; triangle++) {
-                        const offset = triangle * stride + axis;
-                        const a = this.triangles[offset], b = this.triangles[offset + 4], c = this.triangles[offset + 8];
-                        low = Math.min(low, a, b, c); high = Math.max(high, a, b, c);
+        const nodes = this.nodes, sorted = this.triangles, data = positions ?? sorted;
+        for (let base = nodes.length - 12; base >= 0; base -= 12) {
+            const first = nodes[base + 3], leafCount = nodes[base + 7];
+            if (leafCount) {
+                // The sorted range belongs to exactly one leaf. Copy the new pose
+                // and accumulate its bounds while those coordinates are in registers.
+                let minX = Infinity, minY = Infinity, minZ = Infinity;
+                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+                for (let triangle = first; triangle < first + leafCount; triangle++) {
+                    const target = triangle * stride, source = positions ? this.order[triangle] * stride : target;
+                    const ax = data[source], ay = data[source + 1], az = data[source + 2];
+                    const bx = data[source + 4], by = data[source + 5], bz = data[source + 6];
+                    const cx = data[source + 8], cy = data[source + 9], cz = data[source + 10];
+                    if (positions) {
+                        sorted[target] = ax; sorted[target + 1] = ay; sorted[target + 2] = az;
+                        sorted[target + 4] = bx; sorted[target + 5] = by; sorted[target + 6] = bz;
+                        sorted[target + 8] = cx; sorted[target + 9] = cy; sorted[target + 10] = cz;
                     }
-                } else if (count) {
-                    const right = this.nodes[base + 8];
-                    low = Math.min(this.nodes[first * 12 + axis], this.nodes[right * 12 + axis]);
-                    high = Math.max(this.nodes[first * 12 + 4 + axis], this.nodes[right * 12 + 4 + axis]);
-                } else { low = 0; high = 0; }
-                this.nodes[base + axis] = low - 0.0001; this.nodes[base + 4 + axis] = high + 0.0001;
+                    minX = Math.min(minX, ax, bx, cx); maxX = Math.max(maxX, ax, bx, cx);
+                    minY = Math.min(minY, ay, by, cy); maxY = Math.max(maxY, ay, by, cy);
+                    minZ = Math.min(minZ, az, bz, cz); maxZ = Math.max(maxZ, az, bz, cz);
+                }
+                nodes[base] = minX - 0.0001; nodes[base + 4] = maxX + 0.0001;
+                nodes[base + 1] = minY - 0.0001; nodes[base + 5] = maxY + 0.0001;
+                nodes[base + 2] = minZ - 0.0001; nodes[base + 6] = maxZ + 0.0001;
+                continue;
+            }
+            const left = first * 12, right = nodes[base + 8] * 12;
+            for (let axis = 0; axis < 3; axis++) {
+                const low = count ? Math.min(nodes[left + axis], nodes[right + axis]) : 0;
+                const high = count ? Math.max(nodes[left + 4 + axis], nodes[right + 4 + axis]) : 0;
+                nodes[base + axis] = low - 0.0001; nodes[base + 4 + axis] = high + 0.0001;
             }
         }
     }

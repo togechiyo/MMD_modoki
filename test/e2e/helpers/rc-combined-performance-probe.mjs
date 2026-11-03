@@ -79,7 +79,26 @@ export async function createRcPlaybackFixture() {
   await scene.whenReadyAsync();
   return { moving, staticTriangles: stage.getTotalIndices() / 3 };
 }
+export async function prepareAliciaPlaybackStage() {
+  const { scene } = context();
+  const stage = CreateGround("rc-alicia-playback-stage", { width: 32, height: 32, subdivisions: 96 }, scene);
+  stage.material = scene.materials.find(material => material.name === "GI Receiver");
+  if (!stage.material) throw new Error("Fixture floor material missing");
+  stage.position.y = -.08;
+  await scene.whenReadyAsync();
+  const skinned = scene.meshes.filter(mesh => mesh.skeleton && mesh.getTotalVertices() > 0);
+  return { model: "Alicia_solid.pmx", motion: "2分ループステップ20.vmd", staticTriangles: stage.getTotalIndices() / 3,
+    skinnedMeshes: skinned.map(mesh => ({ name: mesh.name, vertices: mesh.getTotalVertices(), triangles: mesh.getTotalIndices() / 3 })) };
+}
 export function setCombinedReferencePose(frame) { manager.setAutoRenderEnabled(false); pose(frame); return combinedPerformanceState(); }
+export async function readPlaybackNearestAtlas(effect) {
+  const texture = context()[effect]?.field?.nearestSurfaceField;
+  const data = await texture?.readPixels();
+  if (!(data instanceof Float32Array)) throw new Error(`Missing RGBA32F nearest surface for ${effect}`);
+  const { width, height } = texture.getSize();
+  if (data.length !== width * height * 4) throw new Error("Incomplete nearest-surface atlas");
+  return Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+}
 export async function prepareCombinedPerformance({ width = 1280, height = 720 } = {}) {
   const { engine } = context(); manager.setAutoRenderEnabled(false); manager.setRenderFpsLimit(0); engine.setSize(width, height); pose(0);
   await manager.waitForPostEffectBackendReadyForCapture();
@@ -121,6 +140,7 @@ export async function measureCombinedPerformance({ moving = false, warmFrames = 
   });
   timed(sky, "prepareFrame", "skyController"); timed(gi, "prepareFrame", "giController"); timed(post, "execute", "postExecute");
   for (const [name, field] of [["skyField", sky?.field], ["giField", gi?.field]]) timed(field, "execute", name);
+  for (const source of sources.keys()) timed(source.geometry, "readWorldPositions", "worldPositions");
   wrap(LuminousRadianceSceneSource.prototype, "update", original => function (...args) {
     const previous = activeSource, name = sourceNames.get(this) ?? "other", start = performance.now(), updates = this.updates;
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- Attribute nested deformation/upload work to its calling source.
@@ -144,6 +164,8 @@ export async function measureCombinedPerformance({ moving = false, warmFrames = 
   wrap(StorageBuffer.prototype, "update", original => function (data, offset, length) {
     if (activeSource && [activeSource.triangleBuffer, activeSource.nodeBuffer, activeSource.emissionBuffer].includes(this)) {
       add("bufferUploads"); add("uploadedBytes", length ?? data.byteLength);
+      const start = performance.now();
+      try { return original.call(this, data, offset, length); } finally { time("uploadSubmit", performance.now() - start); }
     }
     return original.call(this, data, offset, length);
   });

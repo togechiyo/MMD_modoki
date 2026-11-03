@@ -9,7 +9,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Scene } from "@babylonjs/core/scene";
 import { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
-import { SKY_NEAREST_SURFACE_WGSL } from "./radiance-sky-nearest-surface-shaders";
+import { RadianceNearestSurfaceTask } from "./radiance-nearest-surface-task";
 import { RC_DIFFUSE_GI_CASCADE_WGSL } from "./rc-diffuse-gi-shaders";
 import { RC_DIFFUSE_GI_GRID, RC_DIFFUSE_GI_IRRADIANCE_WGSL } from "./rc-diffuse-gi-irradiance";
 import { createRcDiffuseGiIntervals } from "./rc-diffuse-gi-intervals";
@@ -30,9 +30,7 @@ export class RcDiffuseGiField {
     private volume: Volume;
     private intervals: ReturnType<typeof createRcDiffuseGiIntervals>;
     private light: RcDiffuseGiLight = { directionToLight: [0, 1, 0], color: [0, 0, 0] };
-    private nearestTask: FrameGraphComputeShaderTask;
-    private nearestGeometryRevision = -1;
-    private nearestVolumeKey = "";
+    private readonly nearestTask: RadianceNearestSurfaceTask;
     private disposed = false;
 
     constructor(scene: Scene, options: { volume: Volume; acceptsMaterial?: (material: Material) => boolean }) {
@@ -103,28 +101,9 @@ export class RcDiffuseGiField {
             });
             const nearest = allocate("rcDiffuseGiNearestSurface", grid, grid * grid, Constants.TEXTURETYPE_FLOAT);
             this.nearestSurfaceField = nearest.texture;
-            const guard = new FrameGraphComputeShaderTask("rcDiffuseGiNearestSurface", this.graph,
-                { computeSource: SKY_NEAREST_SURFACE_WGSL }, { bindingsMapping: {
-                    params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 },
-                    nodes: { group: 0, binding: 2 }, nearestSurface: { group: 0, binding: 3 },
-                } });
+            const guard = new RadianceNearestSurfaceTask("rcDiffuseGiNearestSurface", this.graph, this.source, grid, nearest);
             this.nearestTask = guard;
             this.tasks.push(guard); this.graph.addTask(guard);
-            const params = guard.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4 });
-            guard.dispatchSize = new Vector3(Math.ceil(grid / 4), Math.ceil(grid / 4), Math.ceil(grid / 4));
-            guard.dependencies = new Set([nearest.handle]);
-            const bind = () => {
-                guard.setStorageBuffer("triangles", this.source.triangleBuffer); guard.setStorageBuffer("nodes", this.source.nodeBuffer);
-                guard.setInternalTexture("nearestSurface", nearest.internal);
-            };
-            guard.onTexturesAllocatedObservable.add(bind);
-            guard.execute = () => {
-                bind();
-                const volume = this.volume;
-                params.updateFloat4("volumeMin", ...volume.min, 0);
-                params.updateFloat4("volumeSize", volume.size, volume.size, volume.size, 0);
-                params.updateFloat4("shape", grid, 0, 0, this.source.bvh.triangleCount);
-            };
         } catch (error) { this.dispose(); throw error; }
     }
 
@@ -135,17 +114,10 @@ export class RcDiffuseGiField {
 
     public execute(light: RcDiffuseGiLight, updateField = true): number {
         if (!updateField || this.disposed) return 0;
-        const volumeKey = `${this.volume.min.join(",")}:${this.volume.size}`;
-        const updateNearest = this.nearestGeometryRevision !== this.source.geometryRevision || this.nearestVolumeKey !== volumeKey;
-        // The disabled compute pass is a no-op. Its imported RawTexture remains owned
-        // by this field, so light/albedo edits can reuse the same triangle candidates.
-        this.nearestTask.disabled = !updateNearest;
+        this.nearestTask.prepareVolume(this.volume);
         this.light = light; this.graph.execute();
-        if (updateNearest) {
-            this.nearestGeometryRevision = this.source.geometryRevision;
-            this.nearestVolumeKey = volumeKey;
-        }
-        return this.tasks.length - (updateNearest ? 0 : 1);
+        this.nearestTask.markSubmitted();
+        return this.tasks.length - (this.nearestTask.disabled ? 1 : 0);
     }
 
     public dispose(): void {

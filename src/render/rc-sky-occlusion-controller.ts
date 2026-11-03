@@ -1,4 +1,5 @@
 import type { Scene } from "@babylonjs/core/scene";
+import type { RcPrepareTiming } from "../diagnostics/active-meshes-performance";
 import type { Material } from "@babylonjs/core/Materials/material";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { logWarn } from "../app-logger";
@@ -122,7 +123,7 @@ export class RcSkyOcclusionController {
     }
 
     /** Called after all pose edits, before active-mesh evaluation and every camera/export draw. */
-    public prepareFrame(): void {
+    public prepareFrame(timing?: RcPrepareTiming): void {
         if (this.disposed) return;
         const settings = this.settings();
         if (!settings.enabled) {
@@ -155,13 +156,16 @@ export class RcSkyOcclusionController {
         if (this.frameId === frameId) return;
         try {
             for (const skeleton of new Set(this.scene.meshes.filter(mesh => mesh.isEnabled()).flatMap(mesh => mesh.skeleton ? [mesh.skeleton] : []))) skeleton.prepare(true);
-            field.source.update();
+            const sourceStart = timing ? performance.now() : 0;
+            try { field.source.update(); }
+            finally { timing?.recordSource(performance.now() - sourceStart); }
             if (field.source.error) throw new Error(field.source.error);
             if (!field.graph.isReady()) { this.view = null; this.status = "preparing"; return; }
             const volumeKey = JSON.stringify(volume);
             const update = field.source.revision !== this.sourceRevision || volumeKey !== this.volumeKey;
             const nearDistance = volume.size * 0.5;
             if (update) {
+                const submitStart = timing ? performance.now() : 0;
                 field.setVolume(volume);
                 const engine = this.scene.getEngine(), target = engine._currentRenderTarget;
                 const viewport = engine.currentViewport && { ...engine.currentViewport }, pass = engine.currentRenderPassId;
@@ -176,6 +180,7 @@ export class RcSkyOcclusionController {
                     if (target) engine.bindFramebuffer(target);
                     engine.currentRenderPassId = pass;
                     if (viewport) engine.setViewport(viewport);
+                    timing?.recordFieldSubmit(performance.now() - submitStart);
                 }
                 this.sourceRevision = field.source.revision; this.volumeKey = volumeKey; this.fieldRevision++;
             }

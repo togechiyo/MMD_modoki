@@ -80,6 +80,22 @@ node scripts/show-app-log.mjs --latest-session --scope postfx --lines 200
 
 `sceneRenderCore` が重い場合は、次に `mmdBeforePhysics`、`mmdAfterPhysics`、`activeMeshesEvaluation`、`renderTargetsRender`、`frameGraphSceneColorRenderTarget`、`frameGraphLuminousMaskRenderTarget`、`cameraRender`、`drawPhase` を見る。
 
+### RC GI・天空遮蔽の準備時間
+
+10秒ごとの `frame performance sample` で、`isPlaying` と `rcLighting` を確認する。`masterEnabled` はFrameGraph全体のスイッチ。`skyEnabled` と `giEnabled` は記録時点のカードとキーを反映する。全体OFFでも個別カードのチェックは保持される。途中で切り替えた場合は、同じ設定のまま再生を続けた次の集計を見る。
+
+| `sections` の項目 | 含むCPU時間 |
+| --- | --- |
+| `activeMeshesEvaluation` | Babylonの描画対象メッシュ評価と、その前後の通知区間内の処理 |
+| `rcSkyOcclusionPrepare` / `rcDiffuseGiPrepare` | 各効果の `prepareFrame()` 全体。OFF判定の呼び出しも含む |
+| `activeMeshesEvaluationOther` | 評価全体から上の2効果の準備時間を引いた残り |
+| `rcSkyOcclusionSource` / `rcDiffuseGiSource` | 各準備のうち、形状の照合・変形・BVH更新・バッファ更新要求などの `source.update()` |
+| `rcSkyOcclusionFieldSubmit` / `rcDiffuseGiFieldSubmit` | 各準備のうち、更新が必要な光場の設定・実行要求・flush・描画ターゲットの復帰 |
+
+この8項目の `samples` は同じ完了済みメッシュ評価の回数。各評価で実行しなかった子処理は0 msとして集計する。`avgMs` は「天空遮蔽Prepare ＋ GIPrepare ＋ Other ≒ 評価全体」となり、最大約0.002 msの丸め差がある。`Source` と `FieldSubmit` は各 `Prepare` の内数。各項目の最大値が出る評価は異なり得るため、`maxMs` は合算しない。GPUがシェーダーを実行した時間は専用のタイムスタンプ計測で確認する。
+
+比較には再生開始後、設定を固定して20秒以上再生し、同一セッションの連続した再生中サンプルを使う。新しい項目が付くのはこの変更を含むアプリの記録から。[アリシアでの4条件テストと再現手順](./rc-alicia-dance-performance-2026-11-03.md)
+
 ### sceneInstrumentation
 
 Babylon 側の計測。

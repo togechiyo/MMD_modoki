@@ -354,6 +354,7 @@ import {
     normalizePerformanceLogMode,
     PerformanceProfiler,
 } from "./diagnostics/performance-profiler";
+import { ACTIVE_MESHES_PERFORMANCE_SECTIONS, ActiveMeshesPerformance } from "./diagnostics/active-meshes-performance";
 import {
     POST_EFFECT_BACKEND_STORAGE_KEY,
     readPostEffectBackendLocalStorage,
@@ -612,7 +613,7 @@ type FramePerformanceSection =
     | "mmdBeforePhysics"
     | "mmdAfterPhysics"
     | "sceneAnimations"
-    | "activeMeshesEvaluation"
+    | typeof ACTIVE_MESHES_PERFORMANCE_SECTIONS[number]
     | "renderTargetsRender"
     | "cameraRender"
     | "drawPhase"
@@ -640,7 +641,7 @@ const FRAME_PERFORMANCE_SECTIONS: readonly FramePerformanceSection[] = [
     "mmdBeforePhysics",
     "mmdAfterPhysics",
     "sceneAnimations",
-    "activeMeshesEvaluation",
+    ...ACTIVE_MESHES_PERFORMANCE_SECTIONS,
     "renderTargetsRender",
     "cameraRender",
     "drawPhase",
@@ -1913,6 +1914,7 @@ ${beforeFogAppendBlock}
     private nextFramePerformanceLogMs = performance.now() + MmdManager.FRAME_PERFORMANCE_LOG_INTERVAL_MS;
     private nextPhysicsChainDiagnosticsMs = 0;
     private readonly framePerformanceProfiler = new PerformanceProfiler(FRAME_PERFORMANCE_SECTIONS);
+    private readonly activeMeshesProfiler = this.framePerformanceLogEnabled ? new ActiveMeshesPerformance(this.framePerformanceProfiler) : null;
     private readonly framePerformancePhaseStartMs = new Map<FramePerformanceSection, number>();
     private readonly performanceHookedRuntimes = new WeakSet<object>();
     private ground: Mesh | null = null;
@@ -8444,8 +8446,12 @@ ${beforeFogAppendBlock}
             }
             this.enforceUniformModelEdgeWidthsBeforeRender();
             this.radianceSkyVisibilityLab?.prepareFrame();
-            this.rcSkyOcclusionController?.prepareFrame();
-            this.rcDiffuseGiController?.prepareFrame();
+            if (this.activeMeshesProfiler) {
+                this.activeMeshesProfiler.prepareLighting(this.rcSkyOcclusionController, this.rcDiffuseGiController);
+            } else {
+                this.rcSkyOcclusionController?.prepareFrame();
+                this.rcDiffuseGiController?.prepareFrame();
+            }
         });
 
         this.scene.onBeforeRenderObservable.add(() => {
@@ -8718,13 +8724,14 @@ ${beforeFogAppendBlock}
     }
 
     private installScenePerformancePhaseObservers(): void {
-        if (!this.framePerformanceLogEnabled) return;
+        const activeMeshes = this.activeMeshesProfiler;
+        if (!activeMeshes) return;
 
         this.scene.onBeforeAnimationsObservable.add(() => this.markFramePerformancePhase("sceneAnimations"));
         this.scene.onAfterAnimationsObservable.add(() => this.recordFramePerformancePhase("sceneAnimations"));
 
-        this.scene.onBeforeActiveMeshesEvaluationObservable.add(() => this.markFramePerformancePhase("activeMeshesEvaluation"));
-        this.scene.onAfterActiveMeshesEvaluationObservable.add(() => this.recordFramePerformancePhase("activeMeshesEvaluation"));
+        this.scene.onBeforeActiveMeshesEvaluationObservable.add(() => activeMeshes.begin());
+        this.scene.onAfterActiveMeshesEvaluationObservable.add(() => activeMeshes.finish());
 
         this.scene.onBeforeRenderTargetsRenderObservable.add(() => this.markFramePerformancePhase("renderTargetsRender"));
         this.scene.onAfterRenderTargetsRenderObservable.add(() => this.recordFramePerformancePhase("renderTargetsRender"));
@@ -8829,6 +8836,11 @@ ${beforeFogAppendBlock}
             physicsBackend: this.getPhysicsBackendLabel(),
             editor: this.getEditorPerformanceSnapshot(),
             sections: options.sections,
+            rcLighting: {
+                masterEnabled: this.frameGraphPostEffectsEnabledValue,
+                skyEnabled: this.getRcSkyOcclusionSettings().enabled,
+                giEnabled: this.getRcDiffuseGiSettings().enabled,
+            },
             sceneInstrumentation: this.getSceneInstrumentationSnapshot(),
             renderTargetDetails: this.getRenderTargetDetails(),
             renderTargets,

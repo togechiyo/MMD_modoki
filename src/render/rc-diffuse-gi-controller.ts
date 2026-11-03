@@ -1,4 +1,5 @@
 import type { Scene } from "@babylonjs/core/scene";
+import type { RcPrepareTiming } from "../diagnostics/active-meshes-performance";
 import type { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { readRcDiffuseGiLight } from "./rc-diffuse-gi-light";
 import type { Material } from "@babylonjs/core/Materials/material";
@@ -129,7 +130,7 @@ export class RcDiffuseGiController {
     }
 
     /** Called after all pose edits, before active-mesh evaluation and every camera/export draw. */
-    public prepareFrame(): void {
+    public prepareFrame(timing?: RcPrepareTiming): void {
         if (this.disposed) return;
         const settings = this.settings();
         if (!settings.enabled) {
@@ -165,12 +166,15 @@ export class RcDiffuseGiController {
                 this.view = null; this.status = "ready"; this.reason = "No direct light"; this.frameId = -1; return;
             }
             for (const skeleton of new Set(this.scene.meshes.filter(mesh => mesh.isEnabled()).flatMap(mesh => mesh.skeleton ? [mesh.skeleton] : []))) skeleton.prepare(true);
-            field.source.update();
+            const sourceStart = timing ? performance.now() : 0;
+            try { field.source.update(); }
+            finally { timing?.recordSource(performance.now() - sourceStart); }
             if (field.source.error) throw new Error(field.source.error);
             if (!field.source.ready || !field.graph.isReady()) { this.view = null; this.status = "preparing"; return; }
             const volumeKey = JSON.stringify(volume), lightKey = JSON.stringify(light);
             const update = field.source.revision !== this.sourceRevision || volumeKey !== this.volumeKey || lightKey !== this.lightKey;
             if (update) {
+                const submitStart = timing ? performance.now() : 0;
                 field.setVolume(volume);
                 const engine = this.scene.getEngine(), target = engine._currentRenderTarget;
                 const viewport = engine.currentViewport && { ...engine.currentViewport }, pass = engine.currentRenderPassId;
@@ -185,6 +189,7 @@ export class RcDiffuseGiController {
                     if (target) engine.bindFramebuffer(target);
                     engine.currentRenderPassId = pass;
                     if (viewport) engine.setViewport(viewport);
+                    timing?.recordFieldSubmit(performance.now() - submitStart);
                 }
                 this.sourceRevision = field.source.revision; this.volumeKey = volumeKey; this.lightKey = lightKey; this.fieldRevision++;
             }

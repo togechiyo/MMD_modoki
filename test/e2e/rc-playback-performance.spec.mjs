@@ -4,11 +4,13 @@ import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
 import { camera, difference, giVolume, initialState, numberControl, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
-import { setRcLightingEnabled } from "./helpers/rc-lighting-controls.mjs";
+import { closeRcLighting, openPostEffects, setRcLightingEnabled } from "./helpers/rc-lighting-controls.mjs";
+import { measurePlaybackAppLog } from "./helpers/rc-playback-app-log.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-diffuse-gi-stage/rc-diffuse-gi-red.pmx");
 const alicia = process.env.MMD_RC_PLAYBACK_ALICIA === "1";
+const appLog = process.env.MMD_RC_PLAYBACK_APP_LOG === "1";
 const character = resolve(root, "local-references/model/Alicia/MMD/Alicia_solid.pmx");
 const motion = resolve(root, "local-references/model/Alicia/MMD Motion/2分ループステップ20.vmd");
 const probeUrl = "/test/e2e/helpers/rc-combined-performance-probe.mjs";
@@ -41,7 +43,7 @@ if (process.env.MMD_RC_PLAYBACK_SINGLE_EFFECTS === "1") {
   cases.push({ id: "gi-only", gi: true, sky: false }, { id: "sky-only", gi: false, sky: true });
 }
 for (const setting of cases) {
-  const { gi, sky } = setting, id = alicia ? `alicia-${setting.id}` : setting.id;
+  const { gi, sky } = setting, id = `${alicia ? "alicia-" : ""}${setting.id}${appLog ? "-app-log" : ""}`;
   // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
   test(`RC normal playback: ${id}`, async ({}, testInfo) => {
     test.skip(alicia && (!existsSync(character) || !existsSync(motion)), "Optional Alicia PMX and bundled motion are not installed");
@@ -52,7 +54,11 @@ for (const setting of cases) {
     mkdirSync(directory, { recursive: true });
     try {
       const page = await app.app.firstWindow();
-      await page.addInitScript(() => {
+      await page.addInitScript(appLog => {
+        if (appLog) {
+          localStorage.setItem("mmd_modoki.framePerfLog", "summary");
+          return;
+        }
         const proto = window.GPUAdapter?.prototype;
         if (!proto) return;
         const request = proto.requestDevice;
@@ -61,19 +67,20 @@ for (const setting of cases) {
           if (this.features.has("timestamp-query")) features.add("timestamp-query");
           return request.call(this, { ...descriptor, requiredFeatures: [...features] });
         };
-      });
+      }, appLog);
       await page.reload();
       page.on("pageerror", error => report.errors.push(error.message));
       page.on("console", message => { if (message.type() === "error") report.consoleErrors.push(message.text()); });
       await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
       await page.evaluate(url => import(url).then(() => true), probeUrl);
       await initialState(page);
-      await page.evaluate(async volume => {
+      await page.evaluate(async ({ volume, appLog }) => {
         const state = window.mmdModokiE2e.exportProjectState();
         state.lighting.rcDiffuseGi.volume = volume;
         state.lighting.rcSkyOcclusion = { enabled: false, strength: .75, minimum: .2, volume };
+        if (appLog) { state.physics.enabled = true; state.lighting.shadowEnabled = true; }
         await window.mmdModokiE2e.importProjectState(state);
-      }, alicia ? { min: [-16, -4, -16], size: 32 } : giVolume);
+      }, { volume: alicia ? { min: [-16, -4, -16], size: 32 } : giVolume, appLog });
       await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixture);
       if (alicia) {
         await loadAliciaDance(app, page);
@@ -81,19 +88,45 @@ for (const setting of cases) {
         await page.locator("#info-model-select").selectOption("0");
         const category = await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().find(track => track.name === "光遮蔽板")?.category);
         expect(category).toBeTruthy();
-        for (const [frame, x] of [[0, 0], [60, -20], [300, 0]]) {
+        for (const [frame, x] of [[0, 0], [60, -20], [appLog ? 1800 : 300, 0]]) {
           await seek(page, frame); await selectTimelineTrack(page, category, "光遮蔽板");
           await numberControl(page, "tx", x); await page.locator("#btn-bone-keyframe").click();
         }
       }
       await seek(page, 0); report.camera = await camera(page, alicia ? { tx: 0, ty: 9, rx: -4, ry: 10, camDistance: 44 } : {});
-      await setRcLightingEnabled(page, "rcDiffuseGi", gi);
-      await setRcLightingEnabled(page, "rcSkyOcclusion", sky);
+      const masterOff = appLog && !gi && !sky;
+      await setRcLightingEnabled(page, "rcDiffuseGi", gi || masterOff);
+      await setRcLightingEnabled(page, "rcSkyOcclusion", sky || masterOff);
+      if (masterOff) {
+        await openPostEffects(page);
+        const master = page.locator("#btn-effect-toggle-framegraph");
+        await expect(master).toHaveAttribute("aria-pressed", "true");
+        await master.click(); await expect(master).toHaveAttribute("aria-pressed", "false");
+        await closeRcLighting(page);
+      }
       report.fixture = await invoke(page, alicia ? "prepareAliciaPlaybackStage" : "createRcPlaybackFixture");
       report.prepared = await invoke(page, "prepareCombinedPerformance", { width: 1280, height: 720 });
       expect(report.prepared.size).toEqual([1280, 720]);
+      if (appLog) {
+        report.sceneSettings = await page.evaluate(() => {
+          const state = window.mmdModokiE2e.exportProjectState();
+          return { physics: state.physics.enabled, shadow: state.lighting.shadowEnabled };
+        });
+        expect(report.sceneSettings).toEqual({ physics: true, shadow: true });
+      }
       const play = page.locator("#viewport-seek-play-toggle");
       await play.click();
+      if (appLog) {
+        // A complete 10-second summary must come from ordinary playback, before
+        // the separate benchmark instruments source updates or GPU timestamps.
+        report.appLog = await measurePlaybackAppLog(page, app.tempDir, {
+          masterEnabled: !masterOff, giEnabled: gi || masterOff, skyEnabled: sky || masterOff,
+        });
+        await play.click();
+        report.validation = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());
+        expect(report.validation.count).toBe(0); expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
+        return;
+      }
       report.measurement = await invoke(page, "measureCombinedPerformance", { warmFrames: 12, frames: 80, completionFrames: 0 });
       const { realtime } = report.measurement;
       expect(realtime.frames).toBe(80);

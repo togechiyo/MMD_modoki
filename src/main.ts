@@ -136,6 +136,10 @@ const configureAppLogging = (): void => {
   log.transports.file.level = isDev ? 'debug' : 'info';
   log.transports.file.maxSize = (isDev ? 20 : 5) * 1024 * 1024;
   log.transports.file.resolvePathFn = (variables) => {
+    // Long performance runs can rotate files. Keep automated sessions with their own user data.
+    if ((isE2eMode && process.env.MMD_MODOKI_E2E_USER_DATA_PATH) || (isSmokeMode && process.env.MMD_MODOKI_SMOKE_USER_DATA_PATH)) {
+      return path.join(app.getPath('userData'), 'logs', isDev ? 'dev' : '', log.transports.file.fileName);
+    }
     const baseLogDir = process.platform === 'darwin'
       ? path.join(variables.home, 'Library', 'Logs', APP_LOG_NAME)
       : path.join(variables.appData, APP_LOG_NAME, 'logs');

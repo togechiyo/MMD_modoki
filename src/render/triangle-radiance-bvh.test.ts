@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TriangleRadianceBvh, radianceTriangleBudget, MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE as STRIDE } from "./triangle-radiance-bvh";
+import { TriangleRadianceBvh, radianceTriangleBudget, MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE as STRIDE,
+    createRadianceIndexedPositions, materializeRadianceIndexedPositions } from "./triangle-radiance-bvh";
 
 function geometry(count: number, shift = 0): Float32Array {
     return new Float32Array(Array.from({ length: count }, (_, index) => {
@@ -33,6 +34,37 @@ function verifyEscapes(nodes: Float32Array): void {
 }
 
 describe("world triangle radiance BVH", () => {
+    it("reads indexed poses directly without changing sorted attributes, padded nodes or traversal order", () => {
+        const count = 21, input = geometry(count), actual = new TriangleRadianceBvh(), full = new TriangleRadianceBvh();
+        const indices = Uint32Array.from({ length: count * 3 }, (_, i) => count * 3 - 1 - i);
+        actual.update(input); full.update(input);
+        const attributes = input.slice(), originalNodes = actual.nodes, originalTriangles = actual.triangles;
+        for (const scale of [-1, 0.8, 1]) {
+            const positions = new Float32Array(count * 9), expected = input.slice();
+            for (let i = 0; i < count * 3; i++) {
+                const triangle = Math.floor(i / 3), target = triangle * STRIDE + i % 3 * 4, vertex = indices[i] * 3;
+                positions.set([input[target] * scale, input[target + 1] - i * scale, input[target + 2] + scale * 0.1], vertex);
+                expected.set(positions.subarray(vertex, vertex + 3), target);
+            }
+            const indexed = createRadianceIndexedPositions(positions, indices);
+            expect(materializeRadianceIndexedPositions(input, indexed)).toEqual(expected);
+            actual.updateIndexedPositions(indexed); full.update(expected);
+            expect(new Uint8Array(actual.triangles.buffer)).toEqual(new Uint8Array(full.triangles.buffer));
+            expect(new Uint8Array(actual.nodes.buffer)).toEqual(new Uint8Array(full.nodes.buffer));
+            expect(actual.nodes).toBe(originalNodes); expect(actual.triangles).toBe(originalTriangles);
+            expect(input).toEqual(attributes);
+        }
+        const before = actual.triangles.slice(), nodes = actual.nodes.slice();
+        for (const positions of [new Float32Array(9).fill(NaN), new Float32Array(9).fill(Infinity), new Float32Array(3)]) {
+            expect(() => actual.updateIndexedPositions(createRadianceIndexedPositions(positions, new Uint32Array([0, 1, 2])))).toThrow();
+        }
+        expect(() => createRadianceIndexedPositions(new Float32Array(9), new Uint32Array([0, 1]))).toThrow();
+        expect(() => createRadianceIndexedPositions(new Float32Array(9), new Uint32Array([0, 1, 20]))).toThrow();
+        const wrongCount = createRadianceIndexedPositions(new Float32Array(9), new Uint32Array([0, 1, 2]));
+        expect(() => actual.updateIndexedPositions(wrongCount)).toThrow();
+        expect(() => materializeRadianceIndexedPositions(input, wrongCount)).toThrow();
+        expect(actual.triangles).toEqual(before); expect(actual.nodes).toEqual(nodes);
+    });
     it("supports dense scenes within both enabled device limits and a bounded ceiling", () => {
         expect(radianceTriangleBudget(128 * 1024 * 1024, 256 * 1024 * 1024)).toBe(1000000);
         expect(radianceTriangleBudget(10 * STRIDE * 4 + 4, 1024)).toBe(10);

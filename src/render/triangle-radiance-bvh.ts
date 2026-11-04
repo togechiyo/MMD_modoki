@@ -2,6 +2,36 @@
 // 96 MB at this ceiling, below WebGPU's default 128 MiB storage binding limit.
 export const MAX_RADIANCE_TRIANGLES = 1000000;
 export const RADIANCE_TRIANGLE_STRIDE = 24;
+const validatedIndexedPositions = Symbol("validated RC indexed positions");
+/** Both arrays are immutable after validation. Indices follow the source triangle order. */
+export type RadianceIndexedPositions = {
+    readonly positions: Float32Array;
+    readonly indices: Uint32Array;
+    readonly [validatedIndexedPositions]: true;
+};
+
+/** Validate before publishing a chunk, so a rejected pose cannot partially change a BVH. */
+export function createRadianceIndexedPositions(positions: Float32Array, indices: Uint32Array): RadianceIndexedPositions {
+    if (indices.length % 3 !== 0) throw new Error("3D RC indexed position topology mismatch");
+    for (let index = 0; index < indices.length; index++) {
+        const vertex = indices[index] * 3;
+        if (!Number.isFinite(positions[vertex]) || !Number.isFinite(positions[vertex + 1]) || !Number.isFinite(positions[vertex + 2])) {
+            throw new Error("3D RC geometry contains non-finite values");
+        }
+    }
+    return { positions, indices, [validatedIndexedPositions]: true };
+}
+
+/** Used only when a cold/rebuilt tree needs complete records for its initial spatial sort. */
+export function materializeRadianceIndexedPositions(attributes: Float32Array, input: RadianceIndexedPositions): Float32Array {
+    if (input.indices.length * 8 !== attributes.length) throw new Error("3D RC indexed position topology mismatch");
+    const output = attributes.slice();
+    for (let index = 0; index < input.indices.length; index++) {
+        const source = input.indices[index] * 3, target = Math.floor(index / 3) * RADIANCE_TRIANGLE_STRIDE + index % 3 * 4;
+        output[target] = input.positions[source]; output[target + 1] = input.positions[source + 1]; output[target + 2] = input.positions[source + 2];
+    }
+    return output;
+}
 // Match the existing stack traversal: push left then right, so visit right first.
 // info.y is the node to visit after this subtree; -1 terminates the traversal.
 export function threadRadianceBvh(nodes: Float32Array, index = 0, escape = -1): void {
@@ -54,6 +84,12 @@ export class TriangleRadianceBvh {
         this.refit(input);
     }
 
+    /** Coordinates were validated when the immutable source chunk was published. Keep all attributes/order. */
+    public updateIndexedPositions(input: RadianceIndexedPositions): void {
+        if (input.indices.length !== this.triangleCount * 3) throw new Error("3D RC indexed position topology mismatch");
+        this.refit(undefined, input);
+    }
+
     public update(input: Float32Array): void {
         const stride = RADIANCE_TRIANGLE_STRIDE;
         const count = input.length / stride;
@@ -100,9 +136,9 @@ export class TriangleRadianceBvh {
         this.refit();
     }
 
-    private refit(positions?: Float32Array): void {
+    private refit(positions?: Float32Array, indexed?: RadianceIndexedPositions): void {
         const count = this.triangleCount, stride = RADIANCE_TRIANGLE_STRIDE;
-        const nodes = this.nodes, sorted = this.triangles, data = positions ?? sorted;
+        const nodes = this.nodes, sorted = this.triangles, data = indexed?.positions ?? positions ?? sorted;
         for (let base = nodes.length - 12; base >= 0; base -= 12) {
             const first = nodes[base + 3], leafCount = nodes[base + 7];
             if (leafCount) {
@@ -112,10 +148,14 @@ export class TriangleRadianceBvh {
                 let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
                 for (let triangle = first; triangle < first + leafCount; triangle++) {
                     const target = triangle * stride, source = positions ? this.order[triangle] * stride : target;
-                    const ax = data[source], ay = data[source + 1], az = data[source + 2];
-                    const bx = data[source + 4], by = data[source + 5], bz = data[source + 6];
-                    const cx = data[source + 8], cy = data[source + 9], cz = data[source + 10];
-                    if (positions) {
+                    const vertex = indexed ? this.order[triangle] * 3 : 0;
+                    const a = indexed ? indexed.indices[vertex] * 3 : source;
+                    const b = indexed ? indexed.indices[vertex + 1] * 3 : source + 4;
+                    const c = indexed ? indexed.indices[vertex + 2] * 3 : source + 8;
+                    const ax = data[a], ay = data[a + 1], az = data[a + 2];
+                    const bx = data[b], by = data[b + 1], bz = data[b + 2];
+                    const cx = data[c], cy = data[c + 1], cz = data[c + 2];
+                    if (positions || indexed) {
                         sorted[target] = ax; sorted[target + 1] = ay; sorted[target + 2] = az;
                         sorted[target + 4] = bx; sorted[target + 5] = by; sorted[target + 6] = bz;
                         sorted[target + 8] = cx; sorted[target + 9] = cy; sorted[target + 10] = cz;

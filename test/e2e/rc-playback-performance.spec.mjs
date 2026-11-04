@@ -11,6 +11,7 @@ const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-diffuse-gi-stage/rc-diffuse-gi-red.pmx");
 const alicia = process.env.MMD_RC_PLAYBACK_ALICIA === "1";
 const appLog = process.env.MMD_RC_PLAYBACK_APP_LOG === "1";
+const cpuProfile = process.env.MMD_RC_PLAYBACK_CPU_PROFILE === "1";
 const character = resolve(root, "local-references/model/Alicia/MMD/Alicia_solid.pmx");
 const motion = resolve(root, "local-references/model/Alicia/MMD Motion/2分ループステップ20.vmd");
 const probeUrl = "/test/e2e/helpers/rc-combined-performance-probe.mjs";
@@ -19,6 +20,32 @@ const invoke = (page, method, value) => page.evaluate(async ({ method, value, pr
   return probe[method](value);
 }, { method, value, probeUrl });
 const output = process.env.MMD_RC_PLAYBACK_OUTPUT, baseline = process.env.MMD_RC_PLAYBACK_BASELINE;
+async function capturePlaybackCpuProfile(page, directory, id) {
+  const frame = page.locator("#current-frame");
+  const waitFrames = async count => {
+    const start = Number(await frame.inputValue());
+    await expect.poll(async () => Number(await frame.inputValue()), { timeout: 60000, intervals: [1000] })
+      .toBeGreaterThanOrEqual(start + count);
+  };
+  // This is a separate warmed playback window: no function wrappers, GPU timing
+  // probes or ordinary-log timing claims are collected while V8 is profiling.
+  await waitFrames(60);
+  const session = await page.context().newCDPSession(page);
+  let profiling = false;
+  try {
+    await session.send("Profiler.enable");
+    await session.send("Profiler.setSamplingInterval", { interval: 1000 });
+    await session.send("Profiler.start"); profiling = true;
+    await waitFrames(150);
+    const { profile } = await session.send("Profiler.stop"); profiling = false;
+    const name = `${id}.cpuprofile`;
+    writeFileSync(resolve(directory, name), JSON.stringify(profile));
+    return { name, samples: profile.samples?.length ?? 0, durationMs: (profile.endTime - profile.startTime) / 1000 };
+  } finally {
+    try { if (profiling) await session.send("Profiler.stop"); }
+    finally { await session.detach(); }
+  }
+}
 async function loadAliciaDance(app, page) {
   await page.evaluate(path => window.mmdModokiE2e.loadModel(path), character);
   await page.locator("#info-model-select").selectOption("1");
@@ -88,7 +115,7 @@ for (const setting of cases) {
         await page.locator("#info-model-select").selectOption("0");
         const category = await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().find(track => track.name === "光遮蔽板")?.category);
         expect(category).toBeTruthy();
-        for (const [frame, x] of [[0, 0], [60, -20], [appLog ? 1800 : 300, 0]]) {
+        for (const [frame, x] of [[0, 0], [60, -20], [appLog || cpuProfile ? 1800 : 300, 0]]) {
           await seek(page, frame); await selectTimelineTrack(page, category, "光遮蔽板");
           await numberControl(page, "tx", x); await page.locator("#btn-bone-keyframe").click();
         }
@@ -122,11 +149,13 @@ for (const setting of cases) {
         report.appLog = await measurePlaybackAppLog(page, app.tempDir, {
           masterEnabled: !masterOff, giEnabled: gi || masterOff, skyEnabled: sky || masterOff,
         });
+        if (cpuProfile) report.cpuProfile = await capturePlaybackCpuProfile(page, directory, id);
         await play.click();
         report.validation = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());
         expect(report.validation.count).toBe(0); expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
         return;
       }
+      if (cpuProfile) report.cpuProfile = await capturePlaybackCpuProfile(page, directory, id);
       report.measurement = await invoke(page, "measureCombinedPerformance", { warmFrames: 12, frames: 80, completionFrames: 0 });
       const { realtime } = report.measurement;
       expect(realtime.frames).toBe(80);

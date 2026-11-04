@@ -218,7 +218,7 @@ describe("RC separates emission and geometry input", () => {
         vi.spyOn(LuminousRadianceTextures.prototype, "source").mockReturnValue(0);
         state.texture = new Texture(null, mesh.getScene()); data.update(settings);
         const refit = vi.spyOn(TriangleRadianceBvh.prototype, "update");
-        const updatePositions = vi.spyOn(TriangleRadianceBvh.prototype, "updatePositions");
+        const updatePositions = vi.spyOn(TriangleRadianceBvh.prototype, "updateIndexedPositions");
         const changes: Array<[string, boolean, () => void]> = [
             ["transform", true, () => { mesh.position.x += 2; }],
             ["in-place vertex edit", true, () => {
@@ -257,5 +257,43 @@ describe("RC separates emission and geometry input", () => {
         mesh.isVisible = false; data.update(settings); expect(data.bvh.triangleCount).toBe(0);
         mesh.isVisible = true; data.update(settings); expect(data.bvh.triangleCount).toBe(12);
         data.dispose();
+    });
+
+    it("preserves the newest indexed emitter pose through color edits, rebuilds, missing geometry and rejection", () => {
+        const { scene, mesh, state, data, read } = fixture();
+        const source = new LuminousRadianceSceneSource(scene, read);
+        const records = (values: Float32Array): string[] => Array.from({ length: values.length / 24 }, (_, i) =>
+            Array.from(values.subarray(i * 24, (i + 1) * 24)).join(",")).sort();
+        const check = () => {
+            scene.incrementRenderId(); source.update();
+            const full = new LuminousRadianceSceneSource(scene, read); full.update();
+            expect(source.error).toBeNull(); expect(records(source.bvh.triangles)).toEqual(records(full.bvh.triangles));
+            expect(source.getVolume(2)).toEqual(full.getVolume(2)); expect(source.emitterTriangles).toBe(full.emitterTriangles);
+            full.dispose();
+        };
+        check(); mesh.position.set(7, 2, -3); check();
+        const nodes = source.bvh.nodes.slice(), geometryRevision = source.geometryRevision;
+        state.emission = { r: 0.4, g: 0, b: 1 }; check();
+        expect(source.bvh.nodes).toEqual(nodes); expect(source.geometryRevision).toBe(geometryRevision);
+        mesh.isVisible = false; check(); mesh.isVisible = true; check();
+        const extra = CreateBox("extra", {}, scene); extra.material = mesh.material; extra.position.x = -12; check();
+        const index = scene.meshes.indexOf(extra); scene.meshes.splice(index, 1); scene.meshes.unshift(extra); check();
+        extra.dispose(); check();
+        mesh.position.x = 11; check(); state.emission.r = 0.7; check();
+        const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+        if (!positions) throw new Error("fixture positions missing");
+        mesh.removeVerticesData(VertexBuffer.PositionKind); check();
+        mesh.setVerticesData(VertexBuffer.PositionKind, positions); check();
+        mesh.position.x = 14; check();
+        mesh.position.x = 1e100; scene.incrementRenderId(); source.update();
+        expect(source.error).not.toBeNull(); expect(source.bvh.triangleCount).toBe(0);
+        mesh.position.x = -5; check();
+        const indices = mesh.getIndices();
+        if (!indices) throw new Error("fixture indices missing");
+        [indices[0], indices[1]] = [indices[1], indices[0]]; check();
+        state.texture = new Texture(null, scene);
+        vi.spyOn(LuminousRadianceTextures.prototype, "source").mockReturnValue(0);
+        check(); mesh.position.y = 3; check(); state.texture.uOffset = 0.2; check();
+        source.dispose(); data.dispose();
     });
 });

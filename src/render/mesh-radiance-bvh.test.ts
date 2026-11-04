@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MeshRadianceBvh, type RadianceBufferRange } from "./mesh-radiance-bvh";
-import { TriangleRadianceBvh, RADIANCE_TRIANGLE_STRIDE as STRIDE } from "./triangle-radiance-bvh";
+import { TriangleRadianceBvh, RADIANCE_TRIANGLE_STRIDE as STRIDE, createRadianceIndexedPositions,
+    materializeRadianceIndexedPositions, type RadianceIndexedPositions } from "./triangle-radiance-bvh";
 
 function geometry(count: number, shift = 0): Float32Array {
     return new Float32Array(Array.from({ length: count }, (_, index) => {
@@ -67,6 +68,39 @@ function verifyTree(bvh: MeshRadianceBvh, inputs: Float32Array[]): void {
 }
 
 describe("mesh radiance acceleration updates", () => {
+    it("retains indexed poses through RGB edits, live/cold repacking and return to fully packed geometry", () => {
+        const actor: { key: object; triangles: Float32Array; attributesVersion: object; geometryVersion: object;
+            indexedPositions?: RadianceIndexedPositions } = { key: {}, triangles: geometry(17), attributesVersion: {}, geometryVersion: {} };
+        const stage = { key: {}, triangles: geometry(19, 1000) }, actual = new MeshRadianceBvh(), full = new MeshRadianceBvh();
+        const reference = () => ({ key: actor.key, triangles: actor.indexedPositions
+            ? materializeRadianceIndexedPositions(actor.triangles, actor.indexedPositions) : actor.triangles });
+        const update = (order: Array<"actor" | "stage">) => {
+            actual.update(order.map(key => key === "actor" ? actor : stage));
+            full.update(order.map(key => key === "actor" ? reference() : stage));
+            expect(actual.triangles).toEqual(full.triangles); expect(actual.nodes).toEqual(full.nodes);
+            expect(actual.changedMin).toEqual(full.changedMin); expect(actual.changedMax).toEqual(full.changedMax);
+        };
+        update(["stage", "actor"]);
+        for (const x of [-200, 500]) {
+            const positions = new Float32Array(17 * 9), indices = Uint32Array.from({ length: 17 * 3 }, (_, i) => i);
+            for (let i = 0; i < indices.length; i++) {
+                const input = Math.floor(i / 3) * STRIDE + i % 3 * 4;
+                positions.set([actor.triangles[input] + x, actor.triangles[input + 1], actor.triangles[input + 2]], i * 3);
+            }
+            actor.indexedPositions = createRadianceIndexedPositions(positions, indices); actor.geometryVersion = {};
+            update(["stage", "actor"]);
+        }
+        // Color-only updates carry old coordinate attributes but must retain the latest pose.
+        actor.triangles = actor.triangles.slice(); actor.triangles.set([0.3, 0.4, 1], 12); actor.attributesVersion = {};
+        const nodes = actual.nodes.slice();
+        actual.update([stage, actor]); full.update([stage, reference()]);
+        expect(actual.triangles).toEqual(full.triangles); expect(actual.nodes).toEqual(nodes);
+        update(["actor", "stage"]); update(["stage"]); update(["actor", "stage"]);
+        actor.triangles = geometry(17, -400); actor.indexedPositions = undefined; actor.geometryVersion = {}; actor.attributesVersion = {};
+        update(["actor", "stage"]);
+        actor.triangles = geometry(33, 700); actor.geometryVersion = {}; actor.attributesVersion = {};
+        update(["actor", "stage"]); verifyTree(actual, [actor.triangles, stage.triangles]);
+    });
     it("changes the layout revision only after a successful repack", () => {
         const actor = { key: {}, triangles: geometry(17), attributesVersion: {} };
         const stage = { key: {}, triangles: geometry(9, 10) }, bvh = new MeshRadianceBvh();

@@ -114,6 +114,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 3D RCの静止した骨・モーフのCPU変形を再利用し、寄与するモーフだけを走査。typed array数値比較を高速化し、骨付き約30万三角形・32モーフfixtureで変形更新と修正前後のPNG一致を確認（[負荷軽減・実機再確認待ち](./luminous-radiance-pose-cache-performance-2026-10-12.md)）
 - [x] 3D RCのダンス再生時の負荷を受け、参照Split RC・WebGPU剛体拡張・voxel proxy実装を再調査。現行のscene全体更新との差と改修候補を記録（[再調査](./radiance-cascades-animation-research-2026-10-12.md)）
 - [x] 3D RCの骨・モーフが毎frame変わるfixtureで再生負荷を測り、meshごとのBLASと上位treeへ分離。動いたmeshだけのrefit・部分uploadと停止後の画像一致を確認（[実装・比較・実機再確認待ち](./luminous-radiance-animation-performance-2026-10-13.md)）
+- [x] 2026-11-04の所有者ログでRC形状準備が約50.65 msを占めることを確認し、姿勢更新の中間コピーを削減。アリシア再生で形状準備10.93→8.36 ms、44.1→53.7 FPS、PNG・近傍面データ一致と回帰5件を確認。所有者プロジェクトの修正後速度は再確認待ち（[ログ・実装・比較](./rc-alicia-dance-performance-2026-11-03.md#2026-11-04の所有者ログによる再切り分け)）。
 - [x] 3D RCの受け手照明にdepth / normal・8近傍probeのepoch・変更meshの前後boundsを使う再利用を追加。静止 / 連続変形の探索削減、移動直後・法線変更時の全再計算との画像一致を確認。2026-10-14実機ではFPSはほぼ変わらず、体感は少し滑らかかもしれないとの報告を受け、現状で区切った（[実装・比較・実機確認](./luminous-radiance-receiver-reuse-2026-10-13.md)）
 - [ ] 未着手: 3D RCのprobe側irradiance事前集計を、短距離visibility・曲面・薄壁を保つreceiver経路と段階比較する。[所有者の再開依頼](../insights/decisions/defer-further-radiance-cascade-optimization.md)後、2026-10-31は3効果のCPU入力共有などを実装したが、このreceiver方式の比較は未実施（[改修順・比較項目](./radiance-cascades-animation-research-2026-10-12.md)）。
 - [x] FrameGraph stack 見出し右端を全体ON/OFFへ変更。OFFで資源解放、ONで設定を保持して再構築。個別切替は確保済みtask/resourceを再利用（[実装・検証](./framegraph-master-toggle-2026-09-08.md)）

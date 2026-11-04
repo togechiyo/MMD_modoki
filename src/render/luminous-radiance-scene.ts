@@ -7,7 +7,8 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { FloatArray } from "@babylonjs/core/types";
 import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
-import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE } from "./triangle-radiance-bvh";
+import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE, createRadianceIndexedPositions,
+    type RadianceIndexedPositions } from "./triangle-radiance-bvh";
 import { MeshRadianceBvh } from "./mesh-radiance-bvh";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { RadianceInputSnapshot } from "./luminous-radiance-input-cache";
@@ -19,7 +20,8 @@ export type RadianceEmissionReader = (mesh: Mesh, material: Material) => { r: nu
 type Bounds = { low: number[]; high: number[] };
 type MeshInput = { key: Mesh; poseSnapshot: RadianceInputSnapshot; surfaceSnapshot: RadianceInputSnapshot;
     emissionSnapshot: RadianceInputSnapshot; geometryVersion: object; attributesVersion: object;
-    triangles: Float32Array; emitters: number; emitterRanges: Array<[number, number]>; emitterBounds?: Bounds };
+    triangles: Float32Array; vertexIndices: Uint32Array; indexedPositions?: RadianceIndexedPositions;
+    emitters: number; emitterRanges: Array<[number, number]>; emitterBounds?: Bounds };
 
 function emptyBounds(): Bounds { return { low: [Infinity, Infinity, Infinity], high: [-Infinity, -Infinity, -Infinity] }; }
 
@@ -29,7 +31,10 @@ function measureEmitterBounds(chunk: MeshInput): Bounds {
         for (let tri = start; tri < end; tri += RADIANCE_TRIANGLE_STRIDE) {
             for (let axis = 0; axis < 3; axis++) {
                 const offset = tri + axis;
-                const a = chunk.triangles[offset], b = chunk.triangles[offset + 4], c = chunk.triangles[offset + 8];
+                const indexed = chunk.indexedPositions, vertex = tri / RADIANCE_TRIANGLE_STRIDE * 3;
+                const a = indexed ? indexed.positions[indexed.indices[vertex] * 3 + axis] : chunk.triangles[offset];
+                const b = indexed ? indexed.positions[indexed.indices[vertex + 1] * 3 + axis] : chunk.triangles[offset + 4];
+                const c = indexed ? indexed.positions[indexed.indices[vertex + 2] * 3 + axis] : chunk.triangles[offset + 8];
                 bounds.low[axis] = Math.min(bounds.low[axis], a, b, c);
                 bounds.high[axis] = Math.max(bounds.high[axis], a, b, c);
             }
@@ -165,15 +170,21 @@ export class LuminousRadianceSceneSource {
                         attributesVersion: {}, triangles: values };
                     this.meshInputs.set(mesh, chunk); chunks.push(chunk); continue;
                 }
-                // Preserve the old immutable chunk until the BVH consumes this replacement.
-                // With identical topology, material inputs and UVs, only nine coordinates can differ.
+                // Keep immutable attributes and topology through a dance. A validated position
+                // override goes straight into sorted BVH records instead of copying/packing 24 floats per face.
                 const poseOnly = sameAttributes ? previous : undefined;
-                const values = poseOnly?.triangles.slice()
-                    ?? new Float32Array(surfaces.reduce((count, surface) => count + surface.indexCount / 3, 0) * RADIANCE_TRIANGLE_STRIDE);
-                const emitterRanges: Array<[number, number]> = [];
-                let emitters = 0, writeOffset = 0;
                 const transformed = this.geometry.readWorldPositions(mesh, pose, world);
                 if (!transformed) continue;
+                if (poseOnly) {
+                    const chunk: MeshInput = { ...poseOnly, poseSnapshot: new RadianceInputSnapshot(poseParts),
+                        geometryVersion: {}, indexedPositions: createRadianceIndexedPositions(transformed, poseOnly.vertexIndices),
+                        emitterBounds: undefined };
+                    this.meshInputs.set(mesh, chunk); chunks.push(chunk); continue;
+                }
+                const vertexIndices = new Uint32Array(surfaces.reduce((count, surface) => count + surface.indexCount, 0));
+                const values = new Float32Array(vertexIndices.length / 3 * RADIANCE_TRIANGLE_STRIDE);
+                const emitterRanges: Array<[number, number]> = [];
+                let emitters = 0, writeOffset = 0, vertexOffset = 0;
                 for (const surface of surfaces) {
                     const surfaceStart = writeOffset;
                     const { emission, uvs, textureSource, wrap, matrix: textureMatrix } = surface;
@@ -182,11 +193,11 @@ export class LuminousRadianceSceneSource {
                         for (let corner = 0; corner < 3; corner++) {
                             const vertex = indices[index + corner], offset = vertex * 3;
                             const x = transformed[offset], y = transformed[offset + 1], z = transformed[offset + 2];
-                            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) throw new Error("3D RC geometry contains invalid vertices");
+                            if (!Number.isInteger(vertex) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) throw new Error("3D RC geometry contains invalid vertices");
+                            vertexIndices[vertexOffset++] = vertex;
                             values[writeOffset] = x; values[writeOffset + 1] = y; values[writeOffset + 2] = z;
                             writeOffset += 4; // Padding is zero in both the new and copied records.
                         }
-                        if (poseOnly) { writeOffset += RADIANCE_TRIANGLE_STRIDE - 12; continue; }
                         values[writeOffset++] = r; values[writeOffset++] = g; values[writeOffset++] = b; values[writeOffset++] = 0;
                         if (textureMatrix) {
                             for (let corner = 0; corner < 3; corner++) {
@@ -208,8 +219,8 @@ export class LuminousRadianceSceneSource {
                 }
                 const chunk = { key: mesh, poseSnapshot: new RadianceInputSnapshot(poseParts),
                     surfaceSnapshot: sameSurfaces && previous ? previous.surfaceSnapshot : new RadianceInputSnapshot(surfaceParts),
-                    emissionSnapshot: poseOnly?.emissionSnapshot ?? new RadianceInputSnapshot([emissionValues]),
-                    geometryVersion: {}, attributesVersion: poseOnly?.attributesVersion ?? {}, triangles: values, emitters, emitterRanges };
+                    emissionSnapshot: new RadianceInputSnapshot([emissionValues]),
+                    geometryVersion: {}, attributesVersion: {}, triangles: values, vertexIndices, emitters, emitterRanges };
                 this.meshInputs.set(mesh, chunk); chunks.push(chunk);
             }
             this.error = null;

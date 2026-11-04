@@ -1,7 +1,9 @@
-import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh, threadRadianceBvh } from "./triangle-radiance-bvh";
+import { MAX_RADIANCE_TRIANGLES, RADIANCE_TRIANGLE_STRIDE, TriangleRadianceBvh, threadRadianceBvh,
+    materializeRadianceIndexedPositions, type RadianceIndexedPositions } from "./triangle-radiance-bvh";
 
 // geometryVersion certifies all fields except RGB; attributesVersion certifies all except position XYZ.
-type Input = { key: object; triangles: Float32Array; geometryVersion?: object; attributesVersion?: object };
+// An indexed override supplies current XYZ; triangles retain immutable source-order attributes.
+type Input = { key: object; triangles: Float32Array; indexedPositions?: RadianceIndexedPositions; geometryVersion?: object; attributesVersion?: object };
 type Entry = Input & { bvh: TriangleRadianceBvh; triangleOffset: number; nodeOffset: number };
 export type RadianceBufferRange = { byteOffset: number; data: Float32Array };
 type Changes = { triangles: RadianceBufferRange[]; nodes: RadianceBufferRange[] };
@@ -36,10 +38,7 @@ export class MeshRadianceBvh {
             const previous = new Map(this.entries.map(entry => [entry.key, entry]));
             this.entries = inputs.map(input => {
                 const old = previous.get(input.key), bvh = old?.bvh ?? new TriangleRadianceBvh();
-                if (input.triangles !== old?.triangles) {
-                    if (old && input.geometryVersion && input.geometryVersion === old.geometryVersion) bvh.updateEmission(input.triangles);
-                    else bvh.update(input.triangles);
-                }
+                if (!old || input.triangles !== old.triangles || input.indexedPositions !== old.indexedPositions) this.updateEntry(bvh, input, old);
                 return { ...input, bvh, triangleOffset: 0, nodeOffset: 0 };
             });
             this.topCount = Math.max(0, this.entries.length - 1);
@@ -55,16 +54,11 @@ export class MeshRadianceBvh {
         } else {
             for (let index = 0; index < inputs.length; index++) {
                 const entry = this.entries[index], input = inputs[index];
-                if (entry.triangles === input.triangles) continue;
+                if (entry.triangles === input.triangles && entry.indexedPositions === input.indexedPositions) continue;
                 this.includeBounds(entry.bvh.nodes, 0);
-                if (input.geometryVersion && input.geometryVersion === entry.geometryVersion) entry.bvh.updateEmission(input.triangles);
-                else {
-                    if (input.attributesVersion && input.attributesVersion === entry.attributesVersion) entry.bvh.updatePositions(input.triangles);
-                    else entry.bvh.update(input.triangles);
-                    refitted.add(entry);
-                }
+                if (this.updateEntry(entry.bvh, input, entry)) refitted.add(entry);
                 entry.triangles = input.triangles; entry.geometryVersion = input.geometryVersion;
-                entry.attributesVersion = input.attributesVersion; changed.push(entry);
+                entry.attributesVersion = input.attributesVersion; entry.indexedPositions = input.indexedPositions; changed.push(entry);
             }
         }
         this.triangleCount = count;
@@ -116,6 +110,19 @@ export class MeshRadianceBvh {
             return { triangles: [this.range(this.triangles, 0, this.triangles.length)], nodes: [this.range(this.nodes, 0, this.nodes.length)] };
         }
         return changes;
+    }
+
+    /** Returns whether bounds changed; RGB-only edits never disturb the current indexed pose. */
+    private updateEntry(bvh: TriangleRadianceBvh, input: Input, previous?: Input): boolean {
+        const sameCount = previous?.triangles.length === input.triangles.length;
+        if (sameCount && input.geometryVersion && input.geometryVersion === previous?.geometryVersion) {
+            bvh.updateEmission(input.triangles); return false;
+        }
+        if (sameCount && input.attributesVersion && input.attributesVersion === previous?.attributesVersion) {
+            if (input.indexedPositions) bvh.updateIndexedPositions(input.indexedPositions);
+            else bvh.updatePositions(input.triangles);
+        } else bvh.update(input.indexedPositions ? materializeRadianceIndexedPositions(input.triangles, input.indexedPositions) : input.triangles);
+        return true;
     }
 
     private includeBounds(nodes: Float32Array, offset: number): void {

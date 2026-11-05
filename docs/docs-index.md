@@ -383,7 +383,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [RC 天空 visibility・描画前 producer の検証実装 2026-10-29](./radiance-cascades-sky-visibility-validation-2026-10-29.md)
 - [RC 天空 visibility の近距離分割と再構成比較 2026-10-29](./radiance-cascades-sky-reconstruction-2026-10-29.md)
 - [RC 天空 visibility の通常 MMD 材質 adapter 案 2026-10-29](./radiance-cascades-material-adapter-plan-2026-10-29.md)
-- [RC 天空遮蔽: 通常MMD材質・設定・キーの実装 2026-10-29](./rc-sky-occlusion-implementation-2026-10-29.md)
+- [影の深み RC（旧 RC 天空遮蔽）: 通常MMD材質・設定・キーの実装 2026-10-29](./rc-sky-occlusion-implementation-2026-10-29.md)
 - [RC GI: 方向光1反射の通常MMD材質への実装 2026-10-30](./rc-diffuse-gi-implementation-2026-10-30.md)
 - [窓付き室内・XアクセサリのRC GI / 天空遮蔽検証 2026-10-31](./rc-window-room-verification-2026-10-31.md)
 - [Xアクセサリの不透明PNG・Accessory ToonへのRC対応 2026-11-01](./rc-x-accessory-support-2026-11-01.md)

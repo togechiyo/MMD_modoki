@@ -204,7 +204,7 @@ export class RcSkyAmbientController {
             }
             this.view = field.irradianceField && field.nearestSurfaceField
                 ? { field: field.irradianceField, nearestSurface: field.nearestSurfaceField, triangles: field.source.triangleBuffer,
-                    volume, strength: settings.strength, fill: settings.fill, baseLight: settings.baseLight,
+                    volume, strength: settings.strength, fill: settings.fill,
                     opacity: settings.opacity } : null;
             this.frameId = frameId; this.status = "ready"; this.reason = null;
         } catch (error) {

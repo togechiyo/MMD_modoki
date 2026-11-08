@@ -25,7 +25,7 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
     volumeControls.className = "rc-lighting-effect-controls";
     const numberControls: HTMLInputElement[] = [];
     let activeSlider: HTMLInputElement | null = null;
-    const sliders = (["opacity", "strength", "fill", "baseLight"] as const).map(field => {
+    const sliders = (["opacity", "strength", "fill"] as const).map(field => {
         const suffix = `${field[0].toUpperCase()}${field.slice(1)}`;
         const { row, input } = createRcLightingSlider(`rcSkyAmbient${suffix}`, t(`experiment.rcSkyAmbient.${field}`));
         input.addEventListener("input", () => { activeSlider = input; });

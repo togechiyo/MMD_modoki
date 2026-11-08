@@ -91,7 +91,6 @@
     "experiment.rcSkyAmbient.quality.high": "高品質",
     "experiment.rcSkyAmbient.strength": "空の明るさ",
     "experiment.rcSkyAmbient.fill": "暗部の光",
-    "experiment.rcSkyAmbient.baseLight": "通常光",
     "experiment.rcSkyAmbient.minX": "範囲の最小X",
     "experiment.rcSkyAmbient.minY": "範囲の最小Y",
     "experiment.rcSkyAmbient.minZ": "範囲の最小Z",

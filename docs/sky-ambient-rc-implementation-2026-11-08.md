@@ -12,14 +12,13 @@
 | 濃度 | opacity | 0〜1（表示0〜100%） | 1 | 対応 |
 | 空の明るさ | strength | 0〜2 | 0.95 | 対応 |
 | 暗部の光 | fill | 0〜1 | 0.035 | 固定値 |
-| 通常光 | baseLight | 0〜1 | 0.25 | 固定値 |
 | 計算範囲 | rangeScale | ×0.25〜×4（対数） | ×1 | 固定値 |
 | 品質 | quality | 軽量 / 標準 / 高品質 | 標準 | 固定値 |
 
-通常操作は「濃度」の1行。既存の空の明るさ・暗部の光・通常光と、範囲・品質・状態表示は、閉じた「詳細・開発確認」にまとめる。新しいスライダーに数値入力欄や説明文は置かない。範囲・品質の現在値は読み取り専用で表示し、従来の固定範囲座標入力・自動へ戻す操作も詳細内に残す。参考画像のように空照明を主役にする場合は「通常光」を下げ、暗すぎる室内は「暗部の光」で調整する。
+通常操作は「濃度」の1行。空の明るさ・暗部の光と、範囲・品質・状態表示は、閉じた「詳細・開発確認」にまとめる。新しいスライダーに数値入力欄や説明文は置かない。範囲・品質の現在値は読み取り専用で表示し、従来の固定範囲座標入力・自動へ戻す操作も詳細内に残す。濃度は追加する空照明全体の効き、空の明るさはその光量、暗部の光は空が見えない所にも足す演出用の光。通常の光・影を別途減らす「通常光」調整は撤去した。
 
 - 内部IDは `rcSkyAmbient`。各シーン1枚のsingletonで、設定は `lighting.rcSkyAmbient` に保存する。
-- `enabled` / `strength` / `opacity` はscene effect track。強度・濃度は補間し、ON/OFFは段階的に切り替わる。fill / baseLight / volume / rangeScale / qualityはキーごとには変化しない。旧設定・旧キーは濃度1、範囲×1、標準品質で補完して見た目を保つ。
+- `enabled` / `strength` / `opacity` はscene effect track。強度・濃度は補間し、ON/OFFは段階的に切り替わる。fill / volume / rangeScale / qualityはキーごとには変化しない。旧設定・旧キーは濃度1、範囲×1、標準品質で補完する。旧baseLightは保存互換のため保持するが描画には使わない。通常光を弱めていた既存シーンは今回の変更で明るくなるため、必要なら濃度を下げる。
 - チェックOFFではカード・設定・キーを保持する。削除はその効果だけを既定OFFに戻してキーとカードを除去し、Undoで元の位置まで戻す。
 - 全体OFFとClassicでは実行を止め、設定を保持する。FrameGraphへ戻すと復元する。移行済み保存形式では削除したカードを復活させない。
 - 一覧での位置は保存するが、本描画前の照明処理なので並べ替えでPostFXとの合成順は変わらない。
@@ -29,16 +28,16 @@
 既存 `RadianceSkyVisibilityField` のRC＋三角形BVHで空の可視性を計算する。標準16³ probeの低解像度fieldを材質側で補間する方式で、SDFを使うDFAOではない。
 
 ```text
-通常拡散光の倍率 = mix(1, baseLight, clamp(strength, 0, 1))
 空照明 = linear(材質色 × テクスチャ)
-       × strength × (((1 + 法線Y) / 2) × 天空visibility + fill)
+       × strength × (((1 + 法線Y) / 2) × 天空visibility + fill) × opacity
+出力 = gamma(linear(元の描画色) + 空照明)
 ```
 
-空照明は線形空間で加算する。通常光の配分は当該材質の最終diffuse式だけを調整し、シーン全体の方向光・標準影設定は変更しない。材質色そのものや、GIの反射率、発光、specular、sphereへ使う元のdiffuseBaseは書き換えない。fillは演出用の一定光であり、反射を計算したGIではない。
+空照明は線形空間で加算する。通常のdiffuse式・方向光・標準影設定は変更しない。材質色そのものや、GIの反射率、発光、specular、sphereへ使う元のdiffuseBaseも書き換えない。fillは演出用の一定光であり、反射を計算したGIではない。空照明の加算によって影が明るくなることはあるが、通常の光・影を別の倍率で弱める処理はない。
 
-強度0では通常拡散光の倍率が1となり、空照明の加算も0になる。OFF・削除・非対応経路ではneutral bindingへ戻す。visibility=0は有効な暗さとして保持し、無効probeや範囲外では非遮蔽の空へ戻す。
+強度0または濃度0では空照明の加算が0になり、元の描画に戻る。OFF・削除・非対応経路ではneutral bindingへ戻す。visibility=0は有効な暗さとして保持し、無効probeや範囲外では非遮蔽の空へ戻す。
 
-濃度は、clamp後の「元の通常拡散光」と「Sky Ambient用に配分した通常拡散光」を線形RGBで補間し、後段の空照明加算にも掛ける。0は元描画、1は従来のSky Ambient。単純なstrength倍や乗算AOへの置換ではない。sphere・specular・発光・GIの既存合成を維持するため、完成画面全体を2枚描いてクロスフェードする方式とは中間値が異なる。追加描画パス・材質サンプルはなく、中間濃度のみ色空間変換が増える。
+濃度は追加する空照明だけに掛かり、0は元描画、1は設定した光量をすべて加算する。乗算AOへの置換は行わない。以前の通常diffuseの2結果補間も不要になったので削除し、中間濃度だけに必要だった色空間変換を省いた。field・材質サンプル・描画パスは増やしていない。
 
 ### 開発用の範囲と品質
 
@@ -54,7 +53,7 @@
 
 品質が主に変えるのはfield再計算量・メモリ・空間分解能。静的sceneの材質側8probe参照は共通なので、軽量にすると毎frameのFPSが大きく上がるとは限らない。濃度0ではsource更新とfield計算を省き、濃度を戻すと再開する。濃度調整だけでscene再描画やfield再計算を追加しない。
 
-「影の深み RC」は従来のshadow residualを減衰させる効果、Sky Ambient RCは空照明と通常拡散光の配分を作る効果。両方を併用する場合は、既存の影減衰結果全体に通常光の倍率を掛ける。GI RCの加算は独立して保持する。
+「影の深み RC」は従来のshadow residualを減衰させる効果、Sky Ambient RCは空照明を加算する効果。両方を併用すると、既存の影減衰結果へ空照明が加わる。GI RCの加算も独立して保持する。
 
 ## 対象と負荷
 
@@ -72,7 +71,7 @@
 
 既存の「影の深み RC」とはcasterの意味が異なるので、fieldは独立させる。キーで後からONになる効果はcapture前に準備し、途中のOFF区間も必要な資源を保持する。source/computeのエラーをcapture準備完了として扱わない。
 
-## 初回エフェクト化の検証（濃度追加前）
+## 初回エフェクト化の検証（濃度追加・通常光撤去前）
 
 自作 `rc-sky-stage.pmx` を使い、公開FrameGraph UIから操作する [Electron E2E](../test/e2e/rc-sky-ambient.spec.mjs) を実WebGPUで実行した。GUI追加、3スライダー、Undo/Redo、全体OFF、既存RC2種との併用、キー・補間、GUI保存/読込、Classic往復、削除Undo/Redo、viewport自動描画停止中のPNG、61frameのWebMを確認。
 
@@ -87,7 +86,7 @@
 
 証拠はignoredな `local-references/sky-ambient-rc-2026-11-08/` に置く。ここでの結果は小さなfixtureの機能・出力確認であり、所有者のダンスprojectでのFPSや全材質の品質保証ではない。大型stageの細かな接地陰、薄い壁、動く人物の自己遮蔽は引き続き制約がある。試作段階の窓付き室内・移動受け手・field再利用の測定は[比較試作メモ](./sky-ambient-preview-2026-11-08.md)を参照する。
 
-## 濃度・範囲・品質追加の検証
+## 濃度・範囲・品質追加の検証（通常光撤去前）
 
 同じ自作fixtureと公開GUIのE2Eを拡張し、実WebGPUで成功した（約1.8分）。証拠は `local-references/sky-ambient-rc-2026-11-08/density-quality/`。
 
@@ -102,10 +101,23 @@
 
 品質変更の破棄順は同梱Babylon 9.2.0の `FrameGraph.buildAsync` / `whenReadyAsync`、`StandardMaterial.bindForSubMesh`、WebGPUの破棄遅延を参照した。構造build中にdisposeすると後続ready待ちが始まる挙動をNullEngineの局所probeで確認したため、`buildAsync(false)`→世代確認→ready待ちに分離する。キャンセルされた構造buildの資源は、そのbuildが完了または失敗してから破棄する。公開bindingは即座に中立へ戻す。
 
+## 通常光調整の撤去と加算維持の検証
+
+所有者の「通常の影を別に薄めたくない」「空照明の明るさも足したい」に合わせ、通常光の減衰・補間とスライダーを撤去した。空照明の加算を維持し、濃度はその加算量だけを調整する。旧baseLightは読み書きの互換値として残すが、材質bindingへは渡さない。
+
+- 同じfixtureの実WebGPU Electron E2Eが成功（約1.6分）。通常欄は濃度1本、詳細は空の明るさ・暗部の光・範囲・品質の4本で、「通常光」がないことをGUIで確認。
+- 濃度0と未追加の画像差は0。50%の全画面MAEは9.131階調、100%は15.804階調。強度0、個別OFF、削除、全体OFF、保存復元、Classic往復、Undo、手動PNGは対応基準との差0。
+- 通常影OFF/ONの両条件でFXAAを外した同一条件のPNGを比較し、空照明ONによる暗化は各230,400画素中0画素、最大RGB低下も0。通常影だけのON/OFF差も4,240画素・MAE 0.428階調あり、影が実際に描画されたことを画像で確認した。effect切替前後で通常の照明・影設定は一致する。
+- 通常のFXAA付き画像では23画素に最大15階調の低下があった。すべて輪郭・材質境界（3×3近傍の最大差72〜223階調）で、FXAAなしでは低下0だったため、通常AA付きの見た目確認と材質の加算検証を分離した。アプリのAA既定値は変更していない。
+- 範囲・品質、既存RC2種との併用、キー補間、GUI保存/読込、61frameのWebMを継続確認。WebMの0/20/40/60frameと対応PNGのMAEは0.290 / 0.387 / 0.296 / 0.397階調。page error / console error / GPU validationは0件。
+- 全unit 239ファイル・1,505件と全lintが成功。インストール済みBabylon/MMD shaderの通常diffuse式を保持する12条件、および旧baseLight値を変えてもbinding・field再計算が変わらないことを検証。typecheckは既存547件と行・列を除いて一致し、critical TS2304/TS2552は0件。
+
+証拠はignoredな `local-references/sky-ambient-rc-2026-11-08/additive-only/`。通常光の減衰を使っていた旧ルックとの同一性は保証せず、今回の保存互換は設定を壊さず読めることを指す。空照明の加算で影の見かけのコントラストが下がることはあり、必要なら濃度を下げる。実projectでの最終ルックは所有者の目視確認を待つ。
+
 ## 主な実装
 
 - `src/render/rc-sky-ambient-controller.ts`: field、対象選別、準備・更新・破棄。
-- `src/render/mmd-radiance-sky-ambient-*.ts`: 専用binding、通常拡散光の配分、空照明加算。
+- `src/render/mmd-radiance-sky-ambient-*.ts`: 専用binding、既存の描画を保つ空照明加算。
 - `src/render/rc-sky-ambient-settings.ts` / `rc-sky-ambient-casters.ts`: 保存値・静的対象の判定。
 - `src/ui/rc-sky-ambient-settings-panel.ts` / `src/actions/rc-sky-ambient-command.ts`: 操作と履歴。
 - `src/mmd-manager.ts`: scene設定、キー、capture、材質・モデル条件。

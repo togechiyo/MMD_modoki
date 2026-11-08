@@ -68,7 +68,8 @@ export class LuminousRadianceSceneSource {
 
     constructor(private readonly scene: Scene, private readonly readEmission: RadianceEmissionReader,
         private readonly acceptsOccluder: (material: Material) => boolean = () => true,
-        private readonly readReflectance?: RadianceEmissionReader) {
+        private readonly readReflectance?: RadianceEmissionReader,
+        private readonly acceptsMesh?: (mesh: Mesh) => boolean) {
         const engine = scene.getEngine() as WebGPUEngine;
         this.triangleBudget = radianceTriangleBudget(engine.currentLimits.maxStorageBufferBindingSize, engine.currentLimits.maxBufferSize);
         this.triangleBuffer = new StorageBuffer(engine, this.triangleCapacity);
@@ -110,7 +111,8 @@ export class LuminousRadianceSceneSource {
             // Count eligible surfaces before skinning or packing. A rejected scene must not allocate
             // oversized geometry again each frame, or warm emission textures it cannot use.
             const meshes = this.scene.meshes.flatMap(mesh => {
-                if (!(mesh instanceof Mesh) || isRadianceDiagnosticMesh(mesh) || !mesh.isVisible || !mesh.isEnabled() || mesh.visibility <= 0
+                if (!(mesh instanceof Mesh) || this.acceptsMesh?.(mesh) === false
+                    || isRadianceDiagnosticMesh(mesh) || !mesh.isVisible || !mesh.isEnabled() || mesh.visibility <= 0
                     || mesh.getClassName() === "LinesMesh" || !mesh.material || mesh.material.getClassName() === "BackgroundMaterial") return [];
                 const indices = mesh.getIndices();
                 if (!indices?.length) return [];

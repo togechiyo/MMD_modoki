@@ -39,6 +39,7 @@ export async function launchMmdModoki(repoRoot, { effectTimeline = false, radian
           "@babylonjs/core/Buffers/buffer", "@babylonjs/core/Bones/skeleton", "@babylonjs/core/Bones/bone",
           "@babylonjs/core/Morph/morphTarget", "@babylonjs/core/Morph/morphTargetManager", "@babylonjs/core/Maths/math.vector",
           "@babylonjs/core/Instrumentation/engineInstrumentation", "@babylonjs/core/Engines/WebGPU/webgpuPerfCounter",
+          "@babylonjs/core/Engines/engineStore",
         ] },
         define: { ...config.define,
           "import.meta.env.VITE_MMD_EFFECT_TIMELINE": JSON.stringify(effectTimeline ? "1" : "0"),

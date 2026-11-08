@@ -37,6 +37,41 @@ function fixture() {
 }
 
 describe("RC separates emission and geometry input", () => {
+    it("keeps sky geometry stable while excluded receivers move, and updates explicitly selected casters", () => {
+        const { scene, mesh: caster, data } = fixture();
+        const receiver = CreateBox("receiver", {}, scene);
+        // Shared material must not force a receiver into the caster set.
+        receiver.material = caster.material;
+        const casters = new Set([caster]);
+        const source = new LuminousRadianceSceneSource(scene, () => null, undefined, undefined, mesh => casters.has(mesh));
+        const poses = vi.spyOn(LuminousRadiancePoseCache.prototype, "read");
+        source.update();
+        expect(source.bvh.triangleCount).toBe(12);
+        const geometry = source.geometryRevision, revision = source.revision, triangles = source.bvh.triangles.slice();
+        for (const x of [2, -3, 4]) {
+            receiver.position.x = x; scene.incrementRenderId(); poses.mockClear(); source.update();
+            expect(poses.mock.calls.some(([mesh]) => mesh === receiver)).toBe(false);
+            expect(source.geometryRevision).toBe(geometry);
+            expect(source.revision).toBe(revision);
+            expect(source.bvh.triangles).toEqual(triangles);
+        }
+        caster.position.x = 3; scene.incrementRenderId(); source.update();
+        expect(source.geometryRevision).toBeGreaterThan(geometry);
+        expect(source.revision).toBeGreaterThan(revision);
+        expect(source.bvh.nodes[0]).toBeCloseTo(2.5, 3);
+
+        // Explicit selection is re-evaluated and takes the receiver's current pose.
+        casters.add(receiver); source.update();
+        expect(source.bvh.triangleCount).toBe(24);
+        expect(poses.mock.calls.some(([mesh]) => mesh === receiver)).toBe(true);
+        const added = source.geometryRevision;
+        casters.delete(receiver); source.update();
+        expect(source.bvh.triangleCount).toBe(12);
+        expect(source.geometryRevision).toBeGreaterThan(added);
+        expect(source.error).toBeNull();
+        source.dispose(); data.dispose();
+    });
+
     it("shares deformation across independent emission, sky and diffuse sources while retaining their own colors and buffers", () => {
         const { scene, mesh, data } = fixture();
         mesh.skeleton = new Skeleton("bones", "bones", scene);

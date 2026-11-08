@@ -39,6 +39,8 @@
 
 ## F: repositoryで再利用する主な自作fixture
 
+2026-11-08追加: **F-SKY-AMBIENT** — `test/fixtures/sky-ambient-preview/` の手続き生成scene・checker texture。自作/MIT、第三者asset不要。[README](../test/fixtures/sky-ambient-preview/README.md)、[生成scene](../test/fixtures/sky-ambient-preview/scene.ts)、[spec](../test/e2e/sky-ambient-preview.spec.mjs)。固定caster15mesh/180三角形と移動受け手で、独立空照明・庇下/室内・texture保持・再計算抑止を比較。[確認記録](./sky-ambient-preview-2026-11-08.md)。通常アプリのUI/保存/出力は未接続、PMX/X loaderや実ダンス性能の検証ではない。
+
 下表は棚卸し時点の `test/fixtures/` の全directoryをgroup単位で扱う。詳細条件は各README／生成器を正本とし、バイナリの中身を今回再検査したものではない。
 
 | ID / path | 内容・用途 / 権利 | 生成器・主な利用先 | 確認記録・注意 |

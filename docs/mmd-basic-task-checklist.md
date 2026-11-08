@@ -56,6 +56,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] スカイドーム表示 ON/OFF
 - [x] 背景画像・動画を保持したprojectの空表示を読込後に復元し、非透過alpha・FrameGraphの入力素材準備を含めPNG / WebM出力を確認（[V022-116・元環境再確認待ち](./issue-29-background-sky-restore-2026-10-19.md)）
 - [x] ライティング調整
+- [x] 色・テクスチャを保つ独立Sky Ambientを自作sceneで比較。標準影なしの庇下・室内陰影、移動受け手と静的casterの分離、field更新抑止を実WebGPUで確認（[試作・測定・限界](./sky-ambient-preview-2026-11-08.md)、2026-11-08）。通常エフェクト欄へは未接続。
+- [ ] Sky Ambientの通常利用への展開: 固定ステージ＋踊るPMXでの見た目/負荷、接地陰、既存照明との配分、材質互換、UI/保存/出力を確認する。方式の採用は試作結果だけで確定しない（[次の比較](./sky-ambient-preview-2026-11-08.md#制約と次の比較)）。
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）
 - [x] 3D RCのGI・天空・反射・媒質への応用と複数エフェクトの共有境界を整理。現行の個体別BVH/field、非線形合成・寄与分離・visibility履歴の条件を記録（[設計案](./radiance-cascades-shared-effects-design-2026-10-28.md)。採用・実装・新規性能計測は未実施）

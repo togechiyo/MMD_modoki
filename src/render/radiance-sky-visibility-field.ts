@@ -5,6 +5,7 @@ import { FrameGraphComputeShaderTask } from "@babylonjs/core/FrameGraph/Tasks/Mi
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
@@ -45,14 +46,15 @@ export class RadianceSkyVisibilityField {
     private volume: SkyVisibilityBounds;
     private readonly diagnostic: boolean;
 
-    constructor(scene: Scene, options: { volume?: SkyVisibilityBounds; diagnostic?: boolean; opaqueOccludersOnly?: boolean; materialIrradiance?: boolean } = {}) {
+    constructor(scene: Scene, options: { volume?: SkyVisibilityBounds; diagnostic?: boolean; opaqueOccludersOnly?: boolean;
+        materialIrradiance?: boolean; acceptsMesh?: (mesh: Mesh) => boolean } = {}) {
         this.volume = options.volume ?? SKY_VISIBILITY_VOLUME;
         this.diagnostic = options.diagnostic ?? true;
         this.graph = new FrameGraph(scene);
         this.graph.name = "radianceSkyVisibility";
         this.source = new LuminousRadianceSceneSource(scene, () => null, options.opaqueOccludersOnly
             ? material => !material.needAlphaTesting() && !material.needAlphaBlending()
-            : undefined);
+            : undefined, undefined, options.acceptsMesh);
         const allocate = (name: string, width: number, height: number, type: number) => {
             const texture = new RawTexture(null, width, height, Constants.TEXTUREFORMAT_RGBA, scene,
                 false, false, Texture.NEAREST_SAMPLINGMODE, type, Constants.TEXTURE_CREATIONFLAG_STORAGE);

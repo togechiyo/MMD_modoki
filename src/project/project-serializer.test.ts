@@ -300,6 +300,23 @@ it("writes modoki-owned gravity controls keyframes", () => {
 });
 
 describe("exportProjectState", () => {
+    it("saves authored Sky Ambient RC values independently from preview and other sky effects", () => {
+        const settings = { enabled: false, strength: 1.5, fill: 0.07, baseLight: 0.4,
+            volume: { min: [-4, 1, -4] as [number, number, number], size: 8 } };
+        const project = exportProjectState({ ...createHost(),
+            getRcSkyAmbientSettings: () => ({ ...settings, enabled: true, strength: 0 }),
+            getStaticRcSkyAmbientSettings: () => settings,
+            getFrameGraphPostEffectStackEntries: () => [{ id: "rcSkyAmbient" as const, enabled: false }],
+        });
+        expect(project.lighting.rcSkyAmbient).toEqual(settings);
+        expect(project.effects.frameGraphPostStack).toEqual([{ id: "rcSkyAmbient", enabled: false }]);
+        expect(project.effects.rcSceneEffectsInStack).toBe(true);
+        settings.volume.min[0] = 100;
+        expect(project.lighting.rcSkyAmbient?.volume?.min[0]).toBe(-4);
+        expect(project.lighting.rcSkyOcclusion?.volume).toBeNull();
+        expect(exportProjectState(createHost()).lighting.rcSkyAmbient)
+            .toEqual({ enabled: false, strength: 0.95, fill: 0.035, baseLight: 0.25, volume: null });
+    });
     it("marks RC card presence authoritative while retaining OFF cards", () => {
         const project = exportProjectState({ ...createHost(), getFrameGraphPostEffectStackEntries: () => [
             { id: "rcSkyOcclusion" as const, enabled: false }, { id: "rcDiffuseGi" as const, enabled: true },

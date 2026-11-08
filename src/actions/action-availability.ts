@@ -64,7 +64,7 @@ export function canExecuteEditorAction(
         case "keyframe.registerGravity":
             return true;
         case "keyframe.registerEffect":
-            return action.instanceId === "rcSkyOcclusion" || action.instanceId === "rcDiffuseGi" || /^fx-[a-zA-Z0-9-]{1,190}$/.test(action.instanceId);
+            return action.instanceId === "rcSkyOcclusion" || action.instanceId === "rcDiffuseGi" || action.instanceId === "rcSkyAmbient" || /^fx-[a-zA-Z0-9-]{1,190}$/.test(action.instanceId);
         case "keyframe.toggleAutoKey":
         case "keyframe.setAutoKeyScope":
         case "keyframe.insertEmptyFrame":
@@ -262,6 +262,8 @@ export function canExecuteEditorAction(
         case "effect.instanceEdit":
         case "effect.setRcSkyOcclusion":
         case "effect.recalculateRcSkyOcclusionVolume":
+        case "effect.setRcSkyAmbient":
+        case "effect.recalculateRcSkyAmbientVolume":
         case "effect.setRcDiffuseGi":
         case "effect.recalculateRcDiffuseGiVolume":
         case "effect.instanceValue":

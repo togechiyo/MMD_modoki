@@ -3842,6 +3842,7 @@ export class FrameGraphPostEffectsController {
                 case "ringParticles":
                 case "rcSkyOcclusion":
                 case "rcDiffuseGi":
+                case "rcSkyAmbient":
                     // Scene lighting and particles are already present in sceneColor.
                     break;
                 case "motionBlur":

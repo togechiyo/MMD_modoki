@@ -11,6 +11,7 @@ decided_on: 2026-11-08
 evidence:
   - conversation-explicit-instruction
 source_docs:
+  - ../../docs/sky-ambient-rc-implementation-2026-11-08.md
   - ../../docs/sky-ambient-preview-2026-11-08.md
   - ../../docs/lpv-dfao-research-2026-10-25.md
 superseded_by: null
@@ -26,7 +27,7 @@ superseded_by: null
 
 参考画像は陰影の目標とし、モデル本来の色とテクスチャを残す。白い材質への置換を完成条件にしない。建物に広がる柔らかな陰影を比較し、接地陰だけに目標を狭めない。
 
-これは見た目の指定であり、RC / DFAO / SSAO等の方式採用、既存「影の深み RC」の置換、性能の了承ではない。
+その後、所有者は「Sky Ambient RC」としてFrameGraphエフェクト欄へ置くよう明示した。試作専用のまま完了とはせず、通常の操作・保存・出力へ接続する。既存「影の深み RC」の置換や、全sceneでの品質・性能の了承までは指定していない。
 
 ## 避けること
 
@@ -37,6 +38,8 @@ superseded_by: null
 ## 根拠
 
 所有者は「こんな感じのSky ambientにしたい」と画像を提示し、色・テクスチャを残すかの確認に「色・テクスチャを残して、この柔らかい陰影を付けたい」と回答した。
+
+2026-11-08、方式の説明後に「Sky Ambient RCとしてFlameGraphエフェクトにしといて」と通常エフェクト化を指定した。ここでのFlameGraphは既存UIのFrameGraphとして扱う。
 
 ## 再確認条件
 

@@ -22,7 +22,7 @@ export function createRcLightingSlider(name: string, labelText: string) {
 }
 
 /** Scene lighting shares the effect list, but keeps one field and one key track per effect. */
-export function createRcLightingEffectCard(parent: HTMLElement, id: "rcSkyOcclusion" | "rcDiffuseGi", options: RcLightingEffectCardOptions) {
+export function createRcLightingEffectCard(parent: HTMLElement, id: "rcSkyOcclusion" | "rcDiffuseGi" | "rcSkyAmbient", options: RcLightingEffectCardOptions) {
     const section = document.createElement("section");
     section.className = "effect-layer-placeholder effect-layer-placeholder--active effect-layer-placeholder--check rc-lighting-effect";
     section.dataset.effectStackRow = id;

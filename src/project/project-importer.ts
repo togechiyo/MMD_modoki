@@ -1,5 +1,6 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
 import { normalizeRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
+import { normalizeRcSkyAmbientSettings, type RcSkyAmbientSettings } from "../render/rc-sky-ambient-settings";
 import { normalizeRcDiffuseGiSettings, type RcDiffuseGiSettings } from "../render/rc-diffuse-gi-settings";
 import { migrateRcSceneEffectStack } from "../editor/rc-scene-effect-stack";
 import { FrameGraphEffectInstances } from "../editor/frame-graph-effect-instances";
@@ -151,6 +152,7 @@ type ProjectImportHost = {
     clearBackgroundMedia(): void;
     lightIntensity: number;
     setRcSkyOcclusionSettings?: (settings: Partial<RcSkyOcclusionSettings>) => void;
+    setRcSkyAmbientSettings?: (settings: Partial<RcSkyAmbientSettings>) => void;
     setRcDiffuseGiSettings?: (settings: Partial<RcDiffuseGiSettings>) => void;
     ambientIntensity: number;
     lightColorTemperature: number;
@@ -436,6 +438,13 @@ export function restoreProjectRcDiffuseGiSettings(
     lighting: Pick<MmdModokiProjectFileV1["lighting"], "rcDiffuseGi">,
 ): void {
     host.setRcDiffuseGiSettings?.(normalizeRcDiffuseGiSettings(lighting.rcDiffuseGi));
+}
+
+export function restoreProjectRcSkyAmbientSettings(
+    host: Pick<ProjectImportHost, "setRcSkyAmbientSettings">,
+    lighting: Pick<MmdModokiProjectFileV1["lighting"], "rcSkyAmbient">,
+): void {
+    host.setRcSkyAmbientSettings?.(normalizeRcSkyAmbientSettings(lighting.rcSkyAmbient));
 }
 
 export async function importProjectState(
@@ -1012,6 +1021,7 @@ export async function importProjectState(
     }
     host.lightIntensity = data.lighting.intensity;
     restoreProjectRcSkyOcclusionSettings(host, data.lighting);
+    restoreProjectRcSkyAmbientSettings(host, data.lighting);
     restoreProjectRcDiffuseGiSettings(host, data.lighting);
     host.ambientIntensity = data.lighting.ambientIntensity;
     host.lightColorTemperature = data.lighting.temperatureKelvin;

@@ -17,6 +17,14 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 - プロジェクト保存 / 読み込みでは、stack の順序と enabled 状態を `effects.frameGraphPostStack` として復元する。
 - 旧 project などで stack がない場合は、既存の各 post effect state から canonical order で復元する。
 
+## 2026-11-08 追記: Sky Ambient RC
+
+所有者指定で `rcSkyAmbient` singletonを追加。表示名は日本語・英語とも **Sky Ambient RC**。色・テクスチャを保つ独立空照明と通常拡散光の配分を行い、既存「影の深み RC」/ GI RCとは別の設定を持つ。
+
+操作は「空の明るさ」「暗部の光」「通常光」の3スライダー。`lighting.rcSkyAmbient`へ設定を保存し、enabled / strengthだけをscene trackへ登録する。カード追加・削除・Undo、全体OFF、Classic休止・復帰は下記RC singletonと同じ規則。fieldのcasterは静的stage中心とし、踊るPMXは受け手へ限定する。
+
+実装・初期値・材質条件・PNG/WebMを含む実WebGPU確認は[Sky Ambient RC実装メモ](./sky-ambient-rc-implementation-2026-11-08.md)を参照。
+
 ## 2026-10-30 追記: RC天空遮蔽・GIのエフェクト欄への移動
 
 所有者指定で、[RC天空遮蔽](./rc-sky-occlusion-implementation-2026-10-29.md)と[RC GI](./rc-diffuse-gi-implementation-2026-10-30.md)を実験設定から右側のFrameGraphエフェクト欄へ移した。追加・削除・履歴・旧保存形式・backend往復・PNG/WebMをローカルElectron/WebGPUで確認済み。

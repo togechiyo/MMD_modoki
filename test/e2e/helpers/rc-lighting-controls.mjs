@@ -2,7 +2,8 @@ import { expect } from "@playwright/test";
 
 export const rcLightingRow = (page, id) => page.locator(`[data-effect-stack-row="${id}"]`);
 export const rcLightingInput = (page, id, field) => rcLightingRow(page, id).locator(`[name="${id}${field}"]`);
-export const rcLightingStatus = (page, id) => rcLightingRow(page, id).locator(id === "rcDiffuseGi" ? "[data-rc-diffuse-gi-status]" : "[data-rc-sky-occlusion-status]");
+export const rcLightingStatus = (page, id) => rcLightingRow(page, id).locator(id === "rcDiffuseGi"
+  ? "[data-rc-diffuse-gi-status]" : id === "rcSkyAmbient" ? "[data-rc-sky-ambient-status]" : "[data-rc-sky-occlusion-status]");
 export async function openPostEffects(page) {
   if (!await page.locator("#shader-panel").isVisible()) await page.locator("#btn-toggle-shader-panel").click();
   await page.locator('[data-effect-tab="post"]').click();

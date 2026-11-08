@@ -9,6 +9,17 @@ const animations = { version: 1, tracks: [
 ] };
 
 describe("RC singleton scene-effect cards", () => {
+    it("restores sky ambient ON or keyed cards without resurrecting an authored deletion", () => {
+        const lighting = { rcSkyAmbient: { enabled: true, strength: 1.2, fill: 0.1, baseLight: 0.2 } };
+        expect(migrateRcSceneEffectStack({ lighting })).toEqual([{ id: "rcSkyAmbient", enabled: true }]);
+        expect(migrateRcSceneEffectStack({ rcSceneEffectsInStack: true, stack: [], lighting })).toEqual([]);
+        expect(migrateRcSceneEffectStack({ lighting: {}, animations: { version: 1, tracks: [{
+            effectId: "rcSkyAmbient", valueVersion: 1, base: { enabled: false, strength: 0.95 },
+            keys: [{ frame: 20, value: { enabled: true, strength: 1.4 } }],
+        }] } })).toEqual([{ id: "rcSkyAmbient", enabled: false }]);
+        expect(withRcSceneEffectStackIndex(["fx-left", "rcSkyAmbient", "rcSkyOcclusion"], "rcSkyAmbient", null))
+            .toEqual(["fx-left", "rcSkyOcclusion"]);
+    });
     it("migrates old ON lighting and keyed OFF cards without adding untouched OFF defaults", () => {
         expect(migrateRcSceneEffectStack({ lighting: {} })).toEqual([]);
         expect(migrateRcSceneEffectStack({ stack: [{ id: "gamma", enabled: true }],
@@ -43,10 +54,10 @@ describe("RC singleton scene-effect cards", () => {
     it("retains RC singleton tokens in saved instance order without creating duplicate fields", () => {
         const store = new FrameGraphEffectInstances();
         store.add("fx-gamma");
-        store.setOrder(["rcSkyOcclusion", "fx-gamma", "rcDiffuseGi"]);
+        store.setOrder(["rcSkyOcclusion", "fx-gamma", "rcDiffuseGi", "rcSkyAmbient"]);
         const restored = new FrameGraphEffectInstances(); restored.restore(store.serialize());
-        restored.syncLegacyOrder(["rcSkyOcclusion", "rcDiffuseGi"]);
-        expect(restored.order()).toEqual(["rcSkyOcclusion", "fx-gamma", "rcDiffuseGi"]);
+        restored.syncLegacyOrder(["rcSkyOcclusion", "rcDiffuseGi", "rcSkyAmbient"]);
+        expect(restored.order()).toEqual(["rcSkyOcclusion", "fx-gamma", "rcDiffuseGi", "rcSkyAmbient"]);
         expect(restored.ids()).toEqual(["fx-gamma"]);
     });
 });

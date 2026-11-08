@@ -29,6 +29,7 @@ describe("active mesh evaluation timing", () => {
         expect(Object.fromEntries(Object.entries(summary).map(([key, value]) => [key, value.avgMs]))).toEqual({
             activeMeshesEvaluation: 8, rcSkyOcclusionPrepare: 3, rcSkyOcclusionSource: 1.5, rcSkyOcclusionFieldSubmit: 0.5,
             rcDiffuseGiPrepare: 2, rcDiffuseGiSource: 1, rcDiffuseGiFieldSubmit: 0, activeMeshesEvaluationOther: 3,
+            rcSkyAmbientPrepare: 0, rcSkyAmbientSource: 0, rcSkyAmbientFieldSubmit: 0,
         });
         expect(summary.activeMeshesEvaluationOther.maxMs).toBe(5);
     });
@@ -49,5 +50,20 @@ describe("active mesh evaluation timing", () => {
         evaluation.finish();
         expect(profiler.summarize().rcSkyOcclusionSource).toEqual({ samples: 1, avgMs: 0, maxMs: 0 });
         expect(profiler.summarize().activeMeshesEvaluationOther).toEqual({ samples: 1, avgMs: 3, maxMs: 3 });
+    });
+
+    it("keeps sky ambient work out of the remaining active-mesh time", () => {
+        const profiler = new PerformanceProfiler(ACTIVE_MESHES_PERFORMANCE_SECTIONS);
+        let now = 0;
+        const evaluation = new ActiveMeshesPerformance(profiler, () => now);
+        evaluation.begin();
+        evaluation.prepareLighting(null, null, { prepareFrame(timing) {
+            now += 4; timing?.recordSource(2); timing?.recordFieldSubmit(1);
+        } });
+        now += 3; evaluation.finish();
+        expect(profiler.summarize().rcSkyAmbientPrepare.avgMs).toBe(4);
+        expect(profiler.summarize().rcSkyAmbientSource.avgMs).toBe(2);
+        expect(profiler.summarize().rcSkyAmbientFieldSubmit.avgMs).toBe(1);
+        expect(profiler.summarize().activeMeshesEvaluationOther.avgMs).toBe(3);
     });
 });

@@ -7,6 +7,7 @@ export const FRAME_GRAPH_POST_EFFECT_IDS = [
     "directionalLightShafts",
     "ringParticles",
     "rcSkyOcclusion",
+    "rcSkyAmbient",
     "rcDiffuseGi",
     "offsetShadow",
     "offsetHighlight",
@@ -163,6 +164,7 @@ export function isFrameGraphPostEffectActiveInSettings(
             return settings.directionalLightShaftsEnabled;
         case "ringParticles":
         case "rcSkyOcclusion":
+        case "rcSkyAmbient":
         case "rcDiffuseGi":
             // Scene-space helper rendered before the post chain. It lives in the
             // FrameGraph stack UI, but does not allocate a FrameGraph post task.

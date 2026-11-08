@@ -8,6 +8,8 @@ export type RcSkyAmbientSettings = {
     opacity: number;
     strength: number;
     fill: number;
+    skyBrightness: number;
+    /** Kept only for loading/saving earlier projects; no longer used for shading. */
     baseLight: number;
     rangeScale: number;
     quality: RcSkyAmbientQuality;
@@ -15,18 +17,19 @@ export type RcSkyAmbientSettings = {
 };
 
 export const DEFAULT_RC_SKY_AMBIENT_SETTINGS: Readonly<RcSkyAmbientSettings> = Object.freeze({
-    enabled: false, opacity: 1, strength: 0.95, fill: 0.035, baseLight: 0.25, rangeScale: 1, quality: "standard", volume: null,
+    enabled: false, opacity: 1, strength: 0.95, fill: 0.035, skyBrightness: 0, baseLight: 0.25, rangeScale: 1, quality: "standard", volume: null,
 });
 
 export function normalizeRcSkyAmbientSettings(value: unknown): RcSkyAmbientSettings {
     const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
-    const scalar = (key: "opacity" | "strength" | "fill" | "baseLight" | "rangeScale", maximum: number, minimum = 0): number => typeof raw[key] === "number" && Number.isFinite(raw[key])
+    const scalar = (key: "opacity" | "strength" | "fill" | "skyBrightness" | "baseLight" | "rangeScale", maximum: number, minimum = 0): number => typeof raw[key] === "number" && Number.isFinite(raw[key])
         ? Math.max(minimum, Math.min(maximum, raw[key] as number)) : DEFAULT_RC_SKY_AMBIENT_SETTINGS[key];
     return {
         enabled: raw.enabled === true,
         opacity: scalar("opacity", 1),
         strength: scalar("strength", 2),
         fill: scalar("fill", 1),
+        skyBrightness: scalar("skyBrightness", 2),
         baseLight: scalar("baseLight", 1),
         rangeScale: scalar("rangeScale", 4, 0.25),
         quality: raw.quality === "low" || raw.quality === "high" ? raw.quality : "standard",

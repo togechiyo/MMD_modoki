@@ -61,6 +61,23 @@ function fixture() {
 }
 
 describe("Sky Ambient field settings lifecycle", () => {
+    it("keeps optional sky fill independent and ignores legacy base light without rebuilding", async () => {
+        const { controller, settings } = fixture();
+        await controller.prewarm(); controller.prepareFrame();
+        const field = boundary.instances[0];
+        expect(boundary.provider?.()?.skyBrightness).toBe(0);
+        settings.baseLight = 0.9; controller.settingsChanged(); controller.prepareFrame();
+        expect(boundary.provider?.()).not.toHaveProperty("baseLight");
+        settings.strength = 0; controller.settingsChanged(); controller.prepareFrame();
+        expect(boundary.provider?.()).toBeNull();
+        const updates = field.source.update.mock.calls.length;
+        controller.prepareFrame();
+        expect(field.source.update).toHaveBeenCalledTimes(updates);
+        settings.skyBrightness = 0.6; controller.settingsChanged(); controller.prepareFrame();
+        expect(boundary.provider?.()).toMatchObject({ strength: 0, skyBrightness: 0.6 });
+        expect(field.execute).toHaveBeenCalledTimes(1);
+    });
+
     it("applies opacity without recalculating the field and skips source work at zero", async () => {
         const { controller, settings } = fixture();
         await controller.prewarm(); controller.prepareFrame();

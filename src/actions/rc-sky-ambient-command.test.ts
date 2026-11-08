@@ -29,7 +29,7 @@ it("does not record unchanged RC edits and preserves exact absence of a keyed pr
 
 it("routes apply and revert through the same RC settings command boundary", () => {
     const before = { stackIndex: 0, settings: { ...DEFAULT_RC_SKY_AMBIENT_SETTINGS }, track: null };
-    const after = { stackIndex: 0, settings: { ...before.settings, fill: 0.4 }, track: null };
+    const after = { stackIndex: 0, settings: { ...before.settings, fill: 0.4, skyBrightness: 1.4 }, track: null };
     const diff = buildRcSkyAmbientCommandDiff(before, after);
     if (!diff) throw new Error("Expected a settings change");
     let state = before;
@@ -40,6 +40,7 @@ it("routes apply and revert through the same RC settings command boundary", () =
     const command = { id: "test", label: "Sky", scope: "effect" as const, createdAtMs: 0, diff };
     expect(executeCommand(command, "apply", context)).toBe(true);
     expect(state.settings.fill).toBe(0.4);
+    expect(state.settings.skyBrightness).toBe(1.4);
     expect(executeCommand(command, "revert", context)).toBe(true);
     expect(state).toEqual(before);
 });

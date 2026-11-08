@@ -13,7 +13,7 @@ type Host = {
     getEffectSceneKeyframeFrames(id: string): Uint32Array;
 };
 
-/** Independent sky light shares the compact RC effect controls and scene key track. */
+/** Sky shading shares the compact RC effect controls and scene key track. */
 export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispatch: (action: EditorAction) => boolean, options: RcLightingEffectCardOptions): () => void {
     const card = createRcLightingEffectCard(parent, "rcSkyAmbient", options);
     const { enabled, register } = card;
@@ -25,17 +25,18 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
     volumeControls.className = "rc-lighting-effect-controls";
     const numberControls: HTMLInputElement[] = [];
     let activeSlider: HTMLInputElement | null = null;
-    const sliders = (["opacity", "strength", "fill", "baseLight"] as const).map(field => {
+    const sliders = (["opacity", "strength", "fill", "skyBrightness"] as const).map(field => {
         const suffix = `${field[0].toUpperCase()}${field.slice(1)}`;
+        const scale = field === "strength" || field === "skyBrightness" ? 50 : 100;
         const { row, input } = createRcLightingSlider(`rcSkyAmbient${suffix}`, t(`experiment.rcSkyAmbient.${field}`));
         input.addEventListener("input", () => { activeSlider = input; });
         input.addEventListener("change", () => {
             activeSlider = null;
-            dispatch({ type: "effect.setRcSkyAmbient", source: "panel", settings: { [field]: Number(input.value) / (field === "strength" ? 50 : 100) } });
+            dispatch({ type: "effect.setRcSkyAmbient", source: "panel", settings: { [field]: Number(input.value) / scale } });
             refresh();
         });
         (field === "opacity" ? details : volumeControls).append(row);
-        return { input, field };
+        return { input, field, scale };
     });
     const developmentSliders = (["rangeScale", "quality"] as const).map(field => {
         const name = `rcSkyAmbient${field[0].toUpperCase()}${field.slice(1)}`;
@@ -112,7 +113,7 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
         details.disabled = !settings.enabled || host.isPlaying;
         volumeControls.disabled = !settings.enabled || host.isPlaying;
         for (const slider of sliders) {
-            if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * (slider.field === "strength" ? 50 : 100)));
+            if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * slider.scale));
             slider.input.disabled = details.disabled;
         }
         for (const slider of developmentSliders) {

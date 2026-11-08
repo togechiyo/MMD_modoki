@@ -6,6 +6,7 @@ import { launchMmdModoki } from "./electron-app.mjs";
 import { camera, capture, difference, initialState, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
 import { addRcLighting, closeRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow,
   rcLightingStatus, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
+import { measureSkyAmbientGiRetention, measureSkyAmbientRegions, skyAmbientRegions } from "./helpers/rc-sky-ambient-regions.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-sky-stage/rc-sky-stage.pmx");
@@ -121,7 +122,8 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await expect(advancedDetails(page)).toHaveJSProperty("open", false);
     await expect(row(page).locator(".range-number-input")).toHaveCount(0);
     await expect(row(page).locator("p:not([role='status'])")).toHaveCount(0);
-    for (const [field, value] of [["Opacity", "100"], ["Strength", "48"], ["Fill", "4"], ["BaseLight", "25"],
+    await expect(input(page, "BaseLight")).toHaveCount(0);
+    for (const [field, value] of [["Opacity", "100"], ["Strength", "48"], ["Fill", "4"], ["SkyBrightness", "0"],
       ["RangeScale", "50"], ["Quality", "50"]]) {
       await expect(input(page, field)).toHaveValue(value);
       await expect(input(page, field).locator("..")).toHaveClass(/effect-layer-control-row/);
@@ -130,12 +132,12 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     }
     await expect(input(page, "Opacity")).toHaveAccessibleName(/^(濃度|Opacity)$/);
     await advanced(page);
-    await expect(input(page, "Strength")).toHaveAccessibleName(/^(空の明るさ|Sky brightness)$/);
-    await expect(input(page, "Fill")).toHaveAccessibleName(/^(暗部の光|Dark fill)$/);
-    await expect(input(page, "BaseLight")).toHaveAccessibleName(/^(通常光|Base lighting)$/);
+    await expect(input(page, "Strength")).toHaveAccessibleName(/^(陰影の強さ|Shading strength)$/);
+    await expect(input(page, "Fill")).toHaveAccessibleName(/^(暗部の残光|Minimum fill)$/);
+    await expect(input(page, "SkyBrightness")).toHaveAccessibleName(/^(空の明るさ|Sky brightness)$/);
     await expect(input(page, "Quality")).toHaveAttribute("step", "50");
     await advancedDetails(page).locator("summary").click();
-    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .035, baseLight: .25,
+    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .035, baseLight: .25, skyBrightness: 0,
       rangeScale: 1, quality: "standard", volume: null });
     await expect(status(page)).toHaveAttribute("data-automatic-volume", "true");
     await page.locator("#btn-effect-add-post").click();
@@ -144,7 +146,21 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await page.screenshot({ path: testInfo.outputPath("default-sky-ambient-panel.png") });
     await closeRcLighting(page);
     const defaultOn = await take("default-sky-ambient-on");
+    const materialPrograms = await page.evaluate(async () => {
+      const probe = await import("/test/e2e/helpers/rc-sky-ambient-probe.mjs");
+      return probe.inspectSkyAmbientMaterials();
+    });
+    report.checkpoints.materials = materialPrograms.map(({ fragment, ...material }, index) => {
+      writeFileSync(testInfo.outputPath(`material-${index}.wgsl`), fragment);
+      return { ...material, ambientBaseHooks: (fragment.match(/rcSkyAmbientBase \+=/g) ?? []).length };
+    });
     expect(compare("defaultOnVsNeutral", defaultOn, neutral)).toBeGreaterThan(.15);
+    const regions = skyAmbientRegions(report.camera);
+    const baselineRegions = measureSkyAmbientRegions(neutral, regions), defaultRegions = measureSkyAmbientRegions(defaultOn, regions);
+    report.checkpoints.defaultRegions = { baseline: baselineRegions, on: defaultRegions };
+    const defaultCanopyDarkening = baselineRegions.canopy.mean - defaultRegions.canopy.mean;
+    expect(defaultCanopyDarkening).toBeGreaterThan(2);
+    expect(Math.abs(baselineRegions.open.mean - defaultRegions.open.mean)).toBeLessThan(1);
 
     // Density blends the existing effect without changing its brightness controls.
     await open(page); await slider(page, "Opacity", 0); await closeRcLighting(page);
@@ -195,9 +211,13 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await ready(page); await expect(status(page)).toHaveAttribute("data-probe-grid", "16"); await closeRcLighting(page);
     expect(compare("rangeQualityRestored", await take("range-quality-restored"), defaultOn)).toBeLessThan(.1);
 
-    // Strength zero must bypass the ordinary-light attenuation as well as the sky contribution.
+    // Shading and optional sky light are independent; neither changes the other's setting.
     await open(page); await slider(page, "Strength", 0); await closeRcLighting(page);
     expect(compare("strengthZeroVsNeutral", await take("strength-zero"), neutral)).toBeLessThan(.1);
+    await open(page); await slider(page, "SkyBrightness", 100); await ready(page); await closeRcLighting(page);
+    expect((await settings(page)).strength).toBe(0); expect((await settings(page)).skyBrightness).toBe(2);
+    expect(compare("skyBrightnessWithoutShading", await take("sky-brightness-without-shading"), neutral)).toBeGreaterThan(.15);
+    await history(page, "undo"); expect((await settings(page)).skyBrightness).toBe(0);
     await history(page, "undo"); expect((await settings(page)).strength).toBe(.95);
     await ready(page); await input(page, "Enabled").uncheck();
     await expect(status(page)).toHaveAttribute("data-state", "off"); await closeRcLighting(page);
@@ -205,16 +225,16 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await open(page); await input(page, "Enabled").check(); await ready(page);
 
     // Static sliders are authored independently from animated enabled/strength/opacity.
-    await slider(page, "Fill", 10); await slider(page, "BaseLight", 40);
+    await slider(page, "Fill", 10); await slider(page, "SkyBrightness", 10);
     // Keep nondefault development settings for the following save/backend/export checks.
     await slider(page, "RangeScale", 75); await slider(page, "Quality", 0); await ready(page);
-    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .1, baseLight: .4,
+    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .1, baseLight: .25, skyBrightness: .2,
       rangeScale: 2, quality: "low", volume: null });
-    await input(page, "BaseLight").focus(); await input(page, "BaseLight").press("ArrowRight");
-    expect((await settings(page)).baseLight).toBe(.41);
-    await closeRcLighting(page); await history(page, "undo"); expect((await settings(page)).baseLight).toBe(.4);
-    await history(page, "redo"); expect((await settings(page)).baseLight).toBe(.41);
-    await history(page, "undo"); expect((await settings(page)).baseLight).toBe(.4);
+    await input(page, "Fill").focus(); await input(page, "Fill").press("ArrowRight");
+    expect((await settings(page)).fill).toBe(.11);
+    await closeRcLighting(page); await history(page, "undo"); expect((await settings(page)).fill).toBe(.1);
+    await history(page, "redo"); expect((await settings(page)).fill).toBe(.11);
+    await history(page, "undo"); expect((await settings(page)).fill).toBe(.1);
     const currentLighting = (await project(page)).lighting;
     expect(currentLighting.rcSkyOcclusion).toEqual(legacyBefore.rcSkyOcclusion);
     expect(currentLighting.rcDiffuseGi).toEqual(legacyBefore.rcDiffuseGi);
@@ -259,7 +279,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
       await registerRcLighting(page, id); await closeRcLighting(page);
     }
     expect(keys(await project(page))).toEqual(expectedKeys);
-    expect((await settings(page)).fill).toBe(.1); expect((await settings(page)).baseLight).toBe(.4);
+    expect((await settings(page)).fill).toBe(.1); expect((await settings(page)).skyBrightness).toBe(.2);
     expect((await project(page)).effects.frameGraphInstances?.instances?.some(instance => instance.type === id) ?? false).toBe(false);
     await seek(page, 10); await open(page);
     await expect(input(page, "Opacity")).toHaveValue("50"); await expect(input(page, "Strength")).toHaveValue("100");
@@ -281,12 +301,12 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     }, file);
     await fileMenu(page, "file.saveProject");
     const saved = await savedProject(file), savedSnapshot = snapshot(saved);
-    expect(saved.lighting[id]).toEqual({ enabled: true, opacity: 1, strength: 2, fill: .1, baseLight: .4,
+    expect(saved.lighting[id]).toEqual({ enabled: true, opacity: 1, strength: 2, fill: .1, baseLight: .25, skyBrightness: .2,
       rangeScale: 2, quality: "low", volume: null });
     expect(keys(saved)).toEqual(expectedKeys);
-    await open(page); await slider(page, "Fill", 100); await slider(page, "BaseLight", 100);
+    await open(page); await slider(page, "Fill", 100); await slider(page, "SkyBrightness", 100);
     await slider(page, "RangeScale", 50); await slider(page, "Quality", 50); await closeRcLighting(page);
-    expect((await settings(page)).fill).toBe(1); expect((await settings(page)).baseLight).toBe(1);
+    expect((await settings(page)).fill).toBe(1); expect((await settings(page)).skyBrightness).toBe(2);
     expect((await settings(page)).rangeScale).toBe(1); expect((await settings(page)).quality).toBe("standard");
     await fileMenu(page, "file.loadProject");
     await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
@@ -296,7 +316,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await expect(input(page, "Fill")).toHaveValue("10");
     await expect(input(page, "RangeScale")).toHaveValue("75"); await expect(input(page, "Quality")).toHaveValue("0");
     await expect(status(page)).toHaveAttribute("data-probe-grid", "8");
-    await expect(input(page, "BaseLight")).toHaveValue("40"); await closeRcLighting(page);
+    await expect(input(page, "SkyBrightness")).toHaveValue("10"); await closeRcLighting(page);
     expect(compare("projectRestored", await take("project-restored-on"), key20)).toBeLessThan(.15);
 
     for (const backend of ["classic", "frameGraph"]) {
@@ -377,6 +397,89 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
       await validate("webm");
     }
     await page.evaluate(() => window.mmdModokiE2e.setAutoRenderEnabled(true));
+
+    // Isolate material lighting from FXAA's contrast-dependent edge weights.
+    // The authored fixture has shared toon01 and cast/receive-shadow flags.
+    // Give its Toon floor an explicit neutral color, without changing app defaults.
+    const lightingMatrix = report.checkpoints.lightingMatrix = { regions: {}, shadows: {} };
+    const matrixImages = {};
+    for (const shadowEnabled of [false, true]) {
+      await page.evaluate(async shadowEnabled => {
+        const state = window.mmdModokiE2e.exportProjectState();
+        state.viewport.antialiasEnabled = false;
+        Object.assign(state.lighting, { shadowEnabled, shadowColor: { r: .5, g: .5, b: .5 },
+          toonShadowInfluence: 0, ambientIntensity: 0 });
+        Object.assign(state.lighting.rcSkyAmbient, { enabled: true, opacity: 1, strength: .95, fill: .035,
+          skyBrightness: 0, rangeScale: 1, quality: "standard", volume: null });
+        state.lighting.rcSkyOcclusion.enabled = false;
+        Object.assign(state.lighting.rcDiffuseGi, { enabled: false, strength: .08 });
+        if (state.keyframes?.effectAnimations) state.keyframes.effectAnimations.tracks =
+          state.keyframes.effectAnimations.tracks.filter(track => track.effectId !== "rcSkyAmbient");
+        await window.mmdModokiE2e.importProjectState(state);
+      }, shadowEnabled);
+      await ready(page); await closeRcLighting(page);
+      const lightBefore = (await project(page)).lighting;
+      const withSkyName = shadowEnabled ? "both" : "skyOnly", noSkyName = shadowEnabled ? "shadowOnly" : "neither";
+      for (const [name, enabled] of [[withSkyName, true], [noSkyName, false]]) {
+        if (!enabled) { await open(page); await input(page, "Enabled").uncheck(); await closeRcLighting(page); }
+        matrixImages[name] = await take(`lighting-matrix-${name}`);
+        lightingMatrix.regions[name] = measureSkyAmbientRegions(matrixImages[name], regions);
+      }
+      lightingMatrix.shadows[noSkyName] = await page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics());
+      expect(lightingMatrix.shadows[noSkyName].lightSamplingEnabled).toBe(shadowEnabled);
+      const lightAfter = (await project(page)).lighting;
+      delete lightBefore.rcSkyAmbient; delete lightAfter.rcSkyAmbient;
+      expect(lightAfter).toEqual(lightBefore);
+    }
+    const measured = lightingMatrix.regions;
+    const ordinaryShadowDrop = measured.neither.canopy.mean - measured.shadowOnly.canopy.mean;
+    const combinedShadowDrop = measured.skyOnly.canopy.mean - measured.both.canopy.mean;
+    const skyDrop = measured.neither.canopy.mean - measured.skyOnly.canopy.mean;
+    lightingMatrix.contrast = { ordinaryShadowDrop, combinedShadowDrop, skyDrop };
+    expect(ordinaryShadowDrop, "The canopy must cast a real standard shadow").toBeGreaterThan(2);
+    expect(skyDrop, "Sky visibility must darken the canopy's auxiliary light").toBeGreaterThan(2);
+    expect(measured.shadowOnly.canopy.mean - measured.both.canopy.mean).toBeGreaterThan(2);
+    expect(measured.skyOnly.canopy.mean - measured.both.canopy.mean).toBeGreaterThan(2);
+    // The removed common floor is independent of raster shadow: its direct-light
+    // contrast survives instead of shrinking with the Sky Ambient density.
+    expect(Math.abs(combinedShadowDrop - ordinaryShadowDrop)).toBeLessThan(1.5);
+    expect(Math.abs(measured.neither.open.mean - measured.skyOnly.open.mean)).toBeLessThan(1);
+    expect(Math.abs(measured.shadowOnly.open.mean - measured.both.open.mean)).toBeLessThan(1);
+
+    // Retain GI's independent linear addition after the auxiliary-light shading.
+    // A small authored GI gain avoids output clipping hiding a lost contribution.
+    await openRcLighting(page, "rcDiffuseGi"); await rcLightingInput(page, "rcDiffuseGi", "Enabled").check();
+    await expect(rcLightingStatus(page, "rcDiffuseGi")).toHaveAttribute("data-state", "ready", { timeout: 45000 });
+    await closeRcLighting(page);
+    const giOnly = await take("lighting-matrix-shadow-gi");
+    const giOnlyRegions = measureSkyAmbientRegions(giOnly, regions);
+    await open(page); await input(page, "Enabled").check(); await ready(page); await closeRcLighting(page);
+    const withGi = await take("lighting-matrix-shadow-sky-gi");
+    const withGiRegions = measureSkyAmbientRegions(withGi, regions);
+    const retention = measureSkyAmbientGiRetention(matrixImages.shadowOnly, matrixImages.both, giOnly, withGi);
+    lightingMatrix.gi = { withoutSky: giOnlyRegions, withSky: withGiRegions, retention };
+    expect(retention.pixels, "GI and sky shading must overlap on visible surfaces").toBeGreaterThan(100);
+    expect(retention.meanGain).toBeGreaterThan(.002);
+    expect(retention.meanAbsoluteError).toBeLessThan(Math.max(.0015, retention.meanGain * .15));
+
+    // A hemisphere-only fixture distinguishes auxiliary illumination from the
+    // directional Toon floor tested above. It must respond to the same sky mask.
+    await page.evaluate(async () => {
+      const state = window.mmdModokiE2e.exportProjectState();
+      state.viewport.antialiasEnabled = false;
+      Object.assign(state.lighting, { intensity: 0, ambientIntensity: .6, shadowEnabled: false });
+      state.lighting.rcDiffuseGi.enabled = false;
+      state.lighting.rcSkyOcclusion.enabled = false;
+      Object.assign(state.lighting.rcSkyAmbient, { enabled: true, opacity: 1, strength: .95, skyBrightness: 0 });
+      await window.mmdModokiE2e.importProjectState(state);
+    });
+    await ready(page); await closeRcLighting(page);
+    const hemisphereOn = measureSkyAmbientRegions(await take("hemisphere-only-sky-on"), regions);
+    await open(page); await input(page, "Enabled").uncheck(); await closeRcLighting(page);
+    const hemisphereOff = measureSkyAmbientRegions(await take("hemisphere-only-sky-off"), regions);
+    report.checkpoints.hemisphereOnly = { lighting: (await project(page)).lighting, on: hemisphereOn, off: hemisphereOff };
+    expect(hemisphereOff.canopy.mean - hemisphereOn.canopy.mean).toBeGreaterThan(2);
+    expect(Math.abs(hemisphereOff.open.mean - hemisphereOn.open.mean)).toBeLessThan(1);
     await validate("final");
     expect(report.consoleErrors).toEqual([]);
   } finally {

@@ -39,6 +39,7 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | --- | --- | --- |
 | policy | [描画補正はデータ駆動・局所的・可逆にする](./policies/render-corrections-must-be-data-driven-and-reversible.md) | モデル依存に見える描画崩れへ対応する |
 | verified | [babylon-mmdのToon `info.diffuse`はN dot L適用前](./verified/babylon-mmd-toon-info-diffuse-excludes-ndl.md) | MMD Standardのcustom lightingやSSSで`info.diffuse`を扱う |
+| verified | [Babylonのregex挿入は同一light文への再一致を避ける](./verified/babylon-regex-injection-must-not-rematch-identical-light-statements.md) | 展開後の複数light等に同じ文があり、MaterialPluginのregex custom codeで処理を足す |
 | verified | [`.x` の逆向き重複 polygon](./verified/x-reversed-duplicate-polygons.md) | 影を切っても両面材質の面がちらつく |
 | observation | [shadow caster が空になった後の残留 map](./observations/shadow-caster-empty-list.md) | 最後の caster を外しても直前の影が残る。PMX 削除時の同期漏れは未修正 |
 | verified | [広域表示では WebGPU reverse depth を使う](./verified/webgpu-wide-area-reverse-depth.md) | 大きな near/far 範囲で遠景の面が競合・欠落する |

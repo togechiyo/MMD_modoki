@@ -16,7 +16,7 @@ export type RcSkyAmbientDiagnostics = {
     triangleCount: number; fieldRevision: number; supportedMaterialCount: number;
 };
 
-/** Independent sky illumination. Saved values and caster policy belong to the manager. */
+/** Sky attenuation and optional fill. Saved values and caster policy belong to the manager. */
 export class RcSkyAmbientController {
     private field: RadianceSkyVisibilityField | null = null;
     private pending: RadianceSkyVisibilityField | null = null;
@@ -120,7 +120,7 @@ export class RcSkyAmbientController {
     public get isReadyForCapture(): boolean {
         const settings = this.settings();
         if (!settings.enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolume()
-            || settings.enabled && (settings.strength <= 0 || settings.opacity <= 0)) return true;
+            || settings.enabled && (settings.strength <= 0 && settings.skyBrightness <= 0 || settings.opacity <= 0)) return true;
         return this.status !== "error" && this.field?.quality === settings.quality && Boolean(this.field.graph.isReady());
     }
 
@@ -167,7 +167,7 @@ export class RcSkyAmbientController {
             if (!this.pending && this.status !== "error") void this.prewarm();
             return;
         }
-        if (settings.strength <= 0 || settings.opacity <= 0) {
+        if (settings.strength <= 0 && settings.skyBrightness <= 0 || settings.opacity <= 0) {
             this.view = null; this.status = "ready"; this.reason = null; this.frameId = -1; return;
         }
         const field = this.field, frameId = this.scene.getFrameId();
@@ -204,7 +204,7 @@ export class RcSkyAmbientController {
             }
             this.view = field.irradianceField && field.nearestSurfaceField
                 ? { field: field.irradianceField, nearestSurface: field.nearestSurfaceField, triangles: field.source.triangleBuffer,
-                    volume, strength: settings.strength, fill: settings.fill, baseLight: settings.baseLight,
+                    volume, strength: settings.strength, fill: settings.fill, skyBrightness: settings.skyBrightness,
                     opacity: settings.opacity } : null;
             this.frameId = frameId; this.status = "ready"; this.reason = null;
         } catch (error) {

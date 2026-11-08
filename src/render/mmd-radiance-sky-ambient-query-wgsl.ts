@@ -5,16 +5,48 @@ import { MMD_RADIANCE_SKY_QUERY_WGSL } from "./mmd-radiance-sky-query-wgsl";
 export const MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL = MMD_RADIANCE_SKY_QUERY_WGSL
     .replaceAll("RC_SKY_OCCLUSION", "RC_SKY_AMBIENT")
     .replaceAll("RcSky", "RcSkyAmbient")
-    .replaceAll("rcSky", "rcSkyAmbient");
+    .replaceAll("rcSky", "rcSkyAmbient") + /* wgsl */`
+#ifdef RC_SKY_AMBIENT
+fn rcSkyAmbientDarkenDiffuse(diffuse: vec3f, base: vec3f, factor: f32, oldDarkening: vec3f) -> vec3f {
+    // Shadow Depth RC already removed part of the same auxiliary light. Take
+    // the larger attenuation instead of subtracting it twice from direct light.
+    return diffuse - max(base * (1.0 - factor) - oldDarkening, vec3f(0.0));
+}
+#endif
+`;
 
 export const MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL = /* wgsl */`
 #ifdef RC_SKY_AMBIENT
-var rcSkyAmbientBaseScale = 1.0;
+var rcSkyAmbientBase = vec3f(0.0);
+var rcSkyAmbientIsHemi = false;
+var rcSkyAmbientFactor = 1.0;
+var rcSkyAmbientIrradiance = -1.0;
 #ifndef PREPASS
 #ifndef DIFFUSEFRESNEL
 #ifndef LIGHTMAP
 if (uniforms.rcSkyAmbientControl.w > 0.0) {
-    rcSkyAmbientBaseScale = mix(1.0, uniforms.rcSkyAmbientControl.z, clamp(uniforms.rcSkyAmbientControl.x, 0.0, 1.0));
+    let normalLength = length(normalW);
+    let volumeMin = uniforms.rcSkyAmbientVolume.xyz;
+    let size = uniforms.rcSkyAmbientVolume.w;
+    if (normalLength > 0.00001 && normalLength < 1e20 && size > 0.0
+        && all(fragmentInputs.vPositionW >= volumeMin) && all(fragmentInputs.vPositionW <= volumeMin + vec3f(size))) {
+        let normal = normalW / normalLength;
+        let openSky = clamp((1.0 + normal.y) * 0.5, 0.0, 1.0);
+        let horizontal = 0.9238795325 * max(abs(normal.x), abs(normal.z)) + 0.3826834324 * min(abs(normal.x), abs(normal.z));
+        let upperSupport = max(0.75 * normal.y + 0.6614378278 * horizontal, 0.25 * normal.y + 0.9682458366 * horizontal);
+        // A true underside has zero sky irradiance. Invalid probes or a query
+        // outside the volume remain neutral, rather than becoming black.
+        if (openSky <= 0.00001 || upperSupport <= 0.0) {
+            rcSkyAmbientIrradiance = 0.0;
+        } else {
+            let visibility = rcSkyAmbientVisibility(fragmentInputs.vPositionW, normal);
+            if (visibility >= 0.0) { rcSkyAmbientIrradiance = openSky * visibility; }
+        }
+        if (rcSkyAmbientIrradiance >= 0.0) {
+            rcSkyAmbientFactor = 1.0 - (1.0 - uniforms.rcSkyAmbientControl.y)
+                * clamp(uniforms.rcSkyAmbientControl.x * (1.0 - rcSkyAmbientIrradiance), 0.0, 1.0);
+        }
+    }
 }
 #endif
 #endif
@@ -34,6 +66,10 @@ $0
 if (uniforms.rcSkyAmbientControl.w > 0.0) {
     var rcSkyAmbientMixedDiffuse = finalDiffuse;
     {
+        var rcSkyAmbientOldDarkening = vec3f(0.0);
+#ifdef RC_SKY_OCCLUSION
+        rcSkyAmbientOldDarkening = rcSkyResidual * (1.0 - rcSkyFactor);
+#endif
         ${skyDiffuse}
         if (uniforms.rcSkyAmbientControl.w >= 1.0) {
             rcSkyAmbientMixedDiffuse = finalDiffuse;
@@ -53,45 +89,76 @@ if (uniforms.rcSkyAmbientControl.w > 0.0) {
 // original expression is not attenuated by a later regex replacement.
 export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)(rcSkyApplyDiffuse\\(diffuseBase, rcSkyResidual, rcSkyFactor\\)|\\bdiffuseBase\\b)((?:(?!uniforms\\.vAmbientColor)[^;\\n])*);";
 export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATCH = blendDiffusePatch(
-    "var finalDiffuse: vec3f=clamp($1($2 * rcSkyAmbientBaseScale)$3;");
+    "var finalDiffuse: vec3f=clamp($1rcSkyAmbientDarkenDiffuse($2, rcSkyAmbientBase, rcSkyAmbientFactor, rcSkyAmbientOldDarkening)$3;");
 export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)(rcSkyApplyDiffuse\\(diffuseBase, rcSkyResidual, rcSkyFactor\\)|\\bdiffuseBase\\b)([^;\\n]*?)\\+uniforms\\.vAmbientColor([^;\\n]*);";
 export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATCH = blendDiffusePatch(
-    "var finalDiffuse: vec3f=clamp($1($2 * rcSkyAmbientBaseScale)$3+(uniforms.vAmbientColor * rcSkyAmbientBaseScale)$4;");
+    "var finalDiffuse: vec3f=clamp($1rcSkyAmbientDarkenDiffuse($2, rcSkyAmbientBase, rcSkyAmbientFactor, rcSkyAmbientOldDarkening)$3+(uniforms.vAmbientColor * rcSkyAmbientFactor)$4;");
+
+// Capture the common MMD Toon shadow floor B separately from its directional
+// contrast D. The original light sum remains available to sphere/specular/GI.
+// These match expanded shader statements: no unresolved light{X} identifiers
+// are introduced after Babylon has expanded the light includes.
+export const MMD_RADIANCE_SKY_AMBIENT_HEMI_PATTERN = "!info=computeHemisphericLighting(\\([^;\\n]*\\));";
+export const MMD_RADIANCE_SKY_AMBIENT_HEMI_PATCH = `info = computeHemisphericLighting$1;
+#ifdef RC_SKY_AMBIENT
+rcSkyAmbientIsHemi = true;
+#endif
+`;
+export const MMD_RADIANCE_SKY_AMBIENT_TOON_PATTERN = "!let shadowTerm=info\\.diffuse\\*mix\\(one,toonShadowBand,shadowMask\\);";
+// Do not retain the exact matched statement: Babylon iterates matches from a
+// snapshot but replaces the first identical string in the evolving shader.
+// Distinct spelling prevents every light's hook from accumulating on light 0.
+export const MMD_RADIANCE_SKY_AMBIENT_TOON_PATCH = `let shadowTerm = info.diffuse * mix(one, toonShadowBand, shadowMask);
+#ifdef RC_SKY_AMBIENT
+rcSkyAmbientBase += select(info.diffuse * toonShadowBand, shadowTerm, rcSkyAmbientIsHemi);
+rcSkyAmbientIsHemi = false;
+#endif
+`;
+export const MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATTERN = "!diffuseBase\\+=mix\\(info\\.diffuse\\*shadow,toonNdl\\*info\\.diffuse,info\\.isToon\\);";
+export const MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATCH = `diffuseBase += mix(info.diffuse * shadow, toonNdl * info.diffuse, info.isToon);
+#ifdef RC_SKY_AMBIENT
+if (rcSkyAmbientIsHemi) { rcSkyAmbientBase += info.diffuse * shadow; }
+rcSkyAmbientIsHemi = false;
+#endif
+`;
+export const MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATTERN = "!diffuseBase\\+=(\\(info\\.diffuse\\*shadow\\)|info\\.diffuse);";
+export const MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATCH = `{
+let rcSkyAmbientPlainContribution = $1;
+diffuseBase += rcSkyAmbientPlainContribution;
+#ifdef RC_SKY_AMBIENT
+if (rcSkyAmbientIsHemi) { rcSkyAmbientBase += rcSkyAmbientPlainContribution; }
+rcSkyAmbientIsHemi = false;
+#endif
+}
+`;
 
 export const MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL = /* wgsl */`
 #ifdef RC_SKY_AMBIENT
 #ifndef PREPASS
 #ifndef DIFFUSEFRESNEL
 #ifndef LIGHTMAP
-if (uniforms.rcSkyAmbientControl.x > 0.0 && uniforms.rcSkyAmbientControl.w > 0.0) {
-    let skyAmbientNormalLength = length(normalW);
-    if (skyAmbientNormalLength > 0.00001 && skyAmbientNormalLength < 1e20) {
-        let skyAmbientNormal = normalW / skyAmbientNormalLength;
-        // Cosine irradiance of a uniform upper hemisphere: floor 1, wall 0.5,
-        // downward-facing surface 0. The shared field stores visibility ratios.
-        let skyAmbientOpenSky = clamp((1.0 + skyAmbientNormal.y) * 0.5, 0.0, 1.0);
-        var skyAmbientVisibility = 1.0;
-        if (skyAmbientOpenSky > 0.00001) {
-            let skyAmbientSample = rcSkyAmbientVisibility(fragmentInputs.vPositionW, skyAmbientNormal);
-            // A valid zero remains dark. Invalid probes / outside the volume
-            // retain open sky without turning downward surfaces into lit ones.
-            if (skyAmbientSample >= 0.0) { skyAmbientVisibility = skyAmbientSample; }
-        }
-        // Fill is an artistic floor, not a computed indirect-light bounce.
-        let skyAmbientIllumination = uniforms.rcSkyAmbientControl.x
-            * (skyAmbientOpenSky * skyAmbientVisibility + uniforms.rcSkyAmbientControl.y);
-        let skyAmbientReflectance = toLinearSpaceVec3(clamp(diffuseColor * baseColor.rgb, vec3f(0.0), vec3f(1.0)));
-        let skyAmbientAddition = skyAmbientReflectance * skyAmbientIllumination * uniforms.rcSkyAmbientControl.w;
-        if (any(skyAmbientAddition > vec3f(0.0))) {
-            // MMD color is display-space here. Add sky in linear space without
-            // replacing the material's existing specular, sphere or emission.
-            color = vec4f(toGammaSpaceVec3(toLinearSpaceVec3(max(color.rgb, vec3f(0.0)))
-                + skyAmbientAddition), color.a);
-        }
-    }
+if (uniforms.rcSkyAmbientControl.z > 0.0 && uniforms.rcSkyAmbientControl.w > 0.0 && rcSkyAmbientIrradiance > 0.0) {
+    // Optional sky fill is zero by default. Reuse the single visibility query,
+    // and never add an unoccluded floor underneath a roof.
+    let skyAmbientReflectance = toLinearSpaceVec3(clamp(diffuseColor * baseColor.rgb, vec3f(0.0), vec3f(1.0)));
+    let skyAmbientAddition = skyAmbientReflectance * uniforms.rcSkyAmbientControl.z
+        * rcSkyAmbientIrradiance * uniforms.rcSkyAmbientControl.w;
+    color = vec4f(toGammaSpaceVec3(toLinearSpaceVec3(max(color.rgb, vec3f(0.0))) + skyAmbientAddition), color.a);
 }
 #endif
 #endif
 #endif
 #endif
 `;
+
+export const MMD_RADIANCE_SKY_AMBIENT_CUSTOM_CODE: Record<string, string> = {
+    CUSTOM_FRAGMENT_DEFINITIONS: MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL,
+    CUSTOM_FRAGMENT_BEFORE_LIGHTS: MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL,
+    CUSTOM_FRAGMENT_BEFORE_FOG: MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL,
+    [MMD_RADIANCE_SKY_AMBIENT_HEMI_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_HEMI_PATCH,
+    [MMD_RADIANCE_SKY_AMBIENT_TOON_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_TOON_PATCH,
+    [MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATCH,
+    [MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATCH,
+    [MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATCH,
+    [MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATCH,
+};

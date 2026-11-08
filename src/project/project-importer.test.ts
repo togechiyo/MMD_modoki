@@ -207,7 +207,7 @@ describe("importProjectState", () => {
     it("restores Sky Ambient RC through import and resets it when opening a legacy project", async () => {
         const setRcSkyAmbientSettings = vi.fn();
         const host = { ...createHost(), setRcSkyAmbientSettings }, project = createProject();
-        const settings = { enabled: true, strength: 1.6, fill: 0.08, baseLight: 0.35, opacity: 0.7, rangeScale: 2, quality: "high" as const,
+        const settings = { enabled: true, strength: 1.6, fill: 0.08, skyBrightness: 0.8, baseLight: 0.35, opacity: 0.7, rangeScale: 2, quality: "high" as const,
             volume: { min: [-8, 0, -8] as [number, number, number], size: 16 } };
         project.lighting.rcSkyAmbient = settings;
         await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
@@ -217,7 +217,7 @@ describe("importProjectState", () => {
         await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
         expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenLastCalledWith([]);
         restoreProjectRcSkyAmbientSettings(host, createProject().lighting);
-        expect(setRcSkyAmbientSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 0.95, fill: 0.035, baseLight: 0.25, opacity: 1, rangeScale: 1, quality: "standard", volume: null });
+        expect(setRcSkyAmbientSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 0.95, fill: 0.035, skyBrightness: 0, baseLight: 0.25, opacity: 1, rangeScale: 1, quality: "standard", volume: null });
     });
     it("preserves inferred legacy Bloom when adding RC to a project without a saved stack", async () => {
         const host = { ...createHost(), postEffectBloomEnabled: false,

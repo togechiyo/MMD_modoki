@@ -57,7 +57,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 背景画像・動画を保持したprojectの空表示を読込後に復元し、非透過alpha・FrameGraphの入力素材準備を含めPNG / WebM出力を確認（[V022-116・元環境再確認待ち](./issue-29-background-sky-restore-2026-10-19.md)）
 - [x] ライティング調整
 - [x] 色・テクスチャを保つ独立Sky Ambientを自作sceneで比較。標準影なしの庇下・室内陰影、移動受け手と静的casterの分離、field更新抑止を実WebGPUで確認（[試作・測定・限界](./sky-ambient-preview-2026-11-08.md)、2026-11-08）。
-- [x] 所有者指定の「Sky Ambient RC」を通常FrameGraph欄へ接続。濃度1本＋詳細の空照明/範囲/品質、静的caster選別、保存/濃度キー/Undo/Classic往復/PNG/WebMを確認。通常光の減衰調整は撤去し空照明加算を維持（[実装・制約](./sky-ambient-rc-implementation-2026-11-08.md)、2026-11-08）。
+- [x] 所有者指定の「Sky Ambient RC」を通常FrameGraph欄へ接続。濃度1本＋詳細の照明配分/範囲/品質、静的caster選別、保存/濃度キー/Undo/Classic往復/PNG/WebMを確認。加算専用化は目視NGで取り下げ、従来合成へ復帰（[実装・制約](./sky-ambient-rc-implementation-2026-11-08.md)、2026-11-08）。
+- [ ] Sky Ambient RCの合成を再検討する。庇下の柔らかい陰影と空照明の加算を両立し、「通常光」への依存・濃度との分かりづらい関係を整理する（[比較候補と合格条件](./sky-ambient-rc-implementation-2026-11-08.md#加算専用版の取り下げと合成の再検討)）。
 - [ ] Sky Ambient RCの固定ステージ＋踊るPMXでの見た目/負荷、細かな接地陰、対象材質の追加互換を実sceneで確認する。fixtureの成功を全sceneの品質・性能保証としない。
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）

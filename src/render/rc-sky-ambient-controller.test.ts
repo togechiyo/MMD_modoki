@@ -61,18 +61,6 @@ function fixture() {
 }
 
 describe("Sky Ambient field settings lifecycle", () => {
-    it("retains legacy baseLight settings without passing ordinary-light attenuation to the shader", async () => {
-        const { controller, settings } = fixture();
-        await controller.prewarm(); controller.prepareFrame();
-        const before = boundary.provider?.();
-        expect(before).not.toBeNull();
-        expect(before).not.toHaveProperty("baseLight");
-        settings.baseLight = 0; controller.settingsChanged(); controller.prepareFrame();
-        expect(boundary.provider?.()).toEqual(before);
-        settings.baseLight = 1; controller.settingsChanged(); controller.prepareFrame();
-        expect(boundary.provider?.()).toEqual(before);
-        expect(boundary.instances[0].execute).toHaveBeenCalledTimes(1);
-    });
     it("applies opacity without recalculating the field and skips source work at zero", async () => {
         const { controller, settings } = fixture();
         await controller.prewarm(); controller.prepareFrame();

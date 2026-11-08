@@ -8,7 +8,6 @@ export type RcSkyAmbientSettings = {
     opacity: number;
     strength: number;
     fill: number;
-    /** Legacy project value retained for round trips; no longer attenuates ordinary lighting. */
     baseLight: number;
     rangeScale: number;
     quality: RcSkyAmbientQuality;

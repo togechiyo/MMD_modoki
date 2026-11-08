@@ -91,6 +91,7 @@
     "experiment.rcSkyAmbient.quality.high": "High",
     "experiment.rcSkyAmbient.strength": "Sky brightness",
     "experiment.rcSkyAmbient.fill": "Dark fill",
+    "experiment.rcSkyAmbient.baseLight": "Base lighting",
     "experiment.rcSkyAmbient.minX": "Volume minimum X",
     "experiment.rcSkyAmbient.minY": "Volume minimum Y",
     "experiment.rcSkyAmbient.minZ": "Volume minimum Z",

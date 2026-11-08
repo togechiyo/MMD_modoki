@@ -14,6 +14,7 @@ const id = "rcSkyAmbient";
 const row = page => rcLightingRow(page, id);
 const input = (page, field) => rcLightingInput(page, id, field);
 const status = page => row(page).locator("[data-rc-sky-ambient-status]");
+const advancedDetails = page => row(page).locator(`[data-rc-volume-controls="${id}"]`);
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
 const settings = async page => (await project(page)).lighting[id];
 const keys = state => state.keyframes?.effectAnimations?.tracks.find(track => track.effectId === id)?.keys ?? [];
@@ -32,10 +33,17 @@ async function ready(page) {
   await open(page);
   await expect(status(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
 }
+async function advanced(page) {
+  await open(page);
+  if (await advancedDetails(page).getAttribute("open") === null) await advancedDetails(page).locator("summary").click();
+  await expect(input(page, "Quality")).toBeVisible();
+}
 async function slider(page, field, position) {
+  if (field !== "Opacity") await advanced(page);
   const range = input(page, field);
+  const step = Number(await range.getAttribute("step") ?? 1);
   await range.focus(); await range.press(position > 50 ? "End" : "Home");
-  for (let i = 0; i < (position > 50 ? 100 - position : position); i++) {
+  for (let i = 0; i < (position > 50 ? 100 - position : position) / step; i++) {
     await range.press(position > 50 ? "ArrowLeft" : "ArrowRight");
   }
   await expect(range).toHaveValue(String(position));
@@ -106,19 +114,29 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await addRcLighting(page, id); await ready(page);
     await expect(row(page).locator(`[data-effect-stack-item="${id}"]`)).toHaveText("Sky Ambient RC");
     await expect(input(page, "Enabled")).toBeChecked();
-    await expect(row(page).locator('input[type="range"]')).toHaveCount(3);
+    await expect(row(page).locator('input[type="range"]')).toHaveCount(6);
+    await expect(row(page).locator('input[type="range"]:visible')).toHaveCount(1);
+    await expect(input(page, "Opacity")).toBeVisible();
+    await expect(status(page)).not.toBeVisible();
+    await expect(advancedDetails(page)).toHaveJSProperty("open", false);
     await expect(row(page).locator(".range-number-input")).toHaveCount(0);
     await expect(row(page).locator("p:not([role='status'])")).toHaveCount(0);
-    for (const [field, value] of [["Strength", "48"], ["Fill", "4"], ["BaseLight", "25"]]) {
+    for (const [field, value] of [["Opacity", "100"], ["Strength", "48"], ["Fill", "4"], ["BaseLight", "25"],
+      ["RangeScale", "50"], ["Quality", "50"]]) {
       await expect(input(page, field)).toHaveValue(value);
       await expect(input(page, field).locator("..")).toHaveClass(/effect-layer-control-row/);
       await expect(input(page, field)).toHaveAttribute("min", "0");
       await expect(input(page, field)).toHaveAttribute("max", "100");
     }
+    await expect(input(page, "Opacity")).toHaveAccessibleName(/^(濃度|Opacity)$/);
+    await advanced(page);
     await expect(input(page, "Strength")).toHaveAccessibleName(/^(空の明るさ|Sky brightness)$/);
     await expect(input(page, "Fill")).toHaveAccessibleName(/^(暗部の光|Dark fill)$/);
     await expect(input(page, "BaseLight")).toHaveAccessibleName(/^(通常光|Base lighting)$/);
-    expect(await settings(page)).toEqual({ enabled: true, strength: .95, fill: .035, baseLight: .25, volume: null });
+    await expect(input(page, "Quality")).toHaveAttribute("step", "50");
+    await advancedDetails(page).locator("summary").click();
+    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .035, baseLight: .25,
+      rangeScale: 1, quality: "standard", volume: null });
     await expect(status(page)).toHaveAttribute("data-automatic-volume", "true");
     await page.locator("#btn-effect-add-post").click();
     await expect(page.locator(`[data-effect-add-post="${id}"]`)).toBeDisabled();
@@ -127,6 +145,55 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await closeRcLighting(page);
     const defaultOn = await take("default-sky-ambient-on");
     expect(compare("defaultOnVsNeutral", defaultOn, neutral)).toBeGreaterThan(.15);
+
+    // Density blends the existing effect without changing its brightness controls.
+    await open(page); await slider(page, "Opacity", 0); await closeRcLighting(page);
+    const densityZero = await take("opacity-zero");
+    expect(compare("opacityZeroVsNeutral", densityZero, neutral)).toBeLessThan(.1);
+    expect((await settings(page)).strength).toBe(.95);
+    await open(page); await slider(page, "Opacity", 50); await ready(page); await closeRcLighting(page);
+    const densityHalf = await take("opacity-half");
+    const halfDifference = compare("opacityHalfVsZero", densityHalf, densityZero);
+    expect(halfDifference).toBeGreaterThan(.1);
+    expect(halfDifference).toBeLessThan(compare("opacityFullVsZero", defaultOn, densityZero));
+    await open(page); await slider(page, "Opacity", 100); await ready(page); await closeRcLighting(page);
+    expect(compare("opacityFullRestored", await take("opacity-full-restored"), defaultOn)).toBeLessThan(.1);
+
+    // Quality changes the real field dimensions, while range keeps its center.
+    await advanced(page);
+    const effectiveVolume = async () => JSON.parse(await status(page).getAttribute("data-effective-volume") ?? "null");
+    const standardVolume = await effectiveVolume();
+    expect(standardVolume?.size).toBeGreaterThan(0);
+    const center = standardVolume.min.map(value => value + standardVolume.size / 2);
+    for (const [position, quality, probeGrid] of [[0, "low", 8], [50, "standard", 16], [100, "high", 32]]) {
+      await slider(page, "Quality", position); await ready(page);
+      expect((await settings(page)).quality).toBe(quality);
+      await expect(status(page)).toHaveAttribute("data-probe-grid", String(probeGrid));
+      await closeRcLighting(page); await take(`quality-${quality}`); await validate(`quality-${quality}`);
+    }
+    await advanced(page); await slider(page, "Quality", 50); await ready(page);
+    for (const [position, scale] of [[25, .5], [50, 1], [75, 2]]) {
+      await slider(page, "RangeScale", position); await ready(page);
+      expect((await settings(page)).rangeScale).toBe(scale);
+      const volume = await effectiveVolume();
+      expect(volume.size).toBeCloseTo(standardVolume.size * scale, 6);
+      volume.min.forEach((value, axis) => expect(value + volume.size / 2).toBeCloseTo(center[axis], 6));
+      expect((await settings(page)).volume).toBeNull();
+      report.checkpoints[`range-${scale}`] = volume;
+      await closeRcLighting(page); await take(`range-${scale}`);
+    }
+    // Each final arrow edit and quality step is independently undoable.
+    await advanced(page); await input(page, "RangeScale").focus(); await input(page, "RangeScale").press("ArrowRight");
+    expect((await settings(page)).rangeScale).toBeGreaterThan(2);
+    await closeRcLighting(page); await history(page, "undo"); expect((await settings(page)).rangeScale).toBe(2);
+    await advanced(page); await slider(page, "RangeScale", 50); await slider(page, "Quality", 0);
+    expect((await settings(page)).quality).toBe("low");
+    await closeRcLighting(page); await history(page, "undo"); expect((await settings(page)).quality).toBe("standard");
+    await history(page, "redo"); expect((await settings(page)).quality).toBe("low");
+    await history(page, "undo"); expect((await settings(page)).quality).toBe("standard");
+    await advanced(page); await row(page).screenshot({ path: testInfo.outputPath("development-sky-ambient-card.png") });
+    await ready(page); await expect(status(page)).toHaveAttribute("data-probe-grid", "16"); await closeRcLighting(page);
+    expect(compare("rangeQualityRestored", await take("range-quality-restored"), defaultOn)).toBeLessThan(.1);
 
     // Strength zero must bypass the ordinary-light attenuation as well as the sky contribution.
     await open(page); await slider(page, "Strength", 0); await closeRcLighting(page);
@@ -137,9 +204,12 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     expect(compare("disabledVsNeutral", await take("sky-ambient-off"), neutral)).toBeLessThan(.1);
     await open(page); await input(page, "Enabled").check(); await ready(page);
 
-    // Static sliders are authored independently from the animated enabled/strength pair.
+    // Static sliders are authored independently from animated enabled/strength/opacity.
     await slider(page, "Fill", 10); await slider(page, "BaseLight", 40);
-    expect(await settings(page)).toEqual({ enabled: true, strength: .95, fill: .1, baseLight: .4, volume: null });
+    // Keep nondefault development settings for the following save/backend/export checks.
+    await slider(page, "RangeScale", 75); await slider(page, "Quality", 0); await ready(page);
+    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .1, baseLight: .4,
+      rangeScale: 2, quality: "low", volume: null });
     await input(page, "BaseLight").focus(); await input(page, "BaseLight").press("ArrowRight");
     expect((await settings(page)).baseLight).toBe(.41);
     await closeRcLighting(page); await history(page, "undo"); expect((await settings(page)).baseLight).toBe(.4);
@@ -164,25 +234,27 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
       await addRcLighting(page, legacyId); await openRcLighting(page, legacyId);
       await expect(rcLightingStatus(page, legacyId)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     }
-    await ready(page); await closeRcLighting(page); await take("all-three-rc-effects-on");
+    await ready(page); await slider(page, "Opacity", 50); await closeRcLighting(page);
+    await take("all-three-rc-effects-opacity-half"); await validate("all-three-rc-effects-opacity-half");
     for (const legacyId of ["rcSkyOcclusion", "rcDiffuseGi"]) {
       await openRcLighting(page, legacyId); await rcLightingInput(page, legacyId, "Enabled").uncheck();
       await expect(rcLightingStatus(page, legacyId)).toHaveAttribute("data-state", "off");
     }
-    await ready(page); await closeRcLighting(page);
+    await ready(page); await slider(page, "Opacity", 100); await closeRcLighting(page);
     expect(compare("legacyEffectsDisabled", await take("sky-ambient-alone-again"), configuredOn)).toBeLessThan(.1);
 
     // Each key is registered with the public card button, including an explicit OFF key.
     const expectedKeys = [
-      { frame: 0, value: { enabled: true, strength: 0 } },
-      { frame: 20, value: { enabled: true, strength: 2 } },
-      { frame: 40, value: { enabled: false, strength: 2 } },
-      { frame: 60, value: { enabled: true, strength: 2 } },
+      { frame: 0, value: { enabled: true, strength: 2, opacity: 0 } },
+      { frame: 20, value: { enabled: true, strength: 2, opacity: 1 } },
+      { frame: 40, value: { enabled: false, strength: 2, opacity: 1 } },
+      { frame: 60, value: { enabled: true, strength: 2, opacity: 1 } },
     ];
     for (const key of expectedKeys) {
       await seek(page, key.frame); await open(page);
       // Enable before editing a slider, since OFF intentionally disables the controls.
       await input(page, "Enabled").check(); await slider(page, "Strength", key.value.strength * 50);
+      await slider(page, "Opacity", key.value.opacity * 100);
       await input(page, "Enabled").setChecked(key.value.enabled);
       await registerRcLighting(page, id); await closeRcLighting(page);
     }
@@ -190,9 +262,10 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     expect((await settings(page)).fill).toBe(.1); expect((await settings(page)).baseLight).toBe(.4);
     expect((await project(page)).effects.frameGraphInstances?.instances?.some(instance => instance.type === id) ?? false).toBe(false);
     await seek(page, 10); await open(page);
-    await expect(input(page, "Strength")).toHaveValue("50"); await expect(input(page, "Enabled")).toBeChecked();
+    await expect(input(page, "Opacity")).toHaveValue("50"); await expect(input(page, "Strength")).toHaveValue("100");
+    await expect(input(page, "Enabled")).toBeChecked();
     await closeRcLighting(page);
-    await seek(page, 0); const key0 = await take("key-0-strength-zero");
+    await seek(page, 0); const key0 = await take("key-0-opacity-zero");
     expect(compare("key0VsNeutral", key0, neutral)).toBeLessThan(.1);
     await seek(page, 20); await ready(page); await closeRcLighting(page);
     const key20 = await take("key-20-on"); expect(compare("key20VsNeutral", key20, neutral)).toBeGreaterThan(.15);
@@ -208,15 +281,21 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     }, file);
     await fileMenu(page, "file.saveProject");
     const saved = await savedProject(file), savedSnapshot = snapshot(saved);
-    expect(saved.lighting[id]).toEqual({ enabled: true, strength: 2, fill: .1, baseLight: .4, volume: null });
+    expect(saved.lighting[id]).toEqual({ enabled: true, opacity: 1, strength: 2, fill: .1, baseLight: .4,
+      rangeScale: 2, quality: "low", volume: null });
     expect(keys(saved)).toEqual(expectedKeys);
-    await open(page); await slider(page, "Fill", 100); await slider(page, "BaseLight", 100); await closeRcLighting(page);
+    await open(page); await slider(page, "Fill", 100); await slider(page, "BaseLight", 100);
+    await slider(page, "RangeScale", 50); await slider(page, "Quality", 50); await closeRcLighting(page);
     expect((await settings(page)).fill).toBe(1); expect((await settings(page)).baseLight).toBe(1);
+    expect((await settings(page)).rangeScale).toBe(1); expect((await settings(page)).quality).toBe("standard");
     await fileMenu(page, "file.loadProject");
     await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
     await expect.poll(async () => snapshot(await project(page))).toEqual(savedSnapshot);
     await ready(page);
-    await expect(input(page, "Strength")).toHaveValue("100"); await expect(input(page, "Fill")).toHaveValue("10");
+    await expect(input(page, "Opacity")).toHaveValue("100"); await expect(input(page, "Strength")).toHaveValue("100");
+    await expect(input(page, "Fill")).toHaveValue("10");
+    await expect(input(page, "RangeScale")).toHaveValue("75"); await expect(input(page, "Quality")).toHaveValue("0");
+    await expect(status(page)).toHaveAttribute("data-probe-grid", "8");
     await expect(input(page, "BaseLight")).toHaveValue("40"); await closeRcLighting(page);
     expect(compare("projectRestored", await take("project-restored-on"), key20)).toBeLessThan(.15);
 

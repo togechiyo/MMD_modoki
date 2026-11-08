@@ -21,16 +21,17 @@ const WEIGHTS_B = array<vec2f, 16>(
 ${SKY_IRRADIANCE_DIRECTIONS.map((_, i) => `vec2f(${[3, 4].map(a => number(SKY_IRRADIANCE_AXIS_WEIGHTS[a][i])).join(", ")})`).join(",\n")});
 @compute @workgroup_size(4, 4, 4)
 fn main(@builtin(global_invocation_id) probe: vec3u) {
-    if (any(probe >= vec3u(${SKY_IRRADIANCE_GRID}u))) { return; }
+    let grid = textureDimensions(irradiance).x / 2u;
+    if (any(probe >= vec3u(grid))) { return; }
     var a = vec3f(0.0); var b = vec2f(0.0); var valid = 1.0;
     for (var i = 0u; i < 16u; i++) {
-        let pixel = vec2i(i32(probe.x * 8u + i % 8u), i32((probe.z * 16u + probe.y) * 4u + i / 8u));
+        let pixel = vec2i(i32(probe.x * 8u + i % 8u), i32((probe.z * grid + probe.y) * 4u + i / 8u));
         let visibility = textureLoad(directionalField, pixel, 0).a;
         if (!(visibility >= 0.0 && visibility <= 1.0)) { valid = 0.0; }
         a += WEIGHTS_A[i] * visibility; b += WEIGHTS_B[i] * visibility;
     }
-    let pixel = vec2i(i32(probe.x), i32(probe.z * 16u + probe.y));
+    let pixel = vec2i(i32(probe.x), i32(probe.z * grid + probe.y));
     textureStore(irradiance, pixel, vec4f(clamp(a, vec3f(0.0), vec3f(1.0)), valid));
-    textureStore(irradiance, pixel + vec2i(16, 0), vec4f(clamp(b, vec2f(0.0), vec2f(1.0)), 0.0, valid));
+    textureStore(irradiance, pixel + vec2i(i32(grid), 0), vec4f(clamp(b, vec2f(0.0), vec2f(1.0)), 0.0, valid));
 }
 `;

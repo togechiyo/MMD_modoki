@@ -13,40 +13,57 @@ var rcSkyAmbientBaseScale = 1.0;
 #ifndef PREPASS
 #ifndef DIFFUSEFRESNEL
 #ifndef LIGHTMAP
-rcSkyAmbientBaseScale = mix(1.0, uniforms.rcSkyAmbientControl.z, clamp(uniforms.rcSkyAmbientControl.x, 0.0, 1.0));
+if (uniforms.rcSkyAmbientControl.w > 0.0) {
+    rcSkyAmbientBaseScale = mix(1.0, uniforms.rcSkyAmbientControl.z, clamp(uniforms.rcSkyAmbientControl.x, 0.0, 1.0));
+}
 #endif
 #endif
 #endif
 #endif
 `;
 
-// Match the existing Shadow Depth RC result as one term when it has already
-// been injected. If it is injected later, its diffuseBase replacement lands
-// inside our scale. Both plugin-installation orders therefore scale the complete
-// ordinary diffuse light, leaving emission, sphere and GI reflectance alone.
-export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)(rcSkyApplyDiffuse\\(diffuseBase, rcSkyResidual, rcSkyFactor\\)|\\bdiffuseBase\\b)([^;\\n]*);";
-export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATCH = `
-#ifdef RC_SKY_AMBIENT
-var finalDiffuse: vec3f=clamp($1($2 * rcSkyAmbientBaseScale)$3;
-#else
+// Keep both clamped diffuse results. Changing strength alone cannot interpolate
+// the old light and Sky Ambient once one of those endpoints clips. The nested
+// finalDiffuse name deliberately lets Shadow Depth RC patch both expressions,
+// regardless of plugin installation order. Sphere/specular/GI retain their
+// existing downstream composition; no extra material samples are required.
+function blendDiffusePatch(skyDiffuse: string): string {
+    return `
 $0
+#ifdef RC_SKY_AMBIENT
+if (uniforms.rcSkyAmbientControl.w > 0.0) {
+    var rcSkyAmbientMixedDiffuse = finalDiffuse;
+    {
+        ${skyDiffuse}
+        if (uniforms.rcSkyAmbientControl.w >= 1.0) {
+            rcSkyAmbientMixedDiffuse = finalDiffuse;
+        } else {
+            rcSkyAmbientMixedDiffuse = toGammaSpaceVec3(mix(
+                toLinearSpaceVec3(max(rcSkyAmbientMixedDiffuse, vec3f(0.0))),
+                toLinearSpaceVec3(max(finalDiffuse, vec3f(0.0))), uniforms.rcSkyAmbientControl.w));
+        }
+    }
+    finalDiffuse = rcSkyAmbientMixedDiffuse;
+}
 #endif
 `;
-export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)uniforms\\.vAmbientColor([^;\\n]*);";
-export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATCH = `
-#ifdef RC_SKY_AMBIENT
-var finalDiffuse: vec3f=clamp($1(uniforms.vAmbientColor * rcSkyAmbientBaseScale)$2;
-#else
-$0
-#endif
-`;
+}
+
+// Handle folded and separate material ambient independently so the preserved
+// original expression is not attenuated by a later regex replacement.
+export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)(rcSkyApplyDiffuse\\(diffuseBase, rcSkyResidual, rcSkyFactor\\)|\\bdiffuseBase\\b)((?:(?!uniforms\\.vAmbientColor)[^;\\n])*);";
+export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATCH = blendDiffusePatch(
+    "var finalDiffuse: vec3f=clamp($1($2 * rcSkyAmbientBaseScale)$3;");
+export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)(rcSkyApplyDiffuse\\(diffuseBase, rcSkyResidual, rcSkyFactor\\)|\\bdiffuseBase\\b)([^;\\n]*?)\\+uniforms\\.vAmbientColor([^;\\n]*);";
+export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATCH = blendDiffusePatch(
+    "var finalDiffuse: vec3f=clamp($1($2 * rcSkyAmbientBaseScale)$3+(uniforms.vAmbientColor * rcSkyAmbientBaseScale)$4;");
 
 export const MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL = /* wgsl */`
 #ifdef RC_SKY_AMBIENT
 #ifndef PREPASS
 #ifndef DIFFUSEFRESNEL
 #ifndef LIGHTMAP
-if (uniforms.rcSkyAmbientControl.x > 0.0) {
+if (uniforms.rcSkyAmbientControl.x > 0.0 && uniforms.rcSkyAmbientControl.w > 0.0) {
     let skyAmbientNormalLength = length(normalW);
     if (skyAmbientNormalLength > 0.00001 && skyAmbientNormalLength < 1e20) {
         let skyAmbientNormal = normalW / skyAmbientNormalLength;
@@ -64,7 +81,7 @@ if (uniforms.rcSkyAmbientControl.x > 0.0) {
         let skyAmbientIllumination = uniforms.rcSkyAmbientControl.x
             * (skyAmbientOpenSky * skyAmbientVisibility + uniforms.rcSkyAmbientControl.y);
         let skyAmbientReflectance = toLinearSpaceVec3(clamp(diffuseColor * baseColor.rgb, vec3f(0.0), vec3f(1.0)));
-        let skyAmbientAddition = skyAmbientReflectance * skyAmbientIllumination;
+        let skyAmbientAddition = skyAmbientReflectance * skyAmbientIllumination * uniforms.rcSkyAmbientControl.w;
         if (any(skyAmbientAddition > vec3f(0.0))) {
             // MMD color is display-space here. Add sky in linear space without
             // replacing the material's existing specular, sphere or emission.

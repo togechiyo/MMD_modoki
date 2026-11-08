@@ -6564,7 +6564,7 @@ ${beforeFogAppendBlock}
         return [...legacy, ...ids.map(id => ({ name: id, category: "effect" as const, frames: this.effectInstances.frames(id), effectInstance: { type: this.effectInstances.type(id), label: this.effectInstances.label(id), suspended: !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph" } }))];
     }
     private getStaticEffectValue(id: EffectId): EffectValue {
-        if (id === "rcSkyAmbient") return { enabled: this.rcSkyAmbientSettingsValue.enabled, strength: this.rcSkyAmbientSettingsValue.strength };
+        if (id === "rcSkyAmbient") return { enabled: this.rcSkyAmbientSettingsValue.enabled, strength: this.rcSkyAmbientSettingsValue.strength, opacity: this.rcSkyAmbientSettingsValue.opacity };
         if (id === "rcSkyOcclusion") return { enabled: this.rcSkyOcclusionSettingsValue.enabled, strength: this.rcSkyOcclusionSettingsValue.strength };
         if (id === "rcDiffuseGi") return { enabled: this.rcDiffuseGiSettingsValue.enabled, strength: this.rcDiffuseGiSettingsValue.strength };
         if (id === "ssao" || id === "ssgi" || id === "ssr") {
@@ -6593,10 +6593,11 @@ ${beforeFogAppendBlock}
         if (!isEffectId(id)) throw new Error(`Unsupported effect key: ${id}`);
         return makeEffectPayload(id, this.effectSceneTracks.evaluate(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0) ?? this.getStaticEffectValue(id));
     }
-    public getRcSkyAmbientAnimatedValue(): { enabled: boolean; strength: number } {
+    public getRcSkyAmbientAnimatedValue(): { enabled: boolean; strength: number; opacity: number } {
         const value = this.effectSceneTracks.evaluate("rcSkyAmbient", this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
         return { enabled: value?.enabled ?? this.rcSkyAmbientSettingsValue.enabled,
-            strength: Number(value?.strength ?? this.rcSkyAmbientSettingsValue.strength) };
+            strength: Number(value?.strength ?? this.rcSkyAmbientSettingsValue.strength),
+            opacity: Number(value?.opacity ?? this.rcSkyAmbientSettingsValue.opacity) };
     }
     public getRcSkyAmbientTrackState(): unknown | null { return this.effectSceneTracks.snapshot("rcSkyAmbient"); }
     public setRcSkyAmbientTrackState(state: unknown | null): void {
@@ -13245,10 +13246,11 @@ ${beforeFogAppendBlock}
     public setRcSkyAmbientSettings(value: Partial<RcSkyAmbientSettings>): void {
         const next = normalizeRcSkyAmbientSettings({ ...this.rcSkyAmbientSettingsValue, ...value });
         this.rcSkyAmbientSettingsValue = next;
-        if (this.effectSceneTracks.has("rcSkyAmbient") && (value.enabled !== undefined || value.strength !== undefined)) {
+        if (this.effectSceneTracks.has("rcSkyAmbient") && (value.enabled !== undefined || value.strength !== undefined || value.opacity !== undefined)) {
             const current = this.getRcSkyAmbientAnimatedValue();
             this.setEffectScenePreview("rcSkyAmbient", { enabled: value.enabled === undefined ? current.enabled : next.enabled,
-                strength: value.strength === undefined ? current.strength : next.strength });
+                strength: value.strength === undefined ? current.strength : next.strength,
+                opacity: value.opacity === undefined ? current.opacity : next.opacity });
         }
         this.getRcSkyAmbientController().settingsChanged();
     }

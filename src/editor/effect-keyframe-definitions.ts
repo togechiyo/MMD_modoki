@@ -22,7 +22,7 @@ export type EffectValueById = {
     luminous: { enabled: boolean; intensity: number; threshold: number; radius: number };
     luminousRadiance: { enabled: boolean };
     rcSkyOcclusion: { enabled: boolean; strength: number };
-    rcSkyAmbient: { enabled: boolean; strength: number };
+    rcSkyAmbient: { enabled: boolean; strength: number; opacity: number };
     rcDiffuseGi: { enabled: boolean; strength: number };
 };
 export type EffectId = keyof EffectValueById;
@@ -86,8 +86,11 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
     { id: "luminousRadiance", fields: { enabled: { kind: "step", default: false } }, sliders: [] },
     { id: "rcSkyOcclusion", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0.75, min: 0, max: 1 } },
         sliders: [{ field: "strength", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 }] },
-    { id: "rcSkyAmbient", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0.95, min: 0, max: 2 } },
-        sliders: [{ field: "strength", min: 0, max: 100, toValue: position => position / 50, toPosition: value => value * 50 }] },
+    { id: "rcSkyAmbient", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0.95, min: 0, max: 2 }, opacity: { kind: "linear", default: 1, min: 0, max: 1 } },
+        sliders: [
+            { field: "opacity", labelKey: "experiment.rcSkyAmbient.opacity", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 },
+            { field: "strength", min: 0, max: 100, toValue: position => position / 50, toPosition: value => value * 50 },
+        ] },
     { id: "rcDiffuseGi", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0.5, min: 0, max: 2 } },
         sliders: [{ field: "strength", min: 0, max: 100, toValue: position => position / 50, toPosition: value => value * 50 }] },
     { id: "luminous", fixedSettingsLabelKey: "timeline.luminousFixedSettings", fields: { enabled: { kind: "step", default: false }, intensity: { kind: "linear", default: 0.5, min: 0, max: 4 }, threshold: { kind: "linear", default: 0.5, min: 0, max: 1.5 }, radius: { kind: "linear", default: 20, min: 1, max: 128 } },
@@ -199,7 +202,9 @@ function valueSchema(id: EffectId) {
 export const effectKeyframePayloadSchema = z.object({
     kind: z.literal("effect"), effectId: z.enum(["motionBlur", "dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous", "luminousRadiance", "rcSkyOcclusion", "rcSkyAmbient", "rcDiffuseGi"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
     instanceId: z.string().regex(/^fx-[a-zA-Z0-9-]{1,190}$/).optional(),
-}).strict().superRefine((payload, context) => {
+}).strict().transform(payload => payload.effectId === "rcSkyAmbient"
+    // Earlier Sky Ambient keys had no blend control: retain their full effect.
+    ? { ...payload, value: { opacity: 1, ...payload.value } } : payload).superRefine((payload, context) => {
     if (["dof", "motionBlur"].includes(payload.effectId) && !payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "These keys require an effect instance" });
     if (payload.effectId === "rcSkyOcclusion" && payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "Sky occlusion is a scene singleton" });
     if (payload.effectId === "rcSkyAmbient" && payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "Sky ambient is a scene singleton" });

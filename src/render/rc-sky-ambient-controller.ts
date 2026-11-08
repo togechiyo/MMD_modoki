@@ -7,10 +7,12 @@ import { isRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
 import { RadianceSkyVisibilityField } from "./radiance-sky-visibility-field";
 import { registerMmdRadianceSkyAmbient, type MmdRadianceSkyAmbientView } from "./mmd-radiance-sky-ambient-plugin";
 import type { RcSkyAmbientSettings, RcSkyAmbientVolume } from "./rc-sky-ambient-settings";
+import { getSkyVisibilityProbeGrid, scaleSkyVisibilityVolume, type SkyVisibilityQuality } from "./radiance-sky-quality";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcSkyAmbientDiagnostics = {
     status: Status; reason: string | null; volume: RcSkyAmbientVolume | null;
+    effectiveVolume: RcSkyAmbientVolume | null; quality: SkyVisibilityQuality; probeGrid: number;
     triangleCount: number; fieldRevision: number; supportedMaterialCount: number;
 };
 
@@ -30,6 +32,7 @@ export class RcSkyAmbientController {
     private disposed = false;
     private unregister: (() => void) | null = null;
     private automaticVolume: RcSkyAmbientVolume | null = null;
+    private requestedVolumeKey = "";
     private receiverMembership = "";
     private initialization: Promise<void> | null = null;
     private readonly removeSceneObservers: () => void;
@@ -51,7 +54,10 @@ export class RcSkyAmbientController {
     }
 
     public get diagnostics(): RcSkyAmbientDiagnostics {
-        return { status: this.status, reason: this.reason, volume: this.settings().volume ?? this.automaticVolume,
+        const settings = this.settings(), volume = settings.volume ?? this.automaticVolume;
+        return { status: this.status, reason: this.reason, volume,
+            effectiveVolume: volume ? scaleSkyVisibilityVolume(volume, settings.rangeScale) : null,
+            quality: settings.quality, probeGrid: getSkyVisibilityProbeGrid(settings.quality),
             triangleCount: this.field?.source.bvh.triangleCount ?? 0, fieldRevision: this.fieldRevision,
             supportedMaterialCount: this.scene.materials.filter(this.acceptsMaterial).length };
     }
@@ -80,7 +86,8 @@ export class RcSkyAmbientController {
     }
 
     public settingsChanged(): void {
-        this.frameId = -1; this.automaticVolume = null;
+        this.frameId = -1;
+        this.synchronizeQuality();
         if (!this.settings().enabled) {
             this.view = null;
             if (!this.keepResourcesWhileOff()) this.release();
@@ -90,9 +97,20 @@ export class RcSkyAmbientController {
     private resolveVolume(): RcSkyAmbientVolume | null {
         const receivers = this.receivers();
         const membership = receivers.map(mesh => `${mesh.uniqueId}:${mesh.geometry?.uniqueId}`).join(",");
+        const settings = this.settings(), requestedVolumeKey = JSON.stringify(settings.volume);
         // Loading arrives in stages. Refit membership changes, not each animated pose.
-        if (membership !== this.receiverMembership) { this.automaticVolume = null; this.receiverMembership = membership; }
-        return this.settings().volume ?? (this.automaticVolume ??= this.fitVolume(receivers));
+        // Look controls do not refit a moving model; changing manual/automatic bounds does.
+        if (membership !== this.receiverMembership || requestedVolumeKey !== this.requestedVolumeKey) {
+            this.automaticVolume = null; this.receiverMembership = membership; this.requestedVolumeKey = requestedVolumeKey;
+        }
+        const base = settings.volume ?? (this.automaticVolume ??= this.fitVolume(receivers));
+        return base ? scaleSkyVisibilityVolume(base, settings.rangeScale) : null;
+    }
+
+    /** Texture shape is immutable once the graph is built. Detach bindings before replacing it. */
+    private synchronizeQuality(): void {
+        const quality = this.settings().quality;
+        if (this.field && this.field.quality !== quality || this.pending && this.pending.quality !== quality) this.release();
     }
 
     private supported(): boolean {
@@ -100,13 +118,16 @@ export class RcSkyAmbientController {
     }
 
     public get isReadyForCapture(): boolean {
-        if (!this.settings().enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolume()) return true;
-        return this.status !== "error" && Boolean(this.field?.graph.isReady());
+        const settings = this.settings();
+        if (!settings.enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolume()
+            || settings.enabled && (settings.strength <= 0 || settings.opacity <= 0)) return true;
+        return this.status !== "error" && this.field?.quality === settings.quality && Boolean(this.field.graph.isReady());
     }
 
     public async prewarm(): Promise<boolean> {
         if (this.disposed) return false;
         if (!this.supported()) return true;
+        this.synchronizeQuality();
         const volume = this.resolveVolume();
         if (!volume) return true;
         if (!this.unregister) this.unregister = registerMmdRadianceSkyAmbient(this.scene,
@@ -124,6 +145,7 @@ export class RcSkyAmbientController {
     public prepareFrame(timing?: RcPrepareTiming): void {
         if (this.disposed) return;
         const settings = this.settings();
+        this.synchronizeQuality();
         if (!settings.enabled) {
             this.view = null;
             if (this.keepResourcesWhileOff() && this.supported()) {
@@ -145,7 +167,7 @@ export class RcSkyAmbientController {
             if (!this.pending && this.status !== "error") void this.prewarm();
             return;
         }
-        if (settings.strength <= 0) {
+        if (settings.strength <= 0 || settings.opacity <= 0) {
             this.view = null; this.status = "ready"; this.reason = null; this.frameId = -1; return;
         }
         const field = this.field, frameId = this.scene.getFrameId();
@@ -182,7 +204,8 @@ export class RcSkyAmbientController {
             }
             this.view = field.irradianceField && field.nearestSurfaceField
                 ? { field: field.irradianceField, nearestSurface: field.nearestSurfaceField, triangles: field.source.triangleBuffer,
-                    volume, strength: settings.strength, fill: settings.fill, baseLight: settings.baseLight } : null;
+                    volume, strength: settings.strength, fill: settings.fill, baseLight: settings.baseLight,
+                    opacity: settings.opacity } : null;
             this.frameId = frameId; this.status = "ready"; this.reason = null;
         } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
@@ -204,10 +227,24 @@ export class RcSkyAmbientController {
         let candidate: RadianceSkyVisibilityField | null = null;
         try {
             candidate = new RadianceSkyVisibilityField(this.scene, { volume, diagnostic: false, opaqueOccludersOnly: true,
-                materialIrradiance: true, acceptsMesh: this.acceptsCaster });
+                materialIrradiance: true, acceptsMesh: this.acceptsCaster, quality: this.settings().quality });
             this.pending = candidate;
             const cancelled = new Promise<void>(resolve => { this.cancelPending = resolve; });
-            await Promise.race([candidate.graph.buildAsync(), cancelled]);
+            // Babylon's structural build can resume after dispose while awaiting
+            // module/task initialization. Keep this candidate alive until that
+            // phase settles, but let a cancelled owner return immediately.
+            const structure = candidate.graph.buildAsync(false);
+            const built = await Promise.race([structure.then(() => true), cancelled.then(() => false)]);
+            if (!built) {
+                const abandoned = candidate;
+                void structure.then(() => abandoned.dispose(), () => abandoned.dispose());
+                return;
+            }
+            if (this.disposed || generation !== this.generation) { candidate.dispose(); return; }
+            // Readiness cancellation is safe after structural initialization.
+            // graph.dispose cancels Babylon's retry timer; our race releases the
+            // waiting caller because Babylon does not settle that cancelled wait.
+            await Promise.race([candidate.graph.whenReadyAsync(), cancelled]);
             if (this.disposed || generation !== this.generation) { candidate.dispose(); return; }
             this.field = candidate; this.pending = null; this.cancelPending = null;
             this.sourceRevision = -1; this.frameId = -1;
@@ -223,7 +260,9 @@ export class RcSkyAmbientController {
     private release(): void {
         this.view = null; this.generation++; this.cancelPending?.(); this.cancelPending = null;
         this.initialization = null;
-        this.field?.dispose(); this.field = null; this.pending?.dispose(); this.pending = null;
+        this.field?.dispose(); this.field = null;
+        // allocate owns pending disposal, including a cancelled structural build.
+        this.pending = null;
         this.status = "off"; this.reason = null; this.sourceRevision = -1; this.frameId = -1; this.volumeKey = "";
     }
 

@@ -2,14 +2,14 @@ import type { EditorAction } from "../actions/types";
 import { t } from "../i18n";
 import type { RcSkyAmbientSettings, RcSkyAmbientVolume } from "../render/rc-sky-ambient-settings";
 import { createPopupFormButton, createPopupFormButtonRow, createPopupFormField } from "./popup-form-helpers";
-import { getRcSkyAmbientUiState } from "./rc-sky-ambient-ui-state";
+import { getRcSkyAmbientUiState, rcSkyAmbientQualityToSlider, rcSkyAmbientRangeScaleToSlider, rcSkyAmbientSliderToQuality, rcSkyAmbientSliderToRangeScale } from "./rc-sky-ambient-ui-state";
 import { createRcLightingEffectCard, createRcLightingSlider, type RcLightingEffectCardOptions } from "./rc-lighting-effect-card";
 
 type Host = {
     isPlaying: boolean;
     currentFrame: number;
     getRcSkyAmbientSettings(): RcSkyAmbientSettings;
-    getRcSkyAmbientDiagnostics(): { status: "off" | "preparing" | "ready" | "unsupported" | "error"; reason: string | null; volume: RcSkyAmbientVolume | null; triangleCount: number; fieldRevision: number; supportedMaterialCount: number };
+    getRcSkyAmbientDiagnostics(): { status: "off" | "preparing" | "ready" | "unsupported" | "error"; reason: string | null; volume: RcSkyAmbientVolume | null; effectiveVolume?: RcSkyAmbientVolume | null; probeGrid?: number; triangleCount: number; fieldRevision: number; supportedMaterialCount: number };
     getEffectSceneKeyframeFrames(id: string): Uint32Array;
 };
 
@@ -17,14 +17,16 @@ type Host = {
 export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispatch: (action: EditorAction) => boolean, options: RcLightingEffectCardOptions): () => void {
     const card = createRcLightingEffectCard(parent, "rcSkyAmbient", options);
     const { enabled, register } = card;
+    const advancedSummary = card.advanced.querySelector("summary");
+    if (advancedSummary) advancedSummary.textContent = t("experiment.rcSkyAmbient.advanced");
     const details = document.createElement("fieldset");
     details.className = "rc-lighting-effect-controls";
     const volumeControls = document.createElement("fieldset");
     volumeControls.className = "rc-lighting-effect-controls";
     const numberControls: HTMLInputElement[] = [];
     let activeSlider: HTMLInputElement | null = null;
-    const sliders = (["strength", "fill", "baseLight"] as const).map(field => {
-        const suffix = field === "strength" ? "Strength" : field === "fill" ? "Fill" : "BaseLight";
+    const sliders = (["opacity", "strength", "fill", "baseLight"] as const).map(field => {
+        const suffix = `${field[0].toUpperCase()}${field.slice(1)}`;
         const { row, input } = createRcLightingSlider(`rcSkyAmbient${suffix}`, t(`experiment.rcSkyAmbient.${field}`));
         input.addEventListener("input", () => { activeSlider = input; });
         input.addEventListener("change", () => {
@@ -32,8 +34,37 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
             dispatch({ type: "effect.setRcSkyAmbient", source: "panel", settings: { [field]: Number(input.value) / (field === "strength" ? 50 : 100) } });
             refresh();
         });
-        details.append(row);
+        (field === "opacity" ? details : volumeControls).append(row);
         return { input, field };
+    });
+    const developmentSliders = (["rangeScale", "quality"] as const).map(field => {
+        const name = `rcSkyAmbient${field[0].toUpperCase()}${field.slice(1)}`;
+        const { row, input } = createRcLightingSlider(name, t(`experiment.rcSkyAmbient.${field}`));
+        // Development values are read-only; the main opacity row remains slider-only.
+        row.style.gridTemplateColumns = "minmax(58px, 0.35fr) minmax(0, 1fr) 54px";
+        const value = document.createElement("output");
+        value.className = "effect-layer-control-value";
+        input.id = name;
+        value.setAttribute("for", name);
+        if (field === "quality") input.step = "50";
+        const updateValue = (): void => {
+            value.value = field === "rangeScale"
+                ? `×${rcSkyAmbientSliderToRangeScale(Number(input.value)).toFixed(2)}`
+                : t(`experiment.rcSkyAmbient.quality.${rcSkyAmbientSliderToQuality(Number(input.value))}`);
+            input.setAttribute("aria-valuetext", value.value);
+        };
+        input.addEventListener("input", () => { activeSlider = input; updateValue(); });
+        input.addEventListener("change", () => {
+            activeSlider = null;
+            const settings = field === "rangeScale"
+                ? { rangeScale: rcSkyAmbientSliderToRangeScale(Number(input.value)) }
+                : { quality: rcSkyAmbientSliderToQuality(Number(input.value)) };
+            dispatch({ type: "effect.setRcSkyAmbient", source: "panel", settings });
+            refresh();
+        });
+        row.append(value);
+        volumeControls.append(row);
+        return { input, field, updateValue };
     });
     for (const field of ["minX", "minY", "minZ", "size"] as const) {
         const input = document.createElement("input");
@@ -84,6 +115,11 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * (slider.field === "strength" ? 50 : 100)));
             slider.input.disabled = details.disabled;
         }
+        for (const slider of developmentSliders) {
+            if (activeSlider !== slider.input) slider.input.value = String(slider.field === "rangeScale" ? rcSkyAmbientRangeScaleToSlider(settings.rangeScale) : rcSkyAmbientQualityToSlider(settings.quality));
+            slider.input.disabled = volumeControls.disabled;
+            slider.updateValue();
+        }
         const volume = uiState.volume;
         if (!numberControls.includes(document.activeElement as HTMLInputElement)) {
             numberControls.forEach((input, index) => { input.value = volume ? String(index < 3 ? volume.min[index] : volume.size) : ""; });
@@ -94,13 +130,16 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
         status.dataset.fieldRevision = String(diagnostics.fieldRevision);
         status.dataset.supportedMaterialCount = String(diagnostics.supportedMaterialCount);
         status.dataset.automaticVolume = String(uiState.automaticVolume);
+        status.dataset.probeGrid = diagnostics.probeGrid === undefined ? "" : String(diagnostics.probeGrid);
+        status.dataset.volume = JSON.stringify(diagnostics.volume);
+        status.dataset.effectiveVolume = JSON.stringify(diagnostics.effectiveVolume ?? null);
         status.textContent = uiState.statusText;
     };
     enabled.addEventListener("change", () => {
         dispatch({ type: "effect.setRcSkyAmbient", source: "panel", settings: { enabled: enabled.checked } }); refresh();
     });
-    card.advanced.append(volumeControls);
-    card.content.append(details, status, card.advanced, card.remove);
+    card.advanced.append(volumeControls, status);
+    card.content.append(details, card.advanced, card.remove);
     // Hidden camera-panel rebuilds must not expose unchecked/default controls
     // before the next visible timer tick, even when the saved effect is enabled.
     refresh(true);

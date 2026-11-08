@@ -5,7 +5,7 @@ import { effectKeyframePayloadSchema, getEffectDefinition, makeEffectPayload } f
 import { FRAME_GRAPH_INSTANCE_EFFECT_TYPES } from "./frame-graph-instance-effects";
 
 const id = "rcSkyAmbient";
-const base = { enabled: false, strength: 0.95 };
+const base = { enabled: false, strength: 0.95, opacity: 1 };
 const createStore = () => new EffectSceneTrackStore(false, [id]);
 
 describe("Sky Ambient RC scene keys", () => {
@@ -20,24 +20,34 @@ describe("Sky Ambient RC scene keys", () => {
         expect(effectKeyframePayloadSchema.safeParse(payload).success).toBe(true);
         expect(effectKeyframePayloadSchema.safeParse({ ...payload, instanceId: "fx-sky" }).success).toBe(false);
         expect(effectKeyframePayloadSchema.safeParse({ ...payload, value: { ...payload.value, fill: 0.1 } }).success).toBe(false);
-        expect(getEffectDefinition(id).sliders[0].toValue(100)).toBe(2);
+        expect(getEffectDefinition(id).sliders[0].toValue(100)).toBe(1);
     });
 
     it("interpolates strength, steps enabled, and keeps authored ON demand through OFF previews", () => {
         const store = createStore();
-        const on = makeEffectPayload(id, { enabled: true, strength: 0.4 });
-        const off = makeEffectPayload(id, { enabled: false, strength: 1.6 });
+        const on = makeEffectPayload(id, { enabled: true, strength: 0.4, opacity: 0 });
+        const off = makeEffectPayload(id, { enabled: false, strength: 1.6, opacity: 1 });
         store.apply(id, 10, on, base); store.apply(id, 30, off, base);
-        expect(store.evaluate(id, 20)).toEqual({ enabled: true, strength: 1 });
-        expect(store.evaluate(id, 30)).toEqual({ enabled: false, strength: 1.6 });
+        expect(store.evaluate(id, 20)).toEqual({ enabled: true, strength: 1, opacity: 0.5 });
+        expect(store.evaluate(id, 30)).toEqual({ enabled: false, strength: 1.6, opacity: 1 });
         store.preview(id, 20, { enabled: false, strength: 0 }, base);
-        expect(store.evaluate(id, 20, true)).toEqual({ enabled: false, strength: 0 });
+        expect(store.evaluate(id, 20, true)).toEqual({ enabled: false, strength: 0, opacity: 1 });
         expect(store.canBeEnabled(id)).toBe(true);
         store.clearPreviews();
         const restored = createStore(); restored.restore(store.serialize());
-        expect(restored.evaluate(id, 20)).toEqual({ enabled: true, strength: 1 });
+        expect(restored.evaluate(id, 20)).toEqual({ enabled: true, strength: 1, opacity: 0.5 });
         restored.remove(id, [10]);
         expect(restored.canBeEnabled(id)).toBe(false);
+    });
+    it("fills legacy keys and payloads with full density without accepting invalid new values", () => {
+        const legacy = { enabled: true, strength: 1.2 };
+        const store = createStore();
+        store.restore({ version: 1, tracks: [{ effectId: id, valueVersion: 1, base: legacy,
+            keys: [{ frame: 0, value: legacy }, { frame: 20, value: { ...legacy, strength: 0.4 } }] }] });
+        expect(store.evaluate(id, 10)).toEqual({ enabled: true, strength: 0.8, opacity: 1 });
+        expect(effectKeyframePayloadSchema.parse({ kind: "effect", effectId: id, value: legacy }).value)
+            .toEqual({ ...legacy, opacity: 1 });
+        expect(effectKeyframePayloadSchema.safeParse({ kind: "effect", effectId: id, value: { ...legacy, opacity: 2 } }).success).toBe(false);
     });
 
     it("retains current edits while preserving unsupported future animation blocks", () => {

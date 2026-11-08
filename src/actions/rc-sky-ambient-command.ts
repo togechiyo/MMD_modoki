@@ -29,7 +29,7 @@ export function canApplyRcSkyAmbientEditState(current: RcSkyAmbientEditState, ex
         const track = record(state.track);
         if (!track) return state.track;
         const copy = { ...track }; delete copy.preview;
-        const base = { enabled: state.settings.enabled, strength: state.settings.strength };
+        const base = { enabled: state.settings.enabled, strength: state.settings.strength, opacity: state.settings.opacity };
         if (Array.isArray(copy.keys) && copy.keys.length === 0 && JSON.stringify(copy.base) === JSON.stringify(base)
             && Object.keys(copy).every(key => key === "base" || key === "keys")) return null;
         return copy;

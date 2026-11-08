@@ -8,10 +8,10 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
-import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
+import { createSkyVisibilityCascadeLayouts, getSkyVisibilityProbeGrid, type SkyVisibilityQuality } from "./radiance-sky-quality";
 import { SKY_VISIBILITY_CASCADE_WGSL, SKY_VISIBILITY_DIAGNOSTIC_WGSL } from "./radiance-sky-visibility-shaders";
 import { DEFAULT_SKY_RECONSTRUCTION, type SkyVisibilityReconstruction } from "./radiance-sky-reconstruction";
-import { SKY_IRRADIANCE_GRID, SKY_IRRADIANCE_INTEGRATE_WGSL } from "./radiance-sky-irradiance-shaders";
+import { SKY_IRRADIANCE_INTEGRATE_WGSL } from "./radiance-sky-irradiance-shaders";
 import { RadianceNearestSurfaceTask } from "./radiance-nearest-surface-task";
 
 export const SKY_VISIBILITY_VOLUME = { min: [-8, 0, -8] as const, size: 16, planeY: 0.05, resolution: 64 };
@@ -37,6 +37,8 @@ export class RadianceSkyVisibilityField {
     public readonly baseField: RawTexture;
     public readonly irradianceField: RawTexture | null = null;
     public readonly nearestSurfaceField: RawTexture | null = null;
+    public readonly quality: SkyVisibilityQuality;
+    public readonly probeGrid: number;
     private readonly tasks: FrameGraphComputeShaderTask[] = [];
     private readonly textures: RawTexture[] = [];
     private readonly nearestTask?: RadianceNearestSurfaceTask;
@@ -47,8 +49,10 @@ export class RadianceSkyVisibilityField {
     private readonly diagnostic: boolean;
 
     constructor(scene: Scene, options: { volume?: SkyVisibilityBounds; diagnostic?: boolean; opaqueOccludersOnly?: boolean;
-        materialIrradiance?: boolean; acceptsMesh?: (mesh: Mesh) => boolean } = {}) {
+        materialIrradiance?: boolean; acceptsMesh?: (mesh: Mesh) => boolean; quality?: SkyVisibilityQuality } = {}) {
         this.volume = options.volume ?? SKY_VISIBILITY_VOLUME;
+        this.quality = options.quality ?? "standard";
+        this.probeGrid = getSkyVisibilityProbeGrid(this.quality);
         this.diagnostic = options.diagnostic ?? true;
         this.graph = new FrameGraph(scene);
         this.graph.name = "radianceSkyVisibility";
@@ -65,7 +69,7 @@ export class RadianceSkyVisibilityField {
             return { texture, internal, handle: this.graph.textureManager.importTexture(name, internal) };
         };
         try {
-            const layouts = createRadianceCascadeLayouts();
+            const layouts = createSkyVisibilityCascadeLayouts(this.quality);
             const fields = layouts.map((layout, i) => allocate(`skyVisibility${i}`, layout.width, layout.height, Constants.TEXTURETYPE_HALF_FLOAT));
             this.baseField = fields[0].texture;
             const dummy = allocate("skyVisibilityBoundary", 1, 1, Constants.TEXTURETYPE_HALF_FLOAT);
@@ -107,7 +111,7 @@ export class RadianceSkyVisibilityField {
                     [layout.grid, layout.directionsX, layout.directionsY], [layout.start, layout.end, parent ? 1 : 0]);
             }
             if (options.materialIrradiance) {
-                const grid = SKY_IRRADIANCE_GRID;
+                const grid = this.probeGrid;
                 const irradiance = allocate("skyVisibilityIrradiance", grid * 2, grid * grid, Constants.TEXTURETYPE_HALF_FLOAT);
                 this.irradianceField = irradiance.texture;
                 const integrate = new FrameGraphComputeShaderTask("skyVisibilityIrradiance", this.graph,
@@ -128,7 +132,7 @@ export class RadianceSkyVisibilityField {
                 this.tasks.push(guard); this.graph.addTask(guard);
             }
             if (this.diagnostic) addTask("skyVisibilityDiagnostic", SKY_VISIBILITY_DIAGNOSTIC_WGSL, "baseField", "output", fields[0], output,
-                [16, 8, 4], [SKY_VISIBILITY_VOLUME.planeY, diagnosticSize, diagnosticSize], false);
+                [this.probeGrid, 8, 4], [SKY_VISIBILITY_VOLUME.planeY, diagnosticSize, diagnosticSize], false);
             // StandardMaterial can participate in geometry MRT passes; give it a display texture
             // instead of using a color-only ShaderMaterial that would invalidate those passes.
             const display = allocate("skyVisibilityDisplay", diagnosticSize, diagnosticSize, Constants.TEXTURETYPE_UNSIGNED_BYTE);

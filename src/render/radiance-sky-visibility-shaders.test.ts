@@ -45,7 +45,7 @@ describe("sky visibility shader contracts", () => {
         expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("if (connected == 0.0) { continue; }");
         expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("skyDirection(angular.x, angular.y, columns, rows), start)");
         expect(SKY_VISIBILITY_CASCADE_WGSL).toContain("rows * 2u, params.interval.y)");
-        expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("16u, 8u, 4u, 0.0)");
+        expect(SKY_VISIBILITY_DIAGNOSTIC_WGSL).toContain("u32(params.shape.x), 8u, 4u, 0.0)");
     });
 
     it("can split the receiver ray at the near endpoint and traces outside-volume queries without clamping", () => {

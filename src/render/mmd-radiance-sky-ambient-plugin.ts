@@ -19,7 +19,7 @@ import { MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL, MMD_RADIANCE_SKY_AMBIENT_BEFORE_LI
 export type MmdRadianceSkyAmbientView = Readonly<{
     field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer;
     volume: { min: readonly [number, number, number]; size: number };
-    strength: number; fill: number; baseLight: number;
+    strength: number; fill: number; baseLight: number; opacity: number;
 }>;
 type Registration = { provider: () => MmdRadianceSkyAmbientView | null; acceptsMaterial: (material: Material) => boolean };
 type Fallback = { field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer };
@@ -47,8 +47,8 @@ function fallbackFor(scene: Scene): Fallback {
 
 function usableView(view: MmdRadianceSkyAmbientView | null): view is MmdRadianceSkyAmbientView {
     return view !== null && view.field.isReady() && view.nearestSurface.isReady() && Boolean(view.triangles.getBuffer())
-        && [view.volume.size, ...view.volume.min, view.strength, view.fill, view.baseLight].every(Number.isFinite)
-        && view.volume.size > 0 && view.strength > 0;
+        && [view.volume.size, ...view.volume.min, view.strength, view.fill, view.baseLight, view.opacity].every(Number.isFinite)
+        && view.volume.size > 0 && view.strength > 0 && view.opacity > 0;
 }
 
 class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
@@ -81,7 +81,8 @@ class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
         const source = view ?? this.fallback;
         buffer.updateFloat4("rcSkyAmbientVolume", ...(view?.volume.min ?? [0, 0, 0]) as [number, number, number], view?.volume.size ?? 1);
         buffer.updateFloat4("rcSkyAmbientControl", view ? Math.min(2, view.strength) : 0,
-            view ? Math.min(1, Math.max(0, view.fill)) : 0, view ? Math.min(1, Math.max(0, view.baseLight)) : 1, 0);
+            view ? Math.min(1, Math.max(0, view.fill)) : 0, view ? Math.min(1, Math.max(0, view.baseLight)) : 1,
+            view ? Math.min(1, view.opacity) : 0);
         buffer.setTexture("rcSkyAmbientField", source.field);
         buffer.setTexture("rcSkyAmbientNearestSurface", source.nearestSurface);
         (engine as WebGPUEngine).setStorageBuffer("rcSkyAmbientTriangles", source.triangles);

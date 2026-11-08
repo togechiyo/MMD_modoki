@@ -41,19 +41,22 @@ fn rcSkyVisibility(worldPosition: vec3f, worldNormal: vec3f) -> f32 {
     let weightsB = axesB * axesB * ${SKY_IRRADIANCE_AXIS_TOTALS[3].toFixed(10)};
     let normalWeight = dot(weightsA, vec3f(1.0)) + dot(weightsB, vec2f(1.0));
     if (!(normalWeight > 0.00001)) { return -1.0; }
-    let coordinate = clamp((worldPosition - volumeMin) / size * 16.0 - 0.5, vec3f(0.0), vec3f(15.0));
+    // The two lobe blocks and nearest-surface grid are allocated together.
+    let grid = textureDimensions(rcSkyField, 0).x / 2u;
+    if (grid == 0u) { return -1.0; }
+    let coordinate = clamp((worldPosition - volumeMin) / size * f32(grid) - 0.5, vec3f(0.0), vec3f(f32(grid - 1u)));
     let low = vec3u(floor(coordinate)); let fraction = fract(coordinate);
     var result = 0.0; var weightSum = 0.0;
     for (var z = 0u; z < 2u; z++) { for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
-        let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(15u));
+        let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(grid - 1u));
         let weights = select(vec3f(1.0) - fraction, fraction, offset == vec3u(1u));
-        let probePosition = volumeMin + (vec3f(probe) + vec3f(0.5)) * (size / 16.0);
+        let probePosition = volumeMin + (vec3f(probe) + vec3f(0.5)) * (size / f32(grid));
         // Favor probes in front without displacing the query through a low ceiling.
-        let facing = clamp(dot(probePosition - worldPosition, normal) * (16.0 / size) * 4.0 + 0.5, 0.0, 1.0);
+        let facing = clamp(dot(probePosition - worldPosition, normal) * (f32(grid) / size) * 4.0 + 0.5, 0.0, 1.0);
         let weight = weights.x * weights.y * weights.z * facing;
         if (weight <= 0.0) { continue; }
-        let pixel = vec2i(i32(probe.x), i32(probe.z * 16u + probe.y));
-        let a = textureLoad(rcSkyField, pixel, 0); let b = textureLoad(rcSkyField, pixel + vec2i(16, 0), 0);
+        let pixel = vec2i(i32(probe.x), i32(probe.z * grid + probe.y));
+        let a = textureLoad(rcSkyField, pixel, 0); let b = textureLoad(rcSkyField, pixel + vec2i(i32(grid), 0), 0);
         // Zero sky visibility is valid darkness, separate from invalid field input.
         if (!(a.a > 0.5 && b.a > 0.5)) { continue; }
         let visibility = (dot(a.xyz, weightsA) + dot(b.xy, weightsB)) / normalWeight;

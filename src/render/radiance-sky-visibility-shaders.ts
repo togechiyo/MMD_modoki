@@ -158,7 +158,7 @@ fn skyCompareVisibility(position: vec3f) -> vec2f {
                 // query outside the fixed field to unrelated boundary probes.
                 rc = skyTraceToExit(position, ray, nearDistance);
             } else {
-                rc = skyFieldVisibility(baseField, samplePosition, vec2u(u, v), 16u, 8u, 4u, 0.0);
+                rc = skyFieldVisibility(baseField, samplePosition, vec2u(u, v), u32(params.shape.x), 8u, 4u, 0.0);
             }
         }
         if (direct < 0.0 || rc < 0.0) { return vec2f(-1.0); }

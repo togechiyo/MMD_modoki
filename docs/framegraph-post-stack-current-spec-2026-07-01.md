@@ -21,7 +21,9 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 
 所有者指定で `rcSkyAmbient` singletonを追加。表示名は日本語・英語とも **Sky Ambient RC**。色・テクスチャを保ち、共通MMD Toonの補助光を局所的に遮蔽する。方向光・標準影の明暗差を保持し、GI RCが明るくする役割、Sky Ambient RCが暗くする役割を担う。旧「影の深み RC」との重複減衰は大きい方を採り、二重に補助光を引かない。
 
-通常操作は「濃度」1スライダー。「詳細・開発確認」に陰影の強さ・暗部の残光・空の明るさ、計算範囲×0.25〜×4、品質（8³ / 16³ / 32³）を置く。`lighting.rcSkyAmbient`へ設定を保存し、enabled / strength / opacityをscene trackへ登録する。範囲・品質・skyBrightnessは固定値。旧保存・キーは濃度1 / 範囲×1 / 標準品質 / skyBrightness 0を補う。baseLightは保存互換だけ残して未使用とし、旧ルックの再現は保証しない。カード追加・削除・Undo、全体OFF、Classic休止・復帰は下記RC singletonと同じ規則。fieldのcasterは静的stage中心とし、踊るPMXは受け手へ限定する。
+通常操作は「濃度」1スライダー。「詳細・開発確認」に陰影の強さ・暗部の残光・空の明るさ、計算範囲×0.25〜×4、品質（8³ / 16³ / 32³）を置く。`lighting.rcSkyAmbient`へ設定を保存し、enabled / strength / opacityをscene trackへ登録する。範囲・品質・skyBrightnessは固定値。baseLightは保存互換だけ残して未使用とし、旧ルックの再現は保証しない。カード追加・削除・Undo、全体OFF、Classic休止・復帰は下記RC singletonと同じ規則。fieldのcasterは静的stage中心とし、踊るPMXは受け手へ限定する。
+
+2026-11-09、所有者のスクリーンショットに合わせ、暫定既定値を濃度1 / 陰影の強さ1 / 暗部の残光0.05 / 空の明るさ1 / 計算範囲×2 / 高品質32³へ変更した。数値無表示のスライダーは位置からの推定。volumeはnullの自動範囲を維持し、画像の固定座標は採用しない。旧保存・キーに明示された値は維持し、欠損項目だけを現既定値で補完する。未追加や設定のない旧projectはOFFを維持する。「影の深み RC」の既定品質は変更しない。
 
 実装・初期値・材質条件・PNG/WebMを含む実WebGPU確認は[Sky Ambient RC実装メモ](./sky-ambient-rc-implementation-2026-11-08.md)を参照。
 

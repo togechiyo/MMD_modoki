@@ -217,7 +217,7 @@ describe("importProjectState", () => {
         await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
         expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenLastCalledWith([]);
         restoreProjectRcSkyAmbientSettings(host, createProject().lighting);
-        expect(setRcSkyAmbientSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 0.95, fill: 0.035, skyBrightness: 0, baseLight: 0.25, opacity: 1, rangeScale: 1, quality: "standard", volume: null });
+        expect(setRcSkyAmbientSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 1, fill: 0.05, skyBrightness: 1, baseLight: 0.25, opacity: 1, rangeScale: 2, quality: "high", volume: null });
     });
     it("preserves inferred legacy Bloom when adding RC to a project without a saved stack", async () => {
         const host = { ...createHost(), postEffectBloomEnabled: false,

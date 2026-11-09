@@ -17,7 +17,7 @@ export type RcSkyAmbientSettings = {
 };
 
 export const DEFAULT_RC_SKY_AMBIENT_SETTINGS: Readonly<RcSkyAmbientSettings> = Object.freeze({
-    enabled: false, opacity: 1, strength: 0.95, fill: 0.035, skyBrightness: 0, baseLight: 0.25, rangeScale: 1, quality: "standard", volume: null,
+    enabled: false, opacity: 1, strength: 1, fill: 0.05, skyBrightness: 1, baseLight: 0.25, rangeScale: 2, quality: "high", volume: null,
 });
 
 export function normalizeRcSkyAmbientSettings(value: unknown): RcSkyAmbientSettings {
@@ -32,7 +32,8 @@ export function normalizeRcSkyAmbientSettings(value: unknown): RcSkyAmbientSetti
         skyBrightness: scalar("skyBrightness", 2),
         baseLight: scalar("baseLight", 1),
         rangeScale: scalar("rangeScale", 4, 0.25),
-        quality: raw.quality === "low" || raw.quality === "high" ? raw.quality : "standard",
+        quality: raw.quality === "low" || raw.quality === "standard" || raw.quality === "high"
+            ? raw.quality : DEFAULT_RC_SKY_AMBIENT_SETTINGS.quality,
         // Both fields use the same cubic bounds and serialization limits.
         volume: normalizeRcSkyOcclusionSettings({ volume: raw.volume }).volume,
     };

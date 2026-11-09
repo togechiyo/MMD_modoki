@@ -53,7 +53,9 @@ function fixture() {
     const engine = new NullEngine(), scene = new Scene(engine);
     engine.getCaps().supportComputeShaders = true;
     new FreeCamera("camera", Vector3.Zero(), scene);
+    // Fix the lifecycle baseline so changing product defaults still exercises real transitions.
     const settings: RcSkyAmbientSettings = { ...DEFAULT_RC_SKY_AMBIENT_SETTINGS, enabled: true,
+        skyBrightness: 0, rangeScale: 1, quality: "standard",
         volume: { min: [-8, 0, -8], size: 16 } };
     const controller = new RcSkyAmbientController(scene, () => settings, () => true, () => true);
     cleanup.push(() => { controller.dispose(); scene.dispose(); engine.dispose(); });

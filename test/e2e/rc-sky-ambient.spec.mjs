@@ -123,8 +123,8 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await expect(row(page).locator(".range-number-input")).toHaveCount(0);
     await expect(row(page).locator("p:not([role='status'])")).toHaveCount(0);
     await expect(input(page, "BaseLight")).toHaveCount(0);
-    for (const [field, value] of [["Opacity", "100"], ["Strength", "48"], ["Fill", "4"], ["SkyBrightness", "0"],
-      ["RangeScale", "50"], ["Quality", "50"]]) {
+    for (const [field, value] of [["Opacity", "100"], ["Strength", "50"], ["Fill", "5"], ["SkyBrightness", "50"],
+      ["RangeScale", "75"], ["Quality", "100"]]) {
       await expect(input(page, field)).toHaveValue(value);
       await expect(input(page, field).locator("..")).toHaveClass(/effect-layer-control-row/);
       await expect(input(page, field)).toHaveAttribute("min", "0");
@@ -137,15 +137,26 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await expect(input(page, "SkyBrightness")).toHaveAccessibleName(/^(空の明るさ|Sky brightness)$/);
     await expect(input(page, "Quality")).toHaveAttribute("step", "50");
     await advancedDetails(page).locator("summary").click();
-    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .035, baseLight: .25, skyBrightness: 0,
-      rangeScale: 1, quality: "standard", volume: null });
+    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: 1, fill: .05, baseLight: .25, skyBrightness: 1,
+      rangeScale: 2, quality: "high", volume: null });
     await expect(status(page)).toHaveAttribute("data-automatic-volume", "true");
+    await expect(status(page)).toHaveAttribute("data-probe-grid", "32");
+    const effectiveVolume = async () => JSON.parse(await status(page).getAttribute("data-effective-volume") ?? "null");
+    const defaultVolume = await effectiveVolume();
     await page.locator("#btn-effect-add-post").click();
     await expect(page.locator(`[data-effect-add-post="${id}"]`)).toBeDisabled();
     await page.locator("#btn-effect-add-post").click();
     await page.screenshot({ path: testInfo.outputPath("default-sky-ambient-panel.png") });
     await closeRcLighting(page);
     const defaultOn = await take("default-sky-ambient-on");
+    expect(compare("defaultOnVsNeutral", defaultOn, neutral)).toBeGreaterThan(.15);
+    // The provisional defaults include sky light. Isolate attenuation for the
+    // open-sky neutrality and bypass checks below, using the public sliders.
+    await advanced(page); await slider(page, "SkyBrightness", 0);
+    await slider(page, "RangeScale", 50); await slider(page, "Quality", 50); await ready(page);
+    expect(defaultVolume.size).toBeCloseTo((await effectiveVolume()).size * 2, 6);
+    await closeRcLighting(page);
+    const darkeningOn = await take("darkening-only-on");
     const materialPrograms = await page.evaluate(async () => {
       const probe = await import("/test/e2e/helpers/rc-sky-ambient-probe.mjs");
       return probe.inspectSkyAmbientMaterials();
@@ -154,30 +165,28 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
       writeFileSync(testInfo.outputPath(`material-${index}.wgsl`), fragment);
       return { ...material, ambientBaseHooks: (fragment.match(/rcSkyAmbientBase \+=/g) ?? []).length };
     });
-    expect(compare("defaultOnVsNeutral", defaultOn, neutral)).toBeGreaterThan(.15);
+    expect(compare("darkeningOnVsNeutral", darkeningOn, neutral)).toBeGreaterThan(.15);
     const regions = skyAmbientRegions(report.camera);
-    const baselineRegions = measureSkyAmbientRegions(neutral, regions), defaultRegions = measureSkyAmbientRegions(defaultOn, regions);
-    report.checkpoints.defaultRegions = { baseline: baselineRegions, on: defaultRegions };
-    const defaultCanopyDarkening = baselineRegions.canopy.mean - defaultRegions.canopy.mean;
-    expect(defaultCanopyDarkening).toBeGreaterThan(2);
-    expect(Math.abs(baselineRegions.open.mean - defaultRegions.open.mean)).toBeLessThan(1);
+    const baselineRegions = measureSkyAmbientRegions(neutral, regions), darkeningRegions = measureSkyAmbientRegions(darkeningOn, regions);
+    report.checkpoints.darkeningRegions = { baseline: baselineRegions, on: darkeningRegions };
+    expect(baselineRegions.canopy.mean - darkeningRegions.canopy.mean).toBeGreaterThan(2);
+    expect(Math.abs(baselineRegions.open.mean - darkeningRegions.open.mean)).toBeLessThan(1);
 
     // Density blends the existing effect without changing its brightness controls.
     await open(page); await slider(page, "Opacity", 0); await closeRcLighting(page);
     const densityZero = await take("opacity-zero");
     expect(compare("opacityZeroVsNeutral", densityZero, neutral)).toBeLessThan(.1);
-    expect((await settings(page)).strength).toBe(.95);
+    expect((await settings(page)).strength).toBe(1);
     await open(page); await slider(page, "Opacity", 50); await ready(page); await closeRcLighting(page);
     const densityHalf = await take("opacity-half");
     const halfDifference = compare("opacityHalfVsZero", densityHalf, densityZero);
     expect(halfDifference).toBeGreaterThan(.1);
-    expect(halfDifference).toBeLessThan(compare("opacityFullVsZero", defaultOn, densityZero));
+    expect(halfDifference).toBeLessThan(compare("opacityFullVsZero", darkeningOn, densityZero));
     await open(page); await slider(page, "Opacity", 100); await ready(page); await closeRcLighting(page);
-    expect(compare("opacityFullRestored", await take("opacity-full-restored"), defaultOn)).toBeLessThan(.1);
+    expect(compare("opacityFullRestored", await take("opacity-full-restored"), darkeningOn)).toBeLessThan(.1);
 
     // Quality changes the real field dimensions, while range keeps its center.
     await advanced(page);
-    const effectiveVolume = async () => JSON.parse(await status(page).getAttribute("data-effective-volume") ?? "null");
     const standardVolume = await effectiveVolume();
     expect(standardVolume?.size).toBeGreaterThan(0);
     const center = standardVolume.min.map(value => value + standardVolume.size / 2);
@@ -209,7 +218,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await history(page, "undo"); expect((await settings(page)).quality).toBe("standard");
     await advanced(page); await row(page).screenshot({ path: testInfo.outputPath("development-sky-ambient-card.png") });
     await ready(page); await expect(status(page)).toHaveAttribute("data-probe-grid", "16"); await closeRcLighting(page);
-    expect(compare("rangeQualityRestored", await take("range-quality-restored"), defaultOn)).toBeLessThan(.1);
+    expect(compare("rangeQualityRestored", await take("range-quality-restored"), darkeningOn)).toBeLessThan(.1);
 
     // Shading and optional sky light are independent; neither changes the other's setting.
     await open(page); await slider(page, "Strength", 0); await closeRcLighting(page);
@@ -218,7 +227,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     expect((await settings(page)).strength).toBe(0); expect((await settings(page)).skyBrightness).toBe(2);
     expect(compare("skyBrightnessWithoutShading", await take("sky-brightness-without-shading"), neutral)).toBeGreaterThan(.15);
     await history(page, "undo"); expect((await settings(page)).skyBrightness).toBe(0);
-    await history(page, "undo"); expect((await settings(page)).strength).toBe(.95);
+    await history(page, "undo"); expect((await settings(page)).strength).toBe(1);
     await ready(page); await input(page, "Enabled").uncheck();
     await expect(status(page)).toHaveAttribute("data-state", "off"); await closeRcLighting(page);
     expect(compare("disabledVsNeutral", await take("sky-ambient-off"), neutral)).toBeLessThan(.1);
@@ -228,7 +237,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await slider(page, "Fill", 10); await slider(page, "SkyBrightness", 10);
     // Keep nondefault development settings for the following save/backend/export checks.
     await slider(page, "RangeScale", 75); await slider(page, "Quality", 0); await ready(page);
-    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .95, fill: .1, baseLight: .25, skyBrightness: .2,
+    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: 1, fill: .1, baseLight: .25, skyBrightness: .2,
       rangeScale: 2, quality: "low", volume: null });
     await input(page, "Fill").focus(); await input(page, "Fill").press("ArrowRight");
     expect((await settings(page)).fill).toBe(.11);

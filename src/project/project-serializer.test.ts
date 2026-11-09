@@ -315,7 +315,7 @@ describe("exportProjectState", () => {
         expect(project.lighting.rcSkyAmbient?.volume?.min[0]).toBe(-4);
         expect(project.lighting.rcSkyOcclusion?.volume).toBeNull();
         expect(exportProjectState(createHost()).lighting.rcSkyAmbient)
-            .toEqual({ enabled: false, strength: 0.95, fill: 0.035, skyBrightness: 0, baseLight: 0.25, opacity: 1, rangeScale: 1, quality: "standard", volume: null });
+            .toEqual({ enabled: false, strength: 1, fill: 0.05, skyBrightness: 1, baseLight: 0.25, opacity: 1, rangeScale: 2, quality: "high", volume: null });
     });
     it("marks RC card presence authoritative while retaining OFF cards", () => {
         const project = exportProjectState({ ...createHost(), getFrameGraphPostEffectStackEntries: () => [

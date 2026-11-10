@@ -5,6 +5,7 @@ import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
 import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 import { addRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow,
   rcLightingStatus, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
+import { restoreRetiredRcLightingFixture } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
@@ -166,7 +167,12 @@ test("All three RC effects use their own key count to lock playback values", asy
     const page = await launched.app.firstWindow();
     page.on("pageerror", error => errors.push(error.message));
     await initialize(page);
-    for (const [id] of cases) { await addRcLighting(page, id); await openRcLighting(page, id); }
+    for (const [id] of cases) {
+      // Legacy Occlusion is restored from a fixture; public effects use the picker.
+      if (id === "rcSkyOcclusion") await restoreRetiredRcLightingFixture(page, id, { enabled: true });
+      else await addRcLighting(page, id);
+      await openRcLighting(page, id);
+    }
     await start(page);
     for (const [id, field, setting] of cases) {
       await openRcLighting(page, id);

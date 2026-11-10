@@ -7,7 +7,7 @@ import { camera, capture, difference, initialState, seek } from "./helpers/rc-di
 import { addRcLighting, closeRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow,
   rcLightingStatus, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
 import { measureSkyAmbientGiRetention, measureSkyAmbientRegions, skyAmbientRegions } from "./helpers/rc-sky-ambient-regions.mjs";
-import { setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs";
+import { restoreRetiredRcLightingFixture, setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-sky-stage/rc-sky-stage.pmx");
@@ -250,7 +250,10 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
 
     // All three RC consumers can share the stage and the material shader at once.
     for (const legacyId of ["rcSkyOcclusion", "rcDiffuseGi"]) {
-      await addRcLighting(page, legacyId); await openRcLighting(page, legacyId);
+      // Occlusion compatibility is supplied by a saved fixture, not GUI addition.
+      if (legacyId === "rcSkyOcclusion") await restoreRetiredRcLightingFixture(page, legacyId, { enabled: true });
+      else await addRcLighting(page, legacyId);
+      await openRcLighting(page, legacyId);
       await expect(rcLightingStatus(page, legacyId)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     }
     await ready(page); await slider(page, "Opacity", 50); await closeRcLighting(page);

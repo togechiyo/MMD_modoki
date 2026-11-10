@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { restoreRetiredRcLightingFixture } from "./rc-lighting-fixture.mjs";
 
 export const rcLightingRow = (page, id) => page.locator(`[data-effect-stack-row="${id}"]`);
 export const rcLightingInput = (page, id, field) => rcLightingRow(page, id).locator(`[name="${id}${field}"]`);
@@ -18,7 +19,12 @@ export async function openRcLighting(page, id) {
   await openPostEffects(page);
   if (!await rcLightingRow(page, id).count()) {
     const before = await page.evaluate(id => window.mmdModokiE2e.exportProjectState().lighting[id], id);
-    await addRcLighting(page, id);
+    // Rendering compatibility tests restore the retired card from a project
+    // fixture. Only the remaining public effects exercise the Add picker.
+    if (id === "rcSkyOcclusion") {
+      await restoreRetiredRcLightingFixture(page, id);
+      await openPostEffects(page);
+    } else await addRcLighting(page, id);
     const header = rcLightingRow(page, id).locator(`[data-effect-stack-item="${id}"]`);
     if (await header.getAttribute("aria-expanded") !== "true") await header.click();
     // Compatibility setup for rendering tests: opening a previously absent card

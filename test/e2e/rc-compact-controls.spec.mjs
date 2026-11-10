@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { launchMmdModoki } from "./electron-app.mjs";
 import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
 import { addRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow } from "./helpers/rc-lighting-controls.mjs";
+import { restoreRetiredRcLightingFixture } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const ids = ["rcSkyAmbient", "rcSkyOcclusion", "rcDiffuseGi"];
@@ -33,7 +34,8 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
     const page = await launched.app.firstWindow();
     page.on("pageerror", error => errors.push(error.message));
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
-    // Supply an older project fixture once; all subsequent edits use the public GUI.
+    // Supply hidden settings and the retired card through project fixtures;
+    // subsequent value edits use the public GUI.
     await page.evaluate(async () => {
       const state = window.mmdModokiE2e.exportProjectState();
       Object.assign(state.lighting.rcSkyAmbient, { enabled: false, opacity: .8, strength: .7, skyBrightness: .6,
@@ -42,11 +44,13 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
       Object.assign(state.lighting.rcDiffuseGi, { enabled: false, volume: { min: [-6, -2, -6], size: 12 } });
       await window.mmdModokiE2e.importProjectState(state);
     });
+    await restoreRetiredRcLightingFixture(page, "rcSkyOcclusion", { enabled: true });
     const retained = hidden(await project(page));
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
     await page.locator("#info-model-select").selectOption("__camera__");
     for (const [index, id] of ids.entries()) {
-      await addRcLighting(page, id); await openRcLighting(page, id);
+      if (id !== "rcSkyOcclusion") await addRcLighting(page, id);
+      await openRcLighting(page, id);
       const card = rcLightingRow(page, id);
       await expect(card.locator('input[type="range"]:visible')).toHaveCount([3, 2, 1][index]);
       await expect(card.locator('input[type="number"], details, [data-rc-volume-controls]')).toHaveCount(0);

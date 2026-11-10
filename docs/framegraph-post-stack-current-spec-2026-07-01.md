@@ -17,6 +17,16 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 - プロジェクト保存 / 読み込みでは、stack の順序と enabled 状態を `effects.frameGraphPostStack` として復元する。
 - 旧 project などで stack がない場合は、既存の各 post effect state から canonical order で復元する。
 
+## 2026-11-10 追記: 影の深み RCを没扱いへ
+
+所有者の「影の深みRCはもう没扱いでしまってもいいかな」を受け、`rcSkyOcclusion`を通常の新規追加候補から外す。追加メニューのボタンを撤去し、以後は新しい効果として案内しない。
+
+既存projectに入っている場合は、従来のカード・ON/OFF・スライダー・キー・削除・Undo/Redo・描画を互換用に残す。保存ID・値・旧形式の移行処理・backend往復・既存stack APIも維持する。Sky Ambient RCへの自動変換や、既存sceneからの強制削除は行わない。共用の`HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS`や保存正規化のretired判定へ入れると既存カードやstackまで失われるため、それらは変更しない。
+
+検証結果（2026-11-10）: `lint`、insights検証、関連ローカルElectron E2E 6件が成功。新規追加候補の不在、旧カードのGUI編集・キー・削除Undo、現行/旧形式projectの保存再読込、Classic/FrameGraph往復、RC併用時の描画比較、キー0個の再生中編集を確認した。
+
+初回は4件成功・2件失敗。新しいfixture helperがモデルなしの無効な選択欄を操作していた点と、削除Undo後のトラックMap再挿入順を比較していた点を試験側で修正し、対象2件の再実行が成功した。トラックはID別に全値・キーを比較し、カードのstack/order順は厳密比較を維持する。製品側の変更はHTMLの追加ボタン撤去だけ。型・純ロジック・起動処理を変更していないため、型検査・unit全体・独立smokeは再実行せず、動画確認も今回の対象外とした。
+
 ## 2026-11-10 追記: RCの通常操作を3本程度へ整理
 
 所有者指定で、各RC効果の通常エフェクト欄は3本程度のスライダーに絞る。細かな設定を折り畳み内へ残す形式もやめ、通常欄から撤去する。
@@ -25,7 +35,7 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 | --- | --- |
 | Luminous RC | 強度・範囲・柔らかさ（既存の3本） |
 | Sky Ambient RC | 濃度・陰影の強さ・空の明るさ（3本） |
-| 影の深み RC | 強度・最低残光（2本） |
+| 影の深み RC（既存project互換のみ） | 強度・最低残光（2本） |
 | GI RC | 強度（1本） |
 
 ON/OFF・キー登録・削除・状態表示は共通操作として残す。RC3種の計算範囲座標、自動範囲へ戻す操作、再計算、およびSky Ambientの暗部の残光・計算範囲倍率・品質の操作を通常欄から外す。新しい開発設定画面は追加しない。

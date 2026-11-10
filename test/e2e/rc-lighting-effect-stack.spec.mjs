@@ -6,12 +6,15 @@ import { camera, capture, difference, initialState, receiverDifference, seek } f
 import { addRcLighting, closeRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow,
   rcLightingStatus, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
 import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
+import { restoreRetiredRcLightingFixture } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), ids = ["rcSkyOcclusion", "rcDiffuseGi"];
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
 const history = (page, operation) => page.locator(`.app-menu-quick-button[data-menu-command="edit.${operation}"]`).click();
 const tracks = state => state.keyframes?.effectAnimations?.tracks.filter(track => ids.includes(track.effectId)) ?? [];
-const rcState = state => ({ settings: Object.fromEntries(ids.map(id => [id, state.lighting[id]])), tracks: tracks(state),
+// Tracks are keyed by effectId; their Map insertion order is not the card order.
+const rcState = state => ({ settings: Object.fromEntries(ids.map(id => [id, state.lighting[id]])),
+  tracks: tracks(state).sort((a, b) => a.effectId.localeCompare(b.effectId)),
   stack: state.effects.frameGraphPostStack?.filter(entry => ids.includes(entry.id)),
   order: (state.effects.frameGraphInstances?.order ?? state.effects.frameGraphPostStack?.map(entry => entry.id) ?? []).filter(id => ids.includes(id)) });
 async function fileMenu(page, command) {
@@ -29,7 +32,8 @@ async function verifyRows(page) {
   await openPostEffects(page);
   for (const id of ids) await expect(rcLightingRow(page, id)).toHaveCount(1);
   await page.locator("#btn-effect-add-post").click();
-  for (const id of ids) await expect(page.locator(`[data-effect-add-post="${id}"]`)).toBeDisabled();
+  await expect(page.locator('[data-effect-add-post="rcSkyOcclusion"]')).toHaveCount(0);
+  await expect(page.locator('[data-effect-add-post="rcDiffuseGi"]')).toBeDisabled();
   await page.locator("#btn-effect-add-post").click();
 }
 async function setPanelWidth(page, width) {
@@ -70,8 +74,15 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await experiment.locator(".app-menu-dialog-close").click();
     await openPostEffects(page);
     for (const id of ids) await expect(rcLightingRow(page, id)).toHaveCount(0);
+    await page.locator("#btn-effect-add-post").click();
+    await expect(page.locator('[data-effect-add-post="rcSkyOcclusion"]')).toHaveCount(0);
+    for (const id of ["rcSkyAmbient", "rcDiffuseGi"]) await expect(page.locator(`[data-effect-add-post="${id}"]`)).toBeEnabled();
+    await page.locator("#btn-effect-add-post").click();
     for (const id of ids) {
-      await addRcLighting(page, id); await openRcLighting(page, id);
+      // The retired effect enters through a saved project fixture, not the picker.
+      if (id === "rcSkyOcclusion") await restoreRetiredRcLightingFixture(page, id, { enabled: true });
+      else await addRcLighting(page, id);
+      await openRcLighting(page, id);
       await expect(rcLightingInput(page, id, "Enabled")).toBeChecked();
       await expect(rcLightingStatus(page, id)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     }
@@ -208,6 +219,16 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await seek(page, 20); await closeRcLighting(page);
     const both = await capture(page, testInfo, report, "both-key-20"), saved = await project(page);
     report.authored = rcState(saved);
+    // A restored retired card remains editable and removable; Undo restores its
+    // settings, keys and stack position without making it publicly addable again.
+    await openRcLighting(page, "rcSkyOcclusion");
+    await rcLightingRow(page, "rcSkyOcclusion").locator('[data-effect-stack-remove="rcSkyOcclusion"]').click();
+    await expect(rcLightingRow(page, "rcSkyOcclusion")).toHaveCount(0);
+    expect(tracks(await project(page)).some(track => track.effectId === "rcSkyOcclusion")).toBe(false);
+    expect((await project(page)).lighting.rcSkyOcclusion.enabled).toBe(false);
+    await history(page, "undo");
+    expect(rcState(await project(page))).toEqual(report.authored);
+    await verifyRows(page);
     await openRcLighting(page, "rcDiffuseGi"); await rcLightingRow(page, "rcDiffuseGi").locator('[data-effect-stack-remove="rcDiffuseGi"]').click();
     await expect(rcLightingRow(page, "rcDiffuseGi")).toHaveCount(0);
     const deleted = await project(page);

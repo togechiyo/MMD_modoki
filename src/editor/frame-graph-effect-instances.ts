@@ -29,6 +29,7 @@ export class FrameGraphEffectInstances {
     present(id: string): boolean { return this.ordered.includes(id); }
     order(): string[] { return [...this.ordered]; }
     hasTrack(id: string): boolean { const entry = this.get(id); return entry.tracks.has(entry.type); }
+    hasKeyframes(id: string): boolean { const entry = this.get(id); return entry.tracks.hasKeyframes(entry.type); }
     frames(id: string): Uint32Array { const entry = this.get(id); return entry.tracks.frames(entry.type); }
     staticValue(id: string): EffectValue { return { ...this.get(id).settings }; }
     value(id: string, frame: number, preview = false): EffectValue {

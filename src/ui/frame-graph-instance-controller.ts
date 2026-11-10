@@ -9,7 +9,7 @@ import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-insta
 import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from "./section-keyframe-button";
 
 const escape = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-type Host = Pick<MmdManager, "isEffectInstance" | "hasEffectSceneTrack" | "getEffectInstanceState" | "getEffectInstanceFixedSettings" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
+type Host = Pick<MmdManager, "isEffectInstance" | "getEffectSceneKeyframeFrames" | "isEffectValueEditLocked" | "getEffectInstanceState" | "getEffectInstanceFixedSettings" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
 type FixedSlider = { field: InstanceFixedSliderField; panelField: FrameGraphEffectSliderField; label: string; value: number };
 function fixedSliders(type: string, settings: InstanceFixedSettings = {}): FixedSlider[] {
     switch (type) {
@@ -52,11 +52,13 @@ export class FrameGraphInstanceController {
             const id = input?.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             const mapping = id ? this.controls(id).find(item => item.field === input?.dataset.instanceField) : null;
             if (id && input && mapping?.panelField) {
-                if (!host.hasEffectSceneTrack(id) && !this.pendingValue) this.pendingValue = host.getEffectInstanceState();
+                if (host.isEffectValueEditLocked(id)) return;
+                if (host.getEffectSceneKeyframeFrames(id).length === 0 && !this.pendingValue) this.pendingValue = host.getEffectInstanceState();
                 value(id, { ...this.currentValue(id), [mapping.field]: fromFrameGraphEffectSliderValue(mapping.panelField as FrameGraphEffectSliderField, Number(input.value)) });
             }
             const fixed = id ? this.fixedControls(id).find(item => item.field === input?.dataset.instanceFixed) : null;
             if (id && input && fixed) {
+                if (host.isEffectValueEditLocked(id) || (fixed.field === "samples" && host.isPlaying)) return;
                 if (!this.pendingValue) this.pendingValue = host.getEffectInstanceState();
                 this.fixedValue(id, fixed.field, fromFrameGraphEffectSliderValue(fixed.panelField, Number(input.value)));
             }
@@ -73,17 +75,20 @@ export class FrameGraphInstanceController {
                 this.editFixed(id, { radiance: { ...radiance, enabled: input.checked } });
             }
             if (input.dataset.instanceField === "color") {
+                if (host.isEffectValueEditLocked(id)) return;
                 const color = Number.parseInt(input.value.slice(1), 16);
                 const value = { r: (color >> 16 & 255) / 255, g: (color >> 8 & 255) / 255, b: (color & 255) / 255 };
                 if (host.captureCurrentEffectKeyframePayload(id).effectId === "bloom") edit({ action: "color", instanceId: id, color: value });
                 else this.editFixed(id, { color: value });
             }
             if (input.dataset.instanceField === "shadowColor") {
+                if (host.isEffectValueEditLocked(id)) return;
                 const color = Number.parseInt(input.value.slice(1), 16);
                 this.editFixed(id, { shadowColor: { r: (color >> 16 & 255) / 255, g: (color >> 8 & 255) / 255, b: (color & 255) / 255 } });
             }
             if (input.dataset.instanceField === "enabled") {
-                const before = !host.hasEffectSceneTrack(id) ? host.getEffectInstanceState() : null;
+                if (host.isEffectValueEditLocked(id)) return;
+                const before = host.getEffectSceneKeyframeFrames(id).length === 0 ? host.getEffectInstanceState() : null;
                 value(id, { ...host.captureCurrentEffectKeyframePayload(id).value, enabled: input.checked });
                 if (before) commitValue(before);
             }
@@ -110,7 +115,7 @@ export class FrameGraphInstanceController {
         const keyTitle = `${label}: ${escape(t("effect.instance.registerKeyframe"))}`;
         return `<div class="effect-layer-placeholder effect-layer-placeholder--active effect-layer-placeholder--check${value.enabled && present ? "" : " effect-layer-placeholder--off"}" data-effect-stack-row="${id}" data-effect-instance-row="${id}">
             <div class="effect-layer-header"><label class="effect-layer-check-wrap" title="${escape(t("effect.frameGraphPost.toggleVisibility"))}"><input class="effect-layer-check" type="checkbox" data-instance-field="enabled" aria-label="${escape(t("status.on"))}"${value.enabled ? " checked" : ""}></label>
-            <button type="button" class="effect-layer-main" data-instance-action="select" aria-expanded="${expanded}"${present ? ` draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}"${this.host.isPlaying ? " disabled" : ""}` : ""}><span class="effect-layer-name">${label}</span></button>
+            <button type="button" class="effect-layer-main" data-instance-action="select" aria-expanded="${expanded}"${present ? ` draggable="${!this.host.isPlaying}" data-effect-stack-drag="${id}" title="${dragTitle}"` : ""}><span class="effect-layer-name">${label}</span></button>
             <button type="button" class="section-kf-btn effect-instance-keyframe-button" data-instance-action="registerKeyframe" title="${keyTitle}" aria-label="${keyTitle}"></button></div>
             <div class="effect-layer-details"${expanded ? "" : " hidden"}>
             ${instance?.type === "dof" ? '<div data-instance-dof-controls></div>' : ""}${controls}${color}${shadowColor}${fixedSliderControls}${lutControls}
@@ -123,7 +128,8 @@ export class FrameGraphInstanceController {
             const id = root.closest<HTMLElement>("[data-effect-instance-row]")?.dataset.effectInstanceRow;
             if (!id) return;
             const controls = new DofInstanceFocusControls(root, this.host, () => this.currentValue(id), value => {
-                const before = !this.host.hasEffectSceneTrack(id) ? this.host.getEffectInstanceState() : null;
+                if (this.host.isEffectValueEditLocked(id)) return;
+                const before = this.host.getEffectSceneKeyframeFrames(id).length === 0 ? this.host.getEffectInstanceState() : null;
                 this.value(id, value); if (before) this.commitValue(before);
             });
             this.dofControls.set(id, controls);
@@ -136,19 +142,22 @@ export class FrameGraphInstanceController {
             if (!id || !this.host.isEffectInstance(id)) return;
             const value = this.currentValue(id);
             const fixed = this.fixedControls(id);
+            const valueLocked = this.host.isEffectValueEditLocked(id);
             row.classList.toggle("effect-layer-placeholder--off", !value.enabled || !row.querySelector("[data-effect-stack-drag]"));
-            row.querySelectorAll<HTMLButtonElement>("[data-effect-stack-drag]").forEach(handle => { handle.disabled = this.host.isPlaying; handle.draggable = !this.host.isPlaying; });
-            this.dofControls.get(id)?.refresh(value, this.host.isPlaying, id);
+            row.querySelectorAll<HTMLButtonElement>("[data-effect-stack-drag]").forEach(handle => { handle.disabled = false; handle.draggable = !this.host.isPlaying; });
+            this.dofControls.get(id)?.refresh(value, valueLocked, id);
             row.querySelectorAll<HTMLInputElement>("input").forEach(input => {
                 if (input.classList.contains("range-number-input")) return;
-                input.disabled = this.host.isPlaying;
-                if (input.dataset.instanceField === "enabled") input.checked = value.enabled;
                 const mapping = this.controls(id).find(item => item.field === input.dataset.instanceField);
+                const fixedMapping = fixed.find(item => item.field === input.dataset.instanceFixed);
+                const editableValue = input.dataset.instanceField === "enabled" || input.type === "color" || mapping
+                    || (fixedMapping && fixedMapping.field !== "samples");
+                input.disabled = editableValue ? valueLocked : this.host.isPlaying;
+                if (input.dataset.instanceField === "enabled") input.checked = value.enabled;
                 if (mapping?.panelField) {
                     if (document.activeElement !== input) input.value = String(Math.round(toFrameGraphEffectSliderValue(mapping.panelField as FrameGraphEffectSliderField, Number(value[mapping.field]))));
                     this.syncSlider(input);
                 }
-                const fixedMapping = fixed.find(item => item.field === input.dataset.instanceFixed);
                 if (fixedMapping) {
                     if (document.activeElement !== input) input.value = String(Math.round(toFrameGraphEffectSliderValue(fixedMapping.panelField, fixedMapping.value)));
                     this.syncSlider(input);

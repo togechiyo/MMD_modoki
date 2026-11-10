@@ -59,10 +59,10 @@ export function createRcLightingEffectCard(parent: HTMLElement, id: "rcSkyOcclus
     parent.append(section);
     return {
         section, content, advanced, enabled, register, remove,
-        refresh(isEnabled: boolean, playing: boolean): void {
+        refresh(isEnabled: boolean, playing: boolean, valueEditLocked: boolean): void {
             section.classList.toggle("effect-layer-placeholder--off", !isEnabled);
-            enabled.checked = isEnabled; enabled.disabled = playing;
-            title.disabled = playing; title.draggable = !playing; remove.disabled = playing;
+            enabled.checked = isEnabled; enabled.disabled = valueEditLocked;
+            title.disabled = false; title.draggable = !playing; remove.disabled = playing;
             const state = options.keyframeState();
             refreshSectionKeyframeButton(register, state, playing);
             const text = t(`experiment.${id}.${state === "registered" ? "updateKey" : "registerKey"}`);

@@ -18,8 +18,29 @@ function fixture(volume: RcDiffuseGiSettings["volume"] = null) {
     scene.activeCamera = new FreeCamera("camera", Vector3.Zero(), scene);
     const settings: RcDiffuseGiSettings = { enabled: true, strength: 0.5, volume };
     const controller = new RcDiffuseGiController(scene, () => settings, () => true, () => true, () => null);
-    return { scene, controller };
+    return { scene, controller, settings };
 }
+
+it("keeps automatic bounds during a strength edit and refits only when requested", () => {
+    const { scene, controller, settings } = fixture();
+    const mesh = new Mesh("receiver", scene);
+    mesh.material = new MmdStandardMaterial("receiver", scene);
+    mesh.setVerticesData("position", [0, 0, 0, 2, 0, 0, 0, 2, 0]); mesh.setIndices([0, 1, 2]);
+    expect(controller.isReadyForCapture).toBe(false);
+    const initial = controller.diagnostics.volume;
+    expect(initial).not.toBeNull();
+    mesh.position.x = 20; settings.strength = 0.25;
+    controller.settingsChanged(false);
+    expect(controller.isReadyForCapture).toBe(false);
+    expect(controller.diagnostics.volume).toEqual(initial);
+    controller.settingsChanged(true);
+    expect(controller.isReadyForCapture).toBe(false);
+    expect(controller.diagnostics.volume?.min[0]).toBeCloseTo((initial?.min[0] ?? 0) + 20);
+    mesh.position.x = 40;
+    controller.settingsChanged();
+    expect(controller.isReadyForCapture).toBe(false);
+    expect(controller.diagnostics.volume?.min[0]).toBeCloseTo((initial?.min[0] ?? 0) + 40);
+});
 
 it("refits an automatic volume when all receivers disappear and return at another position", () => {
     const { scene, controller } = fixture();

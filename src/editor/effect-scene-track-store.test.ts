@@ -4,6 +4,44 @@ import { effectKeyframePayloadSchema, getEffectDefinition, interpolateEffectValu
 
 const base = { enabled: false, gamma: 1 };
 describe("effect scene track foundation", () => {
+    it("keeps keyless edits as static values after preview cleanup and save/restore", () => {
+        const store = new EffectSceneTrackStore();
+        expect(store.hasKeyframes("gamma")).toBe(false);
+        store.ensure("gamma", base);
+        expect(store.has("gamma")).toBe(true);
+        expect(store.hasKeyframes("gamma")).toBe(false);
+        expect(store.evaluate("gamma", 15)).toEqual(base);
+        const changed = { enabled: true, gamma: 2 };
+        store.preview("gamma", 15, changed, base);
+        expect(store.snapshot("gamma")).toEqual({ base: changed, keys: [] });
+        store.clearPreviewsOutside(20); store.clearPreviews();
+        for (const frame of [15, 0, 120]) {
+            expect(store.evaluate("gamma", frame)).toEqual(changed);
+            expect(store.evaluate("gamma", frame, true)).toEqual(changed);
+        }
+        const restored = new EffectSceneTrackStore(); restored.restore(store.serialize());
+        expect(restored.serialize()).toEqual(store.serialize());
+        expect(restored.evaluate("gamma", 30)).toEqual(changed);
+        expect(restored.hasKeyframes("gamma")).toBe(false);
+    });
+    it("returns to static RC values after the last key is removed and normalizes old empty previews", () => {
+        const store = new EffectSceneTrackStore(false, ["rcSkyAmbient"]);
+        const initial = { enabled: true, strength: 1, opacity: 1 };
+        store.apply("rcSkyAmbient", 20, makeEffectPayload("rcSkyAmbient", initial), initial);
+        expect(store.hasKeyframes("rcSkyAmbient")).toBe(true);
+        expect(store.read("rcSkyAmbient", 10)).toBeNull();
+        expect(store.hasKeyframes("rcSkyAmbient")).toBe(true);
+        store.remove("rcSkyAmbient", [20]);
+        expect(store.hasKeyframes("rcSkyAmbient")).toBe(false);
+        const changed = { enabled: false, strength: 0.5, opacity: 0.25 };
+        store.preview("rcSkyAmbient", 40, changed, initial);
+        expect(store.snapshot("rcSkyAmbient")).toEqual({ base: changed, keys: [] });
+        const restored = new EffectSceneTrackStore(false, ["rcSkyAmbient"]);
+        restored.restore({ version: 1, tracks: [{ effectId: "rcSkyAmbient", valueVersion: 1, base: initial,
+            keys: [], preview: { frame: 40, value: changed } }] });
+        expect(restored.snapshot("rcSkyAmbient")).toEqual({ base: changed, keys: [] });
+        expect(restored.evaluate("rcSkyAmbient", 0)).toEqual(changed);
+    });
     it("shelves keys and previews verbatim without ownership, evaluation, or edits", () => {
         const raw = { version: 1, extra: "retain", tracks: [{ effectId: "gamma", valueVersion: 1,
             base: { enabled: false, gamma: 1 }, keys: [{ frame: 0, value: { enabled: true, gamma: 0.5 } }],

@@ -17,6 +17,7 @@ export class EffectSceneTrackStore {
     private accepts(id: EffectId): boolean { return this.enabled || this.enabledIds.includes(id); }
 
     has(id: EffectId): boolean { return this.entries.has(id); }
+    hasKeyframes(id: EffectId): boolean { return (this.entries.get(id)?.track.keyframes.length ?? 0) > 0; }
     ids(): EffectId[] { return [...this.entries.keys()]; }
     frames(id: EffectId): Uint32Array { return new Uint32Array(this.entries.get(id)?.track.keyframes.map(key => key.frame) ?? []); }
     base(id: EffectId): EffectValue | null { const value = this.entries.get(id)?.track.baseValue; return value ? { ...value } : null; }
@@ -39,8 +40,10 @@ export class EffectSceneTrackStore {
         const entry = this.entries.get(id);
         if (!entry) return;
         const normalized = normalizeEffectValue(getEffectDefinition(id), value, entry.track.baseValue);
-        if (!entry.track.keyframes.length) entry.track.baseValue = normalized;
-        entry.preview = { frame: frameNumber(frame), value: normalized };
+        if (!entry.track.keyframes.length) {
+            entry.track.baseValue = normalized;
+            delete entry.preview;
+        } else entry.preview = { frame: frameNumber(frame), value: normalized };
         entry.revision++;
     }
     clearPreviews(): void { for (const entry of this.entries.values()) delete entry.preview; }

@@ -12,14 +12,19 @@ export type ScenePlaybackControlLocks = {
     gravity: boolean;
 };
 
+/** Only an authored key track owns values during playback. */
+export function isPlaybackValueEditLocked(isPlaying: boolean, hasKeyframes: boolean): boolean {
+    return isPlaying && hasKeyframes;
+}
+
 export function getScenePlaybackControlLocks(
     isPlaying: boolean,
     keyframeCounts: ScenePlaybackKeyframeCounts,
 ): ScenePlaybackControlLocks {
     return {
-        camera: isPlaying && keyframeCounts.camera > 0,
-        light: isPlaying && keyframeCounts.light > 0,
-        shadow: isPlaying && keyframeCounts.shadow > 0,
-        gravity: isPlaying && keyframeCounts.gravity > 0,
+        camera: isPlaybackValueEditLocked(isPlaying, keyframeCounts.camera > 0),
+        light: isPlaybackValueEditLocked(isPlaying, keyframeCounts.light > 0),
+        shadow: isPlaybackValueEditLocked(isPlaying, keyframeCounts.shadow > 0),
+        gravity: isPlaybackValueEditLocked(isPlaying, keyframeCounts.gravity > 0),
     };
 }

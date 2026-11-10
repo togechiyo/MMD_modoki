@@ -4,6 +4,35 @@ import { effectKeyframePayloadSchema, getEffectDefinition } from "./effect-keyfr
 import { applyEffectInstanceDiff, buildEffectInstanceDiff } from "../actions/effect-instance-command";
 
 describe("FrameGraph effect instances", () => {
+    it("undoes and redoes static edits on an emptied track after playback clears previews", () => {
+        const store = new FrameGraphEffectInstances(); store.add("fx-a"); store.add("fx-b");
+        expect(store.hasKeyframes("fx-a")).toBe(false);
+        store.apply("fx-a", 20, store.capture("fx-a", 20));
+        expect(store.hasKeyframes("fx-a")).toBe(true);
+        store.remove("fx-a", [20]);
+        expect(store.hasTrack("fx-a")).toBe(true);
+        expect(store.hasKeyframes("fx-a")).toBe(false);
+        const before = store.serialize(), changed = { enabled: true, gamma: 2 };
+        store.setValue("fx-a", changed, 40);
+        const after = store.serialize(), diff = buildEffectInstanceDiff(before, after);
+        if (!diff) throw new Error("Missing static edit diff");
+        store.clearPreviews(60); store.clearPreviews();
+        expect(store.serialize()).toEqual(after);
+        expect(store.value("fx-a", 60)).toEqual(changed);
+        expect(store.value("fx-b", 60)).toEqual({ enabled: true, gamma: 1 });
+        const reverted = applyEffectInstanceDiff(store.serialize(), diff, "revert");
+        expect(reverted).toEqual(before);
+        store.restore(reverted);
+        expect(store.value("fx-a", 60)).toEqual({ enabled: true, gamma: 1 });
+        const reapplied = applyEffectInstanceDiff(store.serialize(), diff, "apply");
+        expect(reapplied).toEqual(after);
+        store.restore(reapplied);
+        expect(store.value("fx-a", 0)).toEqual(changed);
+        expect(store.hasKeyframes("fx-a")).toBe(false);
+        const restored = new FrameGraphEffectInstances(); restored.restore(store.serialize());
+        expect(restored.value("fx-a", 120, true)).toEqual(changed);
+        expect(restored.hasKeyframes("fx-a")).toBe(false);
+    });
     it.each([
         ["motionBlur", "samples", 47.6, { samples: 48 }],
         ["luminousRadiance", "radianceStrength", 5.6, { radiance: { enabled: true, strength: 5.6, range: 12, softness: 0, distanceSoftness: false } }],

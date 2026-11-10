@@ -8,6 +8,7 @@ import { createRcLightingEffectCard, createRcLightingSlider, type RcLightingEffe
 type Host = {
     isPlaying: boolean;
     currentFrame: number;
+    isEffectValueEditLocked(id: string): boolean;
     getRcDiffuseGiSettings(): RcDiffuseGiSettings;
     getRcDiffuseGiDiagnostics(): { status: "off" | "preparing" | "ready" | "unsupported" | "error"; reason: string | null; volume: RcDiffuseGiVolume | null; triangleCount: number; fieldRevision: number; supportedMaterialCount: number };
     getEffectSceneKeyframeFrames(id: string): Uint32Array;
@@ -71,13 +72,14 @@ export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispat
     const refresh = (initial = false): void => {
         if (!initial && card.section.getClientRects().length === 0) return;
         const settings = host.getRcDiffuseGiSettings();
-        card.refresh(settings.enabled, host.isPlaying);
+        const valueEditLocked = host.isEffectValueEditLocked("rcDiffuseGi");
+        card.refresh(settings.enabled, host.isPlaying, valueEditLocked);
         const hasCurrentKey = host.getEffectSceneKeyframeFrames("rcDiffuseGi").includes(Math.floor(host.currentFrame));
         register.dataset.hasCurrentKey = String(hasCurrentKey);
         if (!initial && card.content.hidden) return;
         const diagnostics = host.getRcDiffuseGiDiagnostics();
         const uiState = getRcDiffuseGiUiState(settings, diagnostics, t);
-        details.disabled = !settings.enabled || host.isPlaying;
+        details.disabled = !settings.enabled || valueEditLocked;
         volumeControls.disabled = !settings.enabled || host.isPlaying;
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * 50));

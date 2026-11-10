@@ -8,6 +8,7 @@ import { createRcLightingEffectCard, createRcLightingSlider, type RcLightingEffe
 type Host = {
     isPlaying: boolean;
     currentFrame: number;
+    isEffectValueEditLocked(id: string): boolean;
     getRcSkyAmbientSettings(): RcSkyAmbientSettings;
     getRcSkyAmbientDiagnostics(): { status: "off" | "preparing" | "ready" | "unsupported" | "error"; reason: string | null; volume: RcSkyAmbientVolume | null; effectiveVolume?: RcSkyAmbientVolume | null; probeGrid?: number; triangleCount: number; fieldRevision: number; supportedMaterialCount: number };
     getEffectSceneKeyframeFrames(id: string): Uint32Array;
@@ -21,6 +22,8 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
     if (advancedSummary) advancedSummary.textContent = t("experiment.rcSkyAmbient.advanced");
     const details = document.createElement("fieldset");
     details.className = "rc-lighting-effect-controls";
+    const lightingControls = document.createElement("fieldset");
+    lightingControls.className = "rc-lighting-effect-controls";
     const volumeControls = document.createElement("fieldset");
     volumeControls.className = "rc-lighting-effect-controls";
     const numberControls: HTMLInputElement[] = [];
@@ -35,7 +38,7 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
             dispatch({ type: "effect.setRcSkyAmbient", source: "panel", settings: { [field]: Number(input.value) / scale } });
             refresh();
         });
-        (field === "opacity" ? details : volumeControls).append(row);
+        (field === "opacity" ? details : lightingControls).append(row);
         return { input, field, scale };
     });
     const developmentSliders = (["rangeScale", "quality"] as const).map(field => {
@@ -104,13 +107,15 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
     const refresh = (initial = false): void => {
         if (!initial && card.section.getClientRects().length === 0) return;
         const settings = host.getRcSkyAmbientSettings();
-        card.refresh(settings.enabled, host.isPlaying);
+        const valueEditLocked = host.isEffectValueEditLocked("rcSkyAmbient");
+        card.refresh(settings.enabled, host.isPlaying, valueEditLocked);
         const hasCurrentKey = host.getEffectSceneKeyframeFrames("rcSkyAmbient").includes(Math.floor(host.currentFrame));
         register.dataset.hasCurrentKey = String(hasCurrentKey);
         if (!initial && card.content.hidden) return;
         const diagnostics = host.getRcSkyAmbientDiagnostics();
         const uiState = getRcSkyAmbientUiState(settings, diagnostics, t);
-        details.disabled = !settings.enabled || host.isPlaying;
+        details.disabled = !settings.enabled || valueEditLocked;
+        lightingControls.disabled = details.disabled;
         volumeControls.disabled = !settings.enabled || host.isPlaying;
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * slider.scale));
@@ -139,7 +144,7 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
     enabled.addEventListener("change", () => {
         dispatch({ type: "effect.setRcSkyAmbient", source: "panel", settings: { enabled: enabled.checked } }); refresh();
     });
-    card.advanced.append(volumeControls, status);
+    card.advanced.append(lightingControls, volumeControls, status);
     card.content.append(details, card.advanced, card.remove);
     // Hidden camera-panel rebuilds must not expose unchecked/default controls
     // before the next visible timer tick, even when the saved effect is enabled.

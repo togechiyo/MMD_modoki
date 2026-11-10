@@ -75,9 +75,9 @@ export class RcDiffuseGiController {
         return fitRcDiffuseGiVolume(meshes, this.acceptsMaterial);
     }
 
-    public settingsChanged(): void {
+    public settingsChanged(refitVolume = true): void {
         this.frameId = -1;
-        this.automaticVolume = null;
+        if (refitVolume) this.automaticVolume = null;
         if (!this.settings().enabled) {
             this.view = null;
             if (!this.keepResourcesWhileOff()) this.release();

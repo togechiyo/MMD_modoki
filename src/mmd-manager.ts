@@ -534,6 +534,8 @@ import { INSTANCE_LUT_PRESETS } from "./editor/frame-graph-instance-fixed-settin
 import { dofInstanceFocusDistanceMm, resolveDofInstanceFocusTarget } from "./editor/dof-instance-focus";
 import { EffectInstanceRuntimeDuration } from "./editor/effect-instance-runtime-duration";
 import { applyEffectInstanceDiff, type EffectInstanceDiff } from "./actions/effect-instance-command";
+import { isEffectInstancePlaybackValueDiff, isRcPlaybackValuePatch } from "./editor/effect-playback-edit";
+import { isPlaybackValueEditLocked } from "./editor/scene-playback-control-lock";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, makeEffectPayload, type EffectId, type EffectValue, type DepthEffectValues, type ScreenSpaceEffectValues } from "./editor/effect-keyframe-definitions";
 import { applyClassicKeyframedBloomBlur } from "./render/keyframed-bloom-blur";
@@ -6628,6 +6630,11 @@ ${beforeFogAppendBlock}
         this.onEffectKeyframePreviewChanged?.();
     }
     public hasEffectSceneTrack(id: string): boolean { return this.effectInstances.has(id) ? this.effectInstances.hasTrack(id) : isEffectId(id) && this.effectSceneTracks.has(id); }
+    public isEffectValueEditLocked(id: string): boolean {
+        const hasKeys = this.effectInstances.has(id) ? this.effectInstances.hasKeyframes(id)
+            : isEffectId(id) && this.effectSceneTracks.hasKeyframes(id);
+        return isPlaybackValueEditLocked(this._isPlaying, hasKeys);
+    }
     public isEffectTrackSuspended(id: string): boolean {
         if (isRcSceneEffectId(id)) return this.postEffectBackend !== "frameGraph" || this.getRcSceneEffectStackIndex(id) === null;
         if (this.effectInstances.has(id)) return !this.effectInstances.present(id) || this.postEffectBackend !== "frameGraph";
@@ -6635,7 +6642,7 @@ ${beforeFogAppendBlock}
     }
     public setEffectScenePreview(id: string, value: unknown): void {
         if (this.effectInstances.has(id)) {
-            if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
+            if (this.isEffectValueEditLocked(id) || this.postEffectBackend !== "frameGraph") return;
             this.effectInstances.setValue(id, value as EffectValue, this._currentFrame, true);
             this.onEffectKeyframePreviewChanged?.();
             return;
@@ -6643,7 +6650,7 @@ ${beforeFogAppendBlock}
         if (!isEffectId(id)) return;
         if (!EFFECT_TIMELINE_ENABLED && !isRcSceneEffectId(id)) return;
         if (isRcSceneEffectId(id) && this.isEffectTrackSuspended(id)) return;
-        if (this.isPlaying) return;
+        if (this.isEffectValueEditLocked(id)) return;
         const first = !this.effectSceneTracks.has(id);
         this.effectSceneTracks.preview(id, this._currentFrame, value, this.getStaticEffectValue(id));
         if (first && !isRcSceneEffectId(id)) this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(this.getFrameGraphPostEffectStackIds(), id));
@@ -6717,17 +6724,18 @@ ${beforeFogAppendBlock}
         return this.effectInstances.fixedSettings(id);
     }
     public setEffectInstanceFixedSliderValue(id: string, field: import("./editor/frame-graph-instance-fixed-settings").InstanceFixedSliderField, value: number): void {
-        if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
+        if (this.isEffectValueEditLocked(id) || (this._isPlaying && field === "samples") || this.postEffectBackend !== "frameGraph") return;
         this.effectInstances.setFixedSliderValue(id, field, value);
         this.onEffectKeyframePreviewChanged?.();
     }
     public setEffectInstanceValue(id: string, value: EffectValue): void {
-        if (this._isPlaying || this.postEffectBackend !== "frameGraph") return;
+        if (this.isEffectValueEditLocked(id) || this.postEffectBackend !== "frameGraph") return;
         this.effectInstances.setValue(id, value, this._currentFrame);
         this.onEffectKeyframePreviewChanged?.();
     }
     public applyEffectInstanceDiff(diff: EffectInstanceDiff, direction: "apply" | "revert"): boolean {
-        if (this._isPlaying) return false;
+        if (this._isPlaying && (this.postEffectBackend !== "frameGraph" || !isEffectInstancePlaybackValueDiff(diff)
+            || diff.changes.some(change => this.isEffectValueEditLocked(change.instanceId)))) return false;
         const state = this.getEffectInstanceState(), next = applyEffectInstanceDiff(state, diff, direction);
         if (!next) return false;
         try { this.effectInstances.restore(next); } catch { return false; }
@@ -13244,6 +13252,7 @@ ${beforeFogAppendBlock}
     }
 
     public setRcSkyAmbientSettings(value: Partial<RcSkyAmbientSettings>): void {
+        if (this._isPlaying && (this.isEffectValueEditLocked("rcSkyAmbient") || !isRcPlaybackValuePatch(value))) return;
         const next = normalizeRcSkyAmbientSettings({ ...this.rcSkyAmbientSettingsValue, ...value });
         this.rcSkyAmbientSettingsValue = next;
         if (this.effectSceneTracks.has("rcSkyAmbient") && (value.enabled !== undefined || value.strength !== undefined || value.opacity !== undefined)) {
@@ -13293,6 +13302,7 @@ ${beforeFogAppendBlock}
     }
 
     public setRcSkyOcclusionSettings(value: Partial<RcSkyOcclusionSettings>): void {
+        if (this._isPlaying && (this.isEffectValueEditLocked("rcSkyOcclusion") || !isRcPlaybackValuePatch(value))) return;
         const next = normalizeRcSkyOcclusionSettings({ ...this.rcSkyOcclusionSettingsValue, ...value });
         this.rcSkyOcclusionSettingsValue = next;
         if (this.effectSceneTracks.has("rcSkyOcclusion") && (value.enabled !== undefined || value.strength !== undefined)) {
@@ -13300,7 +13310,7 @@ ${beforeFogAppendBlock}
             this.setEffectScenePreview("rcSkyOcclusion", { enabled: value.enabled === undefined ? current?.enabled ?? next.enabled : next.enabled,
                 strength: value.strength === undefined ? current?.strength ?? next.strength : next.strength });
         }
-        this.getRcSkyOcclusionController().settingsChanged();
+        this.getRcSkyOcclusionController().settingsChanged(value.volume !== undefined);
     }
 
     public recalculateRcSkyOcclusionVolume(): void {
@@ -13346,6 +13356,7 @@ ${beforeFogAppendBlock}
     }
 
     public setRcDiffuseGiSettings(value: Partial<RcDiffuseGiSettings>): void {
+        if (this._isPlaying && (this.isEffectValueEditLocked("rcDiffuseGi") || !isRcPlaybackValuePatch(value))) return;
         const next = normalizeRcDiffuseGiSettings({ ...this.rcDiffuseGiSettingsValue, ...value });
         this.rcDiffuseGiSettingsValue = next;
         if (this.effectSceneTracks.has("rcDiffuseGi") && (value.enabled !== undefined || value.strength !== undefined)) {
@@ -13353,7 +13364,7 @@ ${beforeFogAppendBlock}
             this.setEffectScenePreview("rcDiffuseGi", { enabled: value.enabled === undefined ? current.enabled : next.enabled,
                 strength: value.strength === undefined ? current.strength : next.strength });
         }
-        this.getRcDiffuseGiController().settingsChanged();
+        this.getRcDiffuseGiController().settingsChanged(value.volume !== undefined);
     }
 
     public recalculateRcDiffuseGiVolume(): void {

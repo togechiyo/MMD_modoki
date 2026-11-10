@@ -77,9 +77,9 @@ export class RcSkyOcclusionController {
         return { min: low.map((value, axis) => (value + high[axis] - size) / 2) as [number, number, number], size };
     }
 
-    public settingsChanged(): void {
+    public settingsChanged(refitVolume = true): void {
         this.frameId = -1;
-        this.automaticVolume = null;
+        if (refitVolume) this.automaticVolume = null;
         if (!this.settings().enabled) {
             this.view = null;
             if (!this.keepResourcesWhileOff()) this.release();

@@ -128,6 +128,7 @@ import {
     type MirrorPasteClipboardItem,
 } from "./editor/mirror-paste-service";
 import { getScenePlaybackControlLocks } from "./editor/scene-playback-control-lock";
+import { isRcPlaybackValuePatch } from "./editor/effect-playback-edit";
 import {
     POST_EFFECT_BACKEND_STORAGE_KEY,
     normalizePostEffectBackend,
@@ -2913,10 +2914,10 @@ export class UIController {
         });
         this.actionDispatcher.register("effect.instanceEdit", action => this.editFrameGraphInstance(action.operation));
         this.actionDispatcher.register("effect.setRcSkyOcclusion", action => {
-            this.editRcSkyOcclusion(() => this.mmdManager.setRcSkyOcclusionSettings(action.settings));
+            this.editRcSkyOcclusion(() => this.mmdManager.setRcSkyOcclusionSettings(action.settings), isRcPlaybackValuePatch(action.settings));
         });
         this.actionDispatcher.register("effect.setRcSkyAmbient", action => {
-            this.editRcSkyAmbient(() => this.mmdManager.setRcSkyAmbientSettings(action.settings));
+            this.editRcSkyAmbient(() => this.mmdManager.setRcSkyAmbientSettings(action.settings), isRcPlaybackValuePatch(action.settings));
         });
         this.actionDispatcher.register("effect.recalculateRcSkyAmbientVolume", () => {
             this.editRcSkyAmbient(() => this.mmdManager.recalculateRcSkyAmbientVolume());
@@ -2925,7 +2926,7 @@ export class UIController {
             this.editRcSkyOcclusion(() => this.mmdManager.recalculateRcSkyOcclusionVolume());
         });
         this.actionDispatcher.register("effect.setRcDiffuseGi", action => {
-            this.editRcDiffuseGi(() => this.mmdManager.setRcDiffuseGiSettings(action.settings));
+            this.editRcDiffuseGi(() => this.mmdManager.setRcDiffuseGiSettings(action.settings), isRcPlaybackValuePatch(action.settings));
         });
         this.actionDispatcher.register("effect.recalculateRcDiffuseGiVolume", () => {
             this.editRcDiffuseGi(() => this.mmdManager.recalculateRcDiffuseGiVolume());
@@ -4715,11 +4716,12 @@ export class UIController {
         }
     }
 
-    private syncRangeNumberInput(slider: HTMLInputElement): void {
+    private syncRangeNumberInput(slider: HTMLInputElement, preserveFocusedDraft = false): void {
         const numberInput = this.rangeNumberInputs.get(slider);
         if (!numberInput) return;
 
         numberInput.disabled = slider.disabled;
+        if (preserveFocusedDraft && !numberInput.disabled && document.activeElement === numberInput) return;
         const parsed = Number(slider.value);
         if (!Number.isFinite(parsed)) return;
 
@@ -5285,7 +5287,7 @@ export class UIController {
             before => {
                 const diff = buildEffectInstanceDiff(before, this.mmdManager.getEffectInstanceState());
                 if (diff) this.commandHistory.push({ id: crypto.randomUUID(), label: "Effect value", scope: "effect", createdAtMs: Date.now(), diff });
-            }, slider => this.syncRangeNumberInput(slider), id => { void this.loadInstanceLut(id); });
+            }, slider => this.syncRangeNumberInput(slider, true), id => { void this.loadInstanceLut(id); });
         document.getElementById("btn-effect-toggle-framegraph")?.addEventListener("click", () => {
             if (this.getConfiguredPostEffectBackend() !== "frameGraph") return;
             this.mmdManager.setFrameGraphPostEffectsEnabled(
@@ -5592,8 +5594,8 @@ export class UIController {
         return { settings: this.mmdManager.getStaticRcSkyAmbientSettings(), track: this.mmdManager.getRcSkyAmbientTrackState(), stackIndex: this.mmdManager.getRcSceneEffectStackIndex("rcSkyAmbient") };
     }
 
-    private editRcSkyAmbient(edit: () => void): void {
-        if (this.mmdManager.isPlaying) return;
+    private editRcSkyAmbient(edit: () => void, allowPlaybackValues = false): void {
+        if (this.mmdManager.isEffectValueEditLocked("rcSkyAmbient") || (this.mmdManager.isPlaying && !allowPlaybackValues)) return;
         const before = this.captureRcSkyAmbientEditState();
         edit();
         const diff = buildRcSkyAmbientCommandDiff(before, this.captureRcSkyAmbientEditState());
@@ -5606,8 +5608,8 @@ export class UIController {
         return { settings: this.mmdManager.getStaticRcDiffuseGiSettings(), track: this.mmdManager.getRcDiffuseGiTrackState(), stackIndex: this.mmdManager.getRcSceneEffectStackIndex("rcDiffuseGi") };
     }
 
-    private editRcDiffuseGi(edit: () => void): void {
-        if (this.mmdManager.isPlaying) return;
+    private editRcDiffuseGi(edit: () => void, allowPlaybackValues = false): void {
+        if (this.mmdManager.isEffectValueEditLocked("rcDiffuseGi") || (this.mmdManager.isPlaying && !allowPlaybackValues)) return;
         const before = this.captureRcDiffuseGiEditState();
         edit();
         const diff = buildRcDiffuseGiCommandDiff(before, this.captureRcDiffuseGiEditState());
@@ -5616,8 +5618,8 @@ export class UIController {
         this.updateTimelineEditState();
     }
 
-    private editRcSkyOcclusion(edit: () => void): void {
-        if (this.mmdManager.isPlaying) return;
+    private editRcSkyOcclusion(edit: () => void, allowPlaybackValues = false): void {
+        if (this.mmdManager.isEffectValueEditLocked("rcSkyOcclusion") || (this.mmdManager.isPlaying && !allowPlaybackValues)) return;
         const before = this.captureRcSkyOcclusionEditState();
         edit();
         const diff = buildRcSkyOcclusionCommandDiff(before, this.captureRcSkyOcclusionEditState());
@@ -5627,7 +5629,8 @@ export class UIController {
     }
 
     private editFrameGraphInstance(operation: EffectInstanceOperation): void {
-        if (this.mmdManager.isPlaying || this.getConfiguredPostEffectBackend() !== "frameGraph") return;
+        if (this.getConfiguredPostEffectBackend() !== "frameGraph") return;
+        if (this.mmdManager.isPlaying && (operation.action !== "color" && operation.action !== "fixed")) return;
         const before = this.mmdManager.getEffectInstanceState(), next = new FrameGraphEffectInstances();
         try { next.restore(before); editEffectInstances(next, operation); }
         catch (error) { this.showToast(error instanceof Error ? error.message : "Effect edit failed", "error"); return; }

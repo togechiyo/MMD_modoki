@@ -35,7 +35,7 @@ export class DofInstanceFocusControls {
         };
         requestAnimationFrame(refreshDistance);
     }
-    refresh(value: EffectValue, playing: boolean, instanceId: string): void {
+    refresh(value: EffectValue, valueLocked: boolean, instanceId: string): void {
         this.instanceId = instanceId;
         const models = this.host.getLoadedModels(), model = models.find(item => item.instanceId === value.targetModelInstanceId);
         const modes = [
@@ -57,7 +57,7 @@ export class DofInstanceFocusControls {
             }
             select.value = selected;
             if (select.parentElement) select.parentElement.hidden = field !== "focusMode" && value.focusMode !== "model-target";
-            select.disabled = playing || (field !== "focusMode" && value.focusMode !== "model-target");
+            select.disabled = valueLocked || (field !== "focusMode" && value.focusMode !== "model-target");
         }
         this.refreshDistance(instanceId);
     }

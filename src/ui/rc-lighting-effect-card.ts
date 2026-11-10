@@ -47,18 +47,13 @@ export function createRcLightingEffectCard(parent: HTMLElement, id: "rcSkyOcclus
     heading.append(toggle, title, register);
     const content = document.createElement("div");
     content.className = "effect-layer-details"; content.hidden = !options.expanded;
-    const advanced = document.createElement("details");
-    advanced.dataset.rcVolumeControls = id;
-    const summary = document.createElement("summary");
-    summary.textContent = t("effect.rcLighting.volume");
-    advanced.append(summary);
     const remove = document.createElement("button");
     remove.type = "button"; remove.className = "effect-layer-control-button";
     remove.dataset.effectStackRemove = id; remove.textContent = t("effect.instance.delete");
     section.append(heading, content);
     parent.append(section);
     return {
-        section, content, advanced, enabled, register, remove,
+        section, content, enabled, register, remove,
         refresh(isEnabled: boolean, playing: boolean, valueEditLocked: boolean): void {
             section.classList.toggle("effect-layer-placeholder--off", !isEnabled);
             enabled.checked = isEnabled; enabled.disabled = valueEditLocked;

@@ -2,8 +2,9 @@ import { test, expect } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { camera, capture, closeGi, difference, giInput, giSection, giSettings, giSlider, giStatus,
+import { camera, capture, closeGi, difference, giSettings, giSlider, giStatus,
   giVolume, initialState, openGi, receiverDifference, setGi } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-diffuse-gi-stage/rc-diffuse-gi-red.pmx");
@@ -12,12 +13,13 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
   test.setTimeout(240000);
   const launched = await launchMmdModoki(root);
   const report = { errors: [], consoleErrors: [], captures: {}, cases: [],
-    interpretation: "Original 36-triangle PMX, default GI strength 0.5. Automatic and bounded volumes must both produce visible red bounce. Black shadow tint and Toon influence 0 are fixture-only GUI shading controls; shadow generator, CSM, bias and distances are unchanged. PMX covers Stage; Accessory/OBJ presets belong to their respective import types." };
+    interpretation: "Original 36-triangle PMX, default GI strength 0.5. Hidden volume settings are prepared through project import and resolved volume is observed through a diagnostic probe, not GUI editing. Automatic and bounded volumes must both produce visible red bounce. Black shadow tint and Toon influence 0 are fixture-only GUI shading controls; shadow generator, CSM, bias and distances are unchanged. PMX covers Stage; Accessory/OBJ presets belong to their respective import types." };
   try {
     const page = await launched.app.firstWindow();
     page.on("pageerror", error => report.errors.push(error.stack ?? error.message));
     page.on("console", message => { if (message.type() === "error") report.consoleErrors.push(message.text()); });
     await initialState(page, { fixed: false });
+    await page.evaluate(async () => { await import("/test/e2e/helpers/rc-diffuse-gi-reference-probe.mjs"); });
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixture);
     const view = await camera(page); report.camera = view;
     const blackReference = { data: Buffer.alloc(640 * 360 * 4) };
@@ -25,8 +27,9 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
 
     const state = async () => {
       await openGi(page);
-      const resolved = { min: await Promise.all(["MinX", "MinY", "MinZ"].map(async field => Number(await giInput(page, field).inputValue()))),
-        size: Number(await giInput(page, "Size").inputValue()) };
+      // Read the field diagnostically; there are no editable volume inputs in the card.
+      const resolved = await page.evaluate(async () =>
+        (await import("/test/e2e/helpers/rc-diffuse-gi-reference-probe.mjs")).readReferenceState().volume);
       const result = { status: await giStatus(page).getAttribute("data-state"), fieldRevision: Number(await giStatus(page).getAttribute("data-field-revision")),
         statusText: await giStatus(page).textContent(),
         supportedMaterials: Number(await giStatus(page).getAttribute("data-supported-material-count")),
@@ -34,14 +37,8 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
       await closeGi(page); return result;
     };
     const volume = async fixed => {
-      await openGi(page);
-      if (fixed) {
-        for (const [field, value] of [["MinX", -8], ["MinY", -2], ["MinZ", -8], ["Size", 16]]) await giInput(page, field).fill(String(value));
-        await giInput(page, "Size").press("Enter");
-      } else {
-        await giSection(page).getByRole("button", { name: /^(自動範囲|Automatic volume)$/ }).click();
-      }
-      await closeGi(page); expect((await giSettings(page)).volume).toEqual(fixed ? giVolume : null);
+      await setRcLightingFixtureSettings(page, "rcDiffuseGi", { volume: fixed ? giVolume : null });
+      expect((await giSettings(page)).volume).toEqual(fixed ? giVolume : null);
     };
     const pair = async (phase, name) => {
       await setGi(page, false); const off = await capture(page, testInfo, report, `${phase}-${name}-off`);
@@ -97,7 +94,8 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
     await page.locator("#info-model-select").selectOption("__camera__");
     const lightValue = async (id, value) => {
       const control = page.locator(`#${id}`);
-      if (!await control.isVisible()) await page.locator("#btn-toolbar-mode-toggle").click();
+      await page.locator("#info-model-select").selectOption("__camera__");
+      await expect(control).toBeVisible();
       const minimum = Number(await control.getAttribute("min")), step = Number(await control.getAttribute("step"));
       await control.focus(); await control.press("Home");
       for (let i = 0; i < Math.round((value - minimum) / step); i++) await control.press("ArrowRight");

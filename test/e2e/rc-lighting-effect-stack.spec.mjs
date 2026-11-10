@@ -100,8 +100,8 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await verifyRows(page);
     // Review the ordinary card layout at the app's default panel width.
     for (const id of ids) {
-      const volume = rcLightingRow(page, id).locator(`[data-rc-volume-controls="${id}"]`);
-      if (await volume.getAttribute("open") !== null) await volume.locator("summary").click();
+      await expect(rcLightingRow(page, id).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+      await expect(rcLightingRow(page, id).locator('input[type="range"]')).toHaveCount(id === "rcSkyOcclusion" ? 2 : 1);
     }
     const skyHeader = rcLightingRow(page, "rcSkyOcclusion").locator('[data-effect-stack-item="rcSkyOcclusion"]');
     if (await skyHeader.getAttribute("aria-expanded") === "true") await skyHeader.click();
@@ -153,7 +153,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await page.screenshot({ path: testInfo.outputPath("rc-lighting-narrow-gamma.png") });
     for (const id of ids) {
       await openRcLighting(page, id);
-      await rcLightingRow(page, id).locator(`[data-rc-volume-controls="${id}"] > summary`).click();
+      await expect(rcLightingRow(page, id).locator("details")).toHaveCount(0);
       report.narrowControls[id] = await controlGeometry(rcLightingInput(page, id, "Strength"));
       await expect(rcLightingRow(page, id).locator(".range-number-input")).toHaveCount(0);
       await expect(rcLightingInput(page, id, "Strength")).toBeInViewport();

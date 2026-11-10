@@ -65,7 +65,9 @@ for (const pose of [
     const geometry = { wall: [[-6, 1.9, 4.9], [-1.5, 1.9, 4.9], [-1.5, 3.5, 4.9], [-6, 3.5, 4.9]].map(point) };
     await addRcLighting(page, "rcSkyAmbient");
     await openRcLighting(page, "rcSkyAmbient");
-    await rcLightingRow(page, "rcSkyAmbient").getByRole("button", { name: /範囲を再計算|Recalculate volume/ }).click();
+    await expect(rcLightingRow(page, "rcSkyAmbient").locator('input[type="range"]')).toHaveCount(3);
+    await expect(rcLightingRow(page, "rcSkyAmbient").locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+    // Addition prepares the automatic field; no manual volume recalculation UI remains.
     await expect(rcLightingStatus(page, "rcSkyAmbient")).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await closeRcLighting(page);
     report.geometry = geometry; report.view = view; report.polygon = projectPoints(view, geometry.wall);

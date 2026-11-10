@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { camera, capture, closeGi, giInput, giSection, giSlider, openGi, setGi } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { camera, capture, closeGi, giInput, giSlider, openGi, setGi } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const references = [
@@ -41,7 +42,7 @@ for (const reference of references) test(`RC GI local reference: ${reference.id}
   test.skip(Boolean(process.env.MMD_RC_GI_REFERENCE) && process.env.MMD_RC_GI_REFERENCE !== reference.id, "Another reference selected");
   test.setTimeout(360000);
   const launched = await launchMmdModoki(root), report = { reference: reference.id, errors: [], consoleErrors: [], captures: {}, cases: {},
-    interpretation: "Local reference audit, not a fixture-only quality test. Same-process OFF/ON timings are diagnostic, not a hardware speedup benchmark. No reference assets are published." };
+    interpretation: "Local reference audit, not a fixture-only quality test. Hidden volumes are prepared through project import, not GUI editing. Same-process OFF/ON timings are diagnostic, not a hardware speedup benchmark. No reference assets are published." };
   let page;
   try {
     page = await launched.app.firstWindow();
@@ -82,9 +83,9 @@ for (const reference of references) test(`RC GI local reference: ${reference.id}
     const fixVolume = async (center, size) => {
       const round = value => Math.round(value * 10) / 10;
       const volume = { min: center.map(value => round(value - size / 2)), size: round(size) };
-      await openGi(page); await giSlider(page, 25);
-      for (const [field, value] of [["MinX", volume.min[0]], ["MinY", volume.min[1]], ["MinZ", volume.min[2]], ["Size", volume.size]]) await giInput(page, field).fill(String(value));
-      await giInput(page, "Size").press("Enter"); await closeGi(page);
+      await openGi(page); await giSlider(page, 25); await closeGi(page);
+      // Hidden volume is diagnostic fixture preparation, while strength uses the public GUI.
+      await setRcLightingFixtureSettings(page, "rcDiffuseGi", { volume });
       expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().lighting.rcDiffuseGi.volume)).toEqual(volume);
       return volume;
     };
@@ -99,8 +100,8 @@ for (const reference of references) test(`RC GI local reference: ${reference.id}
     report.closeCamera = await camera(page, { tx: close.center[0], ty: close.center[1], tz: close.center[2], rx: -15, ry: -25, camDistance: close.distance });
     const closeOff = await capture(page, testInfo, report, "close-off");
     await openGi(page); await giInput(page, "Enabled").check();
-    await giSection(page).getByRole("button", { name: /^(自動範囲|Automatic volume)$/ }).click();
     await closeGi(page);
+    await setRcLightingFixtureSettings(page, "rcDiffuseGi", { volume: null });
     const closeAuto = await capture(page, testInfo, report, "close-auto-25"); report.cases.closeAuto25 = compare(closeOff, closeAuto);
     report.closeVolume = await fixVolume(close.center, close.size);
     const closeLocal = await capture(page, testInfo, report, "close-local-25"); report.cases.closeLocal25 = compare(closeOff, closeLocal);

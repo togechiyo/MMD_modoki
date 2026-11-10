@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
 import { closeRcLighting, openRcLighting, rcLightingRow, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
+import { setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-sky-stage/rc-sky-stage.pmx");
@@ -30,7 +31,6 @@ async function seek(page, frame) {
 }
 async function history(page, operation) { await page.locator(`.app-menu-quick-button[data-menu-command="edit.${operation}"]`).click(); }
 async function register(page) { await registerRcLighting(page, "rcSkyOcclusion"); }
-async function automatic(page) { await section(page).getByRole("button", { name: /^(自動範囲|Automatic volume)$/ }).click(); }
 function difference(a, b) {
   expect(a.length).toBe(b.length);
   let sum = 0;
@@ -85,7 +85,9 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
     await input(page, "Enabled").check();
     await expect(status(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await expect(status(page)).toHaveAttribute("data-automatic-volume", "true");
-    await expect(input(page, "Size")).not.toHaveValue("");
+    await expect(section(page).locator('input[type="range"]')).toHaveCount(2);
+    await expect(section(page).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+    await expect(section(page).getByRole("button", { name: /自動範囲|Automatic volume|範囲を再計算|Recalculate volume/ })).toHaveCount(0);
     expect((await settings(page)).volume).toBeNull();
     await close(page);
     // Automatic bounds resolving on a later render must not invalidate this Undo snapshot.
@@ -97,28 +99,11 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
     await close(page); await history(page, "undo"); expect((await settings(page)).minimum).toBe(0.2);
     await history(page, "redo"); expect((await settings(page)).minimum).toBe(0.21);
 
-    await open(page);
-    for (const [field, value] of [["MinX", -12], ["MinY", -2], ["MinZ", -12], ["Size", 24]]) await input(page, field).fill(String(value));
-    expect((await settings(page)).volume).toBeNull(); // Numeric values commit only on Enter.
-    await input(page, "Size").press("Enter");
+    // Legacy hidden volume is fixture input through project import, not a GUI edit.
     const fixedVolume = { min: [-12, -2, -12], size: 24 };
+    await setRcLightingFixtureSettings(page, "rcSkyOcclusion", { volume: fixedVolume });
     expect((await settings(page)).volume).toEqual(fixedVolume);
-    await input(page, "MinX").fill("-99"); await input(page, "MinX").press("Escape");
-    expect((await settings(page)).volume).toEqual(fixedVolume);
-    // The effect card is not a popup; Escape cancels the number edit in place.
-    await close(page);
-    await history(page, "undo"); expect((await settings(page)).volume).toBeNull();
-    await history(page, "redo"); expect((await settings(page)).volume).toEqual(fixedVolume);
-    await open(page); await automatic(page); await close(page);
-    expect((await settings(page)).volume).toBeNull();
-    await history(page, "undo"); expect((await settings(page)).volume).toEqual(fixedVolume);
-    await history(page, "redo"); expect((await settings(page)).volume).toBeNull();
-    await open(page); await section(page).getByRole("button", { name: /範囲を再計算|Recalculate volume/ }).click();
-    const recalculated = (await settings(page)).volume;
-    expect(recalculated?.size).toBeGreaterThan(0); expect(recalculated?.min).toHaveLength(3);
-    await close(page); await history(page, "undo"); expect((await settings(page)).volume).toBeNull();
-    await history(page, "redo"); expect((await settings(page)).volume).toEqual(recalculated);
-    await open(page); await automatic(page); await close(page);
+    report.hiddenSettingsFixture = { preparation: "project import hook", volume: fixedVolume };
 
     await seek(page, 0); await open(page);
     await input(page, "Strength").focus(); await input(page, "Strength").press("Home");
@@ -165,7 +150,7 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
       const state = await project(page);
       return { settings: state.lighting.rcSkyOcclusion, keys: state.keyframes?.effectAnimations?.tracks.find(track => track.effectId === "rcSkyOcclusion")?.keys, frame: state.scene.currentFrame };
     }).toEqual({ settings: saved.lighting.rcSkyOcclusion, keys: expectedKeys, frame: 10 });
-    expect(saved.lighting.rcSkyOcclusion.volume).toBeNull();
+    expect(saved.lighting.rcSkyOcclusion.volume).toEqual(fixedVolume);
     expect(saved.keyframes.effectAnimations.tracks.find(track => track.effectId === "rcSkyOcclusion").keys).toEqual(expectedKeys);
     await open(page); await input(page, "Minimum").focus(); await input(page, "Minimum").press("End"); await close(page);
     expect((await settings(page)).minimum).toBe(1);

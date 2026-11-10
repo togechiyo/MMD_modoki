@@ -9,10 +9,10 @@
 | Outcome | Decision | Use when |
 | --- | --- | --- |
 | adopted | [v0.2.5はエフェクトのキー登録を仕上げる](./decisions/v025-finishes-effect-key-registration.md) | 11/14午前の公開目標に向けた優先順位。キー0個なら再生中もGUIで調整できるよう共通側で修正し、カメラ・照明と挙動を合わせる。Electron更新も対象。軽めの色調補正・標準レンズフレア等の追加は余裕があれば扱う低優先度。具体的な更新先・追加効果・日程詳細は未確定、公開許可は別 |
-| adopted | [Sky Ambientは材質色・テクスチャを保って柔らかな陰影を付ける](./decisions/sky-ambient-preserves-material-colors.md) | 街角の参考画像の陰影を通常材質へ付ける。FrameGraphエフェクト、濃度と開発用範囲・品質を指定。加算専用化は取り下げ。GI RCを明るくする側、Sky Ambient RCを暗くする側として、標準影を保ち補助光に遮蔽を効かせる改良を指定。2026-11-09のスクリーンショットから暫定既定値を設定し、明示保存値・未追加OFFは維持。数値は位置からの推定で、全sceneの品質・性能了承には広げない |
+| adopted | [Sky Ambientは材質色・テクスチャを保って柔らかな陰影を付ける](./decisions/sky-ambient-preserves-material-colors.md) | 街角の参考画像の陰影を通常材質へ付ける。FrameGraphエフェクト。11/10の操作数削減により開発用範囲・品質等は通常欄から外す。加算専用化は取り下げ。GI RCを明るくする側、Sky Ambient RCを暗くする側として、標準影を保ち補助光に遮蔽を効かせる改良を指定。11/09の画像から暫定既定値を設定し、明示保存値・未追加OFFは維持。全sceneの品質・性能了承には広げない |
 | adopted | [低〜中性能PCで使いやすい軽量なリアルタイムMMDを優先する](./decisions/prioritize-lightweight-realtime-mmd-defaults.md) | アマチュアMMD利用者向けの既定動作、品質と負荷、操作の複雑さを判断する。具体的な方式・FPS・最低動作環境は別途確認 |
 | accepted-with-constraints | [3D RC は通常 Luminous から分離して最適化を再開する](./decisions/defer-further-radiance-cascade-optimization.md) | 通常GlowとRCを分け、保存互換と独立動作を維持する。2026-10-31、Luminous・天空遮蔽・GIの3効果を対象に効率化・高速化を再依頼。手軽なリアルタイムMMD用途を維持する |
-| adopted | [RCはアプリから目視できる1エフェクト単位で完成させる](./decisions/complete-rc-effects-one-at-a-time-for-visual-review.md) | 共通基盤後の派生効果を、アプリで操作・目視比較できる単位へ仕上げる。2026-10-30、天空遮蔽を一区切りとしGIへ着手指定。GI調整後は両効果を右側FrameGraphエフェクト欄へ移動。2026-10-31、説明と操作行の数値欄を撤去しラベル＋スライダーへ簡素化。詳細範囲入力・他効果は維持。2026-11-05、天空遮蔽の表示名は「影の深み RC」に確定。実機コメントとGI全般の品質了承は区別する |
+| adopted | [RCはアプリから目視できる1エフェクト単位で完成させる](./decisions/complete-rc-effects-one-at-a-time-for-visual-review.md) | 共通基盤後の派生効果をアプリで操作・比較できる単位へ仕上げる。天空遮蔽を一区切りとしGIへ着手、右側FrameGraph欄へ移動。説明・操作行の数値欄を撤去。11/10、各RCの操作をスライダー3本程度へ絞り、範囲・品質・座標等は折り畳みを含め通常欄から外す。保存値は維持。天空遮蔽の表示名は「影の深み RC」。実機コメントとGI全般の品質了承は区別する |
 | adopted | [RC GIは推しモデルが映える強い演出を許容する](./decisions/rc-gi-allows-strong-effects-for-favorite-models.md) | GIの効きが見分けにくい場合に、くどいくらい強い演出も許容して調整する。全効果の無条件増幅や軽量方針の撤回には広げない |
 | adopted | [Luminous RCの発光色は2D Luminousを基準にする](./decisions/rc-emission-color-follows-2d-luminous.md) | 2DとRCの色を揃える。補正前の材質色を別基準として固定しない |
 | adopted | [Luminous / RCの入力挙動をAutoLuminousへ寄せる](./decisions/luminous-inputs-follow-autoluminous.md) | 原典調査に続き、まず2Dの材質発光条件を対応。RCの同時置換や原典不整合の再現まで広げない |

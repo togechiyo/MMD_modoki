@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
 import { registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
+import { setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs";
 import { camera, capture, closeGi, difference, giInput, giKeys, giSection, giSettings, giSlider, giStatus,
   initialState, openGi, project, receiverDifference, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
 
@@ -32,24 +33,18 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
     await expect(giInput(page, "Strength")).toHaveValue("25");
     await giInput(page, "Enabled").check(); await expect(giStatus(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await expect(giStatus(page)).toHaveAttribute("data-automatic-volume", "true");
-    await expect(giInput(page, "Size")).not.toHaveValue(""); expect((await giSettings(page)).volume).toBeNull();
+    await expect(giSection(page).locator('input[type="range"]')).toHaveCount(1);
+    await expect(giSection(page).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+    await expect(giSection(page).getByRole("button", { name: /自動範囲|Automatic volume|範囲を再計算|Recalculate volume/ })).toHaveCount(0);
+    expect((await giSettings(page)).volume).toBeNull();
     await closeGi(page); await history(page, "undo"); expect((await giSettings(page)).enabled).toBe(false);
     await history(page, "redo"); expect((await giSettings(page)).enabled).toBe(true);
-    await openGi(page);
-    for (const [field, value] of [["MinX", -8], ["MinY", -2], ["MinZ", -8], ["Size", 16]]) await giInput(page, field).fill(String(value));
-    expect((await giSettings(page)).volume).toBeNull(); await giInput(page, "Size").press("Enter");
-    const fixed = { min: [-8, -2, -8], size: 16 }; expect((await giSettings(page)).volume).toEqual(fixed);
-    await closeGi(page); await history(page, "undo"); expect((await giSettings(page)).volume).toBeNull();
-    await history(page, "redo"); expect((await giSettings(page)).volume).toEqual(fixed);
-    await openGi(page); await giSection(page).getByRole("button", { name: /^(自動範囲|Automatic volume)$/ }).click();
-    expect((await giSettings(page)).volume).toBeNull();
-    await giSection(page).getByRole("button", { name: /範囲を再計算|Recalculate volume/ }).click();
-    expect((await giSettings(page)).volume?.size).toBeGreaterThan(0); await closeGi(page);
-    await history(page, "undo"); expect((await giSettings(page)).volume).toBeNull();
-    // Keep the bounded fixed volume for image comparisons, independent of the parked blocker.
-    await openGi(page);
-    for (const [field, value] of [["MinX", -8], ["MinY", -2], ["MinZ", -8], ["Size", 16]]) await giInput(page, field).fill(String(value));
-    await giInput(page, "Size").press("Enter"); await closeGi(page);
+    // Restore a legacy hidden volume as fixture input; its former GUI controls are absent.
+    // Keep the bounded field for comparisons, independent of the parked blocker.
+    const fixed = { min: [-8, -2, -8], size: 16 };
+    await setRcLightingFixtureSettings(page, "rcDiffuseGi", { volume: fixed });
+    expect((await giSettings(page)).volume).toEqual(fixed);
+    report.hiddenSettingsFixture = { preparation: "project import hook", volume: fixed };
 
     await seek(page, 0); await openGi(page); await giSlider(page, 0); await register(page); await closeGi(page);
     await history(page, "undo"); expect((await giKeys(page))?.keys ?? []).toEqual([]);

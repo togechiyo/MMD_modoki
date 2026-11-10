@@ -9,8 +9,9 @@ var<storage, read> rcSkyTriangles: array<RcSkyTriangle>;
 var rcSkyField: texture_2d<f32>;
 var rcSkyNearestSurface: texture_2d<f32>;
 fn rcSkyProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
-    let segment = probe - position; let distance = length(segment);
-    if (distance <= 0.0001) { return false; }
+    let segment = probe - position; let distanceSquared = dot(segment, segment);
+    if (distanceSquared <= 0.00000001) { return false; }
+    let positionMagnitude = max(abs(position.x), max(abs(position.y), abs(position.z)));
     for (var i = 0u; i < 2u; i++) {
         let encoded = candidates[i];
         if (!(encoded >= 1.0 && encoded <= f32(arrayLength(&rcSkyTriangles)))) { continue; }
@@ -18,11 +19,23 @@ fn rcSkyProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
         let edge1 = triangle.b.xyz - triangle.a.xyz; let edge2 = triangle.c.xyz - triangle.a.xyz;
         let h = cross(segment, edge2); let determinant = dot(edge1, h);
         if (abs(determinant) < 0.0000001) { continue; }
-        let s = position - triangle.a.xyz; let u = dot(s, h) / determinant;
-        let q = cross(s, edge1); let v = dot(segment, q) / determinant;
-        let t = dot(edge2, q) / determinant;
+        let s = position - triangle.a.xyz; let q = cross(s, edge1);
+        let numerator = dot(edge2, q);
+        // Raster interpolation and the Float32 geometry cache can disagree by a
+        // few ULPs on the receiver's own plane. Test perpendicular distance:
+        // a ray-distance-only epsilon amplifies that error at grazing angles.
+        let edgeMagnitude = max(max(abs(edge1.x), max(abs(edge1.y), abs(edge1.z))),
+            max(abs(edge2.x), max(abs(edge2.y), abs(edge2.z))));
+        let tolerance = max(0.0001, (positionMagnitude + edgeMagnitude) * 0.000000476837158203125);
+        let planeNormal = cross(edge1, edge2);
+        if (numerator * numerator <= tolerance * tolerance * dot(planeNormal, planeNormal)) { continue; }
+        let inverseDeterminant = 1.0 / determinant;
+        let u = dot(s, h) * inverseDeterminant;
+        let v = dot(segment, q) * inverseDeterminant;
+        let t = numerator * inverseDeterminant;
         // Ignore the receiver's own surface, but include a surface at the probe.
-        if (u >= -0.00001 && v >= -0.00001 && u + v <= 1.00001 && t > 0.0001 / distance && t <= 1.00001) { return true; }
+        if (u >= -0.00001 && v >= -0.00001 && u + v <= 1.00001
+            && t > 0.0 && t * t * distanceSquared > 0.00000001 && t <= 1.00001) { return true; }
     }
     return false;
 }
@@ -35,6 +48,12 @@ fn rcSkyVisibility(worldPosition: vec3f, worldNormal: vec3f) -> f32 {
     // Exact support test for the original 8 azimuths x 2 upper elevations.
     let horizontal = 0.9238795325 * max(abs(normal.x), abs(normal.z)) + 0.3826834324 * min(abs(normal.x), abs(normal.z));
     if (max(0.75 * normal.y + 0.6614378278 * horizontal, 0.25 * normal.y + 0.9682458366 * horizontal) <= 0.0) { return -1.0; }
+    return rcSkyVisibilityValidated(worldPosition, normal);
+}
+// Callers that already validated position, normal and upper-sky support can
+// reuse the query without repeating normalization and its square root.
+fn rcSkyVisibilityValidated(worldPosition: vec3f, normal: vec3f) -> f32 {
+    let volumeMin = uniforms.rcSkyVolume.xyz; let size = uniforms.rcSkyVolume.w;
     let axesA = max(vec3f(normal.x, -normal.x, normal.y), vec3f(0.0));
     let axesB = max(vec2f(normal.z, -normal.z), vec2f(0.0));
     let weightsA = axesA * axesA * vec3f(${SKY_IRRADIANCE_AXIS_TOTALS[0].toFixed(10)}, ${SKY_IRRADIANCE_AXIS_TOTALS[1].toFixed(10)}, 8.0);

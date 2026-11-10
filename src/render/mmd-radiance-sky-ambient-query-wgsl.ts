@@ -39,7 +39,7 @@ if (uniforms.rcSkyAmbientControl.w > 0.0) {
         if (openSky <= 0.00001 || upperSupport <= 0.0) {
             rcSkyAmbientIrradiance = 0.0;
         } else {
-            let visibility = rcSkyAmbientVisibility(fragmentInputs.vPositionW, normal);
+            let visibility = rcSkyAmbientVisibilityValidated(fragmentInputs.vPositionW, normal);
             if (visibility >= 0.0) { rcSkyAmbientIrradiance = openSky * visibility; }
         }
         if (rcSkyAmbientIrradiance >= 0.0) {
@@ -138,8 +138,8 @@ export const MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL = /* wgsl */`
 #ifndef DIFFUSEFRESNEL
 #ifndef LIGHTMAP
 if (uniforms.rcSkyAmbientControl.z > 0.0 && uniforms.rcSkyAmbientControl.w > 0.0 && rcSkyAmbientIrradiance > 0.0) {
-    // Optional sky fill is zero by default. Reuse the single visibility query,
-    // and never add an unoccluded floor underneath a roof.
+    // Independently adjustable sky fill reuses the single visibility query,
+    // and never adds an unoccluded floor underneath a roof.
     let skyAmbientReflectance = toLinearSpaceVec3(clamp(diffuseColor * baseColor.rgb, vec3f(0.0), vec3f(1.0)));
     let skyAmbientAddition = skyAmbientReflectance * uniforms.rcSkyAmbientControl.z
         * rcSkyAmbientIrradiance * uniforms.rcSkyAmbientControl.w;

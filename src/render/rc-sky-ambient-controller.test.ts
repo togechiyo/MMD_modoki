@@ -4,6 +4,8 @@ import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import type { Material } from "@babylonjs/core/Materials/material";
+import { BoundingInfo } from "@babylonjs/core/Culling/boundingInfo";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { MmdRadianceSkyAmbientView } from "./mmd-radiance-sky-ambient-plugin";
 import type { SkyVisibilityQuality } from "./radiance-sky-quality";
@@ -49,7 +51,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-function fixture() {
+function fixture(acceptsMaterial: (material: Material) => boolean = () => true) {
     const engine = new NullEngine(), scene = new Scene(engine);
     engine.getCaps().supportComputeShaders = true;
     new FreeCamera("camera", Vector3.Zero(), scene);
@@ -57,7 +59,7 @@ function fixture() {
     const settings: RcSkyAmbientSettings = { ...DEFAULT_RC_SKY_AMBIENT_SETTINGS, enabled: true,
         skyBrightness: 0, rangeScale: 1, quality: "standard",
         volume: { min: [-8, 0, -8], size: 16 } };
-    const controller = new RcSkyAmbientController(scene, () => settings, () => true, () => true);
+    const controller = new RcSkyAmbientController(scene, () => settings, () => true, acceptsMaterial);
     cleanup.push(() => { controller.dispose(); scene.dispose(); engine.dispose(); });
     return { controller, settings, scene };
 }
@@ -98,6 +100,7 @@ describe("Sky Ambient field settings lifecycle", () => {
 
     it("keeps manual base bounds intact and changes effective range without reallocating", async () => {
         const { controller, settings } = fixture();
+        const fit = vi.spyOn(controller, "fitVolume");
         await controller.prewarm(); controller.prepareFrame();
         const field = boundary.instances[0];
         settings.rangeScale = 2; controller.settingsChanged(); controller.prepareFrame();
@@ -107,6 +110,42 @@ describe("Sky Ambient field settings lifecycle", () => {
         expect(controller.diagnostics).toMatchObject({ volume: { min: [-8, 0, -8], size: 16 },
             effectiveVolume: { min: [-16, -8, -16], size: 32 }, quality: "standard", probeGrid: 16 });
         expect(settings.volume).toEqual({ min: [-8, 0, -8], size: 16 });
+        expect(fit).not.toHaveBeenCalled();
+    });
+
+    it("fits actual receiver vertices without culling padding and retains black receivers", () => {
+        const { controller, scene } = fixture();
+        const near = CreateBox("near", { size: 2 }, scene), far = CreateBox("far", { size: 2 }, scene);
+        near.material = new StandardMaterial("near", scene);
+        const black = new StandardMaterial("black", scene); black.diffuseColor.set(0, 0, 0);
+        far.material = black; far.position.x = 20;
+        near.setBoundingInfo(new BoundingInfo(new Vector3(-1000, -1000, -1000), new Vector3(1000, 1000, 1000)));
+        const volume = controller.fitVolume();
+        expect(volume?.size).toBeCloseTo(26.4);
+        expect(volume?.min[0]).toBeCloseTo(-3.2);
+        expect(near.getBoundingInfo().boundingBox.maximum.x).toBe(1000);
+    });
+
+    it("refits when eligible material surfaces change without reading vertices on unchanged frames", async () => {
+        let includeFar = false;
+        const { controller, settings, scene } = fixture(material => material.name !== "far" || includeFar);
+        settings.volume = null;
+        const near = CreateBox("near", { size: 2 }, scene), far = CreateBox("far", { size: 2 }, scene);
+        near.material = new StandardMaterial("near", scene); far.material = new StandardMaterial("far", scene);
+        far.position.x = 20;
+        await controller.prewarm(); controller.prepareFrame();
+        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
+        const read = vi.spyOn(near, "getVerticesData"), fit = vi.spyOn(controller, "fitVolume");
+        controller.settingsChanged(); controller.prepareFrame();
+        expect(read).not.toHaveBeenCalled(); expect(fit).not.toHaveBeenCalled();
+        includeFar = true; controller.settingsChanged(); controller.prepareFrame();
+        expect(controller.diagnostics.volume?.size).toBeCloseTo(26.4);
+        expect(fit).toHaveBeenCalledTimes(1);
+        read.mockClear(); fit.mockClear();
+        far.subMeshes[0].indexCount = 0;
+        controller.settingsChanged(); controller.prepareFrame();
+        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
+        expect(fit).toHaveBeenCalledTimes(1);
     });
 
     it("keeps automatically fitted bounds stable while changing look controls on a moving receiver", async () => {
@@ -116,6 +155,7 @@ describe("Sky Ambient field settings lifecycle", () => {
         await controller.prewarm(); controller.prepareFrame();
         const base = controller.diagnostics.volume, field = boundary.instances[0];
         expect(base).not.toBeNull();
+        const read = vi.spyOn(mesh, "getVerticesData"), fit = vi.spyOn(controller, "fitVolume");
         mesh.position.x = 100; settings.opacity = 0.5;
         controller.settingsChanged(); controller.prepareFrame();
         expect(controller.diagnostics.volume).toEqual(base);
@@ -123,6 +163,7 @@ describe("Sky Ambient field settings lifecycle", () => {
         settings.rangeScale = 2; controller.settingsChanged(); controller.prepareFrame();
         expect(controller.diagnostics.volume).toEqual(base);
         expect(field.execute).toHaveBeenCalledTimes(2);
+        expect(read).not.toHaveBeenCalled(); expect(fit).not.toHaveBeenCalled();
         // A manual/automatic mode round trip intentionally requests a fresh fit.
         settings.volume = { min: [0, 0, 0], size: 2 }; controller.settingsChanged(); controller.prepareFrame();
         settings.volume = null; controller.settingsChanged(); controller.prepareFrame();

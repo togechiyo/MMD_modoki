@@ -112,6 +112,14 @@ export const SKY_VISIBILITY_CASCADE_WGSL = `${SKY_VISIBILITY_COMMON_WGSL}
 @group(0) @binding(3) var parentField: texture_2d<f32>;
 @group(0) @binding(4) var outputField: texture_storage_2d<rgba16float, write>;
 fn skyCascadeVisibility(position: vec3f, angular: vec2u, grid: u32, columns: u32, rows: u32) -> f32 {
+    if (params.shape.w < 0.5) { return 1.0; }
+    if (arrayLength(&nodes) > 0u) {
+        let root = nodes[0];
+        // All computed directions point upward. Above the complete occluder
+        // bounds the sky is provably open; interpolating lower parent probes
+        // here could introduce false self-occlusion on an exposed roof top.
+        if (all(root.low.xyz <= root.high.xyz) && position.y >= root.high.y) { return 1.0; }
+    }
     let ray = skyDirection(angular.x, angular.y, columns, rows);
     // Only the outermost interval establishes the boundary value at the scene exit.
     if (params.interval.z < 0.5) { return skyTraceToExit(position, ray, params.interval.x); }
@@ -130,6 +138,12 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     let grid = u32(params.shape.x); let columns = u32(params.shape.y); let rows = u32(params.shape.z);
     if (id.x >= grid * columns || id.y >= grid * grid * rows) { return; }
     let angular = vec2u(id.x % columns, id.y % rows);
+    // Sky integration only reads the upper hemisphere. Parent angular children
+    // stay in that hemisphere, so lower directions need no BVH traversal.
+    if (angular.y >= rows / 2u) {
+        textureStore(outputField, vec2i(id.xy), vec4f(0.0, 0.0, 0.0, -1.0));
+        return;
+    }
     let flat = id.y / rows; let probe = vec3u(id.x / columns, flat % grid, flat / grid);
     let position = params.volumeMin.xyz + (vec3f(probe) + 0.5) / f32(grid) * params.volumeSize.xyz;
     let visibility = skyCascadeVisibility(position, angular, grid, columns, rows);

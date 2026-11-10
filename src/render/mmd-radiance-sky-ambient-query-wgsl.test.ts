@@ -218,7 +218,7 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
                 vec3f: (v: number) => v, length: () => 1, all: (v: boolean) => v,
                 abs: Math.abs, min: Math.min, max: Math.max,
                 clamp: (v: number, low: number, high: number) => Math.min(high, Math.max(low, v)),
-                rcSkyAmbientVisibility: () => { reads++; return visibility; },
+                rcSkyAmbientVisibilityValidated: () => { reads++; return visibility; },
             }) as { factor: number; exposure: number };
             return { ...value, reads };
         };
@@ -254,7 +254,7 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
         for (const disabled of ["PREPASS", "DIFFUSEFRESNEL", "LIGHTMAP"]) {
             const code = await preprocessed(MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL, ["RC_SKY_AMBIENT", disabled]);
             expect(code).toMatch(/rcSkyAmbientFactor\s*=\s*1\.0/);
-            expect(code).not.toContain("rcSkyAmbientVisibility(");
+            expect(code).not.toContain("rcSkyAmbientVisibilityValidated(");
             const fog = await preprocessed(MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL, ["RC_SKY_AMBIENT", disabled]);
             expect(fog.trim()).toBe("");
         }
@@ -272,7 +272,7 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
                 clamp: (value: number, low: number, high: number) => Math.min(high, Math.max(low, value)), max: Math.max,
                 toLinearSpaceVec3: (value: number) => value ** 2.2,
                 toGammaSpaceVec3: (value: number) => value ** (1 / 2.2),
-                rcSkyAmbientVisibility: () => { throw new Error("A second field query is unnecessary"); },
+                rcSkyAmbientVisibilityValidated: () => { throw new Error("A second field query is unnecessary"); },
             }) as { rgb: number; a: number };
             expect(result.a).toBe(before.a);
             if (brightness === 0 || irradiance <= 0 || opacity === 0) expect(result.rgb).toBe(before.rgb);

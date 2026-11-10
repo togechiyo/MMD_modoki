@@ -8,6 +8,7 @@ import { RadianceSkyVisibilityField } from "./radiance-sky-visibility-field";
 import { registerMmdRadianceSkyAmbient, type MmdRadianceSkyAmbientView } from "./mmd-radiance-sky-ambient-plugin";
 import type { RcSkyAmbientSettings, RcSkyAmbientVolume } from "./rc-sky-ambient-settings";
 import { getSkyVisibilityProbeGrid, scaleSkyVisibilityVolume, type SkyVisibilityQuality } from "./radiance-sky-quality";
+import { fitRadianceReceiverVolume, getRadianceReceiverVolumeMembership } from "./radiance-receiver-volume";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcSkyAmbientDiagnostics = {
@@ -71,18 +72,8 @@ export class RcSkyAmbientController {
 
     /** Fit visible receivers once; offscreen blockers do not enlarge the grid. */
     public fitVolume(meshes = this.receivers()): RcSkyAmbientVolume | null {
-        const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
-        for (const mesh of meshes) {
-            mesh.computeWorldMatrix(true);
-            const bounds = mesh.getBoundingInfo().boundingBox;
-            const min = bounds.minimumWorld.asArray(), max = bounds.maximumWorld.asArray();
-            if (![...min, ...max].every(Number.isFinite)) continue;
-            for (let axis = 0; axis < 3; axis++) { low[axis] = Math.min(low[axis], min[axis]); high[axis] = Math.max(high[axis], max[axis]); }
-        }
-        if (!low.every(Number.isFinite)) return null;
-        const size = Math.max(1, ...high.map((value, axis) => value - low[axis])) * 1.2;
-        if (size > 100000) return null;
-        return { min: low.map((value, axis) => (value + high[axis] - size) / 2) as [number, number, number], size };
+        // Sky also affects black receivers; GI alone filters by reflectance.
+        return fitRadianceReceiverVolume(meshes, (_mesh, material) => this.acceptsMaterial(material));
     }
 
     public settingsChanged(): void {
@@ -96,7 +87,7 @@ export class RcSkyAmbientController {
 
     private resolveVolume(): RcSkyAmbientVolume | null {
         const receivers = this.receivers();
-        const membership = receivers.map(mesh => `${mesh.uniqueId}:${mesh.geometry?.uniqueId}`).join(",");
+        const membership = getRadianceReceiverVolumeMembership(receivers, (_mesh, material) => this.acceptsMaterial(material));
         const settings = this.settings(), requestedVolumeKey = JSON.stringify(settings.volume);
         // Loading arrives in stages. Refit membership changes, not each animated pose.
         // Look controls do not refit a moving model; changing manual/automatic bounds does.

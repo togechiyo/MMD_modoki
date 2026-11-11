@@ -42,6 +42,7 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | verified | [Babylonのregex挿入は同一light文への再一致を避ける](./verified/babylon-regex-injection-must-not-rematch-identical-light-statements.md) | 展開後の複数light等に同じ文があり、MaterialPluginのregex custom codeで処理を足す |
 | verified | [`.x` の逆向き重複 polygon](./verified/x-reversed-duplicate-polygons.md) | 影を切っても両面材質の面がちらつく |
 | observation | [shadow caster が空になった後の残留 map](./observations/shadow-caster-empty-list.md) | 最後の caster を外しても直前の影が残る。PMX 削除時の同期漏れは未修正 |
+| verified | [CSMの中間境界と影距離終端を分ける](./verified/csm-final-distance-cutoff-is-not-cascade-blending.md) | 壁や床の帯が中間blendか、最後の影が消える段差かを診断する |
 | verified | [広域表示では WebGPU reverse depth を使う](./verified/webgpu-wide-area-reverse-depth.md) | 大きな near/far 範囲で遠景の面が競合・欠落する |
 | verified | [ボーン移動後のPMX消失では描画位置とboundsを比較する](./verified/pmx-bone-motion-can-outgrow-static-bounds.md) | 移動・接近で消えるmodelの静的boundsとculling回避を確認する |
 

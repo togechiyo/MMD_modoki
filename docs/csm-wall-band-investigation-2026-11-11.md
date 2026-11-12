@@ -4,7 +4,11 @@
 
 ## 結論と報告との対応
 
-壁面で明瞭に再現したのは、**最後のカスケードの先で影が突然なくなる段差**だった。
+11/12の所有者実機確認では、**画面上端の影抜けは解消したが、壁面の帯は残る**。
+Sky Ambient RC / RC GIを両方OFFにしても残る。半影ON/OFFによる変化は未試行で不明。
+以下の終端fadeだけで元sceneの壁面問題を解消したとは扱わない。
+
+初回の壁面調査で明瞭に再現したのは、**最後のカスケードの先で影が突然なくなる段差**だった。
 影距離 `1000` 付近に出る段差が、診断用に `1500` へ変えるとその位置まで移動する。
 半影 OFF / ON の両方で発生し、Babylon.js 9.2.0 の終端にフェードがない実装と一致する。
 
@@ -15,6 +19,100 @@
 
 最初の調査ではアプリを変更せず、診断用テストと記録を `3d6af55` に保存した。
 その後、所有者から「では修正のほどお願い」と依頼を受け、以下の終端fadeを実装した。
+
+## 2026-11-12 残存する壁面の帯とblend再確認
+
+所有者の追加画像とRCを切った結果を受け、屋根の全面遮蔽を外して壁そのものの影判定を比較した。
+アプリ本体のshader・blend・biasの既定値は変更していない。追加の診断は以下。
+
+- [blend診断spec](../test/e2e/csm-wall-blend-investigation.spec.mjs)
+- [材質比較・細かい壁面samplingのprobe](../test/e2e/helpers/csm-wall-blend-probe.mjs)
+
+### 現行方式と値
+
+Babylon.js 9.2.0のGLSL/WGSL `lightFragment` は、ともに中間境界の手前で
+`t = clamp((split - viewDepth) / frustumLength, 0, 1) / cascadeBlendPercentage`、
+`shadow = mix(nextShadow, currentShadow, t)` を使う線形blendである。
+アプリの初期化と設定切替の値は一致し、半影OFFはblend `0.1` / lambda `0.9`、ONはblend `0.2` / lambda `0.6`。
+`frustumEdgeFalloff` は引き続き0。終端fadeは設定影距離基準のまま。
+
+通常MMDはこの混合結果をさらにToonの`smoothstep`へ通す。
+遮蔽境界softness既定値 `0.1` は幅 `0.25`、すなわち `smoothstep(0.25, 0.75, rawShadow)` になる。
+例えば隣接cascadeのraw値が `0.05 / 1` なら、名目blend幅の約52.6%だけが明暗遷移に使われる。
+`T(mix(next,current,t))` と `mix(T(next),T(current),t)` は同じではない。
+これは実装と計算から確認できる特性だが、**元sceneの帯の主因と確定したわけではない**。
+
+### 壁の自己影を含む比較
+
+配布可能な自作PMX、FrameGraph、RCなし、屋根OFF、near視点 `(80,80,-100) → (-114,80,350)`、
+ライト方向 `(-1,-2,0)`、距離1000で、MMD材質と同じ色設定のStandard材質を比較した。
+Standard置換ではshaderが異なるため、材質間の絶対色ではなく各材質内の影ON/OFF比を使う。
+world Z間隔を0.5へ細かくし、5高さ・境界前後の同じ窓をblend `0 / 0.1 / 0.2` で測る。
+分割位置、caster数11、実texture type、backend、filterも照合する。
+
+半影OFFのsplitは `387.899 / 626.854 / 1000`。第1/第2境界の測定窓は761/490 unique pixels。
+両材質に自己影の細かい波状模様があり、blend帯の外にも変動した。
+以下は窓全体で、同じ高さの隣接測定点が別画素になったときの影ON/OFF RGB平均比の最大差。
+**blend帯内だけの指標ではなく、影品質の合否閾値でもない**。
+
+| 材質 | blend | 第1境界の窓 | 第2境界の窓 |
+| --- | ---: | ---: | ---: |
+| MMD | 0 | 0.040573 | 0.038186 |
+| MMD | 0.1 | 0.040573 | 0.031026 |
+| MMD | 0.2 | 0.038186 | 0.026253 |
+| Standard | 0 | 0.175676 | 0.099099 |
+| Standard | 0.1 | 0.175676 | 0.126126 |
+| Standard | 0.2 | 0.175676 | 0.076577 |
+
+blendを増やすだけでは模様は消えず、Standardにも残るためToonだけの現象ではない。
+診断内でbiasだけを `0.0005 → 0.001` にした対照では、全6条件・両境界窓の比が1、最大差0となった。
+caster11、同じsplit、HALF_FLOAT、normalBias `0.01`を維持したまま消えたため、
+このfixtureの模様には自己影の深度比較誤差が関わると判断できる。
+これを元sceneの同一原因の証明や、全体biasを倍にする採用判断にはしない。接地影等への影響は未検証。
+
+半影ONでは第1境界が画面外で未測定、第2境界の895 unique pixelsは全条件で比1だった。
+この壁では影による変動がなく、PCSSのblend品質が良いという証拠にはならない。
+次cascadeの実行列で受光点を投影すると、blend `0.2` の355 unique pixels中135点が次mapのUV範囲外だった。
+Noneでは測定した次mapのUVはすべて範囲内。UV診断はcaster normal biasを加えない受光点座標による。
+Babylonは次cascadeのfrustumをblend幅分だけ手前へ明示拡張せず、自然なlight-spaceの重なりに依存する。
+次mapの範囲不足は別の候補だが、このPCSS条件では実影がなく、帯への影響は判定できない。
+
+### 追加試行で除外した結果
+
+HALF_FLOAT精度を切り分けるための `useFloat32TextureType=true` の単純な実行中切替は無効な比較だった。
+Babylonのsetterは `dispose(false) → _createInstance()` を呼び、CSMのdispose経路でcaster listやdepth reducerが失われる。
+run `1794471362147` はcaster0・実texture type2のままで、影が消えた結果を精度改善と解釈できない。
+この試行の画像は結論に使わず、setterを使う診断変更を撤去した。最終specにはcaster数・split・実typeの保持assertを追加した。
+半精度の量子化とshadow texelのsampling誤差の内訳は未確定。
+
+### 残る修正候補と検証
+
+まずは影を実際に受ける壁で、両cascadeのraw影判定がどこで異なるかを確認する。
+Toon後のcascade blendは候補だが、自己影の誤差を広く薄く見せる可能性もあり、今回の証拠だけで採用しない。
+試す場合は通常MMDの遮蔽マスクだけに限定し、既存raw shadow、Standard/PBR、selfMask、設定距離fadeを維持する。
+次mapのUV不足、自己影の深度誤差、Toonによる遷移幅の圧縮を別々に扱い、全体blend/biasの増加を一括の解決策にしない。
+
+実行例（ローカルGPU、実行中はsource/docsを編集しない）:
+
+```powershell
+$env:MMD_CSM_BLEND_INVESTIGATION='1'
+$env:MMD_CSM_BLEND_OVERRIDES='{}'
+npm.cmd run test:e2e -- csm-wall-blend-investigation.spec.mjs
+
+$env:MMD_CSM_BLEND_OVERRIDES='{"bias":0.001}'
+npm.cmd run test:e2e -- csm-wall-blend-investigation.spec.mjs --grep 'penumbra=false'
+```
+
+| 確認 | 結果 |
+| --- | --- |
+| 最終spec・既定bias・半影OFF/ON | 2 tests成功 / 12条件、run `1794472100113`。初回 `1794470632016` と同じ結果 |
+| biasだけ0.001の対照 | 1 test成功 / 6条件、run `1794471265739`。caster/split/typeの保存値も照合 |
+| pageerror / console error / WebGPU validation error | 有効な上記比較で0 |
+| `node --check`（追加2ファイル） / lint | 成功 |
+
+出力はignoredな `artifacts/e2e/csm-wall-blend/<run>/<filter>/` のPNGとreport。
+アプリ本体のTypeScript変更はなく、unit/typecheck/smokeの別実行は省略した。起動とWebGPU描画は診断E2Eで確認。
+テスト成功は比較データを取得できたことを意味し、元sceneの残存帯の解消を意味しない。
 
 ## 2026-11-12 上端の影抜けとfade基準の訂正
 
@@ -42,7 +140,7 @@ BabylonのMaterialPlugin APIを使い、meshごとのlightSources順とcamera別
 初回unitには「自動短縮した最終splitでもfadeする」という誤った期待があった。これを近景影保持へ訂正し、可視深度範囲が変わっても設定距離でfadeする回帰テストを追加した。訂正前のGLSL/WGSLでは4件が失敗することを確認済み。
 初回GPUテストは大きい屋根と遠い壁で最終splitが1000/1500に達する条件だけを扱っており、今回の近景条件を見落としていた。
 
-根拠はインストール済みBabylon.js 9.2.0の `cascadedShadowGenerator.js` のdepth reducer、`_splitFrustum`、`prepareDefines`、および[公式のautoCalcDepthBounds / Culling説明](https://doc.babylonjs.com/features/featuresDeepDive/lights/shadows_csm/)。元sceneとの同一性・解消は所有者実機で別途確認する。
+根拠はインストール済みBabylon.js 9.2.0の `cascadedShadowGenerator.js` のdepth reducer、`_splitFrustum`、`prepareDefines`、および[公式のautoCalcDepthBounds / Culling説明](https://doc.babylonjs.com/features/featuresDeepDive/lights/shadows_csm/)。11/12の後続報告で所有者が画面上端の影抜け解消を確認した。残存する壁面の帯は別に調査する。
 再現specは [csm-viewport-edge](../test/e2e/csm-viewport-edge.spec.mjs)、比較画像はローカル `artifacts/e2e/csm-viewport-edge/`。
 
 ### 訂正後の検証

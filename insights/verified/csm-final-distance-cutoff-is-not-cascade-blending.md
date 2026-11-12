@@ -8,6 +8,7 @@ last_verified: 2026-11-12
 evidence:
   - local-electron-webgpu-diagnostic
   - babylon-primary-source
+  - user-device-confirmation
 source_docs:
   - ../../docs/csm-wall-band-investigation-2026-11-11.md
   - ../../docs/csm-boundary-unshadowed-band-2026-10-17.md
@@ -40,6 +41,7 @@ MMD Standardの通常陰影ではraw shadowをToonマスクにした後にfade�
 - CSMの `frustumEdgeFalloff` を戻し、修正済みの中間境界の影抜けを再発させる。
 - 画面外の境界を「帯なし」と判定する、明度比の固定閾値だけで影の有無を決める。
 - 屋根による全面遮蔽の再現を、元sceneの自己影や全backendの品質保証に広げる。
+- Toonで混合結果を再閾値化する影響と、各cascadeの自己影誤差を混同し、blend幅だけで解決する。
 
 ## 根拠
 
@@ -48,6 +50,9 @@ MMD Standardの通常陰影ではraw shadowをToonマスクにした後にfade�
 通常MMD以外の独自Toon / external WGSLがshadowを再量子化する条件は、共有fadeだけで同じ遷移幅になるとは扱わない。
 修正後はClassic/FrameGraph・半影OFF/ON・PNGを確認した。1フレームWebMでは修正前にも同じ影欠落があり、動画のfade確認済みとはしない。
 11/12の上端回帰を自作床で再現し、設定距離基準への訂正後は25/35/45度・両backend・Standard/MMDで上端と中央の影濃度が一致。既存の遠方終端fadeも維持した。
+所有者実機でも上端影抜けは解消。ただし壁面の帯はRC2効果をOFFにしても残ると確認された。元sceneの半影ON/OFF差は未確認。
+屋根なしの追加比較ではNoneの自己影模様がMMD/Standard両方・blend外にもあり、幅0/0.1/0.2では消えず、診断内のbias0.0005→0.001で消えた。元sceneの同一原因や全体bias変更の採用は未確定。
+PCSSの無影面、画面外の境界はblend品質の検証には使わない。次cascadeのUV範囲外がある条件も別途残る。
 
 ## 再確認条件
 

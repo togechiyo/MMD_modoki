@@ -16,12 +16,64 @@
 最初の調査ではアプリを変更せず、診断用テストと記録を `3d6af55` に保存した。
 その後、所有者から「では修正のほどお願い」と依頼を受け、以下の終端fadeを実装した。
 
-## 2026-11-11 終端fadeの修正
+## 2026-11-12 上端の影抜けとfade基準の訂正
+
+初回修正後、所有者から「ビューポート上端あたりの影が消える」と画像付きで報告があり、カメラを上下に動かしても境目が上端について移動すると確認された。
+画像では影範囲1000、カメラ距離154.3、俯角35度付近。元モデルにはアクセスせず、自作の床と画面外の屋根で切り分けた。
+
+原因は初回修正が **自動depth boundsの最終splitを、影を消す距離として扱ったこと**。
+半影OFFの `autoCalcDepthBounds=true` は、カメラに見えるdepth mapのmin/maxへカスケードを絞る品質最適化であり、設定した影の表示距離とは別である。
+下向きカメラでは最も遠い床が画面上端にあるため、その手前10%をfadeすると上端付近の影が抜ける。
+`SHADOWCSMUSESHADOWMAXZ` は設定距離とcamera farの比較によるdefineであり、最終splitが設定距離に到達した証拠ではなかった。
+
+修正前のローカルWebGPU / FrameGraph / Standard床では、影範囲1000のまま次の値となった。
+屋根は全測定点を遮蔽し、画面外でもcaster listに存在する。影ON/OFFの画素比は1に近いほど影が消えている。
+
+| 俯角 | 自動最終split | 中央の影ON/OFF比（中央値） | 上側の最大比 |
+| --- | ---: | ---: | ---: |
+| 25度 | 357.777 | 0.2008 | 0.6814 |
+| 35度 | 247.151 | 0.2008 | 0.9183 |
+| 45度 | 208.623 | 0.2008 | 0.9584 |
+
+訂正では `generator.shadowMaxZ`（有限camera farを超える場合はそのfarまで）を材質pluginからライトごとに渡し、fade終端を設定距離へ固定する。
+自動depth bounds、cascade分割、filter、bias、casterの収集方法は変更しない。通常MMDのraw shadow→Toon→fadeという合成順も維持する。
+BabylonのMaterialPlugin APIを使い、meshごとのlightSources順とcamera別generatorに追従する。毎回のhard bindで距離を更新し、距離変更のためのshader再コンパイルは追加しない。
+
+初回unitには「自動短縮した最終splitでもfadeする」という誤った期待があった。これを近景影保持へ訂正し、可視深度範囲が変わっても設定距離でfadeする回帰テストを追加した。訂正前のGLSL/WGSLでは4件が失敗することを確認済み。
+初回GPUテストは大きい屋根と遠い壁で最終splitが1000/1500に達する条件だけを扱っており、今回の近景条件を見落としていた。
+
+根拠はインストール済みBabylon.js 9.2.0の `cascadedShadowGenerator.js` のdepth reducer、`_splitFrustum`、`prepareDefines`、および[公式のautoCalcDepthBounds / Culling説明](https://doc.babylonjs.com/features/featuresDeepDive/lights/shadows_csm/)。元sceneとの同一性・解消は所有者実機で別途確認する。
+再現specは [csm-viewport-edge](../test/e2e/csm-viewport-edge.spec.mjs)、比較画像はローカル `artifacts/e2e/csm-viewport-edge/`。
+
+### 訂正後の検証
+
+Classic / FrameGraphとも、俯角25/35/45度すべてで上側と中央が同じ影濃度になった。
+Standardの影ON/OFF比は `0.200831`、通常MMDは `0.828571` で、上側の最大比と中央の中央値の差は0。35度のPNG surfaceとviewportの測定比の差も0だった。
+自動最終splitは修正前と同じ357.777 / 247.151 / 208.623であり、範囲の自動最適化を止めて症状を隠したものではない。
+
+| 確認 | 結果 |
+| --- | --- |
+| 近景の上端回帰 | 両backend × Standard/MMDの4件成功。各3俯角、35度でPNG比較 |
+| 設定距離1000/1500の終端fade | 両backend × 半影OFF/ONの4件成功。近景保持とviewport/PNGの滑らかな終端を維持 |
+| 既存の影経路 | 中間境界・削除再読込5件、豆腐PMX/OBJ・通常影/CSM4件、MMD/PBR材質2件成功 |
+| 全unit / lint | 243 files / 1579 tests成功、lint成功。初回sandbox内のHTTPテスト16件はlocalhost接続EACCESで、ローカル実行では全件成功 |
+| typecheck / critical | 既存547件。行・列を除いた診断全文と重複は作業前と一致。critical 0で成功 |
+| WebGPU smoke | renderer初期化・安定稼働、環境光probe成功 |
+
+描画確認は計19件。先行の遠方FrameGraph/半影OFF 1件、回帰batchの16件、下記の材質別判定を訂正したMMD近景2件の成功を合わせた数。
+近景MMDテストの初回は、上端・中央とも `0.828571` なのにStandardと同じ「0.8未満」を期待して失敗した。
+fixtureの共有toon01暗部（RGB205）を確認し、MMDの影存在判定のみ0.9未満へ分けた。上端と中央の差0.04未満とPNG一致の条件は緩めず、両backendを再実行した。
+
+材質pluginはStandard/MMD/PBRに登録し、実際のStandard/PBR・GLSL/WGSL shaderへの定義注入もunitで検証する。
+WGSLには `getUniforms().fragment` の注入markerがないため、light countの定義は両言語にある `CUSTOM_FRAGMENT_DEFINITIONS` へ入れる。近景の影保持だけではfade全体が無効でも通るため、距離終端のGPU比較も必須とする。
+元sceneでの所有者実機確認はまだ残る。WebMの既存別件はこの訂正では変更していない。
+
+## 2026-11-11 終端fadeの初回修正（基準は11/12に訂正）
 
 共有 `lightFragment`（GLSL / WGSL）へ、最後の影を非遮蔽へ滑らかに戻す処理を追加した。
 影方式、filter、map、bias、cascade分割、影距離の設定値は保持する。追加のtexture samplingや保存項目、UI設定はない。
 
-- 実際の `viewFrustumZ` の最終値を終端とし、その10%をfade幅にする。ただし最終カスケードが短い場合は、その長さの半分までに制限する。auto depth boundsによる短縮にも追従する。
+- 初回は実際の `viewFrustumZ` の最終値を終端とし、その10%をfade幅にした。ただし最終カスケードが短い場合は、その長さの半分までに制限した。自動depth boundsの短縮にもfadeを追従させた点が不適切で、11/12に設定距離基準へ訂正した。
 - 有限の影距離を持つCSMだけに適用し、通常ShadowGeneratorや影OFFではfadeを0にする。
 - 影のsample後、`globalShadow` / `aggShadow` / diffuse / specular等へ渡る前に補間する。Standard / PBRとClassic / FrameGraphが同じ処理を使う。
 - MMD Standardの通常陰影は、補間前の影をToonマスクに変換してからfadeを適用する。`selfMask`（面の向きによる陰影）を保持し、遮蔽のマスクだけを戻す。fade済み値を再びsmoothstepへ通して遷移が狭くなるのを防ぐ。

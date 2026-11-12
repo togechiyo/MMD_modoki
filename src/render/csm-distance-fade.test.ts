@@ -11,6 +11,7 @@ type LightInput = {
     kind: "csm" | "standard" | "unshadowed";
     depth: number;
     end?: number;
+    configuredEnd?: number;
     lastLength?: number;
     raw?: number;
     rightHanded?: boolean;
@@ -29,7 +30,7 @@ async function preprocess(source: string, language: ShaderLanguage, defines: str
 
 // Execute the installed include's scalar control flow and injected fade. Only
 // texture sampling is replaced with known shadow values; this is not a GPU compiler.
-async function evaluate(source: string, language: ShaderLanguage, lights: LightInput[]): Promise<Sample[]> {
+async function evaluate(source: string, language: ShaderLanguage, lights: LightInput[], fadeLightCount: number | null = 8): Promise<Sample[]> {
     const samples: Sample[] = [], uniforms: Record<string, unknown> = {}, inputs: Record<string, unknown> = {};
     const context: Record<string, unknown> = {
         samples, uniforms, fragmentInputs: inputs, shadow: .123,
@@ -44,6 +45,7 @@ async function evaluate(source: string, language: ShaderLanguage, lights: LightI
         computeShadow: (_position: unknown, _depth: number, texture: { raw: number }) => texture.raw,
     };
     const defines = ["SHADOWONLY"], includes: string[] = [];
+    if (fadeLightCount !== null) defines.push(`MMD_CSM_FADE_LIGHT_COUNT ${fadeLightCount}`);
     for (const [index, light] of lights.entries()) {
         const end = light.end ?? 1000;
         defines.push(`LIGHT${index}`);
@@ -55,7 +57,8 @@ async function evaluate(source: string, language: ShaderLanguage, lights: LightI
         }
         const cameraPosition = { z: light.rightHanded ? -light.depth : light.depth };
         const splitValues = [end * .25, end * .6, end], lengths = [end * .25, end * .35, light.lastLength ?? end * .4];
-        Object.assign(uniforms, { [`viewFrustumZ${index}`]: splitValues, [`frustumLengths${index}`]: lengths });
+        Object.assign(uniforms, { [`viewFrustumZ${index}`]: splitValues, [`frustumLengths${index}`]: lengths,
+            [`mmdCsmShadowMaxZ${index}`]: light.configuredEnd ?? 1000 });
         Object.assign(inputs, { [`vPositionFromCamera${index}`]: cameraPosition,
             [`vPositionFromLight${index}`]: 0, [`vDepthMetric${index}`]: 0 });
         for (let cascade = 0; cascade < 4; cascade++) {
@@ -66,6 +69,7 @@ async function evaluate(source: string, language: ShaderLanguage, lights: LightI
             // GLSL declares these in lightFragmentDeclaration, outside this include.
             [`index${index}`]: light.limited !== false ? -1 : 2, [`diff${index}`]: 0,
             [`viewFrustumZ${index}`]: splitValues, [`frustumLengths${index}`]: lengths,
+            [`mmdCsmShadowMaxZ${index}`]: light.configuredEnd ?? 1000,
             [`vPositionFromCamera${index}`]: cameraPosition,
             [`vPositionFromLight${index}`]: [0, 0, 0, 0], [`vDepthMetric${index}`]: [0, 0, 0, 0],
             [`light${index}`]: { shadowsInfo: { x: 0, y: 0, z: 0, w: 0 } },
@@ -102,7 +106,7 @@ for (const [name, language, original] of [
         ])).toEqual([{ shadow: .35, raw: .35, fade: 0 }, { shadow: 1, raw: 1, fade: 0 }]);
     });
 
-    it("keeps the interior unchanged and fades continuously to the actual last split", async () => {
+    it("keeps the interior unchanged and fades continuously to the configured distance", async () => {
         const [near, start, middle, end, beyond] = await evaluate(patched, language,
             [500, 900, 950, 1000, 1010].map(depth => ({ kind: "csm", depth })));
         expect(near).toEqual({ shadow: .2, raw: .2, fade: 0 });
@@ -114,9 +118,21 @@ for (const [name, language, original] of [
         expect(beyond).toEqual({ shadow: 1, raw: 1, fade: 1 });
     });
 
-    it("uses shortened depth bounds and caps the fade to half of a short final cascade", async () => {
+    it("preserves near shadows when automatic bounds end at the visible floor", async () => {
+        const values = await evaluate(patched, language,
+            [140, 225, 240, 250].map(depth => ({ kind: "csm", depth, end: 250, lastLength: 60 })));
+        for (const value of values) expect(value).toEqual({ shadow: .2, raw: .2, fade: 0 });
+    });
+
+    it("does not move the fade start when automatic depth bounds change", async () => {
+        const values = await evaluate(patched, language,
+            [960, 980, 1000].map(end => ({ kind: "csm", depth: 950, end, lastLength: 400 })));
+        for (const value of values) expect(value.fade).toBeCloseTo(.5);
+    });
+
+    it("caps the fade to half of a short final cascade at the configured boundary", async () => {
         const [start, middle, end] = await evaluate(patched, language,
-            [580, 590, 600].map(depth => ({ kind: "csm", depth, end: 600, lastLength: 40 })));
+            [580, 590, 600].map(depth => ({ kind: "csm", depth, end: 600, configuredEnd: 600, lastLength: 40 })));
         expect(start.fade).toBe(0);
         expect(middle.fade).toBeCloseTo(.5);
         expect(middle.shadow).toBeCloseTo(.6);
@@ -130,6 +146,13 @@ for (const [name, language, original] of [
         expect(rightHanded.fade).toBeCloseTo(.5);
         expect(rightHanded.shadow).toBeCloseTo(.6);
         expect(unlimited).toEqual({ shadow: .2, raw: .2, fade: 0 });
+    });
+
+    it("keeps unsupported material layouts and inactive distance uniforms neutral", async () => {
+        const light: LightInput = { kind: "csm", depth: 950 };
+        expect(await evaluate(patched, language, [light], null)).toEqual([{ shadow: .2, raw: .2, fade: 0 }]);
+        expect((await evaluate(patched, language, [light, light], 1))[1]).toEqual({ shadow: .2, raw: .2, fade: 0 });
+        expect(await evaluate(patched, language, [{ ...light, configuredEnd: 0 }])).toEqual([{ shadow: .2, raw: .2, fade: 0 }]);
     });
 
     it("isolates repeated local names and resets a beyond-range light before sampling", async () => {

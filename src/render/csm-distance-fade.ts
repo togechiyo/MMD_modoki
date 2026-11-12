@@ -1,5 +1,6 @@
 import { ShaderStore } from "@babylonjs/core/Engines/shaderStore";
 import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
+import { installCsmDistanceFadePlugin } from "./csm-distance-fade-plugin";
 import "@babylonjs/core/Shaders/ShadersInclude/lightFragment";
 import "@babylonjs/core/ShadersWGSL/ShadersInclude/lightFragment";
 
@@ -11,8 +12,8 @@ const SHADOW_CONSUMERS = "#ifdef SHADOWONLY\n#ifndef SHADOWINUSE";
 
 /**
  * Babylon 9.2 blends adjacent cascades, but cuts the final one off abruptly.
- * Apply a receiver-side fade before all shadow consumers, using the actual
- * final split (which can be shortened by auto depth bounds). No map, filter,
+ * Apply a receiver-side fade before all shadow consumers, using the configured
+ * distance, not the visible-depth bounds used to fit the maps. No map, filter,
  * bias or configured shadow distance is changed.
  */
 export function injectCsmDistanceFade(source: string, shaderLanguage: ShaderLanguage): string {
@@ -38,7 +39,9 @@ export function injectCsmDistanceFade(source: string, shaderLanguage: ShaderLang
     const last = "SHADOWCSMNUM_CASCADES{X}-1";
     const fade = `mmdCsmUnfadedShadow=shadow;
 #if defined(SHADOWCSM{X}) && defined(SHADOWCSMUSESHADOWMAXZ{X})
-${scalar("mmdCsmEnd", `${uniforms}viewFrustumZ{X}[${last}]`)}
+#if defined(MMD_CSM_FADE_LIGHT_COUNT) && {X} < MMD_CSM_FADE_LIGHT_COUNT
+${scalar("mmdCsmEnd", `${uniforms}mmdCsmShadowMaxZ{X}`)}
+if (mmdCsmEnd>0.0) {
 ${scalar("mmdCsmFadeWidth", `max(min(mmdCsmEnd*0.1,${uniforms}frustumLengths{X}[${last}]*0.5),0.0001)`)}
 #ifdef SHADOWCSM_RIGHTHANDED{X}
 ${scalar("mmdCsmDepth", `-${inputs}vPositionFromCamera{X}.z`)}
@@ -47,6 +50,8 @@ ${scalar("mmdCsmDepth", `${inputs}vPositionFromCamera{X}.z`)}
 #endif
 mmdCsmEndFade=smoothstep(mmdCsmEnd-mmdCsmFadeWidth,mmdCsmEnd,mmdCsmDepth);
 shadow=mix(mmdCsmUnfadedShadow,1.0,mmdCsmEndFade);
+}
+#endif
 #endif
 `;
     // Each expanded light owns these locals. MMD's generic Toon replacement
@@ -62,6 +67,7 @@ shadow=mix(mmdCsmUnfadedShadow,1.0,mmdCsmEndFade);
 }
 
 export function installCsmDistanceFade(): void {
+    installCsmDistanceFadePlugin();
     for (const [store, language] of [
         [ShaderStore.IncludesShadersStore, ShaderLanguage.GLSL],
         [ShaderStore.IncludesShadersStoreWGSL, ShaderLanguage.WGSL],

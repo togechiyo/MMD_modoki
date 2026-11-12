@@ -8,6 +8,7 @@ import { externalParentOmissionCount } from "./export/external-parent-warning";
 import { seekVideoFrame } from "./export/seek-video-frame";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
 import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
+import { installCsmDistanceFade } from "./render/csm-distance-fade";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { WebGPUTintWASM } from "@babylonjs/core/Engines/WebGPU/webgpuTintWASM";
 import { Scene } from "@babylonjs/core/scene";
@@ -1429,7 +1430,7 @@ let toonInfluence=clamp(uniforms.toonTextureAdditiveColor.a,0.0,1.0);
 let toonShadowPixel=vec2i(0,0);
 let toonRaw=clamp(textureLoad(toonSampler,toonShadowPixel,0).rgb,vec3f(0.0),vec3f(1.0));
 let selfMask=smoothstep(${selfMaskMin},${selfMaskMax},clamp(info.ndl,0.0,1.0));
-let occlusionMask=smoothstep(${occlusionMaskMin},${occlusionMaskMax},clamp(shadow,0.0,1.0));
+let occlusionMask=mix(smoothstep(${occlusionMaskMin},${occlusionMaskMax},clamp(mmdCsmUnfadedShadow,0.0,1.0)),1.0,mmdCsmEndFade);
 let geometricLitMask=clamp(selfMask*occlusionMask,0.0,1.0);
 let litMask=geometricLitMask;
 let shadowMask=1.0-litMask;
@@ -1457,7 +1458,7 @@ float toonInfluence=clamp(toonTextureAdditiveColor.a,0.0,1.0);
 ivec2 toonShadowPixel=ivec2(0,0);
 vec3 toonRaw=clamp(texelFetch(toonSampler,toonShadowPixel,0).rgb,vec3(0.0),vec3(1.0));
 float selfMask=smoothstep(${selfMaskMin},${selfMaskMax},clamp(info.ndl,0.0,1.0));
-float occlusionMask=smoothstep(${occlusionMaskMin},${occlusionMaskMax},clamp(shadow,0.0,1.0));
+float occlusionMask=mix(smoothstep(${occlusionMaskMin},${occlusionMaskMax},clamp(mmdCsmUnfadedShadow,0.0,1.0)),1.0,mmdCsmEndFade);
 float geometricLitMask=clamp(selfMask*occlusionMask,0.0,1.0);
 float litMask=geometricLitMask;
 float shadowMask=1.0-litMask;
@@ -8188,6 +8189,7 @@ ${beforeFogAppendBlock}
             this.runtimeDiagnostics.add(diagnostic);
         }
 
+        installCsmDistanceFade();
         MmdManager.patchMmdStandardMaterialPluginInitDirty();
         MmdManager.patchMmdToonLightSeparationShader();
 

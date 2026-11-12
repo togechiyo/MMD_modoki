@@ -362,7 +362,7 @@ MMD_modoki では街モデルなどの遠方ステージ表示との両立のた
 新規既定の `shadowMaxZ = 1000` は、この far plane 全体を使い切らず、近景キャラと中距離ステージの影密度を優先するための値です。
 
 2026-11-11の[壁面調査](./csm-wall-band-investigation-2026-11-11.md)では、最後の影が距離終端で突然消える段差を半影OFF/ONとも再現しました。
-現行Babylon.js 9.2.0に終端fadeはなく、中間cascadeのblendとは別です。終端fadeは検討候補で、現行設定・shaderの変更は未実施です。
+Babylon.js 9.2.0標準に終端fadeはなく、中間cascadeのblendとは別です。後続の所有者依頼により、アプリ側で実最終split手前の10%（最終cascade長の半分以下）を滑らかに薄める処理を追加しました。距離・bias・filter等の設定値は保持し、通常ShadowGeneratorには適用しません。MMD Standardの通常陰影は、面の向きによる陰影を保って遮蔽だけを薄めます。
 
 ## UI との関係
 

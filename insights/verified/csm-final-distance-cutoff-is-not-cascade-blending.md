@@ -4,7 +4,7 @@ status: verified
 priority: normal
 scope: rendering/shadows
 confidence: high
-last_verified: 2026-11-11
+last_verified: 2026-11-12
 evidence:
   - local-electron-webgpu-diagnostic
   - babylon-primary-source
@@ -23,9 +23,13 @@ superseded_by: null
 ## 判断
 
 実際の `viewFrustumZ` と観測点のview depthを比べ、中間blend帯と最終splitを分ける。
-Babylon.js 9.2.0では最終splitの外で影samplingを止め、終端の距離fadeはない。
+Babylon.js 9.2.0標準では最終splitの外で影samplingを止め、終端の距離fadeはない。
 自作PMXの壁に屋根の影を落としたWebGPU/FrameGraphでは、半影OFF/ONとも終端で段差が出た。
 半影OFFで診断用の影距離を1000から1500へ変えると段差も移動した。
+
+後続の所有者の修正依頼により、共有lightFragmentへ終端fadeを追加した。
+実最終splitの10%（最終cascade長の半分以下）で薄め、設定距離・bias・filterは維持する。
+MMD Standardの通常陰影ではraw shadowをToonマスクにした後にfadeし、面の向きによるselfMaskは保つ。
 
 ## 避けること
 
@@ -38,7 +42,8 @@ Babylon.js 9.2.0では最終splitの外で影samplingを止め、終端の距離
 
 [調査記録](../../docs/csm-wall-band-investigation-2026-11-11.md)に、比較条件、画像run、集計、9.2.0のshader分岐、検証結果を記載した。
 所有者の「影が終わる所の1本に近い」という報告とも整合するが、元sceneとの直接比較は未実施。
-終端fadeは修正候補であり、採用・実装済みの方針ではない。
+通常MMD以外の独自Toon / external WGSLがshadowを再量子化する条件は、共有fadeだけで同じ遷移幅になるとは扱わない。
+修正後はClassic/FrameGraph・半影OFF/ON・PNGを確認した。1フレームWebMでは修正前にも同じ影欠落があり、動画のfade確認済みとはしない。
 
 ## 再確認条件
 

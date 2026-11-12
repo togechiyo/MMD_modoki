@@ -1,6 +1,6 @@
 # CSM の壁面に残る帯と影距離終端の調査
 
-更新日: 2026-11-11
+更新日: 2026-11-12
 
 ## 結論と報告との対応
 
@@ -13,8 +13,63 @@
 今回の再現と症状は整合する。ただし元の画像・scene・カメラ条件との直接比較は未実施であり、同一原因と確定したわけではない。
 ユーザー所有 asset は探索・使用していない。
 
-今回の依頼は調査であり、アプリの shader、影方式、bias、cascade、既定の影距離は変更していない。
-診断用テストと記録を追加した。終端の段差は未修正。
+最初の調査ではアプリを変更せず、診断用テストと記録を `3d6af55` に保存した。
+その後、所有者から「では修正のほどお願い」と依頼を受け、以下の終端fadeを実装した。
+
+## 2026-11-11 終端fadeの修正
+
+共有 `lightFragment`（GLSL / WGSL）へ、最後の影を非遮蔽へ滑らかに戻す処理を追加した。
+影方式、filter、map、bias、cascade分割、影距離の設定値は保持する。追加のtexture samplingや保存項目、UI設定はない。
+
+- 実際の `viewFrustumZ` の最終値を終端とし、その10%をfade幅にする。ただし最終カスケードが短い場合は、その長さの半分までに制限する。auto depth boundsによる短縮にも追従する。
+- 有限の影距離を持つCSMだけに適用し、通常ShadowGeneratorや影OFFではfadeを0にする。
+- 影のsample後、`globalShadow` / `aggShadow` / diffuse / specular等へ渡る前に補間する。Standard / PBRとClassic / FrameGraphが同じ処理を使う。
+- MMD Standardの通常陰影は、補間前の影をToonマスクに変換してからfadeを適用する。`selfMask`（面の向きによる陰影）を保持し、遮蔽のマスクだけを戻す。fade済み値を再びsmoothstepへ通して遷移が狭くなるのを防ぐ。
+- 各LIGHTの局所scopeにfade値を持ち、他ライトへ値を持ち越さない。CSMの範囲外でsamplingが省略されるときも、直前のライトの影が残らないよう初期化する。
+- installerは再適用しても二重挿入しない。Babylonの対象includeが変わった場合は、挿入点の不一致を検出する。
+
+実装は [csm-distance-fade.ts](../src/render/csm-distance-fade.ts) と、MmdManagerのToonマスク2箇所・初期化呼出し。
+[shader unit](../src/render/csm-distance-fade.test.ts)では実際のBabylon includeを前処理し、GLSL/WGSL、通常影、短い最終区間、右手系、複数ライトを確認する。
+[回帰E2E](../test/e2e/csm-distance-fade.spec.mjs)は同じ壁で、近景の影が残ること、終端が複数段階で変わること、距離外が非遮蔽になること、viewport/PNGの一致を確認する。
+
+初回のFrameGraph / 半影OFFの実描画確認は成功。距離1000の最大stepはviewport `0.018145` / PNG `0.022177`（修正前viewport `0.122984`）、距離1500はともに `0.018145`（修正前 `0.143145`）。近景の比率は `0.804435` を保持した。
+Classic / FrameGraph × 半影OFF / ONの全4条件で同じ結果となった。viewport/PNGの測定比の差は平均 `0.00078` 以下、最大 `0.0081` 以下。
+
+### 最終検証（11/12）
+
+| 確認 | 結果 |
+| --- | --- |
+| `npm.cmd run test:unit` | 242 files / 1568 tests成功（追加shader unit 13件を含む） |
+| `npm.cmd run lint` | 成功 |
+| `typecheck` / `typecheck:critical` | 通常は既存547件で失敗。行・列を除いた診断全文・重複は作業前と一致。criticalは成功 |
+| `csm-distance-fade` | 4件成功。両backend / 半影OFF・ON、GUI距離1000→1500、近景保持・終端fade・viewport/PNGの一致。pageerror / GPU validation error 0 |
+| `csm-boundary` | 5件成功。既存の中間境界、通常影/CSM、caster削除・再読込の回帰確認 |
+| `shadow-csm-tofu-fixtures` | 4件成功。豆腐PMX＋床、OBJの初回読込、caster/receiverと通常影の確認 |
+| `pbr-light-shadow-audit` | 2件成功。両backend、MMD Standard / PBR Base / PBR MMD Like、影ON/OFF |
+
+画像とprofileはローカルの `artifacts/e2e/csm-distance-fade/2026-11-11-final/` に保存した。
+独立した `npm.cmd run smoke:launch` も成功。`engine=WebGPU` / Bullet MPR のrenderer初期化、3秒間の安定稼働、環境光probeの成功を確認した。
+
+### WebM比較で見つかった既存の別件
+
+[追加のexport診断](../test/e2e/csm-distance-fade-export.spec.mjs)では、屋根も小さいPMXとして通常読込し、保存projectから隠しPNG/WebM exporterへ読み直した。
+隠しPNGでも近景の比 `0.804435`、終端最大step `0.022177` となり修正を確認できた。
+一方、FrameGraph / 半影OFF / 1280×720 / VP8 / RGBA surface / 0〜0の1フレームWebMは、影ON/OFFが同じ画像となり、近景比 `1`、終端step `0` だった。
+
+今回の4変更（installer import/呼出しとMMDマスク2箇所）だけを一時的に外し、開始時と同じ描画コードでも比較した。
+同じWebMの影欠落を再現し、PNGは修正前の段差（最大step `0.177419`）へ戻った。比較後は4変更を復元した。
+したがってこの1フレームWebMの問題は今回のフェードが生んだものではない。先頭だけか後続も続くか、capture準備・shadow map更新等の原因は未確定。
+動画で終端fadeを確認済みとは扱わず、別件として追跡する。
+
+初回の真っ黒な比較画像は、テストが`loadeddata`直後にvideoをcanvasへ描いていたため。seekと実フレーム提示を待つよう改めると映像を取得でき、上記の影欠落を区別できた。
+また、テスト用のeye/target逐次操作と保存用MMDカメラの同期に差が出たため、export診断は正規importerでtarget/rotation/distanceを復元してから、描画・保存のeye/target一致を検証する。製品のカメラ同期コードは変更していない。
+
+既存の別件を通常テストへ失敗として追加しないよう、このexport診断だけ `MMD_CSM_EXPORT_INVESTIGATION=1` で明示実行する。
+判定閾値は緩めず、近景影・fade・PNG/WebM一致を引き続き要求する。通常の終端回帰4件は常時実行対象。
+
+独自の陰影を持つbuiltin / external WGSLは、受け取ったshadowをさらに再量子化できる。
+`toon_hard_shadow.wgsl`の`step`、SSS・highlight系の独自`smoothstep`や微分処理まで通常MMDと同じ遷移幅にする変更は含めない。
+これらを使うsceneや元報告sceneの見た目は、通常MMD / Standard / PBRの検証とは区別する。
 
 ## 以前の修正との違い
 
@@ -91,7 +146,7 @@ None near-downward の第1/第2blendで最大 `0.019093 / 0.038186`、mid-downwa
 [Babylon.js公式のCSM説明](https://doc.babylonjs.com/features/featuresDeepDive/lights/shadows_csm/)でもカスケード間のblendと影距離上限は別の設定として説明される。
 公式のblend調整を「最後の影を薄める機能」と解釈しない。blendの過大化は別のartifactを生む場合がある。
 
-## 修正候補と残る確認
+## 調査時の修正候補と残る確認
 
 候補は、実際の最終splitの手前で遮蔽の寄与を徐々に弱める距離fade。
 影距離を延長するだけでは段差を遠くへ移すだけで、近景の影精度との交換にもなる。
@@ -99,9 +154,9 @@ None near-downward の第1/第2blendで最大 `0.019093 / 0.038186`、mid-downwa
 
 実装する場合は、MMDの自分自身の明暗（`selfMask`）と遮蔽（`occlusionMask`）を区別し、壁・床・キャラクターのToonを壊さない合成位置を検討する。
 Standard / PBR / SSS、半影 OFF / ON、Classic / FrameGraph、PNG / WebM、保存済み距離、auto depth boundsで最終splitが短くなる条件を確認する必要がある。
-現段階でこれらの変更を採用したという所有者判断はない。
+この段落は初回調査時の候補整理。後続の所有者依頼で採用した修正と検証範囲は上記の修正節に記載する。
 
-今回未確認なのは、元sceneとの直接比較、Classic、画像・動画export、PCSSの画面手前にあった中間境界、別材質や強い自己影の条件。
+初回調査時に未確認だったのは、元sceneとの直接比較、Classic、画像・動画export、PCSSの画面手前にあった中間境界、別材質や強い自己影の条件。修正後に追加確認した範囲とWebMの別件は上記に区別した。
 1500のmid視点は採取範囲が終端付近までで、終端+10以遠の完全非遮蔽領域は未計測。1500への変更試験は半影OFFだけで実施した。
 報告が終端の1本に近いという追加情報は終端説を支持するが、実シーンでの一致・解消確認は別に残す。
 

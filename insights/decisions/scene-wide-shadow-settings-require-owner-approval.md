@@ -4,7 +4,7 @@ status: decision
 priority: high
 scope: rendering/shadows
 confidence: high
-last_verified: 2026-08-22
+last_verified: 2026-11-11
 evidence:
   - project-owner-directive
   - repeated-owner-directive
@@ -15,6 +15,7 @@ source_docs:
   - ../../docs/webgpu-csm-pcf-diagonal-shadow-investigation-2026-08-22.md
   - ../../docs/framegraph-shadow-migration-investigation-2026-08-22.md
   - ../../docs/custom-shadow-system-concept-2026-08-22.md
+  - ../../docs/csm-wall-band-investigation-2026-11-11.md
 superseded_by: null
 decision_owner: project-owner
 decision: accepted-with-constraints
@@ -33,6 +34,9 @@ ownership など、PMX、accessory、背景、effectへ横断的に影響する�
 シーン全体へ波及する影設定は、プロジェクト所有者の明示的な許可を得てから変更する。OBJなど個別形式の
 描画不具合は、まず材質、geometry、alpha、normal、caster登録など形式内の原因として切り分ける。
 影の再設計や調査を許可された場合も、現行設定を baseline として残し、通常経路と分離した実験から始める。
+
+2026-11-11、影距離終端の段差の調査結果と距離fade案を提示した後、所有者は「では修正のほどお願い」と実装を依頼した。
+この終端補正は許可された範囲として進める。既定の影距離、bias、filter、cascade数を変更する包括的な許可には広げない。
 
 ## 避けること
 

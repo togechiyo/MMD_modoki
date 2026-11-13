@@ -43,6 +43,10 @@ ownership など、PMX、accessory、背景、effectへ横断的に影響する�
 同時に `bias` と `normalBias` は影響範囲が大きいため触らないと明示した。今回の比較では両値をbaselineに固定し、
 blend幅や関連設定を一つずつ変える。以前のbias変更診断を、本体のbias変更や今回の再試験の許可に使わない。
 
+同日の比較結果を受け、所有者は「depthClampの設定だけ変えてみて。こっちでも確認したい」と試用を依頼した。
+CSMのdepthClampだけをfalseへ変更し、起動・再生成・半影切替に揃える。bias / normalBias、blend幅、その他の影設定は維持する。
+元sceneの白帯の解消と恒久採用は、所有者の確認待ちとして扱う。
+
 ## 避けること
 
 - OBJなど一形式の見た目を理由にCSMを外す、または既定のshadow generatorを切り替える。

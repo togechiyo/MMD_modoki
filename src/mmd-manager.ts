@@ -4662,7 +4662,7 @@ ${beforeFogAppendBlock}
             shadowGenerator.cascadeBlendPercentage = this.shadowPenumbraEnabledValue ? PCSS_CSM_CASCADE_BLEND : DEFAULT_CSM_CASCADE_BLEND;
             shadowGenerator.autoCalcDepthBounds = !this.shadowPenumbraEnabledValue;
             shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
-            shadowGenerator.depthClamp = !this.shadowPenumbraEnabledValue;
+            shadowGenerator.depthClamp = false;
             shadowGenerator.penumbraDarkness = this.shadowPenumbraEnabledValue ? PCSS_CSM_PENUMBRA_DARKNESS : 1.0;
             shadowGenerator.shadowMaxZ = this.shadowMaxZValue;
             dirLight.shadowFrustumSize = DEFAULT_CSM_FRUSTUM_SIZE;

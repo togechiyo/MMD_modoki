@@ -214,7 +214,7 @@ function applyShadowFilterSettings(host: LightShadowHost): void {
         host.shadowGenerator.cascadeBlendPercentage = penumbraEnabled ? PCSS_CSM_CASCADE_BLEND : DEFAULT_CSM_CASCADE_BLEND;
         host.shadowGenerator.autoCalcDepthBounds = !penumbraEnabled;
         host.shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
-        host.shadowGenerator.depthClamp = !penumbraEnabled;
+        host.shadowGenerator.depthClamp = false;
         host.shadowGenerator.penumbraDarkness = penumbraEnabled ? PCSS_CSM_PENUMBRA_DARKNESS : 1.0;
     }
     host.shadowGenerator.filteringQuality = isCascaded
@@ -240,7 +240,7 @@ function createShadowGenerator(host: LightShadowHost, dirLight: DirectionalLight
         shadowGenerator.cascadeBlendPercentage = DEFAULT_CSM_CASCADE_BLEND;
         shadowGenerator.autoCalcDepthBounds = true;
         shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
-        shadowGenerator.depthClamp = true;
+        shadowGenerator.depthClamp = false;
         shadowGenerator.penumbraDarkness = 1.0;
         shadowGenerator.shadowMaxZ = DEFAULT_CSM_SHADOW_MAX_Z;
     }

@@ -5,7 +5,7 @@
 ## 調査の結論
 
 所有者の壁面の白帯は残存。上端影抜けは解消済み、RC2効果OFFでも帯が残り、元sceneの半影ON/OFF差は未確認。
-資料と使用中のBabylon.js **9.2.0** を照合し、後続依頼でbias値を固定したブレンド幅比較を実施した。アプリ本体の既定設定は変更していない。
+資料と使用中のBabylon.js **9.2.0** を照合し、後続依頼でbias値を固定したブレンド幅比較を実施した。比較時は本体未変更。その後、所有者の明示依頼でdepthClampだけをfalseへ変更した（末尾の試用記録）。
 前日の実機比較は[壁面調査](./csm-wall-band-investigation-2026-11-11.md)、今回の結果は末尾の「固定biasでの比較」を参照する。
 
 公式資料には「blendを大きくすればよい」という一律の推奨はない。
@@ -27,7 +27,7 @@
 
 ## 現在の設定と、白帯との関係
 
-以下はWebGPUでの初期値・影距離倍率1。保存projectのbiasや距離等は異なり得る。
+以下は比較開始時のWebGPU初期値・影距離倍率1。保存projectのbiasや距離等は異なり得る。後続のdepthClamp単独変更は末尾を参照。
 初期化は `src/mmd-manager.ts`、設定切替は `src/scene/light-shadow-controller.ts` を読み、両経路の値の一致を確認した。
 既定値と前日の自作fixtureの実測を、元sceneの値と混同しない。
 
@@ -167,3 +167,19 @@ GPUを利用できるローカル環境で直列実行し、実行中のtracked 
 - 予備runの失敗は、MMDの実際の影の比率0.9523を固定閾値0.95で棄却した診断判定と、約3e-14のcamera座標丸め差を完全一致で比較したassert。アプリ回帰ではない。前者はRGB平均2階調超の測定可能性確認、後者は1e-8精度比較へ訂正し、上記の最終runは成功した。
 - 結果は `artifacts/e2e/csm-wall-blend/<run>/`（ignored）。本体TypeScript変更がないためunit/typecheck/smokeは対象外。
 - 変更したMJSの `node --check`、`npm.cmd run lint`、insights validator、`git diff --check` は成功。
+
+## 所有者実機での試用：depthClampだけOFF
+
+比較結果の提示後、所有者から `depthClamp` だけを変えて自身でも確認したいとの依頼があった。
+`src/mmd-manager.ts` のgenerator生成と `src/scene/light-shadow-controller.ts` の生成・filter再適用の3箇所を `false` に揃えた。
+半影OFFではtrueからfalseへ変わり、半影ONは従来からfalse。bias / normalBias、blend幅、stabilize、auto depth、lambda、距離、filterは変更していない。
+保存項目・UIの追加はなく、アプリ再起動後から適用される。半影の切替やgenerator再生成でもtrueへ戻らない。
+元sceneの白帯への効果は所有者の確認待ちで、解消済みとは扱わない。
+
+試用変更後の確認:
+
+- 関連unit15件、lint、WebGPU smoke、insights validator、diff check成功。
+- typecheckは前回の547診断と行・列を除いた内容・重複が一致。critical TS2304/TS2552は0。
+- ローカルElectron E2E9件成功。CSM境界の両backend・半影ON/OFF、標準影との切替、PMX/OBJの削除・再読込、半影OFFの両backendで距離fade/PNG、通常MMDの上端を確認した。
+- 距離fadeの両backend・距離1000/1500・影ON/OFFの8取得状態で `depthClamp=false`、bias0.0005、normalBias0.01、blend0.1と他の既定設定を確認。上端の両backend・25/35/45度・ON/OFFの12取得状態でもdepthClamp=false。上端と中央の影比率差は0で、35度PNGも測定点の差0。
+- ログは `artifacts/e2e/csm-wall-blend/depth-clamp-*.log`、描画reportは `test-results/`。元sceneでの改善はこの自作fixture検証とは分ける。

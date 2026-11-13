@@ -84,6 +84,7 @@ WGSL CSM PCF 経路だけを避ける互換処理です。代償として WebGPU
   - WebGL CSM: `PCF`
   - WebGPU CSM: `FILTER_NONE`（Babylon.js 9.2.0 の WGSL CSM PCF 範囲外サンプリング回避）
 - 品質: `QUALITY_HIGH`
+- CSMの `depthClamp = false`：2026-11-13、壁面の帯を所有者実機で比較するため単独変更。bias・blend等は維持。半影ONは従来からfalse（[比較と試用記録](./csm-seam-parameters-and-official-sources-2026-11-13.md)）。
 - `Contact Hardening` / PCSS は実験用。既定では無効
 - `Blur ESM` は既定では無効
 - 接地感調整

@@ -174,7 +174,7 @@ GPUを利用できるローカル環境で直列実行し、実行中のtracked 
 `src/mmd-manager.ts` のgenerator生成と `src/scene/light-shadow-controller.ts` の生成・filter再適用の3箇所を `false` に揃えた。
 半影OFFではtrueからfalseへ変わり、半影ONは従来からfalse。bias / normalBias、blend幅、stabilize、auto depth、lambda、距離、filterは変更していない。
 保存項目・UIの追加はなく、アプリ再起動後から適用される。半影の切替やgenerator再生成でもtrueへ戻らない。
-元sceneの白帯への効果は所有者の確認待ちで、解消済みとは扱わない。
+後続の所有者実機確認では帯が残った。depthClamp単独変更で元sceneの問題が解消したとは扱わない。
 
 試用変更後の確認:
 
@@ -183,3 +183,20 @@ GPUを利用できるローカル環境で直列実行し、実行中のtracked 
 - ローカルElectron E2E9件成功。CSM境界の両backend・半影ON/OFF、標準影との切替、PMX/OBJの削除・再読込、半影OFFの両backendで距離fade/PNG、通常MMDの上端を確認した。
 - 距離fadeの両backend・距離1000/1500・影ON/OFFの8取得状態で `depthClamp=false`、bias0.0005、normalBias0.01、blend0.1と他の既定設定を確認。上端の両backend・25/35/45度・ON/OFFの12取得状態でもdepthClamp=false。上端と中央の影比率差は0で、35度PNGも測定点の差0。
 - ログは `artifacts/e2e/csm-wall-blend/depth-clamp-*.log`、描画reportは `test-results/`。元sceneでの改善はこの自作fixture検証とは分ける。
+
+## 所有者許可のローカルPMXによる切り分け
+
+depthClamp変更後も残存するという報告を受け、所有者が明示した1つのローカルPMXと参照テクスチャだけを読み込んだ。
+モデル名・元path・画像・モデルとテクスチャの実データを公開記録やcommitへ含めない。作業用runner・画像・詳細reportはignoredの `local-references/csm-private/` に限定し、モデル本体の変更・複製はしていない。
+
+今回のローカル比較では、中央入口の左側の太い柱に見える横方向の明暗差について次を確認した。
+
+- 影ON/OFFの画像で横筋が同じ位置に残る。柱内部の測定域では明度比が約0.804でほぼ一定。
+- diffuse textureを一時的に外すと、その横方向の明暗差が消える。影による遮蔽形状は別に残る。テクスチャは比較後に復元した。
+- 幅0 / 0.3、auto depth OFF、stabilize OFF、NoneのR32F対照では、この柱内部の測定pixelは変わらなかった。
+- R32F対照は同一generatorの `recreateShadowMap()` を使い、caster数・ID集合、設定、splits、各cascade行列を保持。実type2→1、format RED、Noneのnearest samplingを使用し、WebGPU validation errorは0。元のR16Fへ復元した。public float setterによるcaster消失を結果に混ぜていない。
+- 別画角とPCSS対照でも、上記の横筋をCSM境界の欠損とは特定できなかった。右側の柱には別の細かな自己影ノイズ候補があるが、横帯と同一視しない。
+
+**この測定域の横筋はテクスチャ由来と整合する。ただし、所有者が問題としている白帯と同じ箇所かは未確定。**
+スクリーンショット内の対象位置を確認中であり、元報告の原因確定・修正完了とはしない。元の模様を消すようなモデル加工や、本体の影設定の追加変更は行っていない。
+診断アプリは終了し、今回の比較で本体sourceは変更していない。

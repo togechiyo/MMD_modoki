@@ -47,6 +47,9 @@ blend幅や関連設定を一つずつ変える。以前のbias変更診断を�
 CSMのdepthClampだけをfalseへ変更し、起動・再生成・半影切替に揃える。bias / normalBias、blend幅、その他の影設定は維持する。
 元sceneの白帯の解消と恒久採用は、所有者の確認待ちとして扱う。
 
+その後の残存報告で、所有者は指定したローカルPMXを使った追加検証を許可し、ドキュメントへモデル名を記載しないよう明示した。
+対象PMXと参照textureだけをローカルで扱い、元path・名称・画像・モデルとテクスチャの実データはcommitへ含めない。診断資料はignoredのlocal-referencesへ置く。
+
 ## 避けること
 
 - OBJなど一形式の見た目を理由にCSMを外す、または既定のshadow generatorを切り替える。

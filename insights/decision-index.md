@@ -39,7 +39,7 @@
 | adopted | [アクセサリはモデル編集モードへ置く](./decisions/accessories-belong-to-model-edit-mode.md) | `.x` の編集モードや操作表示を変更する |
 | adopted | [XとOBJは共通のアクセサリ変形タイムラインを使う](./decisions/x-and-obj-share-accessory-transform-timeline.md) | `.x` / OBJ の変形キー、タイムライン、保存を変更する |
 | adopted | [街モデルを扱える広域描画を支援する](./decisions/support-city-scale-wide-area-rendering.md) | far、空ドーム、影距離を変更する |
-| accepted-with-constraints | [シーン全体の影設定変更には所有者の許可を必要とする](./decisions/scene-wide-shadow-settings-require-owner-approval.md) | CSM、ShadowGenerator、cascade、全体bias、影距離を変更する。11/11に距離終端fade修正を依頼。11/13はbias/normalBias固定で比較後、depthClampだけfalseへ変更して所有者実機で試用するよう明示 |
+| accepted-with-constraints | [シーン全体の影設定変更には所有者の許可を必要とする](./decisions/scene-wide-shadow-settings-require-owner-approval.md) | CSM、ShadowGenerator、cascade、全体bias、影距離を変更する。11/11に距離終端fade修正を依頼。11/13はbias/normalBias固定で比較後、depthClampだけfalseへ変更して試用。残存報告後に指定PMXでの追加検証を許可、モデル名は記録しないよう明示 |
 | accepted-with-constraints | [選択キーの一括補正を v0.2.3 で扱う](./decisions/adopt-selected-key-batch-correction-for-v023.md) | XYZ 補正や複数キー編集を設計する |
 | adopted | [シーンキーは照明、影、重力、エフェクトの順で進める](./decisions/scene-key-order-is-light-shadow-gravity-then-effects.md) | 2026-10-07: エフェクトキーの再開を次版で目指す候補へ追加。復帰対象・収録範囲・標準公開時期は未決定。現状の標準OFFと保存済みキーの保管を維持し、既存17種と公開UIの範囲を照合して再開計画を整理する |
 | adopted | [再生中の編集権限はカテゴリごとのキー有無で決める](./decisions/playback-ownership-follows-category-key-presence.md) | camera / light / shadow / gravity の再生中評価とUIロックを変更する |

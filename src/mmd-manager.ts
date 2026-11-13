@@ -13227,6 +13227,7 @@ ${beforeFogAppendBlock}
         const entry = this.sceneModels.find(model => model.mesh === mesh || model.renderMeshes.includes(mesh));
         if (entry) return isRcSkyAmbientStaticModel({
             animationCount: entry.model.runtimeAnimations.size,
+            sourceAnimation: this.modelSourceAnimationsByModel.get(entry.model),
             dynamicPhysics: entry.rigidBodies.some(body => body.physicsMode > 0),
             externalParent: Boolean(entry.externalParent) || entry.externalParentKeyframes.length > 0,
         });

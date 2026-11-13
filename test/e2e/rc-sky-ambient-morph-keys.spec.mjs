@@ -1,0 +1,165 @@
+import { test, expect } from "@playwright/test";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { createRcSkyStage } from "../../scripts/generate-rc-sky-stage.mjs";
+import { writePmx } from "../../scripts/generate-external-parent-test-models.mjs";
+import { launchMmdModoki } from "./electron-app.mjs";
+import { camera, capture, difference, initialState, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { addRcLighting, closeRcLighting, openRcLighting, rcLightingStatus } from "./helpers/rc-lighting-controls.mjs";
+import { measureSkyAmbientRegions, skyAmbientRegions } from "./helpers/rc-sky-ambient-regions.mjs";
+
+const root = resolve(import.meta.dirname, "../.."), id = "rcSkyAmbient", roof = "庇移動モーフ", material = "材質テスト";
+const probe = (page, name = "skyMorphState") => page.evaluate(async name =>
+  (await import("/test/e2e/helpers/rc-sky-ambient-morph-probe.mjs"))[name](), name);
+const key = (page, name) => page.getByRole("button", { name: `${name} keyframe`, exact: true });
+const slider = (page, name) => page.locator("#morph-controls .morph-slider-row")
+  .filter({ has: key(page, name) }).locator('input[type="range"]');
+const history = (page, operation) => page.locator(`.app-menu-quick-button[data-menu-command="edit.${operation}"]`).click();
+const frames = async (page, name) => (await probe(page))?.morphTracks.find(track => track.name === name)?.frames ?? [];
+
+async function setMorph(page, name, value) {
+  const control = slider(page, name);
+  await control.focus(); await control.press(value === 0 ? "Home" : "End");
+  await expect(control).toHaveValue(String(value));
+  await expect.poll(async () => (await probe(page))?.weights[name]).toBe(value);
+}
+async function ready(page, triangles) {
+  await openRcLighting(page, id);
+  await expect(rcLightingStatus(page, id)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
+  await expect.poll(async () => {
+    const state = await probe(page);
+    return { triangles: state?.diagnostics.triangleCount, ready: state?.providerReady };
+  }, { timeout: 45000 }).toEqual({ triangles, ready: true });
+  await closeRcLighting(page);
+}
+async function fileMenu(page, command) {
+  await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+  await page.locator(`[data-menu-command="${command}"]`).click();
+}
+
+// eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
+test("Sky Ambient retains stage occluders through GUI morph keys, undo and project restore", async ({}, testInfo) => {
+  test.setTimeout(240000);
+  const launched = await launchMmdModoki(root);
+  const report = { errors: [], consoleErrors: [], shaderResponses: [], shaderRequestFailures: [], captures: {}, states: {}, comparisons: {} };
+  let page;
+  try {
+    page = await launched.app.firstWindow();
+    page.on("pageerror", error => report.errors.push(error.stack ?? error.message));
+    page.on("console", message => { if (message.type() === "error") report.consoleErrors.push(message.text()); });
+    const shaderRequest = url => /\.(?:vertex|fragment)\.fx(?:[?#]|$)/i.test(url);
+    page.on("response", response => {
+      if (shaderRequest(response.url())) report.shaderResponses.push({ url: response.url(), status: response.status(),
+        contentType: response.headers()["content-type"] ?? "" });
+    });
+    page.on("requestfailed", request => {
+      if (shaderRequest(request.url())) report.shaderRequestFailures.push({ url: request.url(), error: request.failure()?.errorText });
+    });
+    await initialState(page, { fixed: false });
+    await page.evaluate(async () => {
+      await import("/test/e2e/helpers/rc-sky-ambient-morph-probe.mjs");
+      const state = window.mmdModokiE2e.exportProjectState();
+      // Authored fixture settings isolate sky shading and keep this regression small.
+      Object.assign(state.lighting.rcSkyAmbient, { enabled: false, strength: 1, skyBrightness: 0,
+        opacity: 1, quality: "standard", rangeScale: 1 });
+      await window.mmdModokiE2e.importProjectState(state);
+    });
+    const auto = page.locator("#btn-auto-key");
+    if (await auto.getAttribute("aria-pressed") === "true") await auto.click();
+    const model = createRcSkyStage();
+    model.materialSwitchMorph = true; // First material: alpha 1 -> 0.6, while the roof/walls stay opaque.
+    const fullTriangles = model.materialGroups.reduce((count, group) => count + group.indices.length / 3, 0);
+    const partialTriangles = fullTriangles - model.materialGroups[0].indices.length / 3;
+    const modelPath = join(launched.tempDir, "sky-morph-stage.pmx");
+    writeFileSync(modelPath, writePmx(model));
+    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath);
+    const view = await camera(page, { tx: 0, ty: 1.5, tz: 0, rx: -20, ry: -38, rz: 0, camDistance: 31 });
+    await page.locator("#info-model-select").selectOption("0");
+    const take = name => capture(page, testInfo, report, name);
+    const regions = skyAmbientRegions(view);
+    const neutral = await take("neutral");
+    await addRcLighting(page, id); await ready(page, fullTriangles);
+    const before = await take("before-morph-registration");
+    report.comparisons.skyBefore = difference(neutral, before);
+    expect(report.comparisons.skyBefore).toBeGreaterThan(.15);
+    report.states.before = await probe(page);
+    expect(report.states.before.runtimeAnimations).toBe(0);
+
+    // Registering an unchanged zero value still creates the first runtime animation.
+    await key(page, roof).click();
+    await expect.poll(() => frames(page, roof)).toEqual([0]);
+    await ready(page, fullTriangles);
+    report.states.registered = await probe(page);
+    expect(report.states.registered.runtimeAnimations).toBeGreaterThan(0);
+    expect(report.states.registered.boneKeyCount).toBe(0);
+    report.comparisons.registered = difference(before, await take("first-zero-key"));
+    expect(report.comparisons.registered).toBeLessThan(.15);
+
+    await history(page, "undo");
+    await expect.poll(() => frames(page, roof)).toEqual([]);
+    await ready(page, fullTriangles);
+    report.comparisons.undo = difference(before, await take("undo-first-key"));
+    expect(report.comparisons.undo).toBeLessThan(.15);
+    await history(page, "redo");
+    await expect.poll(() => frames(page, roof)).toEqual([0]);
+    await ready(page, fullTriangles);
+
+    await seek(page, 30); await setMorph(page, roof, 1); await key(page, roof).click();
+    await expect.poll(() => frames(page, roof)).toEqual([0, 30]);
+    await ready(page, fullTriangles);
+    const moved = await take("roof-morph-key-30");
+    report.states.moved = await probe(page);
+    report.comparisons.canopy = { before: measureSkyAmbientRegions(before, regions).canopy.mean,
+      moved: measureSkyAmbientRegions(moved, regions).canopy.mean };
+    expect(report.comparisons.canopy.moved - report.comparisons.canopy.before).toBeGreaterThan(2);
+    expect(report.states.moved.diagnostics.fieldRevision).toBeGreaterThan(report.states.registered.diagnostics.fieldRevision);
+    await seek(page, 0); await ready(page, fullTriangles);
+    await expect(slider(page, roof)).toHaveValue("0");
+    report.comparisons.seekBack = difference(before, await take("seek-zero"));
+    expect(report.comparisons.seekBack).toBeLessThan(.15);
+
+    // A material visibility morph removes its own surfaces, not every stage surface.
+    await key(page, material).click();
+    await seek(page, 30); await setMorph(page, material, 1); await key(page, material).click();
+    await expect.poll(() => frames(page, material)).toEqual([0, 30]);
+    await ready(page, partialTriangles);
+    report.states.partial = await probe(page);
+    await take("partial-material-morph");
+    await seek(page, 0); await ready(page, fullTriangles);
+    await expect(slider(page, material)).toHaveValue("0");
+    const savedTracks = (await probe(page)).morphTracks;
+    const projectPath = join(launched.tempDir, "sky-morph-keys.json");
+    await launched.app.evaluate(({ dialog }, path) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: path });
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, projectPath);
+    await fileMenu(page, "file.saveProject");
+    await expect.poll(() => {
+      try { JSON.parse(readFileSync(projectPath, "utf8")); return true; }
+      catch (error) { if (error.code === "ENOENT" || error instanceof SyntaxError) return false; throw error; }
+    }).toBe(true);
+    await seek(page, 30); await ready(page, partialTriangles);
+    await fileMenu(page, "file.loadProject");
+    await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
+    await page.locator("#info-model-select").selectOption("0");
+    await expect.poll(async () => (await probe(page))?.morphTracks).toEqual(savedTracks);
+    await seek(page, 0); await ready(page, fullTriangles);
+    report.comparisons.restored = difference(before, await take("restored-zero"));
+    expect(report.comparisons.restored).toBeLessThan(.15);
+    await seek(page, 30); await ready(page, partialTriangles);
+    await expect(slider(page, roof)).toHaveValue("1");
+    await expect(slider(page, material)).toHaveValue("1");
+    report.states.restored = await probe(page);
+    await take("restored-morph-key-30");
+    report.validation = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());
+    expect(report.validation.count).toBe(0);
+    expect(report.shaderResponses.filter(response => /text\/html/i.test(response.contentType))).toEqual([]);
+    expect(report.shaderRequestFailures).toEqual([]);
+    expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
+  } finally {
+    mkdirSync(testInfo.outputDir, { recursive: true });
+    writeFileSync(testInfo.outputPath("report.json"), JSON.stringify(report, null, 2));
+    if (page && !page.isClosed()) await probe(page, "disposeSkyMorphProbe").catch(() => undefined);
+    await launched.close();
+  }
+});

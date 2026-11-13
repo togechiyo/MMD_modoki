@@ -41,6 +41,7 @@ const diffuseSection = "\n" + original.slice(start, original.indexOf("#ifdef SPE
 const mmd = MmdPluginMaterial.prototype.getCustomCode("fragment") ?? {};
 const oldSky = { [MMD_RADIANCE_SKY_FINAL_DIFFUSE_PATTERN]: MMD_RADIANCE_SKY_FINAL_DIFFUSE_PATCH };
 const ambient = MMD_RADIANCE_SKY_AMBIENT_CUSTOM_CODE;
+const stageStandard = readFileSync(new URL("../scene/shaders/builtin-toon/stage_standard.wgsl", import.meta.url), "utf8");
 
 // The diffuse math is component-wise. Execute one channel of the actual shader,
 // including its helper bodies, instead of restating the composition in JS.
@@ -92,6 +93,26 @@ function diffuseChannel(code: string, opacity: number, input: Partial<Inputs> = 
 
 async function composed(defines: string[], oldFirst = true): Promise<string> {
     return preprocessed(inject(diffuseSection, [mmd, ...(oldFirst ? [oldSky, ambient] : [ambient, oldSky])]), defines);
+}
+
+function stageLighting(code: string, input: Partial<{
+    diffuse: number; ndl: number; shadow: number; isToon: number; hemi: boolean; factor: number;
+}> = {}) {
+    const values = { diffuse: 0.8, ndl: 1, shadow: 1, isToon: 1, hemi: false, factor: 0.25, ...input };
+    const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+    return runInNewContext(shaderFunction(MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL, "rcSkyAmbientDarkenDiffuse")
+        + "\n" + scalarStatements(code) + "\n({ diffuse: diffuseBase, base: rcSkyAmbientBase, hemi: rcSkyAmbientIsHemi,"
+        + " attenuated: rcSkyAmbientDarkenDiffuse(diffuseBase, rcSkyAmbientBase, factor, 0) });", {
+        diffuseBase: 0, rcSkyAmbientBase: 0, rcSkyAmbientIsHemi: values.hemi, factor: values.factor,
+        info: { diffuse: values.diffuse, ndl: values.ndl, isToon: values.isToon }, shadow: values.shadow, toonNdl: values.ndl,
+        uniforms: { toonTextureAdditiveColor: { rgb: 0.4, a: 0 } }, toonSampler: 0,
+        textureLoad: () => ({ rgb: 0.7 }), vec2i: () => 0, vec3f: (value: number) => value,
+        clamp, max: Math.max, mix: (a: number, b: number, amount: number) => a * (1 - amount) + b * amount,
+        select: (a: number, b: number, condition: boolean) => condition ? b : a,
+        smoothstep: (low: number, high: number, value: number) => {
+            const t = clamp((value - low) / (high - low), 0, 1); return t * t * (3 - 2 * t);
+        },
+    }) as { diffuse: number; base: number; hemi: boolean; attenuated: number };
 }
 
 describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", () => {
@@ -203,6 +224,51 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
             select: (a: number, b: number, condition: boolean) => condition ? b : a,
         }) as number;
         expect(result).toBeCloseTo((0.8 + 0.3) * 0.4, 12);
+    });
+
+    it("keeps Stage Standard lighting unchanged while attenuating only its auxiliary floor", async () => {
+        const native = await preprocessed(inject(stageStandard, [ambient]), ["TOON_TEXTURE_COLOR"]);
+        const patched = await preprocessed(inject(stageStandard, [ambient]), ["TOON_TEXTURE_COLOR", "RC_SKY_AMBIENT"]);
+        expect(native).not.toContain("rcSkyAmbientBase");
+        for (const ndl of [-0.7, 0, 0.4, 1]) for (const shadow of [0, 0.35, 1]) {
+            const input = { ndl, shadow }, before = stageLighting(native, input), after = stageLighting(patched, input);
+            expect(after.diffuse).toBeCloseTo(before.diffuse, 12);
+            expect(after.base).toBeGreaterThanOrEqual(0);
+            expect(after.base).toBeLessThanOrEqual(after.diffuse + 1e-12);
+        }
+        const lit = stageLighting(patched), shadowed = stageLighting(patched, { shadow: 0 });
+        expect(lit.diffuse).toBeCloseTo(0.8, 12);
+        expect(shadowed.diffuse).toBeCloseTo(0.32, 12);
+        expect(lit.base).toBeCloseTo(0.32, 12);
+        expect(shadowed.base).toBeCloseTo(0.32, 12);
+        expect(lit.attenuated).toBeCloseTo(0.56, 12);
+        expect(shadowed.attenuated).toBeCloseTo(0.08, 12);
+        expect(lit.attenuated - shadowed.attenuated).toBeCloseTo(lit.diffuse - shadowed.diffuse, 12);
+    });
+
+    it("captures Stage Standard hemispheric light in full and leaves non-Toon direct light alone", async () => {
+        const code = await preprocessed(inject(stageStandard, [ambient]), ["TOON_TEXTURE_COLOR", "RC_SKY_AMBIENT"]);
+        for (const isToon of [0, 1]) {
+            const hemi = stageLighting(code, { isToon, hemi: true, shadow: 0.4 });
+            expect(hemi.base).toBeCloseTo(hemi.diffuse, 12);
+            expect(hemi.attenuated).toBeCloseTo(hemi.diffuse * 0.25, 12);
+            expect(hemi.hemi).toBe(false);
+        }
+        const direct = stageLighting(code, { isToon: 0, shadow: 0.4 });
+        expect(direct.diffuse).toBeCloseTo(0.32, 12);
+        expect(direct.base).toBe(0);
+        expect(direct.attenuated).toBe(direct.diffuse);
+    });
+
+    it("captures each repeated Stage Standard light once without retaining the hemispheric flag", async () => {
+        const source = [0, 0.8, 0.3].map(energy => `{ info.diffuse = ${energy};\n${stageStandard}\n}`).join("\n");
+        const code = await preprocessed(inject(source, [ambient]), ["TOON_TEXTURE_COLOR", "RC_SKY_AMBIENT"]);
+        // The first hemispheric light has no energy. The following lights are directional.
+        const result = stageLighting(code, { hemi: true });
+        expect(result.diffuse).toBeCloseTo(1.1, 12);
+        expect(result.base).toBeCloseTo(1.1 * 0.4, 12);
+        expect(result.attenuated).toBeCloseTo(0.77, 12);
+        expect(result.hemi).toBe(false);
     });
 
     it("treats unsupported downward directions as dark while invalid probes and bounds stay neutral", async () => {

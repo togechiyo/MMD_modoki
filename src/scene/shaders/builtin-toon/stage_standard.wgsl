@@ -16,7 +16,14 @@ let surface=mix(shadowColor,vec3f(1.0),formLight*visibility);
 // Main form lighting still uses the nonnegative ndl above.
 let secondaryAngle=clamp(info.ndl,-1.0,1.0);
 let secondaryShade=mix(0.03,0.08,visibility)*(1.0-smoothstep(-1.0,0.85,secondaryAngle));
-diffuseBase+=info.diffuse*mix(vec3f(visibility),surface*(1.0-secondaryShade),info.isToon);
+let stageContribution=info.diffuse*mix(vec3f(visibility),surface*(1.0-secondaryShade),info.isToon);
+diffuseBase+=stageContribution;
+#ifdef RC_SKY_AMBIENT
+// Keep Stage's directional contrast; only its shadow-color floor is auxiliary
+// light. Hemispheric lighting contributes entirely to that auxiliary base.
+rcSkyAmbientBase+=select(info.diffuse*shadowColor*(1.0-secondaryShade)*info.isToon,stageContribution,rcSkyAmbientIsHemi);
+rcSkyAmbientIsHemi=false;
+#endif
 }
 #else
 diffuseBase+=mix(info.diffuse*shadow,toonNdl*info.diffuse,info.isToon);

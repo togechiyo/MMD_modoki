@@ -1,6 +1,6 @@
 # Stage Standard 背景材質プリセット
 
-更新日: 2026-09-07
+更新日: 2026-11-13
 
 ## 目的・使い方
 
@@ -46,6 +46,8 @@ ToonなしではStage Standard専用fallbackを使ってMMDの照明経路を有
 他のプリセットのfallbackや影色は変更しない。
 
 ## 実装・一次情報
+
+2026-11-13、所有者指定でSky Ambient RCの受け手へ追加した。静的モデルの対応する不透明材質に限り、Stage Standardの影色の下地をSky Ambientで遮蔽する。通常の方向光・落ち影・副陰影と、エフェクトOFF時の描画は維持する。動的モデルは引き続き対象外で、モーフ・各骨最大1キーの固定配置は許可する。詳細と検証は[Sky Ambient実装メモ](./sky-ambient-rc-implementation-2026-11-08.md#2026-11-13-stage-standardへの対応)を参照。
 
 - `src/scene/shaders/builtin-toon/stage_standard.wgsl`: 受光曲線と影色の合成（2026-09-12に旧`wgsl/`から移動）。
 - `src/scene/material-shader-service.ts`: 元材質の復元、マット化、Toonなしの基準色。

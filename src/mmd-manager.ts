@@ -200,6 +200,7 @@ import { isRcSkyAmbientStaticModel } from "./render/rc-sky-ambient-casters";
 import { normalizeRcSkyOcclusionSettings, cloneRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "./render/rc-sky-occlusion-settings";
 import { RcDiffuseGiController } from "./render/rc-diffuse-gi-controller";
 import { isRcDiffuseGiPresetEligible } from "./render/rc-diffuse-gi-material-eligibility";
+import { isRcSkyAmbientPresetEligible } from "./render/rc-sky-ambient-material-eligibility";
 import { normalizeRcDiffuseGiSettings, cloneRcDiffuseGiSettings, type RcDiffuseGiSettings } from "./render/rc-diffuse-gi-settings";
 import { isRcSceneEffectId, withRcSceneEffectStackIndex, type RcSceneEffectId } from "./editor/rc-scene-effect-stack";
 import {
@@ -13245,9 +13246,9 @@ ${beforeFogAppendBlock}
                 return material instanceof MmdStandardMaterial && !material.disableLighting && material.alpha >= 0.99
                     && !material.needAlphaTesting() && !material.needAlphaBlending()
                     && !material.diffuseFresnelParameters?.isEnabled && !material.lightmapTexture
-                    && (preset === "wgsl-mmd-standard" || preset === "wgsl-light-and-shadow" || preset === "wgsl-accessory-toon")
-                    && !MmdManager.externalWgslToonFragmentByMaterial.has(material)
-                    && !MmdManager.presetWgslToonFragmentByMaterial.has(material);
+                    && isRcSkyAmbientPresetEligible({ preset,
+                        hasExternalShader: MmdManager.externalWgslToonFragmentByMaterial.has(material),
+                        hasPresetShader: MmdManager.presetWgslToonFragmentByMaterial.has(material) });
             }, () => this.needsRcSkyAmbientResources(), mesh => this.acceptsRcSkyAmbientMesh(mesh));
     }
 

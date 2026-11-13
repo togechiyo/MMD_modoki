@@ -66,7 +66,7 @@ Fはfill〜1に収まり、既定の完全遮蔽時は0.05。開放された上�
 
 ## 対象と負荷
 
-受け手はWGSLの通常MMD、Light and Shadow、Accessory Toonの不透明材質。alpha test/blend、Full Light等の別preset、PBR、外部の独自shader、Fresnel、lightmapは今回の対象外。PrePass、複数・rig camera、scene custom render target経路では休止する。
+受け手はWGSLの通常MMD、Light and Shadow、Stage Standard、Accessory Toonの不透明材質。alpha test/blend、Full Light等の別preset、PBR、外部の独自shader、Fresnel、lightmapは今回の対象外。PrePass、複数・rig camera、scene custom render target経路では休止する。
 
 遮蔽物・受け手には主に静的なステージを使う。2026-11-13の所有者指定で、PMX/PMDは次のいずれかを持つと両方から暫定除外する。以前の「動的モデルは受け手専用」という扱いは現行方針ではない。
 
@@ -261,11 +261,24 @@ controllerの対象選別と自動範囲、材質pluginの描画ごとのbinding
 - 共有材質の静止mesh→動的mesh→静止meshのbinding、手動範囲で対象0、初期化待ち取消と復帰はunitで確認。page error / console error / GPU validationは0件。
 - 証拠はignoredな `artifacts/e2e/sky-static-receivers/`。今回はPNGまで確認し、WebMと元の人物モデルでの見え方は未確認。
 
+### 2026-11-13: Stage Standardへの対応
+
+所有者指定でStage Standardも受け手へ追加した。独自のToon fragmentを持つため、既存の共通Toon用hookでは補助光を捕捉できない。Stage Standard内で影色の下地 `info.diffuse × shadowColor × (1 - secondaryShade) × info.isToon` を補助光として渡し、半球光は従来どおり実際の寄与全体を渡す。Stageの受光曲線・落ち影・副陰影による方向光の差を保ち、最後の拡散光合成でSky Ambientの遮蔽を適用する。OFF時のStage Standardの計算結果は変えない。
+
+既知のStage Standardだけに独自fragmentの例外を設け、外部shaderや他の特殊presetは対象外のままとする。動的モデルの除外と、モーフ・各骨1キーの固定配置の許可は維持する。保存形式や既定値は変更しない。
+
+- 全unit248ファイル1,649件、lint、critical型検査が成功。通常typecheckの診断は既存と同じ548件、critical TS2304 / TS2552は0件。
+- 自作stageの実Electron/WebGPU GUI E2Eが成功。Stage Standardを全材質へ割り当て、空の明るさ0のSky ONで庇下ROI平均が95.33→42.67、開放ROIは95.33のまま。空の明るさ2の加算も確認した。
+- 濃度0と未追加基準、濃度を戻した状態、Semi Matte HighlightのSky ON/OFF、Stage Standardへの復帰、Classic同士の基準比較、FrameGraphへの復帰はそれぞれPNG差0。GUI保存・読込後もStage Standardの指定と陰影を維持した。
+- 実際のStage WGSLを使うunitで、元の光の寄与を保つこと、補助光だけの減衰、半球光・非Toon光の扱い、複数lightの捕捉を確認。実機のpage error / console error / GPU validationは0件。
+- 証拠はignoredな `artifacts/e2e/sky-stage-standard/` と `artifacts/verification/sky-stage-standard/typecheck.log`。今回はPNGまで確認し、WebMと第三者stageの見え方は未確認。
+
 ## 主な実装
 
 - `src/render/rc-sky-ambient-controller.ts`: field、対象選別、準備・更新・破棄。
 - `src/render/mmd-radiance-sky-ambient-*.ts`: 専用binding、共通Toon/半球光の補助光捕捉、遮蔽と任意の空照明加算。
 - `src/render/rc-sky-ambient-settings.ts` / `rc-sky-ambient-casters.ts`: 保存値・静的対象の判定。
+- `src/render/rc-sky-ambient-material-eligibility.ts`: 既知の対応presetと独自shaderの選別。
 - `src/ui/rc-sky-ambient-settings-panel.ts` / `src/actions/rc-sky-ambient-command.ts`: 操作と履歴。
 - `src/mmd-manager.ts`: scene設定、キー、capture、材質・モデル条件。
 - 性能ログに `rcSkyAmbientPrepare` / `rcSkyAmbientSource` / `rcSkyAmbientFieldSubmit` を追加。

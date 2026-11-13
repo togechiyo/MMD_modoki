@@ -4,7 +4,7 @@ status: decision
 priority: high
 scope: rendering/shadows
 confidence: high
-last_verified: 2026-11-11
+last_verified: 2026-11-13
 evidence:
   - project-owner-directive
   - repeated-owner-directive
@@ -16,6 +16,7 @@ source_docs:
   - ../../docs/framegraph-shadow-migration-investigation-2026-08-22.md
   - ../../docs/custom-shadow-system-concept-2026-08-22.md
   - ../../docs/csm-wall-band-investigation-2026-11-11.md
+  - ../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md
 superseded_by: null
 decision_owner: project-owner
 decision: accepted-with-constraints
@@ -37,6 +38,10 @@ ownership など、PMX、accessory、背景、effectへ横断的に影響する�
 
 2026-11-11、影距離終端の段差の調査結果と距離fade案を提示した後、所有者は「では修正のほどお願い」と実装を依頼した。
 この終端補正は許可された範囲として進める。既定の影距離、bias、filter、cascade数を変更する包括的な許可には広げない。
+
+2026-11-13、所有者は残存する壁の白帯について「まずブレンド幅とかいろいろためしてみる」と比較を指定した。
+同時に `bias` と `normalBias` は影響範囲が大きいため触らないと明示した。今回の比較では両値をbaselineに固定し、
+blend幅や関連設定を一つずつ変える。以前のbias変更診断を、本体のbias変更や今回の再試験の許可に使わない。
 
 ## 避けること
 

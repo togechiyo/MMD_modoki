@@ -5,8 +5,8 @@
 ## 調査の結論
 
 所有者の壁面の白帯は残存。上端影抜けは解消済み、RC2効果OFFでも帯が残り、元sceneの半影ON/OFF差は未確認。
-今回は資料と使用中のBabylon.js **9.2.0** を照合した。アプリ本体・設定値は変更せず、新しい描画試験も実施していない。
-前日の実機比較は[壁面調査](./csm-wall-band-investigation-2026-11-11.md)を参照する。
+資料と使用中のBabylon.js **9.2.0** を照合し、後続依頼でbias値を固定したブレンド幅比較を実施した。アプリ本体の既定設定は変更していない。
+前日の実機比較は[壁面調査](./csm-wall-band-investigation-2026-11-11.md)、今回の結果は末尾の「固定biasでの比較」を参照する。
 
 公式資料には「blendを大きくすればよい」という一律の推奨はない。
 近い公式報告では、blend先のcascadeの深度範囲とdepth clampの相互作用が問題になっている。
@@ -73,12 +73,97 @@
 
 ## 次の比較の優先順
 
-これは資料と既存結果からの調査案であり、設定変更の採用・実装ではない。
+資料と既存結果からの調査案。後続の所有者依頼でblend幅等の比較を進めることになったが、`bias` / `normalBias` は変更しないという制約が明示された。既定設定の採用変更とは区別する。
 
 1. Standard対照でcascade色分けと実行列を使い、白帯が中間split・blend帯・影距離終端のどれに一致するかを特定する。次mapのUVだけでなく深度範囲も記録する。
 2. 影を実際に受ける壁でblendを0 / 0.02 / 0.05 / 現値に変え、幅と位置の変化を見る。前日の明るいPCSS壁だけではこの検証にならない。
 3. 半影OFFだけ `depthClamp=false` を単独比較。次に元へ戻して `stabilizeCascades=false` を単独比較する。auto depthや距離を同時に変えない。
-4. map間で同じ受光点の影判定が違う場合、bias / normalBiasと深度範囲を調べる。模様が消えるだけでなく、壁・床の接地影や隙間も確認する。
+4. map間で同じ受光点の影判定が違う場合、深度範囲と現在のbias / normalBiasの適用を調べる。両bias値は固定し、模様が消えるだけでなく壁・床の接地影や隙間も確認する。
 5. 両mapの有効範囲と影判定が妥当な場合に、通常MMDのToon後blendを対照にする。Standard/PBRや面の向きの陰影、設定距離fadeを混ぜて変更しない。
 
-資料調査の検証はリンク・使用中sourceとの照合・`git diff --check`。描画コード変更がないためlint/unit/E2Eは再実行していない。
+資料調査段階ではリンク・使用中sourceとの照合・`git diff --check`を実施。後続の描画比較は以下。
+
+## 固定biasでの比較（2026-11-13）
+
+所有者の「まずブレンド幅とかいろいろためしてみる」「biasとnormalBiasはいじりたくない」に従い、
+`bias=0.0005` / `normalBias=0.01` を全条件で固定した。変更を拒否するguardと描画後の実値assertを診断へ追加した。
+本体の既定値や保存形式は変更していない。
+
+### 条件と測定
+
+- 自作 `shadow-stage-wide.pmx` の同じ壁・カメラ・照明、WebGPU / FrameGraph / Babylon 9.2.0、map8192・3cascade・実texture type2。
+- 幅0 / 0.02 / 0.05 / 0.1 / 0.2 / 0.3を比較。Noneだけ既定幅0.1で `depthClamp=false`、元へ戻して `stabilizeCascades=false` も単独比較。auto depth、lambda、距離は各filterの既定を維持。
+- 各条件でMMD / Standard対照、影ON/OFFの同一pixelのRGB平均を取得。最後にbaselineを再撮影し、測定pixelの差が0であることを確認。
+- 前回のPCSSは影のない面だったため、自作の梁（8×50×1800、中心-40/220/800）を追加。壁の高さ50/75/100で投影影、高さ30/125で明部を測定する。高さ75を影の内部の主対照とする。
+- 各split前後35%の固定窓を用いる。`u=(depth-split)/cascade長` として、左plateau `u<-.3`、右plateau `u>.05`、評価域 `-.3<=u<=.05` のpixel重複を除去。左右中央値から補間した値に対する残差と影ON/OFF差を分ける。影端のmaxStepだけでは品質を順位付けしない。
+- caster数、split、描画後の全設定、影ON/OFF対照の状態を検証。画面外のPCSS第1境界は未測定と明記。projectionのUV/clip Z範囲も記録するが、範囲内判定はPCSSの周辺sampleの有効性保証ではない。
+
+### 梁あり：投影影の維持と、明部の自己影
+
+Noneの両境界、PCSSの第2境界では、すべての幅で影内部の明暗残差は0。
+MMDの影による明度低下は6.6667/255、StandardはNoneで70.3333/255・PCSSで69.3333/255を維持した。
+元sceneの白帯はこの投影影内部では再現していないため、幅の優劣や元sceneの修正済みという判断には使わない。
+
+Noneの高さ30には余分な暗化が残り、幅の増加は材質・境界によって異なる結果になった。
+表は評価域の平均暗化（RGB平均の8bit階調、第1 / 第2境界）。
+
+| 条件 | MMD | Standard |
+| --- | --- | --- |
+| 既定幅0.1 | 0.540 / 0.156 | 0.563 / 0.117 |
+| 幅0.3 | 0.460 / 0.097 | 0.779 / 0.053 |
+| depthClamp OFF | 0 / 0 | 0 / 0 |
+| stabilize OFF | 0.142 / 0.154 | 0.078 / 0.021 |
+
+高さ125の暗化は全条件0。PCSSの明部30/125も全条件0。
+PCSSは幅0.2で実blend内のnext UV範囲外が高さごと27点、幅0.3で62点あるが、この条件で影欠損は発生しなかった。
+UV範囲外の数だけで原因を確定しない。split後の記録のcurrent/nextは境界両側の2枚を表し、そのpixelで使うactive cascadeとは限らない。
+
+### 梁なし：自己影模様の比較
+
+全高さ・両境界の1738 unique測定点を同じ重みで集計。表は影OFFからのRGB平均低下量の **平均 / P95 / 最大**（8bit階調）。
+材質間の濃さではなく、同じ材質の条件差を見る。平均は暗化の広がり、P95・最大は少数の強い模様を補足する。
+
+| 条件 | MMD | Standard |
+| --- | --- | --- |
+| 幅0 | 0.374 / 3.333 / 6.667 | 0.809 / 5.000 / 37.333 |
+| 幅0.02 | 0.368 / 3.333 / 6.667 | 0.818 / 5.667 / 37.333 |
+| 幅0.05 | 0.358 / 3.333 / 6.667 | 0.848 / 5.667 / 37.333 |
+| 幅0.1（既定） | 0.350 / 3.000 / 6.667 | 0.817 / 5.667 / 37.333 |
+| 幅0.2 | 0.322 / 2.333 / 6.667 | 0.808 / 5.667 / 37.333 |
+| 幅0.3 | 0.292 / 2.333 / 6.667 | 0.810 / 5.000 / 37.333 |
+| depthClamp OFF、幅0.1 | 0.004 / 0 / 2.000 | 0.026 / 0 / 4.333 |
+| stabilize OFF、幅0.1 | 0.084 / 0 / 6.667 | 0.053 / 0 / 10.000 |
+
+depthClamp OFFは第1境界の測定点の暗化を解消したが、第2境界にMMD5点・Standard22点の暗化が残る。
+画像でも模様の大幅な減少を確認した。全体の完全解消とはしない。
+
+### 判断と残る確認
+
+幅を小さくする案も大きくする案も、一律の改善は確認できない。`depthClamp=false` は固定bias値のまま自己影模様を抑え、投影影を保った比較候補になった。
+ただしdepthClampはcascadeの深度範囲を変えるため、bias値が同じでもworld座標上の実効補正量は変わり得る。単なるblend方式の差とは解釈しない。
+`stabilize=false` は模様を減らすが残存し、カメラ移動時の揺れは今回未検証。
+元sceneの白帯と自己影模様の同一性、他の光角度・接地影・カメラ移動・出力への影響を確認する前に既定値へ採用しない。
+
+### 再実行と検証記録
+
+```powershell
+$env:MMD_CSM_BLEND_INVESTIGATION='1'
+$env:MMD_CSM_BLEND_OCCLUDER='beam'
+$env:MMD_CSM_BLEND_VALUES='[0,0.02,0.05,0.1,0.2,0.3]'
+$env:MMD_CSM_BLEND_OVERRIDES='{}'
+$env:MMD_CSM_BLEND_VARIANTS='1'
+npm.cmd run test:e2e -- csm-wall-blend-investigation.spec.mjs
+
+$env:MMD_CSM_BLEND_OCCLUDER='none'
+npm.cmd run test:e2e -- csm-wall-blend-investigation.spec.mjs --grep 'penumbra=false'
+```
+
+GPUを利用できるローカル環境で直列実行し、実行中のtracked file編集を止めた。
+
+- 梁ありrun `1794540814172`：2 passed、None20条件 / PCSS16条件。
+- 梁なしrun `1794540976700`：1 passed、None20条件。
+- 各条件に影ON/OFF画像とJSONを保存。全runでrenderer / console / WebGPU validation error 0。
+- baseline再撮影は梁ありNone各材質1738点、PCSS1245点、梁なしNone1738点でshadow / clear / 比率差0。
+- 予備runの失敗は、MMDの実際の影の比率0.9523を固定閾値0.95で棄却した診断判定と、約3e-14のcamera座標丸め差を完全一致で比較したassert。アプリ回帰ではない。前者はRGB平均2階調超の測定可能性確認、後者は1e-8精度比較へ訂正し、上記の最終runは成功した。
+- 結果は `artifacts/e2e/csm-wall-blend/<run>/`（ignored）。本体TypeScript変更がないためunit/typecheck/smokeは対象外。
+- 変更したMJSの `node --check`、`npm.cmd run lint`、insights validator、`git diff --check` は成功。

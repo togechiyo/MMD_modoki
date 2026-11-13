@@ -55,6 +55,7 @@ MMD Standardの通常陰影ではraw shadowをToonマスクにした後にfade�
 屋根なしの追加比較ではNoneの自己影模様がMMD/Standard両方・blend外にもあり、幅0/0.1/0.2では消えず、診断内のbias0.0005→0.001で消えた。元sceneの同一原因や全体bias変更の採用は未確定。
 PCSSの無影面、画面外の境界はblend品質の検証には使わない。次cascadeのUV範囲外がある条件も別途残る。
 11/13の[公式資料照合](../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md)では、大きなblendとdepth clampによる誤影の報告を確認したが、関連PR #16248は9.2.0へ導入済み。blend増量やライブラリ更新だけを解決策としない。現Noneのauto depth / stabilize併用は公式推奨と異なるため、原因の断定ではなく単独比較候補として扱う。
+同日の固定bias比較（幅0/0.02/0.05/0.1/0.2/0.3）では、梁の投影影内部に白帯を再現せず、幅変更だけの改善根拠は得られなかった。Noneの明部の自己影模様はdepthClamp OFFで大幅に減ったが、梁なしでは少数点が残る。数値biasが同じでもdepth範囲変更で実効補正量は変わり得るため、元sceneとの同一原因や既定値変更の採用へ広げない。所有者の指定により以後bias / normalBiasを固定して比較する。
 
 ## 再確認条件
 

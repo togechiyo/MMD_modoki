@@ -17,7 +17,7 @@ export type RcSkyAmbientDiagnostics = {
     triangleCount: number; fieldRevision: number; supportedMaterialCount: number;
 };
 
-/** Sky attenuation and optional fill. Saved values and caster policy belong to the manager. */
+/** Sky attenuation and optional fill. Saved values and static-model policy belong to the manager. */
 export class RcSkyAmbientController {
     private field: RadianceSkyVisibilityField | null = null;
     private pending: RadianceSkyVisibilityField | null = null;
@@ -43,7 +43,7 @@ export class RcSkyAmbientController {
         private readonly backendReady: () => boolean,
         private readonly acceptsMaterial: (material: Material) => boolean,
         private readonly keepResourcesWhileOff: () => boolean = () => false,
-        private readonly acceptsCaster: (mesh: Mesh) => boolean = () => true) {
+        private readonly acceptsMesh: (mesh: Mesh) => boolean = () => true) {
         const beforeRender = scene.onBeforeRenderObservable.add(() => {
             if (this.unsupportedReason() || !this.settings().enabled || !this.backendReady()) this.view = null;
         });
@@ -60,12 +60,13 @@ export class RcSkyAmbientController {
             effectiveVolume: volume ? scaleSkyVisibilityVolume(volume, settings.rangeScale) : null,
             quality: settings.quality, probeGrid: getSkyVisibilityProbeGrid(settings.quality),
             triangleCount: this.field?.source.bvh.triangleCount ?? 0, fieldRevision: this.fieldRevision,
-            supportedMaterialCount: this.scene.materials.filter(this.acceptsMaterial).length };
+            supportedMaterialCount: new Set(this.receivers().flatMap(mesh => (mesh.subMeshes ?? [])
+                .map(sub => sub.getMaterial()).filter(material => material && this.acceptsMaterial(material)))).size };
     }
 
     private receivers(): Mesh[] {
         return this.scene.meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh && !isRadianceDiagnosticMesh(mesh)
-            && mesh.isEnabled() && mesh.isVisible && mesh.visibility > 0 && (mesh.subMeshes ?? []).some(sub => {
+            && mesh.isEnabled() && mesh.isVisible && mesh.visibility > 0 && this.acceptsMesh(mesh) && (mesh.subMeshes ?? []).some(sub => {
                 const material = sub.getMaterial(); return material && this.acceptsMaterial(material);
             }));
     }
@@ -73,7 +74,7 @@ export class RcSkyAmbientController {
     /** Fit visible receivers once; offscreen blockers do not enlarge the grid. */
     public fitVolume(meshes = this.receivers()): RcSkyAmbientVolume | null {
         // Sky also affects black receivers; GI alone filters by reflectance.
-        return fitRadianceReceiverVolume(meshes, (_mesh, material) => this.acceptsMaterial(material));
+        return fitRadianceReceiverVolume(meshes, (mesh, material) => this.acceptsMesh(mesh) && this.acceptsMaterial(material));
     }
 
     public settingsChanged(): void {
@@ -94,6 +95,8 @@ export class RcSkyAmbientController {
         if (membership !== this.receiverMembership || requestedVolumeKey !== this.requestedVolumeKey) {
             this.automaticVolume = null; this.receiverMembership = membership; this.requestedVolumeKey = requestedVolumeKey;
         }
+        // A saved manual volume must not keep an all-dynamic scene preparing.
+        if (!receivers.length) return null;
         const base = settings.volume ?? (this.automaticVolume ??= this.fitVolume(receivers));
         return base ? scaleSkyVisibilityVolume(base, settings.rangeScale) : null;
     }
@@ -120,9 +123,13 @@ export class RcSkyAmbientController {
         if (!this.supported()) return true;
         this.synchronizeQuality();
         const volume = this.resolveVolume();
-        if (!volume) return true;
+        if (!volume) {
+            if (this.pending) this.release();
+            this.view = null; this.frameId = -1; return true;
+        }
         if (!this.unregister) this.unregister = registerMmdRadianceSkyAmbient(this.scene,
-            () => this.backendReady() && this.settings().enabled ? this.view : null, this.acceptsMaterial);
+            () => this.backendReady() && this.settings().enabled ? this.view : null, this.acceptsMaterial,
+            mesh => mesh instanceof Mesh && this.acceptsMesh(mesh));
         if (!this.field && !this.initialization) {
             const initialization = this.allocate(volume);
             this.initialization = initialization;
@@ -152,7 +159,8 @@ export class RcSkyAmbientController {
         if (unsupported) { this.view = null; this.status = "unsupported"; this.reason = unsupported; this.frameId = -1; return; }
         const volume = this.resolveVolume();
         if (!volume) {
-            this.view = null; this.status = "preparing"; this.reason = "対象の通常MMD材質を読み込んでください"; return;
+            if (this.pending) this.release();
+            this.view = null; this.status = "ready"; this.reason = "対象の固定モデルがありません"; this.frameId = -1; return;
         }
         if (!this.field) {
             if (!this.pending && this.status !== "error") void this.prewarm();
@@ -164,10 +172,10 @@ export class RcSkyAmbientController {
         const field = this.field, frameId = this.scene.getFrameId();
         if (this.frameId === frameId) return;
         try {
-            // Receiver-only models need no CPU skinning or skeleton preparation
-            // for this field. Static PMX casters may still have skeletons.
+            // Dynamic models neither occlude nor receive this effect. Static PMX
+            // models may still have skeletons for morphs and fixed placement keys.
             const skeletons = new Set(this.scene.meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh
-                && mesh.isEnabled() && this.acceptsCaster(mesh)).flatMap(mesh => mesh.skeleton ? [mesh.skeleton] : []));
+                && mesh.isEnabled() && this.acceptsMesh(mesh)).flatMap(mesh => mesh.skeleton ? [mesh.skeleton] : []));
             for (const skeleton of skeletons) skeleton.prepare(true);
             const sourceStart = timing ? performance.now() : 0;
             try { field.source.update(); }
@@ -218,7 +226,7 @@ export class RcSkyAmbientController {
         let candidate: RadianceSkyVisibilityField | null = null;
         try {
             candidate = new RadianceSkyVisibilityField(this.scene, { volume, diagnostic: false, opaqueOccludersOnly: true,
-                materialIrradiance: true, acceptsMesh: this.acceptsCaster, quality: this.settings().quality });
+                materialIrradiance: true, acceptsMesh: this.acceptsMesh, quality: this.settings().quality });
             this.pending = candidate;
             const cancelled = new Promise<void>(resolve => { this.cancelPending = resolve; });
             // Babylon's structural build can resume after dispose while awaiting

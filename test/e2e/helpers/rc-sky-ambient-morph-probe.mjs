@@ -16,6 +16,7 @@ export function skyMorphState() {
     frame: manager.currentFrame,
     diagnostics: { ...controller.diagnostics },
     providerReady: Boolean(controller.view),
+    receiverCount: controller.receivers().length,
     runtimeAnimations: entry.model.runtimeAnimations.size,
     boneKeyCount: [...(source?.boneTracks ?? []), ...(source?.movableBoneTracks ?? [])]
       .reduce((count, track) => count + track.frameNumbers.length, 0),

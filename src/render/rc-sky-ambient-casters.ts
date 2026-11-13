@@ -19,6 +19,6 @@ export function isRcSkyAmbientStaticModel(input: {
     // stage can position several bones without becoming a moving character.
     if (animation) return !animation.boneTracks.some(track => track.frameNumbers.length > 1)
         && !animation.movableBoneTracks.some(track => track.frameNumbers.length > 1);
-    // Unknown runtime-only animation retains the conservative receiver-only path.
+    // Unknown runtime-only animation remains outside the static-model path.
     return input.animationCount === 0;
 }

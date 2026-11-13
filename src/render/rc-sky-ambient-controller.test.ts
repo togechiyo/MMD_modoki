@@ -5,6 +5,7 @@ import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { Material } from "@babylonjs/core/Materials/material";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { BoundingInfo } from "@babylonjs/core/Culling/boundingInfo";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { MmdRadianceSkyAmbientView } from "./mmd-radiance-sky-ambient-plugin";
@@ -51,7 +52,8 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-function fixture(acceptsMaterial: (material: Material) => boolean = () => true) {
+function fixture(acceptsMaterial: (material: Material) => boolean = () => true,
+    acceptsMesh: (mesh: Mesh) => boolean = () => true) {
     const engine = new NullEngine(), scene = new Scene(engine);
     engine.getCaps().supportComputeShaders = true;
     new FreeCamera("camera", Vector3.Zero(), scene);
@@ -59,9 +61,11 @@ function fixture(acceptsMaterial: (material: Material) => boolean = () => true) 
     const settings: RcSkyAmbientSettings = { ...DEFAULT_RC_SKY_AMBIENT_SETTINGS, enabled: true,
         skyBrightness: 0, rangeScale: 1, quality: "standard",
         volume: { min: [-8, 0, -8], size: 16 } };
-    const controller = new RcSkyAmbientController(scene, () => settings, () => true, acceptsMaterial);
+    const receiver = CreateBox("receiver", { size: 2 }, scene);
+    receiver.material = new StandardMaterial("receiver", scene);
+    const controller = new RcSkyAmbientController(scene, () => settings, () => true, acceptsMaterial, () => false, acceptsMesh);
     cleanup.push(() => { controller.dispose(); scene.dispose(); engine.dispose(); });
-    return { controller, settings, scene };
+    return { controller, settings, scene, receiver };
 }
 
 describe("Sky Ambient field settings lifecycle", () => {
@@ -126,6 +130,64 @@ describe("Sky Ambient field settings lifecycle", () => {
         expect(near.getBoundingInfo().boundingBox.maximum.x).toBe(1000);
     });
 
+    it("excludes moving meshes from bounds even when they share a supported material", async () => {
+        let moving = true;
+        const { controller, settings, scene, receiver } = fixture(() => true, mesh => mesh.name !== "moving" || !moving);
+        settings.volume = null;
+        const far = CreateBox("moving", { size: 2 }, scene); far.position.x = 100;
+        far.material = receiver.material;
+        await controller.prewarm(); controller.prepareFrame();
+        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
+        expect(controller.fitVolume([far, receiver])?.size).toBeCloseTo(2.4);
+        expect(controller.diagnostics.supportedMaterialCount).toBe(1);
+        moving = false; controller.settingsChanged(); controller.prepareFrame();
+        expect(controller.diagnostics.volume?.size).toBeCloseTo(122.4);
+        expect(controller.diagnostics.supportedMaterialCount).toBe(1);
+        moving = true; controller.settingsChanged(); controller.prepareFrame();
+        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
+    });
+
+    it.each([false, true])("stops receiving when every model moves and resumes after Undo (manual=%s)", async manual => {
+        let stationary = true;
+        const { controller, settings } = fixture(() => true, () => stationary);
+        if (!manual) settings.volume = null;
+        await controller.prewarm(); controller.prepareFrame();
+        const field = boundary.instances[0];
+        expect(boundary.provider?.()).not.toBeNull();
+        const updates = field.source.update.mock.calls.length;
+        stationary = false; controller.prepareFrame();
+        expect(boundary.provider?.()).toBeNull();
+        expect(controller.diagnostics).toMatchObject({ status: "ready", supportedMaterialCount: 0 });
+        expect(controller.isReadyForCapture).toBe(true);
+        await controller.prewarm();
+        expect(boundary.instances).toHaveLength(1);
+        expect(field.source.update).toHaveBeenCalledTimes(updates);
+        stationary = true; controller.prepareFrame();
+        expect(boundary.provider?.()?.field).toBe(field.irradianceField);
+        expect(controller.diagnostics.supportedMaterialCount).toBe(1);
+        expect(field.source.update).toHaveBeenCalledTimes(updates + 1);
+    });
+
+    it("cancels pending preparation when all receivers become dynamic and rebuilds after Undo", async () => {
+        let stationary = true;
+        const { controller } = fixture(() => true, () => stationary);
+        boundary.waitForBuild = true;
+        const first = controller.prewarm(), old = boundary.instances[0];
+        stationary = false;
+        await controller.prewarm(); await first;
+        expect(boundary.provider?.()).toBeNull();
+        expect(controller.isReadyForCapture).toBe(true);
+        expect(old.dispose).not.toHaveBeenCalled();
+        stationary = true;
+        const second = controller.prewarm(), current = boundary.instances[1];
+        current.finishBuild(); await second; controller.prepareFrame();
+        expect(boundary.provider?.()?.field).toBe(current.irradianceField);
+        old.finishBuild(); await Promise.resolve();
+        expect(old.dispose).toHaveBeenCalledTimes(1);
+        expect(old.graph.whenReadyAsync).not.toHaveBeenCalled();
+        expect(boundary.provider?.()?.field).toBe(current.irradianceField);
+    });
+
     it("refits when eligible material surfaces change without reading vertices on unchanged frames", async () => {
         let includeFar = false;
         const { controller, settings, scene } = fixture(material => material.name !== "far" || includeFar);
@@ -149,9 +211,7 @@ describe("Sky Ambient field settings lifecycle", () => {
     });
 
     it("keeps automatically fitted bounds stable while changing look controls on a moving receiver", async () => {
-        const { controller, settings, scene } = fixture(); settings.volume = null;
-        const mesh = CreateBox("receiver", { size: 2 }, scene);
-        mesh.material = new StandardMaterial("receiver", scene);
+        const { controller, settings, receiver: mesh } = fixture(); settings.volume = null;
         await controller.prewarm(); controller.prepareFrame();
         const base = controller.diagnostics.volume, field = boundary.instances[0];
         expect(base).not.toBeNull();

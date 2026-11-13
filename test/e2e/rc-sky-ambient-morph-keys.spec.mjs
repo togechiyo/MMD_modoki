@@ -32,6 +32,23 @@ async function ready(page, triangles) {
   }, { timeout: 45000 }).toEqual({ triangles, ready: true });
   await closeRcLighting(page);
 }
+async function noReceivers(page) {
+  await openRcLighting(page, id);
+  await expect(rcLightingInput(page, id, "Enabled")).toBeChecked();
+  await expect(rcLightingStatus(page, id)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
+  await expect.poll(async () => {
+    const state = await probe(page);
+    return { receivers: state?.receiverCount, materials: state?.diagnostics.supportedMaterialCount,
+      providerReady: state?.providerReady };
+  }, { timeout: 45000 }).toEqual({ receivers: 0, materials: 0, providerReady: false });
+  // The field is retained for Undo, so its cached triangle count is not active geometry.
+  await closeRcLighting(page);
+}
+async function skyEnabled(page, enabled) {
+  await openRcLighting(page, id); await rcLightingInput(page, id, "Enabled").setChecked(enabled);
+  await expect(rcLightingStatus(page, id)).toHaveAttribute("data-state", enabled ? "ready" : "off", { timeout: 45000 });
+  await closeRcLighting(page);
+}
 async function fileMenu(page, command) {
   await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
   await page.locator(`[data-menu-command="${command}"]`).click();
@@ -165,7 +182,7 @@ test("Sky Ambient retains stage occluders through GUI morph keys, undo and proje
 });
 
 // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
-test("Sky Ambient retains one placement key per bone and restores casters after undoing a second key", async ({}, testInfo) => {
+test("Sky Ambient retains placement keys and bypasses moving models as both casters and receivers", async ({}, testInfo) => {
   test.setTimeout(180000);
   const launched = await launchMmdModoki(root);
   const report = { errors: [], consoleErrors: [], captures: {}, states: {}, comparisons: {} };
@@ -235,16 +252,24 @@ test("Sky Ambient retains one placement key per bone and restores casters after 
 
     await seek(page, 30); await setBoneX("庇移動", 6); await registerBone();
     await expect.poll(() => boneFrames("庇移動")).toEqual([12, 30]);
-    await ready(page, 0);
+    await noReceivers(page);
     report.states.animated = await probe(page);
-    await take("second-bone-key-excludes-moving-caster");
+    await take("second-bone-key-excludes-moving-model");
     await history(page, "undo");
     await expect.poll(() => boneFrames("庇移動")).toEqual([12]);
     await ready(page, fullTriangles);
     report.states.undo = await probe(page);
+    expect(report.states.undo.receiverCount).toBeGreaterThan(0);
+    expect(report.states.undo.diagnostics.supportedMaterialCount).toBeGreaterThan(0);
     await seek(page, 0); await ready(page, fullTriangles);
-    report.comparisons.undo = difference(placement, await take("undo-second-key"));
-    expect(report.comparisons.undo).toBeLessThan(.15);
+    const undoRecovered = await take("undo-second-key");
+    report.comparisons.undo = difference(placement, undoRecovered);
+    // Restoring receiver membership can refit the automatic volume. Verify the
+    // recovered contribution at that same pose/grid rather than exact old samples.
+    await skyEnabled(page, false);
+    report.comparisons.undoSkyContribution = difference(undoRecovered, await take("undo-second-key-sky-off"));
+    expect(report.comparisons.undoSkyContribution).toBeGreaterThan(1);
+    await skyEnabled(page, true); await ready(page, fullTriangles);
 
     const savedTracks = (await probe(page)).boneTracks;
     const projectPath = join(launched.tempDir, "sky-bone-placement.json");
@@ -258,7 +283,19 @@ test("Sky Ambient retains one placement key per bone and restores casters after 
       catch (error) { if (error.code === "ENOENT" || error instanceof SyntaxError) return false; throw error; }
     }).toBe(true);
     await seek(page, 30); await setBoneX("庇移動", 6); await registerBone();
-    await ready(page, 0);
+    await noReceivers(page);
+    // A strong optional sky-light addition must also be bypassed for moving models.
+    await openRcLighting(page, id);
+    const brightness = rcLightingInput(page, id, "SkyBrightness");
+    await brightness.focus(); await brightness.press("End");
+    await expect(brightness).toHaveValue("100");
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().lighting.rcSkyAmbient.skyBrightness)).toBe(2);
+    await noReceivers(page);
+    const movingSkyOn = await take("moving-model-sky-on-with-added-light");
+    await skyEnabled(page, false);
+    report.comparisons.movingSkyBypass = difference(movingSkyOn, await take("moving-model-sky-off"));
+    expect(report.comparisons.movingSkyBypass).toBeLessThan(.1);
+    await skyEnabled(page, true); await noReceivers(page);
     await fileMenu(page, "file.loadProject");
     await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
     await page.locator("#info-model-select").selectOption("0");

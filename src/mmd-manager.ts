@@ -13223,7 +13223,7 @@ ${beforeFogAppendBlock}
             && (this.rcSkyAmbientSettingsValue.enabled || this.effectSceneTracks.canBeEnabled("rcSkyAmbient"));
     }
 
-    private acceptsRcSkyAmbientCaster(mesh: Mesh): boolean {
+    private acceptsRcSkyAmbientMesh(mesh: Mesh): boolean {
         const entry = this.sceneModels.find(model => model.mesh === mesh || model.renderMeshes.includes(mesh));
         if (entry) return isRcSkyAmbientStaticModel({
             animationCount: entry.model.runtimeAnimations.size,
@@ -13231,8 +13231,8 @@ ${beforeFogAppendBlock}
             dynamicPhysics: entry.rigidBodies.some(body => body.physicsMode > 0),
             externalParent: Boolean(entry.externalParent) || entry.externalParentKeyframes.length > 0,
         });
-        // Rigid accessories are inexpensive to update. Unclassified deforming
-        // meshes remain receivers, rather than becoming accidental dynamic casters.
+        // Keep the existing rigid-accessory path. Unclassified deforming meshes
+        // are excluded from both occlusion and receiving Sky Ambient.
         return !mesh.skeleton && !mesh.morphTargetManager;
     }
 
@@ -13248,7 +13248,7 @@ ${beforeFogAppendBlock}
                     && (preset === "wgsl-mmd-standard" || preset === "wgsl-light-and-shadow" || preset === "wgsl-accessory-toon")
                     && !MmdManager.externalWgslToonFragmentByMaterial.has(material)
                     && !MmdManager.presetWgslToonFragmentByMaterial.has(material);
-            }, () => this.needsRcSkyAmbientResources(), mesh => this.acceptsRcSkyAmbientCaster(mesh));
+            }, () => this.needsRcSkyAmbientResources(), mesh => this.acceptsRcSkyAmbientMesh(mesh));
     }
 
     public getStaticRcSkyAmbientSettings(): RcSkyAmbientSettings {

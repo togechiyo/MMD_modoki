@@ -84,6 +84,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] Sky Ambient RCを暗化優先へ改良。共通Toonの補助光だけを遮蔽して標準影の差を保持し、空照明加算は独立・既定0にする。「通常光」を撤去、濃度を主操作へ整理。庇下/開放面、GI・半球光、保存/PNG/WebMを実WebGPUで確認（[実装と検証](./sky-ambient-rc-implementation-2026-11-08.md#暗化を優先する合成への改良と検証)、2026-11-08）。
 - [x] Sky Ambient RCがモーフキー登録だけでステージ全体を遮蔽物から外す判定を修正。自作fixtureでGUI初回登録・Undo/Redo・モーフ変形・材質の部分除外・保存読込とPNGを確認。元ログのHTML shader読込エラーは未再現（[修正・制約](./sky-ambient-rc-implementation-2026-11-08.md#2026-11-13-モーフキー登録によるステージ遮蔽の消失)、2026-11-13）。
 - [x] Sky Ambient RCで初期配置用の各ボーン1キーも遮蔽物として許可。複数骨・非0フレームの単独キー、シーク、2キー目のUndo、保存復元をGUI・PNGで確認（[配置キー対応](./sky-ambient-rc-implementation-2026-11-08.md#同日追記-各ボーン1キーの配置調整)、2026-11-13）。
+- [x] 所有者指定によりSky Ambient RCの動的モデルを遮蔽物・受け手の両方から暫定除外。モーフ・各骨1キーの配置を維持し、動的モデルのSky ON/OFF画像差0（空照明加算を含む）、Undo・保存復元、共有材質の描画単位判定を回帰確認（[暫定方針・検証範囲](./sky-ambient-rc-implementation-2026-11-08.md#同日追記-動的モデルを受け手からも暫定除外)、2026-11-13）。
 - [ ] Sky Ambient RCの固定ステージ＋踊るPMXでの見た目/負荷、細かな接地陰、対象材質の追加互換を実sceneで確認する。fixtureの成功を全sceneの品質・性能保証としない。
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）

@@ -11,6 +11,7 @@ import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import type { Scene } from "@babylonjs/core/scene";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { MMD_RADIANCE_SKY_AMBIENT_CUSTOM_CODE } from "./mmd-radiance-sky-ambient-query-wgsl";
 
 export type MmdRadianceSkyAmbientView = Readonly<{
@@ -18,7 +19,8 @@ export type MmdRadianceSkyAmbientView = Readonly<{
     volume: { min: readonly [number, number, number]; size: number };
     strength: number; fill: number; skyBrightness: number; opacity: number;
 }>;
-type Registration = { provider: () => MmdRadianceSkyAmbientView | null; acceptsMaterial: (material: Material) => boolean };
+type Registration = { provider: () => MmdRadianceSkyAmbientView | null;
+    acceptsMaterial: (material: Material) => boolean; acceptsMesh: (mesh: AbstractMesh) => boolean };
 type Fallback = { field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer };
 const fallbacks = new WeakMap<Scene, Fallback>();
 const plugins = new WeakMap<MmdStandardMaterial, MmdRadianceSkyAmbientPlugin>();
@@ -71,7 +73,11 @@ class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
             && !this.material.needAlphaTesting() && !this.material.disableLighting
             && !this.material.lightmapTexture && !this.material.diffuseFresnelParameters?.isEnabled) {
             for (const registration of this.registrations) {
-                if (registration.acceptsMaterial(this.material)) view = registration.provider();
+                // Eligibility belongs to the draw, not the shared material. A moving
+                // model must not inherit a static model's live sky bindings.
+                if (registration.acceptsMaterial(this.material) && registration.acceptsMesh(subMesh.getRenderingMesh())) {
+                    view = registration.provider();
+                }
             }
         }
         if (!usableView(view)) view = null;
@@ -90,9 +96,10 @@ class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
 }
 
 /** One plugin per material. Released providers leave neutral, reattachable bindings. */
-export function registerMmdRadianceSkyAmbient(scene: Scene, provider: Registration["provider"], acceptsMaterial: Registration["acceptsMaterial"]): () => void {
+export function registerMmdRadianceSkyAmbient(scene: Scene, provider: Registration["provider"], acceptsMaterial: Registration["acceptsMaterial"],
+    acceptsMesh: Registration["acceptsMesh"] = () => true): () => void {
     if (!scene.getEngine().isWebGPU || scene.isDisposed) return () => undefined;
-    const registration = { provider, acceptsMaterial }, registered = new Map<MmdStandardMaterial, () => void>();
+    const registration = { provider, acceptsMaterial, acceptsMesh }, registered = new Map<MmdStandardMaterial, () => void>();
     let disposed = false;
     const register = (material: Material): void => {
         if (disposed || scene.isDisposed || !(material instanceof MmdStandardMaterial)

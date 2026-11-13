@@ -17,6 +17,8 @@ import { MMD_RADIANCE_SKY_AMBIENT_CUSTOM_CODE } from "./mmd-radiance-sky-ambient
 export type MmdRadianceSkyAmbientView = Readonly<{
     field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer;
     volume: { min: readonly [number, number, number]; size: number };
+    /** Nested near-to-far levels in one vertical atlas; absent for legacy manual volumes. */
+    volumes?: readonly { min: readonly [number, number, number]; size: number }[];
     strength: number; fill: number; skyBrightness: number; opacity: number;
 }>;
 type Registration = { provider: () => MmdRadianceSkyAmbientView | null;
@@ -46,8 +48,18 @@ function fallbackFor(scene: Scene): Fallback {
 
 function usableView(view: MmdRadianceSkyAmbientView | null): view is MmdRadianceSkyAmbientView {
     return view !== null && view.field.isReady() && view.nearestSurface.isReady() && Boolean(view.triangles.getBuffer())
-        && [view.volume.size, ...view.volume.min, view.strength, view.fill, view.skyBrightness, view.opacity].every(Number.isFinite)
-        && view.volume.size > 0 && (view.strength > 0 || view.skyBrightness > 0) && view.opacity > 0;
+        && [view.strength, view.fill, view.skyBrightness, view.opacity].every(Number.isFinite)
+        && (view.strength > 0 || view.skyBrightness > 0) && view.opacity > 0
+        && usableVolumes(view.volumes ?? [view.volume]);
+}
+
+function usableVolumes(volumes: NonNullable<MmdRadianceSkyAmbientView["volumes"]>): boolean {
+    return volumes.length > 0 && volumes.length <= 3 && volumes.every((volume, index) => {
+        if (![volume.size, ...volume.min].every(Number.isFinite) || volume.size <= 0) return false;
+        const inner = volumes[index - 1];
+        return !inner || (volume.size > inner.size && volume.min.every((min, axis) =>
+            min <= inner.min[axis] && min + volume.size >= inner.min[axis] + inner.size));
+    });
 }
 
 class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
@@ -64,7 +76,8 @@ class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
     }
     public override getSamplers(samplers: string[]): void { samplers.push("rcSkyAmbientField", "rcSkyAmbientNearestSurface"); }
     public override getUniforms(): { ubo: Array<{ name: string; size: number; type: string }> } {
-        return { ubo: [{ name: "rcSkyAmbientVolume", size: 4, type: "vec4" }, { name: "rcSkyAmbientControl", size: 4, type: "vec4" }] };
+        return { ubo: ["rcSkyAmbientVolume", "rcSkyAmbientVolume1", "rcSkyAmbientVolume2", "rcSkyAmbientSpatial", "rcSkyAmbientControl"]
+            .map(name => ({ name, size: 4, type: "vec4" })) };
     }
     public override hardBindForSubMesh(buffer: UniformBuffer, _scene: Scene, engine: AbstractEngine, subMesh: SubMesh): void {
         let view: MmdRadianceSkyAmbientView | null = null;
@@ -82,7 +95,13 @@ class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
         }
         if (!usableView(view)) view = null;
         const source = view ?? this.fallback;
-        buffer.updateFloat4("rcSkyAmbientVolume", ...(view?.volume.min ?? [0, 0, 0]) as [number, number, number], view?.volume.size ?? 1);
+        const volumes = view ? view.volumes ?? [view.volume] : [];
+        for (let level = 0; level < 3; level++) {
+            const volume = volumes[level];
+            buffer.updateFloat4(level === 0 ? "rcSkyAmbientVolume" : `rcSkyAmbientVolume${level}`,
+                ...(volume?.min ?? [0, 0, 0]) as [number, number, number], volume?.size ?? 1);
+        }
+        buffer.updateFloat4("rcSkyAmbientSpatial", volumes.length, 0, 0, 0);
         buffer.updateFloat4("rcSkyAmbientControl", view ? Math.min(2, view.strength) : 0,
             view ? Math.min(1, Math.max(0, view.fill)) : 0, view ? Math.min(2, Math.max(0, view.skyBrightness)) : 0,
             view ? Math.min(1, view.opacity) : 0);

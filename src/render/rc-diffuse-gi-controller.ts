@@ -9,12 +9,14 @@ import { isRadianceDiagnosticMesh } from "./radiance-diagnostic-mesh";
 import { RcDiffuseGiField } from "./rc-diffuse-gi-field";
 import { registerMmdRadianceDiffuseGi, type MmdRadianceDiffuseGiView } from "./mmd-radiance-diffuse-gi-plugin";
 import type { RcDiffuseGiSettings, RcDiffuseGiVolume } from "./rc-diffuse-gi-settings";
-import { fitRcDiffuseGiVolume, getRcDiffuseGiVolumeMembership } from "./rc-diffuse-gi-volume";
+import { fitRcDiffuseGiVolume } from "./rc-diffuse-gi-volume";
+import { createRcOriginVolumes } from "./rc-origin-volumes";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcDiffuseGiDiagnostics = {
     status: Status; reason: string | null; volume: RcDiffuseGiVolume | null;
     triangleCount: number; fieldRevision: number; supportedMaterialCount: number;
+    spatialMode: "origin" | "manual"; volumes: RcDiffuseGiVolume[];
 };
 
 /** Saved settings live in the manager; this owner contains only the current GPU generation. */
@@ -33,8 +35,6 @@ export class RcDiffuseGiController {
     private frameId = -1;
     private disposed = false;
     private unregister: (() => void) | null = null;
-    private automaticVolume: RcDiffuseGiVolume | null = null;
-    private receiverMembership = "";
     private initialization: Promise<void> | null = null;
 
     constructor(private readonly scene: Scene,
@@ -55,7 +55,9 @@ export class RcDiffuseGiController {
         const materials = new Set(this.receivers().flatMap(mesh => mesh.subMeshes.flatMap(sub => {
             const material = sub.getMaterial(); return material && this.acceptsMaterial(material) ? [material] : [];
         })));
-        return { status: this.status, reason: this.reason, volume: this.settings().volume ?? this.automaticVolume,
+        const volumes = this.resolveVolumes();
+        return { status: this.status, reason: this.reason, volume: volumes[0] ?? null, volumes,
+            spatialMode: this.settings().volume ? "manual" : "origin",
             triangleCount: this.field?.source.bvh.triangleCount ?? 0, fieldRevision: this.fieldRevision,
             supportedMaterialCount: materials.size };
     }
@@ -70,14 +72,16 @@ export class RcDiffuseGiController {
         });
     }
 
-    /** Pose geometry only; culling margins and nonreceiving submeshes do not consume probes. */
+    /** Explicit legacy/manual fit; automatic lighting uses fixed origin volumes. */
     public fitVolume(meshes = this.receivers()): RcDiffuseGiVolume | null {
         return fitRcDiffuseGiVolume(meshes, this.acceptsMaterial);
     }
 
     public settingsChanged(refitVolume = true): void {
+        // Retain the caller contract; automatic volumes no longer refit scene bounds.
+        void refitVolume;
         this.frameId = -1;
-        if (refitVolume) this.automaticVolume = null;
+        this.synchronizeLayout();
         if (!this.settings().enabled) {
             this.view = null;
             if (!this.keepResourcesWhileOff()) this.release();
@@ -85,14 +89,16 @@ export class RcDiffuseGiController {
         else if (this.status === "error") { this.release(); this.status = "preparing"; }
     }
 
-    private resolveVolume(): RcDiffuseGiVolume | null {
+    private resolveVolumes(): RcDiffuseGiVolume[] {
         const receivers = this.receivers();
-        const membership = getRcDiffuseGiVolumeMembership(receivers, this.acceptsMaterial);
-        // PMX receives geometry, materials and its enabled state in separate async steps.
-        // Also refit changed receiving surfaces, without chasing every pose or positive color edit.
-        if (membership !== this.receiverMembership) { this.automaticVolume = null; this.receiverMembership = membership; }
-        if (!receivers.length) return null;
-        return this.settings().volume ?? (this.automaticVolume ??= this.fitVolume(receivers));
+        if (!receivers.length) return [];
+        const manual = this.settings().volume;
+        return manual ? [manual] : createRcOriginVolumes();
+    }
+
+    private synchronizeLayout(): void {
+        const count = this.settings().volume ? 1 : 3;
+        if (this.field && this.field.volumeCount !== count || this.pending && this.pending.volumeCount !== count) this.release();
     }
 
     private supported(): boolean {
@@ -101,8 +107,8 @@ export class RcDiffuseGiController {
 
     /** A keyed OFF frame retains its generation so the first subsequent ON draw is synchronous. */
     public get isReadyForCapture(): boolean {
-        if (!this.settings().enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolume()) return true;
-        if (!this.field) return false;
+        if (!this.settings().enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolumes().length) return true;
+        if (!this.field || this.field.volumeCount !== (this.settings().volume ? 1 : 3)) return false;
         // A diffuse texture may finish loading while automatic rendering is paused.
         // Revisit the source during capture preparation to start/finish its readback;
         // otherwise its first ON draw could discover that work too late.
@@ -113,12 +119,13 @@ export class RcDiffuseGiController {
     public async prewarm(): Promise<boolean> {
         if (this.disposed) return false;
         if (!this.supported()) return true;
-        const volume = this.resolveVolume();
-        if (!volume) return true;
+        this.synchronizeLayout();
+        const volumes = this.resolveVolumes();
+        if (!volumes.length) return true;
         if (!this.unregister) this.unregister = registerMmdRadianceDiffuseGi(this.scene,
             () => this.backendReady() && this.settings().enabled ? this.view : null, this.acceptsMaterial);
         if (!this.field && !this.initialization) {
-            const initialization = this.allocate(volume);
+            const initialization = this.allocate(volumes);
             this.initialization = initialization;
             void initialization.finally(() => { if (this.initialization === initialization) this.initialization = null; });
         }
@@ -132,6 +139,7 @@ export class RcDiffuseGiController {
     /** Called after all pose edits, before active-mesh evaluation and every camera/export draw. */
     public prepareFrame(timing?: RcPrepareTiming): void {
         if (this.disposed) return;
+        this.synchronizeLayout();
         const settings = this.settings();
         if (!settings.enabled) {
             this.view = null;
@@ -146,7 +154,7 @@ export class RcDiffuseGiController {
         }
         const unsupported = this.unsupportedReason();
         if (unsupported) { this.view = null; this.status = "unsupported"; this.reason = unsupported; this.frameId = -1; return; }
-        const volume = this.resolveVolume();
+        const volumes = this.resolveVolumes(), volume = volumes[0];
         if (!volume) {
             this.view = null; this.status = "preparing"; this.reason = "対象の通常MMD材質を読み込んでください"; return;
         }
@@ -171,11 +179,11 @@ export class RcDiffuseGiController {
             finally { timing?.recordSource(performance.now() - sourceStart); }
             if (field.source.error) throw new Error(field.source.error);
             if (!field.source.ready || !field.graph.isReady()) { this.view = null; this.status = "preparing"; return; }
-            const volumeKey = JSON.stringify(volume), lightKey = JSON.stringify(light);
+            const volumeKey = JSON.stringify(volumes), lightKey = JSON.stringify(light);
             const update = field.source.revision !== this.sourceRevision || volumeKey !== this.volumeKey || lightKey !== this.lightKey;
             if (update) {
                 const submitStart = timing ? performance.now() : 0;
-                field.setVolume(volume);
+                field.setVolumes(volumes);
                 const engine = this.scene.getEngine(), target = engine._currentRenderTarget;
                 const viewport = engine.currentViewport && { ...engine.currentViewport }, pass = engine.currentRenderPassId;
                 try {
@@ -195,7 +203,7 @@ export class RcDiffuseGiController {
             }
             this.view = field.irradianceField && field.nearestSurfaceField
                 ? { field: field.irradianceField, nearestSurface: field.nearestSurfaceField, triangles: field.source.triangleBuffer,
-                    volume, strength: settings.strength } : null;
+                    volume, volumes, strength: settings.strength } : null;
             this.frameId = frameId; this.status = "ready"; this.reason = null;
         } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
@@ -211,16 +219,26 @@ export class RcDiffuseGiController {
                 : scene.prePass ? "PrePass" : null;
     }
 
-    private async allocate(volume: RcDiffuseGiVolume): Promise<void> {
+    private async allocate(volumes: RcDiffuseGiVolume[]): Promise<void> {
         this.status = "preparing"; this.reason = null;
         const generation = ++this.generation;
         let candidate: RcDiffuseGiField | null = null;
         try {
-            candidate = new RcDiffuseGiField(this.scene, { volume, acceptsMaterial: this.acceptsSourceMaterial });
+            candidate = new RcDiffuseGiField(this.scene, { volumes, acceptsMaterial: this.acceptsSourceMaterial });
             this.pending = candidate;
             candidate.source.update();
             const cancelled = new Promise<void>(resolve => { this.cancelPending = resolve; });
-            await Promise.race([candidate.graph.buildAsync(), cancelled]);
+            // A layout switch may cancel while Babylon still initializes tasks.
+            // Keep the candidate alive until that structural phase settles.
+            const structure = candidate.graph.buildAsync(false);
+            const built = await Promise.race([structure.then(() => true), cancelled.then(() => false)]);
+            if (!built) {
+                const abandoned = candidate;
+                void structure.then(() => abandoned.dispose(), () => abandoned.dispose());
+                return;
+            }
+            if (this.disposed || generation !== this.generation) { candidate.dispose(); return; }
+            await Promise.race([candidate.graph.whenReadyAsync(), cancelled]);
             if (this.disposed || generation !== this.generation) { candidate.dispose(); return; }
             this.field = candidate; this.pending = null; this.cancelPending = null;
             this.sourceRevision = -1; this.frameId = -1;
@@ -236,7 +254,9 @@ export class RcDiffuseGiController {
     private release(): void {
         this.view = null; this.generation++; this.cancelPending?.(); this.cancelPending = null;
         this.initialization = null;
-        this.field?.dispose(); this.field = null; this.pending?.dispose(); this.pending = null;
+        this.field?.dispose(); this.field = null;
+        // allocate owns pending disposal, including cancelled structural builds.
+        this.pending = null;
         this.status = "off"; this.reason = null; this.sourceRevision = -1; this.frameId = -1; this.volumeKey = ""; this.lightKey = "";
     }
 

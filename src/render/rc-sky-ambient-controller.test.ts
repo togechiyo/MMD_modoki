@@ -12,12 +12,13 @@ import type { MmdRadianceSkyAmbientView } from "./mmd-radiance-sky-ambient-plugi
 import type { SkyVisibilityQuality } from "./radiance-sky-quality";
 import { RcSkyAmbientController } from "./rc-sky-ambient-controller";
 import { DEFAULT_RC_SKY_AMBIENT_SETTINGS, type RcSkyAmbientSettings } from "./rc-sky-ambient-settings";
+import { createRcOriginVolumes } from "./rc-origin-volumes";
 
 type FieldBoundary = {
     quality: SkyVisibilityQuality; irradianceField: object; disposedWhileBound: boolean;
     finishBuild: () => void; finishReady: () => void; source: { update: ReturnType<typeof vi.fn> };
     graph: { buildAsync: ReturnType<typeof vi.fn>; whenReadyAsync: ReturnType<typeof vi.fn> };
-    execute: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; setVolume: ReturnType<typeof vi.fn>;
+    execute: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; setVolumes: ReturnType<typeof vi.fn>;
 };
 const boundary = vi.hoisted(() => ({ instances: [] as FieldBoundary[], waitForBuild: false, waitForReady: false,
     provider: null as (() => MmdRadianceSkyAmbientView | null) | null }));
@@ -25,18 +26,19 @@ const boundary = vi.hoisted(() => ({ instances: [] as FieldBoundary[], waitForBu
 // Replace the GPU allocation boundary, retaining real Scene and controller lifecycle.
 vi.mock("./radiance-sky-visibility-field", () => ({ RadianceSkyVisibilityField: class {
     quality: SkyVisibilityQuality;
+    volumeCount: number;
     irradianceField = {}; nearestSurfaceField = {}; disposedWhileBound = false;
     finishBuild: () => void = () => undefined;
     finishReady: () => void = () => undefined;
     source = { bvh: { triangleCount: 12 }, update: vi.fn(), revision: 1, error: null, triangleBuffer: {} };
-    execute = vi.fn(); setVolume = vi.fn();
+    execute = vi.fn(); setVolumes = vi.fn();
     dispose = vi.fn(() => { this.disposedWhileBound ||= boundary.provider?.()?.field === this.irradianceField; });
     graph = { isReady: vi.fn(() => true), buildAsync: vi.fn(() => boundary.waitForBuild
         ? new Promise<void>(resolve => { this.finishBuild = resolve; }) : Promise.resolve()),
     whenReadyAsync: vi.fn(() => boundary.waitForReady
         ? new Promise<void>(resolve => { this.finishReady = resolve; }) : Promise.resolve()) };
-    constructor(_scene: unknown, options: { quality: SkyVisibilityQuality }) {
-        this.quality = options.quality; boundary.instances.push(this);
+    constructor(_scene: unknown, options: { quality: SkyVisibilityQuality; volumes: unknown[] }) {
+        this.quality = options.quality; this.volumeCount = options.volumes.length; boundary.instances.push(this);
     }
 } }));
 vi.mock("./mmd-radiance-sky-ambient-plugin", () => ({ registerMmdRadianceSkyAmbient:
@@ -110,7 +112,7 @@ describe("Sky Ambient field settings lifecycle", () => {
         settings.rangeScale = 2; controller.settingsChanged(); controller.prepareFrame();
         expect(boundary.instances).toHaveLength(1);
         expect(field.execute).toHaveBeenCalledTimes(2);
-        expect(field.setVolume).toHaveBeenLastCalledWith({ min: [-16, -8, -16], size: 32 });
+        expect(field.setVolumes).toHaveBeenLastCalledWith([{ min: [-16, -8, -16], size: 32 }]);
         expect(controller.diagnostics).toMatchObject({ volume: { min: [-8, 0, -8], size: 16 },
             effectiveVolume: { min: [-16, -8, -16], size: 32 }, quality: "standard", probeGrid: 16 });
         expect(settings.volume).toEqual({ min: [-8, 0, -8], size: 16 });
@@ -130,21 +132,22 @@ describe("Sky Ambient field settings lifecycle", () => {
         expect(near.getBoundingInfo().boundingBox.maximum.x).toBe(1000);
     });
 
-    it("excludes moving meshes from bounds even when they share a supported material", async () => {
+    it("excludes moving meshes from manual fitting but keeps origin domains independent of eligibility", async () => {
         let moving = true;
         const { controller, settings, scene, receiver } = fixture(() => true, mesh => mesh.name !== "moving" || !moving);
         settings.volume = null;
         const far = CreateBox("moving", { size: 2 }, scene); far.position.x = 100;
         far.material = receiver.material;
         await controller.prewarm(); controller.prepareFrame();
-        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
+        expect(controller.diagnostics.volumes).toEqual(createRcOriginVolumes());
         expect(controller.fitVolume([far, receiver])?.size).toBeCloseTo(2.4);
         expect(controller.diagnostics.supportedMaterialCount).toBe(1);
         moving = false; controller.settingsChanged(); controller.prepareFrame();
-        expect(controller.diagnostics.volume?.size).toBeCloseTo(122.4);
+        expect(controller.diagnostics.volumes).toEqual(createRcOriginVolumes());
+        expect(controller.fitVolume([far, receiver])?.size).toBeCloseTo(122.4);
         expect(controller.diagnostics.supportedMaterialCount).toBe(1);
         moving = true; controller.settingsChanged(); controller.prepareFrame();
-        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
+        expect(controller.diagnostics.volumes).toEqual(createRcOriginVolumes());
     });
 
     it.each([false, true])("stops receiving when every model moves and resumes after Undo (manual=%s)", async manual => {
@@ -188,7 +191,7 @@ describe("Sky Ambient field settings lifecycle", () => {
         expect(boundary.provider?.()?.field).toBe(current.irradianceField);
     });
 
-    it("refits when eligible material surfaces change without reading vertices on unchanged frames", async () => {
+    it("keeps origin domains when material membership changes without fitting geometry", async () => {
         let includeFar = false;
         const { controller, settings, scene } = fixture(material => material.name !== "far" || includeFar);
         settings.volume = null;
@@ -196,21 +199,21 @@ describe("Sky Ambient field settings lifecycle", () => {
         near.material = new StandardMaterial("near", scene); far.material = new StandardMaterial("far", scene);
         far.position.x = 20;
         await controller.prewarm(); controller.prepareFrame();
-        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
+        expect(controller.diagnostics.volumes).toEqual(createRcOriginVolumes());
         const read = vi.spyOn(near, "getVerticesData"), fit = vi.spyOn(controller, "fitVolume");
         controller.settingsChanged(); controller.prepareFrame();
         expect(read).not.toHaveBeenCalled(); expect(fit).not.toHaveBeenCalled();
         includeFar = true; controller.settingsChanged(); controller.prepareFrame();
-        expect(controller.diagnostics.volume?.size).toBeCloseTo(26.4);
-        expect(fit).toHaveBeenCalledTimes(1);
+        expect(controller.diagnostics.volumes).toEqual(createRcOriginVolumes());
+        expect(fit).not.toHaveBeenCalled();
         read.mockClear(); fit.mockClear();
         far.subMeshes[0].indexCount = 0;
         controller.settingsChanged(); controller.prepareFrame();
-        expect(controller.diagnostics.volume?.size).toBeCloseTo(2.4);
-        expect(fit).toHaveBeenCalledTimes(1);
+        expect(controller.diagnostics.volumes).toEqual(createRcOriginVolumes());
+        expect(fit).not.toHaveBeenCalled();
     });
 
-    it("keeps automatically fitted bounds stable while changing look controls on a moving receiver", async () => {
+    it("keeps fixed domains through motion, hidden range edits and manual/origin mode changes", async () => {
         const { controller, settings, receiver: mesh } = fixture(); settings.volume = null;
         await controller.prewarm(); controller.prepareFrame();
         const base = controller.diagnostics.volume, field = boundary.instances[0];
@@ -222,12 +225,19 @@ describe("Sky Ambient field settings lifecycle", () => {
         expect(field.execute).toHaveBeenCalledTimes(1);
         settings.rangeScale = 2; controller.settingsChanged(); controller.prepareFrame();
         expect(controller.diagnostics.volume).toEqual(base);
-        expect(field.execute).toHaveBeenCalledTimes(2);
+        expect(field.execute).toHaveBeenCalledTimes(1);
+        expect(controller.diagnostics.effectiveVolumes).toEqual(createRcOriginVolumes());
         expect(read).not.toHaveBeenCalled(); expect(fit).not.toHaveBeenCalled();
-        // A manual/automatic mode round trip intentionally requests a fresh fit.
-        settings.volume = { min: [0, 0, 0], size: 2 }; controller.settingsChanged(); controller.prepareFrame();
-        settings.volume = null; controller.settingsChanged(); controller.prepareFrame();
-        expect(controller.diagnostics.volume?.min[0]).toBeGreaterThan(90);
+        settings.volume = { min: [0, 0, 0], size: 2 }; controller.settingsChanged();
+        expect(boundary.provider?.()).toBeNull();
+        expect(field.dispose).toHaveBeenCalledOnce();
+        expect(controller.isReadyForCapture).toBe(false);
+        await controller.prewarm(); controller.prepareFrame();
+        expect(controller.diagnostics.effectiveVolumes).toEqual([{ min: [-1, -1, -1], size: 4 }]);
+        settings.volume = null; controller.settingsChanged();
+        await controller.prewarm(); controller.prepareFrame();
+        expect(controller.diagnostics.effectiveVolumes).toEqual(createRcOriginVolumes());
+        expect(boundary.instances).toHaveLength(3);
     });
 
     it("detaches live bindings before replacing a quality allocation and blocks capture until rebuilt", async () => {

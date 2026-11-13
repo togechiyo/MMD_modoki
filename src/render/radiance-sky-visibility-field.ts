@@ -41,16 +41,20 @@ export class RadianceSkyVisibilityField {
     public readonly probeGrid: number;
     private readonly tasks: FrameGraphComputeShaderTask[] = [];
     private readonly textures: RawTexture[] = [];
-    private readonly nearestTask?: RadianceNearestSurfaceTask;
+    private readonly nearestTasks: RadianceNearestSurfaceTask[] = [];
     private displayMode = 0;
     private reconstruction = DEFAULT_SKY_RECONSTRUCTION;
     private disposed = false;
-    private volume: SkyVisibilityBounds;
+    private volumes: readonly SkyVisibilityBounds[];
+    public readonly volumeCount: number;
     private readonly diagnostic: boolean;
 
     constructor(scene: Scene, options: { volume?: SkyVisibilityBounds; diagnostic?: boolean; opaqueOccludersOnly?: boolean;
-        materialIrradiance?: boolean; acceptsMesh?: (mesh: Mesh) => boolean; quality?: SkyVisibilityQuality } = {}) {
-        this.volume = options.volume ?? SKY_VISIBILITY_VOLUME;
+        materialIrradiance?: boolean; acceptsMesh?: (mesh: Mesh) => boolean; quality?: SkyVisibilityQuality;
+        volumes?: readonly SkyVisibilityBounds[] } = {}) {
+        this.volumes = options.volumes ?? [options.volume ?? SKY_VISIBILITY_VOLUME];
+        this.volumeCount = this.volumes.length;
+        if (!this.volumeCount) throw new Error("Sky visibility needs a spatial volume");
         this.quality = options.quality ?? "standard";
         this.probeGrid = getSkyVisibilityProbeGrid(this.quality);
         this.diagnostic = options.diagnostic ?? true;
@@ -70,14 +74,23 @@ export class RadianceSkyVisibilityField {
         };
         try {
             const layouts = createSkyVisibilityCascadeLayouts(this.quality);
-            const fields = layouts.map((layout, i) => allocate(`skyVisibility${i}`, layout.width, layout.height, Constants.TEXTURETYPE_HALF_FLOAT));
-            this.baseField = fields[0].texture;
+            const levelName = (name: string, level: number) => this.volumeCount === 1 ? name : `${name}Level${level}`;
+            const levels = this.volumes.map((_, level) => layouts.map((layout, i) =>
+                allocate(levelName(`skyVisibility${i}`, level), layout.width, layout.height, Constants.TEXTURETYPE_HALF_FLOAT)));
+            this.baseField = levels[0][0].texture;
             const dummy = allocate("skyVisibilityBoundary", 1, 1, Constants.TEXTURETYPE_HALF_FLOAT);
             const diagnosticSize = this.diagnostic ? SKY_VISIBILITY_VOLUME.resolution : 1;
             const output = allocate("skyVisibilityDiagnostic", diagnosticSize, diagnosticSize, Constants.TEXTURETYPE_FLOAT);
             this.output = output.texture;
+            const grid = this.probeGrid;
+            const irradiance = options.materialIrradiance
+                ? allocate("skyVisibilityIrradiance", grid * 2, grid * grid * this.volumeCount, Constants.TEXTURETYPE_HALF_FLOAT) : null;
+            const nearest = options.materialIrradiance
+                ? allocate("skyVisibilityNearestSurface", grid, grid * grid * this.volumeCount, Constants.TEXTURETYPE_FLOAT) : null;
+            this.irradianceField = irradiance?.texture ?? null;
+            this.nearestSurfaceField = nearest?.texture ?? null;
             const addTask = (name: string, shader: string, inputName: string, outputName: string,
-                input: typeof dummy, destination: typeof dummy, shape: number[], interval: number[], scaleInterval = true) => {
+                input: typeof dummy, destination: typeof dummy, shape: number[], interval: number[], scaleInterval = true, level = 0) => {
                 const task = new FrameGraphComputeShaderTask(name, this.graph, { computeSource: shader }, { bindingsMapping: {
                     params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 }, nodes: { group: 0, binding: 2 },
                     [inputName]: { group: 0, binding: 3 }, [outputName]: { group: 0, binding: 4 },
@@ -97,41 +110,43 @@ export class RadianceSkyVisibilityField {
                 task.onTexturesAllocatedObservable.add(bind);
                 task.execute = () => {
                     bind();
-                    const volume = this.volume, scale = scaleInterval ? volume.size / 9 : 1;
+                    const volume = this.volumes[level], scale = scaleInterval ? volume.size / 9 : 1;
                     params.updateFloat4("volumeMin", ...volume.min, 0);
                     params.updateFloat4("volumeSize", volume.size, volume.size, volume.size, 0);
                     params.updateFloat4("shape", shape[0], shape[1], shape[2], this.source.bvh.triangleCount);
                     params.updateFloat4("interval", interval[0] * scale, interval[1] * scale, interval[2], 0);
-                    params.updateFloat4("reconstruction", this.reconstruction.nearDistance, this.reconstruction.rejectOccludedProbes ? 1 : 0, this.reconstruction.sampleAtRayEnd ? 1 : 0, 0);
+                    params.updateFloat4("reconstruction", this.reconstruction.nearDistance * volume.size / this.volumes[0].size,
+                        this.reconstruction.rejectOccludedProbes ? 1 : 0, this.reconstruction.sampleAtRayEnd ? 1 : 0, 0);
                 };
             };
-            for (let i = layouts.length - 1; i >= 0; i--) {
-                const layout = layouts[i], parent = fields[i + 1];
-                addTask(`skyVisibilityCascade${i}`, SKY_VISIBILITY_CASCADE_WGSL, "parentField", "outputField", parent ?? dummy, fields[i],
-                    [layout.grid, layout.directionsX, layout.directionsY], [layout.start, layout.end, parent ? 1 : 0]);
+            for (let level = 0; level < this.volumeCount; level++) {
+                const fields = levels[level];
+                for (let i = layouts.length - 1; i >= 0; i--) {
+                    const layout = layouts[i], parent = fields[i + 1];
+                    addTask(levelName(`skyVisibilityCascade${i}`, level), SKY_VISIBILITY_CASCADE_WGSL, "parentField", "outputField", parent ?? dummy, fields[i],
+                        [layout.grid, layout.directionsX, layout.directionsY], [layout.start, layout.end, parent ? 1 : 0], true, level);
+                }
+                if (irradiance && nearest) {
+                    const integrate = new FrameGraphComputeShaderTask(levelName("skyVisibilityIrradiance", level), this.graph,
+                        { computeSource: SKY_IRRADIANCE_INTEGRATE_WGSL }, { bindingsMapping: {
+                            directionalField: { group: 0, binding: 0 }, irradiance: { group: 0, binding: 1 }, atlas: { group: 0, binding: 2 },
+                        } });
+                    const atlas = integrate.createUniformBuffer("atlas", { offset: 4 });
+                    integrate.execute = () => atlas.updateFloat4("offset", level * grid * grid, 0, 0, 0);
+                    this.tasks.push(integrate); this.graph.addTask(integrate);
+                    integrate.dispatchSize = new Vector3(Math.ceil(grid / 4), Math.ceil(grid / 4), Math.ceil(grid / 4));
+                    integrate.dependencies = new Set([fields[0].handle, irradiance.handle]);
+                    integrate.onTexturesAllocatedObservable.add(() => {
+                        integrate.setInternalTexture("directionalField", fields[0].internal);
+                        integrate.setInternalTexture("irradiance", irradiance.internal);
+                    });
+                    const guard = new RadianceNearestSurfaceTask(levelName("skyVisibilityNearestSurface", level), this.graph,
+                        this.source, grid, nearest, level * grid * grid);
+                    this.nearestTasks.push(guard);
+                    this.tasks.push(guard); this.graph.addTask(guard);
+                }
             }
-            if (options.materialIrradiance) {
-                const grid = this.probeGrid;
-                const irradiance = allocate("skyVisibilityIrradiance", grid * 2, grid * grid, Constants.TEXTURETYPE_HALF_FLOAT);
-                this.irradianceField = irradiance.texture;
-                const integrate = new FrameGraphComputeShaderTask("skyVisibilityIrradiance", this.graph,
-                    { computeSource: SKY_IRRADIANCE_INTEGRATE_WGSL }, { bindingsMapping: {
-                        directionalField: { group: 0, binding: 0 }, irradiance: { group: 0, binding: 1 },
-                    } });
-                this.tasks.push(integrate); this.graph.addTask(integrate);
-                integrate.dispatchSize = new Vector3(Math.ceil(grid / 4), Math.ceil(grid / 4), Math.ceil(grid / 4));
-                integrate.dependencies = new Set([fields[0].handle, irradiance.handle]);
-                integrate.onTexturesAllocatedObservable.add(() => {
-                    integrate.setInternalTexture("directionalField", fields[0].internal);
-                    integrate.setInternalTexture("irradiance", irradiance.internal);
-                });
-                const nearest = allocate("skyVisibilityNearestSurface", grid, grid * grid, Constants.TEXTURETYPE_FLOAT);
-                this.nearestSurfaceField = nearest.texture;
-                const guard = new RadianceNearestSurfaceTask("skyVisibilityNearestSurface", this.graph, this.source, grid, nearest);
-                this.nearestTask = guard;
-                this.tasks.push(guard); this.graph.addTask(guard);
-            }
-            if (this.diagnostic) addTask("skyVisibilityDiagnostic", SKY_VISIBILITY_DIAGNOSTIC_WGSL, "baseField", "output", fields[0], output,
+            if (this.diagnostic) addTask("skyVisibilityDiagnostic", SKY_VISIBILITY_DIAGNOSTIC_WGSL, "baseField", "output", levels[0][0], output,
                 [this.probeGrid, 8, 4], [SKY_VISIBILITY_VOLUME.planeY, diagnosticSize, diagnosticSize], false);
             // StandardMaterial can participate in geometry MRT passes; give it a display texture
             // instead of using a color-only ShaderMaterial that would invalidate those passes.
@@ -153,7 +168,12 @@ export class RadianceSkyVisibilityField {
     }
 
     /** Volume changes invalidate content at the owner; texture dimensions and graph stay fixed. */
-    public setVolume(volume: SkyVisibilityBounds): void { this.volume = volume; }
+    public setVolume(volume: SkyVisibilityBounds): void { this.setVolumes([volume]); }
+
+    public setVolumes(volumes: readonly SkyVisibilityBounds[]): void {
+        if (volumes.length !== this.volumeCount) throw new Error("Sky spatial atlas size cannot change after allocation");
+        this.volumes = volumes;
+    }
 
     public execute(mode: number, updateField: boolean, reconstruction: SkyVisibilityReconstruction = DEFAULT_SKY_RECONSTRUCTION): number {
         this.displayMode = mode;
@@ -161,10 +181,10 @@ export class RadianceSkyVisibilityField {
         if (!this.diagnostic && !updateField) return 0;
         const fieldTasks = this.diagnostic ? this.tasks.length - 1 : this.tasks.length;
         for (let i = 0; i < fieldTasks; i++) this.tasks[i].disabled = !updateField;
-        if (updateField) this.nearestTask?.prepareVolume(this.volume);
+        if (updateField) this.nearestTasks.forEach((task, level) => task.prepareVolume(this.volumes[level]));
         this.graph.execute();
-        if (updateField) this.nearestTask?.markSubmitted();
-        return updateField ? this.tasks.length - (this.nearestTask?.disabled ? 1 : 0) : 1;
+        if (updateField) for (const task of this.nearestTasks) task.markSubmitted();
+        return updateField ? this.tasks.length - this.nearestTasks.filter(task => task.disabled).length : 1;
     }
 
     public dispose(): void {

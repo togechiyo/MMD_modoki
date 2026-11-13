@@ -151,10 +151,12 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     // slider; range/quality are a saved-project fixture for the rendering checks.
     await slider(page, "SkyBrightness", 0);
     await hiddenFixture(page, { rangeScale: 1, quality: "standard" }); await ready(page);
-    expect(defaultVolume.size).toBeCloseTo((await effectiveVolume()).size * 2, 6);
+    expect(defaultVolume).toEqual({ min: [-64, -64, -64], size: 128 });
+    expect(await effectiveVolume()).toEqual(defaultVolume);
     await closeRcLighting(page);
     const darkeningOn = await take("darkening-only-on");
     const materialPrograms = await page.evaluate(async () => {
+      // eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
       const probe = await import("/test/e2e/helpers/rc-sky-ambient-probe.mjs");
       return probe.inspectSkyAmbientMaterials();
     });
@@ -182,12 +184,12 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await open(page); await slider(page, "Opacity", 100); await ready(page); await closeRcLighting(page);
     expect(compare("opacityFullRestored", await take("opacity-full-restored"), darkeningOn)).toBeLessThan(.1);
 
-    // Legacy saved quality changes the real field dimensions, while range keeps
-    // its center. These fixtures no longer have controls or GUI Undo entries.
+    // Saved quality changes probe density. The legacy rangeScale value remains
+    // round-trippable, but automatic origin bounds stay fixed. Manual rangeScale
+    // compatibility is covered by rc-origin-volumes.spec.mjs.
     await open(page);
     const standardVolume = await effectiveVolume();
-    expect(standardVolume?.size).toBeGreaterThan(0);
-    const center = standardVolume.min.map(value => value + standardVolume.size / 2);
+    expect(standardVolume).toEqual({ min: [-64, -64, -64], size: 128 });
     for (const [quality, probeGrid] of [["low", 8], ["standard", 16], ["high", 32]]) {
       await hiddenFixture(page, { quality }); await ready(page);
       expect((await settings(page)).quality).toBe(quality);
@@ -199,8 +201,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
       await hiddenFixture(page, { rangeScale: scale }); await ready(page);
       expect((await settings(page)).rangeScale).toBe(scale);
       const volume = await effectiveVolume();
-      expect(volume.size).toBeCloseTo(standardVolume.size * scale, 6);
-      volume.min.forEach((value, axis) => expect(value + volume.size / 2).toBeCloseTo(center[axis], 6));
+      expect(volume).toEqual(standardVolume);
       expect((await settings(page)).volume).toBeNull();
       report.checkpoints[`range-${scale}`] = volume;
       await closeRcLighting(page); await take(`range-${scale}`);

@@ -42,6 +42,8 @@
 
 ## 操作と保存
 
+2026-11-13追記: 広域モデルに合わせた自動fitで格子が粗くなる問題を、Sky Ambientと一緒に修正した。`volume:null`ではworld原点中心の一辺128・2048・32768の3領域を使い、各16³の間隔は8・128・2048。モデル寸法・配置・カメラ・影距離でこの配分を変更しない。[共通の範囲・境界・互換・検証](./sky-ambient-rc-implementation-2026-11-08.md#同日追記-giと共通の原点3領域を実装)を参照。以下の旧自動fitを使った測定は当時の履歴として扱う。
+
 入口は **右側のEffect → FrameGraph / Post → 追加 → RC GI**。実験設定の本番GI項目は撤去し、右欄の各1枚のsingletonとして追加・OFF・削除を扱う。照明は本描画の材質へ適用するため、一覧での位置は照明の実行順を変えない。複数配置できるLuminous RCのPostFX個体とは区別する。
 
 | 項目 | 初期値 | 編集・保存 |
@@ -53,11 +55,11 @@
 
 固定値は`lighting.rcDiffuseGi`、キーは`keyframes.effectAnimations`の`rcDiffuseGi` singletonへの保存を維持する。欄への追加状態・表示位置はstack側で管理し、追加は既存設定を保持してONにする。個別OFFでは欄・値・キーを保持する。削除は既定OFFへ戻してtrackと欄を除去し、Undoで静的設定・trackのbase/keys/preview・元のstack位置をまとめて復元する。照明値・キーをPostFX個体へ変換しない。
 
-保存には`effects.rcSceneEffectsInStack: true`を追加し、このmarkerがない旧projectだけ、保存済みenabledまたはRC track（全OFFを含む）から欄を補完する。stackのない旧形式でもBloom等の既存効果を保持する。現行形式の削除済み効果は読み込みで復活させず、新設定のない旧projectの見た目も変えない。ClassicとFrame Graph全体OFFでは値・キー・追加状態を保持して実行を休止し、Classicでのキー登録・削除・移動も休止する。通常操作は見出しの有効・キー登録と強度に絞り、普段は自動の計算範囲を折り畳み詳細へ置く。
+保存には`effects.rcSceneEffectsInStack: true`を追加し、このmarkerがない旧projectだけ、保存済みenabledまたはRC track（全OFFを含む）から欄を補完する。stackのない旧形式でもBloom等の既存効果を保持する。現行形式の削除済み効果は読み込みで復活させず、新設定のない旧projectの見た目も変えない。ClassicとFrame Graph全体OFFでは値・キー・追加状態を保持して実行を休止し、Classicでのキー登録・削除・移動も休止する。通常操作は見出しの有効・キー登録と強度に絞り、範囲の詳細UIは11/10に撤去した。
 
 UI移動後の専用カード・天空設定・GI設定/WebMの3ケースが成功し、独立操作、削除Undo/Redo、保存・移行、Classic往復、PNG/WebMを確認した。GPU validation・page/console errorは0件。全unit226ファイル・1,396件、全lint、critical gateを確認し、通常typecheckは既存547件から追加0件。旧stackなしBloom保持の追加検査も対象2ファイル・67件成功。[共通の操作契約・検証記録](./framegraph-post-stack-current-spec-2026-07-01.md#2026-10-30-追記-rc天空遮蔽giのエフェクト欄への移動)を参照。
 
-自動範囲は、対象材質のsubMeshが参照する変形済み頂点をworld座標へ変換し、最大軸の長さに20%の余白を付けた立方体とする。MMD loaderはmeshと全subMeshの描画用boundsへ共通の余白を付けるため、そのboundsをそのまま使わない。反射率が確実に0の黒い材質は自動範囲から除くが、BVHの遮蔽物には残す。保存値を勝手に固定せず、`null`のままruntimeで保持する。「範囲を再計算」と数値欄のEnterで固定し、「自動範囲」で戻す。mesh・geometry・対象材質・subMeshのindex範囲が変わったときは自動範囲を無効化する。毎フレームの変形・カメラ移動には追従しないため、大きく動くモデルや離れたステージ部品には範囲を調整する。
+現在のnull範囲は上記の原点3領域。明示的な`volume`を持つ保存projectは従来の単一cubeを維持する。実受光頂点から最大軸×1.2へfitするhelperは明示的な内部操作用に残すが、通常の自動処理からは呼ばない。範囲再計算・座標・品質の通常UIは11/10に撤去済みで、保存済み値だけを互換保持する。黒い材質もBVHの遮蔽物には残す。
 
 「適用中」は計算と材質接続の準備状態であり、画素に見える寄与があることまでは保証しない。強度0とメイン方向光の光量0は、それぞれ理由を表示する。対象材質がない状態では、固定volumeが保存されていても適用中にしない。
 
@@ -88,7 +90,7 @@ rayが当たった面でUV付き反射率、面の幾何法線、方向光との
 
 base gridの32方向を`+X / -X / +Y / -Y / +Z / -Z`の6軸へcos重みで正規化し、照度/πとして保存する。材質側は法線の符号で3軸を選び、法線成分の二乗で混ぜる。三線形補間と受光面前方への重み付けを行い、各probeの近傍2三角形で接続の遮蔽を判定する。遮られたprobeは分子・分母から除き、採用できるprobeの重みだけで正規化する。全probeが遮蔽・無効なら0。以前は遮られた重みも分母へ残していたため、採用可能な反射光まで薄まっていた。天空遮蔽の集計規則は変更しない。
 
-材質内でBVH探索は行わず、最大**32 textureLoad＋16個の固定三角形判定**。集計atlasは`96×256 / RGBA16F`で192 KiB、近傍情報は`16×256 / RGBA32F`で64 KiB、計256 KiBの追加画素payloadとなる。4段field・BVH・反射率texture cacheのメモリは別に必要。入力が変わったときだけ4 cascade＋集計＋近傍探索の6 taskを実行し、静止時には再利用する。強度だけの変更はfieldへ焼き込まない。
+材質内でBVH探索は行わず、1領域あたり最大**32 textureLoad＋16個の固定三角形判定**。原点モードの境界帯だけ隣接2領域を参照する。集計atlasは`96×768 / RGBA16F`で576 KiB、近傍情報は`16×768 / RGBA32F`で192 KiB、計768 KiBの画素payloadとなる。manual単一領域は従来と同じ256 KiBで、原点3領域の1/3。方向field・BVH・反射率texture cacheは別に必要で、BVH/sourceは3領域で共有する。入力変更時は各領域の4 cascade＋集計と、必要な近傍探索を実行し、静止時には再利用する。強度だけの変更はfieldへ焼き込まない。
 
 source revision・範囲・方向光snapshotを更新条件とする。ライトのparent変換、色・強度・有効状態も反映する。同frameのpose確定後・active mesh評価前に実行し、dirty fieldの後だけ`flushFramebuffer()`で提出してから材質を描画する。GPU完了待ちや毎フレームreadbackは追加しない。
 
@@ -116,7 +118,7 @@ cos正規化した入射fieldは照度/πに相当する平均で、定数の入
 | 独立UI・Action/Undo | [設定panel](../src/ui/rc-diffuse-gi-settings-panel.ts)、[Command差分](../src/actions/rc-diffuse-gi-command.ts) |
 | dirty判定・描画前更新・capture準備・資源寿命 | [rc-diffuse-gi-controller.ts](../src/render/rc-diffuse-gi-controller.ts) |
 | light snapshot・反射率source | [ライト](../src/render/rc-diffuse-gi-light.ts)、[反射率](../src/render/rc-diffuse-gi-source.ts) |
-| 自動範囲・対応preset・GI専用距離区間 | [範囲](../src/render/rc-diffuse-gi-volume.ts)、[対応材質](../src/render/rc-diffuse-gi-material-eligibility.ts)、[距離区間](../src/render/rc-diffuse-gi-intervals.ts) |
+| 原点範囲・手動fit・対応preset・GI専用距離区間 | [原点範囲](../src/render/rc-origin-volumes.ts)、[手動fit](../src/render/rc-diffuse-gi-volume.ts)、[対応材質](../src/render/rc-diffuse-gi-material-eligibility.ts)、[距離区間](../src/render/rc-diffuse-gi-intervals.ts) |
 | 専用FrameGraph・RC輸送・照度集計 | [field](../src/render/rc-diffuse-gi-field.ts)、[cascade shader](../src/render/rc-diffuse-gi-shaders.ts)、[6軸集計](../src/render/rc-diffuse-gi-irradiance.ts) |
 | 材質参照・合成・中立fallback | [query](../src/render/mmd-radiance-gi-query-wgsl.ts)、[plugin](../src/render/mmd-radiance-diffuse-gi-plugin.ts) |
 
@@ -127,9 +129,9 @@ FrameGraphのtask順序・ready・破棄は[公式のtask lifecycle](https://doc
 - 単一の通常カメラが対象。scene custom render target・複数/rig camera・PrePassでは中立化する。RSM GIとの併用はそのrender target条件にも左右される。
 - PBR・外部WGSL・特殊preset・透明/alpha-test・lightmap・diffuse Fresnel等は受光対象外。背景やhelperは対象にしない。
 - sourceの非既定texture色モーフ・vertex colorは反射率0として遮蔽だけ残す。動的texture、UVモーフ、normal mapやsmooth normalによる反射の再現は対象外。
-- coarse probeと6軸近似、2候補だけの接続遮蔽には誤差があり、薄壁の漏れ・屋根端の過暗化を一般に解消するものではない。volume外は寄与0で、境界fadeは未実装。
+- coarse probeと6軸近似、2候補だけの接続遮蔽には誤差があり、薄壁の漏れ・屋根端の過暗化を一般に解消するものではない。原点モードは領域間を補間し、最外周25%で寄与0へfadeする。manual単一領域は従来の端判定を保持し、範囲外は寄与0。
 - 天空・発光の追加反射、多重反射、鏡面GIは未実装。単一の方向光だけを使い、追加ライトやライトのmesh別include/excludeは評価しない。
-- 天空遮蔽・LuminousとのGPU source/field共有は未実装。併用するとCPU変形・BVH更新も各sourceで行う。小さいfixtureの費用を密なPMXや低性能PCの全体FPSへ換算しない。
+- 天空遮蔽・LuminousとのGPU source/field共有は未実装。scene共通cacheでCPU変形・world変換を共有するが、BVH・packed source・fieldは各効果で持つ。小さいfixtureの費用を密なPMXや低性能PCの全体FPSへ換算しない。
 - 今回のGI実描画で動かした形状はbone付き遮光板。morph/physicsは既存の共通pose入力を利用するが、GIを有効にした個別の実描画比較は未実施。
 
 ## 仕上げ修正と再検証（2026-10-30）

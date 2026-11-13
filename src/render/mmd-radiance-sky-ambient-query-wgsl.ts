@@ -1,8 +1,8 @@
-import { MMD_RADIANCE_SKY_QUERY_WGSL } from "./mmd-radiance-sky-query-wgsl";
+import { createMmdRadianceSkyQueryWgsl } from "./mmd-radiance-sky-query-wgsl";
 
 // Geometry reconstruction is shared with Shadow Depth RC, but bindings and
 // contribution are independent: the two effects may coexist on one material.
-export const MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL = MMD_RADIANCE_SKY_QUERY_WGSL
+export const MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL = createMmdRadianceSkyQueryWgsl(true)
     .replaceAll("RC_SKY_OCCLUSION", "RC_SKY_AMBIENT")
     .replaceAll("RcSky", "RcSkyAmbient")
     .replaceAll("rcSky", "rcSkyAmbient") + /* wgsl */`
@@ -26,8 +26,9 @@ var rcSkyAmbientIrradiance = -1.0;
 #ifndef LIGHTMAP
 if (uniforms.rcSkyAmbientControl.w > 0.0) {
     let normalLength = length(normalW);
-    let volumeMin = uniforms.rcSkyAmbientVolume.xyz;
-    let size = uniforms.rcSkyAmbientVolume.w;
+    let volume = rcSkyAmbientOuterVolume();
+    let volumeMin = volume.xyz;
+    let size = volume.w;
     if (normalLength > 0.00001 && normalLength < 1e20 && size > 0.0
         && all(fragmentInputs.vPositionW >= volumeMin) && all(fragmentInputs.vPositionW <= volumeMin + vec3f(size))) {
         let normal = normalW / normalLength;
@@ -45,6 +46,11 @@ if (uniforms.rcSkyAmbientControl.w > 0.0) {
         if (rcSkyAmbientIrradiance >= 0.0) {
             rcSkyAmbientFactor = 1.0 - (1.0 - uniforms.rcSkyAmbientControl.y)
                 * clamp(uniforms.rcSkyAmbientControl.x * (1.0 - rcSkyAmbientIrradiance), 0.0, 1.0);
+            // Fade both attenuation and added sky fill to the unmodified material
+            // at the outer edge. Visibility is blended before either contribution.
+            let coverage = rcSkyAmbientSpatialCoverage(fragmentInputs.vPositionW);
+            rcSkyAmbientFactor = mix(1.0, rcSkyAmbientFactor, coverage);
+            rcSkyAmbientIrradiance *= coverage;
         }
     }
 }

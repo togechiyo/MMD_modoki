@@ -15,6 +15,7 @@ const number = (value: number): string => value.toFixed(10);
 export const SKY_IRRADIANCE_INTEGRATE_WGSL = `
 @group(0) @binding(0) var directionalField: texture_2d<f32>;
 @group(0) @binding(1) var irradiance: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(2) var<uniform> atlas: vec4f;
 const WEIGHTS_A = array<vec3f, 16>(
 ${SKY_IRRADIANCE_DIRECTIONS.map((_, i) => `vec3f(${[0, 1, 2].map(a => number(SKY_IRRADIANCE_AXIS_WEIGHTS[a][i])).join(", ")})`).join(",\n")});
 const WEIGHTS_B = array<vec2f, 16>(
@@ -30,7 +31,7 @@ fn main(@builtin(global_invocation_id) probe: vec3u) {
         if (!(visibility >= 0.0 && visibility <= 1.0)) { valid = 0.0; }
         a += WEIGHTS_A[i] * visibility; b += WEIGHTS_B[i] * visibility;
     }
-    let pixel = vec2i(i32(probe.x), i32(probe.z * grid + probe.y));
+    let pixel = vec2i(i32(probe.x), i32(probe.z * grid + probe.y) + i32(atlas.x));
     textureStore(irradiance, pixel, vec4f(clamp(a, vec3f(0.0), vec3f(1.0)), valid));
     textureStore(irradiance, pixel + vec2i(i32(grid), 0), vec4f(clamp(b, vec2f(0.0), vec2f(1.0)), 0.0, valid));
 }

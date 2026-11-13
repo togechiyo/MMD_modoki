@@ -23,12 +23,18 @@ fn rcGiProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
     }
     return false;
 }
-fn rcGiIrradiance(worldPosition: vec3f, worldNormal: vec3f) -> vec3f {
-    let volumeMin = uniforms.rcGiVolume.xyz; let size = uniforms.rcGiVolume.w;
+fn rcGiVolumeAt(level: u32) -> vec4f {
+    if (level == 1u) { return uniforms.rcGiVolume1; }
+    if (level == 2u) { return uniforms.rcGiVolume2; }
+    return uniforms.rcGiVolume;
+}
+fn rcGiVolumeRadius(worldPosition: vec3f, volume: vec4f) -> f32 {
+    let relative = abs((worldPosition - volume.xyz) / volume.w * 2.0 - vec3f(1.0));
+    return max(relative.x, max(relative.y, relative.z));
+}
+fn rcGiIrradianceInVolume(worldPosition: vec3f, normal: vec3f, volume: vec4f, level: u32) -> vec3f {
+    let volumeMin = volume.xyz; let size = volume.w;
     if (!(size > 0.0 && all(worldPosition >= volumeMin) && all(worldPosition <= volumeMin + vec3f(size)))) { return vec3f(0.0); }
-    let normalLength = length(worldNormal);
-    if (!(normalLength > 0.00001 && normalLength < 1e20)) { return vec3f(0.0); }
-    let normal = worldNormal / normalLength;
     let normalWeights = normal * normal;
     let columns = vec3i(select(1, 0, normal.x >= 0.0), select(3, 2, normal.y >= 0.0), select(5, 4, normal.z >= 0.0)) * 16;
     let coordinate = clamp((worldPosition - volumeMin) / size * 16.0 - 0.5, vec3f(0.0), vec3f(15.0));
@@ -41,7 +47,7 @@ fn rcGiIrradiance(worldPosition: vec3f, worldNormal: vec3f) -> vec3f {
         let facing = clamp(dot(probePosition - worldPosition, normal) * (16.0 / size) * 4.0 + 0.5, 0.0, 1.0);
         let weight = weights.x * weights.y * weights.z * facing;
         if (weight <= 0.0) { continue; }
-        let pixel = vec2i(i32(probe.x), i32(probe.z * 16u + probe.y));
+        let pixel = vec2i(i32(probe.x), i32(probe.z * 16u + probe.y + level * 256u));
         let a = textureLoad(rcGiField, pixel + vec2i(columns.x, 0), 0);
         let b = textureLoad(rcGiField, pixel + vec2i(columns.y, 0), 0);
         let c = textureLoad(rcGiField, pixel + vec2i(columns.z, 0), 0);
@@ -57,6 +63,27 @@ fn rcGiIrradiance(worldPosition: vec3f, worldNormal: vec3f) -> vec3f {
     } } }
     if (!(weightSum > 0.00001)) { return vec3f(0.0); }
     return max(result / weightSum, vec3f(0.0));
+}
+fn rcGiIrradiance(worldPosition: vec3f, worldNormal: vec3f) -> vec3f {
+    let normalLength = length(worldNormal);
+    if (!(normalLength > 0.00001 && normalLength < 1e20)) { return vec3f(0.0); }
+    let normal = worldNormal / normalLength;
+    let count = u32(clamp(uniforms.rcGiSpatial.x, 1.0, 3.0));
+    // Manual volumes retain their original hard bounds and full strength.
+    if (count == 1u) { return rcGiIrradianceInVolume(worldPosition, normal, uniforms.rcGiVolume, 0u); }
+    for (var level = 0u; level < count; level++) {
+        let volume = rcGiVolumeAt(level);
+        let radius = rcGiVolumeRadius(worldPosition, volume);
+        if (!(radius <= 1.0)) { continue; }
+        let inner = rcGiIrradianceInVolume(worldPosition, normal, volume, level);
+        let blend = smoothstep(0.75, 1.0, radius);
+        if (level + 1u == count) { return inner * (1.0 - blend); }
+        if (blend <= 0.0) { return inner; }
+        let outer = rcGiIrradianceInVolume(worldPosition, normal, rcGiVolumeAt(level + 1u), level + 1u);
+        // Blend irradiance once; artistic gain remains outside this query.
+        return mix(inner, outer, blend);
+    }
+    return vec3f(0.0);
 }
 #endif
 `;

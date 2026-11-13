@@ -12,6 +12,7 @@ import { MMD_RADIANCE_SKY_QUERY_WGSL, MMD_RADIANCE_SKY_FINAL_DIFFUSE_PATTERN,
 import { MMD_RADIANCE_SKY_AMBIENT_CUSTOM_CODE, MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL,
     MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL,
     MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL } from "./mmd-radiance-sky-ambient-query-wgsl";
+import { MMD_RADIANCE_GI_QUERY_WGSL } from "./mmd-radiance-gi-query-wgsl";
 
 type CustomCode = Readonly<Record<string, string>>;
 type Injector = { _injectCustomCode(event: { indexParameters: Record<string, number> }): (stage: string, code: string) => string };
@@ -47,9 +48,51 @@ const stageStandard = readFileSync(new URL("../scene/shaders/builtin-toon/stage_
 // including its helper bodies, instead of restating the composition in JS.
 // This is not a substitute for full WGSL compilation/material GPU checks.
 function scalarStatements(source: string): string {
-    return source.replace(/:\s*(?:vec[234]f|f32|bool)\b/g, "")
-        .replace(/->\s*(?:vec[234]f|f32|bool)\b/g, "")
+    return source.replace(/:\s*(?:vec[234]f|f32|u32|bool)\b/g, "")
+        .replace(/->\s*(?:vec[234]f|f32|u32|bool)\b/g, "")
+        .replace(/\b(\d+)u\b/g, "$1")
         .replace(/\bfn\b/g, "function").replace(/\bvar\b/g, "let");
+}
+
+// Evaluate positions along one cube axis. Its absolute coordinate is also the
+// max-absolute radius because the other two coordinates remain at the origin.
+function spatialFunctions(source: string, names: string[]): string {
+    return names.map(name => shaderFunction(source, name)).join("\n")
+        .replace(/relative\.[xyz]/g, "relative");
+}
+
+const spatialMath = {
+    vec3f: (value: number) => value, u32: Math.trunc, length: Math.abs, abs: Math.abs, max: Math.max,
+    clamp: (value: number, low: number, high: number) => Math.min(high, Math.max(low, value)),
+    mix: (a: number, b: number, amount: number) => a * (1 - amount) + b * amount,
+    smoothstep: (low: number, high: number, value: number) => {
+        const t = Math.min(1, Math.max(0, (value - low) / (high - low))); return t * t * (3 - 2 * t);
+    },
+};
+
+function spatialUniforms(prefix: string, count: number) {
+    return {
+        [prefix + "Volume"]: { xyz: -64, w: 128 },
+        [prefix + "Volume1"]: { xyz: -1024, w: 2048 },
+        [prefix + "Volume2"]: { xyz: -16384, w: 32768 },
+        [prefix + "Spatial"]: { x: count },
+    };
+}
+
+function spatialQuery(kind: "gi" | "sky", position: number, values: number[], count = 3) {
+    const source = kind === "gi" ? MMD_RADIANCE_GI_QUERY_WGSL : MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL;
+    const prefix = kind === "gi" ? "rcGi" : "rcSkyAmbient";
+    const query = prefix + (kind === "gi" ? "Irradiance" : "VisibilityValidated");
+    const sample = prefix + (kind === "gi" ? "IrradianceInVolume" : "VisibilityInVolume");
+    const names = [prefix + "VolumeAt", prefix + "VolumeRadius", query];
+    const reads: number[] = [];
+    const value = runInNewContext(spatialFunctions(source, names) + `\n${query}(position, 1);`, {
+        ...spatialMath, uniforms: spatialUniforms(prefix, count), position,
+        [sample]: (_position: number, _normal: number, _volume: unknown, level: number) => {
+            reads.push(level); return values[level];
+        },
+    }) as number;
+    return { value, reads };
 }
 
 function shaderFunction(source: string, name: string): string {
@@ -116,6 +159,36 @@ function stageLighting(code: string, input: Partial<{
 }
 
 describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", () => {
+    it("selects the finest containing level and blends only the adjacent field at both seams", () => {
+        for (const kind of ["gi", "sky"] as const) {
+            const values = [0.2, 0.6, 0.8];
+            expect(spatialQuery(kind, 0, values)).toEqual({ value: 0.2, reads: [0] });
+            expect(spatialQuery(kind, -48, values)).toEqual({ value: 0.2, reads: [0] });
+            expect(spatialQuery(kind, 56, values)).toEqual({ value: 0.4, reads: [0, 1] });
+            expect(spatialQuery(kind, 64, values)).toEqual({ value: 0.6, reads: [0, 1] });
+            expect(spatialQuery(kind, 65, values)).toEqual({ value: 0.6, reads: [1] });
+            expect(spatialQuery(kind, 896, values)).toEqual({ value: 0.7, reads: [1, 2] });
+            expect(spatialQuery(kind, 1024, values)).toEqual({ value: 0.8, reads: [1, 2] });
+            expect(spatialQuery(kind, 1025, values)).toEqual({ value: 0.8, reads: [2] });
+            for (const edge of [64, 1024]) {
+                expect(spatialQuery(kind, edge - 0.00001, values).value)
+                    .toBeCloseTo(spatialQuery(kind, edge + 0.00001, values).value, 10);
+            }
+            // Manual mode has no transition, even at the former blend edge.
+            expect(spatialQuery(kind, 64, values, 1)).toEqual({ value: 0.2, reads: [0] });
+        }
+    });
+
+    it("fades outer GI to neutral and keeps valid sky visibility when its neighbor is unknown", () => {
+        expect(spatialQuery("gi", 12288, [2, 4, 8])).toEqual({ value: 8, reads: [2] });
+        expect(spatialQuery("gi", 14336, [2, 4, 8])).toEqual({ value: 4, reads: [2] });
+        expect(spatialQuery("gi", 16384, [2, 4, 8])).toEqual({ value: 0, reads: [2] });
+        expect(spatialQuery("gi", 16385, [2, 4, 8])).toEqual({ value: 0, reads: [] });
+        expect(spatialQuery("sky", 16385, [0.2, 0.6, 0.8])).toEqual({ value: -1, reads: [] });
+        expect(spatialQuery("sky", 56, [-1, 0.6, 0.8])).toEqual({ value: 0.6, reads: [0, 1] });
+        expect(spatialQuery("sky", 56, [0.2, -1, 0.8])).toEqual({ value: 0.2, reads: [0, 1] });
+    });
+
     for (const oldFirst of [true, false]) for (const foldedAmbient of [true, false]) {
         for (const emission of ["normal", "linked", "illumination"] as const) {
             it("preserves diffuse branches and opacity: oldFirst=" + oldFirst + ", folded=" + foldedAmbient + ", emission=" + emission, async () => {
@@ -275,11 +348,16 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
         const source = await preprocessed(MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL, ["RC_SKY_AMBIENT"]);
         // Unit normals are supplied directly; scalar coordinates stand in for
         // an interior/outside point. Execute the actual exposure/factor branches.
-        const code = scalarStatements(source).replace("normalW / normalLength", "normalW");
-        const evaluate = (y: number, visibility: number, position = 0.5) => {
+        const helpers = spatialFunctions(MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL,
+            ["rcSkyAmbientVolumeAt", "rcSkyAmbientVolumeRadius", "rcSkyAmbientOuterVolume", "rcSkyAmbientSpatialCoverage"]);
+        const code = helpers + "\n" + scalarStatements(source).replace("normalW / normalLength", "normalW");
+        const evaluate = (y: number, visibility: number, position = 0.5, automatic = false) => {
             let reads = 0;
             const value = runInNewContext(code + "\n({ factor: rcSkyAmbientFactor, exposure: rcSkyAmbientIrradiance });", {
-                uniforms: { rcSkyAmbientControl: { x: 0.95, y: 0.035, w: 1 }, rcSkyAmbientVolume: { xyz: 0, w: 1 } },
+                ...spatialMath,
+                uniforms: { rcSkyAmbientControl: { x: 0.95, y: 0.035, w: 1 },
+                    ...spatialUniforms("rcSkyAmbient", automatic ? 3 : 1),
+                    ...(!automatic ? { rcSkyAmbientVolume: { xyz: 0, w: 1 } } : {}) },
                 fragmentInputs: { vPositionW: position }, normalW: { x: Math.sqrt(Math.max(0, 1 - y * y)), y, z: 0 },
                 vec3f: (v: number) => v, length: () => 1, all: (v: boolean) => v,
                 abs: Math.abs, min: Math.min, max: Math.max,
@@ -295,6 +373,13 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
         expect(evaluate(1, 0).factor).toBeCloseTo(0.08325, 12);
         expect(evaluate(1, -1)).toEqual({ factor: 1, exposure: -1, reads: 1 });
         expect(evaluate(-1, 0, 2)).toEqual({ factor: 1, exposure: -1, reads: 0 });
+        // Far levels remain valid beyond the first volume. At the outer fade,
+        // attenuation and added light approach neutral independently and once.
+        expect(evaluate(1, 0.5, 1000, true).exposure).toBe(0.5);
+        expect(evaluate(1, 0.5, 14336, true).exposure).toBe(0.25);
+        expect(evaluate(1, 0.5, 14336, true).factor).toBeCloseTo((1 + (1 - 0.965 * 0.95 * 0.5)) / 2, 12);
+        expect(evaluate(1, 0.5, 16384, true)).toEqual({ factor: 1, exposure: 0, reads: 1 });
+        expect(evaluate(1, 0.5, 16385, true)).toEqual({ factor: 1, exposure: -1, reads: 0 });
     });
 
     it("captures the actual hemispheric contribution without Toon and leaves direct light alone", async () => {

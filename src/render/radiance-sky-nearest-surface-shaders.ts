@@ -105,6 +105,6 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     let nearest = skyNearestTriangles(position, radiusSquared);
     candidates[index] = vec2u(nearest.xy);
     // B distinguishes a valid empty candidate set from an invalid traversal.
-    textureStore(nearestSurface, vec2i(i32(id.x), i32(id.z * grid + id.y)), vec4f(nearest, 0.0));
+    textureStore(nearestSurface, vec2i(i32(id.x), i32(id.z * grid + id.y + u32(params.shape.y))), vec4f(nearest, 0.0));
 }
 `;

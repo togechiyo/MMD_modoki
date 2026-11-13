@@ -13,6 +13,9 @@ MmdManager.prototype.getRcDiffuseGiSettings = observeManager;
 function controllerState(controller) {
   const source = controller?.field?.source;
   return { diagnostics: controller?.diagnostics ?? null, view: Boolean(controller?.view),
+    volumeCount: controller?.field?.volumeCount ?? null,
+    irradianceSize: controller?.field?.irradianceField?.getSize() ?? null,
+    nearestSize: controller?.field?.nearestSurfaceField?.getSize() ?? null,
     sourceRevision: source?.revision ?? null, sourceReady: source?.ready ?? null,
     sourceError: source?.error ?? null,
     chunks: (source?.chunks ?? []).map(chunk => ({ name: chunk.key.name, triangles: chunk.triangles.length / 24 })) };

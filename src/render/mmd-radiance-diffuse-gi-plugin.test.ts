@@ -14,6 +14,7 @@ import { MmdPluginMaterial } from "babylon-mmd/esm/Loader/ShadersWGSL/mmdStandar
 import { defaultPixelShaderWGSL } from "@babylonjs/core/ShadersWGSL/default.fragment";
 import { registerMmdRadianceDiffuseGi, type MmdRadianceDiffuseGiView } from "./mmd-radiance-diffuse-gi-plugin";
 import { registerMmdRadianceSkyOcclusion } from "./mmd-radiance-sky-occlusion-plugin";
+import { registerMmdRadianceSkyAmbient } from "./mmd-radiance-sky-ambient-plugin";
 import { MMD_RADIANCE_GI_QUERY_WGSL } from "./mmd-radiance-gi-query-wgsl";
 
 // Only the GPU storage boundary is replaced; use actual material/plugin lifetimes and UBO calls.
@@ -49,10 +50,51 @@ function fixture() {
         plugin.hardBindForSubMesh(buffer, scene, engine, mesh.subMeshes[0]);
         return write.mock.calls.find(call => call[0] === "rcGiControl")?.slice(1);
     };
-    return { engine, scene, mesh, material, live, state, register, bind, bindTexture, bindStorage };
+    return { engine, scene, mesh, material, live, state, register, bind, bindTexture, bindStorage, write, buffer };
 }
 
 describe("MMD diffuse GI plugin", () => {
+    it("binds three nested levels in one atlas and restores the original manual volume", () => {
+        const { state, live, register, bind, write, bindTexture, material } = fixture(); register();
+        const volumes = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
+        state.view = { ...live, volumes };
+        expect(bind()).toEqual([0.5, 0, 0, 0]);
+        expect(write.mock.calls).toEqual([
+            ["rcGiVolume", -64, -64, -64, 128], ["rcGiVolume1", -1024, -1024, -1024, 2048],
+            ["rcGiVolume2", -16384, -16384, -16384, 32768], ["rcGiSpatial", 3, 0, 0, 0], ["rcGiControl", 0.5, 0, 0, 0],
+        ]);
+        expect(bindTexture.mock.calls).toEqual([["rcGiField", live.field], ["rcGiNearestSurface", live.nearestSurface]]);
+        const plugin = material.pluginManager?.getPlugin("MmdRadianceDiffuseGi");
+        expect(plugin?.getUniforms().ubo?.map(uniform => uniform.name))
+            .toEqual(["rcGiVolume", "rcGiVolume1", "rcGiVolume2", "rcGiSpatial", "rcGiControl"]);
+        state.view = live; bind();
+        expect(write.mock.calls).toContainEqual(["rcGiVolume", -8, 0, -8, 16]);
+        expect(write.mock.calls).toContainEqual(["rcGiSpatial", 1, 0, 0, 0]);
+        // A malformed atlas must never index absent or non-nested levels.
+        for (const invalid of [[], [...volumes, volumes[2]], [volumes[1], volumes[0]],
+            [volumes[0], { min: [0, 0, 0] as const, size: 2048 }], [{ ...volumes[0], size: NaN }]]) {
+            state.view = { ...live, volumes: invalid };
+            expect(bind()).toEqual([0, 0, 0, 0]);
+            expect(write.mock.calls).toContainEqual(["rcGiSpatial", 0, 0, 0, 0]);
+        }
+    });
+
+    it("keeps simultaneous GI and Sky Ambient atlas uniforms and textures independent", () => {
+        const { engine, scene, mesh, material, live, register, bind, write, buffer, bindTexture } = fixture(); register();
+        const volumes = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
+        const releaseSky = registerMmdRadianceSkyAmbient(scene, () => ({ ...live, volumes,
+            strength: 0.75, fill: 0.2, skyBrightness: 0.4, opacity: 1 }), () => true);
+        bind();
+        material.pluginManager?.getPlugin("MmdRadianceSkyAmbient")?.hardBindForSubMesh(buffer, scene, engine, mesh.subMeshes[0]);
+        expect(write.mock.calls).toContainEqual(["rcGiSpatial", 1, 0, 0, 0]);
+        expect(write.mock.calls).toContainEqual(["rcSkyAmbientSpatial", 3, 0, 0, 0]);
+        expect(write.mock.calls).toContainEqual(["rcGiControl", 0.5, 0, 0, 0]);
+        expect(write.mock.calls).toContainEqual(["rcSkyAmbientControl", 0.75, 0.2, 0.4, 1]);
+        expect(bindTexture.mock.calls.map(call => call[0]))
+            .toEqual(["rcGiField", "rcGiNearestSurface", "rcSkyAmbientField", "rcSkyAmbientNearestSurface"]);
+        releaseSky();
+    });
+
     it("binds both live textures and triangle data, then neutralizes OFF, rejection, invalid input and release", () => {
         const { state, live, register, bind, bindTexture, bindStorage } = fixture();
         const release = register();
@@ -121,6 +163,7 @@ describe("MMD diffuse GI plugin", () => {
     it("composes GI after sky attenuation without changing sphere/emission and before fog", async () => {
         const { scene, material, register } = fixture(); register();
         const releaseSky = registerMmdRadianceSkyOcclusion(scene, () => null, () => true);
+        const releaseAmbient = registerMmdRadianceSkyAmbient(scene, () => null, () => true);
         await flushNotifications();
         if (!material.pluginManager?.getPlugin("MmdMaterial")) new MmdPluginMaterial(material);
         const manager = material.pluginManager as unknown as {
@@ -128,12 +171,15 @@ describe("MMD diffuse GI plugin", () => {
         };
         const code = manager._injectCustomCode({})("fragment", defaultPixelShaderWGSL.shader);
         expect(code).toContain("rcSkyApplyDiffuse");
+        expect(code).toContain("uniforms.rcSkyAmbientSpatial");
+        expect(code).toContain("uniforms.rcGiSpatial");
+        expect(code).not.toMatch(/uniforms\.rcSky(?:Spatial|Volume1|Volume2)\b/);
         expect(code).toContain("sphereReflectionColor.rgb*diffuseBase");
         expect(code).toContain("let bounce = gi * reflectance * uniforms.rcGiControl.x");
         expect(code.indexOf("let bounce =")).toBeGreaterThan(code.indexOf("var color: vec4f"));
         expect(code.indexOf("let bounce =")).toBeLessThan(code.indexOf("#include<fogFragment>"));
         expect(code).not.toContain("$1");
-        releaseSky();
+        releaseSky(); releaseAmbient();
     });
 
     it("keeps the fragment query bounded to texture reads and two local surface candidates", () => {

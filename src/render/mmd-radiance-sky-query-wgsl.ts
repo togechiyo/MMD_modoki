@@ -2,12 +2,32 @@ import { SKY_IRRADIANCE_AXIS_TOTALS } from "./radiance-sky-irradiance-shaders";
 
 // Field updates integrate the sky and cache two nearby surfaces per probe. Each
 // receiver checks those fixed candidates, without traversing the scene BVH.
-export const MMD_RADIANCE_SKY_QUERY_WGSL = `
+export function createMmdRadianceSkyQueryWgsl(spatialVolumes = false): string {
+    return `
 #ifdef RC_SKY_OCCLUSION
 struct RcSkyTriangle { a: vec4f, b: vec4f, c: vec4f, emission: vec4f, uvAB: vec4f, uvSource: vec4f };
 var<storage, read> rcSkyTriangles: array<RcSkyTriangle>;
 var rcSkyField: texture_2d<f32>;
 var rcSkyNearestSurface: texture_2d<f32>;
+${spatialVolumes ? `
+fn rcSkyVolumeAt(level: u32) -> vec4f {
+    if (level == 1u) { return uniforms.rcSkyVolume1; }
+    if (level == 2u) { return uniforms.rcSkyVolume2; }
+    return uniforms.rcSkyVolume;
+}
+fn rcSkyVolumeRadius(worldPosition: vec3f, volume: vec4f) -> f32 {
+    let relative = abs((worldPosition - volume.xyz) / volume.w * 2.0 - vec3f(1.0));
+    return max(relative.x, max(relative.y, relative.z));
+}
+fn rcSkyOuterVolume() -> vec4f {
+    return rcSkyVolumeAt(u32(clamp(uniforms.rcSkySpatial.x, 1.0, 3.0)) - 1u);
+}
+fn rcSkySpatialCoverage(worldPosition: vec3f) -> f32 {
+    // Preserve the exact manual-volume edge; only automatic origin levels fade.
+    if (uniforms.rcSkySpatial.x <= 1.0) { return 1.0; }
+    return 1.0 - smoothstep(0.75, 1.0, rcSkyVolumeRadius(worldPosition, rcSkyOuterVolume()));
+}
+` : ""}
 fn rcSkyProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
     let segment = probe - position; let distanceSquared = dot(segment, segment);
     if (distanceSquared <= 0.00000001) { return false; }
@@ -40,7 +60,8 @@ fn rcSkyProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
     return false;
 }
 fn rcSkyVisibility(worldPosition: vec3f, worldNormal: vec3f) -> f32 {
-    let volumeMin = uniforms.rcSkyVolume.xyz; let size = uniforms.rcSkyVolume.w;
+    let volume = ${spatialVolumes ? "rcSkyOuterVolume()" : "uniforms.rcSkyVolume"};
+    let volumeMin = volume.xyz; let size = volume.w;
     if (!(size > 0.0 && all(worldPosition >= volumeMin) && all(worldPosition <= volumeMin + vec3f(size)))) { return -1.0; }
     let normalLength = length(worldNormal);
     if (!(normalLength > 0.00001 && normalLength < 1e20)) { return -1.0; }
@@ -52,8 +73,8 @@ fn rcSkyVisibility(worldPosition: vec3f, worldNormal: vec3f) -> f32 {
 }
 // Callers that already validated position, normal and upper-sky support can
 // reuse the query without repeating normalization and its square root.
-fn rcSkyVisibilityValidated(worldPosition: vec3f, normal: vec3f) -> f32 {
-    let volumeMin = uniforms.rcSkyVolume.xyz; let size = uniforms.rcSkyVolume.w;
+fn ${spatialVolumes ? "rcSkyVisibilityInVolume(worldPosition: vec3f, normal: vec3f, volume: vec4f, level: u32)" : "rcSkyVisibilityValidated(worldPosition: vec3f, normal: vec3f)"} -> f32 {
+    let volumeMin = ${spatialVolumes ? "volume" : "uniforms.rcSkyVolume"}.xyz; let size = ${spatialVolumes ? "volume" : "uniforms.rcSkyVolume"}.w;
     let axesA = max(vec3f(normal.x, -normal.x, normal.y), vec3f(0.0));
     let axesB = max(vec2f(normal.z, -normal.z), vec2f(0.0));
     let weightsA = axesA * axesA * vec3f(${SKY_IRRADIANCE_AXIS_TOTALS[0].toFixed(10)}, ${SKY_IRRADIANCE_AXIS_TOTALS[1].toFixed(10)}, 8.0);
@@ -74,7 +95,7 @@ fn rcSkyVisibilityValidated(worldPosition: vec3f, normal: vec3f) -> f32 {
         let facing = clamp(dot(probePosition - worldPosition, normal) * (f32(grid) / size) * 4.0 + 0.5, 0.0, 1.0);
         let weight = weights.x * weights.y * weights.z * facing;
         if (weight <= 0.0) { continue; }
-        let pixel = vec2i(i32(probe.x), i32(probe.z * grid + probe.y));
+        let pixel = vec2i(i32(probe.x), i32(probe.z * grid + probe.y${spatialVolumes ? " + level * grid * grid" : ""}));
         let a = textureLoad(rcSkyField, pixel, 0); let b = textureLoad(rcSkyField, pixel + vec2i(i32(grid), 0), 0);
         // Zero sky visibility is valid darkness, separate from invalid field input.
         if (!(a.a > 0.5 && b.a > 0.5)) { continue; }
@@ -93,12 +114,36 @@ fn rcSkyVisibilityValidated(worldPosition: vec3f, normal: vec3f) -> f32 {
     if (!(weightSum > 0.00001)) { return -1.0; }
     return clamp(result / weightSum, 0.0, 1.0);
 }
+${spatialVolumes ? `
+fn rcSkyVisibilityValidated(worldPosition: vec3f, normal: vec3f) -> f32 {
+    let count = u32(clamp(uniforms.rcSkySpatial.x, 1.0, 3.0));
+    if (count == 1u) { return rcSkyVisibilityInVolume(worldPosition, normal, uniforms.rcSkyVolume, 0u); }
+    for (var level = 0u; level < count; level++) {
+        let volume = rcSkyVolumeAt(level);
+        let radius = rcSkyVolumeRadius(worldPosition, volume);
+        if (!(radius <= 1.0)) { continue; }
+        let inner = rcSkyVisibilityInVolume(worldPosition, normal, volume, level);
+        let blend = smoothstep(0.75, 1.0, radius);
+        if (level + 1u == count || blend <= 0.0) { return inner; }
+        let outer = rcSkyVisibilityInVolume(worldPosition, normal, rcSkyVolumeAt(level + 1u), level + 1u);
+        // Missing input is unknown, not black. Keep whichever level is valid.
+        if (inner < 0.0) { return outer; }
+        if (outer < 0.0) { return inner; }
+        return mix(inner, outer, blend);
+    }
+    return -1.0;
+}
+` : ""}
 fn rcSkyApplyDiffuse(diffuse: vec3f, residual: vec3f, factor: f32) -> vec3f {
     if (factor >= 1.0) { return diffuse; }
     return diffuse - residual * (1.0 - factor);
 }
 #endif
 `;
+}
+
+// Shadow Depth RC retains its single-volume bindings and query.
+export const MMD_RADIANCE_SKY_QUERY_WGSL = createMmdRadianceSkyQueryWgsl();
 
 export const MMD_RADIANCE_SKY_BEFORE_LIGHTS_WGSL = `
 #ifdef RC_SKY_OCCLUSION

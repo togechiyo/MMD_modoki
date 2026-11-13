@@ -8,17 +8,20 @@ import { setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs"
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-diffuse-gi-stage/rc-diffuse-gi-red.pmx");
+const originVolume = { min: [-64, -64, -64], size: 128 };
 
-test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver and live light updates", async ({}, testInfo) => {
+// eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
+test("RC diffuse GI visibility: origin bounds, manual lighting, dark receiver and live light updates", async ({}, testInfo) => {
   test.setTimeout(240000);
   const launched = await launchMmdModoki(root);
   const report = { errors: [], consoleErrors: [], captures: {}, cases: [],
-    interpretation: "Original 36-triangle PMX, default GI strength 0.5. Hidden volume settings are prepared through project import and resolved volume is observed through a diagnostic probe, not GUI editing. Automatic and bounded volumes must both produce visible red bounce. Black shadow tint and Toon influence 0 are fixture-only GUI shading controls; shadow generator, CSM, bias and distances are unchanged. PMX covers Stage; Accessory/OBJ presets belong to their respective import types." };
+    interpretation: "Original 36-triangle PMX, default GI strength 0.5. Hidden volume settings are prepared through project import and resolved volume is observed through a diagnostic probe, not GUI editing. Manual size-16 bounds preserve this small fixture's red-bounce thresholds; automatic mode checks origin bounds and identical output after a manual round trip. Automatic lighting magnitude is covered with the larger room in rc-origin-volumes.spec.mjs. Black shadow tint and Toon influence 0 are fixture-only GUI shading controls; shadow generator, CSM, bias and distances are unchanged. PMX covers Stage; Accessory/OBJ presets belong to their respective import types." };
   try {
     const page = await launched.app.firstWindow();
     page.on("pageerror", error => report.errors.push(error.stack ?? error.message));
     page.on("console", message => { if (message.type() === "error") report.consoleErrors.push(message.text()); });
     await initialState(page, { fixed: false });
+    // eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
     await page.evaluate(async () => { await import("/test/e2e/helpers/rc-diffuse-gi-reference-probe.mjs"); });
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixture);
     const view = await camera(page); report.camera = view;
@@ -29,6 +32,7 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
       await openGi(page);
       // Read the field diagnostically; there are no editable volume inputs in the card.
       const resolved = await page.evaluate(async () =>
+        // eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
         (await import("/test/e2e/helpers/rc-diffuse-gi-reference-probe.mjs")).readReferenceState().volume);
       const result = { status: await giStatus(page).getAttribute("data-state"), fieldRevision: Number(await giStatus(page).getAttribute("data-field-revision")),
         statusText: await giStatus(page).textContent(),
@@ -54,12 +58,20 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
       expect(item.state.resolved.size).toBeGreaterThan(0);
       expect(item.delta.rgbSigned.every(Number.isFinite)).toBe(true);
       expect(item.lighting.direction).toEqual(phase === "dark" ? [-1,0,0] : [-1,-1,0]);
-      const minimumRed = phase === "dark" ? 10 : 2;
-      expect(item.delta.rgbSigned[0]).toBeGreaterThan(minimumRed);
-      expect(item.delta.redExcess).toBeGreaterThan(minimumRed);
-      // Six units of receiving depth plus 20% padding; the parked black blocker
-      // and loader culling padding must not consume the automatic probe volume.
-      if (name !== "fixed16") expect(item.state.resolved.size).toBeCloseTo(7.2, 4);
+      if (name === "fixed16") {
+        // Keep the original quantitative lighting gate at this fixture's explicit
+        // grid resolution. Its tiny receiver does not resolve the automatic grid.
+        expect(item.state.resolved).toEqual(giVolume);
+        expect(item.state.stored.volume).toEqual(giVolume);
+        expect(item.state.automatic).toBe(false);
+        const minimumRed = phase === "dark" ? 10 : 2;
+        expect(item.delta.rgbSigned[0]).toBeGreaterThan(minimumRed);
+        expect(item.delta.redExcess).toBeGreaterThan(minimumRed);
+      } else {
+        expect(item.state.resolved).toEqual(originVolume);
+        expect(item.state.stored.volume).toBeNull();
+        expect(item.state.automatic).toBe(true);
+      }
       if (phase === "dark") for (const value of item.offMean) expect(value).toBeLessThan(1);
       return { item, off, on };
     };
@@ -75,8 +87,8 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
         automaticToBoundedRatio: bounded.item.delta.redExcess ? automatic.item.delta.redExcess / bounded.item.delta.redExcess : null,
         restoreWholeImageDifference: difference(automatic.on, restored.on), restoreReceiver: restore };
       expect(report[`${phase}Comparison`].restoreWholeImageDifference).toBeLessThan(0.15);
-      // Keep the auto/fixed ratio as diagnostic evidence; grid placement and later
-      // reconstruction improvements need not preserve this particular ratio.
+      // The auto/fixed ratio is diagnostic only. This test instead requires the
+      // origin grid and rendered output to recover after the manual round trip.
       for (const value of restore.rgbAbsolute) expect(value).toBeLessThan(0.15);
       expect(restored.item.state.stored.volume).toBeNull();
       return restored.item.state;
@@ -125,10 +137,11 @@ test("RC diffuse GI visibility: automatic bounds, bounded field, dark receiver a
       await page.locator("#shader-preset-select").selectOption("wgsl-stage-standard"); await page.locator("#btn-shader-apply-selected").click();
     }
     await page.locator("#btn-toggle-shader-panel").click(); await page.locator("#info-model-select").selectOption("__camera__");
-    const stage = await pair("preset-stage", "auto");
+    await volume(true);
+    const stage = await pair("preset-stage", "fixed16");
     stage.item.preset = "wgsl-stage-standard";
     stage.item.materialAssignments = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.models[0].materialShaders);
-    expect(stage.item.state.stored.volume).toBeNull(); expect(stage.item.state.supportedMaterials).toBeGreaterThanOrEqual(2);
+    expect(stage.item.state.stored.volume).toEqual(giVolume); expect(stage.item.state.supportedMaterials).toBeGreaterThanOrEqual(2);
 
     await openGi(page); await giSlider(page, 0);
     await expect(giStatus(page)).toHaveAttribute("data-state", "ready");

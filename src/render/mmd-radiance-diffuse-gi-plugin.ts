@@ -16,6 +16,8 @@ import { MMD_RADIANCE_GI_QUERY_WGSL, MMD_RADIANCE_GI_BEFORE_FOG_WGSL } from "./m
 export type MmdRadianceDiffuseGiView = Readonly<{
     field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer;
     volume: { min: readonly [number, number, number]; size: number };
+    /** Nested near-to-far levels in one vertical atlas; absent for legacy manual volumes. */
+    volumes?: readonly { min: readonly [number, number, number]; size: number }[];
     strength: number;
 }>;
 type Registration = { provider: () => MmdRadianceDiffuseGiView | null; acceptsMaterial: (material: Material) => boolean };
@@ -44,8 +46,17 @@ function fallbackFor(scene: Scene): Fallback {
 
 function usableView(view: MmdRadianceDiffuseGiView | null): view is MmdRadianceDiffuseGiView {
     return view !== null && view.field.isReady() && view.nearestSurface.isReady() && Boolean(view.triangles.getBuffer())
-        && [view.volume.size, ...view.volume.min, view.strength].every(Number.isFinite)
-        && view.volume.size > 0 && view.strength > 0;
+        && Number.isFinite(view.strength) && view.strength > 0
+        && usableVolumes(view.volumes ?? [view.volume]);
+}
+
+function usableVolumes(volumes: NonNullable<MmdRadianceDiffuseGiView["volumes"]>): boolean {
+    return volumes.length > 0 && volumes.length <= 3 && volumes.every((volume, index) => {
+        if (![volume.size, ...volume.min].every(Number.isFinite) || volume.size <= 0) return false;
+        const inner = volumes[index - 1];
+        return !inner || (volume.size > inner.size && volume.min.every((min, axis) =>
+            min <= inner.min[axis] && min + volume.size >= inner.min[axis] + inner.size));
+    });
 }
 
 class MmdRadianceDiffuseGiPlugin extends MaterialPluginBase {
@@ -62,7 +73,8 @@ class MmdRadianceDiffuseGiPlugin extends MaterialPluginBase {
     }
     public override getSamplers(samplers: string[]): void { samplers.push("rcGiField", "rcGiNearestSurface"); }
     public override getUniforms(): { ubo: Array<{ name: string; size: number; type: string }> } {
-        return { ubo: [{ name: "rcGiVolume", size: 4, type: "vec4" }, { name: "rcGiControl", size: 4, type: "vec4" }] };
+        return { ubo: ["rcGiVolume", "rcGiVolume1", "rcGiVolume2", "rcGiSpatial", "rcGiControl"]
+            .map(name => ({ name, size: 4, type: "vec4" })) };
     }
     public override hardBindForSubMesh(buffer: UniformBuffer, _scene: Scene, engine: AbstractEngine, subMesh: SubMesh): void {
         let view: MmdRadianceDiffuseGiView | null = null;
@@ -76,7 +88,13 @@ class MmdRadianceDiffuseGiPlugin extends MaterialPluginBase {
         }
         if (!usableView(view)) view = null;
         const source = view ?? this.fallback;
-        buffer.updateFloat4("rcGiVolume", ...(view?.volume.min ?? [0, 0, 0]) as [number, number, number], view?.volume.size ?? 1);
+        const volumes = view ? view.volumes ?? [view.volume] : [];
+        for (let level = 0; level < 3; level++) {
+            const volume = volumes[level];
+            buffer.updateFloat4(level === 0 ? "rcGiVolume" : `rcGiVolume${level}`,
+                ...(volume?.min ?? [0, 0, 0]) as [number, number, number], volume?.size ?? 1);
+        }
+        buffer.updateFloat4("rcGiSpatial", volumes.length, 0, 0, 0);
         buffer.updateFloat4("rcGiControl", view ? Math.min(2, view.strength) : 0, 0, 0, 0);
         buffer.setTexture("rcGiField", source.field);
         buffer.setTexture("rcGiNearestSurface", source.nearestSurface);

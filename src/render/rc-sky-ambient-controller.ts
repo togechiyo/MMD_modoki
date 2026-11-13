@@ -8,13 +8,15 @@ import { RadianceSkyVisibilityField } from "./radiance-sky-visibility-field";
 import { registerMmdRadianceSkyAmbient, type MmdRadianceSkyAmbientView } from "./mmd-radiance-sky-ambient-plugin";
 import type { RcSkyAmbientSettings, RcSkyAmbientVolume } from "./rc-sky-ambient-settings";
 import { getSkyVisibilityProbeGrid, scaleSkyVisibilityVolume, type SkyVisibilityQuality } from "./radiance-sky-quality";
-import { fitRadianceReceiverVolume, getRadianceReceiverVolumeMembership } from "./radiance-receiver-volume";
+import { fitRadianceReceiverVolume } from "./radiance-receiver-volume";
+import { createRcOriginVolumes } from "./rc-origin-volumes";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcSkyAmbientDiagnostics = {
     status: Status; reason: string | null; volume: RcSkyAmbientVolume | null;
     effectiveVolume: RcSkyAmbientVolume | null; quality: SkyVisibilityQuality; probeGrid: number;
     triangleCount: number; fieldRevision: number; supportedMaterialCount: number;
+    spatialMode: "origin" | "manual"; volumes: RcSkyAmbientVolume[]; effectiveVolumes: RcSkyAmbientVolume[];
 };
 
 /** Sky attenuation and optional fill. Saved values and static-model policy belong to the manager. */
@@ -32,9 +34,6 @@ export class RcSkyAmbientController {
     private frameId = -1;
     private disposed = false;
     private unregister: (() => void) | null = null;
-    private automaticVolume: RcSkyAmbientVolume | null = null;
-    private requestedVolumeKey = "";
-    private receiverMembership = "";
     private initialization: Promise<void> | null = null;
     private readonly removeSceneObservers: () => void;
 
@@ -55,9 +54,12 @@ export class RcSkyAmbientController {
     }
 
     public get diagnostics(): RcSkyAmbientDiagnostics {
-        const settings = this.settings(), volume = settings.volume ?? this.automaticVolume;
+        const settings = this.settings(), effectiveVolumes = this.resolveVolumes();
+        const volumes = effectiveVolumes.length ? settings.volume ? [settings.volume] : createRcOriginVolumes() : [];
+        const volume = volumes[0] ?? null;
         return { status: this.status, reason: this.reason, volume,
-            effectiveVolume: volume ? scaleSkyVisibilityVolume(volume, settings.rangeScale) : null,
+            effectiveVolume: effectiveVolumes[0] ?? null, volumes, effectiveVolumes,
+            spatialMode: settings.volume ? "manual" : "origin",
             quality: settings.quality, probeGrid: getSkyVisibilityProbeGrid(settings.quality),
             triangleCount: this.field?.source.bvh.triangleCount ?? 0, fieldRevision: this.fieldRevision,
             supportedMaterialCount: new Set(this.receivers().flatMap(mesh => (mesh.subMeshes ?? [])
@@ -71,7 +73,7 @@ export class RcSkyAmbientController {
             }));
     }
 
-    /** Fit visible receivers once; offscreen blockers do not enlarge the grid. */
+    /** Explicit legacy/manual fit; automatic lighting uses fixed origin volumes. */
     public fitVolume(meshes = this.receivers()): RcSkyAmbientVolume | null {
         // Sky also affects black receivers; GI alone filters by reflectance.
         return fitRadianceReceiverVolume(meshes, (mesh, material) => this.acceptsMesh(mesh) && this.acceptsMaterial(material));
@@ -86,25 +88,21 @@ export class RcSkyAmbientController {
         } else if (this.status === "error") { this.release(); this.status = "preparing"; }
     }
 
-    private resolveVolume(): RcSkyAmbientVolume | null {
+    private resolveVolumes(): RcSkyAmbientVolume[] {
         const receivers = this.receivers();
-        const membership = getRadianceReceiverVolumeMembership(receivers, (_mesh, material) => this.acceptsMaterial(material));
-        const settings = this.settings(), requestedVolumeKey = JSON.stringify(settings.volume);
-        // Loading arrives in stages. Refit membership changes, not each animated pose.
-        // Look controls do not refit a moving model; changing manual/automatic bounds does.
-        if (membership !== this.receiverMembership || requestedVolumeKey !== this.requestedVolumeKey) {
-            this.automaticVolume = null; this.receiverMembership = membership; this.requestedVolumeKey = requestedVolumeKey;
-        }
+        const settings = this.settings();
         // A saved manual volume must not keep an all-dynamic scene preparing.
-        if (!receivers.length) return null;
-        const base = settings.volume ?? (this.automaticVolume ??= this.fitVolume(receivers));
-        return base ? scaleSkyVisibilityVolume(base, settings.rangeScale) : null;
+        if (!receivers.length) return [];
+        // Legacy rangeScale applies only to explicitly saved manual bounds.
+        return settings.volume ? [scaleSkyVisibilityVolume(settings.volume, settings.rangeScale)] : createRcOriginVolumes();
     }
 
     /** Texture shape is immutable once the graph is built. Detach bindings before replacing it. */
     private synchronizeQuality(): void {
         const quality = this.settings().quality;
-        if (this.field && this.field.quality !== quality || this.pending && this.pending.quality !== quality) this.release();
+        const count = this.settings().volume ? 1 : 3;
+        if (this.field && (this.field.quality !== quality || this.field.volumeCount !== count)
+            || this.pending && (this.pending.quality !== quality || this.pending.volumeCount !== count)) this.release();
     }
 
     private supported(): boolean {
@@ -113,17 +111,18 @@ export class RcSkyAmbientController {
 
     public get isReadyForCapture(): boolean {
         const settings = this.settings();
-        if (!settings.enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolume()
+        if (!settings.enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolumes().length
             || settings.enabled && (settings.strength <= 0 && settings.skyBrightness <= 0 || settings.opacity <= 0)) return true;
-        return this.status !== "error" && this.field?.quality === settings.quality && Boolean(this.field.graph.isReady());
+        return this.status !== "error" && this.field?.quality === settings.quality
+            && this.field.volumeCount === (settings.volume ? 1 : 3) && Boolean(this.field.graph.isReady());
     }
 
     public async prewarm(): Promise<boolean> {
         if (this.disposed) return false;
         if (!this.supported()) return true;
         this.synchronizeQuality();
-        const volume = this.resolveVolume();
-        if (!volume) {
+        const volumes = this.resolveVolumes();
+        if (!volumes.length) {
             if (this.pending) this.release();
             this.view = null; this.frameId = -1; return true;
         }
@@ -131,7 +130,7 @@ export class RcSkyAmbientController {
             () => this.backendReady() && this.settings().enabled ? this.view : null, this.acceptsMaterial,
             mesh => mesh instanceof Mesh && this.acceptsMesh(mesh));
         if (!this.field && !this.initialization) {
-            const initialization = this.allocate(volume);
+            const initialization = this.allocate(volumes);
             this.initialization = initialization;
             void initialization.finally(() => { if (this.initialization === initialization) this.initialization = null; });
         }
@@ -157,7 +156,7 @@ export class RcSkyAmbientController {
         }
         const unsupported = this.unsupportedReason();
         if (unsupported) { this.view = null; this.status = "unsupported"; this.reason = unsupported; this.frameId = -1; return; }
-        const volume = this.resolveVolume();
+        const volumes = this.resolveVolumes(), volume = volumes[0];
         if (!volume) {
             if (this.pending) this.release();
             this.view = null; this.status = "ready"; this.reason = "対象の固定モデルがありません"; this.frameId = -1; return;
@@ -182,10 +181,10 @@ export class RcSkyAmbientController {
             finally { timing?.recordSource(performance.now() - sourceStart); }
             if (field.source.error) throw new Error(field.source.error);
             if (!field.graph.isReady()) { this.view = null; this.status = "preparing"; return; }
-            const volumeKey = JSON.stringify(volume);
+            const volumeKey = JSON.stringify(volumes);
             if (field.source.revision !== this.sourceRevision || volumeKey !== this.volumeKey) {
                 const submitStart = timing ? performance.now() : 0;
-                field.setVolume(volume);
+                field.setVolumes(volumes);
                 const engine = this.scene.getEngine(), target = engine._currentRenderTarget;
                 const viewport = engine.currentViewport && { ...engine.currentViewport }, pass = engine.currentRenderPassId;
                 try {
@@ -203,7 +202,7 @@ export class RcSkyAmbientController {
             }
             this.view = field.irradianceField && field.nearestSurfaceField
                 ? { field: field.irradianceField, nearestSurface: field.nearestSurfaceField, triangles: field.source.triangleBuffer,
-                    volume, strength: settings.strength, fill: settings.fill, skyBrightness: settings.skyBrightness,
+                    volume, volumes, strength: settings.strength, fill: settings.fill, skyBrightness: settings.skyBrightness,
                     opacity: settings.opacity } : null;
             this.frameId = frameId; this.status = "ready"; this.reason = null;
         } catch (error) {
@@ -220,12 +219,12 @@ export class RcSkyAmbientController {
                 : scene.prePass ? "PrePass" : null;
     }
 
-    private async allocate(volume: RcSkyAmbientVolume): Promise<void> {
+    private async allocate(volumes: RcSkyAmbientVolume[]): Promise<void> {
         this.status = "preparing"; this.reason = null;
         const generation = ++this.generation;
         let candidate: RadianceSkyVisibilityField | null = null;
         try {
-            candidate = new RadianceSkyVisibilityField(this.scene, { volume, diagnostic: false, opaqueOccludersOnly: true,
+            candidate = new RadianceSkyVisibilityField(this.scene, { volumes, diagnostic: false, opaqueOccludersOnly: true,
                 materialIrradiance: true, acceptsMesh: this.acceptsMesh, quality: this.settings().quality });
             this.pending = candidate;
             const cancelled = new Promise<void>(resolve => { this.cancelPending = resolve; });

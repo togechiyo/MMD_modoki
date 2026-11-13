@@ -28,7 +28,8 @@ export class RadianceNearestSurfaceTask extends FrameGraphComputeShaderTask {
     private readonly candidates: StorageBuffer;
 
     constructor(name: string, graph: FrameGraph, private readonly source: LuminousRadianceSceneSource,
-        private readonly grid: number, output: { handle: FrameGraphTextureHandle; internal: InternalTexture }) {
+        private readonly grid: number, output: { handle: FrameGraphTextureHandle; internal: InternalTexture },
+        private readonly atlasOffsetY = 0) {
         super(name, graph, { computeSource: SKY_NEAREST_SURFACE_WGSL }, { bindingsMapping: {
             params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 },
             nodes: { group: 0, binding: 2 }, nearestSurface: { group: 0, binding: 3 }, candidates: { group: 0, binding: 4 },
@@ -61,7 +62,7 @@ export class RadianceNearestSurfaceTask extends FrameGraphComputeShaderTask {
         this.completed = null; // A failed graph submission must retry with a full atlas.
         this.params.updateFloat4("volumeMin", ...volume.min, 0);
         this.params.updateFloat4("volumeSize", volume.size, volume.size, volume.size, 0);
-        this.params.updateFloat4("shape", this.grid, 0, 0, bvh.triangleCount);
+        this.params.updateFloat4("shape", this.grid, this.atlasOffsetY, 0, bvh.triangleCount);
         this.params.updateFloat4("dirtyMin", low[0], low[1], low[2], mode === "partial" ? 1 : 0);
         this.params.updateFloat4("dirtyMax", high[0], high[1], high[2], 0);
     }

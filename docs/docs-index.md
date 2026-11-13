@@ -89,6 +89,7 @@
 - [依存関係ブートストラップメモ](./dependency-bootstrap-2026-03-13.md)
 - [依存関係セキュリティ状況](./dependency-security-status-2026-04-13.md)
 - [v0.2 依存更新メモ 2026-04-27](./dependency-upgrade-v0.2-note-2026-04-27.md)
+- [Electron 45更新・互換性と検証 2026-11-13](./electron-45-upgrade-2026-11-13.md)
 - [v0.2 ライブラリ追加調査メモ 2026-05-17](./library-adoption-investigation-v0.2-2026-05-17.md)
 - [Vite / Vitest バージョン選定メモ 2026-05-17](./vite-vitest-version-security-note-2026-05-17.md)
 - [Electron 起動確認自動化 調査メモ](./electron-launch-test-investigation.md)

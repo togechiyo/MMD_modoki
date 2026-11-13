@@ -28,6 +28,7 @@ import type {
   WebmExportRequest,
 } from "./types";
 import { POST_EFFECT_BACKEND_STORAGE_KEY } from "./render/post-effect-backend";
+import { installLocalAssetRouting } from "./render/local-asset-routing";
 
 let shaderRequestTraceInstalled = false;
 
@@ -232,6 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initializeApp(): Promise<void> {
+  installLocalAssetRouting();
   const wgslRecovered = await initializeWgslRecovery();
   const searchParams = new URLSearchParams(window.location.search);
   const mode = searchParams.get("mode");
@@ -558,40 +560,61 @@ async function initializeApp(): Promise<void> {
         return;
       }
       const environmentLightingWasEnabled = mmdManager.isEnvironmentLightingEnabled();
-      mmdManager.setEnvironmentLightingEnabled(true);
-      const environmentDiagnostics = mmdManager.getEnvironmentLightingDiagnostics();
-      environmentLightingDiagnostics = environmentDiagnostics;
-      mmdManager.setEnvironmentLightingEnabled(environmentLightingWasEnabled);
-      if (
-        !environmentDiagnostics.textureReady
-        || !environmentDiagnostics.hasSphericalPolynomial
-      ) {
-        reportSmokeRendererFailure("Environment lighting is not PBR-ready", {
-          environmentDiagnostics,
-        });
-        return;
-      }
-      if (smokeHdrPath && (
-        !environmentDiagnostics.backgroundVisible
-        || !environmentDiagnostics.backgroundTextureReady
-        || !environmentDiagnostics.backgroundMeshEnabled
-        || environmentDiagnostics.environmentTextureSize.width < 1024
-        || environmentDiagnostics.backgroundTextureSize.width < 1024
-      )) {
-        reportSmokeRendererFailure("External HDR background is not ready", {
-          environmentDiagnostics,
-        });
-        return;
-      }
-      mmdManager.setEnvironmentLightingEnabled(true);
-      environmentLightingProbe = await mmdManager.runEnvironmentLightingDiagnosticProbe();
-      mmdManager.setEnvironmentLightingEnabled(environmentLightingWasEnabled);
-      if (!environmentLightingProbe.passed) {
-        reportSmokeRendererFailure("Environment lighting did not affect synthetic PBR output", {
-          environmentDiagnostics,
-          environmentLightingProbe,
-        });
-        return;
+      try {
+        mmdManager.setEnvironmentLightingEnabled(true);
+        const readinessStartedAt = performance.now();
+        let environmentDiagnostics = mmdManager.getEnvironmentLightingDiagnostics();
+        while (
+          (
+            !environmentDiagnostics.textureReady
+            || !environmentDiagnostics.hasSphericalPolynomial
+            || (smokeHdrPath && (
+              !environmentDiagnostics.backgroundVisible
+              || !environmentDiagnostics.backgroundTextureReady
+              || !environmentDiagnostics.backgroundMeshEnabled
+              || environmentDiagnostics.environmentTextureSize.width < 1024
+              || environmentDiagnostics.backgroundTextureSize.width < 1024
+            ))
+          )
+          && performance.now() - readinessStartedAt < 10_000
+        ) {
+          await waitAnimationFrames(1);
+          environmentDiagnostics = mmdManager.getEnvironmentLightingDiagnostics();
+        }
+        environmentLightingDiagnostics = environmentDiagnostics;
+        if (
+          !environmentDiagnostics.textureReady
+          || !environmentDiagnostics.hasSphericalPolynomial
+        ) {
+          reportSmokeRendererFailure("Environment lighting is not PBR-ready", {
+            environmentDiagnostics,
+            elapsedMs: performance.now() - readinessStartedAt,
+          });
+          return;
+        }
+        if (smokeHdrPath && (
+          !environmentDiagnostics.backgroundVisible
+          || !environmentDiagnostics.backgroundTextureReady
+          || !environmentDiagnostics.backgroundMeshEnabled
+          || environmentDiagnostics.environmentTextureSize.width < 1024
+          || environmentDiagnostics.backgroundTextureSize.width < 1024
+        )) {
+          reportSmokeRendererFailure("External HDR background is not ready", {
+            environmentDiagnostics,
+            elapsedMs: performance.now() - readinessStartedAt,
+          });
+          return;
+        }
+        environmentLightingProbe = await mmdManager.runEnvironmentLightingDiagnosticProbe();
+        if (!environmentLightingProbe.passed) {
+          reportSmokeRendererFailure("Environment lighting did not affect synthetic PBR output", {
+            environmentDiagnostics,
+            environmentLightingProbe,
+          });
+          return;
+        }
+      } finally {
+        mmdManager.setEnvironmentLightingEnabled(environmentLightingWasEnabled);
       }
     }
     const scenario = smokeModelPath

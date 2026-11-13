@@ -38,6 +38,7 @@ Windows:
 macOS:
 
 - `MMD modoki.app`
+- The current development build requires **macOS 13 Ventura or later** after the Electron upgrade. This applies to the next release; requirements for the published v0.2.4 build are unchanged.
 
 Linux:
 
@@ -114,7 +115,7 @@ Mouse:
 
 Requirements:
 
-- Node.js 22 (used by release CI)
+- Node.js 22.12.0 or later (release CI uses Node.js 22)
 - npm
 
 Setup:

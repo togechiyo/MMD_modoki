@@ -40,6 +40,7 @@ Windows:
 macOS:
 
 - `MMD modoki.app`
+- 現在の開発版はElectron更新に伴い **macOS 13 Ventura以降** が必要です。次回配布版から適用され、公開済みv0.2.4の要件は変更しません。
 
 Linux:
 
@@ -116,7 +117,7 @@ Linux:
 
 要件:
 
-- Node.js 22（リリースCIで使用）
+- Node.js 22.12.0以上（リリースCIは22系）
 - npm
 
 セットアップ:

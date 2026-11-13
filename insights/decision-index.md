@@ -8,7 +8,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
-| adopted | [v0.2.5はエフェクトのキー登録を仕上げる](./decisions/v025-finishes-effect-key-registration.md) | 11/14午前の公開目標に向けた優先順位。キー0個なら再生中もGUIで調整できるよう共通側で修正し、カメラ・照明と挙動を合わせる。Electron更新も対象。軽めの色調補正・標準レンズフレア等の追加は余裕があれば扱う低優先度。具体的な更新先・追加効果・日程詳細は未確定、公開許可は別 |
+| adopted | [v0.2.5はエフェクトのキー登録を仕上げる](./decisions/v025-finishes-effect-key-registration.md) | 11/14午前の公開目標に向けた優先順位。キー0個なら再生中もGUIで調整できるよう共通側で修正し、カメラ・照明と挙動を合わせる。Electron更新も対象で、11/13に読込経路も対応してMPRを維持する方針を選択。軽めの追加効果は余裕があれば扱う。公開許可は別 |
 | adopted | [Sky Ambientは材質色・テクスチャを保って柔らかな陰影を付ける](./decisions/sky-ambient-preserves-material-colors.md) | 街角の参考画像の陰影を通常材質へ付ける。FrameGraphエフェクト。11/10の操作数削減により開発用範囲・品質等は通常欄から外す。加算専用化は取り下げ。GI RCを明るくする側、Sky Ambient RCを暗くする側として、標準影を保ち補助光に遮蔽を効かせる改良を指定。11/09の画像から暫定既定値を設定し、明示保存値・未追加OFFは維持。全sceneの品質・性能了承には広げない |
 | adopted | [低〜中性能PCで使いやすい軽量なリアルタイムMMDを優先する](./decisions/prioritize-lightweight-realtime-mmd-defaults.md) | アマチュアMMD利用者向けの既定動作、品質と負荷、操作の複雑さを判断する。具体的な方式・FPS・最低動作環境は別途確認 |
 | accepted-with-constraints | [3D RC は通常 Luminous から分離して最適化を再開する](./decisions/defer-further-radiance-cascade-optimization.md) | 通常GlowとRCを分け、保存互換と独立動作を維持する。2026-10-31、Luminous・天空遮蔽・GIの3効果を対象に効率化・高速化を再依頼。手軽なリアルタイムMMD用途を維持する |

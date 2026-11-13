@@ -1,6 +1,6 @@
 # Playwright Electron E2E 実装・運用ガイド
 
-更新日: 2026-08-23
+更新日: 2026-11-13
 
 ## 目的
 
@@ -36,6 +36,8 @@ test-results/
 - `test-results/`: 失敗時のPlaywright artifact。Git管理しない。
 
 ElectronとWebGPUは同時実行時にGPU・プロセス資源を競合しやすいため、当面は1 workerで直列実行する。
+
+配布版へCDP接続する`mcp-packaged-export.spec.mjs`は、Electron45でtrace記録付きの非表示exporterが初期化停止 / 描画準備timeoutになるため、このspecだけtraceを無効にし、console / pageerror / request失敗 / operation結果を`report.json`へ残す。同一配布版・同一assertionのtrace OFFでは完了を確認した。開発版E2E全体のtrace無効化や製品側timeout延長には広げない（[更新検証](./electron-45-upgrade-2026-11-13.md)）。
 
 実行中はsource・specだけでなく、`docs/`やfixture README等の監視対象も編集しない。Tailwindのscan対象asset変更からViteのfull reloadが入り、sceneや設定が初期化される場合がある。2026-11-01の[RC X検証](./rc-x-accessory-support-2026-11-01.md#確認)では文書更新と初期化の時刻が一致し、全編集停止で通常cache・新規cacheとも再試験が成功した。テストと文書更新は直列にする。
 

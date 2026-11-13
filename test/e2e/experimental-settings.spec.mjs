@@ -18,8 +18,8 @@ test("experimental settings persist PBR imports and expose environment and log o
     await page.locator("#light-color-r").dispatchEvent("input");
     await page.locator("#btn-light-keyframe").click();
     const keys = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().keyframes);
-    await launched.app.evaluate(({ shell, clipboard }) => {
-      globalThis.experimentOriginalClipboard = clipboard.readText();
+    await launched.app.evaluate(async ({ shell, clipboard }) => {
+      globalThis.experimentOriginalClipboard = await clipboard.readText();
       globalThis.experimentOpenedPaths = [];
       shell.openPath = async path => { globalThis.experimentOpenedPaths.push(path); return ""; };
     });
@@ -90,7 +90,7 @@ test("experimental settings persist PBR imports and expose environment and log o
     await expect.poll(() => launched.app.evaluate(() => globalThis.experimentOpenedPaths)).toEqual([logInfo.directoryPath, logInfo.path]);
     await page.evaluate(() => window.electronAPI.logInfo("renderer", "experimental-settings-copy-fixture"));
     await dialog.getByRole("button", { name: "ログ内容をコピー", exact: true }).click();
-    await expect.poll(() => launched.app.evaluate(({ clipboard }) => clipboard.readText().includes("experimental-settings-copy-fixture"))).toBe(true);
+    await expect.poll(() => launched.app.evaluate(async ({ clipboard }) => (await clipboard.readText()).includes("experimental-settings-copy-fixture"))).toBe(true);
     await dialog.screenshot({ path: testInfo.outputPath("experimental-settings.png") });
     await page.reload();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
@@ -151,8 +151,8 @@ test("experimental settings persist PBR imports and expose environment and log o
     expect(errors).toEqual([]);
     expect((await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).count).toBe(0);
   } finally {
-    await launched.app.evaluate(({ clipboard }) => {
-      if (typeof globalThis.experimentOriginalClipboard === "string") clipboard.writeText(globalThis.experimentOriginalClipboard);
+    await launched.app.evaluate(async ({ clipboard }) => {
+      if (typeof globalThis.experimentOriginalClipboard === "string") await clipboard.writeText(globalThis.experimentOriginalClipboard);
     }).catch(() => undefined);
     await launched.close();
   }

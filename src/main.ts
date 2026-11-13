@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, session, shell, type IpcMainEvent } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, protocol, screen, session, shell, type IpcMainEvent, type Session } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { isProjectFilePath } from './project/project-drop';
@@ -40,6 +40,8 @@ import { prepareAutomationVideoOutput } from './main/automation/video-output';
 import { prepareAutomationPngOutput, type AutomationPngOutput } from './main/automation/png-output';
 import { AutomationError, toAutomationFailure } from './automation/diagnostics';
 import type { AutomationPermission, AutomationVideoOptions } from './automation/ui-operation-schema';
+import { LOCAL_ASSET_SCHEME } from './shared/local-asset-url';
+import { createLocalAssetProtocolHandler } from './main/local-asset-protocol';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -47,6 +49,19 @@ if (started) {
 }
 
 const isDev = Boolean(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+const PNG_EXPORTER_PARTITION = 'persist:mmd-modoki-png-exporter';
+if (isDev) {
+  protocol.registerSchemesAsPrivileged([{
+    scheme: LOCAL_ASSET_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  }]);
+}
 const isSmokeMode = process.env.MMD_MODOKI_SMOKE === '1';
 const isE2eMode = process.env.MMD_MODOKI_E2E === '1';
 const pngSequenceEncoderMode = process.env.MMD_MODOKI_PNG_ENCODER === 'main'
@@ -652,14 +667,21 @@ const appendResponseHeaderValue = (
   headers[name] = [value];
 };
 
-const configureCrossOriginIsolationHeaders = (): void => {
-  session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*', 'file://*/*'] }, (details, callback) => {
+const configureDevelopmentSession = (targetSession: Session): void => {
+  targetSession.webRequest.onHeadersReceived({ urls: ['*://*/*', 'file://*/*'] }, (details, callback) => {
     const responseHeaders = { ...(details.responseHeaders ?? {}) };
     appendResponseHeaderValue(responseHeaders, 'Cross-Origin-Opener-Policy', 'same-origin');
     appendResponseHeaderValue(responseHeaders, 'Cross-Origin-Embedder-Policy', 'require-corp');
     appendResponseHeaderValue(responseHeaders, 'Cross-Origin-Resource-Policy', 'cross-origin');
     callback({ responseHeaders });
   });
+  targetSession.protocol.handle(LOCAL_ASSET_SCHEME, createLocalAssetProtocolHandler({
+    devOrigin: MAIN_WINDOW_VITE_DEV_SERVER_URL,
+    fetchFile: (url, init) => targetSession.fetch(url, init),
+    getFileSize: async url => (await fs.promises.stat(fileURLToPath(url))).size,
+    resolveNearbyFileUrl,
+    reportError: error => writeAppLog('warn', 'ipc', 'failed to serve local asset', createLogErrorData(error)),
+  }));
 };
 
 const configureSessionSecurity = (): void => {
@@ -1012,7 +1034,7 @@ const createWindow = (projectFilePath?: string): BrowserWindow => {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false, // Allow file:// protocol for local PMX/texture loading
+      webSecurity: isDev, // Dev local assets use a protocol compatible with isolation.
     },
   });
   mainWindow.setMenuBarVisibility(false);
@@ -1108,7 +1130,8 @@ app.on('ready', () => {
     logFilePath: log.transports.file.getFile().path,
   });
   if (isDev) {
-    configureCrossOriginIsolationHeaders();
+    configureDevelopmentSession(session.defaultSession);
+    configureDevelopmentSession(session.fromPartition(PNG_EXPORTER_PARTITION));
   }
   configureSessionSecurity();
   createWindow();
@@ -1152,7 +1175,7 @@ ipcMain.handle('log:openCurrent', async (): Promise<boolean> => {
 ipcMain.handle('log:copyCurrent', async (): Promise<boolean> => {
   try {
     const content = await fs.promises.readFile(log.transports.file.getFile().path, 'utf8');
-    clipboard.writeText(content);
+    await clipboard.writeText(content);
     return true;
   } catch (err: unknown) {
     writeAppLog('error', 'ipc', 'failed to copy current log', createLogErrorData(err));
@@ -2085,11 +2108,11 @@ ipcMain.handle(
         parent: ownerWindow,
         webPreferences: {
           preload: path.join(__dirname, 'preload.js'),
-          partition: 'persist:mmd-modoki-png-exporter',
+          partition: PNG_EXPORTER_PARTITION,
           zoomFactor: 1,
           contextIsolation: true,
           nodeIntegration: false,
-          webSecurity: false,
+          webSecurity: isDev,
           backgroundThrottling: false,
         },
       });
@@ -2269,9 +2292,8 @@ ipcMain.handle(
           preload: path.join(__dirname, 'preload.js'),
           contextIsolation: true,
           nodeIntegration: false,
-          // Packaged file:// WebCodecs requires the standard origin checks. The dev
-          // HTTP page still needs file:// access for local project/texture loading.
-          webSecurity: !MAIN_WINDOW_VITE_DEV_SERVER_URL,
+          // Both packaged WebCodecs and dev shared-memory physics need origin checks.
+          webSecurity: true,
           backgroundThrottling: false,
         },
       });

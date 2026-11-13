@@ -1,13 +1,17 @@
 import { test, expect, chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { enableMcpEditing } from "./mcp-client.mjs";
 
-test("packaged file:// MCP export with production fuses and local model textures", async () => {
+// Electron 45's CDP-attached hidden exporter stalls with Playwright trace recording.
+// Keep the same functional assertions and collect structured events/results below.
+test.use({ trace: "off" });
+
+test("packaged file:// MCP export with production fuses and local model textures", async ({}, testInfo) => {
     test.skip(!process.env.MMD_MODOKI_PACKAGED_EXECUTABLE, "Run package first and set MMD_MODOKI_PACKAGED_EXECUTABLE");
     test.setTimeout(240000);
     const temp = await mkdtemp(join(tmpdir(), "mmd-packaged-mcp-"));
@@ -19,6 +23,14 @@ test("packaged file:// MCP export with production fuses and local model textures
     for (const key of Object.keys(env)) if (/^(ELECTRON_RUN_AS_NODE|MMD_MODOKI_E2E|MMD_MODOKI_SMOKE)/i.test(key)) delete env[key];
     const child = spawn(resolve(process.env.MMD_MODOKI_PACKAGED_EXECUTABLE), [`--remote-debugging-port=${port}`, `--user-data-dir=${join(temp, "profile")}`], { env, windowsHide: false, stdio: "ignore" });
     let browser, page;
+    const report = { events: [], operations: [] };
+    const observe = current => {
+        current.on("console", message => {
+            if (["warning", "error"].includes(message.type())) report.events.push({ type: message.type(), url: current.url(), text: message.text() });
+        });
+        current.on("pageerror", error => report.events.push({ type: "pageerror", url: current.url(), text: error.message }));
+        current.on("requestfailed", request => report.events.push({ type: "requestfailed", url: request.url(), error: request.failure() }));
+    };
     let launchError;
     child.on("error", error => { launchError = error; });
     try {
@@ -27,7 +39,9 @@ test("packaged file:// MCP export with production fuses and local model textures
             try { return (await fetch(`http://127.0.0.1:${port}/json/version`)).ok; } catch { return false; }
         }, { timeout: 45000 }).toBe(true);
         browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 15000 });
+        browser.contexts()[0].on("page", observe);
         page = browser.contexts()[0].pages()[0];
+        observe(page);
         page.setDefaultTimeout(15000);
         // Static menu markup appears before the asynchronous runtime and UI handlers.
         await page.waitForFunction(() => Boolean(window.mmdModokiDiagnostics), undefined, { timeout: 45000 });
@@ -47,9 +61,11 @@ test("packaged file:// MCP export with production fuses and local model textures
             let result;
             await expect.poll(async () => {
                 result = (await rpc("mmd_get_operation", { target: input.target, operationId: input.operationId })).structuredContent;
+                report.lastOperation = result;
                 return result.status;
             }, { timeout: 90000 }).not.toBe("running");
             expect(result.status, JSON.stringify(result)).toBe("completed");
+            report.operations.push(result);
             return result;
         };
         const loaded = await edit("mmd_start_ui_operation", { operation: { kind: "loadAsset", assetKind: "model", filePath: resolve("test/fixtures/external-parent/material-switch.pmx") } });
@@ -91,6 +107,7 @@ test("packaged file:// MCP export with production fuses and local model textures
         }, { timeout: 30000 }).toBe("failed");
         expect(terminal).toMatchObject({ progress: { totalFrames: 3, capturedFrames: 0 }, diagnostic: { error: { code: "VIDEO_ENCODER_UNAVAILABLE", details: { stage: "initializing", secureContext: true, videoEncoderAvailable: false } } } });
     } finally {
+        await writeFile(testInfo.outputPath("report.json"), JSON.stringify(report, null, 2));
         await page?.close().catch(() => undefined);
         await browser?.close();
         if (child.exitCode === null) {

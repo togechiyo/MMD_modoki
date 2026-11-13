@@ -9,6 +9,7 @@ import { seekVideoFrame } from "./export/seek-video-frame";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
 import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
 import { installCsmDistanceFade } from "./render/csm-distance-fade";
+import { resolveRendererAssetUrl } from "./render/local-asset-routing";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { WebGPUTintWASM } from "@babylonjs/core/Engines/WebGPU/webgpuTintWASM";
 import { Scene } from "@babylonjs/core/scene";
@@ -7456,7 +7457,8 @@ ${beforeFogAppendBlock}
         video.loop = false;
         video.playsInline = true;
         video.setAttribute("playsinline", "");
-        video.src = localPathToFileUrl(normalizedPath);
+        if (import.meta.env.DEV) video.crossOrigin = "anonymous";
+        video.src = resolveRendererAssetUrl(localPathToFileUrl(normalizedPath));
 
         let texture: DynamicTexture | null = null;
         let canvas: HTMLCanvasElement | null = null;
@@ -10895,7 +10897,8 @@ ${beforeFogAppendBlock}
                 });
             };
             image.onerror = () => resolve(null);
-            image.src = url;
+            if (import.meta.env.DEV) image.crossOrigin = "anonymous";
+            image.src = resolveRendererAssetUrl(url);
         });
     }
 
@@ -16550,6 +16553,11 @@ ${beforeFogAppendBlock}
     }
 
     public isPostEffectBackendReadyForCapture(): boolean {
+        // A loaded media texture does not mean its Layer shader has compiled yet.
+        // Warm visible layers before a separate exporter captures its first frame.
+        for (const layer of [this.backgroundImageLayer, this.backgroundVideoLayer]) {
+            if (layer?.isEnabled && !layer.isReady()) return false;
+        }
         if (this.needsRcSkyAmbientResources() && !this.getRcSkyAmbientController().isReadyForCapture) return false;
         if (this.needsRcSkyOcclusionResources() && !this.getRcSkyOcclusionController().isReadyForCapture) return false;
         if (this.needsRcDiffuseGiResources() && !this.getRcDiffuseGiController().isReadyForCapture) return false;

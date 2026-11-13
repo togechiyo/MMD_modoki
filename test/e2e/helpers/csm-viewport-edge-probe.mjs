@@ -51,7 +51,7 @@ export async function inspectCsmViewportEdge({ pitch = 35, shadowEnabled = true,
   // Disabled meshes can still affect caster bounds if left in renderList.
   casters.splice(0, casters.length, roof);
   generator.getLight().shadowEnabled = shadowEnabled;
-  // Deliberately do not force min/max distances or turn off automatic depth bounds.
+  // Keep the application's depth-bounds policy; do not override min/max distances.
   for (let frame = 0; frame < 12; frame++) await new Promise(resolve => scene.onAfterRenderObservable.addOnce(resolve));
   const engine = scene.getEngine();
   const width = engine.getRenderWidth(), height = engine.getRenderHeight();

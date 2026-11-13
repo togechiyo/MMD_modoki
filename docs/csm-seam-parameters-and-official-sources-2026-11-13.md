@@ -4,13 +4,16 @@
 
 ## 調査の結論
 
-所有者の壁面の白帯は残存。上端影抜けは解消済み、RC2効果OFFでも帯が残り、元sceneの半影ON/OFF差は未確認。
+残存報告の対象は、手前の柱ではなく窓の向こうの最奥の廊下壁だった。所有者は通常影では出ずCSMのみで発生し、読み込み初期値でも見えると明示した。
+許可されたローカル比較で、最奥壁がCSMの自動深度範囲の外へ出てsamplingを止められることを確認した。WebGPU reverse depthのprojection係数の丸めと深度復元の組合せが範囲を過小評価する（末尾の追加調査）。柱のtexture由来の横筋をこの報告の原因とは扱わない。
+WebGPUかつreverse depthではauto boundsを無効にし、設定した影距離を保つよう修正した。指定されたローカルPMXの初期値と自作fixtureで奥壁の影の復帰を確認した。所有者による修正後の最終確認は未実施。
+上端影抜けは解消済み。RC2効果OFFでも残るという報告と、元sceneの半影ON/OFF差が未確認である点は履歴として保持する。
 資料と使用中のBabylon.js **9.2.0** を照合し、後続依頼でbias値を固定したブレンド幅比較を実施した。比較時は本体未変更。その後、所有者の明示依頼でdepthClampだけをfalseへ変更した（末尾の試用記録）。
 前日の実機比較は[壁面調査](./csm-wall-band-investigation-2026-11-11.md)、今回の結果は末尾の「固定biasでの比較」を参照する。
 
 公式資料には「blendを大きくすればよい」という一律の推奨はない。
 近い公式報告では、blend先のcascadeの深度範囲とdepth clampの相互作用が問題になっている。
-一方、使用中の9.2.0はその際の修正を既に含む。今回の白帯と同じ原因、または更新だけで解消するとは確定できない。
+一方、使用中の9.2.0はその際の修正を既に含む。今回特定した自動範囲の過小評価は、そのblend/depth clamp報告とは分ける。
 
 ## 直接参考になる一次資料
 
@@ -25,9 +28,9 @@
 
 フォーラムの負深度を保持する案やLESS→LEQUALへの変更は、同じスレッドの後続で別条件のartifactが指摘されている。確定した修正として転用しない。
 
-## 現在の設定と、白帯との関係
+## 比較開始時の設定と、白帯との関係
 
-以下は比較開始時のWebGPU初期値・影距離倍率1。保存projectのbiasや距離等は異なり得る。後続のdepthClamp単独変更は末尾を参照。
+以下は比較開始時のWebGPU初期値・影距離倍率1。保存projectのbiasや距離等は異なり得る。後続のdepthClamp単独変更とauto bounds修正は末尾、現行値は[影仕様](./shadow-spec.md)を参照。
 初期化は `src/mmd-manager.ts`、設定切替は `src/scene/light-shadow-controller.ts` を読み、両経路の値の一致を確認した。
 既定値と前日の自作fixtureの実測を、元sceneの値と混同しない。
 
@@ -197,6 +200,33 @@ depthClamp変更後も残存するという報告を受け、所有者が明示�
 - R32F対照は同一generatorの `recreateShadowMap()` を使い、caster数・ID集合、設定、splits、各cascade行列を保持。実type2→1、format RED、Noneのnearest samplingを使用し、WebGPU validation errorは0。元のR16Fへ復元した。public float setterによるcaster消失を結果に混ぜていない。
 - 別画角とPCSS対照でも、上記の横筋をCSM境界の欠損とは特定できなかった。右側の柱には別の細かな自己影ノイズ候補があるが、横帯と同一視しない。
 
-**この測定域の横筋はテクスチャ由来と整合する。ただし、所有者が問題としている白帯と同じ箇所かは未確定。**
-スクリーンショット内の対象位置を確認中であり、元報告の原因確定・修正完了とはしない。元の模様を消すようなモデル加工や、本体の影設定の追加変更は行っていない。
-診断アプリは終了し、今回の比較で本体sourceは変更していない。
+**この測定域は手前の柱であり、所有者が問題としている最奥の廊下壁とは別だった。**
+後続の注記付き画像で対象を訂正した。柱でのtexture比較やblend/精度比較を、奥壁の原因否定や解消確認へ流用しない。モデルやtextureの加工は行っていない。
+
+## 最奥壁の自動深度範囲からの脱落
+
+所有者の「通常影では出ず、CSMのみ」「読み込み初期値で出る」を受け、窓枠の向こうの最奥壁をpickし直した。初期カメラ・照明で壁のview depthが最後の `viewFrustumZ` より奥にあり、設定影距離1000の内側なのにCSM samplingから外れていた。
+診断内で `autoCalcDepthBounds=false` だけを変更すると最後のsplitが設定距離へ戻り、同じ壁の影が復帰した。柱の模様とは独立した結果で、bias / normalBiasは固定した。
+
+使用中のBabylon.js 9.2.0をCPU計算と実際のprojection行列で照合した。
+
+- 既定camera near=0.15 / far=100000、WebGPU、reverse depthの組合せ。
+- `Matrix.PerspectiveFovLHToRef` は一度Float32行列へ書いてからhalf-Z変換する。Z係数は理論値約-1.50000225e-6に対し実値-1.4901161193847656e-6で、約0.66%の差がある。
+- DepthRendererはこのprojectionからnormalized depth metricを作り、CSMはcameraのnear/farを使ってview depthへ戻す。両者の差が自動範囲の不足として現れる。R16Fの丸めだけでは説明できない大きさであり、blend幅やshadow mapのR32F化を対処にしない。
+- 最後のsplitを超えた点は `lightFragment` でcascade indexが-1となり、shadow samplingを行わない。以前の設定影距離基準のfade修正とは別の停止条件である。
+- [Babylon公式のdepth metric解説](https://doc.babylonjs.com/features/featuresDeepDive/lights/mathShadows/)と、installed 9.2.0の `Maths/math.vector.js`、`Rendering/depthRenderer.js`、`ShadersWGSL/depth.vertex.js`、`Lights/Shadows/cascadedShadowGenerator.js` を照合した。既知の上流修正としては断定しない。
+
+対処はWebGPUかつreverse depthのCSMで自動深度範囲の絞り込みを止める。生成・再生成・filter再適用の3経路を揃え、設定距離まで描画する。WebGL側の既定、cascade数、bias / normalBias、blend、lambda、stabilize、depthClamp、影距離は維持する。
+自動的に範囲を狭めていたsceneでは各cascadeの実効解像度が下がる可能性がある。全projectionや全DepthRendererへの独自補正を追加せず、CSMの対象経路だけを変更する。Babylon更新時には精度と自動範囲を再評価する。
+
+### 修正後の検証
+
+- 新規 `csm-far-receiver.spec.mjs` は自作の壁・近景box・画面外の屋根だけで構成し、camera near/farは既定値、カメラの上下角は-2/0/+2度で比較する。本体のauto bounds設定を保持し、診断を除いてfalseへ上書きしない。
+- Classic / FrameGraphそれぞれでCSMと通常影を確認し、4件成功。各条件418点の影ON/OFF明度比は約0.213で一定、修正後CSMの最終split外は0点。通常影の対照はfixtureを収めるfrustumを明示しPCFを使用、CSMはNoneのため同一filter比較とは扱わない。
+- `MMD_CSM_FAR_RECEIVER_DIAGNOSTIC=1` の旧auto bounds対照では、水平時に最終split約446.85に対して壁depth約449.99となり418点すべてが影の範囲外。+2度では285点が範囲外となり、明度比約0.213→1の白帯を再現した。これらの値は自作fixtureのもの。
+- 既存11件も成功。CSM境界の両backend・半影OFF/ON、最後のcaster削除/再読込、距離終端fadeの両backend・距離1000/1500・PNG、上端の両backend・Standard/MMD・25/35/45度・PNGを確認した。新旧合計15件で描画経路の回帰を確認。
+- 指定されたローカルPMXを修正後の本体へ読み直し、初期カメラ・初期照明で最終split=設定距離1000を確認。最奥壁の左右5点で影ON/OFF明度比は約0.803〜0.805となり、欠落していた影が復帰した。画像・座標・モデルの識別情報は公開記録へ含めない。renderer / WebGPU validation errorは0。
+- 関連unit39件、lint、WebGPU smoke、insights validator、diff check成功。typecheckは既存547診断と行・列を除いた内容・重複が一致し、新規差分0、critical TS2304/TS2552は0。
+- 自作fixtureの結果は `artifacts/e2e/csm-wall-blend/auto-bounds-receiver-run/`、既存経路・起動確認ログはその親directoryの `auto-bounds-regression.log` / `auto-bounds-smoke.log`（いずれもignored）。私有モデルの検証資料は前述のlocal reference内だけに保持。
+
+本修正の最終的な所有者実機での見え方は未確認。別の自己影ノイズや柱のtexture由来の明暗差まで解消したとは扱わない。

@@ -56,10 +56,10 @@ function compareFloor(actual, clear, state) {
 }
 
 for (const backend of ["classic", "frameGraph"]) for (const materialPath of ["standard", "mmd"]) {
-test(`CSM automatic depth bounds preserve shadows at the viewport upper edge: ${backend}, ${materialPath}`, async ({}, testInfo) => {
+test(`CSM configured range preserves shadows at the viewport upper edge: ${backend}, ${materialPath}`, async ({}, testInfo) => {
   test.setTimeout(180000);
   const report = { backend, materialPath, errors: [], consoleErrors: [], pitches: [],
-    interpretation: "Self-authored floor with StandardMaterial or the normally loaded tofu PMX material, and an overhead offscreen roof under vertical light. Shadow distance stays 1000 and auto depth bounds stay enabled; no diagnostic min/max override. Every sampled floor point is uniformly occluded, well before the configured fade distance. Compare shadow ON/OFF pixels at viewport upper and middle regions; also compare PNG surface capture at pitch35." };
+    interpretation: "Self-authored floor with StandardMaterial or the normally loaded tofu PMX material, and an overhead offscreen roof under vertical light. Shadow distance stays 1000 with the application's WebGPU reverse-depth auto-bounds safeguard; no diagnostic min/max override. Every sampled floor point is uniformly occluded, well before the configured fade distance. Compare shadow ON/OFF pixels at viewport upper and middle regions; also compare PNG surface capture at pitch35." };
   const launched = await launchMmdModoki(root);
   try {
     const page = await launched.app.firstWindow();
@@ -110,12 +110,12 @@ test(`CSM automatic depth bounds preserve shadows at the viewport upper edge: ${
     expect(report.errors).toEqual([]);
     expect(report.consoleErrors).toEqual([]);
     for (const { pitch, state, reference, profile, png } of report.pitches) {
-      expect(state.settings).toMatchObject({ shadowMaxZ: 1000, autoCalcDepthBounds: true, filter: 0 });
+      expect(state.settings).toMatchObject({ shadowMaxZ: 1000, autoCalcDepthBounds: false, filter: 0 });
       expect(state.roofIsCaster).toBe(true);
       expect(state.shadowEnabled).toBe(true);
       expect(reference.shadowEnabled).toBe(false);
       expect(state.material).toMatchObject({ path: materialPath, mmd: materialPath === "mmd" });
-      expect(state.splits.at(-1), `${pitch}: genuinely short automatically fitted range`).toBeLessThan(500);
+      expect(state.splits.at(-1), `${pitch}: retains the configured shadow range`).toBeCloseTo(1000, 5);
       expectUniformShadow(profile, `${pitch} viewport`, materialPath);
       if (png) {
         expectUniformShadow(png.profile, `${pitch} PNG surface`, materialPath);

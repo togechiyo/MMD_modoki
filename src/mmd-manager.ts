@@ -4660,7 +4660,10 @@ ${beforeFogAppendBlock}
             shadowGenerator.stabilizeCascades = !this.shadowPenumbraEnabledValue;
             shadowGenerator.lambda = this.shadowPenumbraEnabledValue ? PCSS_CSM_LAMBDA : DEFAULT_CSM_LAMBDA;
             shadowGenerator.cascadeBlendPercentage = this.shadowPenumbraEnabledValue ? PCSS_CSM_CASCADE_BLEND : DEFAULT_CSM_CASCADE_BLEND;
-            shadowGenerator.autoCalcDepthBounds = !this.shadowPenumbraEnabledValue;
+            // Match filter reapplication: reverse-depth reduction can shorten
+            // the last split before visible receivers despite the configured range.
+            shadowGenerator.autoCalcDepthBounds = !this.shadowPenumbraEnabledValue
+                && !(this.engine.isWebGPU && this.engine.useReverseDepthBuffer);
             shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
             shadowGenerator.depthClamp = false;
             shadowGenerator.penumbraDarkness = this.shadowPenumbraEnabledValue ? PCSS_CSM_PENUMBRA_DARKNESS : 1.0;

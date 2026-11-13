@@ -7,6 +7,7 @@
 - [影品質向上の検討メモ](./shadow-quality-investigation.md)
 - [セルフ影の横縞メモ](./self-shadow-horizontal-banding-note.md)
 - [CSM 境界の影抜け帯 修正メモ 2026-10-17](./csm-boundary-unshadowed-band-2026-10-17.md)
+- [CSM 白帯・自動深度範囲の調査と修正 2026-11-13](./csm-seam-parameters-and-official-sources-2026-11-13.md)
 - [IBL Shadows 検討メモ](./ibl-shadows-investigation-2026-05-07.md)
 - [Blob Shadow 接地影検討メモ](./blob-shadow-contact-plan-2026-05-08.md)
 
@@ -141,9 +142,6 @@ WGSL CSM PCF 経路だけを避ける互換処理です。代償として WebGPU
   - `stabilizeCascades = true`
   - `lambda = 0.9`
   - `cascadeBlendPercentage = 0.1`
-  - `autoCalcDepthBounds = true`
-  - `autoCalcDepthBoundsRefreshRate = 1`
-  - `depthClamp = true`
 - PCSS 時:
   - `stabilizeCascades = false`
   - `lambda = 0.6`
@@ -151,14 +149,17 @@ WGSL CSM PCF 経路だけを避ける互換処理です。代償として WebGPU
   - `contactHardeningLightSizeUVRatio = clamp(半影サイズ * 0.1, 0.001, 0.02)`
   - `penumbraDarkness = 0.17`
 - `autoCalcDepthBounds`
-  - PCF 時: `true`
   - PCSS 時: `false`
+  - 半影OFFかつWebGPU + reverse depth: `false`。最奥receiverが自動範囲から脱落する問題を回避する
+  - それ以外の半影OFF: `true`
+- `autoCalcDepthBoundsRefreshRate = 1`（auto bounds有効時のみ稼働）
+- `depthClamp = false`（半影OFFも11/13の所有者指定で変更。単独では奥壁の白帯は解消しなかった）
 - `shadowFrustumSize = 960`（固定）
 - `shadowMaxZ = 1000`（既定値、UI で調整可能）
 - 広域影距離倍率 `1..10`（既定 `1`、実効距離上限 `100000`）
 - camera far plane は `maxZ = 100000`
 - 光源位置距離: `220`
-- 半影 OFF 時のフィルタは `PCF + QUALITY_HIGH`
+- 半影 OFF 時のフィルタはWebGLで `PCF + QUALITY_HIGH`、WebGPUで `FILTER_NONE`
 - 半影 ON 時のみ、実験用として `PCSS + QUALITY_HIGH`
 
 投影範囲の考え方:
@@ -348,6 +349,7 @@ UI:
 - `enableSoftTransparentShadow`
 
 つまり、今回の「落ち影の縁のにじみ」は半影設定そのものより、`CascadedShadowGenerator` の深度範囲の取り方の問題だった。
+これは当時の確認結果。2026-11-13以降は最奥receiverの影抜け回避を優先し、WebGPU + reverse depthではauto boundsを無効にした。自動範囲を狭めていたsceneでは影の実効解像度が下がる可能性がある（[原因と検証](./csm-seam-parameters-and-official-sources-2026-11-13.md)）。
 
 ### `shadowMaxZ` の考え方
 
@@ -363,7 +365,7 @@ MMD_modoki では街モデルなどの遠方ステージ表示との両立のた
 新規既定の `shadowMaxZ = 1000` は、この far plane 全体を使い切らず、近景キャラと中距離ステージの影密度を優先するための値です。
 
 2026-11-11の[壁面調査](./csm-wall-band-investigation-2026-11-11.md)では、最後の影が距離終端で突然消える段差を半影OFF/ONとも再現しました。
-Babylon.js 9.2.0標準に終端fadeはなく、中間cascadeのblendとは別です。後続の所有者依頼により、アプリ側で設定した影距離の手前10%（最終cascade長の半分以下）を滑らかに薄める処理を追加しました。初回は自動depth boundsの最終splitを基準にしたため、近景の画面上端で影が抜ける回帰があり、11/12に設定距離基準へ訂正しました。自動depth boundsは計算範囲の最適化であり、影を消す距離には使いません。距離・bias・filter等の設定値は保持し、通常ShadowGeneratorには適用しません。MMD Standardの通常陰影は、面の向きによる陰影を保って遮蔽だけを薄めます。
+Babylon.js 9.2.0標準に終端fadeはなく、中間cascadeのblendとは別です。後続の所有者依頼により、アプリ側で設定した影距離の手前10%（最終cascade長の半分以下）を滑らかに薄める処理を追加しました。初回は自動depth boundsの最終splitを基準にしたため、近景の画面上端で影が抜ける回帰があり、11/12に設定距離基準へ訂正しました。自動depth boundsはアプリ側の距離fade終端には使いません。ただしBabylon自体は最終splitでsamplingを止めるため、自動範囲の過小評価による欠落を[11/13に別途修正](./csm-seam-parameters-and-official-sources-2026-11-13.md)しました。距離・bias・filter等の設定値は保持し、通常ShadowGeneratorには適用しません。MMD Standardの通常陰影は、面の向きによる陰影を保って遮蔽だけを薄めます。
 
 ## UI との関係
 
@@ -434,9 +436,9 @@ PMX ステージで標準床より半影が硬く見える場合は、shadow map
   - ただし `半影サイズ = 0.04` でもボケが強く残るため、読み込み順だけが原因ではない可能性が高い
 - PCSS なしの CSM 最適化
   - 公式 CSM 実装では PCF / PCSS / None 系の filter が主経路で、Blur Exponential 系は通常 `ShadowGenerator` 用として扱う
-  - PCSS を既定から外したため、CSM 既定は `numCascades = 3` / `lambda = 0.9` / `cascadeBlendPercentage = 0.1` / `depthClamp = true` に寄せた
+  - 当時はPCSSを既定から外したため、CSM既定を `numCascades = 3` / `lambda = 0.9` / `cascadeBlendPercentage = 0.1` / `depthClamp = true` に寄せた。11/13に `depthClamp = false` へ変更した
   - WebGL CSM は `PCF QUALITY_HIGH`、WebGPU CSM は Babylon.js 9.2.0 互換処理として `FILTER_NONE` を使う
-  - `autoCalcDepthBounds = true` / `autoCalcDepthBoundsRefreshRate = 1` で、MMD 再生中のカメラ・モデル変化に追従させる
+  - 当時は `autoCalcDepthBounds = true` / `autoCalcDepthBoundsRefreshRate = 1` で再生中の変化へ追従させた。11/13にWebGPU + reverse depthでは `false` へ変更した（[理由と精度のトレードオフ](./csm-seam-parameters-and-official-sources-2026-11-13.md)）
   - `QUALITY_HIGH` は PCF 5x5 kernel。CSM + PCF では物理的な半影ブラーは出ないが、Medium の 3x3 より境界 aliasing は抑えやすい。
   - 既存 project に `shadowFilteringQuality = Medium` などが保存されていても、CSM 使用中は実行時に `QUALITY_HIGH` を強制する。CSM のフィルタ品質 UI は通常表示しないため、保存値で PCF が弱いままになる経路を避ける。
   - `cascadeBlendPercentage` は cascade 同士の切替線をなじませる値で、落ち影そのものの輪郭を半影としてぼかす値ではない。影の輪郭が硬い場合は PCF 品質、shadow density、材質側 shadow factor の丸めを別途見る。

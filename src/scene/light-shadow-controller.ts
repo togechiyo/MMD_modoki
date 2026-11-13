@@ -41,6 +41,7 @@ type LightShadowHost = {
     engine: {
         getCaps(): { maxTextureSize?: number };
         isWebGPU?: boolean;
+        useReverseDepthBuffer?: boolean;
         releaseEffects?: () => void;
     };
     scene: Scene;
@@ -212,7 +213,10 @@ function applyShadowFilterSettings(host: LightShadowHost): void {
         host.shadowGenerator.stabilizeCascades = !penumbraEnabled;
         host.shadowGenerator.lambda = penumbraEnabled ? PCSS_CSM_LAMBDA : DEFAULT_CSM_LAMBDA;
         host.shadowGenerator.cascadeBlendPercentage = penumbraEnabled ? PCSS_CSM_CASCADE_BLEND : DEFAULT_CSM_CASCADE_BLEND;
-        host.shadowGenerator.autoCalcDepthBounds = !penumbraEnabled;
+        // Babylon's reverse-depth reduction can underestimate visible depth and
+        // stop CSM sampling before distant receivers. Keep the configured range.
+        host.shadowGenerator.autoCalcDepthBounds = !penumbraEnabled
+            && !(host.engine.isWebGPU && host.engine.useReverseDepthBuffer);
         host.shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
         host.shadowGenerator.depthClamp = false;
         host.shadowGenerator.penumbraDarkness = penumbraEnabled ? PCSS_CSM_PENUMBRA_DARKNESS : 1.0;
@@ -238,7 +242,7 @@ function createShadowGenerator(host: LightShadowHost, dirLight: DirectionalLight
         shadowGenerator.stabilizeCascades = true;
         shadowGenerator.lambda = DEFAULT_CSM_LAMBDA;
         shadowGenerator.cascadeBlendPercentage = DEFAULT_CSM_CASCADE_BLEND;
-        shadowGenerator.autoCalcDepthBounds = true;
+        shadowGenerator.autoCalcDepthBounds = !(host.engine.isWebGPU && host.engine.useReverseDepthBuffer);
         shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
         shadowGenerator.depthClamp = false;
         shadowGenerator.penumbraDarkness = 1.0;

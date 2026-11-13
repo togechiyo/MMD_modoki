@@ -3,14 +3,16 @@ id: webgpu-wide-area-reverse-depth
 status: verified
 scope: rendering/webgpu
 confidence: high
-last_verified: 2026-08-20
+last_verified: 2026-11-13
 evidence:
   - unit-test
+  - local-electron-webgpu-diagnostic
   - babylon-primary-source
   - user-device
 source_docs:
   - ../../docs/x-accessory-alpha-coplanar-rendering-note-2026-08-20.md
   - ../../docs/floor-render-stability-investigation-2026-06-26.md
+  - ../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md
 superseded_by: null
 ---
 
@@ -23,6 +25,7 @@ WebGPU で、camera の near/far 範囲が大きく、遠距離の広い面に�
 ## 判断
 
 WebGPU engine の生成直後、Scene と材質を作る前に reverse depth buffer を有効化する。WebGL2 は通常 depth のまま維持する。
+ただしreverse depthを使うだけで、depth metricの正規化・復元まで正確になるとは限らない。9.2.0のCSM自動深度範囲では、既定near/farのprojection係数の丸めが最奥receiverの脱落を生んだ。reverse depth全体を撤回せず、[CSM側の自動範囲](./csm-final-distance-cutoff-is-not-cascade-blending.md)を分けて扱う。
 
 ## 避けること
 

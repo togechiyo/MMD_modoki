@@ -31,8 +31,11 @@ Babylon.js 9.2.0標準では最終splitの外で影samplingを止め、終端の
 
 後続の所有者の修正依頼により、共有lightFragmentへ終端fadeを追加した。
 設定した影距離の手前10%（最終cascade長の半分以下）で薄め、設定距離・bias・filterは維持する。
-初回の実最終split基準は、見下ろし時の画面上端に影抜けを生む回帰だった。auto depth boundsが画面内の最遠面へ範囲を絞っても、影の表示距離には使わない。
+初回の実最終split基準は、見下ろし時の画面上端に影抜けを生む回帰だった。auto depth boundsが画面内の最遠面へ範囲を絞っても、アプリ側の距離fade終端には使わない。
 MMD Standardの通常陰影ではraw shadowをToonマスクにした後にfadeし、面の向きによるselfMaskは保つ。
+
+設定影距離の内側でも、auto depth boundsの最後のsplitを超えるとsampling自体が止まる。WebGPU reverse depth・near=0.15/far=100000では、9.2.0のFloat32 projection係数とnormalized depth復元の差により範囲が過小になった。設定影距離のfadeと、この自動範囲による脱落を別に調べる。
+現行ではWebGPU + reverse depthのCSMだけauto boundsを無効にして設定距離を維持する。生成・再生成・filter再適用を揃え、bias / normalBiasは変更しない。自動範囲を狭めていたsceneでは実効解像度が下がる可能性があり、Babylon更新時に再評価する。
 
 ## 避けること
 
@@ -47,16 +50,17 @@ MMD Standardの通常陰影ではraw shadowをToonマスクにした後にfade�
 ## 根拠
 
 [調査記録](../../docs/csm-wall-band-investigation-2026-11-11.md)に、比較条件、画像run、集計、9.2.0のshader分岐、検証結果を記載した。
-所有者の「影が終わる所の1本に近い」という報告とも整合するが、元sceneとの直接比較は未実施。
+所有者の「影が終わる所の1本に近い」という報告とも整合したが、当初の距離終端調査では元sceneとの直接比較は未実施だった。
 通常MMD以外の独自Toon / external WGSLがshadowを再量子化する条件は、共有fadeだけで同じ遷移幅になるとは扱わない。
 修正後はClassic/FrameGraph・半影OFF/ON・PNGを確認した。1フレームWebMでは修正前にも同じ影欠落があり、動画のfade確認済みとはしない。
 11/12の上端回帰を自作床で再現し、設定距離基準への訂正後は25/35/45度・両backend・Standard/MMDで上端と中央の影濃度が一致。既存の遠方終端fadeも維持した。
 所有者実機でも上端影抜けは解消。ただし壁面の帯はRC2効果をOFFにしても残ると確認された。元sceneの半影ON/OFF差は未確認。
 屋根なしの追加比較ではNoneの自己影模様がMMD/Standard両方・blend外にもあり、幅0/0.1/0.2では消えず、診断内のbias0.0005→0.001で消えた。元sceneの同一原因や全体bias変更の採用は未確定。
 PCSSの無影面、画面外の境界はblend品質の検証には使わない。次cascadeのUV範囲外がある条件も別途残る。
-11/13の[公式資料照合](../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md)では、大きなblendとdepth clampによる誤影の報告を確認したが、関連PR #16248は9.2.0へ導入済み。blend増量やライブラリ更新だけを解決策としない。現Noneのauto depth / stabilize併用は公式推奨と異なるため、原因の断定ではなく単独比較候補として扱う。
+11/13の[公式資料照合](../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md)では、大きなblendとdepth clampによる誤影の報告を確認したが、関連PR #16248は9.2.0へ導入済み。blend増量やライブラリ更新だけを解決策としない。当時のNoneのauto depth / stabilize併用は公式推奨と異なるため、原因の断定ではなく単独比較候補として扱った。
 同日の固定bias比較（幅0/0.02/0.05/0.1/0.2/0.3）では、梁の投影影内部に白帯を再現せず、幅変更だけの改善根拠は得られなかった。Noneの明部の自己影模様はdepthClamp OFFで大幅に減ったが、梁なしでは少数点が残る。数値biasが同じでもdepth範囲変更で実効補正量は変わり得るため、元sceneとの同一原因や既定値変更の採用へ広げない。所有者の指定により以後bias / normalBiasを固定して比較する。
-後続の明示依頼でdepthClampだけfalseへ変更したが、所有者実機では白帯が残った。自作fixtureの改善を元sceneの解消へ広げない。許可されたローカルPMXの比較ではテクスチャ由来の横筋も確認されたが、報告対象との位置一致は未確定。影ON/OFF差とtextureの寄与を分け、目視の横筋をすべてCSM境界と扱わない。
+後続の明示依頼でdepthClampだけfalseへ変更したが、所有者実機では白帯が残った。許可されたローカルPMXで確認したtexture由来の横筋は手前柱の別箇所だった。注記付き画像で対象が最奥の廊下壁と判明し、初期値の壁view depthが最後のsplitを超えることと、auto bounds OFFで影が復帰することを確認した。柱での比較を報告対象へ流用しない。
+修正後の本体へ指定PMXを読み直して初期値の影復帰を確認。自作boxの `test/e2e/csm-far-receiver.spec.mjs` では旧auto boundsの白帯を再現し、修正後は両backend・上下角3条件で全測定点が影を保った。既存の上端・距離fade・半影切替・caster削除/再読込を含む計15件のE2Eも成功。所有者による本修正後の見え方の確認は未実施。
 
 ## 再確認条件
 

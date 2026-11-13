@@ -4,7 +4,7 @@ status: verified
 priority: normal
 scope: rendering/shadows
 confidence: high
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 evidence:
   - local-electron-webgpu-diagnostic
   - babylon-primary-source
@@ -12,6 +12,7 @@ evidence:
 source_docs:
   - ../../docs/csm-wall-band-investigation-2026-11-11.md
   - ../../docs/csm-boundary-unshadowed-band-2026-10-17.md
+  - ../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md
 superseded_by: null
 ---
 
@@ -53,6 +54,7 @@ MMD Standardの通常陰影ではraw shadowをToonマスクにした後にfade�
 所有者実機でも上端影抜けは解消。ただし壁面の帯はRC2効果をOFFにしても残ると確認された。元sceneの半影ON/OFF差は未確認。
 屋根なしの追加比較ではNoneの自己影模様がMMD/Standard両方・blend外にもあり、幅0/0.1/0.2では消えず、診断内のbias0.0005→0.001で消えた。元sceneの同一原因や全体bias変更の採用は未確定。
 PCSSの無影面、画面外の境界はblend品質の検証には使わない。次cascadeのUV範囲外がある条件も別途残る。
+11/13の[公式資料照合](../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md)では、大きなblendとdepth clampによる誤影の報告を確認したが、関連PR #16248は9.2.0へ導入済み。blend増量やライブラリ更新だけを解決策としない。現Noneのauto depth / stabilize併用は公式推奨と異なるため、原因の断定ではなく単独比較候補として扱う。
 
 ## 再確認条件
 

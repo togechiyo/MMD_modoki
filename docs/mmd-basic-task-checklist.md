@@ -1,6 +1,6 @@
 # MMD基本機能タスクチェックリスト
 
-更新日: 2026-11-12
+更新日: 2026-11-13
 
 v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バージョン候補](./v0.2.4-next-version-candidates.md)。v0.2.5の重点は下記、個別収録範囲は確認中。個別報告の確認状態は [リリース後台帳](./v0.2.4-post-release-ledger.md) と分けて管理する。
 
@@ -16,7 +16,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 壁面に残るCSMの帯を調査した。半影OFF/ONとも影距離終端の段差を再現し、距離1000→1500で位置が移動することを確認。所有者の「影が終わる所の1本に近い」と整合。調査時は本体未変更で、後続の終端fade修正は次項に記載。元sceneとの一致確認は未実施（[再現条件・結果・残る確認](./csm-wall-band-investigation-2026-11-11.md)）。
 - [x] 所有者の後続依頼により、CSM終端の距離fadeを共通側へ実装。通常MMDの面の向きによる陰影を維持し、両backend・半影OFF/ON・PNGと既存の影経路を計15件のE2Eで確認。後続で報告された近景の上端影抜けは次項でfade基準を訂正。元sceneの壁面は帯が残るため、全体解消とは扱わない（[実装・結果](./csm-wall-band-investigation-2026-11-11.md)）。
 - [x] 11/12報告のCSM上端影抜けを修正。自動depth boundsをfade終端に使った回帰を自作床の25/35/45度で再現し、設定影距離基準へ訂正。両backend・Standard/MMD・PNGと遠方終端・既存影経路の計19描画テスト、unit1579件、lint、既存型診断から差分0/critical0、WebGPU smokeを確認。11/12後続報告で所有者実機でも上端の解消を確認（[原因・訂正・検証](./csm-wall-band-investigation-2026-11-11.md#2026-11-12-上端の影抜けとfade基準の訂正)）。
-- [ ] 残存する壁面の帯を解消する。所有者実機でRC2効果OFFでも残存。blend方式・値を再確認し、自作壁では幅を増やすだけで消えない自己影誤差をMMD/Standard共通で観測。診断内のbias変更で消えるが、元sceneとの同一性・全体設定変更は未確定。Toonの混合順、次mapのUV範囲も別に切り分ける（[追加比較と未確認範囲](./csm-wall-band-investigation-2026-11-11.md#2026-11-12-残存する壁面の帯とblend再確認)）。
+- [ ] 残存する壁面の帯を解消する。所有者実機でRC2効果OFFでも残存。自作壁ではblend増加で消えない自己影誤差をMMD/Standard共通で観測し、診断内のbias変更で消えたが元sceneとの同一性は未確定（[追加比較](./csm-wall-band-investigation-2026-11-11.md#2026-11-12-残存する壁面の帯とblend再確認)）。11/13に[公式資料とパラメータを照合](./csm-seam-parameters-and-official-sources-2026-11-13.md)。中間境界の位置特定、blend縮小、depthClamp、auto depthとstabilizeの組合せを一つずつ比較する。本体設定は未変更。
 - [ ] 自作壁/屋根fixtureの1フレームWebMで影ON/OFFが同じ画像になる既存の別件を調査する。終端fadeを外した比較でも再現。PNGには影があり、先頭captureの準備・後続frame・shadow map更新を切り分ける。診断は `MMD_CSM_EXPORT_INVESTIGATION=1` で明示実行（[条件と比較](./csm-wall-band-investigation-2026-11-11.md#webm比較で見つかった既存の別件)）。
 - [ ] 通常20個体効果と現行RC2種、互換用の旧「影の深み RC」について、登録値/固定値の区別、登録・上書き・補間、キーcopy/move/delete・Undo/Redo、混在操作を確認し、必要な局所修正を行う。
 - [ ] 代表sceneで未登録設定と登録済みキーの保存/読込、シーク/再生、全体OFF/ON・Classic往復、PNG/WebMの最終状態を確認する。Sky Ambientの11/10修正後の動画・見た目・負荷を含める。

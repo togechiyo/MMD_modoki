@@ -92,3 +92,13 @@ PMXをLight & Shadowへ変更したSkyと、Xを通常MMDへ変更したSkyも�
 - WebM・BMPの全形式・別GPUでの性能は今回未確認。適用にはXまたはprojectの再読み込みが必要。
 
 実データの匿名化した診断・比較画像はignoredな`local-references/rc-x-bmp-2026-11-13/`、自作fixtureのGPU結果は`artifacts/e2e/rc-x-bmp-lighting/`へ保存した。第三者assetはGitに含めない。
+
+### 同日追記: Accessory Toonの影色が薄い理由の確認
+
+所有者から修正後の影色が薄く、追加済みのアクセサリ用Toon処理が効いていないのではないかとの指摘があった。同じ許可済みXデータの実Electron/WebGPUで確認すると、専用ToonのGPU先頭texelはRGB222、material ambientは0.22、Toon影響度uniformはGUI操作に応じて1→0に変化した。Accessory Toonの処理・影色供給は残っている。
+
+一方、17材質すべてのemissive RGBが0.752941だった。現loaderはX Material末尾のemissiveColorをそのまま材質発光へ渡す。これは初回loaderからの挙動で、Accessory Toon追加時に抑制したのはambientだけだった。実コンパイルshaderは`clamp(diffuseBase * diffuseColor + emissiveColor, 0, 1) * texture`であり、Sky Ambientもemissiveを減衰しないため、発光が白い下限を作り、影色の差が飽和する。
+
+今回の固定画角ではRC OFF時のToon100%と0%のPNG差は0。Sky Ambient ON・空の明るさ0ではToon切替の平均差5.69、空の明るさ1→0の差4.25。検証用アプリ内だけでemissiveを0にすると平均差116.34となり、目視でも大きく暗化した。GPU validationは0件。発光0は原因を分離する比較で、採用する既定値ではない。BMP分類修正はToon・ambient・emissive値を変更していない。
+
+Xの末尾フィールド名は[Microsoft Material仕様](https://learn.microsoft.com/en-us/windows/win32/direct3d9/material)と一致する。「MMD本体ではこの値をambientとして扱う」とは今回確認できておらず、推測でloader全体の解釈を変えない。元データ・製品shader・既定値は変更せず、次に見え方を調整する場合はAccessory Toon内で発光をどう扱うかを独立に検討する。比較画像・匿名診断・実shaderは前記local reference内の`toon-audit/`、`emission-audit/`に保持する。

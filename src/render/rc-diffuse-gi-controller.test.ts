@@ -30,9 +30,11 @@ it("keeps origin-centered domains independent of mesh scale, placement, camera a
     const initial = controller.diagnostics.volumes;
     expect(initial).toEqual([
         { min: [-64, -64, -64], size: 128 },
+        { min: [-256, -256, -256], size: 512 },
         { min: [-1024, -1024, -1024], size: 2048 },
         { min: [-16384, -16384, -16384], size: 32768 },
     ]);
+    expect(initial.map(volume => volume.size / 16)).toEqual([8, 32, 128, 2048]);
     expect(controller.diagnostics.spatialMode).toBe("origin");
     mesh.position.x = 20000; mesh.scaling.setAll(10000); settings.strength = 0.25;
     if (scene.activeCamera) scene.activeCamera.position.z = -15000;
@@ -59,7 +61,7 @@ it("disables absent receivers and restores the same origin domains after they mo
     mesh.setVerticesData("position", [0, 0, 0, 2, 0, 0, 0, 2, 0]); mesh.setIndices([0, 1, 2]);
     expect(controller.isReadyForCapture).toBe(false);
     const initial = controller.diagnostics.volumes;
-    expect(initial).toHaveLength(3);
+    expect(initial).toHaveLength(4);
     mesh.setEnabled(false);
     expect(controller.isReadyForCapture).toBe(true);
     expect(controller.diagnostics.volume).toBeNull();
@@ -81,7 +83,7 @@ it("retains a saved manual cube and restores origin domains when manual settings
     expect(controller.isReadyForCapture).toBe(false);
     settings.volume = null; controller.settingsChanged();
     expect(controller.diagnostics.spatialMode).toBe("origin");
-    expect(controller.diagnostics.volumes).toHaveLength(3);
+    expect(controller.diagnostics.volumes).toHaveLength(4);
     expect(controller.diagnostics.volume).toEqual({ min: [-64, -64, -64], size: 128 });
     settings.volume = manual; controller.settingsChanged();
     expect(controller.diagnostics.volumes).toEqual([manual]);

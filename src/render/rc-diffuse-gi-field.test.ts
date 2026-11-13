@@ -64,7 +64,7 @@ afterEach(() => {
 });
 const scene = {} as Scene;
 const light: RcDiffuseGiLight = { directionToLight: [0, 1, 0], color: [1, 0.5, 0.25] };
-const volumes: Volume[] = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2], size }));
+const volumes: Volume[] = [128, 512, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2], size }));
 function task(name: string) {
     const found = boundary.tasks.find(candidate => candidate.name === name);
     if (!found) throw new Error(`Missing task ${name}`);
@@ -73,12 +73,13 @@ function task(name: string) {
 
 it("keeps one scene source while writing each spatial level to its own shared atlas slice", () => {
     const field = new RcDiffuseGiField(scene, { volumes });
-    expect(field.volumeCount).toBe(3);
+    expect(field.volumeCount).toBe(4);
     expect(boundary.sources).toHaveLength(1);
-    expect(field.irradianceField).toMatchObject({ width: 96, height: 768 });
-    expect(field.nearestSurfaceField).toMatchObject({ width: 16, height: 768 });
+    expect(field.irradianceField).toMatchObject({ width: 96, height: 1024 });
+    expect(field.nearestSurfaceField).toMatchObject({ width: 16, height: 1024 });
     expect(field.baseField.name).toBe("rcDiffuseGiLevel0Cascade0");
-    expect(field.execute(light)).toBe(18);
+    expect(field.execute(light)).toBe(24);
+    expect(boundary.guards.map(guard => guard.atlasOffsetY)).toEqual([0, 256, 512, 768]);
     for (const [level, volume] of volumes.entries()) {
         const cascade = task(`rcDiffuseGiLevel${level}Cascade0`);
         expect(cascade.buffers.get("triangles")).toBe(boundary.sources[0].triangleBuffer);
@@ -106,7 +107,7 @@ it("updates all volumes and light inputs without reallocating or reusing another
     const resized = volumes.map(volume => ({ ...volume, size: volume.size * 2 }));
     field.setVolumes(resized);
     boundary.guards[1].disabled = true;
-    expect(field.execute(light)).toBe(17);
+    expect(field.execute(light)).toBe(23);
     expect(boundary.sources).toHaveLength(1);
     for (const [level, volume] of resized.entries()) {
         const params = task(`rcDiffuseGiLevel${level}Cascade0`).uniforms.get("params");

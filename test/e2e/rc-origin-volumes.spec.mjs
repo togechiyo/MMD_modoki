@@ -10,7 +10,7 @@ import { measureSkyAmbientRegions } from "./helpers/rc-sky-ambient-regions.mjs";
 const root = resolve(import.meta.dirname, "../..");
 const room = resolve(root, "test/fixtures/rc-window-room/window-room-plain.x");
 const gi = "rcDiffuseGi", sky = "rcSkyAmbient", ids = [gi, sky];
-const originVolumes = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2], size }));
+const originVolumes = [128, 512, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2], size }));
 const manualVolume = { min: [-64, -64, -64], size: 128 };
 const roomY = 1;
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
@@ -88,7 +88,7 @@ async function assertVolumes(page, mode, triangles) {
     expect(field.nearestSize).toEqual({ width: grid, height: grid * grid * expected.length });
     expect(field.diagnostics.triangleCount).toBe(triangles); expect(field.view).toBe(true);
     expect(effective.map(volume => volume.size / grid)).toEqual(mode === "origin"
-      ? skyField ? [4, 64, 1024] : [8, 128, 2048] : skyField ? [8] : [8]);
+      ? skyField ? [4, 16, 64, 1024] : [8, 32, 128, 2048] : skyField ? [8] : [8]);
   }
   return { gi: state.gi, sky: state.skyAmbient };
 }
@@ -179,6 +179,51 @@ test("RC origin volumes keep world resolution through scene size, boundaries and
     await effect(page, sky, true);
     report.states.initial = await assertVolumes(page, "origin", 26);
 
+    // This room lies entirely beyond the 128-unit cube and inside the new
+    // 512-unit cube's unblended interior. Keep its camera-space ROIs and light
+    // identical to the origin captures; measure each effect independently.
+    await effect(page, gi, false); await effect(page, sky, false);
+    await accessory(page, 0, { "pos-x": 128 }); await cameraAt(page, 128);
+    await lightDirection(page, [0, 0, -1]);
+    const middleSkyOff = await take("middle-128-sky-off");
+    await effect(page, sky, true);
+    const middleSkyOn = await take("middle-128-sky-on");
+    await assertLightDirection(page, [0, 0, -1]);
+    report.states.middleSky = await read(page);
+    report.regions.middleSky = {
+      off: measureSkyAmbientRegions(middleSkyOff, regions),
+      on: measureSkyAmbientRegions(middleSkyOn, regions),
+    };
+    report.regions.middleSky.floorAttenuation = report.regions.middleSky.off.floor.mean
+      - report.regions.middleSky.on.floor.mean;
+    compare("middleSkyContribution", middleSkyOn, middleSkyOff);
+
+    await effect(page, sky, false); await lightDirection(page, [0, -1, -1]);
+    const middleGiOff = await take("middle-128-gi-off");
+    await assertLightDirection(page, [0, -1, -1]);
+    await effect(page, gi, true);
+    const middleGiOn = await take("middle-128-gi-on");
+    await assertLightDirection(page, [0, -1, -1]);
+    report.states.middleGi = await read(page);
+    report.regions.middleGi = {
+      off: measureSkyAmbientRegions(middleGiOff, regions),
+      on: measureSkyAmbientRegions(middleGiOn, regions),
+    };
+    const middleGain = report.regions.middleGi.on.bounce.rgbMean.map((value, channel) =>
+      value - report.regions.middleGi.off.bounce.rgbMean[channel]);
+    report.regions.middleGi.bounceGain = {
+      rgb: middleGain, redExcess: middleGain[0] - (middleGain[1] + middleGain[2]) / 2,
+    };
+    compare("middleGiContribution", middleGiOn, middleGiOff);
+    // The added domain must preserve sky attenuation and colored transport,
+    // rather than merely removing the coarse field's visible contribution.
+    expect(report.regions.middleSky.floorAttenuation).toBeGreaterThan(1);
+    expect(middleGain[0]).toBeGreaterThan(.5);
+    expect(report.regions.middleGi.bounceGain.redExcess).toBeGreaterThan(.5);
+    await effect(page, sky, true);
+    report.states.middle = await assertVolumes(page, "origin", 26);
+    await accessory(page, 0, { "pos-x": 0 }); await cameraAt(page);
+
     // A distant, much larger receiving object would previously expand the fitted volume.
     expect(await page.evaluate(path => window.mmdModokiE2e.loadAccessory(path), room)).toBe(true);
     await accessory(page, 1, { "pos-x": 6000, scale: 10 });
@@ -193,9 +238,11 @@ test("RC origin volumes keep world resolution through scene size, boundaries and
     expect(compare("nearContributionAfterFarObject", combined, await take("origin-after-far-object-off"))).toBeGreaterThan(.1);
     await effect(page, gi, true); await effect(page, sky, true);
 
-    // Keep geometry identical in camera space while crossing each world-volume face.
-    // This catches an abrupt spatial-level switch independently of camera-edge motion.
-    for (const boundary of [64, 1024]) {
+    // Movement rebuilds the source/field, so its whole-image difference is a
+    // diagnostic of both geometry transport and level selection, not an isolated
+    // blend-continuity test (covered by the actual-WGSL unit). Record whole-image
+    // and white-wall/floor ROI differences; assert field readiness after each move.
+    for (const boundary of [64, 256, 1024]) {
       const pair = [];
       for (const offset of [-.1, .1]) {
         const x = boundary + offset;
@@ -203,7 +250,11 @@ test("RC origin volumes keep world resolution through scene size, boundaries and
         report.states[`boundary-${x}`] = await assertVolumes(page, "origin", 52);
         pair.push(await take(`origin-boundary-${x}`));
       }
-      expect(compare(`boundary-${boundary}`, pair[0], pair[1])).toBeLessThan(2);
+      compare(`boundary-${boundary}`, pair[0], pair[1]);
+      const absolute = { ...pair[0], data: pair[0].data.map((value, index) =>
+        index % 4 === 3 ? 255 : Math.abs(value - pair[1].data[index])) };
+      const measured = measureSkyAmbientRegions(absolute, regions);
+      report.regions[`boundary-${boundary}`] = measured;
     }
     await accessory(page, 0, { "pos-x": 0 }); await cameraAt(page);
 
@@ -237,7 +288,7 @@ test("RC origin volumes keep world resolution through scene size, boundaries and
     };
     const originWarm = await roundtrip("origin", 52);
     for (const id of ids) await effect(page, id, false);
-    // OFF releases all three levels. PNG must prepare them without a viewport refresh.
+    // OFF releases all four levels. PNG must prepare them without a viewport refresh.
     await page.evaluate(() => window.mmdModokiE2e.setAutoRenderEnabled(false));
     for (const id of ids) await effect(page, id, true, false);
     expect(compare("originColdPng", await take("origin-cold-combined"), originWarm)).toBeLessThan(.15);

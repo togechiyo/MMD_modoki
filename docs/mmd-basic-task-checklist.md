@@ -1,6 +1,6 @@
 # MMD基本機能タスクチェックリスト
 
-更新日: 2026-11-13
+更新日: 2026-11-14
 
 v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バージョン候補](./v0.2.4-next-version-candidates.md)。v0.2.5の重点は下記、個別収録範囲は確認中。個別報告の確認状態は [リリース後台帳](./v0.2.4-post-release-ledger.md) と分けて管理する。
 
@@ -86,7 +86,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] Sky Ambient RCで初期配置用の各ボーン1キーも遮蔽物として許可。複数骨・非0フレームの単独キー、シーク、2キー目のUndo、保存復元をGUI・PNGで確認（[配置キー対応](./sky-ambient-rc-implementation-2026-11-08.md#同日追記-各ボーン1キーの配置調整)、2026-11-13）。
 - [x] 所有者指定によりSky Ambient RCの動的モデルを遮蔽物・受け手の両方から暫定除外。モーフ・各骨1キーの配置を維持し、動的モデルのSky ON/OFF画像差0（空照明加算を含む）、Undo・保存復元、共有材質の描画単位判定を回帰確認（[暫定方針・検証範囲](./sky-ambient-rc-implementation-2026-11-08.md#同日追記-動的モデルを受け手からも暫定除外)、2026-11-13）。
 - [ ] Sky Ambient RCの固定ステージ＋踊るPMXでの見た目/負荷、細かな接地陰、対象材質の追加互換を実sceneで確認する。fixtureの成功を全sceneの品質・性能保証としない。
-- [x] Sky Ambient RCとRC GIを原点付近は細かく遠方は粗い固定3領域へ変更。モデルbounds・カメラ・影距離へ自動連動させず、境界補間・旧manual範囲を維持。実GPUで遠方モデルの追加/拡縮、境界、保存/Classic往復、PNG/WebMと許可済み広域Xを確認（[実装・検証・費用](./sky-ambient-rc-implementation-2026-11-08.md#同日追記-giと共通の原点3領域を実装)、2026-11-13）。
+- [x] Sky Ambient RCとRC GIを原点付近は細かく遠方は粗い固定4領域へ変更。11/14に近〜中距離を追加し、16倍の格子間隔差を4倍刻みに緩和。モデルbounds・カメラ・影距離への非追従、境界補間・旧manual範囲を維持。新領域の陰影・反射色、保存/Classic往復、PNG/WebM、許可済み実データを確認。報告画像の床の塊の完全解消は未確認（[実装・検証・費用](./sky-ambient-rc-implementation-2026-11-08.md#2026-11-14-近景用の中間領域を追加)、2026-11-14）。
 - [x] Sky Ambient RCの受け手へStage Standardを追加。独自Toonの補助光を捕捉し、動的モデル除外を維持。GUI割当・減衰/加算・中立化・保存復元・backend往復を自作fixtureで確認（[対応と検証](./sky-ambient-rc-implementation-2026-11-08.md#2026-11-13-stage-standardへの対応)、2026-11-13）。
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）

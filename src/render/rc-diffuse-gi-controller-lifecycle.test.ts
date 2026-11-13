@@ -74,14 +74,14 @@ describe("RC GI field allocation cancellation", () => {
         const manual = from === "manual", { controller, settings } = fixture(manual);
         boundary.waitForBuild = phase === "build"; boundary.waitForReady = phase === "ready";
         const first = controller.prewarm(), old = boundary.instances[0];
-        expect(old.volumeCount).toBe(manual ? 1 : 3);
+        expect(old.volumeCount).toBe(manual ? 1 : 4);
         expect(old.graph.buildAsync).toHaveBeenCalledWith(false);
         if (phase === "ready") await vi.waitFor(() => expect(old.graph.whenReadyAsync).toHaveBeenCalledOnce());
 
         settings.volume = manual ? null : manualVolume(); controller.settingsChanged();
         // Begin the replacement before the stale promise's finally callback runs.
         const second = controller.prewarm(), current = boundary.instances[1];
-        expect(current.volumeCount).toBe(manual ? 3 : 1);
+        expect(current.volumeCount).toBe(manual ? 4 : 1);
         await expect(first).resolves.toBe(true);
         expect(boundary.provider?.()).toBeNull();
         expect(controller.isReadyForCapture).toBe(false);

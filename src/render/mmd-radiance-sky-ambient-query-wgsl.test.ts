@@ -73,13 +73,14 @@ const spatialMath = {
 function spatialUniforms(prefix: string, count: number) {
     return {
         [prefix + "Volume"]: { xyz: -64, w: 128 },
-        [prefix + "Volume1"]: { xyz: -1024, w: 2048 },
-        [prefix + "Volume2"]: { xyz: -16384, w: 32768 },
+        [prefix + "Volume1"]: { xyz: -256, w: 512 },
+        [prefix + "Volume2"]: { xyz: -1024, w: 2048 },
+        [prefix + "Volume3"]: { xyz: -16384, w: 32768 },
         [prefix + "Spatial"]: { x: count },
     };
 }
 
-function spatialQuery(kind: "gi" | "sky", position: number, values: number[], count = 3) {
+function spatialQuery(kind: "gi" | "sky", position: number, values: number[], count = 4) {
     const source = kind === "gi" ? MMD_RADIANCE_GI_QUERY_WGSL : MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL;
     const prefix = kind === "gi" ? "rcGi" : "rcSkyAmbient";
     const query = prefix + (kind === "gi" ? "Irradiance" : "VisibilityValidated");
@@ -159,18 +160,21 @@ function stageLighting(code: string, input: Partial<{
 }
 
 describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", () => {
-    it("selects the finest containing level and blends only the adjacent field at both seams", () => {
+    it("selects the finest containing level and blends only the adjacent field at all three seams", () => {
         for (const kind of ["gi", "sky"] as const) {
-            const values = [0.2, 0.6, 0.8];
+            const values = [0.2, 0.6, 0.8, 1];
             expect(spatialQuery(kind, 0, values)).toEqual({ value: 0.2, reads: [0] });
             expect(spatialQuery(kind, -48, values)).toEqual({ value: 0.2, reads: [0] });
             expect(spatialQuery(kind, 56, values)).toEqual({ value: 0.4, reads: [0, 1] });
             expect(spatialQuery(kind, 64, values)).toEqual({ value: 0.6, reads: [0, 1] });
             expect(spatialQuery(kind, 65, values)).toEqual({ value: 0.6, reads: [1] });
-            expect(spatialQuery(kind, 896, values)).toEqual({ value: 0.7, reads: [1, 2] });
-            expect(spatialQuery(kind, 1024, values)).toEqual({ value: 0.8, reads: [1, 2] });
-            expect(spatialQuery(kind, 1025, values)).toEqual({ value: 0.8, reads: [2] });
-            for (const edge of [64, 1024]) {
+            expect(spatialQuery(kind, 224, values)).toEqual({ value: 0.7, reads: [1, 2] });
+            expect(spatialQuery(kind, 256, values)).toEqual({ value: 0.8, reads: [1, 2] });
+            expect(spatialQuery(kind, 257, values)).toEqual({ value: 0.8, reads: [2] });
+            expect(spatialQuery(kind, 896, values)).toEqual({ value: 0.9, reads: [2, 3] });
+            expect(spatialQuery(kind, 1024, values)).toEqual({ value: 1, reads: [2, 3] });
+            expect(spatialQuery(kind, 1025, values)).toEqual({ value: 1, reads: [3] });
+            for (const edge of [64, 256, 1024]) {
                 expect(spatialQuery(kind, edge - 0.00001, values).value)
                     .toBeCloseTo(spatialQuery(kind, edge + 0.00001, values).value, 10);
             }
@@ -180,13 +184,13 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
     });
 
     it("fades outer GI to neutral and keeps valid sky visibility when its neighbor is unknown", () => {
-        expect(spatialQuery("gi", 12288, [2, 4, 8])).toEqual({ value: 8, reads: [2] });
-        expect(spatialQuery("gi", 14336, [2, 4, 8])).toEqual({ value: 4, reads: [2] });
-        expect(spatialQuery("gi", 16384, [2, 4, 8])).toEqual({ value: 0, reads: [2] });
-        expect(spatialQuery("gi", 16385, [2, 4, 8])).toEqual({ value: 0, reads: [] });
-        expect(spatialQuery("sky", 16385, [0.2, 0.6, 0.8])).toEqual({ value: -1, reads: [] });
-        expect(spatialQuery("sky", 56, [-1, 0.6, 0.8])).toEqual({ value: 0.6, reads: [0, 1] });
-        expect(spatialQuery("sky", 56, [0.2, -1, 0.8])).toEqual({ value: 0.2, reads: [0, 1] });
+        expect(spatialQuery("gi", 12288, [2, 4, 8, 16])).toEqual({ value: 16, reads: [3] });
+        expect(spatialQuery("gi", 14336, [2, 4, 8, 16])).toEqual({ value: 8, reads: [3] });
+        expect(spatialQuery("gi", 16384, [2, 4, 8, 16])).toEqual({ value: 0, reads: [3] });
+        expect(spatialQuery("gi", 16385, [2, 4, 8, 16])).toEqual({ value: 0, reads: [] });
+        expect(spatialQuery("sky", 16385, [0.2, 0.6, 0.8, 1])).toEqual({ value: -1, reads: [] });
+        expect(spatialQuery("sky", 56, [-1, 0.6, 0.8, 1])).toEqual({ value: 0.6, reads: [0, 1] });
+        expect(spatialQuery("sky", 56, [0.2, -1, 0.8, 1])).toEqual({ value: 0.2, reads: [0, 1] });
     });
 
     for (const oldFirst of [true, false]) for (const foldedAmbient of [true, false]) {
@@ -356,7 +360,7 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
             const value = runInNewContext(code + "\n({ factor: rcSkyAmbientFactor, exposure: rcSkyAmbientIrradiance });", {
                 ...spatialMath,
                 uniforms: { rcSkyAmbientControl: { x: 0.95, y: 0.035, w: 1 },
-                    ...spatialUniforms("rcSkyAmbient", automatic ? 3 : 1),
+                    ...spatialUniforms("rcSkyAmbient", automatic ? 4 : 1),
                     ...(!automatic ? { rcSkyAmbientVolume: { xyz: 0, w: 1 } } : {}) },
                 fragmentInputs: { vPositionW: position }, normalW: { x: Math.sqrt(Math.max(0, 1 - y * y)), y, z: 0 },
                 vec3f: (v: number) => v, length: () => 1, all: (v: boolean) => v,

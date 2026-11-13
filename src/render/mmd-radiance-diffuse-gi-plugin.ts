@@ -51,7 +51,7 @@ function usableView(view: MmdRadianceDiffuseGiView | null): view is MmdRadianceD
 }
 
 function usableVolumes(volumes: NonNullable<MmdRadianceDiffuseGiView["volumes"]>): boolean {
-    return volumes.length > 0 && volumes.length <= 3 && volumes.every((volume, index) => {
+    return volumes.length > 0 && volumes.length <= 4 && volumes.every((volume, index) => {
         if (![volume.size, ...volume.min].every(Number.isFinite) || volume.size <= 0) return false;
         const inner = volumes[index - 1];
         return !inner || (volume.size > inner.size && volume.min.every((min, axis) =>
@@ -73,7 +73,7 @@ class MmdRadianceDiffuseGiPlugin extends MaterialPluginBase {
     }
     public override getSamplers(samplers: string[]): void { samplers.push("rcGiField", "rcGiNearestSurface"); }
     public override getUniforms(): { ubo: Array<{ name: string; size: number; type: string }> } {
-        return { ubo: ["rcGiVolume", "rcGiVolume1", "rcGiVolume2", "rcGiSpatial", "rcGiControl"]
+        return { ubo: ["rcGiVolume", "rcGiVolume1", "rcGiVolume2", "rcGiVolume3", "rcGiSpatial", "rcGiControl"]
             .map(name => ({ name, size: 4, type: "vec4" })) };
     }
     public override hardBindForSubMesh(buffer: UniformBuffer, _scene: Scene, engine: AbstractEngine, subMesh: SubMesh): void {
@@ -89,7 +89,7 @@ class MmdRadianceDiffuseGiPlugin extends MaterialPluginBase {
         if (!usableView(view)) view = null;
         const source = view ?? this.fallback;
         const volumes = view ? view.volumes ?? [view.volume] : [];
-        for (let level = 0; level < 3; level++) {
+        for (let level = 0; level < 4; level++) {
             const volume = volumes[level];
             buffer.updateFloat4(level === 0 ? "rcGiVolume" : `rcGiVolume${level}`,
                 ...(volume?.min ?? [0, 0, 0]) as [number, number, number], volume?.size ?? 1);

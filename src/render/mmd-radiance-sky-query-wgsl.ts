@@ -13,6 +13,7 @@ ${spatialVolumes ? `
 fn rcSkyVolumeAt(level: u32) -> vec4f {
     if (level == 1u) { return uniforms.rcSkyVolume1; }
     if (level == 2u) { return uniforms.rcSkyVolume2; }
+    if (level == 3u) { return uniforms.rcSkyVolume3; }
     return uniforms.rcSkyVolume;
 }
 fn rcSkyVolumeRadius(worldPosition: vec3f, volume: vec4f) -> f32 {
@@ -20,7 +21,7 @@ fn rcSkyVolumeRadius(worldPosition: vec3f, volume: vec4f) -> f32 {
     return max(relative.x, max(relative.y, relative.z));
 }
 fn rcSkyOuterVolume() -> vec4f {
-    return rcSkyVolumeAt(u32(clamp(uniforms.rcSkySpatial.x, 1.0, 3.0)) - 1u);
+    return rcSkyVolumeAt(u32(clamp(uniforms.rcSkySpatial.x, 1.0, 4.0)) - 1u);
 }
 fn rcSkySpatialCoverage(worldPosition: vec3f) -> f32 {
     // Preserve the exact manual-volume edge; only automatic origin levels fade.
@@ -116,7 +117,7 @@ fn ${spatialVolumes ? "rcSkyVisibilityInVolume(worldPosition: vec3f, normal: vec
 }
 ${spatialVolumes ? `
 fn rcSkyVisibilityValidated(worldPosition: vec3f, normal: vec3f) -> f32 {
-    let count = u32(clamp(uniforms.rcSkySpatial.x, 1.0, 3.0));
+    let count = u32(clamp(uniforms.rcSkySpatial.x, 1.0, 4.0));
     if (count == 1u) { return rcSkyVisibilityInVolume(worldPosition, normal, uniforms.rcSkyVolume, 0u); }
     for (var level = 0u; level < count; level++) {
         let volume = rcSkyVolumeAt(level);

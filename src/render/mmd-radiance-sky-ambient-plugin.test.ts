@@ -59,26 +59,27 @@ function fixture() {
 describe("Sky Ambient receiver bindings", () => {
     it("binds all origin levels, preserves manual bounds and clears stale levels on rejection", () => {
         const { stationary, moving, live, provider, bind, write, plugin } = fixture();
-        const volumes = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
+        const volumes = [128, 512, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
         provider.mockReturnValue({ ...live, volumes });
         expect(bind(stationary).control).toEqual([0.75, 0.2, 0.5, 0.8]);
         expect(write.mock.calls).toEqual([
-            ["rcSkyAmbientVolume", -64, -64, -64, 128], ["rcSkyAmbientVolume1", -1024, -1024, -1024, 2048],
-            ["rcSkyAmbientVolume2", -16384, -16384, -16384, 32768], ["rcSkyAmbientSpatial", 3, 0, 0, 0],
+            ["rcSkyAmbientVolume", -64, -64, -64, 128], ["rcSkyAmbientVolume1", -256, -256, -256, 512],
+            ["rcSkyAmbientVolume2", -1024, -1024, -1024, 2048], ["rcSkyAmbientVolume3", -16384, -16384, -16384, 32768],
+            ["rcSkyAmbientSpatial", 4, 0, 0, 0],
             ["rcSkyAmbientControl", 0.75, 0.2, 0.5, 0.8],
         ]);
         const samplers: string[] = []; plugin.getSamplers(samplers);
         expect(samplers).toEqual(["rcSkyAmbientField", "rcSkyAmbientNearestSurface"]);
         expect(plugin.getUniforms().ubo?.map(uniform => uniform.name)).toEqual([
-            "rcSkyAmbientVolume", "rcSkyAmbientVolume1", "rcSkyAmbientVolume2", "rcSkyAmbientSpatial", "rcSkyAmbientControl",
+            "rcSkyAmbientVolume", "rcSkyAmbientVolume1", "rcSkyAmbientVolume2", "rcSkyAmbientVolume3", "rcSkyAmbientSpatial", "rcSkyAmbientControl",
         ]);
         expect(bind(moving).control).toEqual([0, 0, 0, 0]);
         expect(write.mock.calls).toContainEqual(["rcSkyAmbientSpatial", 0, 0, 0, 0]);
-        expect(write.mock.calls).toContainEqual(["rcSkyAmbientVolume2", 0, 0, 0, 1]);
+        expect(write.mock.calls).toContainEqual(["rcSkyAmbientVolume3", 0, 0, 0, 1]);
         provider.mockReturnValue(live); bind(stationary);
         expect(write.mock.calls).toContainEqual(["rcSkyAmbientVolume", -8, 0, -8, 16]);
         expect(write.mock.calls).toContainEqual(["rcSkyAmbientSpatial", 1, 0, 0, 0]);
-        for (const invalid of [[], [...volumes, volumes[2]], [volumes[1], volumes[0]],
+        for (const invalid of [[], [...volumes, { min: [-32768, -32768, -32768] as const, size: 65536 }], [volumes[1], volumes[0]],
             [volumes[0], { min: [0, 0, 0] as const, size: 2048 }], [{ ...volumes[0], size: NaN }]]) {
             provider.mockReturnValue({ ...live, volumes: invalid });
             expect(bind(stationary).control).toEqual([0, 0, 0, 0]);

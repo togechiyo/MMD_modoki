@@ -68,20 +68,21 @@ afterEach(() => {
     boundary.sources.length = 0; boundary.guards.length = 0;
 });
 const scene = {} as Scene;
-const volumes: SkyVisibilityBounds[] = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2], size }));
+const volumes: SkyVisibilityBounds[] = [128, 512, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2], size }));
 const reconstruction = { nearDistance: 64, rejectOccludedProbes: false, sampleAtRayEnd: true };
 const qualities: Array<[SkyVisibilityQuality, number]> = [["low", 8], ["standard", 16], ["high", 32]];
 function tasksFor(shader: string) { return boundary.tasks.filter(task => task.shader?.computeSource === shader); }
 
 it.each(qualities)("shares one source and isolates each spatial level in the %s quality atlas", (quality, grid) => {
     const field = new RadianceSkyVisibilityField(scene, { volumes, quality, diagnostic: false, materialIrradiance: true });
-    expect(field.volumeCount).toBe(3); expect(field.probeGrid).toBe(grid);
+    expect(field.volumeCount).toBe(4); expect(field.probeGrid).toBe(grid);
     expect(boundary.sources).toHaveLength(1);
-    expect(field.irradianceField).toMatchObject({ width: grid * 2, height: grid * grid * 3 });
-    expect(field.nearestSurfaceField).toMatchObject({ width: grid, height: grid * grid * 3 });
-    expect(field.execute(0, true, reconstruction)).toBe(18);
+    expect(field.irradianceField).toMatchObject({ width: grid * 2, height: grid * grid * 4 });
+    expect(field.nearestSurfaceField).toMatchObject({ width: grid, height: grid * grid * 4 });
+    expect(field.execute(0, true, reconstruction)).toBe(24);
+    expect(boundary.guards.map(guard => guard.atlasOffsetY)).toEqual([0, grid * grid, grid * grid * 2, grid * grid * 3]);
     const cascades = tasksFor(SKY_VISIBILITY_CASCADE_WGSL), integrations = tasksFor(SKY_IRRADIANCE_INTEGRATE_WGSL);
-    expect(cascades).toHaveLength(12); expect(integrations).toHaveLength(3);
+    expect(cascades).toHaveLength(16); expect(integrations).toHaveLength(4);
     const address = SKY_IRRADIANCE_INTEGRATE_WGSL.match(/let pixel = (.*);\s*textureStore\(irradiance/);
     expect(address).not.toBeNull();
     const occupied = new Set<string>();
@@ -107,12 +108,12 @@ it.each(qualities)("shares one source and isolates each spatial level in the %s 
                 atlas: { x: atlas?.[0] }, i32: Math.trunc, vec2i: (x: number, y: number) => [x, y] }) as [number, number];
             expect(pixel[1]).toBe(level * grid * grid + (coordinate === 0 ? 0 : grid * grid - 1));
             for (const x of [pixel[0], pixel[0] + grid]) {
-                expect(x).toBeLessThan(grid * 2); expect(pixel[1]).toBeLessThan(grid * grid * 3);
+                expect(x).toBeLessThan(grid * 2); expect(pixel[1]).toBeLessThan(grid * grid * 4);
                 occupied.add(`${x},${pixel[1]}`);
             }
         }
     }
-    expect(occupied.size).toBe(12);
+    expect(occupied.size).toBe(16);
     expect(field.baseField).toBe(cascades[3].textures.get("outputField"));
     expect(boundary.sources[0].update).not.toHaveBeenCalled();
     field.dispose(); field.dispose();
@@ -126,7 +127,7 @@ it("updates each domain and guard without reallocating and keeps unchanged produ
     field.setVolumes(moved);
     // The real guard decides reuse after the producer initially enables its tasks.
     boundary.guards[1].prepareVolume.mockImplementation(() => { boundary.guards[1].disabled = true; });
-    expect(field.execute(0, true, { ...reconstruction, nearDistance: 128 })).toBe(17);
+    expect(field.execute(0, true, { ...reconstruction, nearDistance: 128 })).toBe(23);
     const cascades = tasksFor(SKY_VISIBILITY_CASCADE_WGSL);
     for (const [level, volume] of moved.entries()) {
         const params = cascades[level * 4 + 3].uniforms.get("params");

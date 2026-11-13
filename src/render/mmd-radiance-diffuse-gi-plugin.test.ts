@@ -54,24 +54,25 @@ function fixture() {
 }
 
 describe("MMD diffuse GI plugin", () => {
-    it("binds three nested levels in one atlas and restores the original manual volume", () => {
+    it("binds four nested levels in one atlas and restores the original manual volume", () => {
         const { state, live, register, bind, write, bindTexture, material } = fixture(); register();
-        const volumes = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
+        const volumes = [128, 512, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
         state.view = { ...live, volumes };
         expect(bind()).toEqual([0.5, 0, 0, 0]);
         expect(write.mock.calls).toEqual([
-            ["rcGiVolume", -64, -64, -64, 128], ["rcGiVolume1", -1024, -1024, -1024, 2048],
-            ["rcGiVolume2", -16384, -16384, -16384, 32768], ["rcGiSpatial", 3, 0, 0, 0], ["rcGiControl", 0.5, 0, 0, 0],
+            ["rcGiVolume", -64, -64, -64, 128], ["rcGiVolume1", -256, -256, -256, 512],
+            ["rcGiVolume2", -1024, -1024, -1024, 2048], ["rcGiVolume3", -16384, -16384, -16384, 32768],
+            ["rcGiSpatial", 4, 0, 0, 0], ["rcGiControl", 0.5, 0, 0, 0],
         ]);
         expect(bindTexture.mock.calls).toEqual([["rcGiField", live.field], ["rcGiNearestSurface", live.nearestSurface]]);
         const plugin = material.pluginManager?.getPlugin("MmdRadianceDiffuseGi");
         expect(plugin?.getUniforms().ubo?.map(uniform => uniform.name))
-            .toEqual(["rcGiVolume", "rcGiVolume1", "rcGiVolume2", "rcGiSpatial", "rcGiControl"]);
+            .toEqual(["rcGiVolume", "rcGiVolume1", "rcGiVolume2", "rcGiVolume3", "rcGiSpatial", "rcGiControl"]);
         state.view = live; bind();
         expect(write.mock.calls).toContainEqual(["rcGiVolume", -8, 0, -8, 16]);
         expect(write.mock.calls).toContainEqual(["rcGiSpatial", 1, 0, 0, 0]);
         // A malformed atlas must never index absent or non-nested levels.
-        for (const invalid of [[], [...volumes, volumes[2]], [volumes[1], volumes[0]],
+        for (const invalid of [[], [...volumes, { min: [-32768, -32768, -32768] as const, size: 65536 }], [volumes[1], volumes[0]],
             [volumes[0], { min: [0, 0, 0] as const, size: 2048 }], [{ ...volumes[0], size: NaN }]]) {
             state.view = { ...live, volumes: invalid };
             expect(bind()).toEqual([0, 0, 0, 0]);
@@ -81,13 +82,13 @@ describe("MMD diffuse GI plugin", () => {
 
     it("keeps simultaneous GI and Sky Ambient atlas uniforms and textures independent", () => {
         const { engine, scene, mesh, material, live, register, bind, write, buffer, bindTexture } = fixture(); register();
-        const volumes = [128, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
+        const volumes = [128, 512, 2048, 32768].map(size => ({ min: [-size / 2, -size / 2, -size / 2] as const, size }));
         const releaseSky = registerMmdRadianceSkyAmbient(scene, () => ({ ...live, volumes,
             strength: 0.75, fill: 0.2, skyBrightness: 0.4, opacity: 1 }), () => true);
         bind();
         material.pluginManager?.getPlugin("MmdRadianceSkyAmbient")?.hardBindForSubMesh(buffer, scene, engine, mesh.subMeshes[0]);
         expect(write.mock.calls).toContainEqual(["rcGiSpatial", 1, 0, 0, 0]);
-        expect(write.mock.calls).toContainEqual(["rcSkyAmbientSpatial", 3, 0, 0, 0]);
+        expect(write.mock.calls).toContainEqual(["rcSkyAmbientSpatial", 4, 0, 0, 0]);
         expect(write.mock.calls).toContainEqual(["rcGiControl", 0.5, 0, 0, 0]);
         expect(write.mock.calls).toContainEqual(["rcSkyAmbientControl", 0.75, 0.2, 0.4, 1]);
         expect(bindTexture.mock.calls.map(call => call[0]))
@@ -173,7 +174,7 @@ describe("MMD diffuse GI plugin", () => {
         expect(code).toContain("rcSkyApplyDiffuse");
         expect(code).toContain("uniforms.rcSkyAmbientSpatial");
         expect(code).toContain("uniforms.rcGiSpatial");
-        expect(code).not.toMatch(/uniforms\.rcSky(?:Spatial|Volume1|Volume2)\b/);
+        expect(code).not.toMatch(/uniforms\.rcSky(?:Spatial|Volume1|Volume2|Volume3)\b/);
         expect(code).toContain("sphereReflectionColor.rgb*diffuseBase");
         expect(code).toContain("let bounce = gi * reflectance * uniforms.rcGiControl.x");
         expect(code.indexOf("let bounce =")).toBeGreaterThan(code.indexOf("var color: vec4f"));

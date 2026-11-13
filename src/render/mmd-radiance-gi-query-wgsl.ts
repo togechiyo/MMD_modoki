@@ -26,6 +26,7 @@ fn rcGiProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
 fn rcGiVolumeAt(level: u32) -> vec4f {
     if (level == 1u) { return uniforms.rcGiVolume1; }
     if (level == 2u) { return uniforms.rcGiVolume2; }
+    if (level == 3u) { return uniforms.rcGiVolume3; }
     return uniforms.rcGiVolume;
 }
 fn rcGiVolumeRadius(worldPosition: vec3f, volume: vec4f) -> f32 {
@@ -68,7 +69,7 @@ fn rcGiIrradiance(worldPosition: vec3f, worldNormal: vec3f) -> vec3f {
     let normalLength = length(worldNormal);
     if (!(normalLength > 0.00001 && normalLength < 1e20)) { return vec3f(0.0); }
     let normal = worldNormal / normalLength;
-    let count = u32(clamp(uniforms.rcGiSpatial.x, 1.0, 3.0));
+    let count = u32(clamp(uniforms.rcGiSpatial.x, 1.0, 4.0));
     // Manual volumes retain their original hard bounds and full strength.
     if (count == 1u) { return rcGiIrradianceInVolume(worldPosition, normal, uniforms.rcGiVolume, 0u); }
     for (var level = 0u; level < count; level++) {

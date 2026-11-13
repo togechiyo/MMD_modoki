@@ -10,7 +10,7 @@ import { RcDiffuseGiField } from "./rc-diffuse-gi-field";
 import { registerMmdRadianceDiffuseGi, type MmdRadianceDiffuseGiView } from "./mmd-radiance-diffuse-gi-plugin";
 import type { RcDiffuseGiSettings, RcDiffuseGiVolume } from "./rc-diffuse-gi-settings";
 import { fitRcDiffuseGiVolume } from "./rc-diffuse-gi-volume";
-import { createRcOriginVolumes } from "./rc-origin-volumes";
+import { createRcOriginVolumes, RC_ORIGIN_VOLUME_COUNT } from "./rc-origin-volumes";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcDiffuseGiDiagnostics = {
@@ -97,7 +97,7 @@ export class RcDiffuseGiController {
     }
 
     private synchronizeLayout(): void {
-        const count = this.settings().volume ? 1 : 3;
+        const count = this.settings().volume ? 1 : RC_ORIGIN_VOLUME_COUNT;
         if (this.field && this.field.volumeCount !== count || this.pending && this.pending.volumeCount !== count) this.release();
     }
 
@@ -108,7 +108,7 @@ export class RcDiffuseGiController {
     /** A keyed OFF frame retains its generation so the first subsequent ON draw is synchronous. */
     public get isReadyForCapture(): boolean {
         if (!this.settings().enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolumes().length) return true;
-        if (!this.field || this.field.volumeCount !== (this.settings().volume ? 1 : 3)) return false;
+        if (!this.field || this.field.volumeCount !== (this.settings().volume ? 1 : RC_ORIGIN_VOLUME_COUNT)) return false;
         // A diffuse texture may finish loading while automatic rendering is paused.
         // Revisit the source during capture preparation to start/finish its readback;
         // otherwise its first ON draw could discover that work too late.

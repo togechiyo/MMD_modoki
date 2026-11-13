@@ -9,7 +9,7 @@ import { registerMmdRadianceSkyAmbient, type MmdRadianceSkyAmbientView } from ".
 import type { RcSkyAmbientSettings, RcSkyAmbientVolume } from "./rc-sky-ambient-settings";
 import { getSkyVisibilityProbeGrid, scaleSkyVisibilityVolume, type SkyVisibilityQuality } from "./radiance-sky-quality";
 import { fitRadianceReceiverVolume } from "./radiance-receiver-volume";
-import { createRcOriginVolumes } from "./rc-origin-volumes";
+import { createRcOriginVolumes, RC_ORIGIN_VOLUME_COUNT } from "./rc-origin-volumes";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcSkyAmbientDiagnostics = {
@@ -100,7 +100,7 @@ export class RcSkyAmbientController {
     /** Texture shape is immutable once the graph is built. Detach bindings before replacing it. */
     private synchronizeQuality(): void {
         const quality = this.settings().quality;
-        const count = this.settings().volume ? 1 : 3;
+        const count = this.settings().volume ? 1 : RC_ORIGIN_VOLUME_COUNT;
         if (this.field && (this.field.quality !== quality || this.field.volumeCount !== count)
             || this.pending && (this.pending.quality !== quality || this.pending.volumeCount !== count)) this.release();
     }
@@ -114,7 +114,7 @@ export class RcSkyAmbientController {
         if (!settings.enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolumes().length
             || settings.enabled && (settings.strength <= 0 && settings.skyBrightness <= 0 || settings.opacity <= 0)) return true;
         return this.status !== "error" && this.field?.quality === settings.quality
-            && this.field.volumeCount === (settings.volume ? 1 : 3) && Boolean(this.field.graph.isReady());
+            && this.field.volumeCount === (settings.volume ? 1 : RC_ORIGIN_VOLUME_COUNT) && Boolean(this.field.graph.isReady());
     }
 
     public async prewarm(): Promise<boolean> {

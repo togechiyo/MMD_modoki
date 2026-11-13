@@ -15,7 +15,7 @@ import { DEFAULT_RC_SKY_AMBIENT_SETTINGS, type RcSkyAmbientSettings } from "./rc
 import { createRcOriginVolumes } from "./rc-origin-volumes";
 
 type FieldBoundary = {
-    quality: SkyVisibilityQuality; irradianceField: object; disposedWhileBound: boolean;
+    quality: SkyVisibilityQuality; volumeCount: number; irradianceField: object; disposedWhileBound: boolean;
     finishBuild: () => void; finishReady: () => void; source: { update: ReturnType<typeof vi.fn> };
     graph: { buildAsync: ReturnType<typeof vi.fn>; whenReadyAsync: ReturnType<typeof vi.fn> };
     execute: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; setVolumes: ReturnType<typeof vi.fn>;
@@ -140,6 +140,9 @@ describe("Sky Ambient field settings lifecycle", () => {
         far.material = receiver.material;
         await controller.prewarm(); controller.prepareFrame();
         expect(controller.diagnostics.volumes).toEqual(createRcOriginVolumes());
+        expect(boundary.instances[0].volumeCount).toBe(4);
+        expect(controller.diagnostics.effectiveVolumes.map(volume => volume.size / controller.diagnostics.probeGrid))
+            .toEqual([8, 32, 128, 2048]);
         expect(controller.fitVolume([far, receiver])?.size).toBeCloseTo(2.4);
         expect(controller.diagnostics.supportedMaterialCount).toBe(1);
         moving = false; controller.settingsChanged(); controller.prepareFrame();
@@ -173,9 +176,11 @@ describe("Sky Ambient field settings lifecycle", () => {
 
     it("cancels pending preparation when all receivers become dynamic and rebuilds after Undo", async () => {
         let stationary = true;
-        const { controller } = fixture(() => true, () => stationary);
+        const { controller, settings } = fixture(() => true, () => stationary);
+        settings.volume = null;
         boundary.waitForBuild = true;
         const first = controller.prewarm(), old = boundary.instances[0];
+        expect(old.volumeCount).toBe(4);
         stationary = false;
         await controller.prewarm(); await first;
         expect(boundary.provider?.()).toBeNull();
@@ -183,6 +188,7 @@ describe("Sky Ambient field settings lifecycle", () => {
         expect(old.dispose).not.toHaveBeenCalled();
         stationary = true;
         const second = controller.prewarm(), current = boundary.instances[1];
+        expect(current.volumeCount).toBe(4);
         current.finishBuild(); await second; controller.prepareFrame();
         expect(boundary.provider?.()?.field).toBe(current.irradianceField);
         old.finishBuild(); await Promise.resolve();
@@ -238,6 +244,7 @@ describe("Sky Ambient field settings lifecycle", () => {
         await controller.prewarm(); controller.prepareFrame();
         expect(controller.diagnostics.effectiveVolumes).toEqual(createRcOriginVolumes());
         expect(boundary.instances).toHaveLength(3);
+        expect(boundary.instances.map(instance => instance.volumeCount)).toEqual([4, 1, 4]);
     });
 
     it("detaches live bindings before replacing a quality allocation and blocks capture until rebuilt", async () => {

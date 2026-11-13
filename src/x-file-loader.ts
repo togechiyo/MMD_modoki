@@ -801,8 +801,8 @@ async function resolveSceneTextureUrls(scene: Scene, rootUrl: string, parsed: XS
     for (const material of materials) {
         await resolveTextureUrlForMaterial(rootUrl, material);
         // Complete before building materials: preset defaults must capture the final alpha mode.
-        // BMP/TGA/WebP and explicit material translucency keep their established policy.
-        if (material.textureUrl && /\.png(?:[?#]|$)/i.test(material.textureUrl)
+        // Unknown BMP layouts, TGA/WebP and explicit material translucency keep their established policy.
+        if (material.textureUrl && /\.(?:png|bmp)(?:[?#]|$)/i.test(material.textureUrl)
             && resolveXMaterialRenderPolicy(material.diffuse.a, false) !== "blend") {
             material.textureIsOpaque = await inspectAlpha(material.textureUrl) === "opaque";
         }
@@ -829,7 +829,7 @@ function buildMat(scene: Scene, m: XMat, cache: Map<XMat, MmdStandardMaterial>):
         mat.diffuseTexture = diffuseTexture;
 
         // .x accessories bypass babylon-mmd's PMX alpha evaluation path, so
-        // enable alpha usage for confirmed/unknown alpha, except verified opaque PNGs.
+        // enable alpha usage for confirmed/unknown alpha, except verified opaque textures.
         // Opaque .x materials use alpha test for texture cutouts so foliage and
         // fences participate in the depth buffer instead of unstable mesh-level
         // alpha blending. Explicit material translucency remains alpha blended.

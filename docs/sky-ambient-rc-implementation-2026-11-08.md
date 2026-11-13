@@ -68,6 +68,8 @@ Fはfill〜1に収まり、既定の完全遮蔽時は0.05。開放された上�
 
 受け手はWGSLの通常MMD、Light and Shadow、Stage Standard、Accessory Toonの不透明材質。alpha test/blend、Full Light等の別preset、PBR、外部の独自shader、Fresnel、lightmapは今回の対象外。PrePass、複数・rig camera、scene custom render target経路では休止する。
 
+Xの材質も対象だが、textureの実際の透明度分類が前提になる。2026-11-13に、透明度のない24bit非圧縮BMPまで一律cutoutになっていたloaderを修正し、現行Sky AmbientとRC GIへの反映を実データ・自作fixtureで確認した（[BMPの条件と検証](./rc-x-accessory-support-2026-11-01.md#2026-11-13-24bit-bmpがrcから外れる問題)）。未対応BMPや透明PNGは対象外を維持する。
+
 遮蔽物・受け手には主に静的なステージを使う。2026-11-13の所有者指定で、PMX/PMDは次のいずれかを持つと両方から暫定除外する。以前の「動的モデルは受け手専用」という扱いは現行方針ではない。
 
 - 2個以上のキーを持つbone / movable-bone track（停止中でも除外する）。source不明でruntime animationだけが存在する場合も除外する

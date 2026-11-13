@@ -2,6 +2,8 @@
 
 作成日: 2026-11-01。[窓付き室内検証](./rc-window-room-verification-2026-10-31.md)で確認したXの適用漏れに対応する。対象は不透明PNGのGI・天空遮蔽と、Accessory Toonの天空遮蔽。室内GIの残留・色移り・再構成の変更は含めない。
 
+2026-11-13追記: 24bit非圧縮BMPの対応は末尾を参照。11/01の「Sky」は旧`rcSkyOcclusion`（影の深み RC）であり、現行`rcSkyAmbient`の検証とは区別する。
+
 ## 変更
 
 Xのdiffuse PNGを、材質生成前に読み込み・デコードし、すべての画素のalphaを確認する。全画素255と確認できた画像はopaque材質として作り、GIの反射入力・受光・遮蔽物、および天空遮蔽の対象にする。少しでも透明な画素がある画像、確認できなかった画像は従来のcutout扱いを保つ。材質自体のdiffuse alphaが半透明の場合はblendを優先する。
@@ -67,3 +69,26 @@ PMXをLight & Shadowへ変更したSkyと、Xを通常MMDへ変更したSkyも�
 - [W3C PNG: alpha representation](https://www.w3.org/TR/png-3/#6AlphaRepresentation) / [tRNS](https://www.w3.org/TR/png-3/#11tRNS): alpha channelの有無と実透明度は異なり、palette/truecolorにも透明指定がある。
 - [WHATWG Canvas pixel manipulation](https://html.spec.whatwg.org/multipage/canvas.html#pixel-manipulation): `getImageData`にはorigin-clean等の失敗条件がある。取得できない場合の保守的fallbackを維持する。
 - Babylonの`LoadImage`/`LoadFile`はinstalled 9.2.0の`Misc/fileTools.js`と[一次source](https://github.com/BabylonJS/Babylon.js/blob/master/packages/dev/core/src/Misc/fileTools.pure.ts)を照合する。明示的に対象sceneのengineを渡し、別のengineを暗黙選択させない。masterのfile分割後のsourceを9.2.0そのものとは扱わない。
+
+## 2026-11-13: 24bit BMPがRCから外れる問題
+
+所有者指定のローカルXデータで、17材質中16材質が不透明なBMPを使っているにもかかわらずalpha testになり、RC GI・Sky Ambientの対象から外れる状態を確認した。effectのstatusはreadyだが、対象材質は1件だけで、同一画角のON/OFF画像差はGIが0、Sky Ambientが平均0.0065階調だった。モデル名・パス・第三者assetは記録・同梱しない。
+
+ローダーのBMP一律cutout判定を修正し、読み込み時のbyte検証で不透明と確定できた場合だけOpaqueにする。対応範囲はBM署名、40byte DIB、planes=1、24bit、BI_RGB、paletteなし、正常な幅と正負の高さ。4byte境界に揃えた行サイズから全pixel arrayの存在を検査する。file size、pixel offset、image sizeの格納範囲も確認し、image size=0と実データ内の末尾paddingは許可する。各辺8192・encoded64MiBの上限、import単位cache、明示的な材質半透明の優先を維持する。
+
+32bit、圧縮、拡張DIB、破損・未確認BMPは従来のcutoutに残す。PNGは従来の全画素alpha検査を使う。BMPの認定には追加の画像decode・canvas・GPU readbackを使わず、描画フレームごとの検査も増やさない。RCの合成式・強度・品質・標準影の設定は変更しない。
+
+根拠はMicrosoftの[BITMAPINFO](https://learn.microsoft.com/en-us/previous-versions/dd183376(v=vs.85))にある24bitのBGR形式、[BITMAPINFOHEADER](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapinfoheader)の行stride・高さ・BI_RGB、および[BITMAPFILEHEADER](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapfileheader)のoffsetとfile size。現在の実データとローカル実行も照合する。
+
+### 検証結果
+
+同じローカルXデータを修正後に読み直すと、対象材質は1→17件になった。同一設定・画角の640×360 PNGでSky AmbientのON/OFF差は平均21.36階調、GIは3.86階調。比較画像を目視し、壁面・庇下へのSky Ambient反映とGIの明化を確認した。RCを両方OFFにした修正前後の画像差は0。モデル全体の画質・性能や全カメラ位置を保証する結果ではなく、今回の適用漏れの確認とする。
+
+自作fixtureの`rc-x-bmp-lighting.spec.mjs`をsandbox外Electron/WebGPUで実行し成功（48秒）。既定Accessory ToonのBMP材質は2件ともopaque、RC入力は26三角形。GIの窓下白壁R増分は54.90、Sky Ambientの室内奥床減衰は平均91.14階調。MMD StandardへのGUI切替・project保存復元を通してopaqueと両効果を維持し、復元前後の画像差は0。透明PNGへのGUI差し替えはcutoutと穴を維持し、GIとSky Ambient（空照明加算を含む）の各ON/OFF画像差は0だった。WebGPU validation / page / console errorは0件。
+
+- focused unit: 2ファイル30件成功。24bit BMPの正負高さ・行padding・末尾padding・不正ヘッダ・32bit等の保守的除外、追加decodeなしの検査を含む。
+- 全unit: 248ファイル1,669件を確認。sandbox内ではlocalhost接続の16件がEACCESとなり、それ以外の1,653件は成功。該当2ファイル20件はsandbox外で再実行し成功。
+- lint成功。通常typecheckは既存548件、今回の変更ファイルには0件。critical（TS2304/TS2552）は0件。
+- WebM・BMPの全形式・別GPUでの性能は今回未確認。適用にはXまたはprojectの再読み込みが必要。
+
+実データの匿名化した診断・比較画像はignoredな`local-references/rc-x-bmp-2026-11-13/`、自作fixtureのGPU結果は`artifacts/e2e/rc-x-bmp-lighting/`へ保存した。第三者assetはGitに含めない。

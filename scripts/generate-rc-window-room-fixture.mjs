@@ -137,6 +137,17 @@ function geometryRows(model) {
   })));
 }
 
+function opaqueWhiteBmp24() {
+  // Odd width exercises DWORD row padding. BI_RGB 24bpp carries no alpha channel.
+  const width = 7, height = 8, stride = Math.ceil(width * 3 / 4) * 4;
+  const bytes = Buffer.alloc(54 + stride * height);
+  bytes.write("BM"); bytes.writeUInt32LE(bytes.length, 2); bytes.writeUInt32LE(54, 10);
+  bytes.writeUInt32LE(40, 14); bytes.writeInt32LE(width, 18); bytes.writeInt32LE(height, 22);
+  bytes.writeUInt16LE(1, 26); bytes.writeUInt16LE(24, 28); bytes.writeUInt32LE(stride * height, 34);
+  for (let y = 0; y < height; y++) bytes.fill(255, 54 + y * stride, 54 + y * stride + width * 3);
+  return bytes;
+}
+
 async function validateFixtures(files, models) {
   // Expose the real parser only inside this static SSR process; do not change runtime source.
   const vite = await createServer({ root, configFile: false, appType: "custom", logLevel: "silent",
@@ -150,6 +161,17 @@ async function validateFixtures(files, models) {
   try {
     const { PmxReader } = await vite.ssrLoadModule("/node_modules/babylon-mmd/esm/Loader/Parser/pmxReader.js");
     const { parseFixtureX, triangulateFixtureX } = await vite.ssrLoadModule("/src/x-file-loader.ts");
+    const bmp = await readFile(resolve(directory, "white.bmp"));
+    assert.equal(bmp.subarray(0, 2).toString(), "BM"); assert.equal(bmp.readUInt32LE(2), bmp.length);
+    assert.equal(bmp.readUInt32LE(10), 54); assert.equal(bmp.readUInt32LE(14), 40);
+    assert.equal(bmp.readInt32LE(18), 7); assert.equal(bmp.readInt32LE(22), 8);
+    assert.equal(bmp.readUInt16LE(26), 1); assert.equal(bmp.readUInt16LE(28), 24);
+    assert.equal(bmp.readUInt32LE(30), 0); assert.equal(bmp.readUInt32LE(34), 24 * 8);
+    assert.equal(bmp.length, 54 + 24 * 8);
+    for (let y = 0; y < 8; y++) {
+      assert.ok(bmp.subarray(54 + y * 24, 54 + y * 24 + 21).every(value => value === 255));
+      assert.ok(bmp.subarray(54 + y * 24 + 21, 54 + (y + 1) * 24).every(value => value === 0));
+    }
     for (const [file, model, texture = null, alpha = 1] of files) {
       const bytes = await readFile(resolve(directory, file));
       const expected = geometryRows(model);
@@ -204,6 +226,7 @@ export async function generateRcWindowRoomFixture() {
   for (const [file, model, texture, alpha = 1] of [
     ["window-room.pmx", room], ["window-room-plain.x", room],
     ["window-room-opaque-png.x", room, "white.png"], ["window-room-opaque-jpg.x", room, "white.jpg"],
+    ["window-room-opaque-bmp.x", room, "white.bmp"],
     ["window-room-alpha254.x", room, "white-alpha254.png"], ["window-room-cutout.x", room, "white-cutout.png"],
     ["window-room-blend.x", room, null, 0.5],
     ["window-shutter.pmx", shutter], ["window-shutter.x", shutter],
@@ -212,6 +235,7 @@ export async function generateRcWindowRoomFixture() {
     files.push([file, model, texture, alpha]);
   }
   const white = { width: 8, height: 8, data: Buffer.alloc(8 * 8 * 4, 255) };
+  await writeFile(resolve(directory, "white.bmp"), opaqueWhiteBmp24());
   const png = PNG.sync.write(white, { colorType: 6 }), jpg = jpegjs.encode(white, 100).data;
   for (const [name, bytes, decoded] of [["white.png", png, PNG.sync.read(png)], ["white.jpg", jpg, jpegjs.decode(jpg)]]) {
     assert.equal(decoded.width, 8); assert.equal(decoded.height, 8);
@@ -232,8 +256,9 @@ export async function generateRcWindowRoomFixture() {
     assert.deepEqual(alphaCounts, expectedAlpha); await writeFile(resolve(directory, name), bytes);
   }
   await validateFixtures(files, [room, shutter]);
-  return { directory, files: [...files.map(([file]) => file), "white.png", "white.jpg", "white-alpha254.png", "white-cutout.png"], roomTriangles: 26,
-    shutterTriangles: 2, staticParseAndMatchingGeometry: "passed", textureDecode: "opaque white and exact alpha histograms passed" };
+  return { directory, files: [...files.map(([file]) => file), "white.png", "white.jpg", "white.bmp", "white-alpha254.png", "white-cutout.png"], roomTriangles: 26,
+    shutterTriangles: 2, staticParseAndMatchingGeometry: "passed",
+    textureDecode: "PNG/JPEG decode, BMP24 BI_RGB bytes and exact PNG alpha histograms passed" };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

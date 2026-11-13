@@ -105,6 +105,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 3効果のCPU変形/座標変換共有、BVH loop軽量化、GI近傍情報の再利用、中立設定時の更新停止、未使用GPU texture縮小を実装。高密度・併用・変形fixtureのCPU source中央値27.08→12.42ms、32 PNG画素一致、追加GPU2件と既存11ケース、unit1,403件・lint・既存型エラーから追加0/criticalを確認。検証中に見つかった非表示RC card初期値の不整合も補修（[性能・条件・回帰記録](./radiance-cascades-performance-2026-10-31.md)、2026-10-31。全PCのFPS保証や所有者実機確認とは区別する）。
 - [x] 自作の窓付き室内PMX/X、白PNG/JPEG、黒い遮光板でGI・天空遮蔽を比較。opaque XへのGI、対応presetのSky、窓開閉・復帰を確認し、PNG除外・閉窓GI残留・弱い色移りを記録。fixture/reference台帳も作成（[検証記録](./rc-window-room-verification-2026-10-31.md)、[台帳](./test-reference-asset-ledger.md)、2026-10-31。描画runtime変更なし）。
 - [x] Xの不透明PNGをロード時の全画素alphaで判定し、GI / Skyへ参加。Accessory ToonのSky受光も追加。透明PNG・材質半透明は従来分類を維持し、自作室内7条件、PNGの保存復元・backend復帰・静止30フレームの更新再利用、unit1,443件、lint、typecheck既存547件/critical0を確認（[対応記録](./rc-x-accessory-support-2026-11-01.md)、2026-11-01）。
+- [x] Xの24bit非圧縮BMPを一律cutoutにしてRC GI・Sky Ambientから外していた判定を修正。指定データの対象材質1→17件・実描画差、自作fixtureの個別効果・保存復元・透明PNG維持を確認（[条件・検証](./rc-x-accessory-support-2026-11-01.md#2026-11-13-24bit-bmpがrcから外れる問題)、2026-11-13）。
 - [x] ダンス再生中のRCで材質・UVを再利用し、姿勢だけが変わったメッシュのBVH更新を軽量化。GI＋天空遮蔽を併用した自作シーンの更新中央値6.23 → 3.41〜3.50 ms、停止・逆シークのPNG一致を確認（[条件・FPS・回帰記録](./rc-playback-performance-2026-11-03.md)）。
 - [x] アリシア＋同梱VMDでRCを4条件比較し、形状更新と近傍面探索を軽量化。併用39.0 → 41.5〜43.0 FPS、同じポーズの画像と近傍面IDの一致を確認（[実装・測定条件・結果](./rc-alicia-dance-performance-2026-11-03.md)）。
 - [ ] RC室内品質の後続候補: 閉窓GI残留・色移りと面境界のむらの切り分け。[窓付き室内検証](./rc-window-room-verification-2026-10-31.md)の再現fixtureを使い、確認済み条件と未対応を区別する。

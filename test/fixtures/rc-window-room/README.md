@@ -10,6 +10,7 @@ MMD_modoki 用の自作 geometry と白画像。リポジトリと同じ MIT ラ
 | `window-room-plain.x` | PMXと同じgeometry・diffuse色。textureなし |
 | `window-room-opaque-png.x` | 同じ部屋、全材質に `white.png` を参照 |
 | `window-room-opaque-jpg.x` | 同じ部屋、全材質に `white.jpg` を参照 |
+| `window-room-opaque-bmp.x` / `white.bmp` | 同じ部屋、全材質に自作7×8白画像を参照。DIB40・24bit BI_RGB、各行に3byteのpaddingを含む。不透明BMPの分類用 |
 | `window-shutter.x` / `window-shutter.pmx` | 同じ2三角形・4頂点の黒い遮光板。textureなし |
 | `white.png` / `white.jpg` | 自作8×8白画像。PNGも全画素alpha255 |
 | `window-room-alpha254.x` / `white-alpha254.png` | 同じ部屋、32×32白画像の最後の1画素だけalpha254。間引きなしの透明判定用 |
@@ -23,7 +24,7 @@ MMD_modoki 用の自作 geometry と白画像。リポジトリと同じ MIT ラ
 - `RoomWhite`: diffuse `[0.8,0.8,0.8]`、24三角形。床は赤タイルを除く4枚に分割し、面積の重複をなくす。
 - `RedFloorSource`: diffuse `[0.9,0.025,0.025]`、2三角形。`x=[-1.5,1.5], y=0, z=[1.5,3.5]`。白床と同じ高さで境界だけ接し、z-fightingする重複面はない。発光材質ではなく、方向光を受ける赤い反射面。
 - `WindowShutter`: diffuse `[0,0,0]`、窓と同じ `z=6, x=[-2,2], y=[1.2,4.8]`。原点配置で閉鎖、非表示または削除で開口。黒により遮光板自身の色反射を加えずに比較できる。PMXと`.x`の両方を同時に配置しない。
-- 基本4variantとshutterは全材質 alpha1、specular0、shininess0、emission0。透明対照3variantは上表のalphaだけを変える。明示法線は室内側を向く。PMXは両面のみの描画flag、toon・edge・shadow-map flag・物理・モーフなし。逆向き重複面は作らない。
+- 基本5variantとshutterは全材質 alpha1、specular0、shininess0、emission0。透明対照3variantは上表のalphaだけを変える。明示法線は室内側を向く。PMXは両面のみの描画flag、toon・edge・shadow-map flag・物理・モーフなし。逆向き重複面は作らない。
 - `.x` は各面のUVも持つ。text `.x` parserのV反転を考慮して出力し、読み取り後にPMXと同じUVとなる。白textureなので画像の向きによる色差は生じない。
 
 ## 推奨する比較条件
@@ -34,6 +35,7 @@ MMD_modoki 用の自作 geometry と白画像。リポジトリと同じ MIT ラ
 - 赤床はGI source、窓下の垂直白壁 `z=6, y=0.2..1.0, x=-1.2..1.2` は赤床へ向くGI receiverにできる。同一平面の赤床→白床はLambertのcosが0となるため、GIの主判定に使わない。Skyは窓近くの白床 `x=-0.6..0.6, y=0, z=3.7..4.3` と奥の白床を比較できる。天井は法線が下向きなので、上向きreceiver向けSky実装の主判定に使わない。
 - RC fieldの自動範囲が変化しないよう、開閉は遮光板の表示切替が扱いやすい。部屋だけの厳密boundsは `min[-6,0,-6], max[6,6,6]`。PMX loaderの保守的な追加boundsと混同しない。
 - textureなし → 全白JPEG → 全白PNG の順で、同じgeometryとdiffuse色のまま loaderの材質分類を比較できる。全画素alpha255のPNGはopaque、1画素でもalpha254のPNGと実cutoutは透明用の分類を保つことを確認する。材質alpha0.5は画像なしでもblendを維持する。
+- 24bit BI_RGB BMPにはalpha channelがない。生成器はheader・全BGR画素・行padding・必要byte数を静的検証する。`rc-x-bmp-lighting.spec.mjs`は現行Sky AmbientとGIを個別にON/OFFし、不透明分類・GUI preset・保存復元、およびPNG cutoutの除外と穴の維持を確認する。
 - cutout対照の窓右壁では `z=6, x=2.8..3.2, y=2.8..3.2` が透明側、`x=4.8..5.2` が不透明側。背景を黒として、GI/Sky OFFのPNGでも穴と不透明な面を区別できる。窓自体は全variantで同じgeometry開口。
 - データを揃えても、PMXと`.x`は読み込み時の既定Toon/ambient/presetなどが異なり得る。fixture自体は既定shaderやシーン全体の影設定を変更しない。同じ受光presetで比較するか、loader既定の差を明示して観測する。
 

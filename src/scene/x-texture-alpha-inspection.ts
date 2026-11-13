@@ -1,9 +1,9 @@
 import type { Scene } from "@babylonjs/core/scene";
 import { LoadFile, LoadImage } from "@babylonjs/core/Misc/fileTools";
 import type { IFileRequest } from "@babylonjs/core/Misc/fileRequest";
-import { classifyRgbaAlpha, getStaticPngSize, X_ALPHA_STRIP_ROWS, type XTextureAlpha } from "../shared/x-texture-alpha";
+import { classifyOpaqueBmp, classifyRgbaAlpha, getStaticPngSize, X_ALPHA_STRIP_ROWS, type XTextureAlpha } from "../shared/x-texture-alpha";
 
-/** PNG-only load-time inspection. Other formats retain the existing loader policy. */
+/** Load-time PNG alpha inspection and RGB24 BMP validation. Unknown formats retain cutout. */
 export function inspectXTextureAlpha(url: string, scene: Scene): Promise<XTextureAlpha> {
     return new Promise(resolve => {
         let settled = false;
@@ -24,7 +24,10 @@ export function inspectXTextureAlpha(url: string, scene: Scene): Promise<XTextur
             request = LoadFile(url, data => {
                 if (settled) return;
                 if (!(data instanceof ArrayBuffer)) { finish("unknown"); return; }
-                const size = getStaticPngSize(new Uint8Array(data));
+                const bytes = new Uint8Array(data);
+                if (scene.isDisposed) { finish("unknown"); return; }
+                if (bytes[0] === 0x42 && bytes[1] === 0x4d) { finish(classifyOpaqueBmp(bytes)); return; }
+                const size = getStaticPngSize(bytes);
                 if (!size || scene.isDisposed) { finish("unknown"); return; }
                 try {
                     // Own this URL: Babylon 9.2 only revokes its ArrayBuffer URL on

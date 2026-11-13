@@ -37,11 +37,11 @@ MMD モデルやアクセサリの描画崩れを、モデル名、材質名、�
 | 条件 | 分類 | Babylon.js 設定 | 主な想定 |
 | --- | --- | --- | --- |
 | 材質 diffuse alpha が `1 - 0.001` 未満 | Blend | `MATERIAL_ALPHABLEND` | ガラス、明示的な半透明面 |
-| 材質は不透明で、diffuse PNGの全画素alpha255を読み込み時に確認できた | Opaque | texture alphaを使わない | 不透明PNGの通常面、RC GI / 天空遮蔽 |
+| 材質は不透明で、diffuse PNGの全画素alpha255、または検証済み24bit非圧縮BMP | Opaque | texture alphaを使わない | 不透明テクスチャの通常面、RC GI / Sky Ambient |
 | 材質は不透明で、alpha 対応形式の diffuse texture を持つ | Cutout | `MATERIAL_ALPHATEST`, `alphaCutOff = 0.5` | 葉、柵、抜き文字、板ポリゴン |
 | 上記以外 | Opaque | 透明設定を追加しない | 通常の不透明面 |
 
-alpha 対応形式は PNG / BMP / TGA / WebP とする。2026-11-01から、静的PNGは材質生成前にCPUで全画素alphaを確認し、不透明と確認できた場合だけOpaqueへ分類する。同一import内の同一URLは結果を共有する。透明画素あり・判定失敗・上限超過・APNG、および他形式は従来の拡張子によるCutout分類を維持する。[XアクセサリのRC対応と検証](./rc-x-accessory-support-2026-11-01.md)を参照。
+alpha 対応形式は PNG / BMP / TGA / WebP とする。2026-11-01から、静的PNGは材質生成前にCPUで全画素alphaを確認し、不透明と確認できた場合だけOpaqueへ分類する。2026-11-13から、24bit・BI_RGB・DIB40のBMPもヘッダと全行の格納範囲を検証し、alphaを持たない形式としてOpaqueへ分類する。同一import内の同一URLは結果を共有する。透明画素あり・判定失敗・上限超過・APNG、未対応BMP、および他形式は従来の拡張子によるCutout分類を維持する。[XアクセサリのRC対応と検証](./rc-x-accessory-support-2026-11-01.md)を参照。
 
 ### Alpha Test の実行設定
 
@@ -73,14 +73,14 @@ Babylon.js の Alpha Test はしきい値未満の画素を破棄し、残った
 ### 現行判定の制約
 
 - 材質 alpha が `1` のまま、テクスチャの中間 alpha だけでガラスを表すデータは Cutout と判定される可能性がある。
-- 不透明PNGでも判定不能や上限超過ならCutoutを維持する。BMP/TGA/WebPの実alpha分類は未対応。
+- 不透明PNGでも判定不能や上限超過ならCutoutを維持する。BMPは検証済み24bit非圧縮のみ対応し、32bit・圧縮・拡張DIB、TGA/WebPの実alpha分類は未対応。
 - BMP の alpha 解釈は bit depth と decoder に左右されるため、実画像による継続確認が必要である。
 
-PNGの完全不透明判定以外は、将来次のデータ駆動分類へ拡張する余地がある。
+PNGの完全不透明判定と24bit非圧縮BMPの形式検証以外は、将来次のデータ駆動分類へ拡張する余地がある。
 
 | 実 alpha 分布 | 将来分類候補 |
 | --- | --- |
-| 全画素が `1` | Opaque（静的PNGは実装済み。他形式は候補） |
+| 全画素が `1` | Opaque（静的PNGと検証済み24bit非圧縮BMPは実装済み。他形式は候補） |
 | `0` と `1` が中心で、中間値が少ない | Alpha Test |
 | 中間 alpha が一定量ある | Alpha Blend または Test + Blend |
 

@@ -16,7 +16,7 @@ function metadata(width: number, height: number): ArrayBuffer {
     return bytes.buffer;
 }
 
-describe("X load-time PNG alpha inspection", () => {
+describe("X load-time texture alpha inspection", () => {
     const engine = {};
     const scene = { isDisposed:false, offlineProvider:null, getEngine:() => engine } as unknown as Scene;
     let sourceY = 0;
@@ -41,6 +41,23 @@ describe("X load-time PNG alpha inspection", () => {
         vi.mocked(LoadImage).mockImplementation((_data, success) => { success(image); return null; });
     });
     afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+    it("recognizes RGB24 BMP without allocating a canvas or decoding a second bitmap", async () => {
+        const bytes = new Uint8Array(62), view = new DataView(bytes.buffer);
+        bytes.set([0x42, 0x4d]);
+        view.setUint32(2, 62, true); view.setUint32(10, 54, true); view.setUint32(14, 40, true);
+        view.setInt32(18, 2, true); view.setInt32(22, 1, true);
+        view.setUint16(26, 1, true); view.setUint16(28, 24, true);
+        vi.mocked(LoadFile).mockImplementation((_url, success) => {
+            success(bytes.buffer); return { abort, onCompleteObservable:new Observable<IFileRequest>() };
+        });
+        expect(await inspectXTextureAlpha("file:///opaque.bmp", scene)).toBe("opaque");
+        expect(LoadImage).not.toHaveBeenCalled();
+        expect(document.createElement).not.toHaveBeenCalled();
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+        view.setUint16(28, 32, true);
+        expect(await inspectXTextureAlpha("file:///alpha.bmp", scene)).toBe("unknown");
+    });
 
     it("scans the final partial strip at original resolution and closes its image", async () => {
         pixels.mockImplementation((_x, _y, width, height) => {

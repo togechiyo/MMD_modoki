@@ -49,6 +49,7 @@ export function roomState() {
           useAlphaFromDiffuseTexture: material.useAlphaFromDiffuseTexture,
           giReceiver: manager.acceptsRcDiffuseGiMaterial(material), giSource: manager.acceptsRcDiffuseGiMaterial(material, true),
           skyReceiver: manager.rcSkyOcclusionController?.acceptsMaterial(material) ?? false,
+          skyAmbientReceiver: manager.rcSkyAmbientController?.acceptsMaterial(material) ?? false,
           diffuse: material.diffuseColor?.asArray?.(), textureReady: material.diffuseTexture?.isReady() ?? null,
           textureHasAlpha: material.diffuseTexture?.hasAlpha ?? null,
           textureUrl: material.diffuseTexture?.url ?? null,
@@ -59,6 +60,7 @@ export function roomState() {
       return surfaces.length ? [{ name: mesh.name, surfaces, bounds:worldBounds(mesh) }] : [];
     });
   return { gi: controllerState(manager.rcDiffuseGiController), sky: controllerState(manager.rcSkyOcclusionController),
+    skyAmbient: controllerState(manager.rcSkyAmbientController),
     materials: [...materials.values()], meshes,
     light: { direction: manager.dirLight.direction.asArray(), intensity: manager.dirLight.getScaledIntensity() } };
 }

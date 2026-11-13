@@ -6,7 +6,7 @@
 
 残存報告の対象は、手前の柱ではなく窓の向こうの最奥の廊下壁だった。所有者は通常影では出ずCSMのみで発生し、読み込み初期値でも見えると明示した。
 許可されたローカル比較で、最奥壁がCSMの自動深度範囲の外へ出てsamplingを止められることを確認した。WebGPU reverse depthのprojection係数の丸めと深度復元の組合せが範囲を過小評価する（末尾の追加調査）。柱のtexture由来の横筋をこの報告の原因とは扱わない。
-WebGPUかつreverse depthではauto boundsを無効にし、設定した影距離を保つよう修正した。指定されたローカルPMXの初期値と自作fixtureで奥壁の影の復帰を確認した。所有者による修正後の最終確認は未実施。
+WebGPUかつreverse depthではauto boundsを無効にし、設定した影距離を保つよう修正した。指定されたローカルPMXの初期値と自作fixtureで奥壁の影の復帰を確認した。11/13、修正後に所有者から実機で改善したとの報告を得た。
 上端影抜けは解消済み。RC2効果OFFでも残るという報告と、元sceneの半影ON/OFF差が未確認である点は履歴として保持する。
 資料と使用中のBabylon.js **9.2.0** を照合し、後続依頼でbias値を固定したブレンド幅比較を実施した。比較時は本体未変更。その後、所有者の明示依頼でdepthClampだけをfalseへ変更した（末尾の試用記録）。
 前日の実機比較は[壁面調査](./csm-wall-band-investigation-2026-11-11.md)、今回の結果は末尾の「固定biasでの比較」を参照する。
@@ -229,4 +229,4 @@ depthClamp変更後も残存するという報告を受け、所有者が明示�
 - 関連unit39件、lint、WebGPU smoke、insights validator、diff check成功。typecheckは既存547診断と行・列を除いた内容・重複が一致し、新規差分0、critical TS2304/TS2552は0。
 - 自作fixtureの結果は `artifacts/e2e/csm-wall-blend/auto-bounds-receiver-run/`、既存経路・起動確認ログはその親directoryの `auto-bounds-regression.log` / `auto-bounds-smoke.log`（いずれもignored）。私有モデルの検証資料は前述のlocal reference内だけに保持。
 
-本修正の最終的な所有者実機での見え方は未確認。別の自己影ノイズや柱のtexture由来の明暗差まで解消したとは扱わない。
+11/13、修正コミット `4af5a17` の案内後、所有者から「改善してる」と実機確認の報告を得た。報告対象の改善確認として記録し、全画角や別の自己影ノイズ、柱のtexture由来の明暗差まで解消したとは扱わない。

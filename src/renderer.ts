@@ -3,6 +3,7 @@
  * Initializes Babylon.js, babylon-mmd, and all UI components.
  */
 
+import "./render/configure-schema-validation";
 import "@babylonjs/loaders/glTF";
 import { WebRequest } from "@babylonjs/core/Misc/webRequest";
 import "./index.css";

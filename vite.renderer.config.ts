@@ -1,11 +1,27 @@
 import { defineConfig } from 'vite';
 // eslint-disable-next-line import/no-unresolved -- Tailwind v4 exposes its Vite plugin via package exports.
 import tailwindcss from '@tailwindcss/vite';
+import { createRendererContentSecurityPolicy } from './src/shared/renderer-csp';
 
 // https://vitejs.dev/config
 export default defineConfig({
   plugins: [
     tailwindcss(),
+    {
+      name: 'renderer-content-security-policy',
+      transformIndexHtml: {
+        order: 'post',
+        handler(_html, context) {
+          const devUrl = context.server?.resolvedUrls?.local[0];
+          if (context.server && !devUrl) throw new Error('Renderer dev server URL is not ready for CSP');
+          return [{
+            tag: 'meta',
+            attrs: { 'http-equiv': 'Content-Security-Policy', content: createRendererContentSecurityPolicy(devUrl) },
+            injectTo: 'head-prepend',
+          }];
+        },
+      },
+    },
   ],
   optimizeDeps: {
     include: [

@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { enableMcpEditing } from "./mcp-client.mjs";
+import { observeCsp } from "./csp-observer.mjs";
+import { verifyCspRestrictions } from "./csp-probes.mjs";
 
 // Electron 45's CDP-attached hidden exporter stalls with Playwright trace recording.
 // Keep the same functional assertions and collect structured events/results below.
@@ -43,6 +45,9 @@ test("packaged file:// MCP export with production fuses and local model textures
         page = browser.contexts()[0].pages()[0];
         observe(page);
         page.setDefaultTimeout(15000);
+        const cspObserver = await observeCsp(page.context());
+        // CDP attaches after initial navigation started; reload to include startup CSP enforcement.
+        await page.reload();
         // Static menu markup appears before the asynchronous runtime and UI handlers.
         await page.waitForFunction(() => Boolean(window.mmdModokiDiagnostics), undefined, { timeout: 45000 });
         await expect(page.locator('[data-i18n="menu.tools"]')).toBeVisible();
@@ -95,6 +100,9 @@ test("packaged file:// MCP export with production fuses and local model textures
                 } finally { video.removeAttribute("src"); video.load(); URL.revokeObjectURL(url); }
             }, [...bytes])).toEqual([320, 180]);
         }
+        report.cspNormalEvents = cspObserver.events.slice();
+        expect(report.cspNormalEvents).toEqual([]);
+        const firstFaultEvent = cspObserver.events.length;
         // Fault injection in the test only: prove the renderer -> main -> MCP diagnostic path.
         await page.context().addInitScript(() => {
             if (new URLSearchParams(location.search).get("mode") === "webm-exporter") Object.defineProperty(window, "VideoEncoder", { value: undefined });
@@ -106,6 +114,10 @@ test("packaged file:// MCP export with production fuses and local model textures
             return terminal.status;
         }, { timeout: 30000 }).toBe("failed");
         expect(terminal).toMatchObject({ progress: { totalFrames: 3, capturedFrames: 0 }, diagnostic: { error: { code: "VIDEO_ENCODER_UNAVAILABLE", details: { stage: "initializing", secureContext: true, videoEncoderAvailable: false } } } });
+        report.cspFaultEvents = cspObserver.events.slice(firstFaultEvent);
+        const firstProbeEvent = cspObserver.events.length;
+        report.cspProbes = await verifyCspRestrictions(page);
+        report.cspProbeEvents = cspObserver.events.slice(firstProbeEvent);
     } finally {
         await writeFile(testInfo.outputPath("report.json"), JSON.stringify(report, null, 2));
         await page?.close().catch(() => undefined);

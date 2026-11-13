@@ -78,11 +78,6 @@ if (isSmokeMode && process.env.MMD_MODOKI_SMOKE_USER_DATA_PATH) {
 if (isE2eMode && process.env.MMD_MODOKI_E2E_USER_DATA_PATH) {
   app.setPath('userData', process.env.MMD_MODOKI_E2E_USER_DATA_PATH);
 }
-if (isDev) {
-  // Keep local file loading behavior while hiding noisy Electron dev warnings.
-  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
-}
-
 const APP_LOG_NAME = 'MMD_modoki';
 const ENABLE_ELECTRON_LOG_CONSOLE = process.env.MMD_MODOKI_CONSOLE_LOG === '1';
 const appLogSessionId = `${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}-${randomUUID().slice(0, 4)}`;

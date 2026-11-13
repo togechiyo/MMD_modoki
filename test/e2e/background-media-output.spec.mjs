@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { createMedia } from "../fixtures/background-media/create.mjs";
 import { resolve } from "node:path";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { observeCsp } from "./csp-observer.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -96,6 +97,7 @@ for (const backend of ["classic", "frameGraph"]) {
         launched.app.on("window", handleDialogs);
         try {
             const page = await launched.app.firstWindow();
+            const cspObserver = await observeCsp(page.context());
             handleDialogs(page);
             await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
             await page.evaluate(value => localStorage.setItem("mmd_modoki.postEffectBackend", value), backend);
@@ -143,6 +145,7 @@ for (const backend of ["classic", "frameGraph"]) {
                 const rgb = await sampleMedia(page, resolve(launched.tempDir, outputVideo ? "hidden.webm" : "hidden_0000.png"), outputVideo);
                 expect(Math.max(...rgb.slice(0, 3)), JSON.stringify(rgb)).toBeLessThan(20);
             }
+            expect(cspObserver.events).toEqual([]);
         } finally { await launched.close(); }
     });
 }

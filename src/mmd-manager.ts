@@ -763,8 +763,8 @@ async function loadBundledMprWasmInstance(): Promise<IMmdWasmInstance> {
     if (bundledMprWasmInstancePromise) return bundledMprWasmInstancePromise;
 
     bundledMprWasmInstancePromise = (async () => {
-        const importModule = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<typeof import("babylon-mmd/esm/Runtime/Optimized/wasm/mpr")>;
-        const mprWasmBindgen = await importModule("/node_modules/babylon-mmd/esm/Runtime/Optimized/wasm/mpr/index.js");
+        const mprModuleUrl = "/node_modules/babylon-mmd/esm/Runtime/Optimized/wasm/mpr/index.js";
+        const mprWasmBindgen = await import(/* @vite-ignore */ mprModuleUrl) as typeof import("babylon-mmd/esm/Runtime/Optimized/wasm/mpr");
         const initOutput = await mprWasmBindgen.default({ module_or_path: mprWasmBinaryUrl });
         mprWasmBindgen.init();
 

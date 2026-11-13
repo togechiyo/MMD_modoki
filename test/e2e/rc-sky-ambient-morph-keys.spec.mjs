@@ -3,9 +3,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createRcSkyStage } from "../../scripts/generate-rc-sky-stage.mjs";
 import { writePmx } from "../../scripts/generate-external-parent-test-models.mjs";
-import { launchMmdModoki } from "./electron-app.mjs";
+import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
 import { camera, capture, difference, initialState, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
-import { addRcLighting, closeRcLighting, openRcLighting, rcLightingStatus } from "./helpers/rc-lighting-controls.mjs";
+import { addRcLighting, closeRcLighting, openRcLighting, rcLightingInput, rcLightingStatus } from "./helpers/rc-lighting-controls.mjs";
 import { measureSkyAmbientRegions, skyAmbientRegions } from "./helpers/rc-sky-ambient-regions.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), id = "rcSkyAmbient", roof = "庇移動モーフ", material = "材質テスト";
@@ -155,6 +155,130 @@ test("Sky Ambient retains stage occluders through GUI morph keys, undo and proje
     expect(report.validation.count).toBe(0);
     expect(report.shaderResponses.filter(response => /text\/html/i.test(response.contentType))).toEqual([]);
     expect(report.shaderRequestFailures).toEqual([]);
+    expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
+  } finally {
+    mkdirSync(testInfo.outputDir, { recursive: true });
+    writeFileSync(testInfo.outputPath("report.json"), JSON.stringify(report, null, 2));
+    if (page && !page.isClosed()) await probe(page, "disposeSkyMorphProbe").catch(() => undefined);
+    await launched.close();
+  }
+});
+
+// eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
+test("Sky Ambient retains one placement key per bone and restores casters after undoing a second key", async ({}, testInfo) => {
+  test.setTimeout(180000);
+  const launched = await launchMmdModoki(root);
+  const report = { errors: [], consoleErrors: [], captures: {}, states: {}, comparisons: {} };
+  let page;
+  try {
+    page = await launched.app.firstWindow();
+    page.on("pageerror", error => report.errors.push(error.stack ?? error.message));
+    page.on("console", message => { if (message.type() === "error") report.consoleErrors.push(message.text()); });
+    await initialState(page, { fixed: false });
+    await page.evaluate(async () => {
+      await import("/test/e2e/helpers/rc-sky-ambient-morph-probe.mjs");
+      const state = window.mmdModokiE2e.exportProjectState();
+      Object.assign(state.lighting.rcSkyAmbient, { enabled: false, strength: 1, skyBrightness: 0,
+        opacity: 1, quality: "standard", rangeScale: 1 });
+      await window.mmdModokiE2e.importProjectState(state);
+    });
+    const auto = page.locator("#btn-auto-key");
+    if (await auto.getAttribute("aria-pressed") === "true") await auto.click();
+    const model = createRcSkyStage();
+    const fullTriangles = model.materialGroups.reduce((count, group) => count + group.indices.length / 3, 0);
+    const modelPath = join(launched.tempDir, "sky-bone-placement-stage.pmx");
+    writeFileSync(modelPath, writePmx(model));
+    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath);
+    await camera(page, { tx: 0, ty: 1.5, tz: 0, rx: -20, ry: -38, rz: 0, camDistance: 31 });
+    await page.locator("#info-model-select").selectOption("0");
+    await addRcLighting(page, id); await ready(page, fullTriangles);
+    const take = name => capture(page, testInfo, report, name);
+    const boneFrames = async name => (await probe(page))?.boneTracks.find(track => track.name === name)?.frames ?? [];
+    const setBoneX = async (name, value) => {
+      const category = await page.evaluate(name => window.mmdModokiE2e.getTimelineTracks().find(track => track.name === name)?.category, name);
+      expect(category).toBeTruthy();
+      await selectTimelineTrack(page, category, name);
+      const x = page.locator('#bone-controls input[data-control-key="tx"]');
+      await x.fill(String(value)); await x.press("Enter");
+      await expect.poll(async () => Number(await x.inputValue())).toBe(value);
+    };
+    const registerBone = async () => page.locator("#btn-bone-keyframe").click();
+    // The key need not be at frame zero: a single-key track has one constant pose.
+    await seek(page, 12); await setBoneX("庇移動", 3); await ready(page, fullTriangles);
+    const roofPreview = await take("roof-placement-preview");
+    await registerBone();
+    await expect.poll(() => boneFrames("庇移動")).toEqual([12]);
+    await ready(page, fullTriangles);
+    report.states.oneBone = await probe(page);
+    expect(report.states.oneBone.runtimeAnimations).toBeGreaterThan(0);
+    expect(report.states.oneBone.boneKeyCount).toBe(1);
+    report.comparisons.roofRegistered = difference(roofPreview, await take("roof-placement-key"));
+    expect(report.comparisons.roofRegistered).toBeLessThan(.15);
+
+    // The budget is per track, not a single bone key across the whole model.
+    await setBoneX("センター", 1); await ready(page, fullTriangles);
+    const centerPreview = await take("center-placement-preview");
+    await registerBone();
+    await expect.poll(() => boneFrames("センター")).toEqual([12]);
+    await ready(page, fullTriangles);
+    report.states.twoBones = await probe(page);
+    expect(report.states.twoBones.boneKeyCount).toBe(2);
+    expect(report.states.twoBones.boneTracks.filter(track => track.frames.length > 0)).toHaveLength(2);
+    const placement = await take("two-placement-keys");
+    report.comparisons.centerRegistered = difference(centerPreview, placement);
+    expect(report.comparisons.centerRegistered).toBeLessThan(.15);
+    for (const frame of [0, 30, 12]) {
+      await seek(page, frame); await ready(page, fullTriangles);
+      report.comparisons[`constantPose${frame}`] = difference(placement, await take(`constant-pose-${frame}`));
+      expect(report.comparisons[`constantPose${frame}`]).toBeLessThan(.15);
+    }
+
+    await seek(page, 30); await setBoneX("庇移動", 6); await registerBone();
+    await expect.poll(() => boneFrames("庇移動")).toEqual([12, 30]);
+    await ready(page, 0);
+    report.states.animated = await probe(page);
+    await take("second-bone-key-excludes-moving-caster");
+    await history(page, "undo");
+    await expect.poll(() => boneFrames("庇移動")).toEqual([12]);
+    await ready(page, fullTriangles);
+    report.states.undo = await probe(page);
+    await seek(page, 0); await ready(page, fullTriangles);
+    report.comparisons.undo = difference(placement, await take("undo-second-key"));
+    expect(report.comparisons.undo).toBeLessThan(.15);
+
+    const savedTracks = (await probe(page)).boneTracks;
+    const projectPath = join(launched.tempDir, "sky-bone-placement.json");
+    await launched.app.evaluate(({ dialog }, path) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: path });
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, projectPath);
+    await fileMenu(page, "file.saveProject");
+    await expect.poll(() => {
+      try { JSON.parse(readFileSync(projectPath, "utf8")); return true; }
+      catch (error) { if (error.code === "ENOENT" || error instanceof SyntaxError) return false; throw error; }
+    }).toBe(true);
+    await seek(page, 30); await setBoneX("庇移動", 6); await registerBone();
+    await ready(page, 0);
+    await fileMenu(page, "file.loadProject");
+    await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
+    await page.locator("#info-model-select").selectOption("0");
+    await expect.poll(async () => (await probe(page))?.boneTracks).toEqual(savedTracks);
+    await ready(page, fullTriangles);
+    report.states.restored = await probe(page);
+    const restored = await take("restored-placement");
+    report.comparisons.restored = difference(placement, restored);
+    // Auto bounds stay fixed during pose editing, but refit on project load.
+    // The center translation therefore changes the probe grid origin. Compare
+    // sky ON/OFF at the restored pose instead of requiring identical grid samples.
+    await openRcLighting(page, id); await rcLightingInput(page, id, "Enabled").setChecked(false);
+    await expect(rcLightingStatus(page, id)).toHaveAttribute("data-state", "off");
+    await closeRcLighting(page);
+    report.comparisons.restoredSkyContribution = difference(restored, await take("restored-placement-sky-off"));
+    expect(report.comparisons.restoredSkyContribution).toBeGreaterThan(1);
+    await openRcLighting(page, id); await rcLightingInput(page, id, "Enabled").setChecked(true);
+    await ready(page, fullTriangles);
+    report.validation = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());
+    expect(report.validation.count).toBe(0);
     expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
   } finally {
     mkdirSync(testInfo.outputDir, { recursive: true });

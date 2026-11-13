@@ -25,8 +25,30 @@ describe("sky ambient static model selection", () => {
         } };
         expect(isRcSkyAmbientStaticModel(registered)).toBe(true);
         for (const kind of ["boneTracks", "movableBoneTracks"] as const) {
-            const sourceAnimation = { ...registered.sourceAnimation, [kind]: [{ frameNumbers: new Uint32Array([0]) }] };
+            const sourceAnimation = { ...registered.sourceAnimation, [kind]: [{ frameNumbers: new Uint32Array([0, 30]) }] };
             expect(isRcSkyAmbientStaticModel({ ...registered, sourceAnimation })).toBe(false);
+        }
+    });
+    it("keeps one pose key per bone, including keys away from frame zero", () => {
+        const registered = { ...stage, animationCount: 1, sourceAnimation: {
+            boneTracks: [{ frameNumbers: new Uint32Array([0]) }, { frameNumbers: new Uint32Array([15]) }],
+            movableBoneTracks: [{ frameNumbers: new Uint32Array([30]) }],
+        } };
+        expect(isRcSkyAmbientStaticModel(registered)).toBe(true);
+        expect(isRcSkyAmbientStaticModel({ ...registered, sourceAnimation: structuredClone(registered.sourceAnimation) })).toBe(true);
+        expect(isRcSkyAmbientStaticModel({ ...registered, dynamicPhysics: true })).toBe(false);
+        expect(isRcSkyAmbientStaticModel({ ...registered, externalParent: true })).toBe(false);
+    });
+    it("rechecks the same source after a second pose key is added or undone", () => {
+        for (const kind of ["boneTracks", "movableBoneTracks"] as const) {
+            const track = { frameNumbers: new Uint32Array([15]) };
+            const sourceAnimation = { ...morphOnly, [kind]: [track] };
+            const registered = { ...stage, animationCount: 1, sourceAnimation };
+            expect(isRcSkyAmbientStaticModel(registered)).toBe(true);
+            track.frameNumbers = new Uint32Array([15, 30]);
+            expect(isRcSkyAmbientStaticModel(registered)).toBe(false);
+            track.frameNumbers = new Uint32Array([15]);
+            expect(isRcSkyAmbientStaticModel(registered)).toBe(true);
         }
     });
     it("keeps physics and external-parent exclusions even for morph-only animation", () => {

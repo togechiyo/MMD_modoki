@@ -361,6 +361,35 @@ controllerの対象選別と自動範囲、材質pluginの描画ごとのbinding
 - 実際のStage WGSLを使うunitで、元の光の寄与を保つこと、補助光だけの減衰、半球光・非Toon光の扱い、複数lightの捕捉を確認。実機のpage error / console error / GPU validationは0件。
 - 証拠はignoredな `artifacts/e2e/sky-stage-standard/` と `artifacts/verification/sky-stage-standard/typecheck.log`。今回はPNGまで確認し、WebMと第三者stageの見え方は未確認。
 
+## 2026-11-14: 範囲と細い帯の類例調査
+
+所有者から近景解像度の変更について「よさげ」と確認があり、続いて細い帯をぼかす提案、さらに実装を先に進めずネットの類例を調べる依頼があった。以下は調査候補であり、方式変更の採用決定ではない。第三者モデル名・元パスは記録しない。
+
+### 一次資料との比較
+
+| 事例 | 確認した方式 | このアプリへの適用候補・差異 |
+| --- | --- | --- |
+| Godot SDFGI | 隣接cascadeのセル幅を2倍、境界を2プローブ間隔のsmoothstepで補間。最小セル幅・近距離範囲・最大距離を関連づける | 密度比とセル単位の境界設計を参考にできる。SDFGI自体はRCではなく、カメラ追従を今回採用する意味でもない |
+| NVIDIA RTXGI DDGI | origin・probeSpacing・probeCountsを独立指定。現行shaderのvolume境界重みは最外probeから外側へ1プローブ間隔で減衰 | 原点固定の細かい領域と粗い領域の配置にも応用可能。DDGIの照度・距離表現をそのまま移植する変更ではない |
+| Split Radiance Cascades / Chandra | sparse hashmapによるworld-space probe、可視面からのray splitting。参照実装は隣接LODを最大2段で混ぜる | 空の領域を密な3D配列で保持しない長期候補。参照実装のLODは視点基準であり、現行の原点固定4領域へそのまま置換できない |
+| Osborne / SannikovのRC論文 Appendix A | 異なる位置の上位probeを先に平均してmergeするとringingが発生し得る。Bilinear Fixは各上位probeへ接続して個別merge後に補間する | 原点volume間blendとは別に、RC内部のmergeも切り分ける根拠。論文の完全な補正は3Dで対象cascadeのray数が8倍になり得るため、無条件採用しない |
+
+参照日: 2026-11-14。参照URLのmain/masterは可変である。
+
+- Godot: [現行設定資料](https://docs.godotengine.org/en/stable/tutorials/3d/global_illumination/using_sdfgi.html)、[領域生成](https://github.com/godotengine/godot/blob/master/servers/rendering/renderer_rd/environment/gi.cpp)、[境界補間](https://github.com/godotengine/godot/blob/master/servers/rendering/renderer_rd/shaders/environment/gi.glsl)。`cell_size *= 2.0` と `sdfgi_process` のblend式を照合した。
+- NVIDIA: [volume資料](https://github.com/NVIDIAGameWorks/RTXGI-DDGI/blob/main/docs/DDGIVolume.md)、[DDGIGetVolumeBlendWeight](https://github.com/NVIDIAGameWorks/RTXGI-DDGI/blob/main/rtxgi-sdk/shaders/ddgi/Irradiance.hlsl)。
+- Split RC: [論文概要・v2](https://arxiv.org/abs/2607.20384v2)、[著者の参照実装](https://github.com/entropylost/chandra)、[cache.rs](https://github.com/entropylost/chandra/blob/main/src/cache.rs) の `iter_lods`。論文全文PDFは取得上限のため未読で、本文を確認済みとは扱わない。
+- RCの理論とringing: [論文・Appendix A](https://academic.oup.com/rasti/article/doi/10.1093/rasti/rzae062/7929002)。天体放射輸送への適用論文なので、ゲーム描画全体の性能保証へ広げない。
+- 追加候補として[第三者のWebGPU版Split RC](https://github.com/wroughtinator/split-radiance-cascades-webgpu)も見つかった。作者READMEではsoftware BVH、面に沿った補間、LOD cross-fadeを説明する一方、asset規模からの自動probe間隔も使う。性能・品質の主張は未追試で、モデルの大きさに合わせない今回の方針へ丸ごと採用しない。
+
+### 現行コードとの差と次の切り分け
+
+現行の原点cube一辺は128 / 512 / 2048 / 32768、Sky highのprobe間隔は4 / 16 / 64 / 1024で、隣接密度差は4倍・4倍・16倍。最外段の大きな差は遠方を低費用で覆う配分であり、今回の近景の帯の原因と断定しない。現行の正規化半径0.75〜1のblendは片側でSky32の4セル幅・GI16の2セル幅に相当し、すでに一定の重なりを持つ。幅をセル単位へ書き換えるだけでは改善にならない。
+
+RCの理論でいう近距離・遠距離は、各probeから光や遮蔽物までのray区間である。原点からの距離による画質配分とは別の階層として扱う。まず原点volumeの選択段、内部cascadeのmerge、受光点からprobeへの接続ガードを分けて可視化・比較する。原点固定、モデルboundsへの非追従、標準影のbias/normalBiasの維持を前提とする。隣接密度差を小さくする場合、段数・最大範囲・メモリのどれを変えるかも同時に比較する。
+
+Luminous RCは光のbufferだけに深度・法線を考慮した多段blurを掛ける。Sky Ambientは材質内で直接queryするため、同じパスの単純共有はできない。受け面上で遮蔽領域の面積を求める試作は実WGSLの境界・屋根の継ぎ目の契約を通ったが、許可済み広域データの同画角1280×720計測でhard約14〜15ms、試作約42〜43msだった（warm後16frame、CPU送信とGPU完了待ちを含む中央値。field再計算0）。本採用せず、通常のSky Ambient queryは従来のhardガードへ戻した。後続の計算短縮・法線基底変更は未GPU検証の作業差分として保留し、品質改善済みとは扱わない。試作証拠はignoredな `local-references/rc-town-scale-2026-11-13/softening-town/`。
+
 ## 主な実装
 
 - `src/render/rc-sky-ambient-controller.ts`: field、対象選別、準備・更新・破棄。

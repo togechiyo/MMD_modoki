@@ -457,7 +457,9 @@ Sky Ambientの共通queryを次のように変更した。
 - 上面・候補更新、薄い屋根と縦長PNG、壁面3条件、Stage Standard、XのBMP/cutout、モーフ登録・配置キーの計9件の実Electron/WebGPUテストが成功。page / console error・GPU validationは0件。今回はWebMとFPS比較は再実施していない。
 - 全unit 253ファイル・1,700件を確認。sandboxのlocalhost接続拒否で失敗した2ファイルは、ローカル通信可能な環境で20件を再実行して成功した。全lintと追加MJSのscoped lintも成功。typecheckは既存548件と行・列を除いて一致し、critical TS2304/TS2552は0件。
 
-証拠はignoredな `local-references/sky-upper-surface/` と `artifacts/e2e/sky-upper-surface-four/`、`sky-upper-surface-regression/`。元プロジェクトでの所有者の見た目確認は、この上面修正については未実施。
+証拠はignoredな `local-references/sky-upper-surface/` と `artifacts/e2e/sky-upper-surface-four/`、`sky-upper-surface-regression/`。
+
+同日、修正報告後に所有者から「OK、これでひとまずRC系はいいかな」と確認を得た。現状のRC系改修はここで一区切りとする。個別の検証範囲と既知の近似制約は上記の記録を維持する。
 
 ## 主な実装
 

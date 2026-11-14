@@ -10,6 +10,7 @@ import type { RcSkyAmbientSettings, RcSkyAmbientVolume } from "./rc-sky-ambient-
 import { getSkyVisibilityProbeGrid, scaleSkyVisibilityVolume, type SkyVisibilityQuality } from "./radiance-sky-quality";
 import { fitRadianceReceiverVolume } from "./radiance-receiver-volume";
 import { createRcOriginVolumes, RC_ORIGIN_VOLUME_COUNT } from "./rc-origin-volumes";
+import { RcSkyAmbientScreen, skyAmbientScreenSize } from "./rc-sky-ambient-screen";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcSkyAmbientDiagnostics = {
@@ -17,6 +18,7 @@ export type RcSkyAmbientDiagnostics = {
     effectiveVolume: RcSkyAmbientVolume | null; quality: SkyVisibilityQuality; probeGrid: number;
     triangleCount: number; fieldRevision: number; supportedMaterialCount: number;
     spatialMode: "origin" | "manual"; volumes: RcSkyAmbientVolume[]; effectiveVolumes: RcSkyAmbientVolume[];
+    screen: { width: number; height: number; ready: boolean; renders: number; frameId: number } | null;
 };
 
 /** Sky attenuation and optional fill. Saved values and static-model policy belong to the manager. */
@@ -35,6 +37,8 @@ export class RcSkyAmbientController {
     private disposed = false;
     private unregister: (() => void) | null = null;
     private initialization: Promise<void> | null = null;
+    private screen: RcSkyAmbientScreen | null = null;
+    private screenFrameId = -1;
     private readonly removeSceneObservers: () => void;
 
     constructor(private readonly scene: Scene,
@@ -44,11 +48,16 @@ export class RcSkyAmbientController {
         private readonly keepResourcesWhileOff: () => boolean = () => false,
         private readonly acceptsMesh: (mesh: Mesh) => boolean = () => true) {
         const beforeRender = scene.onBeforeRenderObservable.add(() => {
+            if (this.view?.screen) this.view = { ...this.view, screen: undefined };
             if (this.unsupportedReason() || !this.settings().enabled || !this.backendReady()) this.view = null;
         });
+        // The camera-local notification follows software skinning. The earlier
+        // scene-level notification is ignored until prepareFrame saw this frame.
+        const beforeTargets = scene.onBeforeRenderTargetsRenderObservable.add(() => this.prepareScreen());
         const sceneDisposed = scene.onDisposeObservable.addOnce(() => this.dispose());
         this.removeSceneObservers = () => {
             scene.onBeforeRenderObservable.remove(beforeRender);
+            scene.onBeforeRenderTargetsRenderObservable.remove(beforeTargets);
             scene.onDisposeObservable.remove(sceneDisposed);
         };
     }
@@ -61,6 +70,8 @@ export class RcSkyAmbientController {
             effectiveVolume: effectiveVolumes[0] ?? null, volumes, effectiveVolumes,
             spatialMode: settings.volume ? "manual" : "origin",
             quality: settings.quality, probeGrid: getSkyVisibilityProbeGrid(settings.quality),
+            screen: this.screen ? { width: this.screen.width, height: this.screen.height, ready: this.screen.isReady,
+                renders: this.screen.renders, frameId: this.screenFrameId } : null,
             triangleCount: this.field?.source.bvh.triangleCount ?? 0, fieldRevision: this.fieldRevision,
             supportedMaterialCount: new Set(this.receivers().flatMap(mesh => (mesh.subMeshes ?? [])
                 .map(sub => sub.getMaterial()).filter(material => material && this.acceptsMaterial(material)))).size };
@@ -114,7 +125,8 @@ export class RcSkyAmbientController {
         if (!settings.enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolumes().length
             || settings.enabled && (settings.strength <= 0 && settings.skyBrightness <= 0 || settings.opacity <= 0)) return true;
         return this.status !== "error" && this.field?.quality === settings.quality
-            && this.field.volumeCount === (settings.volume ? 1 : RC_ORIGIN_VOLUME_COUNT) && Boolean(this.field.graph.isReady());
+            && this.field.volumeCount === (settings.volume ? 1 : RC_ORIGIN_VOLUME_COUNT) && Boolean(this.field.graph.isReady())
+            && (!this.scene.getEngine().isWebGPU || Boolean(this.ensureScreen()?.isReady));
     }
 
     public async prewarm(): Promise<boolean> {
@@ -135,7 +147,47 @@ export class RcSkyAmbientController {
             void initialization.finally(() => { if (this.initialization === initialization) this.initialization = null; });
         }
         await this.initialization;
+        if (this.field && this.scene.getEngine().isWebGPU) await this.ensureScreen()?.built;
         return this.status !== "error";
+    }
+
+    private ensureScreen(): RcSkyAmbientScreen | null {
+        const camera = this.scene.activeCamera, field = this.field;
+        if (!camera || !field?.irradianceField || !field.nearestSurfaceField) return null;
+        const engine = this.scene.getEngine(), output = camera.outputRenderTarget?.getSize();
+        const size = skyAmbientScreenSize(output?.width ?? engine.getRenderWidth(true), output?.height ?? engine.getRenderHeight(true));
+        if (this.screen && (this.screen.width !== size.width || this.screen.height !== size.height)) {
+            if (this.view) this.view = { ...this.view, screen: undefined };
+            this.screen.dispose(); this.screen = null; this.screenFrameId = -1;
+        }
+        if (!this.screen) {
+            const volumes = this.resolveVolumes();
+            if (!volumes.length) return null;
+            this.screen = new RcSkyAmbientScreen(this.scene, size.width, size.height, camera, this.receivers(), {
+                ...this.settings(),
+                field: field.irradianceField, nearestSurface: field.nearestSurfaceField, triangles: field.source.triangleBuffer,
+                volume: volumes[0], volumes,
+            });
+        }
+        return this.screen;
+    }
+
+    private prepareScreen(): void {
+        const frame = this.scene.getFrameId(), camera = this.scene.activeCamera;
+        if (!this.view || !camera || this.frameId !== frame || this.screenFrameId === frame || !this.scene.getEngine().isWebGPU) return;
+        try {
+            const screen = this.ensureScreen();
+            if (screen?.error) throw new Error(screen.error);
+            // Detach material sampling during geometry capture (including reused
+            // material draw caches), so its output can never be sampled as an input.
+            this.view = { ...this.view, screen: undefined };
+            const result = screen?.render(camera, this.receivers(), this.view);
+            if (result) { this.view = { ...this.view, screen: result }; this.screenFrameId = frame; }
+        } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            if (reason !== this.reason) logWarn("render", "RC sky ambient screen update failed", { reason });
+            this.reason = reason; this.status = "error";
+        }
     }
 
     /** Prepare after poses are final, before active meshes and camera/export draws. */
@@ -257,6 +309,7 @@ export class RcSkyAmbientController {
 
     private release(): void {
         this.view = null; this.generation++; this.cancelPending?.(); this.cancelPending = null;
+        this.screen?.dispose(); this.screen = null; this.screenFrameId = -1;
         this.initialization = null;
         this.field?.dispose(); this.field = null;
         // allocate owns pending disposal, including a cancelled structural build.

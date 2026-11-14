@@ -3,6 +3,7 @@ import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { StorageBuffer } from "@babylonjs/core/Buffers/storageBuffer";
+import { Matrix } from "@babylonjs/core/Maths/math.vector";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
 import type { Material } from "@babylonjs/core/Materials/material";
 import type { MaterialDefines } from "@babylonjs/core/Materials/materialDefines";
@@ -12,7 +13,12 @@ import type { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import type { Scene } from "@babylonjs/core/scene";
 import type { SubMesh } from "@babylonjs/core/Meshes/subMesh";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
+import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { MMD_RADIANCE_SKY_AMBIENT_CUSTOM_CODE } from "./mmd-radiance-sky-ambient-query-wgsl";
+
+export type RcSkyAmbientScreenView = Readonly<{
+    light: BaseTexture; position: BaseTexture; viewProjection: Matrix; width: number; height: number;
+}>;
 
 export type MmdRadianceSkyAmbientView = Readonly<{
     field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer;
@@ -20,12 +26,15 @@ export type MmdRadianceSkyAmbientView = Readonly<{
     /** Nested near-to-far levels in one vertical atlas; absent for legacy manual volumes. */
     volumes?: readonly { min: readonly [number, number, number]; size: number }[];
     strength: number; fill: number; skyBrightness: number; opacity: number;
+    /** Current-camera irradiance, before the material's outer-volume fade. */
+    screen?: RcSkyAmbientScreenView;
 }>;
 type Registration = { provider: () => MmdRadianceSkyAmbientView | null;
     acceptsMaterial: (material: Material) => boolean; acceptsMesh: (mesh: AbstractMesh) => boolean };
 type Fallback = { field: RawTexture; nearestSurface: RawTexture; triangles: StorageBuffer };
 const fallbacks = new WeakMap<Scene, Fallback>();
 const plugins = new WeakMap<MmdStandardMaterial, MmdRadianceSkyAmbientPlugin>();
+const identity = Matrix.Identity();
 
 function fallbackFor(scene: Scene): Fallback {
     const previous = fallbacks.get(scene);
@@ -62,6 +71,12 @@ function usableVolumes(volumes: NonNullable<MmdRadianceSkyAmbientView["volumes"]
     });
 }
 
+function usableScreen(screen: RcSkyAmbientScreenView | undefined): screen is RcSkyAmbientScreenView {
+    return screen !== undefined && screen.light.isReady() && screen.position.isReady()
+        && Number.isInteger(screen.width) && screen.width > 0 && Number.isInteger(screen.height) && screen.height > 0
+        && Array.from(screen.viewProjection.m).every(Number.isFinite);
+}
+
 class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
     public readonly registrations = new Set<Registration>();
     constructor(private readonly material: MmdStandardMaterial, private readonly fallback: Fallback) {
@@ -74,10 +89,15 @@ class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
     public override prepareDefines(defines: MaterialDefines): void {
         (defines as MaterialDefines & { RC_SKY_AMBIENT: boolean }).RC_SKY_AMBIENT = true;
     }
-    public override getSamplers(samplers: string[]): void { samplers.push("rcSkyAmbientField", "rcSkyAmbientNearestSurface"); }
+    public override getSamplers(samplers: string[]): void {
+        samplers.push("rcSkyAmbientField", "rcSkyAmbientNearestSurface", "rcSkyAmbientScreenLight", "rcSkyAmbientScreenPosition");
+    }
     public override getUniforms(): { ubo: Array<{ name: string; size: number; type: string }> } {
-        return { ubo: ["rcSkyAmbientVolume", "rcSkyAmbientVolume1", "rcSkyAmbientVolume2", "rcSkyAmbientVolume3", "rcSkyAmbientSpatial", "rcSkyAmbientControl"]
-            .map(name => ({ name, size: 4, type: "vec4" })) };
+        return { ubo: [
+            ...["rcSkyAmbientVolume", "rcSkyAmbientVolume1", "rcSkyAmbientVolume2", "rcSkyAmbientVolume3", "rcSkyAmbientSpatial",
+                "rcSkyAmbientControl", "rcSkyAmbientScreen"].map(name => ({ name, size: 4, type: "vec4" })),
+            { name: "rcSkyAmbientScreenViewProjection", size: 16, type: "mat4" },
+        ] };
     }
     public override hardBindForSubMesh(buffer: UniformBuffer, _scene: Scene, engine: AbstractEngine, subMesh: SubMesh): void {
         let view: MmdRadianceSkyAmbientView | null = null;
@@ -107,6 +127,14 @@ class MmdRadianceSkyAmbientPlugin extends MaterialPluginBase {
             view ? Math.min(1, view.opacity) : 0);
         buffer.setTexture("rcSkyAmbientField", source.field);
         buffer.setTexture("rcSkyAmbientNearestSurface", source.nearestSurface);
+        // PREPASS and rejected receivers have no view, so they cannot sample a
+        // screen attachment while it is being rendered or inherit a prior draw.
+        const candidateScreen = view?.screen;
+        const screen = usableScreen(candidateScreen) ? candidateScreen : undefined;
+        buffer.updateFloat4("rcSkyAmbientScreen", screen?.width ?? 1, screen?.height ?? 1, screen ? 1 : 0, 0);
+        buffer.updateMatrix("rcSkyAmbientScreenViewProjection", screen?.viewProjection ?? identity);
+        buffer.setTexture("rcSkyAmbientScreenLight", screen?.light ?? this.fallback.field);
+        buffer.setTexture("rcSkyAmbientScreenPosition", screen?.position ?? this.fallback.field);
         (engine as WebGPUEngine).setStorageBuffer("rcSkyAmbientTriangles", source.triangles);
     }
     public override getCustomCode(type: string): Record<string, string> | null {

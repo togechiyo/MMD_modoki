@@ -355,7 +355,7 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
         const helpers = spatialFunctions(MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL,
             ["rcSkyAmbientVolumeAt", "rcSkyAmbientVolumeRadius", "rcSkyAmbientOuterVolume", "rcSkyAmbientSpatialCoverage"]);
         const code = helpers + "\n" + scalarStatements(source).replace("normalW / normalLength", "normalW");
-        const evaluate = (y: number, visibility: number, position = 0.5, automatic = false) => {
+        const evaluate = (y: number, visibility: number, position = 0.5, automatic = false, screen = -1) => {
             let reads = 0;
             const value = runInNewContext(code + "\n({ factor: rcSkyAmbientFactor, exposure: rcSkyAmbientIrradiance });", {
                 ...spatialMath,
@@ -367,6 +367,7 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
                 abs: Math.abs, min: Math.min, max: Math.max,
                 clamp: (v: number, low: number, high: number) => Math.min(high, Math.max(low, v)),
                 rcSkyAmbientVisibilityValidated: () => { reads++; return visibility; },
+                rcSkyAmbientScreenIrradiance: () => screen,
             }) as { factor: number; exposure: number };
             return { ...value, reads };
         };
@@ -384,6 +385,12 @@ describe("Sky Ambient replaces only the ambient-equivalent MMD contribution", ()
         expect(evaluate(1, 0.5, 14336, true).factor).toBeCloseTo((1 + (1 - 0.965 * 0.95 * 0.5)) / 2, 12);
         expect(evaluate(1, 0.5, 16384, true)).toEqual({ factor: 1, exposure: 0, reads: 1 });
         expect(evaluate(1, 0.5, 16385, true)).toEqual({ factor: 1, exposure: -1, reads: 0 });
+        // Screen values already contain hemispherical exposure, but not the outer fade.
+        // Reuse them for both contributions without querying or multiplying by openSky again.
+        expect(evaluate(0, 0, 1000, true, 0.4).exposure).toBe(0.4);
+        expect(evaluate(0, 0, 1000, true, 0.4).reads).toBe(0);
+        expect(evaluate(0, 0, 14336, true, 0.4).exposure).toBe(0.2);
+        expect(evaluate(-1, 1, 0.5, false, 1)).toEqual({ factor: 1 - 0.965 * 0.95, exposure: 0, reads: 0 });
     });
 
     it("captures the actual hemispheric contribution without Toon and leaves direct light alone", async () => {

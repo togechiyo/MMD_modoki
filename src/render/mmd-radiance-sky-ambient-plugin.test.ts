@@ -9,6 +9,8 @@ import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { UniformBuffer } from "@babylonjs/core/Materials/uniformBuffer";
 import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { StorageBuffer } from "@babylonjs/core/Buffers/storageBuffer";
+import { Matrix } from "@babylonjs/core/Maths/math.vector";
+import { MaterialDefines } from "@babylonjs/core/Materials/materialDefines";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
 import { registerMmdRadianceSkyAmbient, type MmdRadianceSkyAmbientView } from "./mmd-radiance-sky-ambient-plugin";
 
@@ -42,15 +44,20 @@ function fixture() {
     if (!plugin) throw new Error("Sky Ambient plugin was not registered");
     const buffer = new UniformBuffer(engine);
     const write = vi.spyOn(buffer, "updateFloat4").mockImplementation(() => undefined);
+    const writeMatrix = vi.spyOn(buffer, "updateMatrix").mockImplementation(() => undefined);
     const bindTexture = vi.spyOn(buffer, "setTexture").mockImplementation(() => undefined);
     const bind = (mesh: Mesh) => {
-        write.mockClear(); bindTexture.mockClear(); bindStorage.mockClear();
+        write.mockClear(); writeMatrix.mockClear(); bindTexture.mockClear(); bindStorage.mockClear();
         plugin.hardBindForSubMesh(buffer, scene, engine, mesh.subMeshes[0]);
         return {
             control: write.mock.calls.find(call => call[0] === "rcSkyAmbientControl")?.slice(1),
             field: bindTexture.mock.calls.find(call => call[0] === "rcSkyAmbientField")?.[1],
             nearestSurface: bindTexture.mock.calls.find(call => call[0] === "rcSkyAmbientNearestSurface")?.[1],
             triangles: bindStorage.mock.calls.find(call => call[0] === "rcSkyAmbientTriangles")?.[1],
+            screen: write.mock.calls.find(call => call[0] === "rcSkyAmbientScreen")?.slice(1),
+            screenLight: bindTexture.mock.calls.find(call => call[0] === "rcSkyAmbientScreenLight")?.[1],
+            screenPosition: bindTexture.mock.calls.find(call => call[0] === "rcSkyAmbientScreenPosition")?.[1],
+            screenMatrix: writeMatrix.mock.calls.find(call => call[0] === "rcSkyAmbientScreenViewProjection")?.[1],
         };
     };
     return { scene, stationary, moving, receivers, live, provider, bind, write, plugin };
@@ -67,11 +74,13 @@ describe("Sky Ambient receiver bindings", () => {
             ["rcSkyAmbientVolume2", -1024, -1024, -1024, 2048], ["rcSkyAmbientVolume3", -16384, -16384, -16384, 32768],
             ["rcSkyAmbientSpatial", 4, 0, 0, 0],
             ["rcSkyAmbientControl", 0.75, 0.2, 0.5, 0.8],
+            ["rcSkyAmbientScreen", 1, 1, 0, 0],
         ]);
         const samplers: string[] = []; plugin.getSamplers(samplers);
-        expect(samplers).toEqual(["rcSkyAmbientField", "rcSkyAmbientNearestSurface"]);
+        expect(samplers).toEqual(["rcSkyAmbientField", "rcSkyAmbientNearestSurface", "rcSkyAmbientScreenLight", "rcSkyAmbientScreenPosition"]);
         expect(plugin.getUniforms().ubo?.map(uniform => uniform.name)).toEqual([
             "rcSkyAmbientVolume", "rcSkyAmbientVolume1", "rcSkyAmbientVolume2", "rcSkyAmbientVolume3", "rcSkyAmbientSpatial", "rcSkyAmbientControl",
+            "rcSkyAmbientScreen", "rcSkyAmbientScreenViewProjection",
         ]);
         expect(bind(moving).control).toEqual([0, 0, 0, 0]);
         expect(write.mock.calls).toContainEqual(["rcSkyAmbientSpatial", 0, 0, 0, 0]);
@@ -89,7 +98,7 @@ describe("Sky Ambient receiver bindings", () => {
     it("isolates moving receivers that share a material with a stationary receiver", () => {
         const { stationary, moving, live, provider, bind } = fixture();
         const active = bind(stationary);
-        expect(active).toEqual({ control: [0.75, 0.2, 0.5, 0.8],
+        expect(active).toMatchObject({ control: [0.75, 0.2, 0.5, 0.8],
             field: live.field, nearestSurface: live.nearestSurface, triangles: live.triangles });
         const neutral = bind(moving);
         expect(neutral.control).toEqual([0, 0, 0, 0]);
@@ -113,5 +122,29 @@ describe("Sky Ambient receiver bindings", () => {
         receivers.add(stationary);
         expect(bind(stationary)).toEqual(active);
         expect(scene.getFrameId()).toBe(frame);
+    });
+
+    it("binds the current screen field only on an eligible color draw and clears PREPASS feedback", () => {
+        const { stationary, moving, live, provider, bind } = fixture();
+        const viewProjection = Matrix.Translation(1, 2, 3);
+        const screen = { light: live.field, position: live.nearestSurface, viewProjection, width: 640, height: 360 };
+        provider.mockReturnValue({ ...live, screen });
+        const active = bind(stationary);
+        expect(active.screen).toEqual([640, 360, 1, 0]);
+        expect(active.screenLight).toBe(live.field); expect(active.screenPosition).toBe(live.nearestSurface);
+        expect(active.screenMatrix).toBe(viewProjection);
+        const rejected = bind(moving);
+        expect(rejected.screen).toEqual([1, 1, 0, 0]);
+        expect(rejected.screenLight).not.toBe(live.field); expect(rejected.screenPosition).not.toBe(live.nearestSurface);
+        expect(Array.from(rejected.screenMatrix?.asArray() ?? [])).toEqual(Array.from(Matrix.Identity().m));
+        stationary.subMeshes[0].materialDefines = Object.assign(new MaterialDefines(), { PREPASS: true });
+        expect(bind(stationary).screen).toEqual([1, 1, 0, 0]);
+        stationary.subMeshes[0].materialDefines = null;
+        expect(bind(stationary)).toEqual(active);
+        // A not-yet-ready screen pass does not disable the established world-field fallback.
+        provider.mockReturnValue({ ...live, screen: { ...screen, width: 0 } });
+        const pending = bind(stationary);
+        expect(pending.screen).toEqual([1, 1, 0, 0]); expect(pending.control).toEqual(active.control);
+        expect(pending.field).toBe(live.field);
     });
 });

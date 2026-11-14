@@ -390,9 +390,49 @@ RCの理論でいう近距離・遠距離は、各probeから光や遮蔽物ま�
 
 Luminous RCは光のbufferだけに深度・法線を考慮した多段blurを掛ける。Sky Ambientは材質内で直接queryするため、同じパスの単純共有はできない。受け面上で遮蔽領域の面積を求める試作は実WGSLの境界・屋根の継ぎ目の契約を通ったが、許可済み広域データの同画角1280×720計測でhard約14〜15ms、試作約42〜43msだった（warm後16frame、CPU送信とGPU完了待ちを含む中央値。field再計算0）。本採用せず、通常のSky Ambient queryは従来のhardガードへ戻した。後続の計算短縮・法線基底変更は未GPU検証の作業差分として保留し、品質改善済みとは扱わない。試作証拠はignoredな `local-references/rc-town-scale-2026-11-13/softening-town/`。
 
+## 2026-11-14: 同一フレームの天空係数を面ごとに平滑化
+
+調査後の実装依頼を受け、Luminous RCの照明bufferをぼかす構成を参考に、Sky Ambient専用の小さなgeometry / compute経路を追加した。原点固定4領域、旧manual範囲、RC GIのfieldと合成、通常影の設定は維持する。前節の重い面積blur試作は通常ソースから撤去し、ignoredなローカル比較資料として退避した。
+
+### 描画順と境界
+
+1. 現在の姿勢から従来のSky fieldを準備する。
+2. 色の描画前に、対象となる不透明面のワールド位置と法線を取得する。解像度は表示サイズの半分、長辺960画素までとする。
+3. 既存の接続ガード付きqueryで、天空係数だけを計算する。
+4. 法線・面からの距離・ワールド距離で面を区別する3×3 filterを、間隔1・2画素の2段で適用する。
+5. 材質側の4点補間でも面の一致を確認してから係数を使う。該当する画素がなければ従来のhard queryへ戻す。
+
+色画像全体はぼかさず、元のテクスチャ・材質色・Toon影色・GI反射色を保持する。ぼかし半径は最内側のprobe間隔の0.2倍、最大2 world units（既定highで0.8）。モデルの外形やカメラ距離からRCの範囲・縮尺を変更しない。3本の操作スライダーと保存形式も維持する。
+
+位置の丸め誤差による許容幅には上限を設け、近接した平行面や屋根の裏表を混ぜにくくする。一定の明るさは中心値との差分を積算し、半精度bufferへの書き戻しで暗くなる誤差を抑える。時間方向の蓄積は使わない。毎フレーム、姿勢反映後に更新し、前フレームの画面bufferは公開しない。
+
+### 所有権と出力
+
+材質が色を描く前に必要なため、色描画後のPostFX graphとは別に所有する。geometry描画中はscreen参照を外して読み書きの競合を避け、外部から使う位置textureは参照を保持する。画面サイズ変更ではgraphを再生成し、準備完了をcapture待機条件へ含める。OFF・削除時は材質から切り離してから破棄する。既存motion blurの前フレーム行列要求をgeometry graphの構築で消さない。
+
+同managerのPNG出力ではcanvasと出力RTの縦横比が異なる場合がある。geometry開始時の自動投影行列再計算に任せず、呼び出し元のview / projectionを保存してgeometryと材質参照で共有する。
+
+### 検証状況と制限
+
+最終版の広域データ比較では細い境界が和らぎ、hard / filteredの各再撮影は画素差0だった。1280×720、warm後16frameの中央値はhard 16.08 / 15.65ms、filtered 18.71 / 17.70msで、追加約2.1〜2.6ms。field再計算は0、GPU validation / page / console errorは0だった。証拠はignoredな `local-references/rc-town-scale-2026-11-13/screen-town-final/`。これは同条件での局所比較であり、全sceneでの速度保証ではない。
+
+filterと材質の補間関数を実WebGPUで直接実行し、帯の平滑化、一定値保持、0.01離れた平行面、座標20000での面分離、反対法線、無効画素、従来queryへのfallbackを確認した。
+
+- 自作stageで0.2セルの屋根下の隙間を検証。受け面の平均RGBは開放時57.87、屋根下0となり、屋根下はhard queryと同じ値を維持した。カメラ変更直後、縦長360×640、横長への復帰の再撮影差は0。geometry描画時と材質参照の行列も一致した。
+- キーのON/OFF・濃度、保存復元、Undo/Redo、Classic往復、停止中のPNGを確認。WebMの0/20/40/60フレームは対応するPNGとの平均絶対差0.28〜0.39、逆状態との差5.28以上で、キーに応じた変化を維持した。
+- Stage Standard、Xの不透明BMPとcutout PNG、GIとの併用、モーフ・各骨1キーと動的モデル除外も回帰確認した。GPU契約1件、屋根/出力1件、基本操作/WebM1件、壁面3件、材質/X2件、モーフ/骨2件の計10件。page / console error、GPU validationは0件。
+- 単体テスト253ファイル1700件、全lint、変更したE2Eのlintが成功。sandboxでは既存MCPテストのlocalhost通信が拒否されたため、最終の全unitは通常ローカル権限で実行した。通常typecheckは既存と同じ548件、変更したSkyの型エラーとcritical TS2304 / TS2552は0件。
+
+遠方へ平行移動した壁面の旧「ノイズがほぼ0」という絶対assertは、変更前`1a16e20`のquery / controllerを隔離テスト内で復元しても失敗した。原点4領域の最外側では、同じ壁面内に斜めの照明段差があり、旧指標がその境界も点ノイズとして数えていた。これは今回解消したとは扱わない。screen適用時の全体平均残差はhard 0.643→0.611、平均輝度差は0.002未満。hard境界の2画素近傍を除いた2237画素ではspike 0、平均残差0.046だった。
+
+壁面テストの近景・中距離は旧絶対閾値を維持し、遠方だけは既存境界から離れた領域の絶対ノイズ検査と、全領域のhardとの残差・平均比較を併用する。現行hard自体の品質を保証する固定画像テストではなく、screenによる悪化を検出する回帰検査である。証拠はignoredな `artifacts/e2e/sky-screen-contract-final/`、`sky-screen-regression/`、`sky-screen-head-baseline/`、`sky-screen-materials-final/`。
+
+この方式はRC内部のmergeや接続ガードそのものを変更しない。曲面・薄い面・画面端など、低解像度geometryと一致しない箇所ではぼかしが弱まるかhard queryへ戻る。すべての帯の解消は保証せず、所有者の実sceneでの見え方は再確認対象とする。
+
 ## 主な実装
 
 - `src/render/rc-sky-ambient-controller.ts`: field、対象選別、準備・更新・破棄。
+- `src/render/rc-sky-ambient-screen.ts` / `rc-sky-ambient-screen-shaders.ts`: 同一フレームのgeometry・天空係数・面を区別するfilter。
 - `src/render/mmd-radiance-sky-ambient-*.ts`: 専用binding、共通Toon/半球光の補助光捕捉、遮蔽と任意の空照明加算。
 - `src/render/rc-sky-ambient-settings.ts` / `rc-sky-ambient-casters.ts`: 保存値・静的対象の判定。
 - `src/render/rc-sky-ambient-material-eligibility.ts`: 既知の対応presetと独自shaderの選別。

@@ -41,6 +41,7 @@ function fixture() {
     const state: { view: MmdRadianceDiffuseGiView | null; accepts: boolean } = { view: live, accepts: true };
     const buffer = new UniformBuffer(engine);
     const write = vi.spyOn(buffer, "updateFloat4").mockImplementation(() => undefined);
+    vi.spyOn(buffer, "updateMatrix").mockImplementation(() => undefined);
     const bindTexture = vi.spyOn(buffer, "setTexture").mockImplementation(() => undefined);
     const register = () => registerMmdRadianceDiffuseGi(scene, () => state.view, () => state.accepts);
     const bind = (target = material) => {
@@ -92,7 +93,8 @@ describe("MMD diffuse GI plugin", () => {
         expect(write.mock.calls).toContainEqual(["rcGiControl", 0.5, 0, 0, 0]);
         expect(write.mock.calls).toContainEqual(["rcSkyAmbientControl", 0.75, 0.2, 0.4, 1]);
         expect(bindTexture.mock.calls.map(call => call[0]))
-            .toEqual(["rcGiField", "rcGiNearestSurface", "rcSkyAmbientField", "rcSkyAmbientNearestSurface"]);
+            .toEqual(["rcGiField", "rcGiNearestSurface", "rcSkyAmbientField", "rcSkyAmbientNearestSurface",
+                "rcSkyAmbientScreenLight", "rcSkyAmbientScreenPosition"]);
         releaseSky();
     });
 

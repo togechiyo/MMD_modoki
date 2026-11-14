@@ -1,14 +1,26 @@
+/* global GPUBufferUsage, GPUMapMode */
+// eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
 import { MmdManager } from "/src/mmd-manager.ts";
+// eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
 import { MMD_RADIANCE_SKY_QUERY_WGSL } from "/src/render/mmd-radiance-sky-query-wgsl.ts";
 
 // Test-only access to the app's renderer and the repository-authored stage.
 let manager;
 const getSettings = MmdManager.prototype.getRcSkyAmbientSettings;
 MmdManager.prototype.getRcSkyAmbientSettings = function (...args) {
+  // eslint-disable-next-line @typescript-eslint/no-this-alias -- Test-only capture of the application-owned manager.
   manager = this; return getSettings.apply(this, args);
 };
 
 export function wallFieldState() { return manager.rcSkyAmbientController.diagnostics; }
+
+const screenPreparers = new WeakMap();
+export function setWallScreenEnabled(enabled) {
+  const controller = manager.rcSkyAmbientController;
+  if (!screenPreparers.has(controller)) screenPreparers.set(controller, controller.prepareScreen.bind(controller));
+  controller.prepareScreen = enabled ? screenPreparers.get(controller) : () => undefined;
+  if (controller.view?.screen) controller.view = { ...controller.view, screen: undefined };
+}
 
 export async function checkWallConnectionGuard() {
   // Compile the actual receiver guard, not a JavaScript reimplementation.

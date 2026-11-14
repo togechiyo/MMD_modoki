@@ -7,6 +7,49 @@ export const MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL = createMmdRadianceSkyQueryWgsl
     .replaceAll("RcSky", "RcSkyAmbient")
     .replaceAll("rcSky", "rcSkyAmbient") + /* wgsl */`
 #ifdef RC_SKY_AMBIENT
+var rcSkyAmbientScreenLight: texture_2d<f32>;
+var rcSkyAmbientScreenPosition: texture_2d<f32>;
+
+// Four-tap upsampling is restricted to the receiver's surface. In particular,
+// nearby roof tops must never provide the sky value for the underside below.
+fn rcSkyAmbientScreenIrradiance(position: vec3f, normal: vec3f) -> f32 {
+    if (uniforms.rcSkyAmbientScreen.z < 0.5) { return -1.0; }
+    let clip = uniforms.rcSkyAmbientScreenViewProjection * vec4f(position, 1.0);
+    if (!(clip.w > 0.000001) || !all(abs(clip) < vec4f(1e20))) { return -1.0; }
+    // Offscreen geometry follows Babylon's texture-space Y convention.
+    let uv = clip.xy / clip.w * 0.5 + 0.5;
+    if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return -1.0; }
+    let dimensions = uniforms.rcSkyAmbientScreen.xy;
+    let pixel = uv * dimensions - 0.5;
+    let base = vec2i(floor(pixel)); let fraction = fract(pixel);
+    let matrix = uniforms.rcSkyAmbientScreenViewProjection;
+    let rowX = vec3f(matrix[0].x, matrix[1].x, matrix[2].x);
+    let rowY = vec3f(matrix[0].y, matrix[1].y, matrix[2].y);
+    let pixelWorldSize = 2.0 * abs(clip.w) / max(min(dimensions.x * length(rowX), dimensions.y * length(rowY)), 0.000001);
+    let radius = max(pixelWorldSize * 4.0, 0.001);
+    let magnitude = max(max(abs(position.x), abs(position.y)), abs(position.z));
+    let planeTolerance = clamp(magnitude * 0.0000005, 0.0005, 0.0025);
+    var total = 0.0; var irradiance = 0.0;
+    for (var y = 0; y < 2; y++) { for (var x = 0; x < 2; x++) {
+        let tap = clamp(base + vec2i(x, y), vec2i(0), vec2i(dimensions) - 1);
+        let light = textureLoad(rcSkyAmbientScreenLight, tap, 0);
+        let surface = textureLoad(rcSkyAmbientScreenPosition, tap, 0);
+        let normalLength = length(light.xyz);
+        if (!(light.w >= 0.0 && light.w <= 1.0) || surface.w < 0.5
+            || !(normalLength > 0.5 && normalLength < 1.5)) { continue; }
+        let tapNormal = light.xyz / normalLength;
+        let alignment = dot(normal, tapNormal);
+        let delta = surface.xyz - position;
+        let planeDistance = max(abs(dot(normal, delta)), abs(dot(tapNormal, delta)));
+        if (alignment < 0.95 || !(planeDistance <= planeTolerance) || !(dot(delta, delta) <= radius * radius)) { continue; }
+        let weight = select(1.0 - fraction.x, fraction.x, x == 1)
+            * select(1.0 - fraction.y, fraction.y, y == 1);
+        irradiance += light.w * weight; total += weight;
+    } }
+    if (total <= 0.0001) { return -1.0; }
+    return clamp(irradiance / total, 0.0, 1.0);
+}
+
 fn rcSkyAmbientDarkenDiffuse(diffuse: vec3f, base: vec3f, factor: f32, oldDarkening: vec3f) -> vec3f {
     // Shadow Depth RC already removed part of the same auxiliary light. Take
     // the larger attenuation instead of subtracting it twice from direct light.
@@ -40,8 +83,11 @@ if (uniforms.rcSkyAmbientControl.w > 0.0) {
         if (openSky <= 0.00001 || upperSupport <= 0.0) {
             rcSkyAmbientIrradiance = 0.0;
         } else {
-            let visibility = rcSkyAmbientVisibilityValidated(fragmentInputs.vPositionW, normal);
-            if (visibility >= 0.0) { rcSkyAmbientIrradiance = openSky * visibility; }
+            rcSkyAmbientIrradiance = rcSkyAmbientScreenIrradiance(fragmentInputs.vPositionW, normal);
+            if (rcSkyAmbientIrradiance < 0.0) {
+                let visibility = rcSkyAmbientVisibilityValidated(fragmentInputs.vPositionW, normal);
+                if (visibility >= 0.0) { rcSkyAmbientIrradiance = openSky * visibility; }
+            }
         }
         if (rcSkyAmbientIrradiance >= 0.0) {
             rcSkyAmbientFactor = 1.0 - (1.0 - uniforms.rcSkyAmbientControl.y)

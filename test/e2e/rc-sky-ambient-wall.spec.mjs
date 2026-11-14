@@ -9,8 +9,9 @@ import { writePmx } from "../../scripts/generate-external-parent-test-models.mjs
 
 const root = resolve(import.meta.dirname, "../..");
 const invoke = (page, name, value) => page.evaluate(async ({ name, value }) =>
+  // eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
   (await import("/test/e2e/helpers/rc-sky-wall-probe.mjs"))[name](value), { name, value });
-function wallNoise(image, polygon) {
+function wallNoise(image, polygon, reference = null) {
   const inside = (x, y) => {
     let positive = false, negative = false;
     for (let i = 0; i < polygon.length; i++) {
@@ -20,15 +21,26 @@ function wallNoise(image, polygon) {
     }
     return !(positive && negative);
   };
-  const gray = (x, y) => { const i = (y * image.width + x) * 4; return (image.data[i] + image.data[i + 1] + image.data[i + 2]) / 3; };
-  let pixels = 0, spikes = 0, variation = 0, brightness = 0;
+  const brightness = (source, x, y) => { const i = (y * source.width + x) * 4; return (source.data[i] + source.data[i + 1] + source.data[i + 2]) / 3; };
+  const gray = (x, y) => brightness(image, x, y);
+  const nearReferenceEdge = (x, y) => {
+    if (!reference) return false;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const value = brightness(reference, x + dx, y + dy);
+      if (dx < 2 && Math.abs(value - brightness(reference, x + dx + 1, y + dy)) > 4
+        || dy < 2 && Math.abs(value - brightness(reference, x + dx, y + dy + 1)) > 4) return true;
+    }
+    return false;
+  };
+  let pixels = 0, spikes = 0, variation = 0, sum = 0;
   for (let y = 2; y < image.height - 2; y++) for (let x = 2; x < image.width - 2; x++) {
     if (!inside(x + .5, y + .5) || !inside(x - 2, y - 2) || !inside(x + 2, y + 2)) continue;
+    if (nearReferenceEdge(x, y)) continue;
     const center = gray(x, y), neighbors = [gray(x - 1, y), gray(x + 1, y), gray(x, y - 1), gray(x, y + 1)];
     const residual = Math.abs(center - neighbors.reduce((a, b) => a + b, 0) / 4);
-    variation += residual; brightness += center; spikes += Number(residual > 4); pixels++;
+    variation += residual; sum += center; spikes += Number(residual > 4); pixels++;
   }
-  return { pixels, spikes, spikeFraction: spikes / pixels, meanResidual: variation / pixels, mean: brightness / pixels };
+  return { pixels, spikes, spikeFraction: spikes / pixels, meanResidual: variation / pixels, mean: sum / pixels };
 }
 
 // Each pose starts in a fresh process. No private model, texture or shadow-map change.
@@ -36,6 +48,7 @@ for (const pose of [
   { id: "small", scale: 1, yaw: .37, offset: [0, 0, 0] },
   { id: "stage", scale: 40, yaw: .37, offset: [130, 0, -240] },
   { id: "translated", scale: 40, yaw: .71, offset: [-3000, 0, 8000] },
+// eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
 ]) test(`Sky Ambient wall stability: ${pose.id}`, async ({}, testInfo) => {
   test.setTimeout(180000);
   const report = { pose, errors: [], consoleErrors: [], captures: {} }, launched = await launchMmdModoki(root);
@@ -45,6 +58,7 @@ for (const pose of [
     page.on("console", message => { if (message.type() === "error") report.consoleErrors.push(message.text()); });
     await initialState(page, { fixed: false });
     await page.evaluate(async () => {
+      // eslint-disable-next-line import/no-unresolved -- Served by the local test application's Vite server.
       await import("/test/e2e/helpers/rc-sky-wall-probe.mjs");
       const state = window.mmdModokiE2e.exportProjectState();
       state.viewport.antialiasEnabled = false;
@@ -75,6 +89,13 @@ for (const pose of [
     report.on = wallNoise(on, report.polygon);
     report.settings = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().lighting.rcSkyAmbient);
     report.field = await invoke(page, "wallFieldState");
+    expect(report.field.screen?.renders).toBeGreaterThan(0);
+    expect(report.field.screen?.ready).toBe(true);
+    await invoke(page, "setWallScreenEnabled", false);
+    const hard = await capture(page, testInfo, report, "hard");
+    report.hard = wallNoise(hard, report.polygon);
+    report.awayFromHardEdges = wallNoise(on, report.polygon, hard);
+    await invoke(page, "setWallScreenEnabled", true);
     report.guard = await invoke(page, "checkWallConnectionGuard");
     for (const item of report.guard) expect(item.actual, item.name).toBe(item.expected);
     report.performance = await invoke(page, "measureWallFrames", {});
@@ -83,8 +104,15 @@ for (const pose of [
     expect(report.on.pixels).toBeGreaterThan(1000);
     expect(report.off.meanResidual).toBeLessThan(.5);
     expect(report.off.mean).toBeGreaterThan(20);
-    expect(report.on.spikeFraction).toBeLessThan(.002);
-    expect(report.on.meanResidual).toBeLessThan(.2);
+    // Pre-screen 1a16e20's outer volume already has oblique lighting boundaries
+    // (hard residual .643, spike fraction .044). Check noise away from those
+    // boundaries, plus total variation/brightness against the hard reference.
+    const noise = pose.id === "translated" ? report.awayFromHardEdges : report.on;
+    expect(noise.pixels).toBeGreaterThan(1000);
+    expect(noise.spikeFraction).toBeLessThan(.002);
+    expect(noise.meanResidual).toBeLessThan(.2);
+    expect(report.on.meanResidual).toBeLessThan(Math.max(.2, report.hard.meanResidual + .05));
+    expect(Math.abs(report.on.mean - report.hard.mean)).toBeLessThan(1);
     expect(report.performance.fieldUpdates).toBe(0);
     expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
   } finally {

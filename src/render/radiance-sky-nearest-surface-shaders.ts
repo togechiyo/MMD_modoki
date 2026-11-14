@@ -108,3 +108,93 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     textureStore(nearestSurface, vec2i(i32(id.x), i32(id.z * grid + id.y + u32(params.shape.y))), vec4f(nearest, 0.0));
 }
 `;
+
+// Sky Ambient needs both triangular halves of nearby thin surfaces after its
+// receiver-side hemisphere restriction. Keep the legacy pair shader unchanged:
+// GI and Shadow Depth RC still use RG IDs plus the B validity flag.
+const FOUR_SURFACE_HEADER = SKY_NEAREST_SURFACE_WGSL
+    .slice(0, SKY_NEAREST_SURFACE_WGSL.indexOf("fn skyNearestTriangles("))
+    .replace("candidates: array<vec2u>", "candidates: array<vec4u>");
+
+// Four exact ID+1 values use all RGBA32F channels. Zero means an empty slot;
+// an all-negative texel denotes an invalid traversal rather than an empty set.
+export const SKY_NEAREST_FOUR_SURFACES_WGSL = `${FOUR_SURFACE_HEADER}
+fn skyNearestTriangles(point: vec3f, radiusSquared: f32) -> vec4f {
+    let triangleCount = min(u32(params.shape.w), arrayLength(&triangles));
+    if (triangleCount == 0u) { return vec4f(0.0); }
+    let nodeCount = arrayLength(&nodes);
+    var current = 0; var visited = 0u;
+    var ids = vec4u(0u); var distances = vec4f(radiusSquared);
+    loop {
+        if (current < 0) { break; }
+        if (u32(current) >= nodeCount || visited >= nodeCount) { return vec4f(-1.0); }
+        visited++;
+        let node = nodes[u32(current)];
+        if (any(node.low.xyz > node.high.xyz)) { return vec4f(-1.0); }
+        let difference = point - clamp(point, node.low.xyz, node.high.xyz);
+        if (dot(difference, difference) > distances.w) { current = i32(node.info.y); continue; }
+        let leafCount = u32(node.high.w);
+        if (leafCount == 0u) { current = i32(node.info.x); continue; }
+        let first = u32(node.low.w);
+        if (first > triangleCount || leafCount > triangleCount - first) { return vec4f(-1.0); }
+        for (var index = first; index < first + leafCount; index++) {
+            let candidate = index + 1u;
+            if (any(ids == vec4u(candidate))) { continue; }
+            let triangle = triangles[index];
+            let distance = skyPointTriangleDistanceSquared(point, triangle.a.xyz, triangle.b.xyz, triangle.c.xyz);
+            if (!(distance >= 0.0)) { return vec4f(-1.0); }
+            if (distance > distances.w) { continue; }
+            var slot = 4u;
+            for (var i = 0u; i < 4u; i++) {
+                if (ids[i] == 0u || distance < distances[i]) { slot = i; break; }
+            }
+            if (slot == 4u) { continue; }
+            for (var i = 3u; i > slot; i--) {
+                ids[i] = ids[i - 1u]; distances[i] = distances[i - 1u];
+            }
+            ids[slot] = candidate; distances[slot] = distance;
+        }
+        current = i32(node.info.y);
+    }
+    return vec4f(ids);
+}
+
+// Only four distinct, currently valid IDs bound the fourth-nearest distance.
+// Re-evaluate their distances after motion; the full BVH traversal still chooses
+// the final four, including newcomers and the original equal-distance order.
+fn skySearchRadius(point: vec3f, radiusSquared: f32, ids: vec4u) -> f32 {
+    let count = min(u32(params.shape.w), arrayLength(&triangles));
+    if (any(ids == vec4u(0u)) || any(ids > vec4u(count))) { return radiusSquared; }
+    var farthest = 0.0;
+    for (var i = 0u; i < 4u; i++) {
+        for (var j = 0u; j < i; j++) {
+            if (ids[i] == ids[j]) { return radiusSquared; }
+        }
+        let triangle = triangles[ids[i] - 1u];
+        let distance = skyPointTriangleDistanceSquared(point, triangle.a.xyz, triangle.b.xyz, triangle.c.xyz);
+        if (!(distance >= 0.0)) { return radiusSquared; }
+        farthest = max(farthest, distance);
+    }
+    return min(radiusSquared, farthest + radiusSquared * 0.00001);
+}
+
+@compute @workgroup_size(4, 4, 4)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+    let grid = u32(params.shape.x);
+    if (any(id >= vec3u(grid))) { return; }
+    let cellSize = params.volumeSize.x / f32(grid);
+    let position = params.volumeMin.xyz + (vec3f(id) + 0.5) * cellSize;
+    let index = (id.z * grid + id.y) * grid + id.x;
+    var radiusSquared = 3.0 * cellSize * cellSize;
+    if (params.dirtyMin.w > 0.5) {
+        // Match the pair path's conservative dirty footprint around both poses.
+        let margin = vec3f(2.0 * cellSize);
+        if (any(position < params.dirtyMin.xyz - margin) || any(position > params.dirtyMax.xyz + margin)) { return; }
+        radiusSquared = skySearchRadius(position, radiusSquared, candidates[index]);
+    }
+    let nearest = skyNearestTriangles(position, radiusSquared);
+    // Invalid output must not become a huge unsigned cached ID on conversion.
+    candidates[index] = vec4u(max(nearest, vec4f(0.0)));
+    textureStore(nearestSurface, vec2i(i32(id.x), i32(id.z * grid + id.y + u32(params.shape.y))), nearest);
+}
+`;

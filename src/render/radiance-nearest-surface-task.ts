@@ -7,7 +7,7 @@ import type { InternalTexture } from "@babylonjs/core/Materials/Textures/interna
 import type { UniformBuffer } from "@babylonjs/core/Materials/uniformBuffer";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
-import { SKY_NEAREST_SURFACE_WGSL } from "./radiance-sky-nearest-surface-shaders";
+import { SKY_NEAREST_FOUR_SURFACES_WGSL, SKY_NEAREST_SURFACE_WGSL } from "./radiance-sky-nearest-surface-shaders";
 
 type Volume = { min: readonly [number, number, number]; size: number };
 type AtlasState = { volumeKey: string; layout: number; geometry: number; updates: number };
@@ -29,8 +29,8 @@ export class RadianceNearestSurfaceTask extends FrameGraphComputeShaderTask {
 
     constructor(name: string, graph: FrameGraph, private readonly source: LuminousRadianceSceneSource,
         private readonly grid: number, output: { handle: FrameGraphTextureHandle; internal: InternalTexture },
-        private readonly atlasOffsetY = 0) {
-        super(name, graph, { computeSource: SKY_NEAREST_SURFACE_WGSL }, { bindingsMapping: {
+        private readonly atlasOffsetY = 0, candidateCount: 2 | 4 = 2) {
+        super(name, graph, { computeSource: candidateCount === 4 ? SKY_NEAREST_FOUR_SURFACES_WGSL : SKY_NEAREST_SURFACE_WGSL }, { bindingsMapping: {
             params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 },
             nodes: { group: 0, binding: 2 }, nearestSurface: { group: 0, binding: 3 }, candidates: { group: 0, binding: 4 },
         } });
@@ -38,7 +38,7 @@ export class RadianceNearestSurfaceTask extends FrameGraphComputeShaderTask {
         const groups = Math.ceil(grid / 4);
         this.dispatchSize = new Vector3(groups, groups, groups);
         this.params = this.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4, dirtyMin: 4, dirtyMax: 4 });
-        this.candidates = new StorageBuffer(graph.engine as WebGPUEngine, grid * grid * grid * 2 * Uint32Array.BYTES_PER_ELEMENT);
+        this.candidates = new StorageBuffer(graph.engine as WebGPUEngine, grid * grid * grid * candidateCount * Uint32Array.BYTES_PER_ELEMENT);
         const bind = () => {
             this.setStorageBuffer("triangles", source.triangleBuffer);
             this.setStorageBuffer("nodes", source.nodeBuffer);

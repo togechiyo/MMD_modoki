@@ -1,6 +1,6 @@
 import { SKY_IRRADIANCE_AXIS_TOTALS } from "./radiance-sky-irradiance-shaders";
 
-// Field updates integrate the sky and cache two nearby surfaces per probe. Each
+// Field updates integrate the sky and cache nearby surfaces per probe. Each
 // receiver checks those fixed candidates, without traversing the scene BVH.
 export function createMmdRadianceSkyQueryWgsl(spatialVolumes = false): string {
     return `
@@ -29,11 +29,11 @@ fn rcSkySpatialCoverage(worldPosition: vec3f) -> f32 {
     return 1.0 - smoothstep(0.75, 1.0, rcSkyVolumeRadius(worldPosition, rcSkyOuterVolume()));
 }
 ` : ""}
-fn rcSkyProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
+fn rcSkyProbeBlocked(position: vec3f, probe: vec3f, candidates: ${spatialVolumes ? "vec4f" : "vec2f"}) -> bool {
     let segment = probe - position; let distanceSquared = dot(segment, segment);
     if (distanceSquared <= 0.00000001) { return false; }
     let positionMagnitude = max(abs(position.x), max(abs(position.y), abs(position.z)));
-    for (var i = 0u; i < 2u; i++) {
+    for (var i = 0u; i < ${spatialVolumes ? "4" : "2"}u; i++) {
         let encoded = candidates[i];
         if (!(encoded >= 1.0 && encoded <= f32(arrayLength(&rcSkyTriangles)))) { continue; }
         let triangle = rcSkyTriangles[u32(encoded) - 1u];
@@ -86,12 +86,24 @@ fn ${spatialVolumes ? "rcSkyVisibilityInVolume(worldPosition: vec3f, normal: vec
     let grid = textureDimensions(rcSkyField, 0).x / 2u;
     if (grid == 0u) { return -1.0; }
     let coordinate = clamp((worldPosition - volumeMin) / size * f32(grid) - 0.5, vec3f(0.0), vec3f(f32(grid - 1u)));
-    let low = vec3u(floor(coordinate)); let fraction = fract(coordinate);
+    let low = vec3u(floor(coordinate));
+${spatialVolumes ? `    // Preserve a small front-side weight just above a probe plane. Computing
+    // fract(coordinate) after adding a large volume offset can round it to zero,
+    // leaving no supported probe and incorrectly returning neutral under a roof.
+    let lowPosition = volumeMin + (vec3f(low) + vec3f(0.5)) * (size / f32(grid));
+    let fraction = clamp((worldPosition - lowPosition) * (f32(grid) / size), vec3f(0.0), vec3f(1.0));
+` : "    let fraction = fract(coordinate);"}
     var result = 0.0; var weightSum = 0.0;
     for (var z = 0u; z < 2u; z++) { for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
         let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(grid - 1u));
         let weights = select(vec3f(1.0) - fraction, fraction, offset == vec3u(1u));
         let probePosition = volumeMin + (vec3f(probe) + vec3f(0.5)) * (size / f32(grid));
+${spatialVolumes ? `        // A probe behind the receiver can be inside the receiver's own solid.
+        // Its valid zero visibility must not darken the exposed front surface.
+        // Keep the query on the surface and retain the connection guard for
+        // front-side probes, so a thin ceiling still blocks light from above.
+        if (dot(probePosition - worldPosition, normal) < 0.0) { continue; }
+` : ""}
         // Favor probes in front without displacing the query through a low ceiling.
         let facing = clamp(dot(probePosition - worldPosition, normal) * (f32(grid) / size) * 4.0 + 0.5, 0.0, 1.0);
         let weight = weights.x * weights.y * weights.z * facing;
@@ -104,15 +116,15 @@ fn ${spatialVolumes ? "rcSkyVisibilityInVolume(worldPosition: vec3f, normal: vec
         var blocked = false;
         if (visibility > 0.0) {
             let surface = textureLoad(rcSkyNearestSurface, pixel, 0);
-            if (!(surface.z > 0.5)) { continue; }
-            blocked = rcSkyProbeBlocked(worldPosition, probePosition, surface.xy);
+            if (${spatialVolumes ? "any(surface < vec4f(0.0))" : "!(surface.z > 0.5)"}) { continue; }
+            blocked = rcSkyProbeBlocked(worldPosition, probePosition, ${spatialVolumes ? "surface" : "surface.xy"});
         }
         weightSum += weight;
         // A geometrically blocked connection stays in the denominator as dark.
         // Removing it and renormalizing would leak when every probe is above a roof.
         if (!blocked) { result += visibility * weight; }
     } } }
-    if (!(weightSum > 0.00001)) { return -1.0; }
+    if (!(weightSum > ${spatialVolumes ? "0.0" : "0.00001"})) { return -1.0; }
     return clamp(result / weightSum, 0.0, 1.0);
 }
 ${spatialVolumes ? `

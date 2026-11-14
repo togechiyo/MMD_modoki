@@ -277,7 +277,7 @@ export class RcSkyAmbientController {
         let candidate: RadianceSkyVisibilityField | null = null;
         try {
             candidate = new RadianceSkyVisibilityField(this.scene, { volumes, diagnostic: false, opaqueOccludersOnly: true,
-                materialIrradiance: true, acceptsMesh: this.acceptsMesh, quality: this.settings().quality });
+                materialIrradiance: true, nearestSurfaceCandidates: 4, acceptsMesh: this.acceptsMesh, quality: this.settings().quality });
             this.pending = candidate;
             const cancelled = new Promise<void>(resolve => { this.cancelPending = resolve; });
             // Babylon's structural build can resume after dispose while awaiting

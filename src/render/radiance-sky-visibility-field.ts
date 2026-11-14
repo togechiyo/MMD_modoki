@@ -51,7 +51,7 @@ export class RadianceSkyVisibilityField {
 
     constructor(scene: Scene, options: { volume?: SkyVisibilityBounds; diagnostic?: boolean; opaqueOccludersOnly?: boolean;
         materialIrradiance?: boolean; acceptsMesh?: (mesh: Mesh) => boolean; quality?: SkyVisibilityQuality;
-        volumes?: readonly SkyVisibilityBounds[] } = {}) {
+        volumes?: readonly SkyVisibilityBounds[]; nearestSurfaceCandidates?: 2 | 4 } = {}) {
         this.volumes = options.volumes ?? [options.volume ?? SKY_VISIBILITY_VOLUME];
         this.volumeCount = this.volumes.length;
         if (!this.volumeCount) throw new Error("Sky visibility needs a spatial volume");
@@ -141,7 +141,7 @@ export class RadianceSkyVisibilityField {
                         integrate.setInternalTexture("irradiance", irradiance.internal);
                     });
                     const guard = new RadianceNearestSurfaceTask(levelName("skyVisibilityNearestSurface", level), this.graph,
-                        this.source, grid, nearest, level * grid * grid);
+                        this.source, grid, nearest, level * grid * grid, options.nearestSurfaceCandidates ?? 2);
                     this.nearestTasks.push(guard);
                     this.tasks.push(guard); this.graph.addTask(guard);
                 }

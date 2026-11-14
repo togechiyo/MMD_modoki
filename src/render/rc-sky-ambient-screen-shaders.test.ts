@@ -16,7 +16,7 @@ describe("Sky Ambient screen reconstruction", () => {
     it("binds the hard query as compute and decodes Babylon world normals", () => {
         expect(SKY_SCREEN_QUERY_WGSL).not.toMatch(/^\s*#/m);
         expect(SKY_SCREEN_QUERY_WGSL).not.toContain("uniforms.");
-        expect(SKY_SCREEN_QUERY_WGSL).toContain("blocked = rcSkyProbeBlocked(worldPosition, probePosition, surface.xy)");
+        expect(SKY_SCREEN_QUERY_WGSL).toContain("blocked = rcSkyProbeBlocked(worldPosition, probePosition, surface)");
         expect(SKY_SCREEN_QUERY_WGSL).not.toContain("rcSkyProbeOcclusion");
         const bindings = [...SKY_SCREEN_QUERY_WGSL.matchAll(/@group\(0\) @binding\((\d)\) var(?:<[^>]*>)? (\w+):/g)]
             .map(match => [Number(match[1]), match[2]]).sort((a, b) => Number(a[0]) - Number(b[0]));

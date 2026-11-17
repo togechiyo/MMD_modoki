@@ -67,6 +67,7 @@
 | confirmed | [PBR材質セットはモデル読込を要求せず布の質感を追加する](./decisions/pbr-texture-sets-add-cloth-without-model-import.md) | 材質設定と画像だけで既存モデルの布へ質感を足す。GLBモデル読込再開を前提にしない。2026-10-08: WGSL入口と外部画像の参照型を選択。画像名規則・適用範囲・保存は設計中 |
 | adopted | [保存済みMCPポートが使用中なら空きポートを再取得する](./decisions/recover-busy-mcp-port.md) | MCP起動時のポート競合、自動再取得、接続先の案内を変更する |
 | adopted | [MCPの連続取得は数秒分の画像をまとめて動きを評価する](./decisions/mcp-sequences-return-short-image-batches.md) | VLM向け連続画像の用途・batchとライブ配信の範囲を決める |
+| adopted | [MCPの設定保持と使い勝手を優先して再整理する](./decisions/prioritize-mcp-usability-reassessment.md) | 再起動で有効化が外れる次版修正、既存軽量化後の改善余地と最新標準を見直す。権限保存範囲・SDK版・標準拡張の採用は別途判断 |
 | adopted | [書き出しメニューは形式名から始める](./decisions/export-menu-labels-start-with-format.md) | VMD・BVMD・VPD・PNG・WebMの書き出し表記を変更する |
 
 ## 却下

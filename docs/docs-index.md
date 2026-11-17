@@ -29,6 +29,7 @@
 - [MCP通信の軽量化と長時間出力の結果待機](./mcp-communication-lightweight-2026-10-05.md)
 - [MCP出力・操作の完了通知](./mcp-operation-completion-notifications-2026-10-05.md)
 - [MCPの状態要約とツールschemaの共通参照](./mcp-compact-context-and-schema-2026-10-06.md)
+- [MCPの設定保持・使い勝手の再整理](./mcp-usability-reassessment-2026-11-17.md)（再起動時OFFの次版修正予定、最新標準・SDK、実測と追加改善順）
 - [MCPのUI対応拡張と残件](./mcp-ui-coverage-expansion-2026-09-10.md)
 - [MCPの動画出力と素材の指定削除](./mcp-video-and-asset-removal-2026-09-11.md)
 - [MCPからの外部親編集](./mcp-external-parent-2026-09-11.md)

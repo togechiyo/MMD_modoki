@@ -96,6 +96,7 @@
 - [Vite / Vitest バージョン選定メモ 2026-05-17](./vite-vitest-version-security-note-2026-05-17.md)
 - [Electron 起動確認自動化 調査メモ](./electron-launch-test-investigation.md)
 - [Electron ローカル起動スモークテスト方針](./electron-local-smoke-test-plan.md)
+- [クラウドでの MMD 素材処理と GUI 起動の検討 2026-11-17](./cloud-execution-and-headless-cli-proposal-2026-11-17.md)
 - [Playwright Electron ローカル E2E 導入検討 2026-08-02](./playwright-electron-local-e2e-investigation-2026-08-02.md)
 - [Playwright Electron E2E 実装・運用ガイド](./playwright-electron-e2e-operation-guide.md)
 - [テストfixture・ローカル参照asset台帳](./test-reference-asset-ledger.md)

@@ -208,3 +208,7 @@ Codex等の実利用clientによるAI再開・通知表示、配布パッケー�
 既存tracksは個体ID・種類・表示名・休止状態を返し、既存キーAPIも個体に対応済み。`render.stack`の旧setterは既存個体を保持するが、個体の追加・複製・並替え・休止・復帰・削除の指定ができない。GUIには純helperと共有Undo Commandがあるため、結果を返す共通入口へ寄せる小さな追加が次候補となる。
 
 後続の[個体管理実装](./mcp-effect-instance-management-2026-11-18.md)で、停止中・FrameGraphの1入口と既存のrevision / operationId / dryRun / Undoを接続。表示順はstore順の逆であり、RC singletonを含む順序を保つ。発見は既存inspectへ`effects`を追加し、全animationや外部LUT本文を含むstateの取得を避ける。固定値はGUIの`visibleInstanceFixedFields()`を基準にし、内部専用parameterを公開しない。検証結果と残る実client確認は実装メモへ記録する。
+
+## 2026-11-18 配布packageでの実AIクライアント確認
+
+[Codex CLIによる実操作記録](./mcp-ai-client-practical-test-2026-11-18.md)へ条件・結果・呼出し数を分離した。公開helpから読込、カメラキー、個体管理、画像を見た構図調整、project保存/復元、PNG/WebM出力を実行できた。`waitMs`による結果待機も確認。一方、新規effectの最初のキーが表示用トラックのフィルタで拒否される不具合を検出した。優先修正はこのMCP接続経路で、続いてhelp検索順位・preview説明・撮影失敗の具体化が低負荷な候補となる。通知購読からのAI再開は今回も未検証。

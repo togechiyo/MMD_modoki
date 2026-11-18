@@ -34,6 +34,7 @@
 - [MCPのUI対応拡張と残件](./mcp-ui-coverage-expansion-2026-09-10.md)
 - [MCPの動画出力と素材の指定削除](./mcp-video-and-asset-removal-2026-09-11.md)
 - [MCPのエフェクト個体管理](./mcp-effect-instance-management-2026-11-18.md)
+- [配布packageと実AIクライアントでのMCP操作確認](./mcp-ai-client-practical-test-2026-11-18.md)（保存・復元・画像・WebMを確認。新規effectの初回キー登録不具合と軽量な改善候補）
 - [MCPからの外部親編集](./mcp-external-parent-2026-09-11.md)
 - [MCPのモデル・アクセサリ編集](./mcp-object-editing-2026-09-11.md)
 - [MCPの一括ポーズpreview](./mcp-pose-editing-2026-09-11.md)

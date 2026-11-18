@@ -109,7 +109,7 @@ UI変更を実装する段階ではlocal Electron E2Eで最終表示を確認す
 
 ## 2026-11-18の実装追記
 
-設定保持、summaryの内部生成削減、軽量プレビュー、確認待ち通知を小さな変更として実装した。SDKはserver/nodeとも2.0.0のまま。エフェクト個体管理、Skills / Tasks、常時画像配信、公開toolの再編は今回の対象に含めない。
+設定保持、summaryの内部生成削減、軽量プレビュー、確認待ち通知を小さな変更として実装した。この段階ではSDKはserver/nodeとも2.0.0のまま（同日の更新比較は末尾）。エフェクト個体管理、Skills / Tasks、常時画像配信、公開toolの再編は今回の対象に含めない。
 
 ### 有効化の保存・起動時復元
 
@@ -168,4 +168,43 @@ summary応答はmaterialMode / backendを残すため114 bytes増えたが、20m
 
 画像のdecode・寸法・mime・実byteLengthとframe/revision不変を確認し、preview画像も目視した。この比率は単純なfixtureでの値であり、一般のモデルで同じ削減率やFPS向上を保証しない。生成artifactは`test-results/`、検証ログは`tmp-mcp-*.log`へローカル保存し、Gitには含めない。
 
-Codex等の実利用clientによるAI再開・通知表示、配布パッケージの再起動、macOS/Linuxでの確認は未実施。新規CLI、SDK更新、標準拡張の採用、実clientでの一連の操作計測は後続項目として残す。
+Codex等の実利用clientによるAI再開・通知表示、配布パッケージの再起動、macOS/Linuxでの確認は未実施。新規CLI、標準拡張の採用、実clientでの一連の操作計測は後続項目として残す。SDK更新比較は次節で実施した。
+
+## 2026-11-18 SDK更新と要求処理の比較
+
+公式releaseとpackage別changelog、導入済みコードを照合し、`@modelcontextprotocol/server`を2.0.0→**2.4.0**、`@modelcontextprotocol/node`を2.0.0→**2.1.2**へ固定更新した。推移依存のcoreも2.4.0となる。lock上のHono / node-serverの版は変わらず、node側のHono依存区分だけが変わった。SDKのLICENSEがApache-2.0への移行と旧MIT寄与の保持を記載しているため、配布へ同梱される[THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES.md)に対象版と3package共通の全文を収録した。
+
+既存のrequestごとにfresh serverを作るfactoryは維持する。新SDKの遅延schema変換で、`tools/list`以外の要求で全53ツールの定義を先に変換する処理を省ける。共有singletonへの変更、公開tool追加、常時timerやネットワーク処理の追加は行っていない。現行実装はoutputSchema・数値の`x-mcp-header`を使用しておらず、それらの互換変更を利用する改修もない。
+
+一次資料: [v2.4.0 release](https://github.com/modelcontextprotocol/typescript-sdk/releases/tag/v2.4.0)、[遅延schema変換 PR #2889](https://github.com/modelcontextprotocol/typescript-sdk/pull/2889)、[server changelog](https://github.com/modelcontextprotocol/typescript-sdk/blob/v2.4.0/packages/server/CHANGELOG.md)、[node changelog](https://github.com/modelcontextprotocol/typescript-sdk/blob/v2.4.0/packages/middleware/node/CHANGELOG.md)。
+
+### 計測
+
+[計測script](../scripts/measure-mcp-payloads.mjs)へ任意の`MMD_MCP_REQUEST_SAMPLES`（0〜500、既定0）を追加した。10回warmup後、合成20model contextのsummaryを100回逐次取得する。実renderer・ユーザーassetを使わないHTTP/SDK処理の測定であり、CPU値はclient/serverが同居するNodeプロセス全体を含む。
+
+両source variantは**同じinstalled SDK**を使うため、script内のbaseline/currentの差をSDKの差と扱わない。今回はsource基準を`60c28a7`に固定し、SDKのinstall前後で別々に実行した。列挙・contextの内容も同一。
+
+| 指標 | server/node 2.0.0 | server 2.4.0 / node 2.1.2 |
+| --- | ---: | ---: |
+| 逐次100要求の中央値（2回の測定範囲） | 8.23〜8.98 ms | 0.92〜1.22 ms |
+| 95 percentile | 10.56〜10.86 ms | 1.45〜2.08 ms |
+| process CPU / 要求 | 9.84〜10.78 ms | 1.72〜2.98 ms |
+| `tools/list` | 119,776 bytes / 53 tools | 119,776 bytes / 53 tools |
+| 開発用main bundle（smoke build） | 1,595.33 kB | 1,635.60 kB |
+
+要求準備の削減が確認できたため採用した。tool定義量・AI token量・描画FPSの改善値ではない。bundleは約40 kB増える。待機時memoryや配布全体のサイズは未計測で、全アプリがこの比率で高速化するとは扱わない。ログはignoredな`.tmp/mcp-sdk-before.json`と`.tmp/mcp-sdk-after.json`へ保存した。
+
+### 互換確認
+
+- 全unit 256 file / 1,735 test成功。新旧protocol（2026-07-28 / 2025-11-25）、認証・Origin拒否・body上限、private TTL、resource購読と失効、schema共通参照を含む。
+- compact対象のキー編集を`tools/list`前にHTTPで呼び、旧Sky Ambient payloadのopacity補完がdispatchへ届くことを追加検証。不正なsingleton個体IDと範囲外値は、runtime refinementでdispatch前に拒否する。新旧両protocolで成功。
+- lint成功。critical型検査成功、TS2304 / TS2552は0。全体型検査は既存548件で失敗し、更新前ログとの診断内容比較は追加0・消失0（行番号差を除外）。
+- WebGPU / Bullet MPR smoke成功。SDK更新後の同一userData再起動・接続復元と、Classic / FrameGraphでのMCP経由読込・編集・保存・出力・確認待ち/完了通知をlocal Electron E2E 3ケースで確認した。
+
+実利用AI clientの通知UI・自動再開やmacOS配布物の確認には広げていない。
+
+### エフェクト個体管理の追加監査
+
+既存tracksは個体ID・種類・表示名・休止状態を返し、既存キーAPIも個体に対応済み。`render.stack`の旧setterは既存個体を保持するが、個体の追加・複製・並替え・休止・復帰・削除の指定ができない。GUIには純helperと共有Undo Commandがあるため、結果を返す共通入口へ寄せる小さな追加が次候補となる。
+
+まだ未実装。最初は停止中・FrameGraphで個体管理をまとめた1入口とし、既存のrevision / operationId / dryRun / Undoを再利用する案。表示順はstore順の逆であり、RC singletonを含む順序を保つ。発見には当面既存tracksを使い、全animationや外部LUT本文を含むstateの取得を増やさない。固定値を公開する場合はGUIの`visibleInstanceFixedFields()`を基準にし、内部専用parameterを公開しない。

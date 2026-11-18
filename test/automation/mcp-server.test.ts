@@ -105,6 +105,38 @@ describe("MCP HTTP foundation", () => {
         expect(allowed.json.result.structuredContent.modelContentShared).toBe(false);
         expect(calls).toBe(1);
     });
+    it.each([true, false])("validates and normalizes compact tool inputs before dispatch (modern=%s)", async modern => {
+        const token = randomBytes(32).toString("base64url");
+        const dispatch = vi.fn(async () => ({ data: { accepted: true } }));
+        const listener = await startAutomationListener({ port: 0, token, appVersion: "test", onError: () => undefined, dispatch });
+        listeners.push(listener);
+        const connected = { ...listener, token };
+        // Old Sky Ambient keys omit opacity; the runtime transform supplies it even though JSON Schema cannot.
+        const payload = { kind: "effect", effectId: "rcSkyAmbient", value: { enabled: true, strength: 1 } };
+        const operation = { action: "set", track: { category: "effect", name: "rcSkyAmbient" }, frame: 0, payload };
+        const args = {
+            target: { editorSessionId: "11111111-1111-4111-8111-111111111111", sceneGeneration: 0 },
+            expectedEditRevision: 0, operationId: "22222222-2222-4222-8222-222222222222",
+            scope: { kind: "camera" }, collision: "reject", operations: [operation],
+        };
+        const result = await rpc(connected, "tools/call", { name: "mmd_edit_keyframes", arguments: args }, modern);
+        expect(result.json.result.structuredContent).toEqual({ accepted: true });
+        expect(dispatch).toHaveBeenCalledTimes(1);
+        expect(dispatch).toHaveBeenCalledWith("mmd_edit_keyframes", {
+            ...args, operations: [{ ...operation, payload: { ...payload, value: { ...payload.value, opacity: 1 } } }],
+        }, expect.any(AbortSignal));
+        dispatch.mockClear();
+        for (const invalidPayload of [
+            { ...payload, instanceId: "fx-invalid-singleton" },
+            { ...payload, value: { ...payload.value, opacity: 2 } },
+        ]) {
+            const invalid = await rpc(connected, "tools/call", { name: "mmd_edit_keyframes", arguments: {
+                ...args, operations: [{ ...operation, payload: invalidPayload }],
+            } }, modern);
+            expect(invalid.json.error ?? invalid.json.result?.isError).toBeTruthy();
+            expect(dispatch).not.toHaveBeenCalled();
+        }
+    });
     it.each([true, false])("forwards bounded operation waits and the request abort signal to dispatch (modern=%s)", async modern => {
         const token = randomBytes(32).toString("base64url");
         const dispatch = vi.fn(async (_tool, _args, signal) => {

@@ -2,10 +2,16 @@ import { build } from "esbuild";
 import { Module } from "node:module";
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Development-only measurement: temporary loopback listener, synthetic context, no app/assets/credentials.
 const root = resolve(import.meta.dirname, "..");
+// Both source variants use the installed SDK. Dependency comparisons require a run before and after installation.
+const installedSdk = Object.fromEntries(["server", "node", "core"].map(name => [name,
+    JSON.parse(readFileSync(resolve(root, `node_modules/@modelcontextprotocol/${name}/package.json`), "utf8")).version]));
+const requestSamples = Number(process.env.MMD_MCP_REQUEST_SAMPLES ?? "0");
+if (!Number.isInteger(requestSamples) || requestSamples < 0 || requestSamples > 500) throw new Error("MMD_MCP_REQUEST_SAMPLES must be an integer in 0..500");
 const baselineRef = execFileSync("git", ["rev-parse", "--verify", "--end-of-options", `${process.argv[2] ?? "HEAD"}^{commit}`],
     { cwd: root, encoding: "utf8" }).trim();
 const baseFiles = ["src/automation/keyframe-schema.ts", "src/automation/contracts.ts", "src/main/automation/mcp-server.ts",
@@ -122,7 +128,27 @@ async function measure(baseline) {
                 contextGeneration.push(await measureContextGeneration(api, count, detail, playing));
             }
         }
-        return { toolsListBytes: list.bytes, toolCount: list.result.tools.length, toolSchemas, contexts, contextGeneration };
+        let requestCost;
+        if (requestSamples > 0) {
+            // Synthetic dispatch isolates HTTP/SDK overhead; it does not measure renderer work.
+            context = fixture(20);
+            const call = () => rpc("tools/call", { name: "mmd_get_context", arguments: { detail: "summary" } });
+            for (let i = 0; i < 10; i++) await call();
+            const cpuBefore = process.cpuUsage();
+            const times = [];
+            for (let i = 0; i < requestSamples; i++) {
+                const started = performance.now();
+                await call();
+                times.push(performance.now() - started);
+            }
+            const cpu = process.cpuUsage(cpuBefore);
+            times.sort((a, b) => a - b);
+            requestCost = { samples: requestSamples, warmup: 10,
+                meanMs: times.reduce((a, b) => a + b, 0) / times.length,
+                medianMs: times[Math.floor(times.length / 2)], p95Ms: times[Math.ceil(times.length * 0.95) - 1],
+                processCpuMsPerRequest: (cpu.user + cpu.system) / 1000 / requestSamples };
+        }
+        return { toolsListBytes: list.bytes, toolCount: list.result.tools.length, toolSchemas, contexts, contextGeneration, requestCost };
     } finally { await listener.close(); }
 }
-console.log(JSON.stringify({ baselineRef, baseline: await measure(true), current: await measure(false) }, null, 2));
+console.log(JSON.stringify({ baselineRef, installedSdk, baseline: await measure(true), current: await measure(false) }, null, 2));

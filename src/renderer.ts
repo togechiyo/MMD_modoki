@@ -338,7 +338,7 @@ async function initializeApp(): Promise<void> {
     const initialProjectPath = await window.electronAPI.takeInitialProjectPath();
     if (initialProjectPath) await uiController.openProjectFile(initialProjectPath);
     if (wgslRecovered) mmdManager.onError?.(t("wgsl.recovered"));
-    connectAutomationEditor(mmdManager, uiController, timeline);
+    connectAutomationEditor(mmdManager, uiController);
     if (new URLSearchParams(window.location.search).get("e2e") === "1") {
       window.mmdModokiE2e = {
         exportProjectState: () => mmdManager.exportProjectState(),

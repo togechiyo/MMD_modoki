@@ -30,6 +30,26 @@ describe("MCP diagnostic boundary", () => {
         if (tooMany.success) throw new Error("Expected validation error");
         expect(toAutomationFailure(tooMany.error).details.issues).toHaveLength(16);
     });
+    it.each([
+        ["window_destroyed", "refresh_context", "mmd_get_context", "閉じられています"],
+        ["window_minimized", "user_action", "mmd_help", "最小化"],
+        ["window_hidden", "user_action", "mmd_help", "非表示"],
+        ["invalid_rect", "user_action", "mmd_help", "表示領域"],
+        ["empty_image", "user_action", "mmd_help", "空"],
+        ["viewport_missing", "user_action", "mmd_help", "初期化"],
+        ["editor_busy", "wait", "mmd_get_diagnostics", "status"],
+    ] as const)("explains the safe capture reason %s with matching recovery", (reason, strategy, nextTool, message) => {
+        const failure = toAutomationFailure(new AutomationError("CAPTURE_UNAVAILABLE", { reason }));
+        expect(automationFailureSchema.safeParse(failure).success).toBe(true);
+        const described = describeAutomationFailure(failure);
+        expect(described).toMatchObject({ error: { code: "CAPTURE_UNAVAILABLE", details: { reason } }, effects: { state: "none" }, recovery: { strategy, nextTool, retrySameInput: false } });
+        expect(described.error.message).toContain(message);
+    });
+    it("does not accept arbitrary capture reasons or change another error's recovery", () => {
+        expect(automationFailureSchema.safeParse({ code: "CAPTURE_UNAVAILABLE", details: { reason: "private path or raw exception" } }).success).toBe(false);
+        expect(describeAutomationFailure({ code: "READ_ONLY", details: { reason: "editor_busy" } }).recovery.strategy).toBe("user_action");
+        expect(describeAutomationFailure({ code: "CAPTURE_UNAVAILABLE", details: {} }).error.message).toContain("viewport");
+    });
     it("locates a failed correction before changing the source", () => {
         const track = { category: "morph" as const, name: "smile", frames: [10] };
         const payload = { kind: "morph" as const, weights: [0.7] };

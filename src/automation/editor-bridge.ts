@@ -1,6 +1,5 @@
 import type { MmdManager } from "../mmd-manager";
 import type { UIController } from "../ui-controller";
-import type { Timeline } from "../timeline";
 import { automationTools, AutomationError, type AutomationRequest, type AutomationResult, type AutomationState } from "./contracts";
 import { keyframeValuesEqual } from "../actions/keyframe-transaction";
 import { buildAutomationKeyframeEdit } from "./keyframe-edit";
@@ -26,7 +25,7 @@ import { automationUserAction } from "./user-action";
 import { readMenuItems } from "./menu-catalog";
 import { t } from "../i18n";
 
-export function connectAutomationEditor(manager: MmdManager, ui: UIController, timeline: Timeline): void {
+export function connectAutomationEditor(manager: MmdManager, ui: UIController): void {
     let state: AutomationState | null = null;
     let inputRevision = 0;
     let pointers = 0;
@@ -144,7 +143,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             if (busy()) throw new AutomationError("EDITOR_BUSY");
             if ((input.offset > 0 && input.expectedEditRevision === undefined) || (input.expectedEditRevision !== undefined && input.expectedEditRevision !== revision)) throw new AutomationError("REVISION_CONFLICT");
             if (!keyframeValuesEqual(input.scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
-            return { data: { ...searchKeyframes(timeline.getKeyframeTracks(), input.filter, input.filter.anchorFrame ?? manager.currentFrame,
+            return { data: { ...searchKeyframes(ui.getAutomationTimelineTracks(), input.filter, input.filter.anchorFrame ?? manager.currentFrame,
                 input.offset, input.limit, (track, frame) => manager.readTimelineKeyframePayload(track, frame)),
                 scope: input.scope, editRevision: revision, modelContentShared: false } };
         }
@@ -238,7 +237,9 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         }
         if (request.tool === "mmd_capture_viewport" || request.tool === "mmd_capture_snapshot") {
             const rect = document.getElementById("render-canvas")?.getBoundingClientRect();
-            if (!rect || rect.width < 1 || rect.height < 1 || busy()) throw new AutomationError("CAPTURE_UNAVAILABLE");
+            if (!rect) throw new AutomationError("CAPTURE_UNAVAILABLE", { reason: "viewport_missing" });
+            if (rect.width < 1 || rect.height < 1) throw new AutomationError("CAPTURE_UNAVAILABLE", { reason: "invalid_rect" });
+            if (busy()) throw new AutomationError("CAPTURE_UNAVAILABLE", { reason: "editor_busy" });
             return { data: { ...before, physicsEnabled: manager.getPhysicsEnabled(), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } } };
         }
         if (request.tool === "mmd_inspect") {
@@ -279,7 +280,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                 return { data: { items, modelInstanceId: model.instanceId, totalCount: names.length, modelContentShared: false, editRevision: revision, nextOffset: input.offset + input.limit < names.length ? input.offset + input.limit : null } };
             }
             if (input.kind === "tracks") {
-                const all = timeline.getKeyframeTracks();
+                const all = ui.getAutomationTimelineTracks();
                 return { data: { items: all.slice(input.offset, input.offset + input.limit).map(({ category, name, frames, effectInstance }) => {
                     const bone = ["root", "semi-standard", "bone"].includes(category);
                     const movable = manager.getActiveModelInfo()?.boneControlInfos?.find(control => control.name === name)?.movable ?? category === "root";
@@ -292,7 +293,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             const items: { category: string; name: string; frame: number; payload: TimelineKeyframePayload | null }[] = [];
             let index = 0;
             let more = false;
-            outer: for (const track of timeline.getKeyframeTracks()) for (const frame of track.frames) {
+            outer: for (const track of ui.getAutomationTimelineTracks()) for (const frame of track.frames) {
                 if (index++ < input.offset) continue;
                 if (items.length === input.limit) { more = true; break outer; }
                 items.push({ category: track.category, name: track.name, frame, payload: manager.readTimelineKeyframePayload(track, frame) });
@@ -374,7 +375,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                 keyOperations = buildClipboardOperations(clipboard.items, input.frame);
             } else keyOperations = buildSelectionOperations(ui.getAutomationKeySelection(), input.operation.action, input.operation.action === "move" ? input.operation.frameOffset : 0);
             const diff = buildAutomationKeyframeEdit(input.scope, keyOperations, input.collision, (track, frame) => manager.readTimelineKeyframePayload(track, frame));
-            validateAutomationKeyframes(manager, timeline, diff);
+            validateAutomationKeyframes(manager, ui.getAutomationTimelineTracks(), diff);
             const plan = { changedKeyCount: diff.items.length, items: diff.items };
             if (input.dryRun) {
                 const result = { status: "validated", operationId: input.operationId, editId: null, editRevision: revision, plan };
@@ -388,7 +389,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_correct_body_motion.schema.parse(args);
             const { diff, preview } = ui.prepareAutomationBodyCorrection(input.modelInstanceId, input.sourceModelInstanceId);
-            validateAutomationKeyframes(manager, timeline, diff);
+            validateAutomationKeyframes(manager, ui.getAutomationTimelineTracks(), diff);
             if (input.dryRun) {
                 const result = { status: "validated", operationId: input.operationId, editId: null, editRevision: revision, plan: preview };
                 operations.set(input.operationId, { input: inputKey, result });
@@ -455,7 +456,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             const scope = input.subject.kind === "camera" ? { kind: "camera" as const } : { kind: "model" as const, modelInstanceId: input.subject.modelInstanceId };
             if (!keyframeValuesEqual(scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
             const subject = input.subject;
-            const tracks = timeline.getKeyframeTracks().filter(track => subject.kind === "camera" ? track.category === "camera" : ["root", "semi-standard", "bone"].includes(track.category) && track.name === subject.boneName);
+            const tracks = ui.getAutomationTimelineTracks().filter(track => subject.kind === "camera" ? track.category === "camera" : ["root", "semi-standard", "bone"].includes(track.category) && track.name === subject.boneName);
             if (tracks.length !== 1) throw new AutomationError("TRACK_NOT_UNIQUE");
             const track = { category: tracks[0].category, name: tracks[0].name };
             const diff = buildExternalParentEdit({ scope, track, operations: input.operations, collision: input.collision,
@@ -467,7 +468,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                     return model;
                 },
             });
-            validateAutomationKeyframes(manager, timeline, diff);
+            validateAutomationKeyframes(manager, ui.getAutomationTimelineTracks(), diff);
             const plan = { subject: input.subject, changes: diff.items, changedKeyCount: diff.items.length,
                 poseModes: input.operations.filter(operation => operation.action === "set").map(operation => ({ frame: operation.frame, poseMode: operation.poseMode })),
                 worldPosePreserved: false, modelContentShared: false };
@@ -537,22 +538,22 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
                 return { action: "set" as const, track, frame: Math.max(0, Math.floor(manager.currentFrame)), payload };
             });
             const diff = buildAutomationKeyframeEdit(input.scope, operations, input.collision, (track, frame) => manager.readTimelineKeyframePayload(track, frame));
-            validateAutomationKeyframes(manager, timeline, diff);
+            validateAutomationKeyframes(manager, ui.getAutomationTimelineTracks(), diff);
             changed = ui.applyAutomationKeyframes(diff, editId);
             ui.finishAutomationKeyframeRegistration(input.tracks);
         } else if (request.tool === "mmd_transform_keyframes") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_transform_keyframes.schema.parse(args);
             if (!keyframeValuesEqual(input.scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
-            const diff = buildAutomationTimelineTransform(input.scope, input.operation, timeline.getKeyframeTracks(), (track, frame) => manager.readTimelineKeyframePayload(track, frame));
-            validateAutomationKeyframes(manager, timeline, diff);
+            const diff = buildAutomationTimelineTransform(input.scope, input.operation, ui.getAutomationTimelineTracks(), (track, frame) => manager.readTimelineKeyframePayload(track, frame));
+            validateAutomationKeyframes(manager, ui.getAutomationTimelineTracks(), diff);
             changed = ui.applyAutomationKeyframes(diff, editId);
         } else if (request.tool === "mmd_edit_keyframes") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");
             const input = automationTools.mmd_edit_keyframes.schema.parse(args);
             if (!keyframeValuesEqual(input.scope, ui.getAutomationTimelineScope())) throw new AutomationError("TIMELINE_TARGET_CHANGED");
             const diff = buildAutomationKeyframeEdit(input.scope, input.operations, input.collision, (track, frame) => manager.readTimelineKeyframePayload(track, frame));
-            validateAutomationKeyframes(manager, timeline, diff);
+            validateAutomationKeyframes(manager, ui.getAutomationTimelineTracks(), diff);
             changed = ui.applyAutomationKeyframes(diff, editId);
         } else if (request.tool === "mmd_select_timeline") {
             if (manager.isPlaying) throw new AutomationError("PLAYING");

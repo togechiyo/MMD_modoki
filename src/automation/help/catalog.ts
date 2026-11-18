@@ -140,8 +140,8 @@ export const automationHelpTopics: readonly AutomationHelpTopic[] = [
     },
     {
         id: "viewport", title: "ビューポート画像", aliases: ["capture", "screenshot", "画像", "見た目"],
-        status: "implemented", summary: "mmd_capture_viewportで現在の表示をPNG画像Contentとして取得します。",
-        body: "長辺1280px以下。モデルファイルではなく表示画像です。取得前後のframeとrevisionを返します。consistency:observedはcompositorの観測画像で、厳密なフレーム同期は保証しません。非表示・最小化・モーダル表示中は取得できません。カメラや再生状態を勝手に変更しません。",
+        status: "implemented", summary: "mmd_capture_viewportで確認用JPEGまたは詳細PNGの画像Contentを取得します。",
+        body: "quality:previewは長辺640px以下のJPEG（品質80）、quality:detail（既定）は長辺1280px以下のPNG。拡大せず、1枚4MiBまで。見た目を反復調整するときはpreview、細部確認はdetailを使います。モデルファイルではなく表示画像です。取得前後のframeとrevisionを返します。consistency:observedはcompositorの観測画像で、厳密なフレーム同期は保証しません。非表示・最小化・モーダル表示中は取得できません。カメラや再生状態を勝手に変更しません。",
     },
     {
         id: "camera", title: "カメラ編集", aliases: ["camera", "構図", "視点"],
@@ -193,8 +193,16 @@ body: "scopeとoperationを指定。列操作は{action:insertFrames|deleteFrame
 export function searchAutomationHelp(query: string, limit: number): AutomationHelpTopic[] {
     const terms = query.normalize("NFKC").toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
-    return automationHelpTopics.filter(topic => {
-        const text = [topic.id, topic.title, ...topic.aliases, topic.summary, topic.body].join(" ").normalize("NFKC").toLocaleLowerCase();
-        return terms.every(term => text.includes(term));
-    }).slice(0, limit);
+    const subjectMatches: AutomationHelpTopic[] = [];
+    const contentMatches: AutomationHelpTopic[] = [];
+    for (const topic of automationHelpTopics) {
+        const subject = [topic.id, topic.title, ...topic.aliases].join(" ").normalize("NFKC").toLocaleLowerCase();
+        if (terms.every(term => subject.includes(term))) {
+            subjectMatches.push(topic);
+        } else {
+            const text = [subject, topic.summary, topic.body].join(" ").normalize("NFKC").toLocaleLowerCase();
+            if (terms.every(term => text.includes(term))) contentMatches.push(topic);
+        }
+    }
+    return [...subjectMatches, ...contentMatches].slice(0, limit);
 }

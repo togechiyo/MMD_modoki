@@ -224,6 +224,96 @@ test("MCP effect instance edits share GUI history, display order, and project pe
     }
 });
 
+test("MCP discovers and registers the first effect key without exposing empty GUI rows", async () => {
+    test.setTimeout(180000);
+    const launched = await launchMmdModoki(root), errors = [];
+    try {
+        const page = await launched.app.firstWindow();
+        page.on("pageerror", error => errors.push(error.message));
+        await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+        await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
+        await page.evaluate(path => window.mmdModokiE2e.loadAccessory(path), resolve(root, "test/fixtures/accessory/simple-triangle.x"));
+        await page.locator("#info-model-select").selectOption("__camera__");
+        const rpc = await enableMcpEditing(page);
+        const { context, edit } = tools(rpc);
+        const query = async kind => {
+            const current = await context();
+            const result = await rpc("mmd_inspect", { target: current.target, expectedEditRevision: current.editRevision, kind });
+            expect(result.isError, JSON.stringify(result)).not.toBe(true);
+            return result.structuredContent.items;
+        };
+        const mutate = async (tool, args) => {
+            const current = await context();
+            const result = await rpc(tool, { target: current.target, expectedEditRevision: current.editRevision, operationId: randomUUID(), ...args });
+            expect(result.isError, JSON.stringify(result)).not.toBe(true);
+            expect(result.structuredContent.status).toBe("applied");
+            return result.structuredContent;
+        };
+        const guiEffectTracks = () => page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().filter(track => track.category === "effect").map(track => track.name));
+        const scope = { kind: "camera" };
+        const bloomId = (await edit({ action: "add", effectType: "bloom" })).control.instanceId;
+        const gammaId = (await edit({ action: "add", effectType: "gamma" })).control.instanceId;
+        const bloom = { category: "effect", name: bloomId }, gamma = { category: "effect", name: gammaId };
+        const bloomValue = { enabled: true, weight: 0.1, threshold: 0.9, kernel: 205 };
+        expect((await query("tracks")).filter(track => track.category === "effect")).toEqual(expect.arrayContaining([
+            expect.objectContaining({ name: bloomId, keyCount: 0, effectType: "bloom" }),
+            expect.objectContaining({ name: gammaId, keyCount: 0, effectType: "gamma" }),
+        ]));
+        expect(await guiEffectTracks()).toEqual([]);
+        const emptyContext = await context();
+        const emptySelection = await rpc("mmd_select_keyframes", { target: emptyContext.target, expectedEditRevision: emptyContext.editRevision,
+            operationId: randomUUID(), scope, selection: { kind: "range", startFrame: 0, endFrame: 10, tracks: [bloom] } });
+        expect(emptySelection.isError, JSON.stringify(emptySelection)).not.toBe(true);
+        expect(await page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().selectedKeys)).toEqual([]);
+        await mutate("mmd_edit_keyframes", { scope, collision: "reject", operations: [{ action: "set", track: bloom, frame: 0,
+            payload: { kind: "effect", effectId: "bloom", instanceId: bloomId, value: bloomValue } }] });
+        await expect.poll(guiEffectTracks).toEqual([bloomId]);
+        await openPostEffects(page);
+        const bloomRow = page.locator(`[data-effect-instance-row="${bloomId}"]`);
+        await expandEffectInstance(bloomRow);
+        await expect(bloomRow.locator('[data-instance-field="weight"]')).toHaveValue("5");
+        await expect(bloomRow.locator('[data-instance-value="weight"]')).toHaveText("0.10");
+        await selectTimelineTrack(page, "effect", bloomId);
+        const gammaValue = (await query("effects")).find(item => item.instanceId === gammaId).value;
+        await mutate("mmd_register_keyframes", { scope, tracks: [gamma], collision: "reject" });
+        expect((await query("keyframes")).filter(key => key.category === "effect")).toEqual(expect.arrayContaining([
+            expect.objectContaining({ name: bloomId, frame: 0, payload: { kind: "effect", effectId: "bloom", instanceId: bloomId, value: bloomValue } }),
+            expect.objectContaining({ name: gammaId, frame: 0, payload: { kind: "effect", effectId: "gamma", instanceId: gammaId, value: gammaValue } }),
+        ]));
+        await mutate("mmd_edit_keyframes", { scope, collision: "reject", operations: [{ action: "delete", track: bloom, frame: 0 }] });
+        await expect.poll(guiEffectTracks).toEqual([gammaId]);
+        expect((await query("tracks")).find(track => track.name === bloomId).keyCount).toBe(0);
+        const currentBloomValue = (await query("effects")).find(item => item.instanceId === bloomId).value;
+        const registered = await mutate("mmd_register_keyframes", { scope, tracks: [bloom], collision: "reject" });
+        expect((await query("keyframes")).find(key => key.name === bloomId).payload.value).toEqual(currentBloomValue);
+        await mutate("mmd_undo", { editId: registered.editId });
+        await expect.poll(guiEffectTracks).toEqual([gammaId]);
+        await mutate("mmd_redo", { editId: registered.editId });
+        await expect.poll(guiEffectTracks).toEqual(expect.arrayContaining([bloomId, gammaId]));
+        await selectTimelineTrack(page, "effect", bloomId);
+
+        // Switching ownership must replace the raw metadata too, not retain camera effects.
+        const model = (await rpc("mmd_get_context", { detail: "full" })).structuredContent.models[0];
+        for (const otherScope of [{ kind: "model", modelInstanceId: model.instanceId }, { kind: "accessory", accessoryIndex: 0 }]) {
+            await mutate("mmd_select_timeline", { scope: otherScope });
+            expect((await query("tracks")).some(track => track.category === "effect")).toBe(false);
+            const current = await context();
+            const refused = await rpc("mmd_register_keyframes", { target: current.target, expectedEditRevision: current.editRevision,
+                operationId: randomUUID(), scope: otherScope, tracks: [bloom], collision: "replace" });
+            expect(refused.isError).toBe(true);
+            expect((await context()).editRevision).toBe(current.editRevision);
+        }
+        await mutate("mmd_select_timeline", { scope });
+        expect((await query("tracks")).find(track => track.name === bloomId).keyCount).toBe(1);
+        await edit({ action: "delete", instanceId: bloomId });
+        expect((await query("tracks")).some(track => track.name === bloomId)).toBe(false);
+        await expect(bloomRow).toHaveCount(0);
+        expect(errors).toEqual([]);
+    } finally {
+        await launched.close();
+    }
+});
+
 test("MCP effect instance edits reject Classic without changing the stack", async () => {
     const launched = await launchMmdModoki(root);
     try {

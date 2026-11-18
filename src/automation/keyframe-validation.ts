@@ -1,12 +1,11 @@
 import type { MmdManager } from "../mmd-manager";
-import type { Timeline } from "../timeline";
+import type { KeyframeTrack } from "../types";
 import { keyframeValuesEqual, type KeyframeTransaction } from "../actions/keyframe-transaction";
 import { AutomationError } from "./contracts";
 
-export function validateAutomationKeyframes(manager: MmdManager, timeline: Timeline, diff: KeyframeTransaction): void {
+export function validateAutomationKeyframes(manager: MmdManager, tracks: readonly KeyframeTrack[], diff: KeyframeTransaction): void {
     const parentIssue = manager.validateExternalParentEdit(diff, "apply");
     if (parentIssue) throw new AutomationError(parentIssue.code, { frame: parentIssue.frame, operationIndex: parentIssue.operationIndex });
-    const tracks = timeline.getKeyframeTracks();
     for (const item of diff.items) {
         if (tracks.filter(track => track.category === item.track.category && track.name === item.track.name).length !== 1) throw new AutomationError("TRACK_NOT_UNIQUE");
         const payload = item.after;

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectAutomationEditor } from "../../src/automation/editor-bridge";
 import type { MmdManager } from "../../src/mmd-manager";
 import type { UIController } from "../../src/ui-controller";
-import type { Timeline } from "../../src/timeline";
 import type { AutomationReply, AutomationRequest, AutomationState } from "../../src/automation/contracts";
 
 async function editorContext() {
@@ -41,7 +40,7 @@ async function editorContext() {
             onState: (callback: typeof onState) => { onState = callback; return () => undefined; },
             onRequest: (callback: typeof onRequest) => { onRequest = callback; return () => undefined; }, reply,
         } } });
-    connectAutomationEditor(manager as unknown as MmdManager, ui as unknown as UIController, {} as Timeline);
+    connectAutomationEditor(manager as unknown as MmdManager, ui as unknown as UIController);
     await Promise.resolve();
     const request = (args: unknown = {}) => {
         reply.mockClear();

@@ -8921,7 +8921,7 @@ export class UIController {
     }
 
     public selectAutomationKeys(selection: KeySelection): SelectedKey[] {
-        const keys = resolveKeySelection(selection, this.timeline.getKeyframeTracks());
+        const keys = resolveKeySelection(selection, this.getAutomationTimelineTracks());
         this.timeline.setSelectedKeys(keys.map(key => ({ trackCategory: key.track.category, trackName: key.track.name, frame: key.frame })));
         this.updateTimelineEditState();
         return this.getAutomationKeySelection();
@@ -9025,8 +9025,12 @@ export class UIController {
         return applied;
     }
 
+    public getAutomationTimelineTracks(): readonly KeyframeTrack[] {
+        return this.effectTimelineView.allTracks();
+    }
+
     public captureAutomationKeyframe(reference: CommandTrackRef): TimelineKeyframePayload | null {
-        const matches = this.timeline.getKeyframeTracks().filter(track => track.category === reference.category && track.name === reference.name);
+        const matches = this.getAutomationTimelineTracks().filter(track => track.category === reference.category && track.name === reference.name);
         if (matches.length !== 1) return null;
         const track = matches[0];
         if (track.category === "morph") return this.createMorphKeyframePayload({ value: this.mmdManager.getMorphWeight(track.name) });

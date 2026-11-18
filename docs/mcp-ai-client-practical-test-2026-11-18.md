@@ -1,10 +1,10 @@
 # 配布packageと実AIクライアントでのMCP操作確認
 
-2026-11-18。対象は`6934b00`を基点としたWindowsの作業ツリーからビルドした配布形式のexe。既存の別作業の描画差分を含むため、clean HEADの配布物や正式Releaseの検証とは区別する。今回は確認と記録のみで、製品コードは変更していない。
+2026-11-18。初回対象は`6934b00`を基点としたWindowsの作業ツリーからビルドした配布形式のexe。既存の別作業の描画差分を含むため、clean HEADの配布物や正式Releaseの検証とは区別する。以下の初回検証は確認と記録のみ。そこで判明した不具合の修正と再確認は末尾へ追記する。
 
 ## 結果
 
-公開MCPのツール定義・ヘルプを手掛かりに、実AIがモデル読込、カメラキー、エフェクト個体操作、画像を見た構図調整、project保存/復元、PNG/WebM出力を実行できた。一方、**新規エフェクトの最初のキー登録が失敗する製品不具合**を確認した。個体管理が使えても、強度などを調整する段階で止まるため優先して修正する。
+公開MCPのツール定義・ヘルプを手掛かりに、実AIがモデル読込、カメラキー、エフェクト個体操作、画像を見た構図調整、project保存/復元、PNG/WebM出力を実行できた。一方、**新規エフェクトの最初のキー登録が失敗する製品不具合**を確認した。個体管理が使えても、強度などを調整する段階で止まるため、後続作業の優先修正対象とした。
 
 | 操作 | 確認結果 |
 | --- | --- |
@@ -67,4 +67,39 @@ CLI報告の累積input/cache hitは前半1,110,042 / 1,020,800 tokens、後半4
 
 ローカル証拠はignoredな`.tmp/mcp-usability-2026-11-18/session/`。`practical.jsonl` / `followup.jsonl`は画像base64を除いた実clientログ、`*-summary.json`は集計、`evaluator-verification.json`は保存物・decodeの確認、`restart-settings.json`は再起動時の設定。project、PNG、WebM、JPEG/detail画像も同ディレクトリに保存した。検証用アプリとAI子プロセスは終了済み。
 
-製品変更がないため、今回はpackage起動と上記実操作、文書リンク・差分確認を行い、直前に成功したunit/lint/typecheck/smokeの全件再実行はしていない。
+初回は製品変更がないため、package起動と上記実操作、文書リンク・差分確認を行い、直前に成功したunit/lint/typecheck/smokeの全件再実行はしていない。
+
+## 同日後続: 初回キー登録・ヘルプ・撮影診断の修正
+
+`cc87b0c`を基点に、GUI表示とMCP編集対象の一覧を分離した。`EffectTimelineViewState`が既に保持する現在scopeの全トラックを共通getterで返し、一覧取得・キー検証・現在値登録・範囲選択へ使用する。GUIは引き続きキー0個のeffect行を隠す。モデル/accessoryの情報へcameraのeffectを付け足す処理は行わず、既存の対象切替通知で一覧を更新する。
+
+ヘルプ検索はid・title・aliasに全検索語が一致するtopicを本文一致より先に返す。`保存`では`ui-operations`と`files-and-output`が先頭になる。画像ヘルプをpreview JPEG640 / detail既定PNG1280へ揃えた。
+
+撮影拒否は従来の`CAPTURE_UNAVAILABLE`を保ち、`details.reason`で非表示・最小化・破棄済み・無効領域・空画像・viewport未生成・editor処理中を区別する。理由に応じた復旧案内を返し、単発・snapshot・sequenceで既存の権限照合とロック解放を維持する。
+
+常時timer、監視、全モデルの追加走査、追加toolは導入していない。検索時だけ短いcatalogを2群に分け、編集対象には既存のトラック情報を再利用する。
+
+### 自動確認
+
+- unitは260ファイル / 1,797件成功。初回全件実行のうちHTTPの2ファイル21件はsandboxのlocalhost接続拒否`EACCES`で失敗したが、該当2ファイル全25件をローカル権限で再実行して成功。コード変更後のcontext・選択・トラック16件も成功。
+- lintは警告0・エラー0。全体typecheckは既存548件で失敗し、直前ログと診断内容・重複数が一致（行番号を除き追加0 / 消失0）。critical型検査は成功、TS2304 / TS2552は0。
+- WebGPU / Bullet MPR smoke成功。
+- `mcp-effect-instances`のローカルElectron E2E 3ケース成功。初回set/register、最後のキー削除後の再登録、空effectの範囲選択、MCP Undo/Redo、GUI行・スライダー表示、model/accessoryへの対象切替と誤った登録の拒否、個体削除を追加確認。既存の個体操作・保存復元・Classic拒否も成功。
+- 新規E2Eの初回失敗は、テスト側がsummaryにない`models`を参照したため。必要箇所だけfullを取得するよう訂正し、当該ケースを再実行して成功。製品の制限やtimeoutは緩めていない。
+- `mcp-capture-diagnostics`のローカルElectron E2E 1ケースも成功。実ウィンドウの最小化・非表示で理由と案内を確認し、それぞれ表示復帰後のJPEG取得まで成功した。合計2 spec / 4ケース。配布版CDPのBrowser window API未対応とComputer Useランタイムの起動失敗があったため、この状態変更は既存のPlaywright Electron経路で検証した。
+
+### 配布形式・実AIでの再確認
+
+別ディレクトリへpackageを再ビルドし、ASAR内のmain/renderer双方に修正が含まれることを確認した。初回と同じ隔離profile・E2E hookなし・Codex CLIで接続。MCP ONは保持され、編集許可はOFFへ戻り、GUIで再許可した。AIにはテストfixture、操作の目的と保存先を渡し、公開help/schemaから具体的な呼出しを選ばせた。
+
+- `保存`のヘルプ検索で先頭に保存関連topicが出て、AIが`saveProject`へ到達した。
+- Bloomの最初の0frameを`weight=0.1 / threshold=0.9 / kernel=205 / enabled=true`で直接set。GammaもGUIで事前登録せず、最初の現在値キーを登録できた。
+- Bloomの唯一のキーを削除し、その時点のUI値（`weight=0.4`）で再登録。Undoで0個、Redoで1個へ戻ることをAIが検索結果で確認した。削除前のキー値と、削除後に復帰するUI現在値は区別する。
+- preview JPEG640×360とdetail PNG1280×720を取得。AIがカメラを調整し、評価側も画像でモデル全体が収まることを確認した。明るい面の白飛びは残っており、今回のMCP修正を描画品質の改善とは扱わない。
+- project保存・再読込が完了。両個体の0frameキーと値をAIが確認し、評価側も保存JSONを照合した。最終状態は停止・busyなし、WebGPU validation errorとrenderer pageerrorは0。
+
+実AIは48呼出し、開始〜最終応答110.7秒。失敗応答はpreview/detailの同時取得による`CAPTURE_BUSY` 1件で、AIが順次取得へ切り替えて成功した。キー登録拒否は0件。モデルコメントは評価側がGUIで1回確認し、その他の編集を代行していない。時間にはAI生成・確認待ちを含み、性能改善率ではない。
+
+公開toolは54個のまま。配布版HTTP helperで取得した`tools/list`結果JSONの再serializeは124,552 bytes（HTTP envelope等を除く）。開発main bundleは1,639.94→1,642.86 kBで約2.92 kB増。待機時CPU/メモリ・FPSは計測していない。
+
+ローカル証拠は同じsessionディレクトリの`fixed-effects.jsonl`、`fixed-effects-summary.json`、`fixed-effects-evaluator.json`、保存project・画像。新packageはignoredな`.tmp/mcp-usability-fix-2026-11-18/package/`。検証用アプリとAI子プロセスは終了した。初回検証と同じく作業ツリーの別件描画差分を含むWindows packageであり、正式Release・他OS・通知からのAI自動再開までの確認ではない。

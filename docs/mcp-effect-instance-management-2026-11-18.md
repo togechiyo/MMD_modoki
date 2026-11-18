@@ -54,4 +54,4 @@ AIからGUIと同じエフェクト編集を行えるよう、`mmd_edit_effect_i
 - local Electron E2Eは2 spec / 4ケース成功。`mcp-effect-instances`で実HTTP経由の全個体操作、MCPとGUI双方のUndo/Redo、古い編集を巻き戻さないこと、同じoperationIdの再送、dryRun無変更、readonly・再生中・Classic・古いrevisionの拒否、GUI保存/再読込を確認。`effect-instance-ui`で既存GUIの個体操作と固定スライダーのpreview・Undo・backend往復も確認。
 - 既存固定スライダーspecは初回、分離前の`luminous`にRCスライダーを探して失敗した。現UIの`luminousRadiance`とキー値`enabled`へテストを修正し、対象ケースの再実行で成功。製品のスライダー仕様やtimeoutは変更していない。
 
-後続の[配布package・実AIクライアント確認](./mcp-ai-client-practical-test-2026-11-18.md)で、Codex CLIによる個体操作・Undo/Redo・保存復元を確認した。一方、GUIの未登録行を隠す一覧をMCPも参照するため、新規個体の最初の値キーが`TRACK_NOT_UNIQUE`で拒否される不具合が判明した。初回キーのset/register経路を追加修正する必要がある。通知表示・通知からのAI自動再開、別プロセス単発PNG、統合モーションの個別削除/差替えは未検証・未対応の残件として区別する。
+後続の[配布package・実AIクライアント確認](./mcp-ai-client-practical-test-2026-11-18.md)で、Codex CLIによる個体操作・Undo/Redo・保存復元を確認した。一方、GUIの未登録行を隠す一覧をMCPも参照するため、新規個体の最初の値キーが`TRACK_NOT_UNIQUE`で拒否される不具合が判明した。同日、現在scopeの全編集対象とGUI表示用一覧を分離し、初回set/register・最後のキー削除後の再登録・Undo/Redo・対象切替をローカルE2Eで確認。再ビルドした配布版でも実AIが登録から保存/再読込まで成功した。通知表示・通知からのAI自動再開、別プロセス単発PNG、統合モーションの個別削除/差替えは未検証・未対応の残件として区別する。

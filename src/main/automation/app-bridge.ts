@@ -12,7 +12,7 @@ import { serializeVmd } from "../../export/vmd-serializer";
 import { serializeVpd } from "../../export/vpd-serializer";
 import { ViewportSnapshots, snapshotCameraSchema } from "../../automation/viewport-snapshots";
 import { captureViewportSequence } from "../../automation/viewport-sequence";
-import { captureViewportImage, type ViewportRect } from "./viewport-capture";
+import { assertViewportCaptureWindow, captureViewportImage, type ViewportRect } from "./viewport-capture";
 import { waitForAutomationOperation } from "./operation-wait";
 import { AutomationOperationNotifications, operationNoticeSchema, operationResourceScope, parseOperationResource } from "../../automation/operation-notifications";
 import { AutomationEnabledPreference } from "./enabled-preference";
@@ -129,7 +129,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 const input = automationTools.mmd_capture_viewport_sequence.schema.parse(args);
                 const validate = (): void => {
                     if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
-                    if (entry.window.isDestroyed() || entry.window.isMinimized() || !entry.window.isVisible()) throw new AutomationError("CAPTURE_UNAVAILABLE");
+                    assertViewportCaptureWindow(entry.window);
                 };
                 const result = await captureViewportSequence(input, {
                     validate, now: () => performance.now(), wait: ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -152,7 +152,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 });
                 return { ...result, data: { ...result.data, target: input.target, maxEdge: input.maxEdge, jpegQuality: 80 } };
             }
-            if (entry.window.isMinimized() || !entry.window.isVisible()) throw new AutomationError("CAPTURE_UNAVAILABLE");
+            assertViewportCaptureWindow(entry.window);
             const before = await requestEditor(entry, tool, args);
             // Renderer already observed ready engine frames. A second subscription waits for a
             // future compositor change, which need not occur in a static viewport. capturePage
@@ -170,7 +170,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 entry.snapshots.synchronize(`${grant}:${currentTarget.sceneGeneration}`);
                 if (currentTarget.sceneGeneration !== input.target.sceneGeneration) throw new AutomationError("SCENE_CHANGED");
                 if (after.data.editRevision !== input.expectedEditRevision || before.data.frame !== after.data.frame || after.data.playing || after.data.busy) throw new AutomationError("REVISION_CONFLICT");
-                if (entry.window.isMinimized() || !entry.window.isVisible()) throw new AutomationError("CAPTURE_UNAVAILABLE");
+                assertViewportCaptureWindow(entry.window);
                 const image = { data: encoded.toString("base64"), mimeType: "image/png" as const };
                 const stored = entry.snapshots.add({ id: randomUUID(), label: input.label, capturedAt: new Date().toISOString(),
                     frame: Number(after.data.frame), editRevision: Number(after.data.editRevision), ...picture.getSize(),

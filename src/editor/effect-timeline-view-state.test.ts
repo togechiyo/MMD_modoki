@@ -6,6 +6,28 @@ const camera: KeyframeTrack = { category: "camera", name: "Camera", frames: new 
 const effect = (name: string, frames: number[] = []): KeyframeTrack => ({ category: "effect", name, frames: Uint32Array.from(frames) });
 
 describe("effect timeline view state", () => {
+    it("keeps unregistered effects available to editors while hiding their GUI rows", () => {
+        const view = new EffectTimelineViewState(), empty = effect("fx-new");
+        view.setTracks([camera, empty]);
+        expect(view.allTracks()).toEqual([camera, empty]);
+        expect(view.visibleTracks()).toEqual([camera]);
+        view.setTracks([camera, effect(empty.name, [0])]);
+        expect(view.allTracks()).toEqual(view.visibleTracks());
+        view.setTracks([camera, empty]);
+        expect(view.allTracks()).toEqual([camera, empty]);
+        expect(view.visibleTracks()).toEqual([camera]);
+    });
+
+    it("replaces all edit targets on model/accessory scope changes and effect deletion", () => {
+        const view = new EffectTimelineViewState(), empty = effect("fx-new");
+        const model: KeyframeTrack = { category: "bone", name: "Center", frames: new Uint32Array() };
+        const accessory: KeyframeTrack = { category: "accessory", name: "Accessory", frames: new Uint32Array() };
+        for (const tracks of [[camera, empty], [model], [accessory], [camera], []]) {
+            view.setTracks(tracks);
+            expect(view.allTracks()).toEqual(tracks);
+        }
+    });
+
     it("keeps normal tracks and keyed effects, hiding empty and preview-only effects", () => {
         const view = new EffectTimelineViewState(), keyed = effect("fx-keyed", [10]);
         const suspended = { ...effect("fx-suspended", [20]), effectInstance: { type: "gamma" as const, label: "Gamma", suspended: true } };

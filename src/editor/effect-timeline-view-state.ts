@@ -8,6 +8,11 @@ export class EffectTimelineViewState {
         this.tracks = tracks;
     }
 
+    /** Edit targets include effects whose first key has not been registered yet. */
+    allTracks(): readonly KeyframeTrack[] {
+        return this.tracks;
+    }
+
     visibleTracks(): KeyframeTrack[] {
         return this.tracks.filter(track => track.category !== "effect" || track.frames.length > 0);
     }

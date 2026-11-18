@@ -2,8 +2,10 @@ import { z } from "zod";
 import { webmFailureStageSchema } from "../shared/webm-export-failure";
 
 const finite = z.number().finite();
+const captureFailureReasonSchema = z.enum(["window_destroyed", "window_minimized", "window_hidden", "invalid_rect", "empty_image", "viewport_missing", "editor_busy"]);
 export const diagnosticDetailsSchema = z.object({
     stage: webmFailureStageSchema.optional(), secureContext: z.boolean().optional(), videoEncoderAvailable: z.boolean().optional(),
+    reason: captureFailureReasonSchema.optional(),
     operationIndex: z.number().int().nonnegative().optional(),
     frame: finite.optional(),
     field: z.string().max(200).regex(/^[A-Za-z0-9_.]+$/).optional(),
@@ -59,6 +61,15 @@ group(["KEY_KIND_MISMATCH", "IK_TRACKS_MISMATCH", "BONE_CONTROL_LOCKED"], "キ�
 group(["KEY_VALUE_OUT_OF_RANGE", "FRAME_OUT_OF_RANGE", "EDIT_TOO_LARGE"], "値または編集件数が許容範囲を超えています。値を修正するか編集を分けてください。", "correct_input", "none", "timeline-transforms");
 group(["EXTERNAL_PARENT_KEY_UNSUPPORTED", "SETTING_UNAVAILABLE", "UNKNOWN_TOOL"], "この操作は現在の対象またはMCP入口では利用できません。対応表を確認してください。", "unsupported", "none", "ui-coverage");
 group(["CAPTURE_UNAVAILABLE", "CAPTURE_TOO_LARGE"], "現在のviewport画像を取得できません。ウィンドウ表示とstatusを確認してください。", "user_action", "none", "viewport");
+const captureFailureRules: Record<z.infer<typeof captureFailureReasonSchema>, Pick<Rule, "message" | "recovery">> = {
+    window_destroyed: { message: "撮影対象のウィンドウは閉じられています。targetを指定せずmmd_get_contextを呼び、公開中の対象を選び直してください。", recovery: "refresh_context" },
+    window_minimized: { message: "撮影対象のウィンドウが最小化されています。ユーザーがウィンドウを元に戻し、viewportが表示されてから再撮影してください。", recovery: "user_action" },
+    window_hidden: { message: "撮影対象のウィンドウが非表示です。ユーザーがウィンドウを表示し、viewportが見えることを確認してから再撮影してください。", recovery: "user_action" },
+    invalid_rect: { message: "撮影できる大きさのviewport表示領域がありません。ウィンドウのサイズとviewportの表示を確認してから再撮影してください。", recovery: "user_action" },
+    empty_image: { message: "撮影結果が空でした。ウィンドウを表示してviewportの描画を確認し、mmd_wait_for_render後に再撮影してください。", recovery: "user_action" },
+    viewport_missing: { message: "撮影対象のviewportが見つかりません。エディタの初期化や読み込みの完了を確認し、viewportが表示されてから再撮影してください。", recovery: "user_action" },
+    editor_busy: { message: "編集中の操作やダイアログのため撮影できません。mmd_get_diagnosticsでstatusの理由を確認し、処理やユーザー操作の完了後に再撮影してください。", recovery: "wait" },
+};
 
 /** Never forwards exception messages, stacks, arbitrary request values, or GPU shader messages. */
 group(["EXTERNAL_PARENT_CYCLE"], "外部親が自己参照または循環します。frameは循環が生じる最初の切替点です。全モデルの解除キーも含めて確認してください。", "correct_input", "none", "external-parent");
@@ -107,7 +118,9 @@ export function validationDetails(error: z.ZodError, value: unknown): Diagnostic
 }
 
 export function describeAutomationFailure(failure: AutomationFailure) {
-    const rule = rules[failure.code] ?? rules.OPERATION_FAILED;
+    const baseRule = rules[failure.code] ?? rules.OPERATION_FAILED;
+    const captureRule = failure.code === "CAPTURE_UNAVAILABLE" && failure.details.reason ? captureFailureRules[failure.details.reason] : undefined;
+    const rule = captureRule ? { ...baseRule, ...captureRule } : baseRule;
     const nextTool = rule.recovery === "inspect_operation" ? "mmd_get_operation" : rule.recovery === "wait" ? "mmd_get_diagnostics" : rule.recovery === "refresh_context" ? "mmd_get_context" : "mmd_help";
     return {
         ok: false as const,

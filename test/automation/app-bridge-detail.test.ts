@@ -62,6 +62,22 @@ describe("detailed diagnostics main permission boundary", () => {
         mocks.readOperationResource = undefined; mocks.resourceUpdated.mockClear(); mocks.invalidateResourceSubscriptions.mockClear();
     });
 
+    it.each(["mmd_capture_viewport", "mmd_capture_snapshot", "mmd_capture_viewport_sequence"] as const)("reports minimized %s before renderer dispatch and releases the capture lock", async tool => {
+        const app = editor();
+        Object.assign(app.window, { isMinimized: () => true, isVisible: () => true });
+        const state = await app.configure(true, false);
+        expect(state.editable).toBe(false);
+        const dispatch = mocks.dispatch;
+        if (!dispatch) throw new Error("Listener not started");
+        const args = { target: { editorSessionId: state.sessionId, sceneGeneration: 0 }, ...(tool === "mmd_capture_snapshot" ? { expectedEditRevision: 0 } : {}) };
+        for (let attempt = 0; attempt < 2; attempt++) {
+            await expect(dispatch(tool, args)).rejects.toMatchObject({ code: "CAPTURE_UNAVAILABLE", details: { reason: "window_minimized" },
+                diagnostic: { recovery: { strategy: "user_action" }, error: { details: { reason: "window_minimized" } } } });
+        }
+        expect(app.requests).toHaveLength(0);
+        await app.configure(false, false);
+    });
+
     it.each(["completed", "failed", "canceled"])("publishes a grant-checked %s summary even when completion precedes the start reply", async status => {
         const app = editor();
         const state = await app.invoke("configure", true, true, false) as AutomationState;

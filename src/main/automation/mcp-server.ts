@@ -8,8 +8,9 @@ import { automationTools, type AutomationToolName, type AutomationResult, Automa
 import { describeAutomationFailure, toAutomationFailure } from "../../automation/diagnostics";
 import { operationResourceTemplate, type AutomationOperationSummary } from "../../automation/operation-notifications";
 import { compactMcpSchema } from "./compact-schema";
+import { automationToolAnnotations } from "./tool-annotations";
 
-const compactSchemaTools = new Set(["mmd_set_control", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_start_ui_operation"]);
+const compactSchemaTools = new Set(["mmd_set_control", "mmd_edit_keyframes", "mmd_transform_keyframes", "mmd_start_ui_operation", "mmd_edit_effect_instances"]);
 
 export const helpInputSchema = z.object({
     query: z.string().trim().min(1).max(200).optional(),
@@ -33,7 +34,7 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
         title: "MMD_modokiの機能ヘルプ",
         description: "引数なしで開始ガイド、queryで検索、topicIdで本文を取得。plannedは実行不可。Search bundled Japanese/English help.",
         inputSchema: helpInputSchema,
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        annotations: automationToolAnnotations("mmd_help", false),
     }, ({ query, topicId, limit }) => {
         if (query) {
             const topics = searchAutomationHelp(query, limit).map(({ id, title, status, summary }) => ({
@@ -64,7 +65,7 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
     if (dispatch) for (const [name, definition] of Object.entries(automationTools)) {
         server.registerTool(name, {
             description: definition.description, inputSchema: compactSchemaTools.has(name) ? compactMcpSchema(definition.schema) : definition.schema,
-            annotations: { readOnlyHint: !definition.edit, destructiveHint: false, openWorldHint: false },
+            annotations: automationToolAnnotations(name, definition.edit),
         }, async (args, context) => {
             try {
                 const result = await dispatch(name as AutomationToolName, args, context.mcpReq.signal);

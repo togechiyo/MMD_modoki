@@ -537,6 +537,7 @@ import { INSTANCE_LUT_PRESETS } from "./editor/frame-graph-instance-fixed-settin
 import { dofInstanceFocusDistanceMm, resolveDofInstanceFocusTarget } from "./editor/dof-instance-focus";
 import { EffectInstanceRuntimeDuration } from "./editor/effect-instance-runtime-duration";
 import { applyEffectInstanceDiff, type EffectInstanceDiff } from "./actions/effect-instance-command";
+import { inspectAutomationEffectInstance } from "./automation/effect-instances";
 import { isEffectInstancePlaybackValueDiff, isRcPlaybackValuePatch } from "./editor/effect-playback-edit";
 import { isPlaybackValueEditLocked } from "./editor/scene-playback-control-lock";
 import { EffectSceneTrackStore, type SerializedEffectAnimations } from "./editor/effect-scene-track-store";
@@ -6727,6 +6728,21 @@ ${beforeFogAppendBlock}
     public getEffectInstanceState(): SerializedEffectInstances {
         this.effectInstances.syncLegacyOrder(this.getFrameGraphPostEffectStackIds());
         return this.effectInstances.serialize();
+    }
+    /** Page public metadata without serializing animation tracks or cloning embedded LUT text. */
+    public getAutomationEffectInstances(offset: number, limit: number) {
+        this.effectInstances.syncLegacyOrder(this.getFrameGraphPostEffectStackIds());
+        const displayOrder = this.effectInstances.order().reverse();
+        const active = new Set(displayOrder);
+        const ids = [...displayOrder.filter(id => this.effectInstances.has(id)), ...this.effectInstances.ids().filter(id => !active.has(id))];
+        return {
+            items: ids.slice(offset, offset + limit).map((id, index) => ({ index: offset + index,
+                ...inspectAutomationEffectInstance({ ...this.effectInstances.renderState(id, this._currentFrame, !this._isPlaying),
+                    label: this.effectInstances.label(id), suspended: !active.has(id) }),
+            })),
+            displayOrder, totalCount: ids.length, nextOffset: offset + limit < ids.length ? offset + limit : null,
+            backend: this.postEffectBackend, frame: this._currentFrame, playing: this._isPlaying,
+        };
     }
     public setSerializedEffectInstances(state: unknown): void {
         this.effectInstances.restore(state);

@@ -33,6 +33,7 @@
 - [MCPの設定保持・使い勝手の再整理](./mcp-usability-reassessment-2026-11-17.md)（11/18: 有効化保持、summary内部軽量化、JPEGプレビュー、確認待ち通知を実装・検証。最新標準・SDKと後続候補）
 - [MCPのUI対応拡張と残件](./mcp-ui-coverage-expansion-2026-09-10.md)
 - [MCPの動画出力と素材の指定削除](./mcp-video-and-asset-removal-2026-09-11.md)
+- [MCPのエフェクト個体管理](./mcp-effect-instance-management-2026-11-18.md)
 - [MCPからの外部親編集](./mcp-external-parent-2026-09-11.md)
 - [MCPのモデル・アクセサリ編集](./mcp-object-editing-2026-09-11.md)
 - [MCPの一括ポーズpreview](./mcp-pose-editing-2026-09-11.md)

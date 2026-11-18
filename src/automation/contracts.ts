@@ -7,6 +7,7 @@ import { keyframeSearchSchema } from "./keyframe-search";
 import { materialBatchSchema } from "./material-batch";
 import { keySelectionSchema } from "./keyframe-selection";
 import { objectSubjectSchema, objectPatchSchema } from "./object-state";
+import { effectInstanceOperationSchema } from "./effect-instance-schema";
 import { externalParentSubjectSchema, externalParentOperationSchema } from "./external-parent-schema";
 import { automationTrackSchema, keyframeOperationSchema, timelineScopeSchema, timelineTransformSchema } from "./keyframe-schema";
 import { automationSettingSchema } from "./settings";
@@ -65,7 +66,8 @@ export const automationTools = {
     mmd_inspect_detail: { description: "要求された1対象のみのボーン/モーフ/材質/剛体/ジョイント診断情報。詳細診断の明示許可が必要。モデル本体、頂点、ウェイト、モーフ頂点差分、テクスチャ原本は返しません。", edit: false, schema: z.object({ ...query, modelInstanceId: z.string().min(1).max(200), subject: diagnosticSelectorSchema, expectedEditRevision: z.number().int().nonnegative() }).strict() },
     mmd_get_diagnostics: { description: "編集できない理由、実行環境、WebGPU検証エラー件数、直近MCP失敗の原因と復旧案内。状態を変更せず、モデル本体や生ログは返しません。", edit: false, schema: z.object({ ...query, limit: z.number().int().min(1).max(50).default(10), operationId: z.string().uuid().optional() }).strict() },
     mmd_set_setting: { description: "対応済みUI設定1項目を指定値へ変更。UIと同じsetterを使用し結果を再取得。Undo対象外。", edit: true, schema: z.object({ ...edit, setting: automationSettingSchema }).strict() },
-    mmd_inspect: { description: "現在のタイムラインのトラック・キー値と補間、または指定モデルのボーン・モーフ・材質一覧。モデル選択を変えず参照でき、総件数・項目番号・名前を返します。形状データは返しません。", edit: false, schema: z.object({ ...query, ...paging, kind: z.enum(["keyframes", "tracks", "bones", "morphs", "materials"]), modelInstanceId: z.string().max(200).optional(), expectedEditRevision: z.number().int().optional() }).strict() },
+    mmd_inspect: { description: "タイムラインのトラック・キー値、モデルのボーン・モーフ・材質、またはeffectsでエフェクト個体ID・表示順・公開固定値をページ取得。選択は変更せず、形状やLUT本文は返しません。", edit: false, schema: z.object({ ...query, ...paging, kind: z.enum(["keyframes", "tracks", "bones", "morphs", "materials", "effects"]), modelInstanceId: z.string().max(200).optional(), expectedEditRevision: z.number().int().optional() }).strict() },
+    mmd_edit_effect_instances: { description: "停止中のFrameGraph個体を追加・複製・並替え・休止/復帰・削除・改名、公開固定値を変更。dryRun既定true、適用は共有Undo。IDはinspect(effects)、操作例はeffect-instancesヘルプ参照。", edit: true, schema: z.object({ ...edit, operation: effectInstanceOperationSchema, dryRun: z.boolean().default(true) }).strict() },
     mmd_set_material_visibility: { description: "指定モデルの材質の表示/非表示。alpha値と区別。通常/PBR共通、Undo対象外。", edit: true, schema: z.object({ ...edit, modelInstanceId: z.string().min(1).max(200), materialKey: z.string().min(1).max(200), visible: z.boolean() }).strict() },
     mmd_select_timeline: { description: "UIと同じモデル・カメラ・アクセサリの編集対象切替。Undo対象外。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema }).strict() },
     mmd_edit_keyframes: { description: "キー値・補間の設定、削除、コピー、移動を1つのUndo単位で適用。現在選択中のscopeを指定。source形式の値はkeyframesヘルプを参照。", edit: true, schema: z.object({ ...edit, scope: timelineScopeSchema, collision: z.enum(["reject", "replace"]), operations: z.array(keyframeOperationSchema).min(1).max(100) }).strict() },

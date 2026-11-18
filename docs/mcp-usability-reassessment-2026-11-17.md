@@ -207,4 +207,4 @@ Codex等の実利用clientによるAI再開・通知表示、配布パッケー�
 
 既存tracksは個体ID・種類・表示名・休止状態を返し、既存キーAPIも個体に対応済み。`render.stack`の旧setterは既存個体を保持するが、個体の追加・複製・並替え・休止・復帰・削除の指定ができない。GUIには純helperと共有Undo Commandがあるため、結果を返す共通入口へ寄せる小さな追加が次候補となる。
 
-まだ未実装。最初は停止中・FrameGraphで個体管理をまとめた1入口とし、既存のrevision / operationId / dryRun / Undoを再利用する案。表示順はstore順の逆であり、RC singletonを含む順序を保つ。発見には当面既存tracksを使い、全animationや外部LUT本文を含むstateの取得を増やさない。固定値を公開する場合はGUIの`visibleInstanceFixedFields()`を基準にし、内部専用parameterを公開しない。
+後続の[個体管理実装](./mcp-effect-instance-management-2026-11-18.md)で、停止中・FrameGraphの1入口と既存のrevision / operationId / dryRun / Undoを接続。表示順はstore順の逆であり、RC singletonを含む順序を保つ。発見は既存inspectへ`effects`を追加し、全animationや外部LUT本文を含むstateの取得を避ける。固定値はGUIの`visibleInstanceFixedFields()`を基準にし、内部専用parameterを公開しない。検証結果と残る実client確認は実装メモへ記録する。

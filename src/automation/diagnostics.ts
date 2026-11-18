@@ -75,6 +75,7 @@ group(["PNG_EXPORT_FAILED"], "PNG連番出力を完了できませんでした�
 group(["VIDEO_EXPORT_FAILED"], "動画出力を完了できませんでした。進捗とローカルログを確認してください。", "inspect_operation", "unknown", "ui-operations");
 group(["VIDEO_ENCODER_UNAVAILABLE"], "出力ウィンドウでWebCodecs VideoEncoderを利用できません。detailsの実行環境とパッケージ版の設定を確認してください。PNG連番出力は別経路です。", "user_action", "none", "video-and-removal");
 group(["VIDEO_CODEC_UNSUPPORTED"], "指定条件に対応するVP8/VP9エンコーダがありません。出力解像度・codecと実行環境を確認してください。", "correct_input", "none", "video-and-removal");
+group(["EFFECT_BACKEND_REQUIRED"], "エフェクト個体の編集にはFrameGraphが必要です。GUIで描画経路を切り替え、contextと個体一覧を再取得してください。", "user_action", "none", "effect-instances");
 export function toAutomationFailure(error: unknown): AutomationFailure {
     if (error instanceof AutomationError) {
         const code = Object.hasOwn(rules, error.code) ? error.code : "OPERATION_FAILED";

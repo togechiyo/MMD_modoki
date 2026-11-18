@@ -163,7 +163,7 @@ import { editEffectInstances, type EffectInstanceOperation } from "./editor/effe
 import { FrameGraphEffectInstances } from "./editor/frame-graph-effect-instances";
 import { isEffectInstanceType } from "./editor/frame-graph-instance-effects";
 import { normalizeLutFile } from "./lut-file";
-import { buildEffectInstanceDiff } from "./actions/effect-instance-command";
+import { buildEffectInstanceDiff, type EffectInstanceDiff } from "./actions/effect-instance-command";
 import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
 import { EffectKeyframeEditState } from "./editor/effect-keyframe-edit-state";
 import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from "./ui/section-keyframe-button";
@@ -5636,15 +5636,28 @@ export class UIController {
         catch (error) { this.showToast(error instanceof Error ? error.message : "Effect edit failed", "error"); return; }
         const diff = buildEffectInstanceDiff(before, next.serialize());
         if (!diff) return;
+        this.applyEffectInstanceCommand(diff, crypto.randomUUID(), `Effect: ${operation.action}`);
+    }
+
+    private applyEffectInstanceCommand(diff: EffectInstanceDiff, id: string, label: string): boolean {
         const added = diff.changes.find(change => !change.before && change.after)?.instanceId;
-        const command: BuiltCommand = { id: crypto.randomUUID(), label: `Effect: ${operation.action}`, scope: "effect", createdAtMs: Date.now(), diff };
+        const command: BuiltCommand = { id, label, scope: "effect", createdAtMs: Date.now(), diff };
         if (executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) {
             this.commandHistory.push(command);
             if (added) {
                 this.expandedFrameGraphPostEffectId = added;
                 this.refreshFrameGraphPostAddUi();
             }
+            return true;
         }
+        return false;
+    }
+
+    public applyAutomationEffectInstanceEdit(diff: EffectInstanceDiff, editId: string): boolean {
+        if (this.mmdManager.isPlaying) throw new AutomationError("PLAYING");
+        if (this.getConfiguredPostEffectBackend() !== "frameGraph") throw new AutomationError("EFFECT_BACKEND_REQUIRED");
+        if (!this.applyEffectInstanceCommand(diff, editId, "AI: エフェクト個体編集")) throw new AutomationError("OPERATION_FAILED");
+        return true;
     }
 
     private addFrameGraphPostEffect(effectId: FrameGraphPostAddEffectId): void {
@@ -9408,7 +9421,7 @@ export class UIController {
             if (scope?.kind !== "model" || scope.modelInstanceId !== diff.modelInstanceId) return false;
             const current = this.mmdManager.buildClearActiveModelMotionCommand();
             if (direction === "revert" ? current !== null : current?.diff.type !== "edit.modelMotionClear" || !keyframeValuesEqual(current.diff.before, diff.before)) return false;
-        } else if (diff.type !== "keyframe.transaction" && diff.type !== "edit.morphWeight" && diff.type !== "edit.morphWeightBatch" && diff.type !== "edit.objectState" && diff.type !== "edit.bonePoseBatch") return false;
+        } else if (diff.type !== "effect.instances" && diff.type !== "keyframe.transaction" && diff.type !== "edit.morphWeight" && diff.type !== "edit.morphWeightBatch" && diff.type !== "edit.objectState" && diff.type !== "edit.bonePoseBatch") return false;
         if (!executeCommand(command, direction, this.createCommandExecutionContext({ seekToFrame: false }))) return false;
         if (direction === "revert") this.commandHistory.undo(); else this.commandHistory.redo();
         return true;

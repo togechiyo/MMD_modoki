@@ -68,11 +68,26 @@ describe("MCP HTTP foundation", () => {
         const connected = { ...connection, token };
         const list = await rpc(connected, "tools/list");
         expect(list.json.result.tools.map((item: { name: string }) => item.name).sort()).toEqual(["mmd_help", ...Object.keys(automationTools)].sort());
-        expect(Buffer.byteLength(list.raw)).toBeLessThan(121000);
+        // 54 tools including effect instance operations: measured at 124,585 bytes with compact schemas.
+        expect(Buffer.byteLength(list.raw)).toBeLessThan(125500);
         expect(list.json.result).toMatchObject({ ttlMs: 300000, cacheScope: "private" });
         const legacyList = await rpc(connected, "tools/list", {}, false);
         expect(legacyList.json.result.ttlMs).toBeUndefined();
         expect(legacyList.json.result.cacheScope).toBeUndefined();
+        for (const listing of [list, legacyList]) {
+            expect(listing.json.result.tools).toEqual(expect.arrayContaining([
+                expect.objectContaining({ name: "mmd_get_context", annotations: { readOnlyHint: true, openWorldHint: false } }),
+                expect.objectContaining({ name: "mmd_edit_keyframes", annotations: {
+                    readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false,
+                } }),
+                expect.objectContaining({ name: "mmd_edit_effect_instances", annotations: {
+                    readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false,
+                } }),
+                expect.objectContaining({ name: "mmd_capture_snapshot", annotations: {
+                    readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false,
+                } }),
+            ]));
+        }
         for (const listing of [list, legacyList]) for (const tool of listing.json.result.tools) {
             const visit = (value: unknown): void => {
                 if (!value || typeof value !== "object") return;
@@ -133,6 +148,33 @@ describe("MCP HTTP foundation", () => {
             const invalid = await rpc(connected, "tools/call", { name: "mmd_edit_keyframes", arguments: {
                 ...args, operations: [{ ...operation, payload: invalidPayload }],
             } }, modern);
+            expect(invalid.json.error ?? invalid.json.result?.isError).toBeTruthy();
+            expect(dispatch).not.toHaveBeenCalled();
+        }
+    });
+    it.each([true, false])("preserves effect instance defaults and validation through compact HTTP schemas (modern=%s)", async modern => {
+        const token = randomBytes(32).toString("base64url");
+        const dispatch = vi.fn(async () => ({ data: { accepted: true } }));
+        const listener = await startAutomationListener({ port: 0, token, appVersion: "test", onError: () => undefined, dispatch });
+        listeners.push(listener);
+        const connected = { ...listener, token };
+        const args = {
+            target: { editorSessionId: "11111111-1111-4111-8111-111111111111", sceneGeneration: 0 },
+            expectedEditRevision: 0, operationId: "22222222-2222-4222-8222-222222222222",
+            operation: { action: "rename", instanceId: "fx-example", label: "  Example  " },
+        };
+        const result = await rpc(connected, "tools/call", { name: "mmd_edit_effect_instances", arguments: args }, modern);
+        expect(result.json.result.structuredContent).toEqual({ accepted: true });
+        expect(dispatch).toHaveBeenCalledTimes(1);
+        expect(dispatch).toHaveBeenCalledWith("mmd_edit_effect_instances", {
+            ...args, operation: { ...args.operation, label: "Example" }, dryRun: true,
+        }, expect.any(AbortSignal));
+        dispatch.mockClear();
+        for (const operation of [
+            { ...args.operation, label: "Example\ninvalid" },
+            { action: "fixed", instanceId: "fx-example", settings: {} },
+        ]) {
+            const invalid = await rpc(connected, "tools/call", { name: "mmd_edit_effect_instances", arguments: { ...args, operation } }, modern);
             expect(invalid.json.error ?? invalid.json.result?.isError).toBeTruthy();
             expect(dispatch).not.toHaveBeenCalled();
         }

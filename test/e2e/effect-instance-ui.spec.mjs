@@ -101,7 +101,7 @@ test("fixed effect sliders preview continuously, commit one gesture and retain s
       const tab = page.locator('[data-effect-tab="post"]'); if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
     };
     await showPost();
-    for (const type of ["motionBlur", "luminous"]) { await page.locator("#btn-effect-add-post").click(); await page.locator(`[data-effect-add-post="${type}"]`).click(); }
+    for (const type of ["motionBlur", "luminousRadiance"]) { await page.locator("#btn-effect-add-post").click(); await page.locator(`[data-effect-add-post="${type}"]`).click(); }
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     const [motion, luminous] = (await state()).instances.map(item => item.instanceId), row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     const specs = [[motion, "samples", 50], [luminous, "radianceStrength", 6], [luminous, "radianceRange", 75.25]];
@@ -133,7 +133,7 @@ test("fixed effect sliders preview continuously, commit one gesture and retain s
     }
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
     await row(luminous).locator('[data-instance-field="enabled"]').uncheck(); await registerEffectInstance(row(luminous));
-    expect(Object.keys((await state()).instances.find(item => item.instanceId === luminous).animation.tracks[0].keys[0].value).sort()).toEqual(["enabled", "intensity", "radius", "threshold"]);
+    expect(Object.keys((await state()).instances.find(item => item.instanceId === luminous).animation.tracks[0].keys[0].value).sort()).toEqual(["enabled"]);
     await page.locator("#viewport-seek-play-toggle").click();
     for (const [id, field] of specs) { const slider = row(id).locator(`[data-instance-fixed="${field}"]`); await expect(slider).toBeDisabled(); await expect(slider.locator("..").locator(".range-number-input")).toBeDisabled(); }
     await page.locator("#viewport-seek-play-toggle").click();

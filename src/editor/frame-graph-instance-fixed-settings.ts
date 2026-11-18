@@ -2,11 +2,9 @@ import { buildLutAtlasDataFrom3dlText } from "../render/lut-atlas-texture";
 import { instanceColor, type InstanceColor, type EffectInstanceType } from "./frame-graph-instance-effects";
 import { normalizeLuminousRadiance, type LuminousRadianceSettings } from "../render/luminous-radiance-settings";
 import type { SsgiBlendMode } from "../types";
+import { INSTANCE_LUT_PRESETS } from "./frame-graph-instance-lut-presets";
+export { INSTANCE_LUT_PRESETS } from "./frame-graph-instance-lut-presets";
 
-export const INSTANCE_LUT_PRESETS = [
-    { id: "anime-soft", label: "Anime Soft" }, { id: "anime-cool", label: "Anime Cool" }, { id: "anime-dramatic", label: "Anime Dramatic" },
-    { id: "monotone", label: "Monotone" }, { id: "sepia", label: "Sepia" }, { id: "teal-orange", label: "Teal Orange" },
-] as const;
 export type InstanceLutSource = { kind: "builtin"; preset: string } | { kind: "external"; name: string; runtimeText: string };
 export type InstanceFixedSettings = { color?: InstanceColor; shadowColor?: InstanceColor; thickness?: number; softness?: number; lut?: InstanceLutSource; toonInfluence?: number; blendMode?: SsgiBlendMode; samples?: number; radiance?: LuminousRadianceSettings };
 export type InstanceFixedSliderField = "samples" | "radianceStrength" | "radianceRange" | "radianceSoftness";

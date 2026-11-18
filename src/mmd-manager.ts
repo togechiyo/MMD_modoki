@@ -6675,8 +6675,15 @@ ${beforeFogAppendBlock}
     private effectSceneTracksChanged(): void {
         this.evaluateEffectTracks(this._currentFrame);
         refreshTotalFramesFromContentImpl(this);
-        this.effectInstanceRuntimeDuration.setDuration(this.getEffectSceneKeyframeFrames().length > 0 ? this._totalFrames : 0);
+        this.refreshEditorRuntimeDuration();
         emitMergedKeyframeTracksImpl(this);
+    }
+    private refreshEditorRuntimeDuration(): void {
+        // Accessory and scene keys have no model/camera animation to supply a clock.
+        // Effect-only edits must retain their duration even while playback is running.
+        this.effectInstanceRuntimeDuration.setDuration(this.getEffectSceneKeyframeFrames().length > 0
+            ? this._totalFrames
+            : this.getRegisteredKeyframeStats().maxFrame);
     }
     public applyEffectSceneKeyframePayload(id: string, frame: number, payload: EffectKeyframePayload | null): boolean {
         if (this.effectInstances.has(id)) {
@@ -10228,7 +10235,7 @@ ${beforeFogAppendBlock}
     }
 
     play(): void {
-        if (!this.currentModel || this.effectPlaybackPreparation.pending) return;
+        if (this.effectPlaybackPreparation.pending) return;
         if ((this.effectSceneTracks.ids().length || this.effectInstances.ids().length || this.needsRcSkyOcclusionResources() || this.needsRcDiffuseGiResources() || this.needsRcSkyAmbientResources()) && !this.isPostEffectBackendReadyForCapture()) {
             this.effectSceneTracks.clearPreviews();
             this.effectInstances.clearPreviews();
@@ -10246,6 +10253,7 @@ ${beforeFogAppendBlock}
         this._isPlaying = true;
         this.manualPlaybackWithoutAudio = false;
         this.refreshActiveRuntimeAnimationHandles();
+        this.refreshEditorRuntimeDuration();
         this.lastEvaluatedLightSceneFrame = null;
         this.lastEvaluatedShadowSceneFrame = null;
         this.lastEvaluatedGravitySceneFrame = null;

@@ -68,13 +68,20 @@ export async function launchMmdModoki(repoRoot, { effectTimeline = false, radian
 
     // Chromium writes DevToolsActivePort before renderer startup. Recovery tests reconnect after a renderer crash.
     mkdirSync(env.MMD_MODOKI_E2E_USER_DATA_PATH, { recursive: true });
-    const app = await electron.launch({ args: ["."], cwd: repoRoot, env });
+    let app = await electron.launch({ args: ["."], cwd: repoRoot, env });
+    // Restart the process with the same isolated profile and Vite server. Persistence
+    // tests must exercise a real shutdown/startup, not a renderer reload or copied state.
+    const restart = async () => {
+      await app.close();
+      app = await electron.launch({ args: ["."], cwd: repoRoot, env });
+      return app;
+    };
     const close = async () => {
       await app.close().catch(() => undefined);
       await Promise.all(devServers.map((server) => server.close().catch(() => undefined)));
       rmSync(tempDir, { recursive: true, force: true });
     };
-    return { app, close, tempDir };
+    return { get app() { return app; }, close, restart, tempDir };
   } catch (error) {
     await Promise.all(devServers.map((server) => server.close().catch(() => undefined)));
     rmSync(tempDir, { recursive: true, force: true });

@@ -2693,6 +2693,10 @@ ${beforeFogAppendBlock}
     public onGlobalIlluminationStateChanged: ((enabled: boolean) => void) | null = null;
     public onDofFocusTargetChanged: (() => void) | null = null;
 
+    public getLoadedModelCount(): number {
+        return this.sceneModels.length;
+    }
+
     public getLoadedModels(): { index: number; instanceId: string; name: string; path: string; active: boolean; castsShadow: boolean; renderOrder: number }[] {
         return this.sceneModels.map((entry, index) => ({
             index,

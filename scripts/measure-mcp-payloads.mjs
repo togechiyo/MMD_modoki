@@ -8,11 +8,15 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const baselineRef = execFileSync("git", ["rev-parse", "--verify", "--end-of-options", `${process.argv[2] ?? "HEAD"}^{commit}`],
     { cwd: root, encoding: "utf8" }).trim();
-const baseFiles = ["src/automation/keyframe-schema.ts", "src/automation/contracts.ts", "src/main/automation/mcp-server.ts"];
+const baseFiles = ["src/automation/keyframe-schema.ts", "src/automation/contracts.ts", "src/main/automation/mcp-server.ts",
+    "src/automation/editor-bridge.ts", "src/automation/context-summary.ts"];
 async function load(baseline) {
-    const previous = baseline ? new Map(baseFiles.map(file => [resolve(root, file).toLowerCase(),
-        execFileSync("git", ["show", `${baselineRef}:${file}`], { cwd: root, encoding: "utf8" })])) : new Map();
-    const bundled = await build({ stdin: { contents: 'export { startAutomationListener } from "./src/main/automation/mcp-server"; export { summarizeAutomationContext } from "./src/automation/context-summary";',
+    // Older comparison commits can predate context-summary.ts; retain their supported tool modes.
+    const existingFiles = baseline ? execFileSync("git", ["ls-tree", "-r", "--name-only", baselineRef, "--", ...baseFiles],
+        { cwd: root, encoding: "utf8" }).trim().split(/\r?\n/).filter(Boolean) : [];
+    const previous = new Map(existingFiles.map(file => [resolve(root, file).toLowerCase(),
+        execFileSync("git", ["show", `${baselineRef}:${file}`], { cwd: root, encoding: "utf8" })]));
+    const bundled = await build({ stdin: { contents: 'export { startAutomationListener } from "./src/main/automation/mcp-server"; export { summarizeAutomationContext } from "./src/automation/context-summary"; export { connectAutomationEditor } from "./src/automation/editor-bridge"; export { automationTools } from "./src/automation/contracts";',
         resolveDir: root, loader: "ts" }, bundle: true, platform: "node", format: "cjs", write: false, logLevel: "silent",
         plugins: [{ name: "baseline", setup(plugin) { plugin.onLoad({ filter: /\.ts$/ }, args => {
             const contents = previous.get(args.path.toLowerCase());
@@ -35,6 +39,52 @@ function fixture(modelCount) {
             ({ instanceId: `synthetic-${i}`, name: `測定用モデル${i}`, active: i === 0 })),
         timelineTarget: "camera", timelineScope: { kind: "camera" }, undoId: null, redoId: null, assetCount: modelCount,
         helpUri: "mmd://help/getting-started", modelContentShared: false };
+}
+async function measureContextGeneration(api, modelCount, detail, playing) {
+    const sample = fixture(modelCount);
+    const calls = { modelListReads: 0, modelDescriptionRows: 0, modelCountReads: 0, cameraPoseReads: 0, busyReads: 0 };
+    const state = { enabled: true, editable: true, detailedDiagnostics: false, sessionId: sample.target.editorSessionId, grant: 1, endpoint: null };
+    let onRequest;
+    let response;
+    const manager = { currentFrame: sample.frame, isPlaying: playing,
+        getAutomationAssetReferences: () => sample.models.map(model => ({ assetId: model.instanceId, kind: "model", recordedPath: "synthetic.pmx" })),
+        getLoadedModels: () => { calls.modelListReads++; calls.modelDescriptionRows += modelCount; return sample.models.map(model => ({ ...model })); },
+        getLoadedModelCount: () => { calls.modelCountReads++; return modelCount; },
+        getCameraKeyframePose: () => { calls.cameraPoseReads++; return sample.camera; },
+        getMmdMaterialPipelinePreset: () => sample.materialMode, getPostEffectBackend: () => sample.backend,
+        getTimelineTarget: () => sample.timelineTarget, isMaterialModeSwitching: () => false,
+        isGroundVisible: () => true, isSkydomeVisible: () => true, isBackgroundMediaVisible: () => false,
+        getBackgroundImagePath: () => null, getBackgroundVideoPath: () => null, antialiasEnabled: true,
+        getPhysicsEnabled: () => true, isPhysicsAvailable: () => true, getShadowEnabled: () => true,
+        isRigidBodyVisualizerEnabled: () => false, isRigidBodyVisualizerAvailable: () => true,
+        postEffectContrast: 1, postEffectGamma: 1, postEffectExposure: 1, postEffectDitheringIntensity: 0,
+        postEffectVignetteWeight: 0, postEffectGrainIntensity: 0, postEffectSharpenEdge: 0, postEffectColorCurvesSaturation: 0,
+    };
+    const ui = { getAutomationHistoryState: () => ({ generation: 0, revision: 0, undoId: null, redoId: null }),
+        getAutomationTimelineScope: () => sample.timelineScope, getAutomationBusyReasons: () => { calls.busyReads++; return []; },
+        onAutomationUserWaitingChanged: () => () => undefined };
+    const globals = { document: { addEventListener() {}, removeEventListener() {}, querySelectorAll: () => [] },
+        window: { addEventListener() {}, removeEventListener() {}, electronAPI: { logError() {}, automation: {
+            getState: async () => state, onState: () => () => undefined,
+            onRequest: callback => { onRequest = callback; return () => undefined; }, reply: value => { response = value; },
+        } } } };
+    const previousGlobals = Object.fromEntries(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+    try {
+        for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+        api.connectAutomationEditor(manager, ui, {});
+        await Promise.resolve();
+        onRequest({ requestId: "measure", tool: "mmd_get_context", sessionId: state.sessionId, grant: state.grant, args: { detail } });
+        if (!response?.result) throw new Error(`Context generation failed: ${response?.failure?.code ?? "no reply"}`);
+        const data = response.result.data;
+        const observedModelCount = detail === "summary" ? data.modelCount : data.models.length;
+        if (observedModelCount !== modelCount) throw new Error("Context generation lost model count");
+        return { models: modelCount, detail, playing, ...calls };
+    } finally {
+        for (const [key, descriptor] of Object.entries(previousGlobals)) {
+            if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+            else delete globalThis[key];
+        }
+    }
 }
 async function measure(baseline) {
     const api = await load(baseline);
@@ -66,7 +116,13 @@ async function measure(baseline) {
             contexts.push({ models: count, fullBytes: (await rpc("tools/call", { name: "mmd_get_context", arguments: {} })).bytes,
                 summaryBytes: (await rpc("tools/call", { name: "mmd_get_context", arguments: { detail: "summary" } })).bytes });
         }
-        return { toolsListBytes: list.bytes, toolCount: list.result.tools.length, toolSchemas, contexts };
+        const contextGeneration = [];
+        for (const count of [0, 20]) for (const playing of [false, true]) for (const detail of ["full", "summary"]) {
+            if (api.automationTools.mmd_get_context.schema.safeParse({ detail }).success) {
+                contextGeneration.push(await measureContextGeneration(api, count, detail, playing));
+            }
+        }
+        return { toolsListBytes: list.bytes, toolCount: list.result.tools.length, toolSchemas, contexts, contextGeneration };
     } finally { await listener.close(); }
 }
 console.log(JSON.stringify({ baselineRef, baseline: await measure(true), current: await measure(false) }, null, 2));

@@ -1,6 +1,6 @@
 # MCPの設定保持・使い勝手の再整理
 
-確認日: 2026-11-17。所有者がMCP改善の重要度を上げ、既存の軽量化を踏まえて使い勝手と最新標準を再確認するよう依頼した。今回は報告の記帳、ソース照合、公式情報の確認、合成データの通信量計測まで。製品コード・依存関係は変更していない。
+調査日: 2026-11-17、実装追記: 2026-11-18。所有者がMCP改善の重要度を上げ、既存の軽量化を踏まえて使い勝手と最新標準を再確認するよう依頼した。11/17は報告の記帳、ソース照合、公式情報の確認、合成データの通信量計測までで、製品コード・依存関係は変更していない。以下の調査・候補・作業順は11/17時点の記録として残し、11/18の実装範囲と確認結果を末尾に追記する。
 
 ## 今回の重点
 
@@ -10,11 +10,11 @@
 
 ## 再起動で有効化が外れる報告
 
-- 台帳ID: **V022-133 / bug / P2 / fix planned**。[フィードバック台帳](./v0.2-feedback.md)に記録。
+- 台帳ID: **V022-133 / bug / P2 / fix planned（11/17時点）**。[フィードバック台帳](./v0.2-feedback.md)に記録。
 - 証拠: 所有者提供のX会話画像。`@taachi`がv0.2.4 / Windows 11で「MCPサーバーの有効化」が起動のたびに外れ、ほかの設定は保持されると報告。所有者`@togechiyo`が次バージョンでの修正を返答している。
 - 投稿URL・正確な投稿日・CPU/GPU・使用MCP clientは未提示。画像の相対時刻から投稿日は推定しない。画像をリポジトリへ転載せず、今回Xへの返信も行っていない。
 
-現行と`v0.2.4` tagの[app-bridge](../src/main/automation/app-bridge.ts)では、editor登録時に`enabled:false`を設定し、保存する登録情報はportと暗号化tokenだけ。ON/OFFの保存・起動時復元がない。renderer navigationでも`revoke()`でOFFにし、[設定パネル](../src/ui/automation-settings-panel.ts)はこのmain側stateを表示する。報告はこの実装と整合し、チェック表示だけの不具合ではない。
+11/17確認時のmainと`v0.2.4` tagの[app-bridge](../src/main/automation/app-bridge.ts)では、editor登録時に`enabled:false`を設定し、保存する登録情報はportと暗号化tokenだけ。ON/OFFの保存・起動時復元がなかった。renderer navigationでも`revoke()`でOFFにし、[設定パネル](../src/ui/automation-settings-panel.ts)はこのmain側stateを表示する。報告は当時の実装と整合し、チェック表示だけの不具合ではない。
 
 [初版設計](./mcp-editor-integration-design-2026-09-10.md)も「再起動後OFF」「次回起動時にも有効は初版に加えない」としていた。これは現在の利用期待に合わせて見直す対象であり、保存処理が偶然失敗したと断定しない。[方式調査](./mcp-integration-design-investigation-2026-09-10.md)では初期値・永続化・復元は実装提案とされ、所有者の固定方針として扱われていない。
 
@@ -106,3 +106,66 @@ SDKの遅延schema変換は追加機能なしでrequest処理を軽くできる�
 5. **標準拡張の小さな試作**: Skillsの少数workflowやTasks adapterは、利用clientで利点を確認できるものを後続候補にする。MCP Apps・WebMCPへの方式変更を今回の前提にはしない。
 
 UI変更を実装する段階ではlocal Electron E2Eで最終表示を確認する。許可・target/revision・Undo・保存/読込・通常/PBRやClassic/Frame Graphの違いは引き続き既存の共通処理へ寄せる。モデル本体非公開、local接続、offline-firstの既存範囲は維持する。
+
+## 2026-11-18の実装追記
+
+設定保持、summaryの内部生成削減、軽量プレビュー、確認待ち通知を小さな変更として実装した。SDKはserver/nodeとも2.0.0のまま。エフェクト個体管理、Skills / Tasks、常時画像配信、公開toolの再編は今回の対象に含めない。
+
+### 有効化の保存・起動時復元
+
+[enabled-preference](../src/main/automation/enabled-preference.ts)に端末のON/OFF設定を保存し、次回起動の最初のeditorだけへ復元する。新規設定はOFF。編集許可・詳細診断許可は起動ごとにOFFとし、追加window、renderer reload / crash後も自動公開しない。projectファイルへ権限や接続情報は保存しない。
+
+保存する利用意図と実際のlistenerの起動結果を分け、起動・保存に失敗した場合はOFF状態と設定エラーを返す。復元はrenderer側bridgeの準備後の初回state取得時に行い、常駐の再試行timerは増やしていない。既存のport・暗号化tokenとは別に保存し、旧session / grantや画像履歴を復元しない。5言語の設定説明も、この保存範囲と設定・資格情報の保存失敗に合わせて同期した。
+
+### 状態と画像の軽量取得
+
+- `mmd_get_context(detail:summary)`はfullを作ってから捨てず、モデル件数専用getterを使う。モデル名・パスの一覧生成を省き、busy判定の重複も除いた。再生中はrevision対象外のカメラ観測を省く。停止時のカメラ編集検出、asset署名、permission / target / revision / frame / busyの観測は維持する。
+- summaryに`materialMode` / `backend`を追加した。内部の画像取得後・snapshot一覧等の再確認も、カメラ値が必要なsnapshot保存を除いてsummaryを使う。既定full、モデル件数、カメラのfull専用返却は維持する。
+- 単発`mmd_capture_viewport`へ`quality:preview`を追加した。要求時だけ長辺640px以下のJPEG品質80を返し、`detail`（既定）は従来の長辺1280px以下のPNGを保つ。拡大なし、1枚4MiB上限、画像取得後の権限・状態確認も維持する。返答にquality / byteLengthを付け、helpに反復確認と細部確認の使い分けを記載した。
+
+### モデルコメント確認待ちの通知
+
+モデル読込jobでコメント確認に入ると、既存operation resourceへ`status:running, phase:waiting_for_user`を通知する。確認待ちを終えると`phase:working`へ戻し、その後の完了・失敗・取消通知を維持する。同じ状態の反復通知や定期監視は追加しない。旧grantの通知拒否、終端状態の保持、既存の件数上限・失効条件も維持する。
+
+通知本文は小さい状態要約とし、必要な操作は`mmd_get_operation`で取得する。モデルコメント本文や元パスを通知に載せず、確認ボタンは利用者が操作する。すべてのOSダイアログや任意のmodalを通知対象に広げたものではない。利用clientの購読維持や通知によるAI再開は引き続き実接続での確認対象。
+
+### 計測と確認済みの範囲
+
+`node scripts/measure-mcp-payloads.mjs`をHEAD `cad3dcc`とworking treeで比較した。従来のHTTP bytes / tool件数 / schemaサイズに、合成renderer境界でのgetter呼出しとモデル説明の生成件数を追加した。実アプリやユーザーassetは使わず、一時loopbackだけを通常のローカル権限で実行した。旧メモの`a47e0f1`指定でも計測できることを確認した。
+
+| 対象 | 変更前 | 11/18実装後 |
+| --- | ---: | ---: |
+| `tools/list` HTTP JSON / tool数 | 119,638 bytes / 53 | 119,776 bytes / 53 |
+| model 0件のcontext full / summary | 1,782 / 1,380 bytes（11/17計測） | 1,782 / 1,494 bytes |
+| model 20件のcontext full / summary | 4,940 / 1,384 bytes（11/17計測） | 4,940 / 1,498 bytes |
+| summaryのモデル説明生成（20model） | 20件 | 0件 |
+| summaryのモデル一覧getter / 件数getter | 1 / 0回 | 0 / 1回 |
+| contextのbusy取得 | 2回 | 1回 |
+| 再生中summaryのカメラ取得 | 1回 | 0回 |
+| 停止中summaryのカメラ取得 | 1回 | 1回 |
+
+summary応答はmaterialMode / backendを残すため114 bytes増えたが、20model例でfull比約70%減を保つ。今回の主な削減は不要な内部生成であり、asset列挙やrevision署名は残る。全体の処理量を定数時間とする変更ではない。上表の通信量は互換用textとstructuredContentを含み、画像転送量・LLM token数・wall time・待機時CPU / メモリ・FPSの改善を実測した値ではない。
+
+### 統合検証（2026-11-18、Windowsローカル）
+
+- `npm.cmd run test:unit`: 256ファイル / 1,732件成功。localhost HTTP購読を含め通常のローカル権限で実行。contextのfull既定、停止中カメラrevision、再生中frame、session失効、保存失敗、通知の重複・古いgrant・終端後の遅い更新を含む。
+- `npm.cmd run lint`: error / warningなし。
+- `npm.cmd run typecheck:critical`: 成功、TS2304 / TS2552は0件。内部の全体typecheckは548件で失敗するが、今回の差分だけをcompiler host上で戻した仮想baselineと診断内容・重複件数が一致（追加0・消失0、行番号差は除外）。既存の別作業の描画差分は両側に維持した。
+- `npm.cmd run smoke:launch`: WebGPU / Bullet MPRでrenderer初期化と安定待機に成功。
+- local Electron E2E: 6 spec / 9ケース成功。`mcp-context-summary`、`mcp-port-recovery`、`mcp-search-expression-comparison`（通常/PBR）、`mcp-startup-persistence`、`mcp-ui-operations`（Classic/FrameGraph）、`mcp-viewport-sequence`（Classic/FrameGraph、各通常/PBR）を実行。
+- 初回E2Eは8件成功、startupだけ`locator.check()`が設定変更中の一時OFFを即時検査して失敗。製品の状態遷移は変えず、既存specと同じGUI click→完了status待機へ修正し、startupだけ再実行して成功した。固定sleepやtimeout延長は追加していない。
+
+再起動試験は同一の隔離userDataでプロセスを終了・起動し、初回OFF→ON保持→参照接続→旧target拒否→追加window OFF→reload OFF→次回起動ON→明示OFF→次回起動OFFを確認した。編集・詳細診断許可は復元せず、port/tokenの再利用も確認した。モデルコメントはGUIで確認し、購読resourceの待機状態と完了を確認した。既存のPNG比較、連続JPEG、撮影競合と権限解除も成功した。
+
+単発画像は配布可能な`test/fixtures/external-parent/tofu.pmx`で測定した（1280×720 PNG / 640×360 JPEG、base64変換前の画像bytes）。
+
+| 描画経路 | 材質 | detail PNG | preview JPEG | JPEG / PNG |
+| --- | --- | ---: | ---: | ---: |
+| FrameGraph | 通常 | 386,290 | 9,072 | 2.35% |
+| FrameGraph | PBR | 381,217 | 7,143 | 1.87% |
+| Classic | 通常 | 386,290 | 9,072 | 2.35% |
+| Classic | PBR | 381,217 | 7,143 | 1.87% |
+
+画像のdecode・寸法・mime・実byteLengthとframe/revision不変を確認し、preview画像も目視した。この比率は単純なfixtureでの値であり、一般のモデルで同じ削減率やFPS向上を保証しない。生成artifactは`test-results/`、検証ログは`tmp-mcp-*.log`へローカル保存し、Gitには含めない。
+
+Codex等の実利用clientによるAI再開・通知表示、配布パッケージの再起動、macOS/Linuxでの確認は未実施。新規CLI、SDK更新、標準拡張の採用、実clientでの一連の操作計測は後続項目として残す。

@@ -15,8 +15,9 @@ import { captureViewportSequence } from "../../automation/viewport-sequence";
 import { captureViewportImage, type ViewportRect } from "./viewport-capture";
 import { waitForAutomationOperation } from "./operation-wait";
 import { AutomationOperationNotifications, operationNoticeSchema, operationResourceScope, parseOperationResource } from "../../automation/operation-notifications";
+import { AutomationEnabledPreference } from "./enabled-preference";
 
-type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[]; snapshots: ViewportSnapshots; notifications: AutomationOperationNotifications };
+type PublishedWindow = { window: BrowserWindow; state: AutomationState; diagnostics: AutomationDiagnosticHistory; detailAccess: DetailAccessRecord[]; snapshots: ViewportSnapshots; notifications: AutomationOperationNotifications; restoreOnFirstState: boolean; startup?: Promise<AutomationState> };
 export function installAutomationAppBridge(report: (code: string, data?: Record<string, string>) => void): { register(window: BrowserWindow): void; canEdit(owner: number, permission: AutomationPermission): boolean } {
     const windows = new Map<number, PublishedWindow>();
     const pending = new Map<string, { owner: number; resolve: (result: AutomationResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -24,6 +25,8 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
     let registration: { token: string; port: number } | undefined;
     let connectionNotice: AutomationState["connectionNotice"];
     let controlQueue: Promise<unknown> = Promise.resolve();
+    let firstEditorRegistered = false;
+    const preference = new AutomationEnabledPreference(() => path.join(app.getPath("userData"), "mcp-settings.json"));
     const publishState = (entry: PublishedWindow): AutomationState => {
         if (!entry.window.isDestroyed()) entry.window.webContents.send("automation:state", entry.state);
         return { ...entry.state };
@@ -39,6 +42,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
         entry.snapshots.clear();
         entry.diagnostics.clear();
         entry.state.enabled = false;
+        entry.state.editable = false;
         entry.state.detailedDiagnostics = false;
         entry.state.grant++;
         entry.state.endpoint = null;
@@ -107,7 +111,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             }, input.waitMs, signal);
         }
         if (tool === "mmd_list_snapshots" || tool === "mmd_compare_snapshots") {
-            const current = await requestEditor(entry, "mmd_get_context", { target: args.target });
+            const current = await requestEditor(entry, "mmd_get_context", { target: args.target, detail: "summary" });
             if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
             const currentTarget = current.data.target as { sceneGeneration: number };
             entry.snapshots.synchronize(`${grant}:${currentTarget.sceneGeneration}`);
@@ -136,7 +140,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                         const capturedAt = new Date().toISOString();
                         const jpeg = picture.toJPEG(80);
                         if (jpeg.length > 4 * 1024 * 1024) throw new AutomationError("CAPTURE_TOO_LARGE");
-                        const after = await requestEditor(entry, "mmd_get_context", { target: input.target });
+                        const after = await requestEditor(entry, "mmd_get_context", { target: input.target, detail: "summary" });
                         validate();
                         if ((after.data.target as { sceneGeneration: number }).sceneGeneration !== input.target.sceneGeneration) throw new AutomationError("SCENE_CHANGED");
                         return { data: { capturedAt, ...picture.getSize(), frameBefore: before.data.frame, frameAfter: after.data.frame,
@@ -154,10 +158,11 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             // future compositor change, which need not occur in a static viewport. capturePage
             // requests the current surface directly; the state is revalidated below.
             if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
-            const picture = await captureViewportImage(entry.window, before.data.rect as ViewportRect, 1280);
-            const png = picture.toPNG();
-            if (png.length > 4 * 1024 * 1024) throw new AutomationError("CAPTURE_TOO_LARGE");
-            const after = await requestEditor(entry, "mmd_get_context", { target: args.target });
+            const preview = tool === "mmd_capture_viewport" && automationTools.mmd_capture_viewport.schema.parse(args).quality === "preview";
+            const picture = await captureViewportImage(entry.window, before.data.rect as ViewportRect, preview ? 640 : 1280);
+            const encoded = preview ? picture.toJPEG(80) : picture.toPNG();
+            if (encoded.length > 4 * 1024 * 1024) throw new AutomationError("CAPTURE_TOO_LARGE");
+            const after = await requestEditor(entry, "mmd_get_context", { target: args.target, detail: tool === "mmd_capture_snapshot" ? "full" : "summary" });
             if (!entry.state.enabled || entry.state.grant !== grant) throw new AutomationError("ACCESS_REVOKED");
             if (tool === "mmd_capture_snapshot") {
                 const input = automationTools.mmd_capture_snapshot.schema.parse(args);
@@ -166,7 +171,7 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
                 if (currentTarget.sceneGeneration !== input.target.sceneGeneration) throw new AutomationError("SCENE_CHANGED");
                 if (after.data.editRevision !== input.expectedEditRevision || before.data.frame !== after.data.frame || after.data.playing || after.data.busy) throw new AutomationError("REVISION_CONFLICT");
                 if (entry.window.isMinimized() || !entry.window.isVisible()) throw new AutomationError("CAPTURE_UNAVAILABLE");
-                const image = { data: png.toString("base64"), mimeType: "image/png" as const };
+                const image = { data: encoded.toString("base64"), mimeType: "image/png" as const };
                 const stored = entry.snapshots.add({ id: randomUUID(), label: input.label, capturedAt: new Date().toISOString(),
                     frame: Number(after.data.frame), editRevision: Number(after.data.editRevision), ...picture.getSize(),
                     camera: snapshotCameraSchema.parse(after.data.camera), physicsEnabled: Boolean(before.data.physicsEnabled),
@@ -175,7 +180,8 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             }
             return { data: { target: after.data.target, source: "viewport", consistency: "observed", capturedAt: new Date().toISOString(),
                 frameBefore: before.data.frame, frameAfter: after.data.frame, editRevisionBefore: before.data.editRevision, editRevisionAfter: after.data.editRevision,
-                ...picture.getSize(), materialMode: after.data.materialMode, backend: after.data.backend }, image: { data: png.toString("base64"), mimeType: "image/png" } };
+                ...picture.getSize(), quality: preview ? "preview" : "detail", byteLength: encoded.length,
+                materialMode: after.data.materialMode, backend: after.data.backend }, image: { data: encoded.toString("base64"), mimeType: preview ? "image/jpeg" : "image/png" } };
         } finally { capturing.delete(owner); }
     }
     async function dispatch(tool: AutomationToolName, rawArgs: unknown, signal?: AbortSignal): Promise<AutomationResult> {
@@ -223,7 +229,74 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
             throw raised;
         }
     }
-    ipcMain.handle("automation:getState", event => ({ ...requireEditor(event).state }));
+    function configurationFailed(entry: PublishedWindow, error: unknown, stage: string): void {
+        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code ?? error.message : "UNKNOWN";
+        report("MCP_CONFIGURATION_FAILED", { stage, code: /^[A-Z_]+$/.test(code) ? code : "UNEXPECTED_ERROR" });
+        entry.state.error = "MCP_CONFIGURATION_FAILED";
+    }
+    async function configureState(entry: PublishedWindow, enabled: boolean, editable: boolean, detailedDiagnostics: boolean, epoch: number, persist: boolean): Promise<AutomationState> {
+        let stage = "preference-write";
+        try {
+            // Store the user's intent even when the listener cannot start. Revocation and
+            // renderer navigation never write this preference.
+            if (persist) await preference.write(enabled);
+            stage = "listener";
+            await closeIfUnused();
+            if (enabled && epoch === entry.state.grant && !entry.window.isDestroyed()) {
+                const saved = await credentials();
+                if (!listener) {
+                    const started = await startAutomationListener({ port: saved.port, token: saved.token, appVersion: app.getVersion(), onError: report, dispatch, readOperationResource });
+                    const port = Number(new URL(started.endpoint).port);
+                    try {
+                        await mkdir(app.getPath("userData"), { recursive: true });
+                        await writeFile(path.join(app.getPath("userData"), "mcp-registration.json"), JSON.stringify({ port, encryptedToken: safeStorage.encryptString(saved.token).toString("base64") }), { mode: 0o600 });
+                    } catch (error) {
+                        await started.close();
+                        throw error;
+                    }
+                    listener = started;
+                    saved.port = port;
+                    if (started.previousPort !== undefined) connectionNotice = { previousPort: started.previousPort, port };
+                }
+                if (epoch === entry.state.grant && !entry.window.isDestroyed()) {
+                    entry.state.enabled = true;
+                    entry.state.editable = editable;
+                    entry.state.detailedDiagnostics = detailedDiagnostics;
+                    entry.state.endpoint = listener.endpoint;
+                    entry.state.connectionNotice = connectionNotice;
+                }
+            }
+            if (epoch === entry.state.grant) entry.state.error = undefined;
+        } catch (error) {
+            if (epoch === entry.state.grant) configurationFailed(entry, error, stage);
+        }
+        await closeIfUnused();
+        return publishState(entry);
+    }
+    ipcMain.handle("automation:getState", event => {
+        const entry = requireEditor(event);
+        if (entry.restoreOnFirstState) {
+            // The renderer requests state after installing its automation bridge. Restoring
+            // here avoids the initial navigation revoking a prematurely started listener.
+            entry.restoreOnFirstState = false;
+            const epoch = entry.state.grant;
+            const work = async (): Promise<AutomationState> => {
+                try {
+                    const enabled = await preference.read();
+                    if (epoch === entry.state.grant && !entry.window.isDestroyed() && enabled) {
+                        revoke(entry);
+                        return configureState(entry, true, false, false, entry.state.grant, false);
+                    }
+                } catch (error) {
+                    if (epoch === entry.state.grant) configurationFailed(entry, error, "preference-read");
+                }
+                return publishState(entry);
+            };
+            entry.startup = controlQueue.then(work, work);
+            controlQueue = entry.startup;
+        }
+        return entry.startup ? entry.startup.then(() => ({ ...entry.state })) : { ...entry.state };
+    });
     const hasPermission = (entry: PublishedWindow, permission: AutomationPermission): boolean => Boolean(permission && entry.state.enabled && entry.state.editable && entry.state.sessionId === permission.sessionId && entry.state.grant === permission.grant);
     ipcMain.handle("automation:saveMotion", async (event, input: { filePath: string; overwrite: boolean; format: "vmd" | "vpd"; document: unknown }, permission: AutomationPermission) => {
         const entry = requireEditor(event);
@@ -244,46 +317,11 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
     ipcMain.handle("automation:configure", (event, enabled: unknown, editable: unknown, detailedDiagnostics: unknown = false) => {
         const entry = requireEditor(event);
         if (typeof enabled !== "boolean" || typeof editable !== "boolean" || typeof detailedDiagnostics !== "boolean") throw new Error("INVALID_SETTINGS");
+        entry.restoreOnFirstState = false;
         // Revoke immediately, even when listener teardown/startup is still queued.
         revoke(entry);
-        entry.state.editable = editable;
         const epoch = entry.state.grant;
-        const work = async (): Promise<AutomationState> => {
-            try {
-                await closeIfUnused();
-                if (enabled && epoch === entry.state.grant && !entry.window.isDestroyed()) {
-                    const saved = await credentials();
-                    if (!listener) {
-                        const started = await startAutomationListener({ port: saved.port, token: saved.token, appVersion: app.getVersion(), onError: report, dispatch, readOperationResource });
-                        const port = Number(new URL(started.endpoint).port);
-                        try {
-                            await mkdir(app.getPath("userData"), { recursive: true });
-                            await writeFile(path.join(app.getPath("userData"), "mcp-registration.json"), JSON.stringify({ port, encryptedToken: safeStorage.encryptString(saved.token).toString("base64") }), { mode: 0o600 });
-                        } catch (error) {
-                            await started.close();
-                            throw error;
-                        }
-                        listener = started;
-                        saved.port = port;
-                        if (started.previousPort !== undefined) {
-                            connectionNotice = { previousPort: started.previousPort, port };
-                        }
-                    }
-                    if (epoch === entry.state.grant && !entry.window.isDestroyed()) {
-                        entry.state.enabled = true;
-                        entry.state.detailedDiagnostics = detailedDiagnostics;
-                        entry.state.endpoint = listener.endpoint;
-                        entry.state.connectionNotice = connectionNotice;
-                    }
-                }
-                entry.state.error = undefined;
-            } catch {
-                report("MCP_CONFIGURATION_FAILED");
-                entry.state.error = "MCP_CONFIGURATION_FAILED";
-            }
-            await closeIfUnused();
-            return publishState(entry);
-        };
+        const work = () => configureState(entry, enabled, editable, detailedDiagnostics, epoch, true);
         const result = controlQueue.then(work, work);
         controlQueue = result;
         return result;
@@ -315,14 +353,19 @@ export function installAutomationAppBridge(report: (code: string, data?: Record<
     });
     return { canEdit(owner, permission) { const entry = windows.get(owner); return Boolean(entry && hasPermission(entry, permission)); }, register(window) {
         const owner = window.webContents.id;
-        const entry: PublishedWindow = { window, diagnostics: new AutomationDiagnosticHistory(), detailAccess: [], snapshots: new ViewportSnapshots(), notifications: new AutomationOperationNotifications(), state: { enabled: false, editable: false, detailedDiagnostics: false, sessionId: randomUUID(), grant: 0, endpoint: null } };
+        const entry: PublishedWindow = { window, diagnostics: new AutomationDiagnosticHistory(), detailAccess: [], snapshots: new ViewportSnapshots(), notifications: new AutomationOperationNotifications(), restoreOnFirstState: !firstEditorRegistered, state: { enabled: false, editable: false, detailedDiagnostics: false, sessionId: randomUUID(), grant: 0, endpoint: null } };
+        firstEditorRegistered = true;
         windows.set(owner, entry);
+        let navigated = false;
         window.webContents.on("render-process-gone", () => {
+            entry.restoreOnFirstState = false;
             revoke(entry);
             controlQueue = controlQueue.then(closeIfUnused, closeIfUnused).catch(() => report("MCP_CLOSE_FAILED"));
         });
         window.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
             if (!isMainFrame) return;
+            if (navigated) entry.restoreOnFirstState = false;
+            navigated = true;
             revoke(entry);
             entry.state.sessionId = randomUUID();
             entry.detailAccess = [];

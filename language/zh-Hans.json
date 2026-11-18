@@ -1,7 +1,7 @@
 ﻿{
     "experiment.mcp.title": "AI 集成",
     "experiment.mcp.enabled": "启用 MCP",
-    "experiment.mcp.sharingNote": "提供此窗口的图像、源路径、关键帧信息，以及骨骼、变形和材质名称列表。不提供模型文件、网格或原始贴图。启动时关闭。",
+    "experiment.mcp.sharingNote": "提供此窗口的图像、源路径、关键帧信息，以及骨骼、变形和材质名称列表。不提供模型文件、网格或原始贴图。开关设置保存在本机，并在下次启动的第一个编辑窗口中恢复。编辑和详细诊断权限在每次启动时关闭；新增窗口或重新加载后的 MCP 也关闭。",
     "experiment.mcp.detailNote": "允许后，会向 MCP 客户端提供所请求对象的骨骼初始位置、IK、变形属性、材质、刚体和关节设置。取决于客户端，数据可能被发送至云端 AI。每次仅提供一个对象，但重复获取可能累积结构信息。不提供模型文件、网格、顶点权重、变形顶点差分或原始贴图。关闭 MCP 时也会撤销此权限。",
     "experiment.mcp.connection": "显示连接设置",
     "experiment.mcp.connectionLabel": "MCP 连接设置",
@@ -16,7 +16,7 @@
     "experiment.mcp.status.detailsOff": "／详细诊断：关闭",
     "experiment.mcp.stateFailed": "无法获取 MCP 状态。",
     "experiment.mcp.changeFailed": "无法更改 MCP 设置。",
-    "experiment.mcp.configurationFailed": "MCP 设置失败。请检查本地连接是否可用，以及凭据的存储状态。",
+    "experiment.mcp.configurationFailed": "MCP 设置失败。请检查本地连接是否可用，以及设置和凭据的存储状态。",
     "experiment.mcp.historyEmpty": "暂无提供记录。",
     "experiment.mcp.unnamed": "未命名",
     "experiment.mcp.historyFailed": "无法获取提供记录。",

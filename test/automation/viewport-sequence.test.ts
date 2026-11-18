@@ -15,6 +15,15 @@ function clock(captureMs = 25) {
 }
 
 describe("viewport sequence", () => {
+    it("keeps single capture PNG by default and offers an explicit bounded preview", () => {
+        const target = { editorSessionId: "38b81a97-d939-4efa-8a10-aefc4ce5bdba", sceneGeneration: 1 };
+        const schema = automationTools.mmd_capture_viewport.schema;
+        expect(schema.parse({ target }).quality).toBe("detail");
+        expect(schema.parse({ target, quality: "preview" }).quality).toBe("preview");
+        expect(schema.safeParse({ target, quality: "raw" }).success).toBe(false);
+        expect(schema.safeParse({ target, quality: "preview", maxEdge: 10000 }).success).toBe(false);
+        expect(automationTools.mmd_capture_snapshot.schema.safeParse({ target, expectedEditRevision: 1, quality: "preview" }).success).toBe(false);
+    });
     it("samples at the requested interval and maps images to observed metadata", async () => {
         const { host } = clock();
         const result = await captureViewportSequence({ durationSeconds: 3, fps: 2 }, host);

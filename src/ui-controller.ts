@@ -9278,6 +9278,10 @@ export class UIController {
         return this.getAutomationBusyReasons().length > 0;
     }
 
+    public onAutomationUserWaitingChanged(listener: (waiting: boolean) => void): () => void {
+        return this.modelCommentNoticeController.onWaitingChanged(listener);
+    }
+
     public getAutomationBusyReasons(): ("loading" | "exporting" | "model_comment_confirmation")[] {
         const reasons: ("loading" | "exporting" | "model_comment_confirmation")[] = [];
         if (this.modelCommentNoticeController.isAwaitingConfirmation()) reasons.push("model_comment_confirmation");

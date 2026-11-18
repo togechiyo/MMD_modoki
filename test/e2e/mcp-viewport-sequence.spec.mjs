@@ -53,6 +53,7 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP viewport sequence obs
         expect((await context()).editRevision).toBe(before.editRevision);
 
         const reports = [];
+        const captureReports = [];
         for (const pbr of [false, true]) {
             if (pbr) {
                 dialog = await settings(page);
@@ -62,6 +63,39 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP viewport sequence obs
             }
             await page.locator("#current-frame").fill("0");
             await page.locator("#current-frame").press("Enter");
+            const captureBefore = await context();
+            const captured = [];
+            for (const quality of ["detail", "preview"]) {
+                // Omitting quality must preserve the existing PNG/default path.
+                const result = await rpc("mmd_capture_viewport", quality === "preview" ? { target, quality } : { target });
+                expect(result.isError, JSON.stringify(result.structuredContent)).not.toBe(true);
+                const data = result.structuredContent;
+                const images = result.content.filter(item => item.type === "image");
+                expect(images).toHaveLength(1);
+                const image = images[0];
+                const bytes = Buffer.from(image.data, "base64");
+                const mimeType = quality === "preview" ? "image/jpeg" : "image/png";
+                expect(image.mimeType).toBe(mimeType);
+                expect([...bytes.subarray(0, quality === "preview" ? 3 : 8)]).toEqual(quality === "preview" ? [255, 216, 255] : [137, 80, 78, 71, 13, 10, 26, 10]);
+                expect(data).toMatchObject({ quality, byteLength: bytes.length, backend, materialMode: pbr ? "pbr-standard" : "mmd-standard",
+                    frameBefore: captureBefore.frame, frameAfter: captureBefore.frame,
+                    editRevisionBefore: captureBefore.editRevision, editRevisionAfter: captureBefore.editRevision });
+                expect(bytes.length).toBeGreaterThan(0);
+                expect(bytes.length).toBeLessThanOrEqual(4 * 1024 * 1024);
+                const decoded = await launched.app.evaluate(({ nativeImage }, encoded) => {
+                    const picture = nativeImage.createFromBuffer(Buffer.from(encoded, "base64"));
+                    return { empty: picture.isEmpty(), ...picture.getSize() };
+                }, image.data);
+                expect(decoded).toEqual({ empty: false, width: data.width, height: data.height });
+                expect(Math.max(decoded.width, decoded.height)).toBeLessThanOrEqual(quality === "preview" ? 640 : 1280);
+                const imagePath = testInfo.outputPath(`capture-${pbr ? "pbr" : "normal"}-${quality}.${quality === "preview" ? "jpg" : "png"}`);
+                await writeFile(imagePath, bytes);
+                await testInfo.attach(`capture-${pbr ? "pbr" : "normal"}-${quality}`, { path: imagePath, contentType: mimeType });
+                captured.push(data);
+            }
+            expect(Math.max(captured[1].width, captured[1].height)).toBe(Math.min(640, Math.max(captured[0].width, captured[0].height)));
+            expect((await context()).editRevision).toBe(captureBefore.editRevision);
+            captureReports.push({ pbr, captures: captured, previewToDetailByteRatio: captured[1].byteLength / captured[0].byteLength });
             await page.locator("#viewport-seek-play-toggle").click();
             await expect.poll(async () => (await context()).playing).toBe(true);
             const result = await rpc("mmd_capture_viewport_sequence", pbr ? { target, durationSeconds: 3, fps: 4 } : { target });
@@ -92,6 +126,9 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP viewport sequence obs
         const reportPath = testInfo.outputPath("sequence-timing.json");
         await writeFile(reportPath, JSON.stringify(reports, null, 2));
         await testInfo.attach("sequence-timing", { path: reportPath, contentType: "application/json" });
+        const captureReportPath = testInfo.outputPath("viewport-capture.json");
+        await writeFile(captureReportPath, JSON.stringify(captureReports, null, 2));
+        await testInfo.attach("viewport-capture", { path: captureReportPath, contentType: "application/json" });
 
         const initialCount = await count();
         const pending = rpc("mmd_capture_viewport_sequence", { target, durationSeconds: 5, fps: 2 }).catch(() => null);

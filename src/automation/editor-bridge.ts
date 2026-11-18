@@ -43,6 +43,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
     });
     const operations = new Map<string, { input: string; result: Record<string, unknown> }>();
     const disposers: (() => void)[] = [];
+    disposers.push(ui.onAutomationUserWaitingChanged(waiting => uiJobs.setWaitingForUser(waiting)));
     const listen = (name: string, callback: EventListener): void => {
         document.addEventListener(name, callback, true);
         disposers.push(() => document.removeEventListener(name, callback, true));
@@ -74,7 +75,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         ...(Array.from(document.querySelectorAll('[aria-modal="true"]')).some(element => element.getClientRects().length > 0) ? ["modal"] : []),
     ];
     const busy = (): boolean => busyReasons().length > 0;
-    function context() {
+    function context(detail: "summary" | "full" = "full") {
         const assets = manager.getAutomationAssetReferences();
         const assetsSignature = JSON.stringify(assets);
         const history = ui.getAutomationHistoryState();
@@ -85,29 +86,34 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
             assetRevision++;
             operations.clear();
         }
-        const pose = manager.getCameraKeyframePose();
-        const camera = { target: { ...pose.target }, rotation: { ...pose.rotation }, distance: pose.distance, fov: pose.fov };
+        const pose = detail === "full" || !manager.isPlaying ? manager.getCameraKeyframePose() : null;
+        const materialMode = manager.getMmdMaterialPipelinePreset();
+        const timelineScope = ui.getAutomationTimelineScope();
         // Playback evaluation is not a user edit; otherwise even pause would race every rendered frame.
-        const signature = JSON.stringify([manager.isPlaying ? null : cameraRevisionValues(camera), manager.isPlaying ? null : manager.currentFrame, manager.isPlaying, history.revision, inputRevision, sceneGeneration, manager.getMmdMaterialPipelinePreset(), ui.getAutomationTimelineScope(), getAutomationSettings(manager)]);
+        const signature = JSON.stringify([manager.isPlaying || !pose ? null : cameraRevisionValues(pose), manager.isPlaying ? null : manager.currentFrame, manager.isPlaying, history.revision, inputRevision, sceneGeneration, materialMode, timelineScope, getAutomationSettings(manager)]);
         if (signature !== lastSignature) { lastSignature = signature; revision++; }
         const reasons = busyReasons();
-        return { target: { editorSessionId: state?.sessionId, sceneGeneration }, editRevision: revision, assetRevision,
-            frame: manager.currentFrame, playing: manager.isPlaying, camera, busy: busy(),
+        const common = { target: { editorSessionId: state?.sessionId, sceneGeneration }, editRevision: revision, assetRevision,
+            frame: manager.currentFrame, playing: manager.isPlaying, busy: reasons.length > 0,
             status: { busy: reasons.length > 0, busyReasons: reasons, userAction: automationUserAction(reasons), editPermission: Boolean(state?.editable),
                 detailedDiagnostics: Boolean(state?.detailedDiagnostics),
                 editBlockers: [...(!state?.editable ? ["read_only"] : []), ...reasons], playing: manager.isPlaying,
                 playbackPolicyRequired: manager.isPlaying, observedAt: new Date().toISOString(), renderCompletion: "not_observed" },
-            materialMode: manager.getMmdMaterialPipelinePreset(), backend: manager.getPostEffectBackend(),
-            models: manager.getLoadedModels().map(({ instanceId, name, active }) => ({ instanceId, name, active })),
-            timelineTarget: manager.getTimelineTarget(), timelineScope: ui.getAutomationTimelineScope(), undoId: history.undoId, redoId: history.redoId, assetCount: assets.length,
+            materialMode, backend: manager.getPostEffectBackend(),
+            timelineTarget: manager.getTimelineTarget(), timelineScope, undoId: history.undoId, redoId: history.redoId, assetCount: assets.length,
             helpUri: "mmd://help/getting-started", modelContentShared: false };
+        if (detail === "summary") return summarizeAutomationContext({ ...common, modelCount: manager.getLoadedModelCount() });
+        const cameraPose = pose ?? manager.getCameraKeyframePose();
+        return { ...common,
+            camera: { target: { ...cameraPose.target }, rotation: { ...cameraPose.rotation }, distance: cameraPose.distance, fov: cameraPose.fov },
+            models: manager.getLoadedModels().map(({ instanceId, name, active }) => ({ instanceId, name, active })) };
     }
     function execute(request: AutomationRequest): AutomationResult {
         if (!state?.enabled || state.sessionId !== request.sessionId || state.grant !== request.grant) throw new AutomationError("ACCESS_REVOKED");
         const definition = automationTools[request.tool];
         if (!definition) throw new AutomationError("UNKNOWN_TOOL");
         const args = definition.schema.parse(request.args);
-        const before = context();
+        const before = context(request.tool === "mmd_get_context" ? automationTools.mmd_get_context.schema.parse(args).detail : "full");
         if (args.target && args.target.editorSessionId !== state.sessionId) throw new AutomationError("SCENE_CHANGED");
         // File load can replace the scene. Replay/query its grant-local result without requiring the old scene to still exist.
         if (request.tool === "mmd_get_operation") {
@@ -125,8 +131,7 @@ export function connectAutomationEditor(manager: MmdManager, ui: UIController, t
         }
         if (args.target && (args.target.editorSessionId !== state.sessionId || (request.tool !== "mmd_get_context" && args.target.sceneGeneration !== sceneGeneration))) throw new AutomationError("SCENE_CHANGED");
         if (request.tool === "mmd_get_context") {
-            const input = automationTools.mmd_get_context.schema.parse(args);
-            return { data: input.detail === "summary" ? summarizeAutomationContext(before) : before };
+            return { data: before };
         }
         if (!args.target) throw new AutomationError("TARGET_REQUIRED");
         if (request.tool === "mmd_list_menu_items") {

@@ -42,17 +42,40 @@ for (const backend of ["frameGraph", "classic"]) test(`MCP controls and local UI
         const loaded = await start({ kind: "loadAsset", assetKind: "model", filePath: resolve(root, "test/fixtures/external-parent/material-switch.pmx") });
         expect(loaded.data.status).toBe("running");
         await expect(page.locator("#model-comment-notice")).toBeVisible();
-        const busy = await context();
-        expect(busy.status.busyReasons).toContain("ui_operation");
-        expect(busy.status.userAction.kind).toBe("model_comment_confirmation");
-        const waiting = (await rpc("mmd_get_operation", { target: loaded.input.target, operationId: loaded.input.operationId })).structuredContent;
-        expect(waiting).toMatchObject({ status: "running", phase: "waiting_for_user", userAction: { kind: "model_comment_confirmation" } });
-        const blocked = await rpc("mmd_set_control", { target: busy.target, expectedEditRevision: busy.editRevision, operationId: randomUUID(), control: { id: "bloom.weight", value: 0.4 } });
-        expect(blocked.structuredContent.error.code).toBe("EDITOR_BUSY");
-        const replay = await rpc("mmd_start_ui_operation", loaded.input);
-        expect(replay.structuredContent.operationId).toBe(loaded.input.operationId);
-        await page.locator("#model-comment-notice-ok").click();
-        expect((await finish(loaded)).status).toBe("completed");
+        const uri = loaded.data.completionUri;
+        expect(uri).toMatch(/^mmd:\/\/operations\//);
+        const subscription = await rpc.subscribe(uri);
+        try {
+            const summary = async () => {
+                const response = await rpc("", { uri }, "resources/read");
+                expect(response).toMatchObject({ ttlMs: 0, cacheScope: "private" });
+                return JSON.parse(response.contents[0].text);
+            };
+            // The confirmation can open before subscription acknowledgement; the initial read retains it.
+            expect(await summary()).toEqual({ operationId: loaded.input.operationId, status: "running", phase: "waiting_for_user" });
+            const busy = await context();
+            expect(busy.status.busyReasons).toContain("ui_operation");
+            expect(busy.status.userAction.kind).toBe("model_comment_confirmation");
+            const waiting = (await rpc("mmd_get_operation", { target: loaded.input.target, operationId: loaded.input.operationId })).structuredContent;
+            expect(waiting).toMatchObject({ status: "running", phase: "waiting_for_user", userAction: { kind: "model_comment_confirmation" } });
+            const blocked = await rpc("mmd_set_control", { target: busy.target, expectedEditRevision: busy.editRevision, operationId: randomUUID(), control: { id: "bloom.weight", value: 0.4 } });
+            expect(blocked.structuredContent.error.code).toBe("EDITOR_BUSY");
+            const replay = await rpc("mmd_start_ui_operation", loaded.input);
+            expect(replay.structuredContent.operationId).toBe(loaded.input.operationId);
+            expect(replay.structuredContent.completionUri).toBe(uri);
+            await page.locator("#model-comment-notice-ok").click();
+            let state;
+            do {
+                expect(await subscription.next()).toMatchObject({ method: "notifications/resources/updated", params: { uri } });
+                state = await summary();
+                // A short resumed phase may already have completed before resources/read arrives.
+                if (state.status === "running") expect(state).toEqual({ operationId: loaded.input.operationId, status: "running", phase: "working" });
+            } while (state.status === "running");
+            expect(state).toEqual({ operationId: loaded.input.operationId, status: "completed", completedAt: expect.any(String) });
+            const completed = await rpc("mmd_get_operation", { target: loaded.input.target, operationId: loaded.input.operationId });
+            expect(completed.structuredContent.status).toBe("completed");
+            await expect(page.locator("#model-comment-notice")).not.toBeVisible();
+        } finally { subscription.close(); }
         expect((await context()).models).toHaveLength(1);
         await page.locator("#info-model-select").selectOption("0");
         const modelInstanceId = (await context()).models[0].instanceId;

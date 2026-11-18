@@ -8,17 +8,22 @@ const context = () => ({ target: { editorSessionId: "11111111-1111-4111-8111-111
         userAction: { kind: "model_comment_confirmation" }, observedAt: "2026-10-06T01:00:00.000Z" },
     timelineTarget: "model", timelineScope: { kind: "model", modelInstanceId: "one" }, undoId: "undo", redoId: null,
     models: [{ instanceId: "one", name: "PRIVATE_MODEL_NAME", active: true }], assetCount: 1,
-    camera: { distance: 45 }, backend: "frameGraph", futureDetail: "PRIVATE_DETAIL" });
+    camera: { distance: 45 }, materialMode: "mmd-standard", backend: "frameGraph", futureDetail: "PRIVATE_DETAIL" });
 
 describe("compact automation context", () => {
     it("keeps editing guards and user action requirements without model names or camera details", () => {
         const full = context();
         const summary = summarizeAutomationContext(full);
         expect(summary).toMatchObject({ target: full.target, editRevision: 7, assetRevision: 3, modelCount: 1,
-            assetCount: 1, timelineScope: full.timelineScope, status: full.status, undoId: "undo", redoId: null });
+            assetCount: 1, timelineScope: full.timelineScope, status: full.status, undoId: "undo", redoId: null,
+            materialMode: "mmd-standard", backend: "frameGraph" });
         expect(JSON.stringify(summary)).not.toContain("PRIVATE");
         expect(summary).not.toHaveProperty("camera");
         expect(summary).not.toHaveProperty("models");
+    });
+    it("accepts an observed count without requiring model descriptions", () => {
+        const { models, ...common } = context();
+        expect(summarizeAutomationContext({ ...common, modelCount: models.length })).toEqual(summarizeAutomationContext(context()));
     });
     it("observes playback and permission changes even when edit revision is unchanged", () => {
         const full = context();

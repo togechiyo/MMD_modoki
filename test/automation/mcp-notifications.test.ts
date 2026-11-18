@@ -74,6 +74,28 @@ async function listen(connection: Connection, uris: string[]) {
 }
 
 describe("MCP completion subscriptions over HTTP", () => {
+    it("reads an early user wait after acknowledgement and pushes later resume and terminal states", async () => {
+        const connection = await start();
+        connection.store.complete(permission, { operationId: firstId, status: "running", phase: "waiting_for_user" });
+        const stream = await listen(connection, [connection.first]);
+        const earlyRead = await (await send(connection, "resources/read", { uri: connection.first })).json();
+        expect(JSON.parse(earlyRead.result.contents[0].text)).toEqual({ operationId: firstId, status: "running", phase: "waiting_for_user" });
+        for (const update of [
+            { operationId: firstId, status: "running" as const, phase: "working" as const },
+            { operationId: firstId, status: "running" as const, phase: "waiting_for_user" as const },
+            { operationId: firstId, status: "completed" as const, completedAt: "2026-10-05T11:00:00.000Z" },
+        ]) {
+            const uri = connection.store.complete(permission, update);
+            expect(uri).toBe(connection.first);
+            connection.resourceUpdated(uri ?? "");
+            const event = await stream.next();
+            expect(event).toEqual({ jsonrpc: "2.0", method: "notifications/resources/updated", params: { uri: connection.first,
+                _meta: { "io.modelcontextprotocol/subscriptionId": 99 } } });
+            const read = await (await send(connection, "resources/read", { uri: connection.first })).json();
+            expect(read.result).toMatchObject({ ttlMs: 0, cacheScope: "private" });
+            expect(JSON.parse(read.result.contents[0].text)).toEqual(update);
+        }
+    });
     it.each(["completed", "failed", "canceled"])("pushes a %s resource update after the tool exchange ended, scoped to the requested URI", async status => {
         const connection = await start();
         const discovery = await (await send(connection, "server/discover")).json();

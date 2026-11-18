@@ -32,6 +32,7 @@ export class ModelCommentNoticeController {
     private readonly cancelButton: HTMLButtonElement | null;
     private pendingResolve: ((confirmed: boolean) => void) | null = null;
     private currentHeader: MmdModelHeaderPreview | null = null;
+    private readonly waitingListeners = new Set<(waiting: boolean) => void>();
 
     constructor() {
         this.root = document.getElementById("model-comment-notice");
@@ -62,10 +63,16 @@ export class ModelCommentNoticeController {
         this.okButton?.focus();
         return new Promise<boolean>((resolve) => {
             this.pendingResolve = resolve;
+            for (const listener of this.waitingListeners) listener(true);
         });
     }
 
     public isAwaitingConfirmation(): boolean { return this.pendingResolve !== null; }
+
+    public onWaitingChanged(listener: (waiting: boolean) => void): () => void {
+        this.waitingListeners.add(listener);
+        return () => { this.waitingListeners.delete(listener); };
+    }
 
     public refreshLocale(): void {
         if (!this.currentHeader || !this.pendingResolve) return;
@@ -88,6 +95,7 @@ export class ModelCommentNoticeController {
         this.pendingResolve = null;
         this.currentHeader = null;
         if (this.root) this.root.hidden = true;
+        if (resolve) for (const listener of this.waitingListeners) listener(false);
         resolve?.(confirmed);
     }
 }

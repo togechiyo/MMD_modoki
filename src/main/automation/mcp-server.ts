@@ -27,7 +27,7 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
             "resources/list": { ttlMs: 300000, cacheScope: "private" },
             "resources/read": { ttlMs: 300000, cacheScope: "private" },
         },
-        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Use detail:summary for fresh guards/status; full (default) for camera/model names. Query catalogs narrowly; pages default to 20 items, follow nextOffset. UI jobs return completionUri: subscribe, await acknowledgement, then resources/read to avoid missing early completion; read again on resources/updated. Fetch full job result once via mmd_get_operation. Without subscriptions use waitMs:30000, repeat while running. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
+        instructions: dispatch ? "Use mmd_get_context first, then explicit target and revision for editing. Use detail:summary for fresh guards/status; full (default) for camera/model names. Query catalogs narrowly; pages default to 20 items, follow nextOffset. For visual iteration use mmd_capture_viewport quality:preview; detail (default) is larger PNG. UI jobs return completionUri: subscribe, await acknowledgement, then resources/read; read again on resources/updated. On phase:waiting_for_user read mmd_get_operation once and relay userAction to the user. On terminal status fetch the full job result once. Without subscriptions use waitMs:30000, repeat while working; waiting_for_user requires user action. Model files, textures, geometry and arbitrary file reads are NEVER available. Only metadata, keyframe information and viewport screenshots are shared. Preview edits do not register keys. Read mmd_help for limits." : "Only mmd_help is connected. Scene operations are unavailable.",
     });
     server.registerTool("mmd_help", {
         title: "MMD_modokiの機能ヘルプ",
@@ -53,8 +53,8 @@ function createHelpServer(version: string, dispatch?: AutomationListenerOptions[
         }, uri => ({ contents: [{ uri: uri.href, mimeType: "text/plain", text: `[${topic.status}] ${topic.title}\n${topic.body}` }] }));
     }
     if (readOperationResource) server.registerResource("operation-completion", new ResourceTemplate(operationResourceTemplate, { list: undefined }), {
-        title: "MMD出力・操作の完了状態", mimeType: "application/json",
-        description: "開始結果のcompletionUriを購読すると完了・失敗・取消時に更新通知。本文は状態の要約のみ。詳細はmmd_get_operation。",
+        title: "MMD出力・操作の待機と完了状態", mimeType: "application/json",
+        description: "completionUriを購読するとユーザー確認待ち・復帰・完了・失敗・取消時に更新通知。本文は状態の要約のみ。詳細はmmd_get_operation。",
         cacheHint: { ttlMs: 0, cacheScope: "private" },
     }, uri => {
         const summary = readOperationResource(uri.href);

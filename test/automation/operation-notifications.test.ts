@@ -27,6 +27,32 @@ describe("operation notification summaries", () => {
         store.clear();
         expect(store.read(uri ?? "")).toBeUndefined();
     });
+    it("retains early waiting notices and deduplicates state changes without reopening a completed job", () => {
+        const store = new AutomationOperationNotifications();
+        const waiting = { operationId, status: "running" as const, phase: "waiting_for_user" as const };
+        const working = { operationId, status: "running" as const, phase: "working" as const };
+        const uri = store.complete(permission, waiting);
+        expect(store.register(permission, operationId)).toBe(uri);
+        expect(store.read(uri ?? "")).toEqual(waiting);
+        expect(store.complete(permission, waiting)).toBeUndefined();
+        expect(store.complete(permission, working)).toBe(uri);
+        expect(store.read(uri ?? "")).toEqual(working);
+        expect(store.complete(permission, working)).toBeUndefined();
+        expect(store.complete(permission, waiting)).toBe(uri);
+        expect(store.complete(permission, completed)).toBe(uri);
+        expect(store.complete(permission, waiting)).toBeUndefined();
+        expect(store.complete(permission, working)).toBeUndefined();
+        expect(store.read(uri ?? "")).toEqual(completed);
+    });
+    it("accepts only small running-state notices and preserves terminal payload compatibility", () => {
+        const waiting = { ...permission, operationId, status: "running", phase: "waiting_for_user" };
+        expect(operationNoticeSchema.safeParse(waiting).success).toBe(true);
+        expect(operationNoticeSchema.safeParse({ ...permission, ...completed }).success).toBe(true);
+        for (const extra of [{ comment: "PRIVATE" }, { filePath: "PRIVATE" }, { progress: {} }, { userAction: { message: "PRIVATE" } }, { completedAt: completed.completedAt }]) {
+            expect(operationNoticeSchema.safeParse({ ...waiting, ...extra }).success).toBe(false);
+        }
+        expect(operationNoticeSchema.safeParse({ ...waiting, phase: undefined }).success).toBe(false);
+    });
     it("bounds retained summaries and keeps failure/cancellation distinct", () => {
         const store = new AutomationOperationNotifications();
         const first = store.register(permission, operationId);

@@ -22,7 +22,7 @@ vi.mock("electron", () => ({
 }));
 vi.mock("node:fs/promises", () => ({
     readFile: async () => { throw Object.assign(new Error("absent"), { code: "ENOENT" }); },
-    mkdir: async () => undefined, writeFile: async () => undefined,
+    mkdir: async () => undefined, writeFile: async () => undefined, rename: async () => undefined, unlink: async () => undefined,
 }));
 vi.mock("../../src/main/automation/mcp-server", () => ({
     startAutomationListener: async (options: AutomationListenerOptions) => {

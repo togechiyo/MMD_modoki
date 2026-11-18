@@ -6,8 +6,17 @@ export const operationCompletionSchema = z.object({
     completedAt: z.string().datetime(), errorCode: z.string().max(80).regex(/^[A-Z_]+$/).optional(),
 }).strict();
 export type AutomationOperationCompletion = z.infer<typeof operationCompletionSchema>;
-export type AutomationOperationSummary = AutomationOperationCompletion | { operationId: string; status: "running" };
-export const operationNoticeSchema = operationCompletionSchema.extend({ sessionId: z.string().uuid(), grant: z.number().int().nonnegative() }).strict();
+const operationRunningSchema = z.object({
+    operationId: z.string().uuid(), status: z.literal("running"), phase: z.enum(["waiting_for_user", "working"]),
+}).strict();
+const operationUpdateSchema = z.union([operationCompletionSchema, operationRunningSchema]);
+export type AutomationOperationUpdate = z.infer<typeof operationUpdateSchema>;
+export type AutomationOperationSummary = AutomationOperationUpdate | { operationId: string; status: "running" };
+const operationPermissionFields = { sessionId: z.string().uuid(), grant: z.number().int().nonnegative() };
+export const operationNoticeSchema = z.union([
+    operationCompletionSchema.extend(operationPermissionFields).strict(),
+    operationRunningSchema.extend(operationPermissionFields).strict(),
+]);
 export type AutomationOperationNotice = z.infer<typeof operationNoticeSchema>;
 const operationResourceSchema = z.object({ sessionId: z.string().uuid(), grant: z.number().int().nonnegative(), operationId: z.string().uuid() });
 export const operationResourceTemplate = "mmd://operations/{sessionId}/{grant}/{operationId}";
@@ -32,11 +41,13 @@ export class AutomationOperationNotifications {
         if (!this.summaries.has(uri)) this.store(uri, { operationId, status: "running" });
         return uri;
     }
-    complete(permission: AutomationPermission, completion: AutomationOperationCompletion): string | undefined {
-        const summary = operationCompletionSchema.parse(completion);
+    complete(permission: AutomationPermission, update: AutomationOperationUpdate): string | undefined {
+        const summary = operationUpdateSchema.parse(update);
         const uri = operationResourceScope(permission) + summary.operationId;
         if (!parseOperationResource(uri)) throw new Error("INVALID_OPERATION_RESOURCE");
-        if (JSON.stringify(this.summaries.get(uri)) === JSON.stringify(summary)) return undefined;
+        const current = this.summaries.get(uri);
+        if (current && current.status !== "running") return undefined;
+        if (JSON.stringify(current) === JSON.stringify(summary)) return undefined;
         this.store(uri, summary);
         return uri;
     }

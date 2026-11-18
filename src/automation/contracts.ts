@@ -59,7 +59,7 @@ export const automationTools = {
     mmd_set_control: { description: "mmd_list_controlsの設定1項目を変更。UIと共通のsetterを使い適用値を返す。Undo対象外。", edit: true, schema: z.object({ ...edit, control: automationControlSchema }).strict() },
     mmd_get_context: { description: "公開ウィンドウとシーン概要。detail:summaryは編集に必要な状態・許可・件数のみ、full（既定）はモデル名一覧やカメラも取得。モデル本体は返しません。", edit: false, schema: z.object({ target: target.optional(), detail: z.enum(["summary", "full"]).default("full") }).strict() },
     mmd_list_assets: { description: "読込元パスと使用先の一覧。ファイル内容・モデル本体は返しません。", edit: false, schema: z.object({ ...query, ...paging, expectedAssetRevision: z.number().int().optional() }).strict() },
-    mmd_capture_viewport: { description: "現在表示中のビューポートのPNG画像。モデルファイルは返しません。", edit: false, schema: z.object(query).strict() },
+    mmd_capture_viewport: { description: "現在の表示画像。quality:previewは確認用JPEG（長辺640px）、detail（既定）はPNG（1280px）。モデルファイルは返しません。", edit: false, schema: z.object({ ...query, quality: z.enum(["preview", "detail"]).default("detail") }).strict() },
     mmd_get_settings: { description: "対応済みUI設定の値と利用可否。idと値の範囲はmmd_set_settingのschemaを参照。", edit: false, schema: z.object(query).strict() },
     mmd_list_diagnostic_targets: { description: "詳細診断用の対象index/name一覧。kindごとにページ取得。ユーザーの詳細診断許可が必要。indexはこの一覧の値を使ってください。", edit: false, schema: z.object({ ...query, ...paging, modelInstanceId: z.string().min(1).max(200), kind: diagnosticKindSchema, expectedEditRevision: z.number().int().nonnegative().optional() }).strict() },
     mmd_inspect_detail: { description: "要求された1対象のみのボーン/モーフ/材質/剛体/ジョイント診断情報。詳細診断の明示許可が必要。モデル本体、頂点、ウェイト、モーフ頂点差分、テクスチャ原本は返しません。", edit: false, schema: z.object({ ...query, modelInstanceId: z.string().min(1).max(200), subject: diagnosticSelectorSchema, expectedEditRevision: z.number().int().nonnegative() }).strict() },
@@ -82,7 +82,7 @@ export const automationTools = {
 export type AutomationToolName = keyof typeof automationTools;
 export type AutomationTarget = z.infer<typeof target>;
 export type AutomationRequest = { requestId: string; sessionId: string; grant: number; tool: AutomationToolName; args: unknown };
-export type AutomationResult = { data: Record<string, unknown>; image?: { data: string; mimeType: "image/png" }; images?: { data: string; mimeType: "image/png" | "image/jpeg" }[] };
+export type AutomationResult = { data: Record<string, unknown>; image?: { data: string; mimeType: "image/png" | "image/jpeg" }; images?: { data: string; mimeType: "image/png" | "image/jpeg" }[] };
 export type AutomationReply = { requestId: string; result?: AutomationResult; error?: string; failure?: AutomationFailure };
 export type AutomationState = { enabled: boolean; editable: boolean; detailedDiagnostics: boolean; sessionId: string; grant: number; endpoint: string | null; connectionNotice?: { previousPort: number; port: number }; error?: string };
 export type AutomationApi = {

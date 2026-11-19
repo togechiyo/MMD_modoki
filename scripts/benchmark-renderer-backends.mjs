@@ -7,6 +7,7 @@ import { parseArgs } from "node:util";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { PNG } from "playwright-core/lib/utilsBundle";
+import { expect } from "@playwright/test";
 import { launchMmdModoki } from "../test/e2e/electron-app.mjs";
 import { decodeFirstVideoFrame } from "../test/e2e/video-first-frame.mjs";
 import { generateLuminousStage } from "./generate-luminous-stage-fixture.mjs";
@@ -18,25 +19,36 @@ const { values } = parseArgs({ options: {
   run: { type: "string", default: "1" }, output: { type: "string" },
 } });
 assert.ok(["webgl2", "webgpu"].includes(values.backend), "--backend webgl2|webgpu is required");
-assert.ok(["fixture", "heavy"].includes(values.preset), "--preset fixture|heavy");
+assert.ok(["fixture", "heavy", "alicia-physics"].includes(values.preset), "--preset fixture|heavy|alicia-physics");
+const aliciaPhysics = values.preset === "alicia-physics";
+const alicia = resolve(root, "local-references/model/Alicia/MMD/Alicia_solid.pmx");
+const aliciaMotion = resolve(root, "local-references/model/Alicia/MMD Motion/2分ループステップ20.vmd");
+if (aliciaPhysics && (!existsSync(alicia) || !existsSync(aliciaMotion))) {
+  console.log("SKIP: optional Alicia model and bundled motion are not installed");
+  process.exit(0);
+}
 const run = Number(values.run);
 assert.ok(Number.isInteger(run) && run > 0, "--run must be a positive integer");
 const directory = resolve(values.output ?? resolve(root, ".tmp/backend-performance", `${values.preset}-${values.backend}-${run}`));
 assert.ok(!existsSync(resolve(directory, "report.json")), "Refusing to overwrite a completed measurement");
 mkdirSync(directory, { recursive: true });
 const width = 1920, height = 1080, frames = 100, fps = 30;
+const warmFrames = aliciaPhysics ? 600 : 60, measuredFrames = aliciaPhysics ? 600 : 180;
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
 const source = { commit: git("rev-parse", "HEAD").trim(),
   productDiffSha256: createHash("sha256").update(git("diff", "--", "src")).digest("hex"),
   modifiedProductFiles: git("diff", "--name-only", "--", "src").trim().split("\n").filter(Boolean) };
-const stage = values.preset === "fixture"
+const stage = aliciaPhysics ? alicia : values.preset === "fixture"
   ? resolve(root, "test/fixtures/luminous-stage/luminous-stage-fixture.pmx")
   : resolve(root, "local-references/backend-benchmark/heavy/luminous-stage-heavy.pmx");
 if (!existsSync(stage)) {
   assert.equal(values.preset, "heavy");
   await generateLuminousStage({ preset: "heavy", output: stage });
 }
-const manifest = JSON.parse(readFileSync(`${stage}.json`, "utf8"));
+const manifest = aliciaPhysics ? { preset: values.preset,
+  sha256: createHash("sha256").update(readFileSync(alicia)).digest("hex"),
+  motionSha256: createHash("sha256").update(readFileSync(aliciaMotion)).digest("hex"),
+} : JSON.parse(readFileSync(`${stage}.json`, "utf8"));
 assert.equal(createHash("sha256").update(readFileSync(stage)).digest("hex"), manifest.sha256);
 const tofu = resolve(root, "test/fixtures/external-parent/tofu.pmx");
 
@@ -68,19 +80,30 @@ let page;
 try {
   page = await launched.app.firstWindow(); watch(page);
   await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
-  for (const path of [stage, tofu, tofu, tofu, tofu]) {
+  if (aliciaPhysics) await page.evaluate(() => localStorage.setItem("mmd_modoki.debug.performance", "1"));
+  for (const path of aliciaPhysics ? [alicia] : [stage, tofu, tofu, tofu, tofu]) {
     assert.notEqual(await page.evaluate(path => window.mmdModokiE2e.loadModel(path), path), null);
   }
+  if (aliciaPhysics) {
+    await page.locator("#info-model-select").selectOption("0");
+    await launched.app.evaluate(({ dialog }, path) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, aliciaMotion);
+    await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+    await page.locator('[data-menu-command="file.openMotion"]').click();
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.models[0]?.motionImports),
+      { timeout: 45000 }).toContainEqual({ type: "vmd", path: aliciaMotion });
+  }
   const project = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
-  project.viewport.groundVisible = false; project.viewport.skydomeVisible = false;
+  project.viewport.groundVisible = aliciaPhysics; project.viewport.skydomeVisible = false;
   project.viewport.backgroundBlack = true; project.viewport.backgroundDisplayMode = "black";
-  project.physics.enabled = false;
-  project.camera.target = { x: 0, y: 5, z: 0 };
-  project.camera.rotation = { x: -25, y: -35, z: 0 };
-  project.camera.distance = 115; project.camera.fov = 40;
+  project.physics.enabled = aliciaPhysics;
+  project.camera.target = { x: 0, y: aliciaPhysics ? 9 : 5, z: 0 };
+  project.camera.rotation = aliciaPhysics ? { x: -4, y: 10, z: 0 } : { x: -25, y: -35, z: 0 };
+  project.camera.distance = aliciaPhysics ? 44 : 115; project.camera.fov = aliciaPhysics ? 30 : 40;
   project.effects.frameGraphPostStack = [];
   project.effects.frameGraphInstances = { version: 1, instances: [], order: [] };
-  for (let i = 0; i < 4; i++) project.keyframes.modelAnimations[i + 1].animation = motion(i);
+  if (!aliciaPhysics) for (let i = 0; i < 4; i++) project.keyframes.modelAnimations[i + 1].animation = motion(i);
   const imported = await page.evaluate(value => window.mmdModokiE2e.importProjectState(value), project);
   assert.deepEqual(imported.warnings, []);
   await page.evaluate(() => window.mmdModokiE2e.seekTo(0));
@@ -95,16 +118,35 @@ try {
   assert.deepEqual(probe.renderSize, [width, height]);
   assert.deepEqual(probe.sceneColorRenderSize, [width, height]);
   const finalProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+  assert.equal(finalProject.physics.enabled, aliciaPhysics);
+  const physicsRuntime = await page.evaluate(() => window.mmdModokiE2e.getPhysicsRuntimeState());
+  if (aliciaPhysics) assert.match(physicsRuntime.active, /Bullet MPR/, "Measure the normal Bullet MPR runtime");
+  const physicsBodies = aliciaPhysics ? await page.evaluate(() =>
+    window.mmdModokiE2e.getMaterialModeRuntimeState().models.map(({ physics }) => ({
+      count: physics?.rigidBodyStates.length ?? 0,
+      enabled: physics?.rigidBodyStates.filter(Boolean).length ?? 0,
+      available: physics?.rigidBodies.filter(Boolean).length ?? 0,
+    }))) : [];
+  if (aliciaPhysics) assert.ok(physicsBodies[0]?.enabled > 0 && physicsBodies[0]?.available > 0,
+    "Alicia must have enabled runtime rigid bodies");
   writeFileSync(resolve(directory, "project.json"), JSON.stringify(finalProject, null, 2));
   console.log(`BENCHMARK_START ${values.preset} ${values.backend} run ${run}`);
   await page.locator("#viewport-seek-play-toggle").click();
-  const playback = await page.evaluate(async probePath => {
+  const playback = await page.evaluate(async ({ probePath, warmFrames, measuredFrames }) => {
     const { measureBackendPlayback } = await import(probePath);
-    return await measureBackendPlayback({ warmFrames: 60, frames: 180 });
-  }, probePath);
+    return await measureBackendPlayback({ warmFrames, frames: measuredFrames });
+  }, { probePath, warmFrames, measuredFrames });
   await page.locator("#viewport-seek-play-toggle").click();
   assert.ok(playback.timeline.last > playback.timeline.first, "Timeline must advance during playback");
   assert.deepEqual(playback.renderSizeAfter, [width, height]);
+  // Save the ordinary physics samples before exporter logs enter the same file.
+  const playbackLog = await page.evaluate(() => window.electronAPI.getLogFileInfo());
+  const physicsSamples = readFileSync(playbackLog.path, "utf8").split(/(?=^\[\d{4}-\d\d-\d\d )/m)
+    .filter(record => record.includes("physics performance sample {") && /physicsEnabled: true\b/.test(record)
+      && /physicsAvailable: true\b/.test(record) && /simulationActive: true\b/.test(record)
+      && record.includes("evaluationType: 'Buffered'") && /modelCount: 1\b/.test(record)
+      && /physicsStepSamples: [1-9]\d*/.test(record));
+  if (aliciaPhysics) assert.ok(physicsSamples.length > 0, "Physics must actually step during playback");
   await page.evaluate(() => window.mmdModokiE2e.seekTo(0));
   const runtime = await page.evaluate(() => ({
     performance: window.mmdModokiDiagnostics.dumpPerformanceSnapshot(),
@@ -131,9 +173,10 @@ try {
     .map(match => match[1]);
   assert.deepEqual(exporterEngines, [probe.engine, probe.engine], "Both exporters must use the requested backend");
   const report = { measuredAt: new Date().toISOString(), backend: values.backend, preset: values.preset, run,
-    conditions: { width, height, frames, fps, order, physics: false, effects: [], warmFrames: 60, measuredFrames: 180 },
+    conditions: { width, height, frames, fps, order, physics: aliciaPhysics, effects: [], warmFrames, measuredFrames,
+      webmInitialPhysics: "fresh-project-no-viewport-snapshot" },
     fixture: manifest, system: { ...system, os: `${platform()} ${release()}`, cpu: cpus()[0]?.model, logicalCpus: cpus().length },
-    source, exporterEngines, probe, playback, runtime, outputs,
+    source, exporterEngines, probe, playback, runtime, outputs, physicsRuntime, physicsBodies, physicsSamples,
     decodedVideo: { width, height, litPixels: lit, presented: decoded.presented }, messages };
   writeFileSync(resolve(directory, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   console.log(`BENCHMARK_RESULT ${JSON.stringify({ preset: values.preset, backend: values.backend, run, fps: playback.fps,

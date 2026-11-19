@@ -172,6 +172,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 単発 PNG を共通 RGBA Surface へ移行し、legacy screenshot / compositor snapshot 経路を整理
 - [x] 共通 RGBA Surface の空シーン・1080p・100フレーム性能を測定（[性能評価](./export-rgba-performance-evaluation-2026-08-09.md)）
 - [ ] WebGPU WebMのRGBA画像取得待ちの変動を調査する。11/19の同一project反復でreadback平均36.6→271.6 ms/frame、出力内容は一致。既知のswapchain警告との因果関係は未確定（[12回のbackend性能比較](./webgl-backend-performance-2026-11-19.md)）。
+- [ ] WebGL2のAlicia性能計測でeditor側に発生した `glGetProgramiv: Program object expected` 警告を切り分ける。3回中1回で96件、残り2回とexporterでは0件。出力は成功しており、発生phase・原因は未特定（[物理ON追試](./alicia-backend-performance-2026-11-19.md)）。
 - [x] 豆腐＋皿＋SSGI＋DoFの代表シーンで1080p・100フレーム性能と反復時readback安定性を測定（[代表シーン性能評価](./export-rgba-representative-scene-evaluation-2026-08-09.md)）
 - [x] 連番PNGをrenderer Web Worker＋`CompressionStream("deflate")`へ移し、filter None固定の直接RGBA encoderへ統合（[実装・性能評価](./png-sequence-web-worker-implementation-evaluation-2026-08-09.md)）
 - [ ] 連番PNG Web Workerを500〜1000frame・4K / 8K・slow diskでhardeningし、旧main-thread fallbackを削除
@@ -404,6 +405,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [ ] 主要エフェクトの WGSL 化
 - [x] 2026-09-17: パラフレアの光側が方向光と左右逆になる符号を修正。左右・上下・背面cameraでviewport / PNGを確認（[記録](./framegraph-directional-light-shafts-implementation-2026-08-12.md#2026-09-17-左右反転の修正)）
 - [x] WebGL2 vs WebGPU 性能比較: 2026-11-19、RTX 3070・自作通常／高密度stage・1080pで各3回。再生は両方約60 FPS、PNGは同程度〜WebGPU優位、WebMはWebGL2が速い。物理OFF・効果なしでの測定に限定し、WebGPU画像取得待ちの変動を別項目で継続調査（[条件・結果・再現手順](./webgl-backend-performance-2026-11-19.md)）。
+- [x] Alicia＋付属モーション・物理ONで同比較を追試。各3回で79剛体とMPR Buffered実行を確認、再生は両方約60 FPS。1080p・100frame中央値はPNG GL 18.38 / GPU 15.37秒、WebM GL 18.67 / GPU 29.33秒。GPU WebMは11.65〜32.44秒と変動し、継続調査対象（[物理ON結果](./alicia-backend-performance-2026-11-19.md)）。
 - [x] WebGPU 関連の既知落ちケースに対する設計整理
 
 ## 7. ビルド・配布

@@ -10,7 +10,7 @@
 | --- | --- |
 | 検証した管理型 Linux クラウドの Chrome 156 | WebGL 1 / WebGL 2 のコンテキストを作成できず、WebGPU のアダプターも取得できなかった。ブラウザーでの観測であり、Electron の起動結果ではない。 |
 | 同調査のコマンド実行環境 | 利用可能なディスプレイや GPU を確認できなかった。別の読み取り専用シェルでの通常のサンドボックス付き Chromium ヘッドレス起動は、プロファイル初期化で停止した。これは描画 API の検証まで到達した結果ではない。 |
-| [公式 v0.2.4 Linux ZIP](https://github.com/togechiyo/MMD_modoki/releases/tag/v0.2.4) | 起動していない。現行ソースの非開発 Linux 起動経路には Chromium のサンドボックスを無効化する設定がある（[main.ts](../src/main.ts)）。既存の配布経路をサンドボックス必須の環境へ持ち込む前に、要件を満たすビルド・配布経路を確認する。保護を緩めて動かすことは本案に含めない。 |
+| [公式 v0.2.4 Linux ZIP](https://github.com/togechiyo/MMD_modoki/releases/tag/v0.2.4) | 起動していない。現行ソースの非開発 Linux 起動経路には Chromium のサンドボックスを無効化する設定がある（[main.ts](../src/main.ts)）。既存の配布経路をサンドボックス必須の環境へ持ち込む前に、要件を満たすビルド・配布経路を確認する。ホスト全体の制限解除や保護なしの自動起動は本案に含めない。アプリ限定の OS ポリシー例外が必要になる可能性は、11/19 の再検討で明記した。 |
 
 この結果は検証したクラウド環境に限る。利用者の PC や別のクラウドでの動作可否、Electron での PMX/VMD の読み込み・再生、ソフトウェア描画の可否はいずれも未確認。
 
@@ -36,7 +36,9 @@
 
 ## Linux 配布版のサンドボックスを戻す案
 
-**第一候補は、対応先を明示した上で、一般ユーザー権限のまま Chromium の user namespace サンドボックスを使う配布経路。** 現行の [package.json](../package.json) は Electron 45.3.1 を固定している。[Forge 設定](../forge.config.ts) には ZIP・Deb・RPM maker があるが、[配布ワークフロー](../.github/workflows/build-zips.yml) の Linux x64 成果物は `ubuntu-latest` で組み立てる ZIP。生成できたことや、開発経路の `smoke:launch` が通ったことだけでは、配布先でのサンドボックス付き起動は確認できない。
+**11/19 再検討: 対象 OS と配布方式を絞れば実現する見込みはあるが、任意の ZIP 展開先・全 Linux への自動対応は保証できない。** 最初は Ubuntu 24.04 向け Deb で、既存 maker の SUID helper 設定が成立するかを確認し、アプリ専用 AppArmor profile による user namespace 許可を別経路として比較する。実証手順・制約・公式実装の根拠は [実現性再検討](./linux-sandbox-restoration-feasibility-2026-11-19.md) を参照。以下の方式比較は設計候補であり、採用や動作保証ではない。
+
+現行の [package.json](../package.json) は Electron 45.3.1 を固定している。[Forge 設定](../forge.config.ts) には ZIP・Deb・RPM maker があるが、[配布ワークフロー](../.github/workflows/build-zips.yml) の Linux x64 成果物は `ubuntu-latest` で組み立てる ZIP。生成できたことや、開発経路の `smoke:launch` が通ったことだけでは、配布先でのサンドボックス付き起動は確認できない。
 
 ### 二つの境界を確認する
 

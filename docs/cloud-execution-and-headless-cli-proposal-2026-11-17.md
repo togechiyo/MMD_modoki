@@ -36,6 +36,8 @@
 
 ## Linux 配布版のサンドボックスを戻す案
 
+**11/19 所有者判断: 今回は見送り。** 下記の再検討結果を説明した後、試作・配布変更への着手を見送ることになった。案は記録として残す。独立した CLI 案の採否はこの判断に含めない（[判断記録](../insights/decisions/defer-linux-sandbox-restoration.md)）。
+
 **11/19 再検討: 対象 OS と配布方式を絞れば実現する見込みはあるが、任意の ZIP 展開先・全 Linux への自動対応は保証できない。** 最初は Ubuntu 24.04 向け Deb で、既存 maker の SUID helper 設定が成立するかを確認し、アプリ専用 AppArmor profile による user namespace 許可を別経路として比較する。実証手順・制約・公式実装の根拠は [実現性再検討](./linux-sandbox-restoration-feasibility-2026-11-19.md) を参照。以下の方式比較は設計候補であり、採用や動作保証ではない。
 
 現行の [package.json](../package.json) は Electron 45.3.1 を固定している。[Forge 設定](../forge.config.ts) には ZIP・Deb・RPM maker があるが、[配布ワークフロー](../.github/workflows/build-zips.yml) の Linux x64 成果物は `ubuntu-latest` で組み立てる ZIP。生成できたことや、開発経路の `smoke:launch` が通ったことだけでは、配布先でのサンドボックス付き起動は確認できない。

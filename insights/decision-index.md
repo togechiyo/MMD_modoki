@@ -85,6 +85,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
+| deferred | [Linux サンドボックス復旧は今回は見送る](./decisions/defer-linux-sandbox-restoration.md) | 11/19の再検討後、試作・配布変更への着手を見送り。調査記録は残す。Linux対応全体の中止や現行方式の安全性確認へ広げない |
 | deferred | [汎用オブジェクト形式の拡張は v0.2.3 より後へ送る](./decisions/defer-generic-object-format-expansion-beyond-v023.md) | v0.2.3の旧保留。2026-10-09に所有者がPLY・STLの静的アクセサリ対応を選び再開。他形式の全面採用へ広げない |
 | deferred | [IBL Shadows は保留する](./decisions/defer-ibl-shadows.md) | IBL Shadows の調査・再実装を検討する |
 | deferred | [Luminous RCの距離連動をOFF固定でUIから外す](./decisions/shelve-luminous-rc-distance-softness.md) | 距離連動の再公開や旧true保存値の復元を扱う。固定ぼかしとHermiteの撤去へ広げない |

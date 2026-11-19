@@ -171,6 +171,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 連番 PNG / WebM の出力レンダリング経路を共通 RGBA Surface へ統合（[計画と進捗](./export-render-surface-unification-plan-2026-08-09.md)）
 - [x] 単発 PNG を共通 RGBA Surface へ移行し、legacy screenshot / compositor snapshot 経路を整理
 - [x] 共通 RGBA Surface の空シーン・1080p・100フレーム性能を測定（[性能評価](./export-rgba-performance-evaluation-2026-08-09.md)）
+- [ ] WebGPU WebMのRGBA画像取得待ちの変動を調査する。11/19の同一project反復でreadback平均36.6→271.6 ms/frame、出力内容は一致。既知のswapchain警告との因果関係は未確定（[12回のbackend性能比較](./webgl-backend-performance-2026-11-19.md)）。
 - [x] 豆腐＋皿＋SSGI＋DoFの代表シーンで1080p・100フレーム性能と反復時readback安定性を測定（[代表シーン性能評価](./export-rgba-representative-scene-evaluation-2026-08-09.md)）
 - [x] 連番PNGをrenderer Web Worker＋`CompressionStream("deflate")`へ移し、filter None固定の直接RGBA encoderへ統合（[実装・性能評価](./png-sequence-web-worker-implementation-evaluation-2026-08-09.md)）
 - [ ] 連番PNG Web Workerを500〜1000frame・4K / 8K・slow diskでhardeningし、旧main-thread fallbackを削除
@@ -402,7 +403,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [ ] 外部WGSL PostFXをLUTに近いファイル読込操作で追加する候補を検討する。まずFrame Graphの1段の画面効果、識別・入力、stackのON / OFF・順序・削除、内容snapshotと割当の保存復元、失敗復帰・出力を整理する（2026-10-08所有者提案。[導線・確認範囲の案](./wgsl-shader-capabilities.md#82-lutに近い外部ファイル読込の導線案)。同日の所有者指定で着手保留、[台帳メモ](./v0.2.4-post-release-ledger.md)参照。再開時期・次版収録は未定）
 - [ ] 主要エフェクトの WGSL 化
 - [x] 2026-09-17: パラフレアの光側が方向光と左右逆になる符号を修正。左右・上下・背面cameraでviewport / PNGを確認（[記録](./framegraph-directional-light-shafts-implementation-2026-08-12.md#2026-09-17-左右反転の修正)）
-- [ ] WebGL2 vs WebGPU 性能比較
+- [x] WebGL2 vs WebGPU 性能比較: 2026-11-19、RTX 3070・自作通常／高密度stage・1080pで各3回。再生は両方約60 FPS、PNGは同程度〜WebGPU優位、WebMはWebGL2が速い。物理OFF・効果なしでの測定に限定し、WebGPU画像取得待ちの変動を別項目で継続調査（[条件・結果・再現手順](./webgl-backend-performance-2026-11-19.md)）。
 - [x] WebGPU 関連の既知落ちケースに対する設計整理
 
 ## 7. ビルド・配布

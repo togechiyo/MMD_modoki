@@ -197,6 +197,7 @@ function createHost() {
         setPlaybackSpeed: vi.fn(),
         setTimelineTarget: vi.fn(),
         engine: {
+            isWebGPU: true,
             releaseEffects: vi.fn(),
         },
         sceneModels: [],
@@ -1355,8 +1356,9 @@ describe("importProjectState", () => {
         expect(host.setCameraExternalParent).not.toHaveBeenCalled();
     });
 
-    it("reapplies render state after seek for dof, light, and model shaders", async () => {
+    it.each([false, true])("reapplies render state after seek for dof, light, and model shaders (WebGPU=%s)", async isWebGPU => {
         const host = createHost();
+        host.engine.isWebGPU = isWebGPU;
         host.loadPMX.mockImplementation(async (path: string, _pipeline, _renderOrder, requestedInstanceId) => {
             const instanceId = requestedInstanceId ?? `model-${host.sceneModels.length + 1}`;
             host.sceneModels.push({
@@ -1405,7 +1407,7 @@ describe("importProjectState", () => {
         expect(host.applyEditorDofSettings).toHaveBeenCalledTimes(1);
         expect(host.applyDofLensBlurSettings).toHaveBeenCalledTimes(1);
         expect(host.setLightDirection).toHaveBeenLastCalledWith(-0.5, -1, 0.5);
-        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(1);
+        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(isWebGPU ? 1 : 0);
     });
 
     it("restores the person-priority DoF autofocus mode", async () => {

@@ -1,4 +1,5 @@
 import { normalizeEnvironmentLightingRotation } from "../shared/environment-lighting-rotation";
+import { releaseWebGpuEffects } from "../render/material-effect-invalidation";
 import { normalizeRcSkyOcclusionSettings, type RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
 import { normalizeRcSkyAmbientSettings, type RcSkyAmbientSettings } from "../render/rc-sky-ambient-settings";
 import { normalizeRcDiffuseGiSettings, type RcDiffuseGiSettings } from "../render/rc-diffuse-gi-settings";
@@ -105,7 +106,7 @@ type ProjectImportHost = {
     applyLightColorTemperature?: () => void;
     applyToonShadowInfluenceToAllModels?: () => void;
     syncLuminousGlowLayer?: () => void;
-    engine?: { releaseEffects?: () => void };
+    engine?: { isWebGPU?: boolean; releaseEffects?: () => void };
     setActiveModelByIndex(index: number): void;
     setModelExternalParent?: (
         childModelIndex: number,
@@ -423,7 +424,7 @@ function finalizeImportedRenderState(
     host.applyLightColorTemperature?.();
     host.applyToonShadowInfluenceToAllModels?.();
     host.syncLuminousGlowLayer?.();
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function restoreProjectRcSkyOcclusionSettings(

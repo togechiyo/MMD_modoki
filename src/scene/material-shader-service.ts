@@ -34,6 +34,7 @@ import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { Material } from "@babylonjs/core/Materials/material";
+import { releaseWebGpuEffects } from "../render/material-effect-invalidation";
 import { RenderTargetTexture } from "@babylonjs/core/Materials/Textures/renderTargetTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { getEffectAssignment, setEffectAssignment } from "../external-wgsl/contract";
@@ -168,7 +169,7 @@ type MaterialShaderHost = Record<string, unknown> & {
         subSurfaceConfiguration?: SkinSssConfiguration | null;
         enableSubSurfaceForPrePass?: () => SkinSssConfiguration | null;
     };
-    engine: { releaseEffects?: () => void };
+    engine: { isWebGPU?: boolean; releaseEffects?: () => void };
     isWebGpuEngine?: () => boolean;
     isMaterialVisible?: (material: MaterialShaderMaterial) => boolean;
     setModelMaterialVisibility?: (modelIndex: number, materialKey: string | null, visible: boolean) => boolean;
@@ -2192,7 +2193,7 @@ export function setExternalWgslToonShader(host: MaterialShaderHost, path: string
         }
     }
 
-    host.engine.releaseEffects();
+    releaseWebGpuEffects(host.engine);
     host.onMaterialShaderStateChanged?.();
 }
 
@@ -2222,7 +2223,7 @@ export function setExternalWgslToonShaderForModel(
     }
     host.externalWgslToonShaderPathValue = normalizedPath;
 
-    host.engine.releaseEffects();
+    releaseWebGpuEffects(host.engine);
     host.onMaterialShaderStateChanged?.();
     return true;
 }
@@ -2260,7 +2261,7 @@ export function setWgslMaterialShaderPreset(
 
     syncLuminousGlowLayer(host);
     syncSkinSssPrePass(host);
-    host.engine.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
     host.onMaterialShaderStateChanged?.();
     return true;
 }
@@ -2289,7 +2290,7 @@ export function applyWgslShaderPresetToMaterials(
 
     syncLuminousGlowLayer(host);
     syncSkinSssPrePass(host);
-    host.engine.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
     host.onMaterialShaderStateChanged?.();
     return true;
 }
@@ -2324,7 +2325,7 @@ export function applyWgslAlphaTextureDebugToMaterials(
 
     if (!applied) return false;
 
-    host.engine.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
     host.onMaterialShaderStateChanged?.();
     return true;
 }

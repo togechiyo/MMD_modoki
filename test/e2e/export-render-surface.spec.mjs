@@ -63,7 +63,9 @@ test("FrameGraphの最終出力を共通RGBA surfaceから取得できる", asyn
   }
 });
 
-test("PNG連番とWebMが共通RGBA surfaceから書き出せる", async () => {
+// Playwright requires a destructured fixtures argument when using testInfo.
+// eslint-disable-next-line no-empty-pattern
+test("PNG連番とWebMが共通RGBA surfaceから書き出せる", async ({}, testInfo) => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -124,7 +126,11 @@ test("PNG連番とWebMが共通RGBA surfaceから書き出せる", async () => {
     await expect.poll(() => existsSync(webmPath) && statSync(webmPath).size > 1_000, { timeout: 30_000 }).toBe(true);
     expect(statSync(webmPath).size).toBeGreaterThan(0);
   } finally {
-    await launched.close();
+    try {
+      const page = await launched.app.firstWindow();
+      const log = await page.evaluate(() => window.electronAPI.getLogFileInfo());
+      await testInfo.attach("export-log", { body: readFileSync(log.path), contentType: "text/plain" });
+    } finally { await launched.close(); }
   }
 });
 

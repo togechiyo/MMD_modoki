@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -7,7 +7,9 @@ import { launchMmdModoki } from "./electron-app.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const modelPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
 
-test("V022-051: WebM progress shows rate and ETA, cancels safely, and permits retry", async () => {
+// Playwright requires a destructured fixtures argument when using testInfo.
+// eslint-disable-next-line no-empty-pattern
+test("V022-051: WebM progress shows rate and ETA, cancels safely, and permits retry", async ({}, testInfo) => {
   test.setTimeout(120_000);
   const launched = await launchMmdModoki(repoRoot);
   try {
@@ -78,6 +80,10 @@ test("V022-051: WebM progress shows rate and ETA, cancels safely, and permits re
     ).toBe(true);
     await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 30_000 });
   } finally {
-    await launched.close();
+    try {
+      const page = await launched.app.firstWindow();
+      const log = await page.evaluate(() => window.electronAPI.getLogFileInfo());
+      await testInfo.attach("export-log", { body: readFileSync(log.path), contentType: "text/plain" });
+    } finally { await launched.close(); }
   }
 });

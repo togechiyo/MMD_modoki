@@ -80,6 +80,7 @@ function createHost() {
         materialShaderPresetByMaterial: new WeakMap<object, string>(),
         externalWgslToonShaderPathByMaterial: new WeakMap<object, string>(),
         engine: {
+            isWebGPU: true,
             releaseEffects: vi.fn(),
         },
         defaultRenderingPipeline: {
@@ -448,6 +449,22 @@ describe("material shader preset restore", () => {
         applyImportedMaterialShaderStates(externalHost, 0, [], warnings, "fixture.pmx");
         expect(getSerializedMaterialShaderStates(externalHost, externalHost.sceneModels[0])[0].externalEffect).toBeUndefined();
         expect(warnings).toEqual([]);
+    });
+
+    it.each([false, true])("clears restored external WGSL state without destroying WebGL effects (WebGPU=%s)", isWebGPU => {
+        const host = createHost();
+        host.engine.isWebGPU = isWebGPU;
+        host.isWebGpuEngine = () => isWebGPU;
+        host.constructor.externalWgslToonFragmentByMaterial.set(host.material, "previous source");
+        host.externalWgslToonShaderPathByMaterial.set(host.material, "previous.wgsl");
+
+        setExternalWgslToonShader(host as unknown as Parameters<typeof setExternalWgslToonShader>[0], null, null);
+
+        expect(host.constructor.externalWgslToonFragmentByMaterial.has(host.material)).toBe(false);
+        expect(host.externalWgslToonShaderPathByMaterial.has(host.material)).toBe(false);
+        expect(host.material.markAsDirty).toHaveBeenCalled();
+        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(isWebGPU ? 1 : 0);
+        expect(host.onMaterialShaderStateChanged).toHaveBeenCalledOnce();
     });
 
     it("keeps preset fragment override when clearing global external wgsl override", () => {

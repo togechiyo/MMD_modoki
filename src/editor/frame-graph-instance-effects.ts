@@ -6,6 +6,12 @@ export type InstanceColor = { r: number; g: number; b: number };
 export type EvaluatedEffectInstance = { instanceId: string; type: EffectInstanceType; value: EffectValue; bloomColor?: InstanceColor; fixedSettings?: import("./frame-graph-instance-fixed-settings").InstanceFixedSettings; lutText?: string; dofFocusDistanceMm?: number };
 export const instanceNeedsViewDepth = (type: string): boolean => ["aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight", "ssao", "ssgi", "ssr", "luminousRadiance"].includes(type);
 export const isEffectInstanceType = (type: string): type is EffectInstanceType => FRAME_GRAPH_INSTANCE_EFFECT_TYPES.some(item => item === type);
+/** Only filters the runtime graph; authored settings and animation stay in the project. */
+export function isEffectInstanceSupported(type: EffectInstanceType, isWebGPU: boolean, computeShaders: boolean): boolean {
+    if (type === "ssgi" || type === "luminousRadiance") return isWebGPU && computeShaders;
+    if (type === "directionalLightShafts") return isWebGPU;
+    return true;
+}
 export const INSTANCE_EFFECT_NAMES: Record<EffectInstanceType, string> = { gamma: "Gamma", grain: "Grain", sharpen: "Sharpen", chromatic: "Chromatic Aberration", vignette: "Vignette", edgeBlur: "Edge Blur", distortion: "Lens Distortion", bloom: "Bloom", lut: "LUT", aerialPerspective: "Aerial Perspective", directionalLightShafts: "Directional Light Shafts", offsetShadow: "Offset Shadow", offsetHighlight: "Offset Highlight", dof: "DoF", luminous: "Luminous", luminousRadiance: "Luminous RC", ssao: "SSAO", ssgi: "SSGI", ssr: "SSR", motionBlur: "Motion Blur" };
 const defaults: Record<EffectInstanceType, EffectValue> = {
     dof: { enabled: true },

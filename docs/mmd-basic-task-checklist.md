@@ -1,6 +1,6 @@
 # MMD基本機能タスクチェックリスト
 
-更新日: 2026-11-18
+更新日: 2026-11-19
 
 v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バージョン候補](./v0.2.4-next-version-candidates.md)。v0.2.5の重点は下記、個別収録範囲は確認中。個別報告の確認状態は [リリース後台帳](./v0.2.4-post-release-ledger.md) と分けて管理する。
 
@@ -17,7 +17,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [ ] modelなしprojectの保存不能V022-126の元条件を確認する。11/18、現行main / Windowsではメニュー保存・Ctrl+S・別path保存・再読込が成功し、保存コードは未変更。元のmacOS・project・操作条件を残す（[切り分け](./model-less-project-playback-2026-11-18.md)）。
 - [x] 配布形式のexeへ実AI clientを接続し、公開helpによる読込→カメラ/個体編集→画像確認→project保存/復元→PNG/WebM出力を確認。11/18、Codex CLIで呼出し数・待機・GUI確認を記録。再起動時のMCP ON保持/編集許可OFFも確認（[実操作結果](./mcp-ai-client-practical-test-2026-11-18.md)）。
 - [x] 実AI確認で判明した、新規effectの最初のキーが`TRACK_NOT_UNIQUE`で拒否される不具合を修正。GUI表示用とMCP編集対象の一覧を分離し、初回set/register・全キー削除後の再登録・Undo/Redo・対象切替を確認。help検索順位、preview説明、capture失敗理由も整備した。11/18、unit 1,797件、lint、critical型検査、WebGPU smoke、GUI E2E 4ケース、再ビルド後の実AIで登録・画像取得・保存復元が成功（[修正と再確認](./mcp-ai-client-practical-test-2026-11-18.md)）。
-- [ ] **次回確認（11/18所有者指定）:** WebGPUが動かない環境を想定し、現行版のWebGL2互換経路を確認する。WebGL2固定起動と、WebGPU非対応・初期化失敗時のauto fallbackを分け、実際のengineとGPU環境を記録。配布可能fixtureでPMX/VMD・`.x`読込、再生・キー編集、保存復元、MCP編集・画像取得、PNG・短いWebMを確認する。Classic / FrameGraph・通常 / PBRの差、RC等のエフェクト・外部WGSLの対応範囲、利用不可時のUI案内・読込継続も確認対象。強制切替や模擬失敗の成功だけで非対応実機の確認済みとはせず、未確認環境を残す（[backendの位置づけ](./architecture.md#webgpu-の位置づけ)、[起動確認の手順と限界](./cloud-execution-and-headless-cli-proposal-2026-11-17.md#gui-環境の検証順序)）。
+- [x] **WebGL2主機能・出力確認（11/19）:** Windows実GPUで固定起動とWebGPU不在／device拒否のauto fallbackを確認。設定復元時のGL program破棄、初期化失敗が伝播しない問題、未対応効果個体による出力停止を修正。PMX/VMD・Xの編集／保存復元、4K／透過／連番PNG、音声付きWebM、背景動画30／60fps、中断再試行、配布形式のMCP画像取得・通常／PBR出力を確認。開発E2E15ケース、配布形式WebGL／WebGPU各1、unit1,812件、lint、critical0、両backend smoke成功（[詳細・検証範囲](./webgl-core-output-verification-2026-11-19.md)）。
+- [ ] WebGL2の残確認: WebGPU非対応の別PCとmacOS／Linux実機、WebGPU context取得後の後期初期化失敗、GPU専用効果が使えない場合のUI案内の統一。模擬失敗や固定起動を非対応実機確認済みとは扱わない。長時間出力・全効果の画質互換も別途確認する（[制約](./webgl-core-output-verification-2026-11-19.md#残る確認制約)、[backendの位置づけ](./architecture.md#webgpu-の位置づけ)）。
 - [ ] MCPの通知からのAI再開・client UI表示、wire通信量・実際のschema提示量の測定を続ける。11/18の実AI確認は結果待機による完了確認で、通知購読は未検証。公開UIの増分、Skills / Tasksは効果とclient対応状況を比較して後続採用を判断する（[作業順・受入条件](./mcp-usability-reassessment-2026-11-17.md)）。
 - [x] 開発版・配布版のrendererへCSPを設定し、MPR / WASM / Workerを維持したままJavaScript文字列実行を禁止。警告抑制設定を撤去し、起動・読込・PNG/WebMと禁止scriptの実効拒否を確認（[設定と検証](./renderer-csp-2026-11-13.md)）。
 - [x] Electron 40.4.1からサポート中の45.3.1へ更新し、manifest/lockfileを固定。所有者指定に従いローカル読込経路を共通化して開発版MPRを維持。非同期clipboard・OS要件・背景Layerのcapture readyを対応し、unit 1,627件、開発E2E20件、Windows ASARの起動・通常/PBR WebMを確認した。配布版SPRは既存条件、macOS/Linuxと正式4配布物の確認は公開工程で別途行う（[公式根拠・実装・検証・既知の警告](./electron-45-upgrade-2026-11-13.md)）。

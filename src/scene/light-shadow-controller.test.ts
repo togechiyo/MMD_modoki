@@ -190,7 +190,7 @@ describe("directional light intensity", () => {
 });
 
 describe("transparent shadow controls", () => {
-    it("can disable transparent shadow sampling independently", () => {
+    it.each([false, true])("can disable transparent shadow sampling independently (WebGPU=%s)", isWebGPU => {
         const host = {
             ...createHost(),
             transparentShadowEnabledValue: true,
@@ -201,6 +201,7 @@ describe("transparent shadow controls", () => {
                 useOpacityTextureForTransparentShadow: true,
             },
             engine: {
+                isWebGPU,
                 releaseEffects: vi.fn(),
             },
         };
@@ -210,10 +211,10 @@ describe("transparent shadow controls", () => {
         expect(host.shadowGenerator.transparencyShadow).toBe(false);
         expect(host.shadowGenerator.enableSoftTransparentShadow).toBe(false);
         expect(host.shadowGenerator.useOpacityTextureForTransparentShadow).toBe(false);
-        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(1);
+        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(isWebGPU ? 1 : 0);
     });
 
-    it("keeps transparent casters while toggling soft transparent shadows", () => {
+    it.each([false, true])("keeps transparent casters while toggling soft transparent shadows (WebGPU=%s)", isWebGPU => {
         const host = {
             ...createHost(),
             transparentShadowEnabledValue: true,
@@ -224,6 +225,7 @@ describe("transparent shadow controls", () => {
                 useOpacityTextureForTransparentShadow: true,
             },
             engine: {
+                isWebGPU,
                 releaseEffects: vi.fn(),
             },
         };
@@ -233,14 +235,14 @@ describe("transparent shadow controls", () => {
         expect(host.shadowGenerator.transparencyShadow).toBe(true);
         expect(host.shadowGenerator.enableSoftTransparentShadow).toBe(false);
         expect(host.shadowGenerator.useOpacityTextureForTransparentShadow).toBe(true);
-        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(1);
+        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(isWebGPU ? 1 : 0);
 
         setSoftTransparentShadowEnabled(host, true);
 
         expect(host.shadowGenerator.transparencyShadow).toBe(true);
         expect(host.shadowGenerator.enableSoftTransparentShadow).toBe(true);
         expect(host.shadowGenerator.useOpacityTextureForTransparentShadow).toBe(true);
-        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(2);
+        expect(host.engine.releaseEffects).toHaveBeenCalledTimes(isWebGPU ? 2 : 0);
     });
 });
 

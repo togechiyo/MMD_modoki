@@ -5,6 +5,7 @@ import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
 import { configureThinTranslucencyShadow } from "../render/thin-translucency-shadow";
+import { releaseWebGpuEffects } from "../render/material-effect-invalidation";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
@@ -498,7 +499,7 @@ export function setShadowFilteringQuality(host: LightShadowHost, v: number): voi
     host.shadowFilteringQualityValue = clampShadowFilteringQuality(v);
     if (host.shadowGenerator) {
         applyShadowFilterSettings(host);
-        host.engine?.releaseEffects?.();
+        releaseWebGpuEffects(host.engine);
     }
 }
 
@@ -509,7 +510,7 @@ export function getShadowBlurKernel(host: LightShadowHost): number {
 export function setShadowBlurKernel(host: LightShadowHost, v: number): void {
     host.shadowBlurKernelValue = clampShadowBlurKernel(v);
     applyShadowFilterSettings(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function getShadowDistanceMultiplier(host: LightShadowHost): number {
@@ -539,7 +540,7 @@ export function getShadowBlurScale(host: LightShadowHost): number {
 export function setShadowBlurScale(host: LightShadowHost, v: number): void {
     host.shadowBlurScaleValue = clampShadowBlurScale(v);
     applyShadowFilterSettings(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function getShadowBlurBoxOffset(host: LightShadowHost): number {
@@ -549,7 +550,7 @@ export function getShadowBlurBoxOffset(host: LightShadowHost): number {
 export function setShadowBlurBoxOffset(host: LightShadowHost, v: number): void {
     host.shadowBlurBoxOffsetValue = clampShadowBlurBoxOffset(v);
     applyShadowFilterSettings(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function getShadowPenumbraEnabled(host: LightShadowHost): boolean {
@@ -559,7 +560,7 @@ export function getShadowPenumbraEnabled(host: LightShadowHost): boolean {
 export function setShadowPenumbraEnabled(host: LightShadowHost, enabled: boolean): void {
     host.shadowPenumbraEnabledValue = Boolean(enabled);
     applyShadowFilterSettings(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function getShadowPenumbraSize(host: LightShadowHost): number {
@@ -569,7 +570,7 @@ export function getShadowPenumbraSize(host: LightShadowHost): number {
 export function setShadowPenumbraSize(host: LightShadowHost, v: number): void {
     host.shadowPenumbraSizeValue = clampShadowPenumbraSize(v);
     applyShadowFilterSettings(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function getTransparentShadowEnabled(host: LightShadowHost): boolean {
@@ -579,7 +580,7 @@ export function getTransparentShadowEnabled(host: LightShadowHost): boolean {
 export function setTransparentShadowEnabled(host: LightShadowHost, enabled: boolean): void {
     host.transparentShadowEnabledValue = Boolean(enabled);
     applyTransparentShadowSettings(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function getSoftTransparentShadowEnabled(host: LightShadowHost): boolean {
@@ -589,7 +590,7 @@ export function getSoftTransparentShadowEnabled(host: LightShadowHost): boolean 
 export function setSoftTransparentShadowEnabled(host: LightShadowHost, enabled: boolean): void {
     host.softTransparentShadowEnabledValue = Boolean(enabled);
     applyTransparentShadowSettings(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function getShadowEnabled(host: LightShadowHost): boolean {
@@ -738,7 +739,7 @@ export function applyShadowEdgeSoftness(host: LightShadowHost): void {
     hostStatics.toonSelfShadowBoundarySoftness = host.selfShadowEdgeSoftnessValue;
     hostStatics.toonOcclusionShadowBoundarySoftness = host.occlusionShadowEdgeSoftnessValue;
     applyToonShadowInfluenceToAllModels(host);
-    host.engine?.releaseEffects?.();
+    releaseWebGpuEffects(host.engine);
 }
 
 export function setLightDirection(host: LightShadowHost, x: number, y: number, z: number): void {

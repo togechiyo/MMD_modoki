@@ -445,6 +445,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 
 ## 出力 / エンコード
 
+- [WebGL2の主機能・画像／動画出力確認 2026-11-19](./webgl-core-output-verification-2026-11-19.md)
 - [PNG 連番出力仕様](./png-sequence-export-spec.md)
 - [WebM 出力 現行仕様 / 実装](./webm-export-current-spec-2026-03-13.md)
 - [WebM 動画書き出し速度調査レポート](./webm-export-performance-analysis-2026-04-21.md)

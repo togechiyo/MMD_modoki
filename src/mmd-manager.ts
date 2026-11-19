@@ -8,9 +8,12 @@ import { externalParentOmissionCount } from "./export/external-parent-warning";
 import { seekVideoFrame } from "./export/seek-video-frame";
 import { diagnosticTargetName, projectModelDiagnosticDetail, type DiagnosticKind, type DiagnosticSelector, type ModelDiagnosticMetadata } from "./automation/model-detail";
 import { configureThinTranslucencyShadow } from "./render/thin-translucency-shadow";
+import { prepareMmdToonGlslDefines, releaseWebGpuEffects } from "./render/material-effect-invalidation";
+import type { MaterialDefines } from "@babylonjs/core/Materials/materialDefines";
 import { installCsmDistanceFade } from "./render/csm-distance-fade";
 import { resolveRendererAssetUrl } from "./render/local-asset-routing";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
+import { createInitializedWebGpuEngine } from "./render/webgpu-initialization";
 import { WebGPUTintWASM } from "@babylonjs/core/Engines/WebGPU/webgpuTintWASM";
 import { Scene } from "@babylonjs/core/scene";
 import { Camera } from "@babylonjs/core/Cameras/camera";
@@ -533,6 +536,7 @@ import {
 } from "./editor/scene-keyframe-track";
 import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
 import { FrameGraphEffectInstances, type SerializedEffectInstances } from "./editor/frame-graph-effect-instances";
+import { isEffectInstanceSupported } from "./editor/frame-graph-instance-effects";
 import { INSTANCE_LUT_PRESETS } from "./editor/frame-graph-instance-fixed-settings";
 import { dofInstanceFocusDistanceMm, resolveDofInstanceFocusTarget } from "./editor/dof-instance-focus";
 import { EffectInstanceRuntimeDuration } from "./editor/effect-instance-runtime-duration";
@@ -1717,6 +1721,7 @@ ${beforeFogAppendBlock}
 
         const patchPrepareDefines = (
             ctor: { prototype: { prepareDefines?: (...args: unknown[]) => void } },
+            isWgsl: boolean,
         ): void => {
             const originalPrepareDefines = ctor.prototype.prepareDefines;
             if (typeof originalPrepareDefines !== "function") return;
@@ -1724,9 +1729,16 @@ ${beforeFogAppendBlock}
             ctor.prototype.prepareDefines = function patchedPrepareDefines(...args: unknown[]): void {
                 originalPrepareDefines.apply(this, args);
 
-                const defines = args[0] as Record<string, unknown> | undefined;
+                const defines = args[0] as MaterialDefines | undefined;
                 if (!defines || typeof defines !== "object") return;
-                defines.MMD_CONTACT_AO = MmdManager.toonContactAoEnabled;
+                if (isWgsl) {
+                    defines.MMD_CONTACT_AO = MmdManager.toonContactAoEnabled;
+                } else {
+                    prepareMmdToonGlslDefines(defines,
+                        MmdManager.toonSelfShadowBoundarySoftness,
+                        MmdManager.toonOcclusionShadowBoundarySoftness,
+                        MmdManager.toonFlatLightColorInfluence);
+                }
             };
         };
 
@@ -1806,7 +1818,8 @@ ${beforeFogAppendBlock}
         patchGetCustomCode(MmdStandardShaderPluginGLSL as unknown as { prototype: { getCustomCode?: (shaderType: string) => unknown } }, false);
         patchGetCustomCode(MmdStandardShaderPluginWGSL as unknown as { prototype: { getCustomCode?: (shaderType: string) => unknown } }, true);
         patchGetSamplers(MmdStandardShaderPluginWGSL as unknown as { prototype: { getSamplers?: (samplers: string[]) => void } });
-        patchPrepareDefines(MmdStandardShaderPluginWGSL as unknown as { prototype: { prepareDefines?: (...args: unknown[]) => void } });
+        patchPrepareDefines(MmdStandardShaderPluginGLSL as unknown as { prototype: { prepareDefines?: (...args: unknown[]) => void } }, false);
+        patchPrepareDefines(MmdStandardShaderPluginWGSL as unknown as { prototype: { prepareDefines?: (...args: unknown[]) => void } }, true);
         patchGetUniforms(MmdStandardShaderPluginWGSL as unknown as { prototype: { getUniforms?: (shaderLanguage?: ShaderLanguage) => unknown } });
         patchBindForSubMesh(MmdStandardShaderPluginWGSL as unknown as { prototype: { bindForSubMesh?: (...args: unknown[]) => void } });
         MmdManager.toonLightSeparationShaderPatched = true;
@@ -4638,7 +4651,7 @@ ${beforeFogAppendBlock}
             const direction = this.getSerializedLightDirection();
             this.setLightDirection(direction.x, direction.y, direction.z);
             this.scene.markAllMaterialsAsDirty(Material.AllDirtyFlag);
-            this.engine.releaseEffects();
+            releaseWebGpuEffects(this.engine);
         };
 
         refresh();
@@ -4845,7 +4858,7 @@ ${beforeFogAppendBlock}
             this.setLightDirection(direction.x, direction.y, direction.z);
         }
         this.scene.markAllMaterialsAsDirty(Material.AllDirtyFlag);
-        this.engine.releaseEffects();
+        releaseWebGpuEffects(this.engine);
     }
 
     public getActiveModelVisibility(): boolean {
@@ -7952,7 +7965,7 @@ ${beforeFogAppendBlock}
             }
 
             WebGPUTintWASM.DisableUniformityAnalysis = true;
-            const engine = await WebGPUEngine.CreateAsync(canvas, {
+            const engine = await createInitializedWebGpuEngine(canvas, {
                 ...MmdManager.RENDER_ENGINE_OPTIONS,
                 setMaximumLimits: true,
                 glslangOptions: {
@@ -11595,7 +11608,11 @@ ${beforeFogAppendBlock}
             contrast: this.postEffectContrastValue,
             gammaPower: this.effectRenderState.gammaPower,
             gammaEnabled: this.effectSceneTracks.has("gamma") ? this.getFrameGraphPostEffectStackIds().includes("gamma") : this.isFrameGraphPostEffectActive("gamma"),
-            effectInstances: this.effectInstances.ids().filter(id => this.effectInstances.present(id)).map(id => {
+            effectInstances: this.effectInstances.ids().filter(id => {
+                const type = this.effectInstances.type(id);
+                return this.effectInstances.present(id) && type !== null
+                    && isEffectInstanceSupported(type, this.isWebGpuEngine(), this.engine.getCaps().supportComputeShaders);
+            }).map(id => {
                 const instance = this.effectInstances.renderState(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
                 const source = instance.fixedSettings?.lut;
                 if (source) instance.lutText = source.kind === "external" ? source.runtimeText : MmdManager.POST_EFFECT_LUT_TEXT_BY_ID[source.preset];
@@ -14230,7 +14247,7 @@ ${beforeFogAppendBlock}
             this.shadowGenerator.filteringQuality = this.shadowGenerator instanceof CascadedShadowGenerator
                 ? ShadowGenerator.QUALITY_HIGH
                 : this.shadowFilteringQualityValue;
-            this.engine.releaseEffects();
+            releaseWebGpuEffects(this.engine);
         }
     }
 

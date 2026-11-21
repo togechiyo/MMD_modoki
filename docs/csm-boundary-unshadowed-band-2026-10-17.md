@@ -50,7 +50,7 @@ CSM / 通常影の選択、filter、cascade 数、blend、bias、影距離、dep
 - viewport と PNG 出力で、完全遮蔽される床の明るさが非遮蔽時の 40% 未満であること。
 - 半影 ON で旧 `0.26` を戻すと、同じ床の明るさが非遮蔽時の 65% を超え、帯を再現すること。
 - 通常影へ GUI で切替後は `0.26`、CSM へ戻した後は `0` になること。
-- 最後の PMX / OBJ caster の削除で caster list が空になり、再読込で復帰すること。OBJ は sampling 停止も確認する。
+- 最後の PMX / OBJ caster を削除したときの caster list と方向光の sampling、再読込後の復帰。
 - JavaScript error と WebGPU validation error がないこと。
 
 helper はテスト用シーンの geometry と比較条件だけを作り、アプリの filter / cascade 設定は保存値から復元する。
@@ -67,10 +67,13 @@ helper はテスト用シーンの geometry と比較条件だけを作り、ア
 - `npm.cmd run typecheck`: 既存エラーで失敗。今回の 2 箇所をメモリ上で元の設定へ戻した TypeScript 診断と照合し、変更前後とも 548 件、位置情報を除く診断内容の一致を確認。
 - `npm.cmd run typecheck:critical`: 成功、TS2304 / TS2552 は 0 件。
 
-追加確認で分かった別件: 最後の PMX 削除後は `casterCount=0` でも `lightSamplingEnabled=true` が残る。
-既存の `removeActiveModel()` は `applyModelShadowCasterState()` の後に
-`syncShadowSamplingWithCasterList()` を呼んでいない。今回のフェード値の変更とは別の同期漏れで、
-削除直後の残留 map の修正は別タスクとする。OBJ の削除経路とは区別する。
+10/17 の追加確認では、最後の PMX 削除後に `casterCount=0` でも `lightSamplingEnabled=true` が残った。PMX の削除処理に caster リストと方向光の同期が欠けていた。
+
+## 2026-11-21 最後の PMX 削除後の影サンプリング
+
+`removeActiveModel()` でモデルを caster リストから外した直後、影表示の切替と同じ `syncShadowSamplingWithCasterList()` を呼ぶようにした。別の caster が残っていれば、その影は引き続き描画する。
+
+Windows / WebGPU の [削除・再読込 E2E](../test/e2e/csm-boundary.spec.mjs) で通常影と CSM の両方を確認した。PMX と OBJ があるシーンで PMX だけを削除すると sampling は有効、最後の OBJ を削除すると停止した。PMX 単独でも削除後はリストが空で sampling が停止し、その場で出力した 640×360 PNG は表示メニューから影を OFF にした対照と全画素の RGBA が一致した。再読込で sampling が復帰し、空プロジェクトの復元で再度停止した。
 
 ## 広域 PMX のカメラ移動確認
 

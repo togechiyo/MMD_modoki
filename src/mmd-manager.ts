@@ -4988,6 +4988,7 @@ ${beforeFogAppendBlock}
         );
         removed.castShadow = false;
         this.applyModelShadowCasterState(removed);
+        this.syncShadowSamplingWithCasterList();
 
         try {
             this.mmdRuntime.destroyMmdModel(removed.model as never);

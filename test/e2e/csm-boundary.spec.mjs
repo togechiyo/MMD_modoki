@@ -6,18 +6,23 @@ import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const probePath = "/test/e2e/helpers/csm-boundary-probe.mjs";
 
 async function inspect(page, phase = "actual") {
-  return page.evaluate(async phase => {
-    const { inspectBoundary } = await import("/test/e2e/helpers/csm-boundary-probe.mjs");
+  return page.evaluate(async ({ phase, probePath }) => {
+    const { inspectBoundary } = await import(probePath);
     return inspectBoundary(phase);
-  }, phase);
+  }, { phase, probePath });
+}
+
+async function clickMenuCommand(page, name) {
+  const command = page.locator(`[data-menu-command="${name}"]`);
+  await page.locator(".app-menu-group", { has: command }).locator(".app-menu-trigger").click();
+  await command.click();
 }
 
 async function selectShadowMode(page, mode) {
-  const command = page.locator('[data-menu-command="view.lightShadowSettings"]');
-  await page.locator(".app-menu-group", { has: command }).locator(".app-menu-trigger").click();
-  await command.click();
+  await clickMenuCommand(page, "view.lightShadowSettings");
   await page.locator("#light-shadow-mode").selectOption(mode);
   await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics().effectiveMode)).toBe(mode);
   await page.keyboard.press("Escape");
@@ -43,7 +48,8 @@ function maximumShadowRatio(shadow, clear, state) {
 }
 
 for (const backend of ["classic", "frameGraph"]) for (const penumbra of [false, true]) {
-  test(`keeps shadows across cascade splits: ${backend}, penumbra ${penumbra}`, async ({}, testInfo) => {
+  test(`keeps shadows across cascade splits: ${backend}, penumbra ${penumbra}`, async () => {
+    const testInfo = test.info();
     const launched = await launchMmdModoki(repoRoot);
     try {
       const page = await launched.app.firstWindow();
@@ -92,39 +98,57 @@ for (const backend of ["classic", "frameGraph"]) for (const penumbra of [false, 
   });
 }
 
-test("restores CSM shadows after deleting and reloading the last fixture caster", async () => {
+async function deleteCaster(page, kind) {
+  await page.locator("#info-model-select").selectOption(kind === "pmx" ? "0" : "__accessory__:0");
+  page.once("dialog", dialog => dialog.accept());
+  await page.locator(kind === "pmx" ? "#btn-model-delete" : "#btn-accessory-delete").click();
+}
+
+async function expectCasterSampling(page, mode, active) {
+  await page.evaluate(async probePath => {
+    const { waitForShadowFrames } = await import(probePath);
+    await waitForShadowFrames();
+  }, probePath);
+  const state = await page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics());
+  expect(state).toMatchObject({ effectiveMode: mode, enabled: true, lightSamplingEnabled: active });
+  if (active) expect(state.casterCount).toBeGreaterThan(0);
+  else expect(state.casterCount).toBe(0);
+}
+
+test("stops and restores shadow sampling when fixture casters are deleted and reloaded", async () => {
+  const testInfo = test.info();
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
-    for (const kind of ["pmx", "obj"]) {
-      const path = resolve(repoRoot, kind === "pmx" ? "test/fixtures/external-parent/tofu.pmx" : "test/fixtures/accessory/tofu.obj");
-      for (let cycle = 0; cycle < 2; cycle++) {
-        await page.evaluate(async ({ path, kind }) => {
-          if (kind === "pmx") await window.mmdModokiE2e.loadModel(path);
-          else await window.mmdModokiE2e.loadAccessory(path);
-        }, { path, kind });
-        const selector = page.locator("#info-model-select");
-        await selector.selectOption(kind === "pmx" ? "0" : "__accessory__:0");
-        await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics().lightSamplingEnabled)).toBe(true);
-        await page.evaluate(async () => {
-          const { waitForShadowFrames } = await import("/test/e2e/helpers/csm-boundary-probe.mjs");
-          await waitForShadowFrames();
-        });
-        page.once("dialog", dialog => dialog.accept());
-        await page.locator(kind === "pmx" ? "#btn-model-delete" : "#btn-accessory-delete").click();
-        await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics())).toMatchObject({
-          effectiveMode: "cascaded", casterCount: 0,
-        });
-        // PMX removal currently omits syncShadowSamplingWithCasterList; track
-        // that existing lifecycle issue separately from cascade-edge fading.
-        if (kind === "obj") expect(await page.evaluate(() =>
-          window.mmdModokiE2e.getShadowRuntimeDiagnostics().lightSamplingEnabled)).toBe(false);
-        await page.evaluate(async () => {
-          const { waitForShadowFrames } = await import("/test/e2e/helpers/csm-boundary-probe.mjs");
-          await waitForShadowFrames();
-        });
-      }
+    const pmx = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
+    const obj = resolve(repoRoot, "test/fixtures/accessory/tofu.obj");
+    for (const mode of ["cascaded", "standard"]) {
+      await selectShadowMode(page, mode);
+      const empty = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+      await page.evaluate(path => window.mmdModokiE2e.loadModel(path), pmx);
+      await expectCasterSampling(page, mode, true);
+      await page.evaluate(path => window.mmdModokiE2e.loadAccessory(path), obj);
+      await deleteCaster(page, "pmx");
+      await expectCasterSampling(page, mode, true);
+      await deleteCaster(page, "obj");
+      await expectCasterSampling(page, mode, false);
+
+      await page.evaluate(path => window.mmdModokiE2e.loadModel(path), pmx);
+      await expectCasterSampling(page, mode, true);
+      await deleteCaster(page, "pmx");
+      await expectCasterSampling(page, mode, false);
+      const size = { width: 640, height: 360 };
+      const afterRemoval = await exportFrame(page, testInfo.outputPath(mode, "removed"), size);
+      await clickMenuCommand(page, "view.toggleShadow");
+      await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics().enabled)).toBe(false);
+      const control = await exportFrame(page, testInfo.outputPath(mode, "shadows-off"), size);
+      expect(afterRemoval.data.equals(control.data)).toBe(true);
+      await clickMenuCommand(page, "view.toggleShadow");
+      await page.evaluate(path => window.mmdModokiE2e.loadModel(path), pmx);
+      await expectCasterSampling(page, mode, true);
+      await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), empty);
+      await expectCasterSampling(page, mode, false);
     }
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });
   } finally {

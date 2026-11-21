@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { createTofuModel, writePmx } from "../../scripts/generate-external-parent-test-models.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const modelPath = resolve(repoRoot, "test", "fixtures", "external-parent", "tofu.pmx");
@@ -47,7 +48,51 @@ async function rowHeaderPosition(page, trackName) {
   throw new Error(`unknown scene track: ${trackName}`);
 }
 
-test("selects row or frame headers and converts them to key selection on double click", async ({}, testInfo) => {
+test("keeps the last timeline label and key row aligned at the bottom", async () => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const model = createTofuModel();
+    model.bones = Array.from({ length: 64 }, (_, i) => ({
+      name: `Bone ${i}`, englishName: `Bone ${i}`, parentBoneIndex: i === 0 ? -1 : 0,
+    }));
+    const fixture = resolve(launched.tempDir, "timeline-rows.pmx");
+    await writeFile(fixture, writePmx(model));
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    expect(await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixture)).not.toBeNull();
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().length)).toBeGreaterThanOrEqual(64);
+
+    const labels = page.locator("#timeline-labels");
+    const tracks = page.locator("#timeline-tracks-scroll");
+    const maxScroll = el => el.scrollHeight - el.clientHeight;
+    const labelMax = await labels.evaluate(maxScroll);
+    expect(labelMax).toBeGreaterThan(0);
+    expect(await tracks.evaluate(maxScroll)).toBe(labelMax);
+    await tracks.hover();
+    await page.mouse.wheel(0, 10000);
+    await expect.poll(() => tracks.evaluate(el => el.scrollTop)).toBeCloseTo(labelMax, 0);
+    await expect.poll(() => labels.evaluate(el => el.scrollTop)).toBeCloseTo(labelMax, 0);
+
+    const labelBox = await labels.boundingBox();
+    const trackBox = await tracks.boundingBox();
+    const lastRowY = labelBox.y + labelBox.height - 9;
+    const lastRow = await page.evaluate(() => {
+      const { name, category } = window.mmdModokiE2e.getTimelineTracks().at(-1);
+      return { name, category };
+    });
+    // Click each side from a different selection, so an empty strip cannot pass.
+    await page.mouse.click(labelBox.x + 12, lastRowY);
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack)).toEqual(lastRow);
+    await page.mouse.click(labelBox.x + 12, lastRowY - 18);
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack)).not.toEqual(lastRow);
+    await page.mouse.click(trackBox.x + 12, lastRowY);
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineSelection().activeTrack)).toEqual(lastRow);
+  } finally {
+    await launched.close();
+  }
+});
+
+test("selects row or frame headers and converts them to key selection on double click", async () => {
   const launched = await launchMmdModoki(repoRoot);
   try {
     const page = await launched.app.firstWindow();
@@ -92,7 +137,7 @@ test("selects row or frame headers and converts them to key selection on double 
       expect(await labels.evaluate(canvas => window.timelineLabelDraws.slice(-4).every(item => item.width <= canvas.clientWidth - 6))).toBe(true);
       expect(await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks())).toEqual(tracksBeforeLocale);
       expect(await page.evaluate(() => window.mmdModokiE2e.getTimelineSelection())).toEqual(selectionBeforeLocale);
-      if (locale === "en") await page.locator("#timeline-container").screenshot({ path: testInfo.outputPath("timeline-english-labels.png") });
+      if (locale === "en") await page.locator("#timeline-container").screenshot({ path: test.info().outputPath("timeline-english-labels.png") });
     }
 
     const panStart = await page.evaluate(() => {

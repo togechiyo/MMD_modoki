@@ -693,19 +693,15 @@ export class Timeline {
 
     resize(): void {
         const dpr = window.devicePixelRatio || 1;
-        // Keep the track area scroll range aligned with the label column.
-        // The label canvas includes the ruler row at the top, so the track canvas
-        // gets a matching spacer at the bottom to avoid scroll drift near the end.
         const trackRowsH = this.getTrackRowsHeight();
-        const trackContentH = trackRowsH + RULER_H;
         const tw = this.trackScrollEl.clientWidth || 400;
         const bufferedTrackWidth = tw + FRAME_PAN_BUFFER_PX * 2;
 
-        // Static canvas (track rows + bottom spacer to match the label column height)
+        // The ruler sits above this scroll area. Only the rows belong inside it.
         this.staticCanvas.width = bufferedTrackWidth * dpr;
-        this.staticCanvas.height = trackContentH * dpr;
+        this.staticCanvas.height = trackRowsH * dpr;
         this.staticCanvas.style.width = `${bufferedTrackWidth}px`;
-        this.staticCanvas.style.height = `${trackContentH}px`;
+        this.staticCanvas.style.height = `${trackRowsH}px`;
         this.staticCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         this.setStaticCanvasTransform();
 
@@ -716,7 +712,7 @@ export class Timeline {
         this.overlayCanvas.style.height = `${RULER_H}px`;
         this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        // Label canvas (ruler row + all track rows = same total as static + RULER_H)
+        // The label scroll area spans the ruler and all track rows.
         const lw = this.labelsEl.clientWidth || 52;
         const totalH = RULER_H + trackRowsH;
         this.labelCanvas.width = lw * dpr;

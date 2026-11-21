@@ -75,6 +75,18 @@ singleton RCには既存のunsupported処理があり、外部WGSLも未対応�
 - 長時間動画のメモリ安定性、8K実出力、複雑な物理モデルの画質・性能比較は今回の対象外。4Kは単発PNGの確認。
 - WebGPU配布版の出力完了付近にswapchainの `Destroyed texture ... used in a submit` 警告が残る。[11/13の同一テストの記録](./electron-45-upgrade-2026-11-13.md)にも同じ署名・頻度があり、今回の新規警告とは扱わない。出力・復号は成功したが、根本原因の同一性や警告解消は未確認。
 
+## 2026-11-21 WebM出力時のFrameGraph再作成
+
+Windows / RTX 3070のWebGL2で、GammaとGPU専用3効果を保存したプロジェクトから4K PNGと3フレームのWebMを出力した。画像と動画の画素・時刻は正常だったが、動画出力用ウィンドウに `GL_INVALID_VALUE: glGetProgramiv: Program object expected` が断続的に出た。
+
+RGBA出力では、プロジェクト読込時に画面用のFrameGraphを構築し、直後の `prepareExportRenderSurface` がそれを破棄して動画用に組み直していた。診断用にWebGLのリンク・完了照会・解放を観測すると、3回とも出力用ウィンドウで完了を確認する前のプログラムを5件解放していた。呼び出し元は `prepareExportRenderSurface` からの `FrameGraphPostEffectsController.dispose` だった。
+
+`webm-exporter` でプロジェクト読込より先に要求解像度のRGBA出力先を作るように変更した。修正後3回とも出力用ウィンドウで観測した早期解放とGL警告は0件。640×360のWebMに3フレームが入り、時刻（0、0.033、0.067秒）と復号後のモデル画素を確認した。WebGPUのGammaと共通RGBA出力によるPNG連番・WebMも成功した。
+
+回帰試験は、テスト用Electronプロセスで該当ジョブの出力先準備とモデル読込開始の順序を観測し、出力画素とGL警告を検査する。修正前のコードでは順序の検査で失敗し、修正後の作業ツリーで成功した。同じ作業ツリーでWebGPUの1フレームWebMに壁の影が映り、Sky Ambient RCの0・20・40・60フレームも既存の画素許容差内でPNGと一致した。[WebGL2互換試験](../test/e2e/webgl-effect-compatibility.spec.mjs)
+
+[11/19のAlicia計測](./alicia-backend-performance-2026-11-19.md)で報告した編集ウィンドウの同名警告は別途調査中。
+
 ## 公式情報・導入版の照合
 
 - [Babylon.js WebGPU Support](https://doc.babylonjs.com/setup/support/webGPU/): 非同期初期化の公式例。2026-11-19確認。

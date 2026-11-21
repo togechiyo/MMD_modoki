@@ -738,6 +738,10 @@ export async function runWebmExportJob(
         };
         exportRuntimeInternals.engine.setHardwareScalingLevel?.(1);
         mmdManager.resize();
+        if (captureMode === "rgba-surface") {
+            // Build the project's effects against the final target on the first pass.
+            mmdManager.prepareExportRenderSurface(outputWidth, outputHeight);
+        }
 
         updateStatus(callbacks, "Loading project into export renderer...", "loading-project");
         const importResult = await mmdManager.importProjectState(request.project, { forExport: true });
@@ -757,10 +761,6 @@ export async function runWebmExportJob(
             );
         }
         mmdManager.setCheckerBackgroundPreviewEnabled(false);
-
-        if (captureMode === "rgba-surface") {
-            mmdManager.prepareExportRenderSurface(outputWidth, outputHeight);
-        }
 
         mmdManager.setTimelineTarget("camera");
         await waitForAnimationFrames(1);

@@ -8,6 +8,24 @@ import { decodeFirstVideoFrame } from "./video-first-frame.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
+function observeExporterSetup({ ipcMain }) {
+  // Observe the production IPC in the fixture's Electron process, before log-file rotation.
+  const events = [];
+  const collect = (event, level, scope, message) => {
+    if (level !== "info") return;
+    if (!(scope === "performance" && message === "export render surface prepared")
+        && !(scope === "asset" && message === "model load started")) return;
+    const url = new URL(event.sender.getURL());
+    if (url.searchParams.get("mode") === "webm-exporter") events.push({ jobId: url.searchParams.get("jobId"), message });
+  };
+  ipcMain.on("log:write", collect);
+  ipcMain.__compatExporterSetup = jobId => {
+    ipcMain.off("log:write", collect);
+    delete ipcMain.__compatExporterSetup;
+    return events.filter(event => event.jobId === jobId).map(event => event.message);
+  };
+}
+
 async function launchWebGl() {
   const previous = process.env.MMD_MODOKI_RENDERER;
   process.env.MMD_MODOKI_RENDERER = "webgl2";
@@ -34,19 +52,23 @@ test("WebGL2 retains GPU-only effect instances while exporting visible 4K PNG an
   test.setTimeout(180000);
   mkdirSync(testInfo.outputDir, { recursive: true });
   const report = { pageErrors: [], glErrors: [], consoleErrors: [] };
-  let launched;
+  let launched, editorPage, phase = "startup";
   try {
     launched = await launchWebGl();
+    const watched = new WeakSet();
     const watch = page => {
+      if (watched.has(page)) return;
+      watched.add(page);
       page.on("pageerror", error => report.pageErrors.push(error.message));
       page.on("console", message => {
         const text = message.text();
+        const source = { phase, window: page === editorPage ? "editor" : "exporter", url: page.url() };
         if (message.type() === "error") report.consoleErrors.push(text);
-        if (/INVALID_OPERATION|deleted object|Program object expected|WebGL.*(?:error|invalid)|useProgram.*(?:deleted|invalid)/i.test(text)) report.glErrors.push(text);
+        if (/INVALID_OPERATION|deleted object|Program object expected|WebGL.*(?:error|invalid)|useProgram.*(?:deleted|invalid)/i.test(text)) report.glErrors.push({ ...source, text, location: message.location() });
       });
     };
     launched.app.on("window", watch);
-    const page = await launched.app.firstWindow();
+    const page = await launched.app.firstWindow(); editorPage = page;
     watch(page);
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     report.engine = (await page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics())).engine;
@@ -60,8 +82,10 @@ test("WebGL2 retains GPU-only effect instances while exporting visible 4K PNG an
         unmaskedRenderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null,
         unmaskedVendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : null };
     });
+    phase = "load fixture model";
     expect(await page.evaluate(path => window.mmdModokiE2e.loadModel(path),
       resolve(root, "test/fixtures/external-parent/tofu.pmx"))).not.toBeNull();
+    phase = "import authored effects";
     const authored = await page.evaluate(async () => {
       // Vite serves this module inside the renderer, not from Node's module resolver.
       // eslint-disable-next-line import/no-unresolved
@@ -89,12 +113,14 @@ test("WebGL2 retains GPU-only effect instances while exporting visible 4K PNG an
     const projectPath = testInfo.outputPath("gpu-effects-project.json");
     writeFileSync(projectPath, JSON.stringify(authored.project));
     const saved = JSON.parse(readFileSync(projectPath, "utf8"));
+    phase = "reload saved project";
     await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), saved);
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances)).toEqual(authored.instances);
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
     report.runtime = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState());
     expect(report.runtime.backend).toBe("frameGraph");
 
+    phase = "4K PNG";
     const capture = await page.evaluate(directory => window.mmdModokiE2e.captureSinglePngSurfaceToPath(directory, 3840, 2160), testInfo.outputDir);
     expect(capture.surfaceReleased).toBe(true);
     const png = PNG.sync.read(readFileSync(capture.path));
@@ -105,7 +131,9 @@ test("WebGL2 retains GPU-only effect instances while exporting visible 4K PNG an
     expect(report.png.object).toBeLessThan(report.png.pixels * 0.85);
     await testInfo.attach("webgl-4k", { path: capture.path, contentType: "image/png" });
 
+    phase = "WebM export";
     const outputPath = testInfo.outputPath("webgl-compatible.webm");
+    await launched.app.evaluate(observeExporterSetup);
     const job = await page.evaluate(async outputFilePath => {
       window.__compatWebmResult = null;
       window.__compatWebmUnsubscribe = window.electronAPI.onWebmExportResult(result => { window.__compatWebmResult = result; });
@@ -122,6 +150,8 @@ test("WebGL2 retains GPU-only effect instances while exporting visible 4K PNG an
       return window.__compatWebmResult;
     });
     expect(report.webmResult.status).toBe("completed");
+    report.exporterSetup = await launched.app.evaluate(({ ipcMain }, id) => ipcMain.__compatExporterSetup(id), job.jobId);
+    expect(report.exporterSetup).toEqual(["export render surface prepared", "model load started"]);
     const input = new Input({ source: new BufferSource(readFileSync(outputPath)), formats: [WEBM] });
     try {
       const track = await input.getPrimaryVideoTrack();
@@ -133,6 +163,7 @@ test("WebGL2 retains GPU-only effect instances while exporting visible 4K PNG an
       expect(timestamps).toHaveLength(3);
       timestamps.sort((a, b) => a - b).forEach((time, i) => expect(Math.abs(time - i / 30)).toBeLessThan(0.002));
     } finally { input.dispose(); }
+    phase = "decode WebM";
     const decoded = await decodeFirstVideoFrame(page, outputPath);
     const videoPng = PNG.sync.read(Buffer.from(decoded.png, "base64"));
     report.videoPixels = { width: decoded.width, height: decoded.height, presented: decoded.presented,

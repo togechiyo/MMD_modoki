@@ -1284,27 +1284,28 @@ export function setupFinalLensDistortionPostProcess(host: PostProcessHost): void
     host.enforceFinalPostProcessOrder();
 }
 
-export function applyAntialiasSettings(host: PostProcessHost): void {
-    if (host.finalAntialiasPostProcess) {
+export function applyAntialiasSettings(host: PostProcessHost, useCameraFxaa: boolean): void {
+    if (useCameraFxaa && !host.finalAntialiasPostProcess) {
+        const camera = host.camera;
+        const engine = camera.getEngine();
+        // Babylon's camera chain calls activate() without a source texture.
+        // Match an export surface even when its size differs from the canvas.
+        const options = host.postEffectBackend === "frameGraph" ? { size: {
+            get width() { return camera.outputRenderTarget?.getRenderWidth() ?? engine.getRenderWidth(true); },
+            get height() { return camera.outputRenderTarget?.getRenderHeight() ?? engine.getRenderHeight(true); },
+        } } : 1.0;
+        host.finalAntialiasPostProcess = new FxaaPostProcess(
+            "finalFxaa",
+            options,
+            camera,
+            Texture.BILINEAR_SAMPLINGMODE,
+            engine,
+            false
+        );
+    } else if (!useCameraFxaa && host.finalAntialiasPostProcess) {
         host.finalAntialiasPostProcess.dispose(host.camera);
         host.finalAntialiasPostProcess = null;
     }
-    if (host.postEffectBackend === "frameGraph") {
-        host.enforceFinalPostProcessOrder();
-        return;
-    }
-    if (!host.antialiasEnabledValue) {
-        host.enforceFinalPostProcessOrder();
-        return;
-    }
-    host.finalAntialiasPostProcess = new FxaaPostProcess(
-        "finalFxaa",
-        1.0,
-        host.camera,
-        Texture.BILINEAR_SAMPLINGMODE,
-        host.engine,
-        false
-    );
     host.enforceFinalPostProcessOrder();
 }
 

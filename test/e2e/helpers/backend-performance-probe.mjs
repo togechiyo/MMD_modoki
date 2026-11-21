@@ -73,13 +73,17 @@ export async function prepareBackendProbe({ width = 1920, height = 1080 } = {}) 
   let resizeReady = false;
   let frameGraph;
   let sceneColor;
+  let cameraFxaaRenderSize;
   while (performance.now() < deadline) {
     frameGraph = getBackendState();
     sceneColor = sceneColorSize(scene);
+    const cameraFxaa = scene.activeCamera?._postProcesses.find(pass => pass?.name === "finalFxaa");
+    cameraFxaaRenderSize = cameraFxaa ? [cameraFxaa.width, cameraFxaa.height] : null;
     const engineMatches = engine.getRenderWidth() === width && engine.getRenderHeight() === height;
     const targetRequired = frameGraph.backend === "frameGraph" && frameGraph.resourcesAllocated;
     const targetMatches = !targetRequired || (sceneColor?.[0] === width && sceneColor?.[1] === height);
-    if (engineMatches && targetMatches && frameGraph.ready) {
+    const fxaaMatches = !cameraFxaa || (cameraFxaa.width === width && cameraFxaa.height === height);
+    if (engineMatches && targetMatches && fxaaMatches && frameGraph.ready) {
       resizeReady = true;
       break;
     }
@@ -88,7 +92,7 @@ export async function prepareBackendProbe({ width = 1920, height = 1080 } = {}) 
   if (!resizeReady) {
     throw new Error(`Backend resize did not become ready: ${JSON.stringify({
       requested: [width, height], engine: [engine.getRenderWidth(), engine.getRenderHeight()],
-      sceneColor, backend: frameGraph?.backend, ready: frameGraph?.ready,
+      sceneColor, cameraFxaaRenderSize, backend: frameGraph?.backend, ready: frameGraph?.ready,
     })}`);
   }
   const meshes = scene.meshes.filter(mesh => mesh.getTotalIndices() > 0);
@@ -103,6 +107,7 @@ export async function prepareBackendProbe({ width = 1920, height = 1080 } = {}) 
     requestedRenderSize: [width, height],
     renderSize: [engine.getRenderWidth(), engine.getRenderHeight()],
     sceneColorRenderSize: sceneColor,
+    cameraFxaaRenderSize,
     canvasClientSize: [canvas.clientWidth, canvas.clientHeight],
     hardwareScalingLevel,
     frameGraph: { backend: frameGraph.backend, ready: frameGraph.ready, buildGeneration: frameGraph.buildGeneration },

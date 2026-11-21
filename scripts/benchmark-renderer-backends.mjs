@@ -116,7 +116,9 @@ try {
   }, { probePath, width, height });
   assert.equal(probe.engine, values.backend === "webgpu" ? "WebGPU" : "WebGL2");
   assert.deepEqual(probe.renderSize, [width, height]);
-  assert.deepEqual(probe.sceneColorRenderSize, [width, height]);
+  // The empty effect stack uses the camera FXAA target on WebGL2 and scene color on WebGPU.
+  assert.deepEqual(probe.sceneColorRenderSize, probe.isWebGPU ? [width, height] : null);
+  assert.deepEqual(probe.cameraFxaaRenderSize, probe.isWebGPU ? null : [width, height]);
   const finalProject = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
   assert.equal(finalProject.physics.enabled, aliciaPhysics);
   const physicsRuntime = await page.evaluate(() => window.mmdModokiE2e.getPhysicsRuntimeState());

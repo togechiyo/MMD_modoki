@@ -367,6 +367,8 @@ import { ACTIVE_MESHES_PERFORMANCE_SECTIONS, ActiveMeshesPerformance } from "./d
 import {
     POST_EFFECT_BACKEND_STORAGE_KEY,
     readPostEffectBackendLocalStorage,
+    resolveAaOnlyOutput,
+    type FrameGraphOutput,
     type PostEffectBackend,
 } from "./render/post-effect-backend";
 import {
@@ -11595,6 +11597,7 @@ ${beforeFogAppendBlock}
         }
         this.postEffectBackend = activated ? "frameGraph" : "classic";
         this.applyImageProcessingSettings();
+        if (this.exportRenderSurface) this.syncExportRenderSurfaceTarget();
         if (activated) {
             logDebugIfEnabled("postfx", "render", "frame graph post effect performance snapshot", {
                 storageKey: MmdManager.FRAME_PERFORMANCE_LOG_STORAGE_KEY,
@@ -12037,21 +12040,46 @@ ${beforeFogAppendBlock}
     }
 
     private shouldExecuteFrameGraphPostEffects(): boolean {
-        return this.frameGraphPostEffectsEnabledValue && (this.getActiveFrameGraphPostEffectIds().length > 0
+        return this.getFrameGraphOutput() === "frameGraph";
+    }
+
+    private getFrameGraphOutput(): FrameGraphOutput {
+        if (!this.frameGraphPostEffectsEnabledValue) return "direct";
+        if (this.getActiveFrameGraphPostEffectIds().length > 0
             || this.effectInstances.ids().some(id => this.effectInstances.present(id))
-            || this.isFrameGraphImageProcessingTaskNeeded()
-            || this.antialiasEnabledValue);
+            || this.isFrameGraphImageProcessingTaskNeeded()) return "frameGraph";
+        const engineType = this.getEngineType();
+        const scattering = engineType === "WebGL2" && this.antialiasEnabledValue
+            && !!this.scene.subSurfaceConfiguration && this.hasActivePbrMmdLikeScattering();
+        return resolveAaOnlyOutput(this.antialiasEnabledValue, engineType, this.postEffectContrastValue, scattering);
     }
 
     private syncFrameGraphRenderTargetState(): void {
         const sceneColorTarget = this.frameGraphPostEffectsSceneColorTarget;
         const customRenderTargets = this.camera?.customRenderTargets;
-        if (!sceneColorTarget || !customRenderTargets) {
+        const webGlOutput = this.postEffectBackend === "frameGraph" && this.getEngineType() === "WebGL2";
+        if (!customRenderTargets || (!sceneColorTarget && !webGlOutput)) {
             return;
         }
+        const output = this.getFrameGraphOutput();
+        if (webGlOutput) {
+            const cameraFxaa = output === "cameraFxaa";
+            if (cameraFxaa !== (this.finalAntialiasPostProcess !== null)) {
+                this.applyAntialiasSettings(cameraFxaa);
+            }
+            // Exposure, native SSS and other non-stack settings can change the
+            // output path without adding or removing an effect card.
+            const needsGraph = output === "frameGraph" && !this.frameGraphPostEffectsController;
+            const releaseGraphForFxaa = cameraFxaa && this.frameGraphPostEffectsController;
+            if ((needsGraph || releaseGraphForFxaa) && !this.frameGraphPostEffectsRebuildPending) {
+                this.frameGraphPostEffectsRebuildPending = true;
+                this.scheduleFrameGraphPostEffectsBackendRebuild();
+            }
+        }
+        if (!sceneColorTarget) return;
         const index = customRenderTargets.indexOf(sceneColorTarget);
         const shouldRenderSceneColorTarget = this.postEffectBackend === "frameGraph"
-            && this.shouldExecuteFrameGraphPostEffects();
+            && output === "frameGraph";
         const subSurfacePolicy = resolveSubSurfaceFrameGraphPolicy(
             shouldRenderSceneColorTarget,
             this.hasActivePbrMmdLikeScattering(),
@@ -12168,7 +12196,8 @@ ${beforeFogAppendBlock}
     }
 
     private renderBoneGizmoUtilityLayerAfterPostEffects(): void {
-        if (this.postEffectBackend !== "frameGraph") {
+        // With camera FXAA, the automatic utility-layer draw is already final.
+        if (this.postEffectBackend !== "frameGraph" || this.finalAntialiasPostProcess) {
             return;
         }
         const utilityLayer = this.boneGizmoManager?.utilityLayer as { render?: () => void } | undefined;
@@ -12778,6 +12807,9 @@ ${beforeFogAppendBlock}
     }
     set postEffectContrast(v: number) {
         this.postEffectContrastValue = Math.max(0, Math.min(3, v));
+        if (this.postEffectBackend === "frameGraph" && this.getEngineType() === "WebGL2") {
+            this.syncFrameGraphRenderTargetState();
+        }
     }
 
     /** Gamma power for mid-tone correction (1.0 = neutral). */
@@ -14425,6 +14457,7 @@ ${beforeFogAppendBlock}
         try {
             if (this.postEffectBackend === "frameGraph") {
                 this.disposeClassicDofPipelineResources();
+                this.applyAntialiasSettings();
                 this.postEffectFarDofStrengthValue = 0;
                 return;
             }
@@ -14530,10 +14563,6 @@ ${beforeFogAppendBlock}
         if (this.dofPostProcess) {
             this.dofPostProcess.dispose(this.camera);
             this.dofPostProcess = null;
-        }
-        if (this.finalAntialiasPostProcess) {
-            this.finalAntialiasPostProcess.dispose(this.camera);
-            this.finalAntialiasPostProcess = null;
         }
         if (this.finalLensDistortionPostProcess) {
             this.finalLensDistortionPostProcess.dispose(this.camera);
@@ -14704,7 +14733,10 @@ ${beforeFogAppendBlock}
     }
 
         private applyImageProcessingSettings(): void {
-        return applyImageProcessingSettingsImpl(this);
+        applyImageProcessingSettingsImpl(this);
+        if (this.postEffectBackend === "frameGraph" && this.getEngineType() === "WebGL2") {
+            this.syncFrameGraphRenderTargetState();
+        }
     }
 
         private isLutSourceReady(): boolean {
@@ -14853,8 +14885,9 @@ ${beforeFogAppendBlock}
         return setupFinalLensDistortionPostProcessImpl(this);
     }
 
-        private applyAntialiasSettings(): void {
-        return applyAntialiasSettingsImpl(this);
+    private applyAntialiasSettings(cameraFxaa = this.postEffectBackend === "frameGraph"
+        ? this.getFrameGraphOutput() === "cameraFxaa" : this.antialiasEnabledValue): void {
+        applyAntialiasSettingsImpl(this, cameraFxaa);
     }
 
         private enforceFinalPostProcessOrder(): void {
@@ -16621,6 +16654,7 @@ ${beforeFogAppendBlock}
             && !this.standaloneBloomEffect?._isReady()) return false;
         if (this.postEffectBackend === "classic" && this.isEffectKeyframePrepared("lut")
             && this.isLutSourceReady() && !this.postEffectLutTexture?.isReady()) return false;
+        if (this.finalAntialiasPostProcess && !this.finalAntialiasPostProcess.isReady()) return false;
         if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) {
             return !this.frameGraphPostEffectsRebuildPending
                 && !this.frameGraphPostEffectsRebuildScheduled;

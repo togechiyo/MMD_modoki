@@ -1,4 +1,18 @@
 export type PostEffectBackend = "classic" | "frameGraph";
+export type FrameGraphOutput = "direct" | "cameraFxaa" | "frameGraph";
+
+/** Select the final pass when no effect stack or image processing task needs the graph. */
+export function resolveAaOnlyOutput(
+    antialiasEnabled: boolean,
+    engineType: string,
+    contrast: number,
+    screenSpaceScattering: boolean,
+): FrameGraphOutput {
+    if (!antialiasEnabled) return "direct";
+    // The graph also applies global contrast and owns the SSS scene-color prepass.
+    if (engineType === "WebGL2" && contrast === 1 && !screenSpaceScattering) return "cameraFxaa";
+    return "frameGraph";
+}
 
 export const POST_EFFECT_BACKEND_STORAGE_KEY = "mmd_modoki.postEffectBackend";
 

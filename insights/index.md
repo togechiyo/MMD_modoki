@@ -31,7 +31,7 @@ MMD 本体より優先度の低い実験・拡張候補は [Low-priority / Exper
 | policy | [描画リソースは意味を保ったまま共有する](./policies/preserve-render-resource-semantics-before-sharing.md) | depth、normal、mask、RTを統合・最適化する |
 | policy | [WebGPU の影変更は独立した高危険作業として隔離・横断検証する](./policies/webgpu-shadow-changes-require-isolated-cross-path-validation.md) | generator、CSM、filter、caster / receiver、shadow resourceを変更する |
 | verified | [大半径 blur は multi-scale で作る](./verified/wide-blur-needs-multiscale-sampling.md) | Bloom、Glow、DoFなど広いぼかしを作る |
-| verified | [AA出力差はFrameGraphの実行まで確認する](./verified/framegraph-aa-requires-pipeline-execution.md) | AA単独時の実行条件・切替・PNG / 動画への反映を確認する |
+| verified | [AA は最終 FXAA の経路と出力画素で確認する](./verified/framegraph-aa-requires-pipeline-execution.md) | WebGL2 のカメラ FXAA と FrameGraph の切替、PNG / 動画の輪郭を検証する |
 
 ## Rendering / materials and depth
 

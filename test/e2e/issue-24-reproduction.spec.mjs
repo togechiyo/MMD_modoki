@@ -24,6 +24,29 @@ async function settle(page) {
   }));
 }
 
+async function expectAaRoute(page, { aa, effect = false, master = true }) {
+  const engine = await page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics().engine);
+  if (process.env.MMD_MODOKI_RENDERER) {
+    expect(engine).toBe(process.env.MMD_MODOKI_RENDERER === "webgl2" ? "WebGL2" : "WebGPU");
+  }
+  const graph = master && (effect || (aa && engine === "WebGPU"));
+  const cameraFxaa = master && aa && !graph ? 1 : 0;
+  // WebGPU can retain a warm, inactive graph when just AA is switched off.
+  const retainInactiveGraph = engine === "WebGPU" && master && !graph;
+  await expect.poll(() => page.evaluate(async probePath => {
+    const before = window.mmdModokiE2e.getFrameGraphPostEffectsState().executedFrameCount;
+    const state = await (await import(probePath)).observe();
+    return {
+      cameraFxaa: state.camera.postProcesses.filter(name => name === "FxaaPostProcess").length,
+      allocated: state.effects.resourcesAllocated, rendering: state.effects.executedFrameCount > before,
+      backend: state.effects.backend, ready: state.effects.ready,
+    };
+  }, "/test/e2e/helpers/feedback-reproduction-probe.mjs")).toMatchObject({
+    cameraFxaa, rendering: graph, backend: "frameGraph", ready: true,
+    ...(retainInactiveGraph ? {} : { allocated: graph }),
+  });
+}
+
 async function setup() {
   mkdirSync(output, { recursive: true });
   const launched = await launchMmdModoki(root);
@@ -54,7 +77,7 @@ async function setup() {
     const pages = launched.app.windows();
     for (let index = 0; index < pages.length; index++) {
       console.log("[issue24] window on failure", pages[index].url());
-      await pages[index].screenshot({ path: resolve(output, `setup-failure-${index}.png`) }).catch(() => {});
+      await pages[index].screenshot({ path: resolve(output, `setup-failure-${index}.png`) }).catch(error => console.log("[issue24] failure screenshot unavailable", error.message));
     }
     await launched.close();
     throw error;
@@ -82,14 +105,20 @@ async function imageMetrics(page, path) {
     const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
     let bright = 0;
     let intermediate = 0;
+    let translucent = 0;
     for (let y = Math.ceil(canvas.height * 0.16); y < canvas.height * 0.84; y++) {
       for (let x = Math.ceil(canvas.width * 0.2); x < canvas.width * 0.8; x++) {
-        const red = data[(y * canvas.width + x) * 4];
-        if (red > 150) bright++;
+        const i = (y * canvas.width + x) * 4;
+        const red = data[i];
+        if (data[i + 3] > 0 && data[i + 3] < 255) translucent++;
+        // Compare visible coverage on the same black background for opaque
+        // and straight-alpha PNGs, including partially covered white edges.
+        if (red * data[i + 3] / 255 > 150) bright++;
         if (red > 5 && red < 240) intermediate++;
       }
     }
-    return { bright, intermediate };
+    return { bright, intermediate, translucent, cornerAlpha: data[3],
+      centerAlpha: data[(Math.floor(canvas.height / 2) * canvas.width + Math.floor(canvas.width / 2)) * 4 + 3] };
   }, path);
 }
 
@@ -179,29 +208,39 @@ async function inspectSavedVideoAndActiveAa() {
           return result;
         }, path);
         expect(decoded.brightPixels).toBeGreaterThan(100);
-        writeFileSync(resolve(output, `aa-${aa}-${fps}fps-decoded.png`), Buffer.from(decoded.png, "base64"));
+        const decodedPath = resolve(output, `aa-${aa}-${fps}fps-decoded.png`);
         const { png, ...metadata } = decoded;
-        videoObservations.push({ aa, fps, ...metadata });
+        writeFileSync(decodedPath, Buffer.from(png, "base64"));
+        const metrics = await imageMetrics(page, decodedPath);
+        if (aa === "on") expect(metrics.intermediate).toBeGreaterThan(500);
+        else expect(metrics.intermediate).toBeLessThan(100);
+        videoObservations.push({ aa, fps, ...metadata, metrics });
         console.log("[issue24] decoded video", aa, fps, decoded.width, decoded.height, decoded.duration, decoded.time);
       }
     }
     writeFileSync(resolve(output, "video-observations.json"), JSON.stringify(videoObservations, null, 2));
     await camera(page, 0, 0, 12, 17);
-    await page.locator("#btn-toggle-shader-panel").click();
+    const panel = page.locator("#btn-toggle-shader-panel");
+    if (await panel.getAttribute("aria-pressed") !== "true") await panel.click();
+    await page.locator('[data-effect-tab="post"]').click();
+    const master = page.locator("#btn-effect-toggle-framegraph");
+    await master.click();
+    await expectAaRoute(page, { aa: true, master: false });
+    await master.click();
+    await expectAaRoute(page, { aa: true });
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="gamma"]').click();
-    const gamma = page.locator('[data-effect-stack-control="gammaPower"]');
-    await gamma.focus();
-    await gamma.press("ArrowRight");
-    await page.locator("#btn-toggle-shader-panel").click();
+    const gammaRow = page.locator("[data-effect-instance-row]");
+    await expect(gammaRow).toHaveCount(1);
     await settle(page);
     const observations = [];
-    for (const aa of [true, false]) {
+    for (const aa of [true, false, true]) {
       if ((await page.evaluate(() => window.mmdModokiE2e.exportProjectState().viewport.antialiasEnabled)) !== aa) {
         await page.getByRole("button", { name: "表示", exact: true }).click();
         await page.locator('[data-menu-command="view.toggleAntialias"]').click();
       }
       await settle(page);
+      await expectAaRoute(page, { aa, effect: true });
       const png = await page.evaluate(dir => window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, 1152, 648), output);
       copyFileSync(png.path, resolve(output, `active-fg-aa-${aa ? "on" : "off"}.png`));
       const metrics = await imageMetrics(page, png.path);
@@ -209,6 +248,18 @@ async function inspectSavedVideoAndActiveAa() {
       if (aa) expect(metrics.intermediate).toBeGreaterThan(500);
       else expect(metrics.intermediate).toBeLessThan(100);
       observations.push({ aa, snapshot: await page.evaluate(() => window.mmdModokiDiagnostics.dumpPerformanceSnapshot()) });
+    }
+    await gammaRow.locator('[data-instance-action="delete"]').click();
+    await expect(gammaRow).toHaveCount(0);
+    await expectAaRoute(page, { aa: true });
+    const emptyStack = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+    for (const field of ["contrast", "exposure"]) {
+      const restored = structuredClone(emptyStack);
+      restored.effects[field] = 1.2;
+      await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), restored);
+      await expectAaRoute(page, { aa: true, effect: true });
+      await page.evaluate(project => window.mmdModokiE2e.importProjectState(project), emptyStack);
+      await expectAaRoute(page, { aa: true });
     }
     writeFileSync(resolve(output, "active-fg-observations.json"), JSON.stringify({ observations, errors: launched.errors,
       validation: await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()),
@@ -228,6 +279,17 @@ test("Issue 24: collect AA viewport PNG and 30/60 fps WebM", async () => {
       width: canvas.width, height: canvas.height, cssWidth: canvas.clientWidth,
       cssHeight: canvas.clientHeight, dpr: devicePixelRatio,
     }));
+    if (await page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics().engine === "WebGL2")) {
+      for (const [width, height] of [[640, 360], [1440, 810]]) {
+        const probePath = "/test/e2e/helpers/feedback-reproduction-probe.mjs";
+        const capture = await page.evaluate(async ({ probePath, directory, width, height }) =>
+          (await import(probePath)).captureWithFxaaInputSize(directory, width, height),
+        { probePath, directory: output, width, height });
+        expect([capture.width, capture.height]).toEqual([width, height]);
+        expect(capture.samples.length).toBeGreaterThan(0);
+        for (const sample of capture.samples) expect(sample).toEqual([width, height]);
+      }
+    }
     for (const [iteration, aa] of [true, false, true].entries()) {
       const current = await page.evaluate(() => window.mmdModokiE2e.exportProjectState().viewport.antialiasEnabled);
       if (current !== aa) {
@@ -244,6 +306,7 @@ test("Issue 24: collect AA viewport PNG and 30/60 fps WebM", async () => {
         });
         await settle(page);
       }
+      await expectAaRoute(page, { aa });
       await page.locator("#render-canvas").screenshot({ path: resolve(output, `${prefix}-viewport.png`) });
       const png = await page.evaluate(({ dir, width, height }) => (
         window.mmdModokiE2e.captureSinglePngSurfaceToPath(dir, width, height)
@@ -256,19 +319,23 @@ test("Issue 24: collect AA viewport PNG and 30/60 fps WebM", async () => {
       const project = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
       writeFileSync(resolve(output, `${prefix}-project.json`), JSON.stringify(project, null, 2));
       rmSync(resolve(output, `${prefix}_0000.png`), { force: true });
-      const pngJob = await page.evaluate(({ project, dir, prefix, width, height }) => (
+      const transparent = iteration === 2;
+      const pngJob = await page.evaluate(({ project, dir, prefix, width, height, transparent }) => (
         window.electronAPI.startPngSequenceExportWindow({ project, outputDirectoryPath: dir,
           startFrame: 0, endFrame: 0, step: 1, prefix, fps: 30, precision: 1,
-          outputWidth: width, outputHeight: height, transparentBackground: false })
-      ), { project, dir: output, prefix, ...size });
+          outputWidth: width, outputHeight: height, transparentBackground: transparent })
+      ), { project, dir: output, prefix, ...size, transparent });
       expect(pngJob?.jobId).toBeTruthy();
       await expect.poll(() => existsSync(resolve(output, `${prefix}_0000.png`)), { timeout: 60_000 }).toBe(true);
       await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 60_000 });
       const sequenceMetrics = await imageMetrics(page, resolve(output, `${prefix}_0000.png`));
       // Independent render contexts need not produce identical FXAA edge samples.
       expect(Math.abs(sequenceMetrics.bright - metrics.bright) / metrics.bright).toBeLessThan(0.01);
-      if (aa) expect(sequenceMetrics.intermediate).toBeGreaterThan(500);
-      else expect(sequenceMetrics.intermediate).toBeLessThan(100);
+      expect(sequenceMetrics.cornerAlpha).toBe(transparent ? 0 : 255);
+      expect(sequenceMetrics.centerAlpha).toBe(255);
+      if (transparent) expect(sequenceMetrics.translucent).toBeGreaterThan(500);
+      if (aa && !transparent) expect(sequenceMetrics.intermediate).toBeGreaterThan(500);
+      if (!aa) expect(sequenceMetrics.intermediate).toBeLessThan(100);
       for (const fps of [30, 60]) {
         const path = resolve(output, `${prefix}-${fps}fps.webm`);
         rmSync(path, { force: true });
@@ -281,7 +348,7 @@ test("Issue 24: collect AA viewport PNG and 30/60 fps WebM", async () => {
         await expect.poll(() => existsSync(path) && statSync(path).size > 1000, { timeout: 60_000 }).toBe(true);
         await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 60_000 });
       }
-      observations.push({ aa, size, metrics, backend: await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState()) });
+      observations.push({ aa, size, metrics, sequenceMetrics, backend: await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState()) });
     }
     writeFileSync(resolve(output, "aa-observations.json"), JSON.stringify({ observations, errors: launched.errors,
       validation: await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()),

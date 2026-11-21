@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { copyFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { launchMmdModoki, selectCenterBone } from "./electron-app.mjs";
 import { createMedia } from "../fixtures/background-media/create.mjs";
@@ -74,7 +75,7 @@ for (const { backend, legacy, background, fps } of [
   { backend: "frameGraph", legacy: true, background: false, fps: 30 },
   { backend: "frameGraph", legacy: false, background: true, fps: 30 },
 ]) {
-  test(`external-parent camera output (${backend}, ${legacy ? "legacy static" : "keyed"}, ${background ? "image" : "no background"}, ${fps}fps)`, async () => {
+  test(`external-parent camera output (${backend}, ${legacy ? "legacy static" : "keyed"}, ${background ? "image" : "no background"}, ${fps}fps)`, async ({}, testInfo) => {
     test.setTimeout(180000);
     const launched = await launchMmdModoki(root);
     const dialogPages = new WeakSet();
@@ -173,6 +174,11 @@ for (const { backend, legacy, background, fps } of [
       await seek(page, 15);
       expect(await page.evaluate(() => window.mmdModokiE2e.getCameraExternalParent())).toBeNull();
       expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().keyframes.cameraExternalParents ?? null)).toBeNull();
+    } catch (error) {
+      for (const name of readdirSync(launched.tempDir).filter(name => /^parent_\d+\.png$/.test(name))) {
+        copyFileSync(resolve(launched.tempDir, name), testInfo.outputPath(name));
+      }
+      throw error;
     } finally { await launched.close(); }
   });
 }

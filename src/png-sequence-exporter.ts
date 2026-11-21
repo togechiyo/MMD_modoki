@@ -128,6 +128,9 @@ export async function runPngSequenceExportJob(
         if (!postEffectReady) {
             throw new Error("Post effects were not ready for PNG sequence capture");
         }
+        await mmdManager.prepareBackgroundVideoFrameForCapture();
+        mmdManager.renderOnceForCapture(0);
+        await waitForAnimationFrames(1);
 
         const padDigits = Math.max(4, String(endFrame).length);
         const totalFrames = frameList.length;

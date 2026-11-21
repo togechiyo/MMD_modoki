@@ -99,7 +99,7 @@ test("keeps cascaded shadows active after loading the tofu PMX and OBJ fixtures"
       requestedMode: "cascaded",
       effectiveMode: "cascaded",
       cascadedSupported: true,
-      cascadedAutoCalcDepthBounds: true,
+      cascadedAutoCalcDepthBounds: false,
       filter: "none",
       engine: "WebGPU",
     });
@@ -145,7 +145,7 @@ test("renders the tofu OBJ as the first cascaded-shadow caster", async () => {
       requestedMode: "cascaded",
       effectiveMode: "cascaded",
       cascadedSupported: true,
-      cascadedAutoCalcDepthBounds: true,
+      cascadedAutoCalcDepthBounds: false,
       filter: "none",
       engine: "WebGPU",
     });
@@ -195,7 +195,7 @@ test("keeps PMX meshes registered as cascaded-shadow casters and receivers", asy
       requestedMode: "cascaded",
       effectiveMode: "cascaded",
       cascadedSupported: true,
-      cascadedAutoCalcDepthBounds: true,
+      cascadedAutoCalcDepthBounds: false,
       filter: "none",
       enabled: true,
       lightSamplingEnabled: true,

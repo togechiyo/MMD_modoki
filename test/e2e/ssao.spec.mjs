@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { effectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
@@ -35,11 +36,11 @@ async function details(page) {
   if (await target.inputValue() !== "__camera__") await target.selectOption("__camera__");
   const tab = page.locator('[data-effect-tab="post"]');
   if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
-  const button = page.locator('[data-effect-stack-item="ssao"]');
+  const button = effectStackRow(page, "ssao").locator('[data-instance-action="select"]');
   if (await button.getAttribute("aria-expanded") !== "true") await button.click();
-  const row = page.locator('[data-effect-stack-row="ssao"]');
+  const row = effectStackRow(page, "ssao");
   await expect(row.locator("select")).toHaveCount(0);
-  return row.locator('[data-effect-stack-control="ssaoStrength"]');
+  return row.locator('[data-instance-field="strength"]');
 }
 
 async function menu(page, command) {
@@ -109,7 +110,7 @@ for (const pbr of [false, true]) test(`SSAO unified simple rendering, legacy fil
     }, savedPath);
     await menu(page, "file.saveProject");
     await expect.poll(() => {
-      try { return JSON.parse(readFileSync(savedPath, "utf8")).effects.ssaoStrength; }
+      try { return JSON.parse(readFileSync(savedPath, "utf8")).effects.frameGraphInstances.instances.find(instance => instance.type === "ssao").settings.strength; }
       catch { return null; }
     }).toBe(1);
     const saved = JSON.parse(readFileSync(savedPath, "utf8"));
@@ -121,7 +122,7 @@ for (const pbr of [false, true]) test(`SSAO unified simple rendering, legacy fil
       const strength = await details(page);
       await strength.fill("25"); await strength.dispatchEvent("input"); await strength.dispatchEvent("change");
       await menu(page, "file.loadProject");
-      await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.ssaoStrength)).toBe(1);
+      await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances?.instances.find(instance => instance.type === "ssao")?.settings.strength)).toBe(1);
       await expect(await details(page)).toHaveValue("100");
       const restored = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
       expect(restored.effects).not.toHaveProperty("ssaoToneMode");
@@ -137,10 +138,11 @@ for (const pbr of [false, true]) test(`SSAO unified simple rendering, legacy fil
       await expect(page.locator("#status-text")).toContainText("Project restored after Runtime change");
       // The backend flag changes before the asynchronous project restore ends;
       // a previous status message can still be visible during that interval.
-      await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.ssaoStrength)).toBe(1);
+      await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances?.instances.find(instance => instance.type === "ssao")?.settings.strength)).toBe(1);
       const restored = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
-      expect(restored.effects.ssaoStrength).toBe(1);
-      expect(restored.effects.ssaoRadius).toBe(3);
+      const ssao = restored.effects.frameGraphInstances.instances.find(instance => instance.type === "ssao");
+      expect(ssao.settings.strength).toBe(1);
+      expect(ssao.settings.radius).toBe(3);
       expect(restored.effects).not.toHaveProperty("ssaoToneMode");
       expect(restored.scene.materialMode).toBe(materialMode);
     }

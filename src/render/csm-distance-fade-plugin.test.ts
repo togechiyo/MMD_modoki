@@ -8,6 +8,7 @@ import { Material } from "@babylonjs/core/Materials/material";
 import { UnregisterMaterialPlugin } from "@babylonjs/core/Materials/materialPluginManager";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { ShaderLanguage } from "@babylonjs/core/Materials/shaderLanguage";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { Scene } from "@babylonjs/core/scene";
@@ -15,6 +16,10 @@ import { defaultPixelShader } from "@babylonjs/core/Shaders/default.fragment";
 import { pbrPixelShader } from "@babylonjs/core/Shaders/pbr.fragment";
 import { defaultPixelShaderWGSL } from "@babylonjs/core/ShadersWGSL/default.fragment";
 import { pbrPixelShaderWGSL } from "@babylonjs/core/ShadersWGSL/pbr.fragment";
+import { defaultFragmentDeclaration } from "@babylonjs/core/Shaders/ShadersInclude/defaultFragmentDeclaration";
+import { defaultUboDeclaration } from "@babylonjs/core/Shaders/ShadersInclude/defaultUboDeclaration";
+import { pbrFragmentDeclaration } from "@babylonjs/core/Shaders/ShadersInclude/pbrFragmentDeclaration";
+import { pbrUboDeclaration } from "@babylonjs/core/Shaders/ShadersInclude/pbrUboDeclaration";
 import { installCsmDistanceFadePlugin } from "./csm-distance-fade-plugin";
 
 const engines: NullEngine[] = [];
@@ -49,6 +54,31 @@ afterEach(() => {
 });
 
 describe("CSM distance fade uniform binding", () => {
+    it("declares every fade uniform with and without GLSL uniform buffers", () => {
+        const { scene } = fixture();
+        for (const isPbr of [false, true]) {
+            const material = isPbr ? new PBRMaterial("pbr", scene) : new StandardMaterial("standard", scene);
+            material.maxSimultaneousLights = 3;
+            material.buildUniformLayout();
+            const manager = material.pluginManager as unknown as {
+                _injectCustomCode: (event: object) => (type: string, source: string) => string;
+            };
+            for (const usesUbo of [false, true]) {
+                const declaration = isPbr
+                    ? (usesUbo ? pbrUboDeclaration : pbrFragmentDeclaration)
+                    : (usesUbo ? defaultUboDeclaration : defaultFragmentDeclaration);
+                const injected = manager._injectCustomCode({})("fragment", declaration.shader);
+                for (let index = 0; index < 3; index++) {
+                    expect(injected.match(new RegExp(`\\bfloat mmdCsmShadowMaxZ${index};`, "g"))).toHaveLength(1);
+                }
+                expect(injected).not.toContain("mmdCsmShadowMaxZ3");
+            }
+            const wgsl = pluginFor(material).getUniforms(ShaderLanguage.WGSL);
+            expect(wgsl.fragment).toBeUndefined();
+            expect(wgsl.ubo).toHaveLength(3);
+        }
+    });
+
     it("injects the fade guard into installed Standard and PBR shaders in both languages", () => {
         const { scene } = fixture();
         for (const [name, shader, isPbr] of [
@@ -77,7 +107,7 @@ describe("CSM distance fade uniform binding", () => {
         expect(pluginFor(pbr).getUniforms().ubo).toHaveLength(2);
         expect(pluginFor(pbr).getCustomCode("fragment")?.CUSTOM_FRAGMENT_DEFINITIONS).toBe("#define MMD_CSM_FADE_LIGHT_COUNT 2");
         const unlit = new StandardMaterial("unlit", scene); unlit.maxSimultaneousLights = 0;
-        expect(pluginFor(unlit).getUniforms()).toEqual({ ubo: [] });
+        expect(pluginFor(unlit).getUniforms()).toEqual({ ubo: [], fragment: "" });
         expect(pluginFor(unlit).getCustomCode("fragment")?.CUSTOM_FRAGMENT_DEFINITIONS).toBe("#define MMD_CSM_FADE_LIGHT_COUNT 0");
         const unsupported = new Material("custom", scene);
         expect(unsupported.pluginManager?.getPlugin("MmdCsmDistanceFade")).toBeFalsy();

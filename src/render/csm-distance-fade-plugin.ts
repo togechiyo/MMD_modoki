@@ -28,18 +28,21 @@ class CsmDistanceFadePlugin extends MaterialPluginBase {
         return language === ShaderLanguage.GLSL || language === ShaderLanguage.WGSL;
     }
 
-    public override getUniforms(): {
+    public override getUniforms(shaderLanguage = ShaderLanguage.GLSL): {
         ubo: Array<{ name: string; size: number; type: string }>;
+        fragment?: string;
     } {
         // The factory runs in Material's base constructor, before the derived
         // material initializes its light count. Read it when building the UBO.
         const count = this.owner instanceof StandardMaterial
             ? this.owner.maxSimultaneousLights : this.owner._maxSimultaneousLights;
         this.layoutLightCount = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
-        return {
-            ubo: Array.from({ length: this.layoutLightCount }, (_, index) => ({
-                name: `mmdCsmShadowMaxZ${index}`, size: 1, type: "float",
-            })),
+        const ubo = Array.from({ length: this.layoutLightCount }, (_, index) => ({
+            name: `mmdCsmShadowMaxZ${index}`, size: 1, type: "float",
+        }));
+        return shaderLanguage === ShaderLanguage.WGSL ? { ubo } : {
+            ubo,
+            fragment: ubo.map(uniform => `uniform float ${uniform.name};`).join("\n"),
         };
     }
 

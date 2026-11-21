@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { executeCommand, type CommandExecutionContext } from "../../src/actions/command-executor";
 import type { BoneTransformCommandSnapshot, BuiltCommand, CommandDiff, CommandTrackRef } from "../../src/actions/command-types";
+import type { TimelineKeyframePayload } from "../../src/editor/timeline-edit-service";
 
 const track: CommandTrackRef = { category: "bone", name: "センター" };
 
@@ -40,6 +41,7 @@ function createContext(result = true, options: { batchRemove?: boolean } = {}): 
                 calls.push(["move", targetTrack, fromFrame, toFrame]);
                 return result;
             },
+            readTimelineKeyframePayload: () => null,
             applyTimelineKeyframePayload: (targetTrack, frame, payload) => {
                 calls.push(["paste", targetTrack, frame, payload ? "payload" : null]);
                 return result;
@@ -378,6 +380,35 @@ describe("executeCommand", () => {
             ["seek", 30],
             ["refresh"],
         ]);
+    });
+
+    it.each(["apply", "revert"] as const)("rolls back a partially written batch paste on %s and permits a retry", direction => {
+        const gamma = { category: "effect" as const, name: "fx-gamma" };
+        const sky = { category: "effect" as const, name: "rcSkyAmbient" };
+        const before = { kind: "effect" as const, effectId: "gamma" as const, instanceId: gamma.name, value: { enabled: false, gamma: 1 } };
+        const after = { ...before, value: { enabled: true, gamma: 2 } };
+        const ambient = { kind: "effect" as const, effectId: "rcSkyAmbient" as const, value: { enabled: true, strength: 0.7, opacity: 1 } };
+        const command = createCommand({ type: "keyframe.batchPaste", pasteBaseFrame: 30, items: [
+            { track: gamma, sourceFrame: 10, targetFrame: 30, before, after },
+            { track: sky, sourceFrame: 10, targetFrame: 30, before: null, after: ambient },
+        ] });
+        const initial = new Map<string, TimelineKeyframePayload>([[gamma.name, direction === "apply" ? before : after]]);
+        if (direction === "revert") initial.set(sky.name, ambient);
+        const stored = new Map(initial);
+        const { context, calls } = createContext();
+        context.readTimelineKeyframePayload = target => stored.get(target.name) ?? null;
+        let writes = 0;
+        context.applyTimelineKeyframePayload = (target, _frame, payload) => {
+            if (payload) stored.set(target.name, payload);
+            else stored.delete(target.name);
+            return ++writes !== 2;
+        };
+        expect(executeCommand(command, direction, context)).toBe(false);
+        expect(stored).toEqual(initial);
+        expect(calls).toEqual([]);
+        expect(executeCommand(command, direction, context)).toBe(true);
+        expect(stored.get(gamma.name)).toEqual(direction === "apply" ? after : before);
+        expect(stored.get(sky.name)).toEqual(direction === "apply" ? ambient : undefined);
     });
 
     it("applies and reverts an empty-frame insertion as one frame-column command", () => {

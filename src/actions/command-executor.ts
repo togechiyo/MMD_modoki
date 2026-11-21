@@ -8,6 +8,7 @@ import type {
     KeyframeCommandDiff,
 } from "./command-types";
 import type { TimelineKeyframePayload } from "../editor/timeline-edit-service";
+import { keyframeValuesEqual } from "./keyframe-transaction";
 
 export type CommandSelectedKeyRef = {
     track: CommandTrackRef;
@@ -32,6 +33,7 @@ export type CommandExecutionContext = {
     removeTimelineKeyframe(track: CommandTrackRef, frame: number): boolean;
     removeTimelineKeyframePayloads?(track: CommandTrackRef, frames: readonly number[]): boolean;
     moveTimelineKeyframe(track: CommandTrackRef, fromFrame: number, toFrame: number): boolean;
+    readTimelineKeyframePayload?(track: CommandTrackRef, frame: number): TimelineKeyframePayload | null;
     applyTimelineKeyframePayload?(track: CommandTrackRef, frame: number, payload: TimelineKeyframePayload | null): boolean;
     applyBoneTransform?(
         modelInstanceId: string,
@@ -209,14 +211,27 @@ function executeKeyframeBatchPaste(
     direction: CommandDirection,
     context: CommandExecutionContext,
 ): boolean {
-    if (!context.applyTimelineKeyframePayload) return false;
+    const read = context.readTimelineKeyframePayload;
+    if (!context.applyTimelineKeyframePayload || !read) return false;
+    const snapshots: { track: CommandTrackRef; frame: number; value: TimelineKeyframePayload | null }[] = [];
     context.beginTimelineEditBatch?.();
     try {
         const items = direction === "apply" ? diff.items : [...diff.items].reverse();
         for (const item of items) {
+            snapshots.push({ track: item.track, frame: item.targetFrame, value: read(item.track, item.targetFrame) });
             const payload = direction === "apply" ? item.after : item.before;
-            if (!applyKeyframePayload(context, item.track, item.targetFrame, payload)) return false;
+            if (!applyKeyframePayload(context, item.track, item.targetFrame, payload)) throw new Error("Keyframe paste failed");
         }
+    } catch {
+        // A write may change a key before reporting failure. Restore the actual
+        // pre-paste values, including that last attempt, before closing the batch.
+        for (const { track, frame, value } of snapshots.reverse()) {
+            if (keyframeValuesEqual(read(track, frame), value)) continue;
+            if (!applyKeyframePayload(context, track, frame, value) || !keyframeValuesEqual(read(track, frame), value)) {
+                throw new Error("Keyframe paste rollback failed");
+            }
+        }
+        return false;
     } finally {
         context.endTimelineEditBatch?.();
     }

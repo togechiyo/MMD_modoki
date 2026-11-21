@@ -108,8 +108,8 @@ describe("effect key ordering and frame boundaries", () => {
         for (const [frame, expected] of [[10, a], [11, b], [12, c], [13, c], [11, b], [10, a]] as const) assertValue(store.value("fx-a", frame), expected);
     });
 
-    it("replays actual move, overwrite and delete Commands without changing earlier/later segments", () => {
-        const { store, base, a, b, c, payload } = fixture("gamma");
+    it.each(FRAME_GRAPH_INSTANCE_EFFECT_TYPES)("%s: replays move, overwrite, delete and cross-instance paste Commands", type => {
+        const { store, base, a, b, c, payload } = fixture(type);
         const track = { category: "effect" as const, name: "fx-a" };
         const context: CommandExecutionContext = {
             addTimelineKeyframe: (ref, frame) => store.apply(ref.name, frame, store.capture(ref.name, frame)),
@@ -128,12 +128,21 @@ describe("effect key ordering and frame boundaries", () => {
         expect(executeCommand(move, "revert", context)).toBe(true); expect(store.serialize()).toEqual(original);
         const overwrite = command({ type: "keyframe.paste", track, frame: 20, before: payload(b), after: payload(c) });
         for (let repeat = 0; repeat < 3; repeat++) {
-            expect(executeCommand(overwrite, "apply", context)).toBe(true); assertValue(store.value("fx-a", 19), between("gamma", a, c, 9));
+            expect(executeCommand(overwrite, "apply", context)).toBe(true); assertValue(store.value("fx-a", 19), between(type, a, c, 9));
             expect(executeCommand(overwrite, "revert", context)).toBe(true); expect(store.serialize()).toEqual(original);
         }
         const remove = command({ type: "keyframe.batchDelete", items: [10, 20, 30].map((frame, index) => ({ track, frame, before: payload([a, b, c][index]) })) });
         expect(executeCommand(remove, "apply", context)).toBe(true); assertValue(store.value("fx-a", 100), base);
         expect(executeCommand(remove, "revert", context)).toBe(true); expect(store.serialize()).toEqual(original);
+        const copied = store.read("fx-a", 20);
+        if (!copied) throw new Error("Expected a registered source key");
+        const target = { category: "effect" as const, name: "fx-b" };
+        const paste = command({ type: "keyframe.paste", track: target, frame: 40, before: null, after: { ...copied, instanceId: target.name } });
+        for (const direction of ["apply", "revert", "apply"] as const) {
+            expect(executeCommand(paste, direction, context)).toBe(true);
+            expect(store.read(target.name, 40)).toEqual(direction === "apply" ? { ...copied, instanceId: target.name } : null);
+            expect(store.read("fx-a", 20)).toEqual(copied);
+        }
         expect(context.refreshAfterKeyframeEdit).toHaveBeenCalled();
     });
 });

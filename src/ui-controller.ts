@@ -164,7 +164,7 @@ import { FrameGraphEffectInstances } from "./editor/frame-graph-effect-instances
 import { isEffectInstanceType } from "./editor/frame-graph-instance-effects";
 import { normalizeLutFile } from "./lut-file";
 import { buildEffectInstanceDiff, type EffectInstanceDiff } from "./actions/effect-instance-command";
-import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId } from "./editor/effect-keyframe-definitions";
+import { EFFECT_KEYFRAME_DEFINITIONS, isEffectId, type EffectId } from "./editor/effect-keyframe-definitions";
 import { EffectKeyframeEditState } from "./editor/effect-keyframe-edit-state";
 import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from "./ui/section-keyframe-button";
 
@@ -200,6 +200,7 @@ type BatchKeyframeClipboard = {
     mode: "batch";
     sourceTarget: TimelineTarget;
     sourceBaseFrame: number;
+    effectTargets: ReadonlyMap<string, EffectId>;
     items: {
         track: CommandTrackRef;
         sourceFrame: number;
@@ -8343,6 +8344,7 @@ export class UIController {
                 fromFrame,
                 toFrame,
             ),
+            readTimelineKeyframePayload: (track, frame) => this.mmdManager.readTimelineKeyframePayload(track, frame),
             applyTimelineKeyframePayload: (track, frame, payload) => {
                 const applied = this.mmdManager.applyTimelineKeyframePayload(track, frame, payload);
                 if (applied) {
@@ -8729,9 +8731,22 @@ export class UIController {
         const clipboard = this.keyframeClipboard;
         if (!clipboard) return false;
         if (clipboard.mode === "batch") {
-            return this.mmdManager.getTimelineTarget() === clipboard.sourceTarget && clipboard.items.length > 0;
+            return this.canPasteKeyframeBatch(clipboard);
         }
         return this.resolveKeyframePasteTarget(clipboard) !== null;
+    }
+
+    private canPasteKeyframeBatch(clipboard: BatchKeyframeClipboard): boolean {
+        if (this.mmdManager.getTimelineTarget() !== clipboard.sourceTarget || !clipboard.items.length) return false;
+        for (const [name, effectId] of clipboard.effectTargets) {
+            if (!this.canPasteEffectKeyframe(name, effectId)) return false;
+        }
+        return true;
+    }
+
+    private canPasteEffectKeyframe(name: string, effectId: EffectId): boolean {
+        return (this.mmdManager.getEffectInstanceType(name) ?? name) === effectId
+            && !this.mmdManager.isEffectTrackSuspended(name);
     }
 
     private canMirrorPasteKeyframeClipboard(): boolean {
@@ -12189,11 +12204,13 @@ export class UIController {
 
     private copySelectedKeyframes(selectedKeys: readonly TimelineKeySelectionRef[]): void {
         const items: BatchKeyframeClipboard["items"] = [];
+        const effectTargets = new Map<string, EffectId>();
         let sourceBaseFrame = Number.MAX_SAFE_INTEGER;
         for (const selectedKey of selectedKeys) {
             const track = this.selectionRefToCommandTrack(selectedKey);
             const payload = this.mmdManager.readTimelineKeyframePayload(track, selectedKey.frame);
             if (!payload) continue;
+            if (payload.kind === "effect") effectTargets.set(track.name, payload.effectId);
             sourceBaseFrame = Math.min(sourceBaseFrame, selectedKey.frame);
             items.push({
                 track,
@@ -12213,6 +12230,7 @@ export class UIController {
             mode: "batch",
             sourceTarget: this.mmdManager.getTimelineTarget(),
             sourceBaseFrame,
+            effectTargets,
             items: items.map((item) => ({
                 ...item,
                 frameOffset: item.sourceFrame - sourceBaseFrame,
@@ -12276,7 +12294,7 @@ export class UIController {
     }
 
     private pasteKeyframeBatchClipboard(clipboard: BatchKeyframeClipboard): void {
-        if (this.mmdManager.getTimelineTarget() !== clipboard.sourceTarget) {
+        if (!this.canPasteKeyframeBatch(clipboard)) {
             this.showToast("No compatible paste target", "error");
             return;
         }
@@ -12414,7 +12432,9 @@ export class UIController {
         if (selectedTrack && this.isCompatibleKeyframePayloadTarget(selectedTrack, clipboard.payload)) {
             return { track: { category: selectedTrack.category, name: selectedTrack.name } };
         }
-        if (clipboard.payload.kind === "effect" && selectedTrack) return null;
+        if (clipboard.payload.kind === "effect") {
+            if (selectedTrack || !this.canPasteEffectKeyframe(clipboard.track.name, clipboard.payload.effectId)) return null;
+        }
         return { track: clipboard.track };
     }
 
@@ -12434,7 +12454,7 @@ export class UIController {
             case "gravity":
                 return track.category === "gravity";
             case "effect":
-                return track.category === "effect" && (this.mmdManager.isEffectInstance(track.name) ? payload.effectId === this.mmdManager.getEffectInstanceType(track.name) : track.name === payload.effectId);
+                return track.category === "effect" && this.canPasteEffectKeyframe(track.name, payload.effectId);
             case "morph":
                 return track.category === "morph";
             case "property":

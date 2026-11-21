@@ -25,6 +25,20 @@ export type ExportRenderSurfaceDiagnostics = {
 
 const DEFAULT_READBACK_TIMEOUT_MS = 8_000;
 
+export const isCaptureRenderTargetReady = (
+    target: Pick<RenderTargetTexture, "renderList" | "isReadyForRendering">,
+    meshes: Scene["meshes"],
+): boolean => {
+    const renderList = target.renderList;
+    try {
+        // Active meshes can still belong to the scene before project import.
+        target.renderList = renderList ?? meshes;
+        return target.isReadyForRendering();
+    } finally {
+        target.renderList = renderList;
+    }
+};
+
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
     let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {

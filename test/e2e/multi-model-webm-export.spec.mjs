@@ -50,6 +50,9 @@ test("V022-006/V022-050: two separated models survive WebM export while viewport
     );
     expect(imported.warnings).toEqual([]);
     await page.evaluate(() => window.mmdModokiE2e.seekTo(0));
+    await expect.poll(() => page.evaluate(() =>
+      window.mmdModokiE2e.getModelBoneRenderedPosition(1, "センター").x
+      - window.mmdModokiE2e.getModelBoneRenderedPosition(0, "センター").x)).toBeCloseTo(12, 4);
 
     const positions = await page.evaluate(() => [
       window.mmdModokiE2e.getModelBoneRenderedPosition(0, "センター"),

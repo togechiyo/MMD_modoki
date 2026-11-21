@@ -377,6 +377,7 @@ import {
 } from "./render/frame-graph-post-effects-controller";
 import {
     ExportRenderSurface,
+    isCaptureRenderTargetReady,
     type ExportRenderSurfaceDiagnostics,
     type RenderedExportFrame,
 } from "./render/export-render-surface";
@@ -16690,11 +16691,15 @@ ${beforeFogAppendBlock}
             // Installing the lighting plugin invalidates material programs. Check the
             // capture pass even when there are no PostFX tasks to warm it indirectly.
             if ((this.needsRcSkyOcclusionResources() || this.needsRcDiffuseGiResources() || this.needsRcSkyAmbientResources()) && (!this.scene.isReady()
-                || (this.exportRenderSurface && !this.exportRenderSurface.renderTarget.isReadyForRendering()))) return false;
-            if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) return true;
+                || (this.exportRenderSurface && !isCaptureRenderTargetReady(this.exportRenderSurface.renderTarget, this.scene.meshes)))) return false;
+            if (this.postEffectBackend !== "frameGraph" || !this.shouldExecuteFrameGraphPostEffects()) {
+                return !this.exportRenderSurface
+                    || isCaptureRenderTargetReady(this.exportRenderSurface.renderTarget, this.scene.meshes);
+            }
             // Graph effects can be ready before the scene-color pass has compiled
             // newly restored background materials for its render pass.
-            return this.frameGraphPostEffectsSceneColorTarget?.isReadyForRendering() === true;
+            return this.frameGraphPostEffectsSceneColorTarget !== null
+                && isCaptureRenderTargetReady(this.frameGraphPostEffectsSceneColorTarget, this.scene.meshes);
         };
         if (isReady()) {
             return true;

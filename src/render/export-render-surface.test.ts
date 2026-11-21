@@ -1,5 +1,51 @@
-import { describe, expect, it } from "vitest";
-import { normalizeExportRgbaAlpha, normalizeExportRgbaRows, unpremultiplyExportRgba } from "./export-render-surface";
+import { describe, expect, it, vi } from "vitest";
+import type { Scene } from "@babylonjs/core/scene";
+import { isCaptureRenderTargetReady, normalizeExportRgbaAlpha, normalizeExportRgbaRows, unpremultiplyExportRgba } from "./export-render-surface";
+
+describe("isCaptureRenderTargetReady", () => {
+    const mesh = { name: "restored-model" } as Scene["meshes"][number];
+
+    it.each([true, false])("checks restored scene meshes without an active-mesh list (ready=%s)", (ready) => {
+        const meshes = [mesh];
+        const target = {
+            renderList: null as Scene["meshes"] | null,
+            isReadyForRendering: vi.fn(() => {
+                expect(target.renderList).toBe(meshes);
+                return ready;
+            }),
+        };
+        expect(isCaptureRenderTargetReady(target, meshes)).toBe(ready);
+        expect(target.isReadyForRendering).toHaveBeenCalledOnce();
+        expect(target.renderList).toBeNull();
+    });
+
+    it.each([{ renderList: [] }, { renderList: [mesh] }])("preserves an explicit render list $renderList", ({ renderList }) => {
+        const target = {
+            renderList,
+            isReadyForRendering: () => {
+                expect(target.renderList).toBe(renderList);
+                return true;
+            },
+        };
+        expect(isCaptureRenderTargetReady(target, [])).toBe(true);
+        expect(target.renderList).toBe(renderList);
+    });
+
+    it("supports a scene without meshes", () => {
+        const target = { renderList: null, isReadyForRendering: () => true };
+        expect(isCaptureRenderTargetReady(target, [])).toBe(true);
+        expect(target.renderList).toBeNull();
+    });
+
+    it("restores the render list when readiness throws", () => {
+        const target = {
+            renderList: null,
+            isReadyForRendering: () => { throw new Error("compilation failed"); },
+        };
+        expect(() => isCaptureRenderTargetReady(target, [mesh])).toThrow("compilation failed");
+        expect(target.renderList).toBeNull();
+    });
+});
 
 describe("normalizeExportRgbaAlpha", () => {
     it("makes opaque output fully opaque while preserving the rendered RGB", () => {

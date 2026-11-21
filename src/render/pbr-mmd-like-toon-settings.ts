@@ -335,6 +335,11 @@ export function registerPbrPresetToonTexture(
     syncPbrMmdLikeShadowTint(material, state);
 }
 
+export function getPbrPresetSourceToonTexture(material: unknown): BaseTexture | null {
+    if (!isPbrPresetMaterialTarget(material)) return null;
+    return (material as PbrPresetMaterialWithRuntimeState)[PBR_PRESET_RUNTIME_STATE]?.toonTexture ?? null;
+}
+
 export function registerPbrPresetTransparencyBaseline(
     material: PbrPresetMaterialTarget,
 ): void {

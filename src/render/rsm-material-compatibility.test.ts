@@ -8,9 +8,10 @@ import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { MultiMaterial } from "@babylonjs/core/Materials/multiMaterial";
 import type { Material } from "@babylonjs/core/Materials/material";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { ReflectiveShadowMap, RSMCreatePluginMaterial } from "@babylonjs/core/Rendering/reflectiveShadowMap";
-import { disposeRsmMaterialClones, prepareRsmMaterialClones } from "./rsm-material-compatibility";
+import { addMeshToRsm, disposeRsmMaterialClones, prepareRsmMaterialClones } from "./rsm-material-compatibility";
 import { GlobalIlluminationController } from "./global-illumination-controller";
 
 const engines: NullEngine[] = [];
@@ -20,7 +21,7 @@ function fixture() {
     const scene = new Scene(engine), light = new DirectionalLight("test", new Vector3(0, -1, 1), scene);
     const rsm = new ReflectiveShadowMap(scene, light, { width: 16, height: 16 });
     const clones = (rsm as unknown as { _regularMatToMatWithPlugin: Map<Material, Material> })._regularMatToMatWithPlugin;
-    const add = (material: Material) => { const mesh = CreateBox("source", {}, scene); mesh.material = material; rsm.addMesh(mesh); return mesh; };
+    const add = (material: Material) => { const mesh = CreateBox("source", {}, scene); mesh.material = material; addMeshToRsm(rsm, mesh); return mesh; };
     return { scene, light, rsm, clones, add };
 }
 
@@ -91,5 +92,27 @@ describe("RSM material compatibility", () => {
         expect(scene.customRenderTargets.filter(target => target.name.startsWith("RSMmrt_"))).toHaveLength(0);
         expect(scene.materials.some(material => material.name.startsWith("RSMCreate_"))).toBe(false);
         expect(scene.materials).toContain(material);
+    });
+
+    it("releases cloned textures with their source while another model keeps its shared texture", () => {
+        const { scene, light, rsm, clones, add } = fixture();
+        const shared = new Texture(null, scene);
+        const first = new StandardMaterial("first", scene), second = new StandardMaterial("second", scene);
+        first.diffuseTexture = second.diffuseTexture = shared;
+        const originalTextureCount = scene.textures.length;
+        add(first);
+        const group = new MultiMaterial("group", scene);
+        group.subMaterials = [second, first];
+        add(group);
+        prepareRsmMaterialClones(rsm, light);
+        const secondClone = clones.get(second) as StandardMaterial;
+        expect(scene.textures.length).toBeGreaterThan(originalTextureCount);
+        first.dispose();
+        expect(clones.has(first)).toBe(false);
+        expect(clones.get(second)).toBe(secondClone);
+        expect(scene.textures).toContain(secondClone.diffuseTexture);
+        disposeRsmMaterialClones(rsm);
+        expect(scene.textures).toHaveLength(originalTextureCount);
+        expect(scene.textures).toContain(shared);
     });
 });

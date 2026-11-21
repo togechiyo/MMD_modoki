@@ -29,6 +29,7 @@ import {
 } from "../shared/mmd-render-order";
 import { AdaptivePbrMaterialBuilder } from "./adaptive-pbr-material-builder";
 import { collectModelBoneInfo } from "./model-bone-metadata";
+import { ownImportedModelResources } from "./model-resource-lifetime";
 import {
     createUniqueModelInstanceId,
     normalizeModelInstanceId,
@@ -524,6 +525,7 @@ type ModelAssetHost = {
     applyDebugMaterialOverrideToMeshes?: (fileName: string, meshes: Mesh[]) => void;
     mmdRuntime: {
         createMmdModel(mesh: MmdMesh, options: object): ModelAssetRuntimeModel;
+        destroyMmdModel(model: ModelAssetRuntimeModel): void;
     };
     isPhysicsAvailable(): boolean;
     getPhysicsBackendLabel?: () => string;
@@ -1218,6 +1220,8 @@ export async function loadPMX(
     requestedInstanceId?: string,
 ): Promise<ModelInfo | null> {
     let renderingSuspended = false;
+    let pendingMesh: MmdMesh | null = null;
+    let pendingRuntime: ModelAssetRuntimeModel | null = null;
     const fallbackFileName = filePath.replace(/^.*[\\/]/, "") || "model";
     try {
         reportModelLoadStage(host, "waiting-runtime", fallbackFileName);
@@ -1307,6 +1311,8 @@ export async function loadPMX(
             if (skeleton) skeletonPool.push(skeleton);
         }
         const uniqueSkeletons = Array.from(new Set(skeletonPool));
+        pendingMesh = mmdMesh;
+        ownImportedModelResources(mmdMesh, uniqueSkeletons);
         host.applyGpuBoneTextureStorageForLargeSkeletons?.(fileName, result.meshes as Mesh[], uniqueSkeletons);
         host.applyCpuSkinningFallbackForWebGpuSdefMeshes?.(fileName, result.meshes as Mesh[]);
 
@@ -1425,6 +1431,7 @@ export async function loadPMX(
                 ? { disableOffsetForConstraintFrame: true }
                 : false,
         });
+        pendingRuntime = mmdModel;
         logModelMaterialVisibilitySummary(fileName, result.meshes as Mesh[], "after-runtime-model-created");
         logSuspiciousMaterialAlphaDiagnostics(fileName, result.meshes as Mesh[], "after-runtime-model-created");
         logAlphaTextureKeptOpaqueCandidates(fileName, result.meshes as Mesh[], "after-runtime-model-created");
@@ -1606,6 +1613,8 @@ export async function loadPMX(
             externalParent: null,
             externalParentKeyframes: [],
         });
+        pendingMesh = null;
+        pendingRuntime = null;
         reportModelLoadStage(host, "scene", fileName);
         host.refreshMmdCoplanarMaterialDepthBiasCorrection?.();
         host.normalizeRuntimeBoneEvaluationOrder?.(mmdModel);
@@ -1652,6 +1661,15 @@ export async function loadPMX(
         schedulePostRenderMaterialDiagnostics(fileName, host.scene, result.meshes as Mesh[]);
         return modelInfo;
     } catch (err: unknown) {
+        try {
+            try {
+                if (pendingRuntime) host.mmdRuntime.destroyMmdModel(pendingRuntime);
+            } finally {
+                pendingMesh?.dispose();
+            }
+        } catch (cleanupError) {
+            logWarn("asset", "failed to release a partially loaded model", { filePath, ...toLogErrorData(cleanupError) });
+        }
         if (renderingSuspended) {
             host.resumeSceneRendering();
         }

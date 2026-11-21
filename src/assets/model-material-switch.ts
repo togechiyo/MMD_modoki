@@ -7,8 +7,9 @@ import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline"
 import type { MmdRenderOrderMode } from "../shared/mmd-render-order";
 import { ensureSharedMmdMaterialBuilder } from "./model-asset-service";
 import { SwitchableMaterialProxy } from "../runtime/switchable-material-proxy";
+import { retainModelTextures } from "./model-resource-lifetime";
 
-type MaterialSet = { materials: readonly Material[]; dispose: () => void };
+type MaterialSet = { materials: readonly Material[]; dispose?: () => void };
 const sets = new WeakMap<MmdMesh, Map<MmdMaterialPipelinePreset, MaterialSet>>();
 
 export interface PreparedMaterialSwitch {
@@ -32,13 +33,12 @@ export async function prepareModelMaterialSwitch(
     }
     let cache = sets.get(root);
     if (!cache) {
-        cache = new Map([[from, { materials: oldMaterials, dispose: () => {
-            for (const material of oldMaterials) material.dispose();
-        } }]]);
+        // The initial materials belong to the imported model root.
+        cache = new Map([[from, { materials: oldMaterials }]]);
         sets.set(root, cache);
         const ownedCache = cache;
         root.onDisposeObservable.addOnce(() => {
-            for (const set of ownedCache.values()) set.dispose();
+            for (const set of ownedCache.values()) set.dispose?.();
             ownedCache.clear();
         });
     }
@@ -64,22 +64,25 @@ export async function prepareModelMaterialSwitch(
         });
         const replacement = container.meshes[0] as MmdMesh | undefined;
         const materials = replacement?.metadata?.materials;
+        // The loader can return a texture already used by a different model or
+        // by another material mode. Only the last owner releases its wrapper.
+        const releaseTextures = retainModelTextures(materials ?? [], container.textures);
+        container.textures.length = 0;
         if (!materials || materials.length !== oldMaterials.length
             || materials.some((material, i) => material.name !== oldMaterials[i].name)) {
             container.dispose();
+            releaseTextures();
             throw new Error("Model source materials changed; material mapping is unavailable");
         }
         // The container never enters the scene and never creates MMD physics.
         // Transfer only materials/textures; discard its temporary geometry.
         const ownedMaterials = [...container.materials];
-        const ownedTextures = [...container.textures];
         container.materials.length = 0;
-        container.textures.length = 0;
         for (const mesh of container.meshes) mesh.material = null;
         container.dispose();
         target = { materials, dispose: () => {
             for (const material of ownedMaterials) material.dispose();
-            for (const texture of ownedTextures) texture.dispose();
+            releaseTextures();
         } };
         created = true;
     }
@@ -115,6 +118,6 @@ export async function prepareModelMaterialSwitch(
             if (created) cache.delete(to);
             committed = false;
         },
-        dispose: () => { if (created && !committed) prepared.dispose(); },
+        dispose: () => { if (created && !committed) prepared.dispose?.(); },
     };
 }

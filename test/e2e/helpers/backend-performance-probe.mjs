@@ -6,6 +6,20 @@ function sceneContext() {
   return { scene, engine: scene.getEngine() };
 }
 
+export async function modelResourceCounts() {
+  const { scene, engine } = sceneContext();
+  await scene.whenReadyAsync();
+  return {
+    engine: engine.isWebGPU ? "webgpu" : `webgl${engine.webGLVersion}`,
+    meshes: scene.meshes.length, skeletons: scene.skeletons.length,
+    materials: scene.materials.length, textures: scene.textures.length,
+    panels: scene.materials.filter(material => material.name.startsWith("AutoLuminous_")).length,
+    panelTextures: scene.textures.filter(texture => /panel-\d+\.png/i.test(texture.name)).length,
+    panelsReady: scene.materials.filter(material => material.name.startsWith("AutoLuminous_"))
+      .every(material => (material.diffuseTexture ?? material.albedoTexture)?.isReady()),
+  };
+}
+
 function glRendererInfo(engine) {
   if (engine.isWebGPU) return null;
   // Read the existing context; do not request a second canvas context.

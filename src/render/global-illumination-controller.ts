@@ -4,7 +4,7 @@ import { GIRSMManager } from "@babylonjs/core/Rendering/GlobalIllumination/giRSM
 import { GIRSM } from "@babylonjs/core/Rendering/GlobalIllumination/giRSM";
 import { ReflectiveShadowMap } from "@babylonjs/core/Rendering/reflectiveShadowMap";
 import type { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
-import { disposeRsmMaterialClones, prepareRsmMaterialClones } from "./rsm-material-compatibility";
+import { addMeshToRsm, disposeRsmMaterialClones, prepareRsmMaterialClones, registerGiMaterials } from "./rsm-material-compatibility";
 import "@babylonjs/core/Engines/Extensions/engine.multiRender";
 import "@babylonjs/core/Engines/WebGPU/Extensions/engine.multiRender";
 import "@babylonjs/core/Rendering/geometryBufferRendererSceneComponent";
@@ -111,7 +111,7 @@ export class GlobalIlluminationController {
 
         // Register GI support on any scene material as soon as we know about it.
         // The plugin can stay disabled until the user explicitly turns GI on.
-        this.giManager.addMaterial();
+        registerGiMaterials(this.giManager);
 
         if (this.desiredEnabled && this.canEnableNow()) {
             this.enablePending = false;
@@ -261,7 +261,7 @@ export class GlobalIlluminationController {
                 continue;
             }
             this.registeredMeshes.add(mesh);
-            this.giRsm.rsm.addMesh(mesh);
+            addMeshToRsm(this.giRsm.rsm, mesh);
         }
         const light = this.getDirectionalLight();
         if (light) prepareRsmMaterialClones(this.giRsm.rsm, light);

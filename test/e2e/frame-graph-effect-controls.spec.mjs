@@ -95,6 +95,7 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
       ready: true,
       hasExecuted: true,
       stack: "luminous,ssgi",
+      connectedInstanceOrder: ["luminous", "ssgi"],
     });
 
     const masterFrameGraph = page.locator("#btn-effect-toggle-framegraph");
@@ -142,6 +143,7 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
       ready: true,
       hasExecuted: true,
       stack: "luminous,ssgi,motionBlur",
+      connectedInstanceOrder: ["luminous", "ssgi", "motionBlur"],
     });
 
     await page.waitForFunction(() => (

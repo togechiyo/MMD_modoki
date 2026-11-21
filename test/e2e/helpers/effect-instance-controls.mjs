@@ -17,11 +17,14 @@ export function effectInstanceRuntimeState() {
   const effects = window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances;
   const controller = window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects.controller;
   const types = new Map(controller?.instances.map(instance => [instance.instanceId, instance.type]) ?? []);
+  const instanceTypes = new Set(types.values());
   return {
     backend: state.backend,
     ready: state.ready,
     hasExecuted: state.executedFrameCount >= 2,
     stack: (effects?.order ?? []).map(id => types.get(id) ?? id).join(","),
+    // The graph also connects built-in passes that are absent from the authored stack.
+    connectedInstanceOrder: controller?.connectedOrder.filter(type => instanceTypes.has(type)),
   };
 }
 

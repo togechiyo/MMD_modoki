@@ -1,5 +1,5 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
@@ -163,12 +163,63 @@ const STANDARD_SHADOW_FRUSTUM_SCALE_FROM_MAX_Z = 0.22;
 const DEFAULT_CSM_CASCADE_COUNT = 3;
 const DEFAULT_CSM_LAMBDA = 0.9;
 const DEFAULT_CSM_CASCADE_BLEND = 0.1;
-const DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE = 1;
 const PCSS_CSM_LAMBDA = 0.6;
 const PCSS_CSM_CASCADE_BLEND = 0.2;
 const PCSS_CSM_LIGHT_SIZE_SCALE = 0.1;
 const PCSS_CSM_MAX_LIGHT_SIZE_UV_RATIO = 0.02;
 const PCSS_CSM_PENUMBRA_DARKNESS = 0.17;
+
+export function getCsmDepthBoundsRefreshRate(isWebGPU: boolean | undefined): number {
+    // WebGL2 reads the reduced depth back synchronously on each update.
+    return isWebGPU ? 1 : 2;
+}
+
+export function requestCsmDepthBoundsRefresh(generator: ShadowGenerator | null): void {
+    if (!(generator instanceof CascadedShadowGenerator) || !generator.autoCalcDepthBounds) return;
+    const interval = generator.autoCalcDepthBoundsRefreshRate;
+    // Babylon resets the depth render target's frame counter on assignment.
+    if (interval > 1) generator.autoCalcDepthBoundsRefreshRate = interval;
+}
+
+type DepthBoundsCamera = Pick<Camera, "getViewMatrix" | "getProjectionMatrix">;
+
+export function createCsmDepthBoundsCameraObserver(
+    mainCamera: DepthBoundsCamera,
+    getGenerator: () => ShadowGenerator | null,
+): (camera: DepthBoundsCamera) => void {
+    const previousView = Matrix.Zero();
+    const previousProjection = Matrix.Zero();
+    return camera => {
+        if (camera !== mainCamera) return;
+        // The scene has updated the main camera matrices before this event.
+        const view = camera.getViewMatrix();
+        const projection = camera.getProjectionMatrix();
+        if (previousView.equals(view) && previousProjection.equals(projection)) return;
+        previousView.copyFrom(view);
+        previousProjection.copyFrom(projection);
+        requestCsmDepthBoundsRefresh(getGenerator());
+    };
+}
+
+export function withPerFrameCsmDepthBounds(generator: ShadowGenerator | null, render: () => void): void {
+    if (!(generator instanceof CascadedShadowGenerator) || !generator.autoCalcDepthBounds) {
+        render();
+        return;
+    }
+    const previewRate = generator.autoCalcDepthBoundsRefreshRate;
+    if (previewRate <= 1) {
+        render();
+        return;
+    }
+    // A captured frame can follow an arbitrary seek or an output resize.
+    // Setting the render target refresh rate also resets its frame counter.
+    generator.autoCalcDepthBoundsRefreshRate = 1;
+    try {
+        render();
+    } finally {
+        generator.autoCalcDepthBoundsRefreshRate = previewRate;
+    }
+}
 
 function getStandardShadowFrustumSize(host: LightShadowHost): number {
     return clampShadowFrustumSize(getEffectiveShadowMaxZ(host) * STANDARD_SHADOW_FRUSTUM_SCALE_FROM_MAX_Z);
@@ -218,7 +269,7 @@ function applyShadowFilterSettings(host: LightShadowHost): void {
         // stop CSM sampling before distant receivers. Keep the configured range.
         host.shadowGenerator.autoCalcDepthBounds = !penumbraEnabled
             && !(host.engine.isWebGPU && host.engine.useReverseDepthBuffer);
-        host.shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
+        host.shadowGenerator.autoCalcDepthBoundsRefreshRate = getCsmDepthBoundsRefreshRate(host.engine.isWebGPU);
         host.shadowGenerator.depthClamp = false;
         host.shadowGenerator.penumbraDarkness = penumbraEnabled ? PCSS_CSM_PENUMBRA_DARKNESS : 1.0;
     }
@@ -244,7 +295,7 @@ function createShadowGenerator(host: LightShadowHost, dirLight: DirectionalLight
         shadowGenerator.lambda = DEFAULT_CSM_LAMBDA;
         shadowGenerator.cascadeBlendPercentage = DEFAULT_CSM_CASCADE_BLEND;
         shadowGenerator.autoCalcDepthBounds = !(host.engine.isWebGPU && host.engine.useReverseDepthBuffer);
-        shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
+        shadowGenerator.autoCalcDepthBoundsRefreshRate = getCsmDepthBoundsRefreshRate(host.engine.isWebGPU);
         shadowGenerator.depthClamp = false;
         shadowGenerator.penumbraDarkness = 1.0;
         shadowGenerator.shadowMaxZ = DEFAULT_CSM_SHADOW_MAX_Z;

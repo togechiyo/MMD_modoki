@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
     applyLightColorTemperature,
+    createCsmDepthBoundsCameraObserver,
     getSerializedLightDirection,
     getDirectionalShadowProjectionDepthRange,
     getShadowDistanceMultiplier,
+    requestCsmDepthBoundsRefresh,
     MAX_DIRECTIONAL_LIGHT_INTENSITY,
     setLightColor,
     setLightIntensity,
@@ -17,8 +19,10 @@ import {
     setShadowMaxZ,
     setShadowDistanceMultiplier,
     setTransparentShadowEnabled,
+    withPerFrameCsmDepthBounds,
 } from "./light-shadow-controller";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { Matrix } from "@babylonjs/core/Maths/math.vector";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
 
@@ -247,6 +251,57 @@ describe("transparent shadow controls", () => {
 });
 
 describe("shadow filter controls", () => {
+    it("refreshes throttled depth bounds for a changed main view, projection, or explicit seek", () => {
+        const resetCounter = vi.fn();
+        const generator = Object.setPrototypeOf({
+            autoCalcDepthBounds: true,
+            get autoCalcDepthBoundsRefreshRate() { return 2; },
+            set autoCalcDepthBoundsRefreshRate(interval: number) { resetCounter(interval); },
+        }, CascadedShadowGenerator.prototype) as CascadedShadowGenerator;
+        const view = Matrix.Identity();
+        const projection = Matrix.Identity();
+        const mainCamera = { getViewMatrix: () => view, getProjectionMatrix: () => projection };
+        const observe = createCsmDepthBoundsCameraObserver(mainCamera, () => generator);
+
+        observe(mainCamera);
+        observe(mainCamera);
+        expect(resetCounter).toHaveBeenCalledTimes(1);
+        view.copyFrom(Matrix.Translation(0, 0, 10));
+        observe({ ...mainCamera });
+        expect(resetCounter).toHaveBeenCalledTimes(1);
+        observe(mainCamera);
+        expect(resetCounter).toHaveBeenCalledTimes(2);
+        projection.copyFrom(Matrix.Scaling(2, 2, 1));
+        observe(mainCamera);
+        observe(mainCamera);
+        expect(resetCounter).toHaveBeenCalledTimes(3);
+        requestCsmDepthBoundsRefresh(generator);
+        expect(resetCounter).toHaveBeenCalledTimes(4);
+        expect(resetCounter).toHaveBeenLastCalledWith(2);
+    });
+
+    it("samples depth on every capture and restores the preview interval even after a failed capture", () => {
+        const generator = Object.setPrototypeOf({
+            autoCalcDepthBounds: true,
+            autoCalcDepthBoundsRefreshRate: 2,
+        }, CascadedShadowGenerator.prototype) as CascadedShadowGenerator;
+        const render = () => expect(generator.autoCalcDepthBoundsRefreshRate).toBe(1);
+
+        withPerFrameCsmDepthBounds(generator, render);
+        expect(generator.autoCalcDepthBoundsRefreshRate).toBe(2);
+        expect(() => withPerFrameCsmDepthBounds(generator, () => {
+            render();
+            throw new Error("capture failed");
+        })).toThrow("capture failed");
+        expect(generator.autoCalcDepthBoundsRefreshRate).toBe(2);
+
+        generator.autoCalcDepthBounds = false;
+        withPerFrameCsmDepthBounds(generator, () => {
+            expect(generator.autoCalcDepthBounds).toBe(false);
+            expect(generator.autoCalcDepthBoundsRefreshRate).toBe(2);
+        });
+    });
+
     it("switches to blurred ESM when blur kernel is set", () => {
         const host = {
             ...createHost(),
@@ -305,7 +360,7 @@ describe("shadow filter controls", () => {
         expect(host.shadowGenerator.contactHardeningLightSizeUVRatio).toBeCloseTo(0.08);
     });
 
-    it("keeps high PCF quality for WebGL cascaded shadows even when saved quality is lower", () => {
+    it("keeps high PCF quality and samples stationary WebGL cascade depth bounds every other frame", () => {
         const csmShadowGenerator = {
             filter: ShadowGenerator.FILTER_PCF,
             filteringQuality: ShadowGenerator.QUALITY_LOW,
@@ -334,11 +389,20 @@ describe("shadow filter controls", () => {
             },
         };
 
-        setShadowFilteringQuality(host, ShadowGenerator.QUALITY_LOW);
+        const typedHost = host as unknown as Parameters<typeof setShadowFilteringQuality>[0];
+        setShadowFilteringQuality(typedHost, ShadowGenerator.QUALITY_LOW);
 
         expect(host.shadowGenerator.filter).toBe(ShadowGenerator.FILTER_PCF);
         expect(host.shadowGenerator.filteringQuality).toBe(ShadowGenerator.QUALITY_HIGH);
         expect(host.shadowFilteringQualityValue).toBe(ShadowGenerator.QUALITY_LOW);
+        expect(host.shadowGenerator.autoCalcDepthBounds).toBe(true);
+        expect(host.shadowGenerator.autoCalcDepthBoundsRefreshRate).toBe(2);
+
+        setShadowPenumbraEnabled(typedHost, true);
+        expect(host.shadowGenerator.autoCalcDepthBounds).toBe(false);
+        setShadowPenumbraEnabled(typedHost, false);
+        expect(host.shadowGenerator.autoCalcDepthBounds).toBe(true);
+        expect(host.shadowGenerator.autoCalcDepthBoundsRefreshRate).toBe(2);
     });
 
     it("avoids the unguarded PCF comparison path for WebGPU cascaded shadows", () => {
@@ -374,6 +438,8 @@ describe("shadow filter controls", () => {
 
         expect(host.shadowGenerator.filter).toBe(ShadowGenerator.FILTER_NONE);
         expect(host.shadowGenerator.filteringQuality).toBe(ShadowGenerator.QUALITY_HIGH);
+        expect(host.shadowGenerator.autoCalcDepthBounds).toBe(true);
+        expect(host.shadowGenerator.autoCalcDepthBoundsRefreshRate).toBe(1);
 
         setShadowPenumbraEnabled(host, true);
         expect(host.shadowGenerator.filter).toBe(ShadowGenerator.FILTER_PCSS);

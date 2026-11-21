@@ -408,6 +408,8 @@ import {
     applyToonShadowInfluenceToMeshes as applyToonShadowInfluenceToMeshesImpl,
     getLightColor as getLightColorImpl,
     getLightDirection as getLightDirectionImpl,
+    createCsmDepthBoundsCameraObserver,
+    getCsmDepthBoundsRefreshRate,
     getDirectionalShadowProjectionDepthRange,
     getSerializedLightDirection as getSerializedLightDirectionImpl,
     getShadowColor as getShadowColorImpl,
@@ -438,6 +440,8 @@ import {
     setShadowPenumbraEnabled as setShadowPenumbraEnabledImpl,
     setShadowPenumbraSize as setShadowPenumbraSizeImpl,
     setTransparentShadowEnabled as setTransparentShadowEnabledImpl,
+    requestCsmDepthBoundsRefresh,
+    withPerFrameCsmDepthBounds,
 } from "./scene/light-shadow-controller";
 import { shouldEnableShadowSampling } from "./scene/shadow-caster-runtime-state";
 import {
@@ -675,7 +679,6 @@ const DEFAULT_CSM_FRUSTUM_SIZE = 960;
 const DEFAULT_CSM_CASCADE_COUNT = 3;
 const DEFAULT_CSM_LAMBDA = 0.9;
 const DEFAULT_CSM_CASCADE_BLEND = 0.1;
-const DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE = 1;
 const PCSS_CSM_LAMBDA = 0.6;
 const PCSS_CSM_CASCADE_BLEND = 0.2;
 const PCSS_CSM_LIGHT_SIZE_SCALE = 0.1;
@@ -4684,7 +4687,7 @@ ${beforeFogAppendBlock}
             // the last split before visible receivers despite the configured range.
             shadowGenerator.autoCalcDepthBounds = !this.shadowPenumbraEnabledValue
                 && !(this.engine.isWebGPU && this.engine.useReverseDepthBuffer);
-            shadowGenerator.autoCalcDepthBoundsRefreshRate = DEFAULT_CSM_DEPTH_BOUNDS_REFRESH_RATE;
+            shadowGenerator.autoCalcDepthBoundsRefreshRate = getCsmDepthBoundsRefreshRate(this.engine.isWebGPU);
             shadowGenerator.depthClamp = false;
             shadowGenerator.penumbraDarkness = this.shadowPenumbraEnabledValue ? PCSS_CSM_PENUMBRA_DARKNESS : 1.0;
             shadowGenerator.shadowMaxZ = this.shadowMaxZValue;
@@ -8529,6 +8532,11 @@ ${beforeFogAppendBlock}
             }
         });
 
+        if (!this.engine.isWebGPU) {
+            this.scene.onBeforeCameraRenderObservable.add(
+                createCsmDepthBoundsCameraObserver(this.camera, () => this.shadowGenerator),
+            );
+        }
         this.scene.onBeforeRenderObservable.add(() => {
             if (!this.framePerformanceLogEnabled) {
                 if (this.shouldApplyCameraMotionToViewport()) {
@@ -10344,6 +10352,7 @@ ${beforeFogAppendBlock}
 
     seekTo(frame: number): void {
         const targetFrame = Math.max(0, Math.floor(frame));
+        requestCsmDepthBoundsRefresh(this.shadowGenerator);
         this.physicsController.syncBulletEvaluationTypeForSeek();
         if (targetFrame > this._totalFrames) {
             this._totalFrames = targetFrame;
@@ -16766,7 +16775,7 @@ ${beforeFogAppendBlock}
 
         this.updateSimpleMotionBlurState(clampedDeltaMs);
         this.syncBackgroundVideoFrame();
-        this.scene.render();
+        withPerFrameCsmDepthBounds(this.shadowGenerator, () => this.scene.render());
         if (!this._isPlaying) return;
 
         if (advancedManualPlayback) {
@@ -16781,7 +16790,7 @@ ${beforeFogAppendBlock}
 
     public renderOnceForCapture(deltaMs = 1000 / 30): void {
         this.effectCaptureDepth++;
-        try { this.renderEffectCaptureFrame(deltaMs); }
+        try { withPerFrameCsmDepthBounds(this.shadowGenerator, () => this.renderEffectCaptureFrame(deltaMs)); }
         finally { this.effectCaptureDepth--; this.evaluateEffectTracks(this._currentFrame); }
     }
 

@@ -152,7 +152,7 @@ WGSL CSM PCF 経路だけを避ける互換処理です。代償として WebGPU
   - PCSS 時: `false`
   - 半影OFFかつWebGPU + reverse depth: `false`。最奥receiverが自動範囲から脱落する問題を回避する
   - それ以外の半影OFF: `true`
-- `autoCalcDepthBoundsRefreshRate = 1`（auto bounds有効時のみ稼働）
+- WebGL2 のプレビューでは、カメラが静止している間は深度範囲を 2 描画フレームごとに更新する。カメラの姿勢や投影が変わったとき、明示的にシークしたとき、および PNG・WebM の出力フレームでは即時更新する。WebGPU で自動範囲が有効な場合の更新間隔は 1。[実機での比較](./webgl-backend-performance-2026-11-19.md#webgl2-の影の深度範囲更新間隔)
 - `depthClamp = false`（半影OFFも11/13の所有者指定で変更。単独では奥壁の白帯は解消しなかった）
 - `shadowFrustumSize = 960`（固定）
 - `shadowMaxZ = 1000`（既定値、UI で調整可能）

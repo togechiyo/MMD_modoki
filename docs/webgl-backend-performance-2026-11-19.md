@@ -100,3 +100,23 @@ node scripts/benchmark-renderer-backends.mjs --backend webgpu --preset heavy --r
 コードは `scripts/benchmark-renderer-backends.mjs`、`scripts/lib/backend-output-benchmark.mjs`、`test/e2e/helpers/backend-performance-probe.mjs`。今回の全report・project・main log・PNG／WebM・集計JSONはignoredな `.tmp/webgl-performance-2026-11-19/` の `final-*` と `summary.json` に保存した。
 
 この計測はgeometry負荷の比較で、複雑な多ボーンキャラクター、物理、透明材質の多いモデル、GPU専用効果、重い外部シェーダーを代表しない。小さなテクスチャと黒背景を含むためPNG合計約10.7〜12.2 MiBで、実写的な複雑な画像やslow diskの負荷も代表しない。低性能GPU、WebGPU非対応実機、macOS／Linux、長尺・4K／8K・配布版の性能は未測定。WebGPU WebMの待ち時間変動はチェックリストで継続調査する。
+
+## WebGL2 の影の深度範囲更新間隔
+
+Linux VM のプロファイルで、CSM の可視深度範囲を求める同期 `readPixels` が毎フレーム観測された。11/21 に Windows の RTX 3070 で、上記の通常ステージ＋動く豆腐4体、固定カメラ、物理OFF、1080p・60 FPS上限、CSM 3段・8192を使って追試した。変更したのは `autoCalcDepthBoundsRefreshRate` のみ。影マップ本体は毎描画フレーム更新する。[Babylon.js の CSM 深度範囲設定](https://doc.babylonjs.com/features/featuresDeepDive/lights/shadows_csm/#autocalcdepthbounds-default-false)
+
+各条件は別々の Electron プロセスで起動し、1→4→2→2→4→1 の順で計測した。毎回300描画フレーム暖機し、続く300フレームで深度範囲の計算完了回数と 1×1 `gl.readPixels` の呼び出し回数が一致することを確認した。時間は2回の範囲。読み戻し待ちはスキップしたフレームを含めた1描画あたりの平均である。
+
+| 更新間隔 | 読み戻し回数 / 300描画 | 平均読み戻し待ち (ms/描画) | beginFrame→endFrame 平均 (ms) | 実描画間隔 p95 (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 300 | 6.39～8.90 | 11.71～14.49 | 17.98～18.44 |
+| 2 | 150 | 0.55～2.32 | 5.71～7.48 | 17.18～22.21 |
+| 4 | 75 | 0.63～4.00 | 6.37～9.14 | 17.13～23.59 |
+
+全条件で 59.49～60.00 FPS。間隔2、4とも平均の同期待ちが短くなった。p95 は反復間の変動があり、一貫した改善は確認できなかった。
+
+広域影ステージの床を近くから見下ろした後、同じ床を遠方から見るカメラへ切り替えた。間隔4固定では最終カスケード境界が旧視点の深度約34に3描画残り、深度約390の測定点が明部と同じ輝度になった。間隔1では切替直後から影の輝度180／明部224。プレビューは間隔2を採用し、カメラの姿勢・投影変更とシークで次の深度更新を促す。PNG と WebM は手動描画ごとに再計算する。[カメラ切替の回帰テスト](../test/e2e/webgl-shadow-depth-refresh.spec.mjs)
+
+採用後、実際の初期設定での独立した1回は、同期読み戻し150回／300描画、待ち7.86 ms/描画、実描画間隔p95は23.48 msだった。回数は再現し、待ち時間は上表の間隔1の範囲と重なった。同一プロセス内の補助比較では間隔を1→2→1の順で試した。各区間は同じシーンを先頭から再生し、300描画暖機してから計測した。待ちは1.93→0.95→2.05 ms/描画、beginFrame→endFrameは6.95→5.96→7.06 ms、実描画間隔p95は17.26→17.08→17.09 ms、平均はいずれも約59.8 FPSだった。
+
+カメラ切替の修正後は1枚目から8枚とも床の輝度が対照と一致し、シーク直後に更新が入った。320×180の連続2回の手動キャプチャは各回1回更新され、プレビューに戻ると間隔2に復帰した。WebGL2へ自動切替した実出力ウィンドウでのPNG・WebMの復号比較と、WebGPUの起動smokeも通過した。固定カメラでモデルだけが動くと、深度範囲には最大1描画前の値を使う。Linux実GPUでの効果は未測定。

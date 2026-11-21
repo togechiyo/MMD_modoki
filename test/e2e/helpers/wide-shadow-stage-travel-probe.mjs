@@ -13,6 +13,96 @@ function sceneContext() {
   return { scene, generator };
 }
 
+// Compare the first displayed frames after a cut with the every-frame reference.
+// Read after FrameGraph composition: a screenshot could skip the transient frames.
+export async function measureShadowAfterCameraCut() {
+  const { scene, generator } = sceneContext();
+  const configuredRate = generator.autoCalcDepthBoundsRefreshRate;
+  const api = window.mmdModokiE2e;
+  const camera = scene.activeCamera;
+  const source = scene.getEngine().getRenderingCanvas();
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const viewport = camera.viewport.toGlobal(canvas.width, canvas.height);
+  const samples = [-90, -80, -70, -10].map(x => new Vector3(x, 1.015, 250));
+  api.setAutoRenderEnabled(true);
+  api.setLightDirection({ x: 1, y: -2, z: 0 });
+
+  const capture = () => {
+    context.drawImage(source, 0, 0);
+    const values = samples.map(point => {
+      const pixel = Vector3.Project(point, Matrix.IdentityReadOnly, scene.getTransformMatrix(), viewport);
+      return context.getImageData(Math.round(pixel.x), Math.round(pixel.y), 1, 1).data[0];
+    });
+    const clear = values.pop();
+    const shadow = values.sort((a, b) => a - b)[1];
+    return { clear, shadow, ratio: shadow / clear, lastSplit: generator._viewSpaceFrustumsZ.at(-1),
+      receiverDepth: Vector3.TransformCoordinates(samples[1], camera.getViewMatrix()).z };
+  };
+  const afterRender = (read = () => undefined) => new Promise(resolve =>
+    scene.onAfterRenderObservable.addOnce(() => scene.getEngine().onEndFrameObservable.addOnce(() => resolve(read()))));
+  const reduction = generator._depthReducer.onAfterReductionPerformed;
+  const afterReductionFrame = () => new Promise(resolve =>
+    reduction.addOnce(() => scene.getEngine().onEndFrameObservable.addOnce(resolve)));
+  const run = async rate => {
+    generator.autoCalcDepthBoundsRefreshRate = rate;
+    api.setCameraPose({ x: -30, y: 35, z: 250 }, { x: -30, y: 1, z: 251 });
+    await scene.whenReadyAsync();
+    for (let i = 0; i < 8; i++) await afterRender();
+    // Cut just after the old view's depth reduction, when the next scheduled
+    // reduction would have to wait the full configured interval.
+    await afterReductionFrame();
+    const nearSplit = generator._viewSpaceFrustumsZ.at(-1);
+    api.setCameraPose({ x: 80, y: 80, z: -100 }, { x: -30, y: 1, z: 250 });
+    const frames = [];
+    for (let i = 0; i < 8; i++) frames.push(await afterRender(capture));
+    return { nearSplit, frames };
+  };
+  try {
+    const control = await run(1), configured = await run(configuredRate);
+    await afterReductionFrame();
+    let reductions = 0;
+    const observer = reduction.add(() => reductions++);
+    try {
+      await afterRender();
+      const stationaryFirstFrame = reductions;
+      await afterReductionFrame();
+      reductions = 0;
+      api.seekTo(20);
+      await afterRender();
+      return { configuredRate, autoBounds: generator.autoCalcDepthBounds, control, configured,
+        stationaryFirstFrame, seekFirstFrame: reductions };
+    } finally {
+      reduction.remove(observer);
+    }
+  } finally {
+    generator.autoCalcDepthBoundsRefreshRate = configuredRate;
+  }
+}
+
+export async function measureCsmDuringCapture() {
+  const { generator } = sceneContext();
+  const reductions = [];
+  const afterReduction = generator._depthReducer.onAfterReductionPerformed;
+  const observer = afterReduction.add(() => reductions.push(generator.autoCalcDepthBoundsRefreshRate));
+  try {
+    const captures = [];
+    window.mmdModokiE2e.setAutoRenderEnabled(false);
+    for (let i = 0; i < 2; i++) {
+      reductions.length = 0;
+      const output = await window.mmdModokiE2e.captureExportSurfaceProbe(320, 180);
+      captures.push({ nonZeroRgbByteCount: output.nonZeroRgbByteCount, rates: [...reductions],
+        restoredRate: generator.autoCalcDepthBoundsRefreshRate });
+    }
+    return captures;
+  } finally {
+    afterReduction.remove(observer);
+    window.mmdModokiE2e.setAutoRenderEnabled(true);
+  }
+}
+
 export function startTravelRecording() {
   const { scene } = sceneContext();
   const stream = scene.getEngine().getRenderingCanvas().captureStream(15);

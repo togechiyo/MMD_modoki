@@ -18,6 +18,20 @@ async function seek(page, frame) {
 }
 const difference = (a, b) => a.reduce((sum, value, index) => sum + (index % 4 === 3 ? 0 : Math.abs(value - b[index])), 0) / (a.length * 0.75);
 
+// Compare the same scene locations across the viewport and the 640x360 output.
+function sampleScene({ width, height, data }) {
+  const samples = [];
+  for (let row = 0; row < 18; row++) {
+    const y = Math.floor((row + 0.5) * height / 18);
+    for (let column = 0; column < 32; column++) {
+      const x = Math.floor((column + 0.5) * width / 32);
+      const offset = (y * width + x) * 4;
+      samples.push(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
+    }
+  }
+  return samples;
+}
+
 test("Gamma only with AA off, individual OFF and master resource release", async ({}, testInfo) => {
   const launched = await launchMmdModoki(root);
   try {
@@ -136,12 +150,13 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await seek(page, 0); await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeDisabled();
     await expect(row(a).locator('[data-instance-action="delete"]')).toBeDisabled();
-    await expect(row(a).locator('[data-effect-stack-drag]')).toBeDisabled();
-    await expect(row(a).locator('[data-effect-stack-drag]')).toHaveAttribute("draggable", "false");
+    const header = row(a).locator('[data-effect-stack-drag]');
+    await expect(header).toBeEnabled();
+    await expect(header).toHaveAttribute("draggable", "false");
     await expect.poll(async () => Number(await page.locator("#current-frame").inputValue())).toBeGreaterThan(12);
     await page.locator("#viewport-seek-play-toggle").click();
     await expect(slider).toBeEnabled();
-    await expect(row(a).locator('[data-effect-stack-drag]')).toBeEnabled();
+    await expect(header).toHaveAttribute("draggable", "true");
     await seek(page, 0); await select(a); await page.locator("#btn-kf-copy").click();
     await select(b); await seek(page, 40); await page.locator("#btn-kf-paste").click();
     expect((await state()).instances.find(item => item.instanceId === b).animation.tracks[0].keys.find(key => key.frame === 40).value.gamma).toBe(0.5);
@@ -159,6 +174,19 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await select(a); await expect(row(a).locator(".effect-layer-name")).toHaveText("Gamma");
     await dragEffectStackRow(row(a), row(bloom), "after");
     expect((await state()).order).toEqual([a, bloom, b]);
+    await expandEffectInstance(row(bloom));
+    const bloomWeight = row(bloom).locator('[data-instance-field="weight"]');
+    await bloomWeight.fill("25");
+    await bloomWeight.dispatchEvent("change");
+    const bloomTint = row(bloom).locator('[data-instance-field="color"]');
+    await bloomTint.fill("#ffe0c0");
+    await bloomTint.dispatchEvent("change");
+    const staticBloom = (await state()).instances.find(item => item.instanceId === bloom);
+    expect(staticBloom.animation.tracks.flatMap(track => track.keys)).toEqual([]);
+    expect(staticBloom.settings.weight).toBe(0.5);
+    expect(staticBloom.bloomColor.r).toBe(1);
+    expect(staticBloom.bloomColor.g).toBeCloseTo(224 / 255);
+    expect(staticBloom.bloomColor.b).toBeCloseTo(192 / 255);
     const capture = async name => {
       const output = testInfo.outputPath(name); mkdirSync(output, { recursive: true });
       await page.evaluate(output => window.mmdModokiE2e.captureSinglePngSurfaceToPath(output, 640, 360), output);
@@ -179,6 +207,14 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     report.comparisons.push({ frameDifference: difference(png0, png20), orderDifference: difference(png20, reordered) });
     expect(difference(png20, reordered)).toBeGreaterThan(0.02);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
+    const authored = await state();
+    const master = page.locator("#btn-effect-toggle-framegraph");
+    await master.click();
+    expect(difference(png20, await capture("stack-off"))).toBeGreaterThan(0.2);
+    await master.click();
+    await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
+    expect(difference(png20, await capture("stack-on"))).toBeLessThan(0.15);
+    expect(await state()).toEqual(authored);
     const projectPath = testInfo.outputPath("instances.json");
     await launched.app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, projectPath);
     await menu(page, "file.saveProject"); await expect.poll(() => existsSync(projectPath)).toBe(true);
@@ -191,6 +227,23 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
       await page.locator('select[data-postfx-select="backend"]').selectOption(backend, { force: true });
       await page.waitForFunction(value => window.mmdModokiE2e?.getFrameGraphPostEffectsState().backend === value, backend);
       await expect.poll(state).toEqual(saved.effects.frameGraphInstances);
+    }
+    expect((await state()).instances.find(item => item.instanceId === bloom)).toEqual(staticBloom);
+    const references = [png0, png20].map(data => sampleScene({ width: 640, height: 360, data }));
+    const canvas = page.locator("#render-canvas");
+    report.viewport = [];
+    for (const [index, frame] of [0, 20].entries()) {
+      await seek(page, frame);
+      const before = await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().executedFrameCount);
+      await page.waitForFunction(count => {
+        const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();
+        return state.ready && state.executedFrameCount >= count + 2;
+      }, before);
+      const viewport = sampleScene(PNG.sync.read(await canvas.screenshot({ path: testInfo.outputPath(`viewport-${frame}.png`) })));
+      const matching = difference(viewport, references[index]);
+      const opposite = difference(viewport, references[1 - index]);
+      report.viewport.push({ frame, matching, opposite });
+      expect(matching, `viewport at frame ${frame} matches its exported Gamma state`).toBeLessThan(opposite);
     }
     await seek(page, 20); const restored = await capture("restored");
     expect(difference(png20, restored)).toBeLessThan(0.15);

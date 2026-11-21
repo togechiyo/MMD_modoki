@@ -2,11 +2,11 @@ import { test, expect } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { launchMmdModoki } from "./electron-app.mjs";
-import { camera, capture, difference, initialState, receiverDifference, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { camera, capture, difference, giVolume, initialState, receiverDifference, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
 import { addRcLighting, closeRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow,
   rcLightingStatus, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
 import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
-import { restoreRetiredRcLightingFixture } from "./helpers/rc-lighting-fixture.mjs";
+import { restoreRetiredRcLightingFixture, setRcLightingFixtureSettings } from "./helpers/rc-lighting-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), ids = ["rcSkyOcclusion", "rcDiffuseGi"];
 const project = page => page.evaluate(() => window.mmdModokiE2e.exportProjectState());
@@ -196,6 +196,9 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     expect((await project(page)).lighting.rcDiffuseGi.strength).toBe(2);
     await history(page, "undo"); expect((await project(page)).lighting.rcDiffuseGi.strength).toBe(.5);
 
+    // The small receiver needs the size-16 fixture volume to resolve the red bounce.
+    await setRcLightingFixtureSettings(page, "rcDiffuseGi", { volume: giVolume });
+    expect((await project(page)).lighting.rcDiffuseGi.volume).toEqual(giVolume);
     for (const [frame, enabled, extreme] of [[0, true, "Home"], [20, true, "End"], [40, false, null], [60, true, null]]) {
       await seek(page, frame);
       for (const id of ids) {

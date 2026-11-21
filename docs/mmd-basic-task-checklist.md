@@ -31,8 +31,8 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 11/12報告のCSM上端影抜けを修正。自動depth boundsをfade終端に使った回帰を自作床の25/35/45度で再現し、設定影距離基準へ訂正。両backend・Standard/MMD・PNGと遠方終端・既存影経路の計19描画テスト、unit1579件、lint、既存型診断から差分0/critical0、WebGPU smokeを確認。11/12後続報告で所有者実機でも上端の解消を確認（[原因・訂正・検証](./csm-wall-band-investigation-2026-11-11.md#2026-11-12-上端の影抜けとfade基準の訂正)）。
 - [x] 最奥の廊下壁に残るCSMの影抜けを修正。WebGPU reverse depthのprojection係数と深度復元の差で自動範囲が過小になり、最奥壁が脱落していた。該当経路のauto boundsを止め、指定ローカルPMXの初期値で影の復帰を確認。自作再現・既存影経路のE2E計15件、関連unit39件、lint、既存型診断から差分0/critical0、WebGPU smokeを確認。bias / normalBiasは固定、モデル名・元path・画像等は公開しない。11/13、所有者実機でも修正後の改善を確認（[原因・比較・対処](./csm-seam-parameters-and-official-sources-2026-11-13.md)）。
 - [ ] 公開候補で自作壁/屋根の1フレームWebMの影を再確認する。11/11には影ON/OFFが同じ画像だったが、11/21のWindows / WebGPU作業ツリーでは、近景の輝度比がPNG 0.8044、WebM 0.8065となり既存診断に合格。再現条件が戻った場合は先頭・後続フレームを比較する（[条件と比較](./csm-wall-band-investigation-2026-11-11.md#webm比較で見つかった既存の別件)）。
-- [ ] 通常20個体効果と現行RC2種、互換用の旧「影の深み RC」について、登録値/固定値の区別、登録・上書き・補間、キーcopy/move/delete・Undo/Redo、混在操作を確認し、必要な局所修正を行う。
-- [ ] 公開候補の代表sceneで未登録設定と登録済みキーの保存/読込、シーク/再生、全体OFF/ON・Classic往復、PNG/WebMの最終状態を確認する。RC系は11/14に現段階了承済み。個別修正の検証と、最終公開候補の通し確認を分ける。
+- [x] 通常20個体効果と現行RC2種、互換用の旧「影の深み RC」の登録値・固定値、補間、混在キーの編集・Undo/RedoをWindows開発版で確認した。コピー元の個体削除後の一括貼り付けでRCのキーが一部だけ残る問題を修正した（[通し確認](./v0.2.5-release-plan-2026-11-10.md#2026-11-21-エフェクトキーと出力の通し確認)）。
+- [ ] 最終公開候補の代表sceneで保存/読込・再生・PNG/WebMを再確認する。11/21のWindows開発版ではキー0個のBloomとキーありのGammaを同時に保存・復元し、全体OFF/ON・Classic往復と同じframeのviewport・PNG・WebMをWebGPU／WebGL2で確認済み（[通し確認](./v0.2.5-release-plan-2026-11-10.md#2026-11-21-エフェクトキーと出力の通し確認)）。
 - [ ] 中韓辞書の欠落（zh-Hant / zh-Hans各107、ko103。11/19再監査でも計317）と人間向け英語残存を修正し、5言語の共通画面・変更画面をGUIで確認する。辞書監査済みとGUI未確認を混同しない。
 - [ ] 開始時に残るSSAO/輪郭・PBR順等の未commit差分を検証し、公開候補への収録を整理する。無関係な差分・生成物を混ぜない。
 - [ ] v0.2.5の版情報・release note・README・known issues・台帳を整合し、最終候補のlint/unit/typecheck/critical・GPU環境のsmoke/E2Eを記録する。

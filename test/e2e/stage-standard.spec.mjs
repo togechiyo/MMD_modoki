@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { effectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 test.setTimeout(180000);
@@ -82,10 +83,11 @@ for (const [backend, fixtureName] of [["framegraph", "sss-no-toon"], ["classic",
       await page.locator('[data-effect-tab="post"]').click();
       await page.locator("#btn-effect-add-post").click();
       await page.locator('[data-effect-add-post="ssao"]').click();
-      await expect(page.locator('[data-effect-stack-row="ssao"]')).toBeVisible();
+      await expect(effectStackRow(page, "ssao")).toBeVisible();
       await page.waitForFunction(() => {
         const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();
-        return state.ready && state.stack.includes("ssao") && state.executedFrameCount > 2;
+        return state.ready && state.executedFrameCount > 2
+          && window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects.controller?.instances.some(instance => instance.type === "ssao");
       });
       await settle(page);
       await page.locator("#render-canvas").screenshot({ path: resolve(output, "stage-with-ssao.png") });

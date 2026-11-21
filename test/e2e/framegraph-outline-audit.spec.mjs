@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { effectStackRow, effectStackToggle } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const ids = ["ssao", "ssgi", "dof", "luminous", "bloom", "directionalLightShafts", "lut", "gamma", "motionBlur", "distortion", "ringParticles", "aerialPerspective", "offsetShadow", "offsetHighlight", "vignette", "grain", "sharpen", "chromatic", "edgeBlur", "ssr"];
@@ -66,7 +67,7 @@ for (const id of (regression ? ["ssgi", "ssr"] : detail ? ["motionBlur", "aerial
     async function capture(name) {
       await settle(page);
       report.states[name] = await page.evaluate(() => ({ runtime: window.mmdModokiE2e.getFrameGraphPostEffectsState(), effects: window.mmdModokiE2e.exportProjectState().effects, validation: window.mmdModokiE2e.getWebGpuValidationDiagnostics() }));
-      report.states[name].toggles = await page.locator("[data-effect-stack-toggle]").evaluateAll(inputs => inputs.map(input => ({ id: input.dataset.effectStackToggle, checked: input.checked })));
+      report.states[name].toggles = await page.locator('[data-instance-field="enabled"], [data-effect-stack-toggle]').evaluateAll(inputs => inputs.map(input => ({ id: input.closest("[data-effect-instance-type]")?.dataset.effectInstanceType ?? input.dataset.effectStackToggle, checked: input.checked })));
       await page.locator("#render-canvas").screenshot({ path: resolve(output, `${name}.png`) });
     }
     await edge(page, 0); await capture("baseline-off");
@@ -74,30 +75,30 @@ for (const id of (regression ? ["ssgi", "ssr"] : detail ? ["motionBlur", "aerial
     await page.locator("#btn-effect-add-post").click();
     report.available = await page.locator("[data-effect-add-post]:not([hidden])").evaluateAll(buttons => buttons.map(button => button.dataset.effectAddPost));
     await page.locator(`[data-effect-add-post="${id}"]`).click();
-    const row = page.locator(`[data-effect-stack-row="${id}"]`);
+    const row = effectStackRow(page, id);
     await expect(row).toBeVisible();
     // Use a non-neutral gamma so its presence is observable in the comparison.
     if (id === "gamma") {
-      await row.locator('[data-effect-stack-control="gammaPower"]').fill("70");
-      await row.locator('[data-effect-stack-control="gammaPower"]').dispatchEvent("input");
+      await row.locator('[data-instance-field="gamma"]').fill("70");
+      await row.locator('[data-instance-field="gamma"]').dispatchEvent("input");
     }
     if (detail) {
       const settings = {
-        aerialPerspective: { aerialPerspectiveStart: "0", aerialPerspectiveRange: "3", aerialPerspectiveStrength: "65" },
-        distortion: { distortion: "85" }, edgeBlur: { edgeBlur: "85" },
-        offsetShadow: { offsetShadowStrength: "80", offsetShadowOffsetX: "75", offsetShadowOffsetY: "75" },
-        offsetHighlight: { offsetHighlightStrength: "80", offsetHighlightOffsetX: "75", offsetHighlightOffsetY: "75" },
+        aerialPerspective: { start: "0", range: "3", strength: "65" },
+        distortion: { influence: "85" }, edgeBlur: { strength: "85" },
+        offsetShadow: { strength: "80", offsetX: "75", offsetY: "75" },
+        offsetHighlight: { strength: "80", offsetX: "75", offsetY: "75" },
       }[id] ?? {};
       for (const [key, value] of Object.entries(settings)) {
-        await row.locator(`[data-effect-stack-control="${key}"]`).fill(value);
-        await row.locator(`[data-effect-stack-control="${key}"]`).dispatchEvent("input");
+        await row.locator(`[data-instance-field="${key}"]`).fill(value);
+        await row.locator(`[data-instance-field="${key}"]`).dispatchEvent("input");
       }
       if (id === "motionBlur") report.animatedMeshes = await page.evaluate(async () => (await import("/test/e2e/helpers/outline-motion-probe.mjs")).startOutlineMotion());
     }
-    report.controls = await row.locator("[data-effect-stack-control]").evaluateAll(inputs => inputs.map(input => ({ key: input.dataset.effectStackControl, value: input.value })));
+    report.controls = await row.locator("[data-instance-field], [data-instance-fixed], [data-effect-stack-control]").evaluateAll(inputs => inputs.map(input => ({ key: input.dataset.instanceField ?? input.dataset.instanceFixed ?? input.dataset.effectStackControl, value: input.value })));
     await capture("effect-added-after-edge");
     await edge(page, 0);
-    await page.locator(`[data-effect-stack-toggle="${id}"]`).check();
+    await effectStackToggle(page, id).check();
     await capture("effect-edge-off");
     await edge(page, 100); await capture("effect-edge-on");
     report.effectDelta = compare(resolve(output, "baseline-off.png"), resolve(output, "effect-edge-off.png"));
@@ -120,8 +121,8 @@ for (const id of (regression ? ["ssgi", "ssr"] : detail ? ["motionBlur", "aerial
       expect(exportDelta.changed).toBeGreaterThan(100);
       expect(exportDelta.black).toBeLessThan(exportDelta.pixels * 0.1);
       await edge(page, 100);
-      await page.locator(`[data-effect-stack-toggle="${id}"]`).uncheck(); await settle(page);
-      await page.locator(`[data-effect-stack-toggle="${id}"]`).check(); await capture("reenabled");
+      await effectStackToggle(page, id).uncheck(); await settle(page);
+      await effectStackToggle(page, id).check(); await capture("reenabled");
       if (id === "ssr") {
         await page.locator("#btn-effect-add-post").click();
         await page.locator('[data-effect-add-post="ssgi"]').click();

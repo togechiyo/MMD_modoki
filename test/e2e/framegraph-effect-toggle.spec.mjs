@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { effectStackRow, effectStackToggle } from "./helpers/effect-instance-controls.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const groups = [
@@ -56,7 +57,7 @@ for (const ids of groups) test(`FrameGraph warm toggles and all off: ${ids.join(
       await settle(page);
     }
     if (ids.includes("gamma")) {
-      const row = page.locator('[data-effect-stack-row="gamma"]');
+      const row = effectStackRow(page, "gamma");
       if (!await row.locator('input[type="range"]').isVisible()) await row.locator('.effect-layer-name').click();
       await row.locator('input[type="range"]').first().fill("70");
       await row.locator('input[type="range"]').first().dispatchEvent("input");
@@ -76,7 +77,7 @@ for (const ids of groups) test(`FrameGraph warm toggles and all off: ${ids.join(
     const before = await canvas.screenshot();
     const timings = [];
     for (const id of ids) {
-      const toggle = page.locator(`[data-effect-stack-toggle="${id}"]`);
+      const toggle = effectStackToggle(page, id);
       const start = Date.now();
       await toggle.uncheck();
       await settle(page);
@@ -91,7 +92,7 @@ for (const ids of groups) test(`FrameGraph warm toggles and all off: ${ids.join(
     await master.click();
     await settle(page);
     await expect(master).toHaveAttribute("aria-pressed", "false");
-    for (const id of ids) await expect(page.locator(`[data-effect-stack-toggle="${id}"]`)).toBeChecked();
+    for (const id of ids) await expect(effectStackToggle(page, id)).toBeChecked();
     expect((await getState()).buildGeneration).toBe(warm.buildGeneration);
     expect((await getState()).resourcesAllocated).toBe(false);
     await assertGpu("all off");
@@ -118,7 +119,7 @@ for (const ids of groups) test(`FrameGraph warm toggles and all off: ${ids.join(
     await page.locator('[data-effect-tab="materials"]').click();
     await page.locator('[data-effect-tab="post"]').click();
     await settle(page);
-    for (const id of ids) await expect(page.locator(`[data-effect-stack-toggle="${id}"]`)).toBeChecked();
+    for (const id of ids) await expect(effectStackToggle(page, id)).toBeChecked();
     await assertGpu("import all off");
     await expect(master).toHaveAttribute("aria-pressed", "false");
     expect((await getState()).resourcesAllocated).toBe(false);

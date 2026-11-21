@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { effectInstanceRuntimeState, effectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const modelPath = resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx");
@@ -22,8 +23,8 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
     await expect.poll(async () => page.locator("[data-effect-add-post]:not([hidden])").evaluateAll((buttons) => (
       buttons.map((button) => button.getAttribute("data-effect-add-post"))
     ))).toEqual([
-      "ssao", "ssgi", "dof",
-      "luminous", "bloom", "directionalLightShafts", "lut",
+      "ssao", "ssgi", "rcSkyAmbient", "rcDiffuseGi", "dof",
+      "luminous", "luminousRadiance", "bloom", "directionalLightShafts", "lut",
       "gamma", "motionBlur", "distortion",
       "ringParticles", "aerialPerspective",
       "offsetShadow", "offsetHighlight", "vignette", "grain", "sharpen", "chromatic", "edgeBlur",
@@ -34,11 +35,11 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
     await expect(addSsgiButton).toHaveText("SSGI");
     await addSsgiButton.click();
 
-    const ssgiRow = page.locator('[data-effect-stack-row="ssgi"]');
+    const ssgiRow = effectStackRow(page, "ssgi");
     await expect(ssgiRow).toBeVisible();
     await expect(ssgiRow.locator(".effect-layer-name")).toHaveText("SSGI");
 
-    const sliders = ssgiRow.locator('input[type="range"][data-effect-stack-control]');
+    const sliders = ssgiRow.locator('input[type="range"][data-instance-field], input[type="range"][data-instance-fixed]');
     await expect(sliders).toHaveCount(2);
     for (let index = 0; index < await sliders.count(); index += 1) {
       await expect(sliders.nth(index)).toHaveAttribute("min", "0");
@@ -46,28 +47,28 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
       await expect(sliders.nth(index)).toHaveAttribute("step", "1");
     }
 
-    const strength = ssgiRow.locator('[data-effect-stack-control="ssgiStrength"]');
+    const strength = ssgiRow.locator('[data-instance-field="strength"]');
     await strength.evaluate((input) => {
       input.value = "75";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await expect(ssgiRow.locator('[data-effect-stack-value="ssgiStrength"]')).toHaveText("0.75");
+    await expect(ssgiRow.locator('[data-instance-value="strength"]')).toHaveText("0.75");
 
-    const radius = ssgiRow.locator('[data-effect-stack-control="ssgiSampleRadius"]');
+    const radius = ssgiRow.locator('[data-instance-field="sampleRadius"]');
     await radius.evaluate((input) => {
       input.value = "50";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await expect(ssgiRow.locator('[data-effect-stack-value="ssgiSampleRadius"]')).toHaveText("129px");
+    await expect(ssgiRow.locator('[data-instance-value="sampleRadius"]')).toHaveText("129.00");
 
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="luminous"]').click();
 
-    const luminousRow = page.locator('[data-effect-stack-row="luminous"]');
+    const luminousRow = effectStackRow(page, "luminous");
     await expect(luminousRow).toBeVisible();
-    const luminousRadius = luminousRow.locator('[data-effect-stack-control="luminousRadius"]');
+    const luminousRadius = luminousRow.locator('[data-instance-field="radius"]');
     await expect(luminousRadius).toHaveAttribute("min", "0");
     await expect(luminousRadius).toHaveAttribute("max", "100");
     await luminousRadius.evaluate((input) => {
@@ -75,9 +76,9 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await expect(luminousRow.locator('[data-effect-stack-value="luminousRadius"]')).toHaveText("65px");
+    await expect(luminousRow.locator('[data-instance-value="radius"]')).toHaveText("65.00");
 
-    const luminousDragHandle = luminousRow.locator('[data-effect-stack-drag="luminous"]');
+    const luminousDragHandle = luminousRow.locator('[data-effect-stack-drag]');
     const ssgiTargetBox = await ssgiRow.boundingBox();
     if (!ssgiTargetBox) throw new Error("SSGI stack row has no bounding box");
     await luminousDragHandle.dragTo(ssgiRow, {
@@ -86,15 +87,14 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
 
     await expect.poll(async () => (
       page.locator("[data-effect-stack-row]").evaluateAll((rows) => (
-        rows.map((row) => row.getAttribute("data-effect-stack-row"))
+        rows.map((row) => row.getAttribute("data-effect-instance-type") ?? row.getAttribute("data-effect-stack-row"))
       ))
     )).toEqual(["ssgi", "luminous"]);
-    await page.waitForFunction(() => {
-      const state = window.mmdModokiE2e?.getFrameGraphPostEffectsState();
-      return state?.backend === "frameGraph"
-        && state.ready
-        && state.executedFrameCount >= 2
-        && state.stack.join(",") === "luminous,ssgi";
+    await expect.poll(() => page.evaluate(effectInstanceRuntimeState), { timeout: 30_000 }).toEqual({
+      backend: "frameGraph",
+      ready: true,
+      hasExecuted: true,
+      stack: "luminous,ssgi",
     });
 
     const masterFrameGraph = page.locator("#btn-effect-toggle-framegraph");
@@ -104,16 +104,16 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
     await expect(masterFrameGraph).toHaveAttribute("aria-pressed", "false");
     await masterFrameGraph.click();
     await page.waitForFunction(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().ready);
-    await expect(page.locator('[data-effect-stack-row="ssgi"]')).toBeVisible();
-    await expect(page.locator('[data-effect-stack-row="luminous"]')).toBeVisible();
-    await expect(page.locator('[data-effect-stack-value="luminousRadius"]')).toHaveText("65px");
+    await expect(effectStackRow(page, "ssgi")).toBeVisible();
+    await expect(effectStackRow(page, "luminous")).toBeVisible();
+    await expect(luminousRow.locator('[data-instance-value="radius"]')).toHaveText("65.00");
 
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="motionBlur"]').click();
 
-    const motionBlurRow = page.locator('[data-effect-stack-row="motionBlur"]');
+    const motionBlurRow = effectStackRow(page, "motionBlur");
     await expect(motionBlurRow).toBeVisible();
-    const motionBlurSliders = motionBlurRow.locator('input[type="range"][data-effect-stack-control]');
+    const motionBlurSliders = motionBlurRow.locator('input[type="range"][data-instance-field], input[type="range"][data-instance-fixed]');
     await expect(motionBlurSliders).toHaveCount(2);
     for (let index = 0; index < await motionBlurSliders.count(); index += 1) {
       await expect(motionBlurSliders.nth(index)).toHaveAttribute("min", "0");
@@ -121,31 +121,23 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
       await expect(motionBlurSliders.nth(index)).toHaveAttribute("step", "1");
     }
 
-    const motionBlurStrength = motionBlurRow.locator('[data-effect-stack-control="motionBlurStrength"]');
+    const motionBlurStrength = motionBlurRow.locator('[data-instance-field="strength"]');
     await motionBlurStrength.evaluate((input) => {
       input.value = "50";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await expect(motionBlurRow.locator('[data-effect-stack-value="motionBlurStrength"]')).toHaveText("5.00");
+    await expect(motionBlurRow.locator('[data-instance-value="strength"]')).toHaveText("5.00");
 
-    const motionBlurSamples = motionBlurRow.locator('[data-effect-stack-control="motionBlurSamples"]');
+    const motionBlurSamples = motionBlurRow.locator('[data-instance-fixed="samples"]');
     await motionBlurSamples.evaluate((input) => {
       input.value = "50";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await expect(motionBlurRow.locator('[data-effect-stack-value="motionBlurSamples"]')).toHaveText("36");
+    await expect(motionBlurRow.locator('[data-instance-fixed-value="samples"]')).toHaveText("36.00");
 
-    await expect.poll(async () => page.evaluate(() => {
-      const state = window.mmdModokiE2e?.getFrameGraphPostEffectsState();
-      return state ? {
-        backend: state.backend,
-        ready: state.ready,
-        hasExecuted: state.executedFrameCount >= 2,
-        stack: state.stack.join(","),
-      } : null;
-    }), { timeout: 30_000 }).toEqual({
+    await expect.poll(() => page.evaluate(effectInstanceRuntimeState), { timeout: 30_000 }).toEqual({
       backend: "frameGraph",
       ready: true,
       hasExecuted: true,
@@ -172,29 +164,29 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
 
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="bloom"]').click();
-    const bloomRow = page.locator('[data-effect-stack-row="bloom"]');
-    await expect(bloomRow.locator('[data-effect-stack-control="bloomColor"]')).toHaveValue("#fedcba");
-    await expect(bloomRow.locator('[data-effect-stack-control="bloomWeight"]')).toHaveValue("20");
-    await expect(bloomRow.locator('[data-effect-stack-control="bloomThreshold"]')).toHaveValue("90");
-    await expect(bloomRow.locator('[data-effect-stack-control="bloomKernel"]')).toHaveValue("80");
-    await expect(bloomRow.locator('[data-effect-stack-value="bloomWeight"]')).toHaveText("20");
-    await expect(bloomRow.locator('[data-effect-stack-value="bloomThreshold"]')).toHaveText("90");
-    await expect(bloomRow.locator('[data-effect-stack-value="bloomKernel"]')).toHaveText("80");
+    const bloomRow = effectStackRow(page, "bloom");
+    await expect(bloomRow.locator('[data-instance-field="color"]')).toHaveValue("#fedcba");
+    await expect(bloomRow.locator('[data-instance-field="weight"]')).toHaveValue("20");
+    await expect(bloomRow.locator('[data-instance-field="threshold"]')).toHaveValue("45");
+    await expect(bloomRow.locator('[data-instance-field="kernel"]')).toHaveValue("80");
+    await expect(bloomRow.locator('[data-instance-value="weight"]')).toHaveText("0.40");
+    await expect(bloomRow.locator('[data-instance-value="threshold"]')).toHaveText("0.90");
+    await expect(bloomRow.locator('[data-instance-value="kernel"]')).toHaveText("205.00");
 
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="gamma"]').click();
-    const gammaRow = page.locator('[data-effect-stack-row="gamma"]');
-    const gammaSlider = gammaRow.locator('[data-effect-stack-control="gammaPower"]');
+    const gammaRow = effectStackRow(page, "gamma");
+    const gammaSlider = gammaRow.locator('[data-instance-field="gamma"]');
     await expect(gammaSlider).toHaveValue("50");
-    await expect(gammaRow.locator('[data-effect-stack-value="gammaPower"]')).toHaveText("50");
+    await expect(gammaRow.locator('[data-instance-value="gamma"]')).toHaveText("1.00");
     await gammaSlider.evaluate((input) => {
       input.value = "80";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await expect(gammaRow.locator('[data-effect-stack-value="gammaPower"]')).toHaveText("80");
+    await expect(gammaRow.locator('[data-instance-value="gamma"]')).toHaveText("0.66");
     await expect.poll(async () => page.evaluate(() => (
-      window.mmdModokiE2e.getFrameGraphPostEffectsState().stack.includes("gamma")
+      window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects.controller?.instances.some(instance => instance.type === "gamma")
     ))).toBe(true);
     const gammaRendered = await page.evaluate(() => (
       window.mmdModokiE2e.captureExportSurfaceProbe(64, 36)

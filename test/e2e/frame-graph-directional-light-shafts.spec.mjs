@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { effectStackRow } from "./helpers/effect-instance-controls.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const modelPath = process.env.MMD_MODOKI_E2E_MODEL_PATH
@@ -21,23 +22,23 @@ test("directional-light-linked two-color para flare renders without WebGPU valid
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="directionalLightShafts"]').click();
 
-    const row = page.locator('[data-effect-stack-row="directionalLightShafts"]');
+    const row = effectStackRow(page, "directionalLightShafts");
     await expect(row).toBeVisible();
-    await expect(row.locator('[data-effect-stack-control="directionalLightShaftsStrength"]')).toHaveValue("50");
-    await expect(row.locator('[data-effect-stack-control="directionalLightShaftsPhaseG"]')).toHaveValue("50");
-    await expect(row.locator('[data-effect-stack-value="directionalLightShaftsPhaseG"]')).toHaveText("0.00");
-    await expect(row.locator('[data-effect-stack-control="directionalLightShaftsLightColor"]')).toHaveValue("#ffffff");
-    await expect(row.locator('[data-effect-stack-control="directionalLightShaftsShadowColor"]')).toHaveValue("#000000");
+    await expect(row.locator('[data-instance-field="strength"]')).toHaveValue("50");
+    await expect(row.locator('[data-instance-field="phaseG"]')).toHaveValue("50");
+    await expect(row.locator('[data-instance-value="phaseG"]')).toHaveText("0.00");
+    await expect(row.locator('[data-instance-field="color"]')).toHaveValue("#ffffff");
+    await expect(row.locator('[data-instance-field="shadowColor"]')).toHaveValue("#000000");
 
     await page.waitForFunction(() => {
       const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();
       return state.backend === "frameGraph"
         && state.ready
-        && state.stack.includes("directionalLightShafts")
+        && window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects.controller?.instances.some(instance => instance.type === "directionalLightShafts")
         && state.executedFrameCount >= 10;
     }, null, { timeout: 20_000 });
 
-    const strength = row.locator('[data-effect-stack-control="directionalLightShaftsStrength"]');
+    const strength = row.locator('[data-instance-field="strength"]');
     await strength.evaluate((element) => {
       element.value = "100";
       element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -46,7 +47,7 @@ test("directional-light-linked two-color para flare renders without WebGPU valid
     const firstDirection = await page.evaluate(() => window.mmdModokiE2e.captureExportSurfaceProbe(64, 36));
     expect(firstDirection.nonZeroRgbByteCount).toBeGreaterThan(0);
 
-    const lightColor = row.locator('[data-effect-stack-control="directionalLightShaftsLightColor"]');
+    const lightColor = row.locator('[data-instance-field="color"]');
     await lightColor.evaluate((element) => {
       element.value = "#ff4040";
       element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -112,9 +113,9 @@ test("para flare light side follows the source of directional light in viewport 
     await page.locator('[data-effect-tab="post"]').click();
     await page.locator("#btn-effect-add-post").click();
     await page.locator('[data-effect-add-post="directionalLightShafts"]').click();
-    const row = page.locator('[data-effect-stack-row="directionalLightShafts"]');
-    for (const [key, value] of [["Strength", "100"], ["LightColor", "#ff0000"], ["ShadowColor", "#ffffff"]]) {
-      await row.locator(`[data-effect-stack-control="directionalLightShafts${key}"]`).evaluate((element, value) => {
+    const row = effectStackRow(page, "directionalLightShafts");
+    for (const [key, value] of [["strength", "100"], ["color", "#ff0000"], ["shadowColor", "#ffffff"]]) {
+      await row.locator(`[data-instance-field="${key}"]`).evaluate((element, value) => {
         element.value = value;
         element.dispatchEvent(new Event("input", { bubbles: true }));
         element.dispatchEvent(new Event("change", { bubbles: true }));

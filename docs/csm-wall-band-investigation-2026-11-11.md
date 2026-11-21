@@ -219,6 +219,8 @@ Classic / FrameGraph × 半影OFF / ONの全4条件で同じ結果となった�
 既存の別件を通常テストへ失敗として追加しないよう、このexport診断だけ `MMD_CSM_EXPORT_INVESTIGATION=1` で明示実行する。
 判定閾値は緩めず、近景影・fade・PNG/WebM一致を引き続き要求する。通常の終端回帰4件は常時実行対象。
 
+11/21 に Windows / WebGPU の作業ツリー（HEAD `8a80ecb`、描画関連の未コミット差分あり）で同じ診断を1回実行し、すべての判定を通過した。0〜0フレーム、1280×720、VP8、FrameGraph、半影OFF。近景の影ON/OFF輝度比は PNG で 0.8044、復号した WebM で 0.8065 だった。終端付近の380点でも両者の比の差は平均0.0028、最大0.0101。この条件で先頭フレームに影が映ることを確認した。どの変更が効いたかは未特定で、公開候補でも同じ診断を再実行する。
+
 独自の陰影を持つbuiltin / external WGSLは、受け取ったshadowをさらに再量子化できる。
 `toon_hard_shadow.wgsl`の`step`、SSS・highlight系の独自`smoothstep`や微分処理まで通常MMDと同じ遷移幅にする変更は含めない。
 これらを使うsceneや元報告sceneの見た目は、通常MMD / Standard / PBRの検証とは区別する。

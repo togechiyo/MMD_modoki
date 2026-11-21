@@ -1,6 +1,6 @@
 # MMD基本機能タスクチェックリスト
 
-更新日: 2026-11-19
+更新日: 2026-11-21
 
 v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バージョン候補](./v0.2.4-next-version-candidates.md)。v0.2.5の重点は下記、個別収録範囲は確認中。個別報告の確認状態は [リリース後台帳](./v0.2.4-post-release-ledger.md) と分けて管理する。
 
@@ -30,7 +30,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 所有者の後続依頼により、CSM終端の距離fadeを共通側へ実装。通常MMDの面の向きによる陰影を維持し、両backend・半影OFF/ON・PNGと既存の影経路を計15件のE2Eで確認。後続で報告された近景の上端影抜けは次項でfade基準を訂正。元sceneの壁面は帯が残るため、全体解消とは扱わない（[実装・結果](./csm-wall-band-investigation-2026-11-11.md)）。
 - [x] 11/12報告のCSM上端影抜けを修正。自動depth boundsをfade終端に使った回帰を自作床の25/35/45度で再現し、設定影距離基準へ訂正。両backend・Standard/MMD・PNGと遠方終端・既存影経路の計19描画テスト、unit1579件、lint、既存型診断から差分0/critical0、WebGPU smokeを確認。11/12後続報告で所有者実機でも上端の解消を確認（[原因・訂正・検証](./csm-wall-band-investigation-2026-11-11.md#2026-11-12-上端の影抜けとfade基準の訂正)）。
 - [x] 最奥の廊下壁に残るCSMの影抜けを修正。WebGPU reverse depthのprojection係数と深度復元の差で自動範囲が過小になり、最奥壁が脱落していた。該当経路のauto boundsを止め、指定ローカルPMXの初期値で影の復帰を確認。自作再現・既存影経路のE2E計15件、関連unit39件、lint、既存型診断から差分0/critical0、WebGPU smokeを確認。bias / normalBiasは固定、モデル名・元path・画像等は公開しない。11/13、所有者実機でも修正後の改善を確認（[原因・比較・対処](./csm-seam-parameters-and-official-sources-2026-11-13.md)）。
-- [ ] 自作壁/屋根fixtureの1フレームWebMで影ON/OFFが同じ画像になる既存の別件を調査する。終端fadeを外した比較でも再現。PNGには影があり、先頭captureの準備・後続frame・shadow map更新を切り分ける。診断は `MMD_CSM_EXPORT_INVESTIGATION=1` で明示実行（[条件と比較](./csm-wall-band-investigation-2026-11-11.md#webm比較で見つかった既存の別件)）。
+- [ ] 公開候補で自作壁/屋根の1フレームWebMの影を再確認する。11/11には影ON/OFFが同じ画像だったが、11/21のWindows / WebGPU作業ツリーでは、近景の輝度比がPNG 0.8044、WebM 0.8065となり既存診断に合格。再現条件が戻った場合は先頭・後続フレームを比較する（[条件と比較](./csm-wall-band-investigation-2026-11-11.md#webm比較で見つかった既存の別件)）。
 - [ ] 通常20個体効果と現行RC2種、互換用の旧「影の深み RC」について、登録値/固定値の区別、登録・上書き・補間、キーcopy/move/delete・Undo/Redo、混在操作を確認し、必要な局所修正を行う。
 - [ ] 公開候補の代表sceneで未登録設定と登録済みキーの保存/読込、シーク/再生、全体OFF/ON・Classic往復、PNG/WebMの最終状態を確認する。RC系は11/14に現段階了承済み。個別修正の検証と、最終公開候補の通し確認を分ける。
 - [ ] 中韓辞書の欠落（zh-Hant / zh-Hans各107、ko103。11/19再監査でも計317）と人間向け英語残存を修正し、5言語の共通画面・変更画面をGUIで確認する。辞書監査済みとGUI未確認を混同しない。

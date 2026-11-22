@@ -1,0 +1,45 @@
+diff --git a/src/main.ts b/src/main.ts
+index e36890d9..84e1df75 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -2130,6 +2130,7 @@ ipcMain.handle(
+         mode: 'exporter',
+         jobId,
+         pngEncoder: pngSequenceEncoderMode,
++        ...(process.env.MMD_MODOKI_PNG_WORKERS ? { pngWorkers: process.env.MMD_MODOKI_PNG_WORKERS } : {}),
+       });
+ 
+       return { jobId };
+diff --git a/src/png-sequence-exporter.ts b/src/png-sequence-exporter.ts
+index 7c4aad44..4fc354d3 100644
+--- a/src/png-sequence-exporter.ts
++++ b/src/png-sequence-exporter.ts
+@@ -16,6 +16,7 @@ export interface PngSequenceExportResult {
+ 
+ export interface PngSequenceExportOptions {
+     encoderMode?: "main" | "renderer-worker";
++    workerCount?: number;
+ }
+ 
+ type ExportQueueItem = {
+@@ -83,7 +84,7 @@ export async function runPngSequenceExportJob(
+     callbacks.onStatus?.("Initializing export renderer...");
+     const mmdManager = await MmdManager.create(canvas, enginePreference);
+     const encoderPool = encoderMode === "renderer-worker"
+-        ? new PngEncoderWebWorkerPool(request.exportKind === "single" ? { size: 1 } : undefined)
++        ? new PngEncoderWebWorkerPool(request.exportKind === "single" ? { size: 1 } : (options.workerCount ? { size: options.workerCount } : undefined))
+         : null;
+ 
+     try {
+diff --git a/src/renderer.ts b/src/renderer.ts
+index d79723ba..d2270cd8 100644
+--- a/src/renderer.ts
++++ b/src/renderer.ts
+@@ -746,6 +746,7 @@ async function initializePngSequenceExporter(searchParams: URLSearchParams): Pro
+       },
+     }, rendererBackend, {
+       encoderMode: searchParams.get("pngEncoder") === "main" ? "main" : "renderer-worker",
++      workerCount: searchParams.get("pngWorkers") ? Number(searchParams.get("pngWorkers")) : undefined,
+     });
+ 
+     setStatus(`Done: ${result.exportedFrames} frame(s)`);

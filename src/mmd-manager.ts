@@ -233,7 +233,6 @@ import {
     normalizeRingParticleSettings,
     RingParticleController,
     type RingParticleSettings,
-    type RingParticleSettingsInput,
 } from "./scene/ring-particle-controller";
 import { WaterSurfaceController } from "./scene/water-surface-controller";
 import {
@@ -2211,6 +2210,7 @@ ${beforeFogAppendBlock}
     private postEffectGlowGlarePowerValue = 0.4;
     private ringParticleSettingsValue: RingParticleSettings = structuredClone(DEFAULT_RING_PARTICLE_SETTINGS);
     private ringParticleController: RingParticleController | null = null;
+    private readonly ringParticleInstances = new Map<string, RingParticleController>();
     private postEffectLutEnabledValue = false;
     private postEffectLutIntensityValue = 1;
     private postEffectLutPresetValue = "anime-soft";
@@ -6590,7 +6590,7 @@ ${beforeFogAppendBlock}
     }
     public getEffectTimelineTracks(): KeyframeTrack[] {
         const legacy = EFFECT_KEYFRAME_DEFINITIONS
-            .filter(definition => (EFFECT_TIMELINE_ENABLED || isRcSceneEffectId(definition.id)) && definition.id !== "dof" && definition.id !== "motionBlur")
+            .filter(definition => (EFFECT_TIMELINE_ENABLED || isRcSceneEffectId(definition.id)) && definition.id !== "dof" && definition.id !== "motionBlur" && definition.id !== "ringParticles")
             .filter(definition => !isRcSceneEffectId(definition.id) || this.getRcSceneEffectStackIndex(definition.id) !== null)
             .map(definition => ({ name: definition.id, category: "effect" as const, frames: this.effectSceneTracks.frames(definition.id) }));
         const ids = [...this.effectInstances.order().filter(id => this.effectInstances.has(id)), ...this.effectInstances.ids().filter(id => !this.effectInstances.present(id))];
@@ -6767,6 +6767,7 @@ ${beforeFogAppendBlock}
     public setSerializedEffectInstances(state: unknown): void {
         this.effectInstances.restore(state);
         this.effectInstances.syncLegacyOrder(this.getFrameGraphPostEffectStackIds());
+        this.syncRingParticleInstanceControllers();
         this.effectSceneTracksChanged();
         this.refreshFrameGraphPostEffectsBackendForOrderChange();
     }
@@ -6792,10 +6793,15 @@ ${beforeFogAppendBlock}
         const state = this.getEffectInstanceState(), next = applyEffectInstanceDiff(state, diff, direction);
         if (!next) return false;
         try { this.effectInstances.restore(next); } catch { return false; }
+        this.syncRingParticleInstanceControllers();
         // Keep singleton slots in the same order when a shared stack drag crosses them.
         this.frameGraphPostEffectStackIdsValue = next.order.filter(isFrameGraphPostEffectId);
         this.effectSceneTracksChanged();
-        if (JSON.stringify(state.order) !== JSON.stringify(next.order)) this.refreshFrameGraphPostEffectsBackendForOrderChange();
+        const postOrder = (store: SerializedEffectInstances) => {
+            const particles = new Set(store.instances.filter(item => item.type === "ringParticles").map(item => item.instanceId));
+            return store.order.filter(id => !particles.has(id));
+        };
+        if (JSON.stringify(postOrder(state)) !== JSON.stringify(postOrder(next))) this.refreshFrameGraphPostEffectsBackendForOrderChange();
         return true;
     }
     public setSerializedEffectSceneTracks(data: unknown): void {
@@ -6870,6 +6876,7 @@ ${beforeFogAppendBlock}
         if (this._isPlaying) this.effectInstances.clearPreviews();
         if (this._isPlaying) this.effectSceneTracks.clearPreviews();
         const withPreview = !this._isPlaying && this.effectCaptureDepth === 0;
+        this.evaluateRingParticleInstances(frame, withPreview);
         this.effectRenderState = effectRenderValues(
             this.effectSceneTracks.evaluate("gamma", frame, withPreview), this.effectSceneTracks.evaluate("grain", frame, withPreview),
             this.postEffectGammaValue, this.postEffectGrainIntensityValue,
@@ -10806,6 +10813,7 @@ ${beforeFogAppendBlock}
         this.lastEvaluatedGravitySceneFrame = null;
         this.effectSceneTracks.restore(null);
         this.effectInstances.restore(null);
+        this.syncRingParticleInstanceControllers();
         this.effectInstanceRuntimeDuration.setDuration(0);
 
         if (this.audioPlayer) {
@@ -11624,7 +11632,7 @@ ${beforeFogAppendBlock}
             gammaEnabled: this.effectSceneTracks.has("gamma") ? this.getFrameGraphPostEffectStackIds().includes("gamma") : this.isFrameGraphPostEffectActive("gamma"),
             effectInstances: this.effectInstances.ids().filter(id => {
                 const type = this.effectInstances.type(id);
-                return this.effectInstances.present(id) && type !== null
+                return this.effectInstances.present(id) && type !== null && type !== "ringParticles"
                     && isEffectInstanceSupported(type, this.isWebGpuEngine(), this.engine.getCaps().supportComputeShaders);
             }).map(id => {
                 const instance = this.effectInstances.renderState(id, this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
@@ -12048,7 +12056,7 @@ ${beforeFogAppendBlock}
     private getFrameGraphOutput(): FrameGraphOutput {
         if (!this.frameGraphPostEffectsEnabledValue) return "direct";
         if (this.getActiveFrameGraphPostEffectIds().length > 0
-            || this.effectInstances.ids().some(id => this.effectInstances.present(id))
+            || this.effectInstances.ids().some(id => this.effectInstances.type(id) !== "ringParticles" && this.effectInstances.present(id))
             || this.isFrameGraphImageProcessingTaskNeeded()) return "frameGraph";
         const engineType = this.getEngineType();
         const scattering = engineType === "WebGL2" && this.antialiasEnabledValue
@@ -13500,7 +13508,7 @@ ${beforeFogAppendBlock}
         return structuredClone(this.ringParticleSettingsValue);
     }
 
-    setRingParticleSettings(settings: RingParticleSettingsInput): void {
+    setRingParticleSettings(settings: RingParticleSettings): void {
         this.ringParticleSettingsValue = normalizeRingParticleSettings(settings);
         this.syncRingParticleRuntimeSettings();
     }
@@ -13511,6 +13519,37 @@ ${beforeFogAppendBlock}
             enabled: this.ringParticleSettingsValue.enabled
                 && (this.postEffectBackend !== "frameGraph" || this.frameGraphPostEffectsEnabledValue),
         });
+        this.evaluateRingParticleInstances(this._currentFrame, !this._isPlaying && this.effectCaptureDepth === 0);
+    }
+
+    private syncRingParticleInstanceControllers(): void {
+        // Particles draw into scene color. Only screen-space instances need a post-process task.
+        const present = this.effectInstances.order().filter(id => this.effectInstances.type(id) === "ringParticles");
+        for (const [id, controller] of this.ringParticleInstances) {
+            if (present.includes(id)) continue;
+            controller.dispose();
+            this.ringParticleInstances.delete(id);
+        }
+        for (const id of present) {
+            if (!this.ringParticleInstances.has(id)) {
+                this.ringParticleInstances.set(id, new RingParticleController(this.scene, this.camera, () => this._currentFrame, id));
+            }
+        }
+    }
+
+    private evaluateRingParticleInstances(frame: number, preview: boolean): void {
+        for (const [id, controller] of this.ringParticleInstances) {
+            const { value, fixedSettings } = this.effectInstances.renderState(id, frame, preview);
+            controller.setSettings({
+                enabled: value.enabled && this.postEffectBackend === "frameGraph" && this.frameGraphPostEffectsEnabledValue,
+                count: Number(value.count),
+                density: Number(value.density),
+                size: Number(value.size),
+                speed: Number(value.speed),
+                intensity: Number(value.intensity),
+                color: fixedSettings?.color ?? DEFAULT_RING_PARTICLE_SETTINGS.color,
+            });
+        }
     }
 
     /** LuminousGlow threshold (0..1.5). */
@@ -16909,6 +16948,8 @@ ${beforeFogAppendBlock}
         this.disposeBoneGizmoSystem();
         this.ringParticleController?.dispose();
         this.ringParticleController = null;
+        for (const controller of this.ringParticleInstances.values()) controller.dispose();
+        this.ringParticleInstances.clear();
         window.removeEventListener("resize", this.onWindowResize);
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();

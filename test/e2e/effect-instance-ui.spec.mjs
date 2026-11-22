@@ -19,17 +19,18 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     }
     const state = () => page.evaluate(() => window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances);
     const effectRows = () => page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().filter(track => track.category === "effect"));
-    const before = await state(), [a, b, c] = before.instances.map(item => item.instanceId);
-    expect(before.instances.map(item => item.label)).toEqual(["SSAO", "SSAO 2", "SSGI"]);
+    const before = await state(), [a, b, c, particles] = before.instances.map(item => item.instanceId);
+    expect(before.instances.map(item => item.label)).toEqual(["SSAO", "SSAO 2", "SSGI", "Particles"]);
     const row = id => page.locator(`[data-effect-stack-row="${id}"]`);
     await expect(page.locator('[data-instance-field="label"], [data-instance-action="up"], [data-instance-action="down"]')).toHaveCount(0);
     await expect(row(a).locator('.effect-layer-main[data-effect-stack-drag]')).toHaveCount(1);
-    await expect(row("ringParticles").locator('.effect-layer-main[data-effect-stack-drag]')).toHaveCount(1);
-    await dragEffectStackRow(row(a), row("ringParticles"), "before");
-    expect((await state()).order).toEqual([b, c, "ringParticles", a]);
+    await expect(row(particles).locator(".effect-layer-name")).toHaveText("パーティクル");
+    await expect(row(particles).locator('.effect-layer-main[data-effect-stack-drag]')).toHaveCount(1);
+    await dragEffectStackRow(row(a), row(particles), "before");
+    expect((await state()).order).toEqual([b, c, particles, a]);
     expect((await state()).instances).toEqual(before.instances);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click(); expect(await state()).toEqual(before);
-    await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click(); expect((await state()).order).toEqual([b, c, "ringParticles", a]);
+    await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click(); expect((await state()).order).toEqual([b, c, particles, a]);
     await expandEffectInstance(row(b));
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.timelineTarget)).toBe("model");
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);
@@ -78,7 +79,7 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     expect(await effectRows()).toEqual([{ category: "effect", name: b, frames: [0] }]);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
     expect(await effectRows()).toEqual([]);
-    expect((await state()).instances).toHaveLength(3);
+    expect((await state()).instances).toHaveLength(4);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
   } finally { await launched.close(); }
 });

@@ -13,7 +13,7 @@ export function visibleInstanceFixedFields(type: EffectInstanceType): readonly (
     switch (type) {
         case "bloom": return ["bloomColor"];
         case "lut": return ["lut"];
-        case "aerialPerspective": case "offsetShadow": case "offsetHighlight": return ["color"];
+        case "aerialPerspective": case "offsetShadow": case "offsetHighlight": case "ringParticles": return ["color"];
         case "directionalLightShafts": return ["color", "shadowColor"];
         case "motionBlur": return ["samples"];
         case "luminousRadiance": return ["radiance"];
@@ -42,7 +42,7 @@ export function instanceFixedSettings(type: EffectInstanceType, value: InstanceF
         case "aerialPerspective": return { color: instanceColor(value.color ?? { r: 0.72, g: 0.79, b: 0.83 }) };
         case "directionalLightShafts": return { color: instanceColor(value.color), shadowColor: instanceColor(value.shadowColor ?? { r: 0, g: 0, b: 0 }) };
         case "offsetShadow": return { color: instanceColor(value.color ?? { r: 0.29, g: 0.21, b: 0.16 }), thickness: finite(value.thickness, 1, 0.0001, 1), softness: finite(value.softness, 0, 0, 12) };
-        case "offsetHighlight": return { color: instanceColor(value.color) };
+        case "offsetHighlight": case "ringParticles": return { color: instanceColor(value.color) };
         default: return undefined;
     }
 }

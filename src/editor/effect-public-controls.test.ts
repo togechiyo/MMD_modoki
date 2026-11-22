@@ -17,6 +17,8 @@ describe("public effect controls", () => {
         expect(visibleInstanceFixedFields("luminous")).toEqual([]);
         expect(visibleInstanceFixedFields("luminousRadiance")).toEqual(["radiance"]);
         expect(visibleInstanceFixedFields("motionBlur")).toEqual(["samples"]);
+        expect(visibleInstanceFixedFields("ringParticles")).toEqual(["color"]);
+        expect(getEffectDefinition("ringParticles").sliders.map(slider => slider.field)).toEqual(["count", "density", "size", "speed", "intensity"]);
     });
     it("drops hidden optics from loaded settings, key bases, keys and previews, preserving target keys", () => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, "dof");

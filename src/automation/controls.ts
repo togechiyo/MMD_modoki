@@ -80,8 +80,8 @@ export const automationControls: readonly Control[] = [
         return { id: "ringParticles." + key, unit: "runtime scalar", schema, available: frameGraph,
             read: m => m.getRingParticleSettings()[key], write: (m, v) => m.setRingParticleSettings({ ...m.getRingParticleSettings(), [key]: schema.parse(v) }) };
     }),
-    ...(["colorA", "colorB", "colorC"] as const).map(key => ({ ...color("ringParticles." + key, m => m.getRingParticleSettings()[key],
-        (m, r, g, b) => m.setRingParticleSettings({ ...m.getRingParticleSettings(), [key]: { r, g, b } })), available: frameGraph })),
+    { ...color("ringParticles.color", m => m.getRingParticleSettings().color,
+        (m, r, g, b) => m.setRingParticleSettings({ ...m.getRingParticleSettings(), color: { r, g, b } })), available: frameGraph },
     { ...color("aerialPerspective.color", m => m.getPostEffectAerialPerspectiveColor(), (m, r, g, b) => m.setPostEffectAerialPerspectiveColor(r, g, b)), available: frameGraph },
     { ...color("directionalLightShafts.lightColor", m => m.getPostEffectDirectionalLightShaftsLightColor(), (m, r, g, b) => m.setPostEffectDirectionalLightShaftsLightColor(r, g, b)), available: frameGraph },
     { ...color("directionalLightShafts.shadowColor", m => m.getPostEffectDirectionalLightShaftsShadowColor(), (m, r, g, b) => m.setPostEffectDirectionalLightShaftsShadowColor(r, g, b)), available: frameGraph },

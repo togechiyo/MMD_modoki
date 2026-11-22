@@ -94,6 +94,12 @@ export const t = (key: string, params?: Record<string, string | number>): string
 
 export const getLocale = (): UiLocale => currentLocale;
 
+export function getEffectInstanceDisplayName(type: string, label: string): string {
+    if (type !== "ringParticles") return label;
+    const defaultName = /^Particles( [1-9]\d*)?$/.exec(label);
+    return defaultName ? t("effect.frameGraphPost.effects.ringParticles") + (defaultName[1] ?? "") : label;
+}
+
 export const applyI18nToDom = (root: ParentNode = document): void => {
     root.querySelectorAll<HTMLElement>("[data-i18n]").forEach((element) => {
         const key = element.dataset.i18n;

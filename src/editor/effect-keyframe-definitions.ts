@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { RING_PARTICLE_PARAMETERS } from "../shared/ring-particle-settings";
+import { fromFrameGraphEffectSliderValue, toFrameGraphEffectSliderValue, type FrameGraphEffectSliderField } from "../ui/frame-graph-effect-slider-mapping";
 
 export type EffectValueById = {
+    ringParticles: { enabled: boolean; count: number; density: number; size: number; speed: number; intensity: number };
     dof: { enabled: boolean; focusMode: string; targetModelInstanceId: string; targetBoneName: string; focusOffset: number; lensSize: number };
     ssao: { enabled: boolean; strength: number; radius: number };
     ssgi: { enabled: boolean; strength: number; sampleRadius: number };
@@ -48,7 +51,26 @@ function linearSlider(field: string, panelField: string, label: string, min: num
         },
         toPosition: value => (value - min) / (max - min) * 100 };
 }
+function panelSlider(field: string, panelField: FrameGraphEffectSliderField, label: string): EffectSlider {
+    return { field, panelField, labelKey: "effect.frameGraphPost.controls." + label, min: 0, max: 100,
+        toValue: position => fromFrameGraphEffectSliderValue(panelField, position),
+        toPosition: value => toFrameGraphEffectSliderValue(panelField, value) };
+}
 export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
+    { id: "ringParticles", fields: {
+        enabled: { kind: "step", default: false },
+        count: { kind: "linear", ...RING_PARTICLE_PARAMETERS.count },
+        density: { kind: "linear", ...RING_PARTICLE_PARAMETERS.density },
+        size: { kind: "linear", ...RING_PARTICLE_PARAMETERS.size },
+        speed: { kind: "linear", ...RING_PARTICLE_PARAMETERS.speed },
+        intensity: { kind: "linear", ...RING_PARTICLE_PARAMETERS.intensity },
+    }, sliders: [
+        panelSlider("count", "ringParticleCount", "particleCount"),
+        panelSlider("density", "ringParticleDensity", "particleDensity"),
+        panelSlider("size", "ringParticleSize", "particleSize"),
+        panelSlider("speed", "ringParticleSpeed", "particleSpeed"),
+        panelSlider("intensity", "ringParticleIntensity", "emissionStrength"),
+    ] },
     { id: "motionBlur", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 10, min: 0, max: 10 } },
         sliders: [linearSlider("strength", "motionBlurStrength", "strength", 0, 10)] },
     { id: "dof", fields: {
@@ -200,12 +222,12 @@ function valueSchema(id: EffectId) {
         [key, field.kind === "step" ? z.boolean() : field.kind === "discrete" ? z.string().refine(value => validDiscrete(value, field.values)) : z.number().finite().min(field.min).max(field.max)]))).strict();
 }
 export const effectKeyframePayloadSchema = z.object({
-    kind: z.literal("effect"), effectId: z.enum(["motionBlur", "dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous", "luminousRadiance", "rcSkyOcclusion", "rcSkyAmbient", "rcDiffuseGi"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
+    kind: z.literal("effect"), effectId: z.enum(["motionBlur", "dof", "ssao", "ssgi", "ssr", "directionalLightShafts", "offsetShadow", "offsetHighlight", "aerialPerspective", "gamma", "grain", "bloom", "vignette", "sharpen", "chromatic", "edgeBlur", "distortion", "lut", "luminous", "luminousRadiance", "ringParticles", "rcSkyOcclusion", "rcSkyAmbient", "rcDiffuseGi"]), value: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
     instanceId: z.string().regex(/^fx-[a-zA-Z0-9-]{1,190}$/).optional(),
 }).strict().transform(payload => payload.effectId === "rcSkyAmbient"
     // Earlier Sky Ambient keys had no blend control: retain their full effect.
     ? { ...payload, value: { opacity: 1, ...payload.value } } : payload).superRefine((payload, context) => {
-    if (["dof", "motionBlur"].includes(payload.effectId) && !payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "These keys require an effect instance" });
+    if (["dof", "motionBlur", "ringParticles"].includes(payload.effectId) && !payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "These keys require an effect instance" });
     if (payload.effectId === "rcSkyOcclusion" && payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "Sky occlusion is a scene singleton" });
     if (payload.effectId === "rcSkyAmbient" && payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "Sky ambient is a scene singleton" });
     if (payload.effectId === "rcDiffuseGi" && payload.instanceId) context.addIssue({ code: "custom", path: ["instanceId"], message: "Diffuse GI is a scene singleton" });

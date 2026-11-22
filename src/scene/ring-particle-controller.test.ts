@@ -1,51 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { Scene } from "@babylonjs/core/scene";
+import { describe, expect, it, vi } from "vitest";
 import {
     DEFAULT_RING_PARTICLE_SETTINGS,
     hashRingParticle,
     normalizeRingParticleSettings,
-    RING_PARTICLE_COLOR_RATIOS,
-    resolveRingParticleColorGroup,
+    RingParticleController,
     resolveRingParticleMaterialState,
     sampleRingParticle,
 } from "./ring-particle-controller";
 
 describe("ring particle sampling", () => {
-    it("3色を60%、30%、10%の割合で割り当てる", () => {
-        expect(RING_PARTICLE_COLOR_RATIOS).toEqual([0.6, 0.3, 0.1]);
-
-        const sampleCount = 100_000;
-        const counts = [0, 0, 0];
-        for (let index = 0; index < sampleCount; index++) {
-            counts[resolveRingParticleColorGroup(index)] += 1;
-        }
-
-        expect(counts[0] / sampleCount).toBeCloseTo(0.6, 2);
-        expect(counts[1] / sampleCount).toBeCloseTo(0.3, 2);
-        expect(counts[2] / sampleCount).toBeCloseTo(0.1, 2);
+    it("既定のパーティクル色は白", () => {
+        expect(DEFAULT_RING_PARTICLE_SETTINGS.color).toEqual({ r: 1, g: 1, b: 1 });
     });
 
-    it("3つの既定色はすべて白で、各色groupへ粒子を割り当てる", () => {
-        expect(DEFAULT_RING_PARTICLE_SETTINGS.colorA).toEqual({ r: 1, g: 1, b: 1 });
-        expect(DEFAULT_RING_PARTICLE_SETTINGS.colorB).toEqual({ r: 1, g: 1, b: 1 });
-        expect(DEFAULT_RING_PARTICLE_SETTINGS.colorC).toEqual({ r: 1, g: 1, b: 1 });
-
-        const groups = new Set(Array.from({ length: 256 }, (_, index) => resolveRingParticleColorGroup(index)));
-        expect(groups).toEqual(new Set([0, 1, 2]));
-    });
-
-    it("旧2色設定は第3色へ第2色を補完する", () => {
+    it("単色のRGB値を表示範囲に収める", () => {
         const normalized = normalizeRingParticleSettings({
-            enabled: false,
-            count: 180,
-            density: 32.5,
-            size: 0.335,
-            speed: 0.05,
-            intensity: 4,
-            colorA: { r: 1, g: 1, b: 1 },
-            colorB: { r: 0.2, g: 0.4, b: 0.8 },
+            ...DEFAULT_RING_PARTICLE_SETTINGS, color: { r: -1, g: 0.4, b: 2 },
         });
-
-        expect(normalized.colorC).toEqual({ r: 0.2, g: 0.4, b: 0.8 });
+        expect(normalized.color).toEqual({ r: 0, g: 0.4, b: 1 });
     });
 
     it("同じseedとframeなら同じ位置へ戻る", () => {
@@ -81,5 +59,72 @@ describe("ring particle sampling", () => {
         expect(state.color.b).toBeCloseTo(0.32);
         expect(state.color.g).toBeGreaterThan(state.color.r * 3);
         expect(state.alpha).toBe(1);
+    });
+});
+
+describe("ring particle instances", () => {
+    it("1つの材質で全粒子を着色し、色の変更で座標を再転送しない", () => {
+        const engine = new NullEngine();
+        const scene = new Scene(engine);
+        const camera = new FreeCamera("camera", Vector3.Zero(), scene);
+        const controller = new RingParticleController(scene, camera, () => 0);
+        try {
+            const settings = { ...DEFAULT_RING_PARTICLE_SETTINGS, enabled: true, count: 32 };
+            controller.setSettings(settings);
+            expect(scene.meshes).toHaveLength(1);
+            const mesh = scene.meshes[0] as Mesh;
+            const material = mesh.material as StandardMaterial;
+            expect(mesh.thinInstanceCount).toBe(32);
+            const updateBuffer = vi.spyOn(mesh, "thinInstanceBufferUpdated");
+            const redrawMaterial = vi.spyOn(material, "markAsDirty");
+            controller.setSettings(structuredClone(settings));
+            expect(redrawMaterial).not.toHaveBeenCalled();
+            controller.setSettings({ ...settings, color: { r: 0.1, g: 0.6, b: 0.3 } });
+            expect(material.emissiveColor.asArray()).toEqual([0.1, 0.6, 0.3]);
+            expect(updateBuffer).not.toHaveBeenCalled();
+
+            // Default IDs retain the particle positions of earlier projects.
+            const particle = sampleRingParticle(0, 0, settings);
+            expect(mesh.thinInstanceGetWorldMatrices()[0].getTranslation().x).toBeCloseTo(particle.x);
+            controller.setSettings({ ...settings, count: 64 });
+            expect(mesh.thinInstanceCount).toBe(64);
+            controller.setSettings({ ...settings, intensity: 0 });
+            expect(mesh.isEnabled()).toBe(false);
+        } finally {
+            controller.dispose();
+            scene.dispose();
+            engine.dispose();
+        }
+    });
+
+    it("重ねたエフェクトは保存IDごとに異なる粒子配置と色を保つ", () => {
+        const engine = new NullEngine();
+        const scene = new Scene(engine);
+        const camera = new FreeCamera("camera", Vector3.Zero(), scene);
+        const settings = { ...DEFAULT_RING_PARTICLE_SETTINGS, enabled: true, count: 16 };
+        const first = new RingParticleController(scene, camera, () => 240, "effect-1");
+        let second = new RingParticleController(scene, camera, () => 240, "effect-2");
+        try {
+            first.setSettings({ ...settings, color: { r: 1, g: 0, b: 0 } });
+            const blue = { ...settings, color: { r: 0, g: 0, b: 1 } };
+            second.setSettings(blue);
+            const [firstMesh, secondMesh] = scene.meshes as Mesh[];
+            expect((firstMesh.material as StandardMaterial).emissiveColor.asArray()).toEqual([1, 0, 0]);
+            expect((secondMesh.material as StandardMaterial).emissiveColor.asArray()).toEqual([0, 0, 1]);
+            const positions = (mesh: Mesh) => mesh.thinInstanceGetWorldMatrices().map(m => m.getTranslation().asArray());
+            const secondPositions = positions(secondMesh);
+            expect(positions(firstMesh)).not.toEqual(secondPositions);
+
+            second.dispose();
+            expect(scene.meshes).toEqual([firstMesh]);
+            second = new RingParticleController(scene, camera, () => 240, "effect-2");
+            second.setSettings(blue);
+            expect(positions(scene.meshes[1] as Mesh)).toEqual(secondPositions);
+        } finally {
+            second.dispose();
+            first.dispose();
+            scene.dispose();
+            engine.dispose();
+        }
     });
 });

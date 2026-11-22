@@ -21,6 +21,18 @@ describe("timeline track display names", () => {
     });
 
     it.each([
+        ["ja", "パーティクル"], ["en", "Particles"], ["zh-Hant", "粒子"], ["zh-Hans", "粒子"], ["ko", "파티클"],
+    ] as const)("localizes numbered particle tracks in %s and preserves custom names", (locale, translated) => {
+        changeLocale(locale);
+        const display = (label: string) => getTimelineTrackDisplayName({
+            name: "fx-test", category: "effect", effectInstance: { type: "ringParticles", label, suspended: false },
+        });
+        expect(display("Particles")).toBe(translated);
+        expect(display("Particles 2")).toBe(`${translated} 2`);
+        expect(display("Particles warm")).toBe("Particles warm");
+    });
+
+    it.each([
         ["ja", ["カメラ", "照明", "影", "重力"]],
         ["en", ["Camera", "Lighting", "Shadow", "Gravity"]],
         ["zh-Hant", ["相機", "照明", "陰影", "重力"]],

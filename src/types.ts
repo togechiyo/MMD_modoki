@@ -791,7 +791,7 @@ export interface ProjectEffectState {
     fogDensity?: number;
     fogOpacity?: number;
     fogColor?: ProjectRgbColor;
-    ringParticles?: ProjectRingParticleState;
+    ringParticles?: ProjectRingParticleState | LegacyProjectRingParticleState;
     frameGraphPostStack?: FrameGraphPostEffectStackEntry[];
     /** RC singleton card presence is authoritative, including explicit removal. */
     rcSceneEffectsInStack?: true;
@@ -1027,6 +1027,10 @@ export interface ProjectRingParticleState {
     size: number;
     speed: number;
     intensity: number;
+    color: ProjectRgbColor;
+}
+
+interface LegacyProjectRingParticleState extends Omit<ProjectRingParticleState, "color"> {
     colorA: ProjectRgbColor;
     colorB: ProjectRgbColor;
     colorC?: ProjectRgbColor;

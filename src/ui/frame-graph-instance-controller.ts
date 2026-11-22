@@ -1,4 +1,4 @@
-import { t } from "../i18n";
+import { getEffectInstanceDisplayName, t } from "../i18n";
 import type { MmdManager } from "../mmd-manager";
 import type { SerializedEffectInstances } from "../editor/frame-graph-effect-instances";
 import type { EffectInstanceOperation } from "../editor/effect-instance-operations";
@@ -9,7 +9,7 @@ import { DofInstanceFocusControls, type DofInstanceFocusHost } from "./dof-insta
 import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from "./section-keyframe-button";
 
 const escape = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-type Host = Pick<MmdManager, "isEffectInstance" | "getEffectSceneKeyframeFrames" | "isEffectValueEditLocked" | "getEffectInstanceState" | "getEffectInstanceFixedSettings" | "captureCurrentEffectKeyframePayload" | "getEffectInstanceLabel" | "isPlaying"> & DofInstanceFocusHost;
+type Host = Pick<MmdManager, "isEffectInstance" | "getEffectSceneKeyframeFrames" | "isEffectValueEditLocked" | "getEffectInstanceState" | "getEffectInstanceFixedSettings" | "captureCurrentEffectKeyframePayload" | "isPlaying"> & DofInstanceFocusHost;
 type FixedSlider = { field: InstanceFixedSliderField; panelField: FrameGraphEffectSliderField; label: string; value: number };
 function fixedSliders(type: string, settings: InstanceFixedSettings = {}): FixedSlider[] {
     switch (type) {
@@ -96,14 +96,15 @@ export class FrameGraphInstanceController {
         });
     }
     render(id: string, present: boolean, expanded: boolean): string {
-        const value = this.currentValue(id), label = escape(this.host.getEffectInstanceLabel(id));
+        const instance = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id);
+        if (!instance) return "";
+        const value = this.currentValue(id), label = escape(getEffectInstanceDisplayName(instance.type, instance.label));
         const controls = this.controls(id).map(mapping => {
             const field = mapping.panelField as FrameGraphEffectSliderField;
             const controlLabel = this.controlLabel(id, mapping);
             return `<div class="effect-layer-control-row"><span class="effect-layer-control-label">${escape(controlLabel)}</span><input type="range" class="effect-layer-control-slider" min="0" max="100" step="1" data-instance-field="${mapping.field}" aria-label="${escape(controlLabel)}" value="${Math.round(toFrameGraphEffectSliderValue(field, Number(value[mapping.field])))}"><output class="effect-layer-control-value" data-instance-value="${mapping.field}">${Number(value[mapping.field]).toFixed(2)}</output></div>`;
         }).join("");
-        const instance = this.host.getEffectInstanceState().instances.find(item => item.instanceId === id);
-        const visibleFixed = instance ? visibleInstanceFixedFields(instance.type) : [];
+        const visibleFixed = visibleInstanceFixedFields(instance.type);
         const primaryColor = visibleFixed.includes("bloomColor") ? instance?.bloomColor : visibleFixed.includes("color") ? instance?.fixedSettings?.color : undefined;
         const color = primaryColor ? this.renderColor("color", primaryColor) : "";
         const shadowColor = visibleFixed.includes("shadowColor") && instance?.fixedSettings?.shadowColor ? this.renderColor("shadowColor", instance.fixedSettings.shadowColor) : "";

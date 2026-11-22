@@ -194,6 +194,14 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
       window.mmdModokiE2e.captureExportSurfaceProbe(64, 36)
     ));
     expect(gammaRendered.nonZeroRgbByteCount).toBeGreaterThan(0);
+    const postOrder = (await page.evaluate(effectInstanceRuntimeState)).connectedInstanceOrder;
+    await page.locator("#btn-effect-add-post").click();
+    await page.locator('[data-effect-add-post="ringParticles"]').click();
+    await expect(effectStackRow(page, "ringParticles").locator('input[type="color"]')).toHaveCount(1);
+    await expect.poll(() => page.evaluate(effectInstanceRuntimeState)).toMatchObject({
+      stack: "luminous,ssgi,motionBlur,bloom,gamma,ringParticles",
+      connectedInstanceOrder: postOrder,
+    });
     expect(await page.evaluate(() => (
       window.mmdModokiE2e.getWebGpuValidationDiagnostics()
     ))).toEqual({ count: 0, messages: [] });

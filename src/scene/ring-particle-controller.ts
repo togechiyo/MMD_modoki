@@ -11,44 +11,17 @@ import "@babylonjs/core/Meshes/thinInstanceMesh";
 import type { Observer } from "@babylonjs/core/Misc/observable";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
-
-export interface RingParticleSettings {
-    enabled: boolean;
-    count: number;
-    density: number;
-    size: number;
-    speed: number;
-    intensity: number;
-    colorA: { r: number; g: number; b: number };
-    colorB: { r: number; g: number; b: number };
-    colorC: { r: number; g: number; b: number };
-}
-
-export type RingParticleSettingsInput = Omit<RingParticleSettings, "colorC"> & {
-    colorC?: RingParticleSettings["colorC"];
-};
-
-export const DEFAULT_RING_PARTICLE_SETTINGS: RingParticleSettings = {
-    enabled: false,
-    count: 180,
-    density: 32.5,
-    size: 0.335,
-    speed: 0.05,
-    intensity: 4,
-    colorA: { r: 1, g: 1, b: 1 },
-    colorB: { r: 1, g: 1, b: 1 },
-    colorC: { r: 1, g: 1, b: 1 },
-};
+import type { ProjectRingParticleState as RingParticleSettings } from "../types";
+import { DEFAULT_RING_PARTICLE_SETTINGS, normalizeRingParticleSettings } from "../shared/ring-particle-settings";
+export type { RingParticleSettings };
+export { DEFAULT_RING_PARTICLE_SETTINGS, normalizeRingParticleSettings };
 
 export interface RingParticleSample {
     x: number;
     y: number;
     z: number;
     scale: number;
-    colorGroup: 0 | 1 | 2;
 }
-
-export const RING_PARTICLE_COLOR_RATIOS = [0.6, 0.3, 0.1] as const;
 
 function fract(value: number): number {
     return value - Math.floor(value);
@@ -59,10 +32,14 @@ export function hashRingParticle(index: number, channel: number): number {
     return fract(Math.sin((index + 1) * 127.1 + (channel + 1) * 311.7) * 43758.5453123);
 }
 
-export function resolveRingParticleColorGroup(index: number): 0 | 1 | 2 {
-    const colorHash = hashRingParticle(index, 11);
-    if (colorHash < RING_PARTICLE_COLOR_RATIOS[0]) return 0;
-    return colorHash < RING_PARTICLE_COLOR_RATIOS[0] + RING_PARTICLE_COLOR_RATIOS[1] ? 1 : 2;
+function getParticleIndexOffset(instanceId: string): number {
+    // Preserve the particle field of projects created before instances had IDs.
+    if (instanceId === "ringParticles") return 0;
+    let hash = 2166136261;
+    for (let i = 0; i < instanceId.length; i++) {
+        hash = Math.imul(hash ^ instanceId.charCodeAt(i), 16777619);
+    }
+    return hash >>> 0;
 }
 
 export function sampleRingParticle(
@@ -104,7 +81,6 @@ export function sampleRingParticle(
         y: height,
         z: Math.sin(angle) * radius,
         scale,
-        colorGroup: resolveRingParticleColorGroup(index),
     };
 }
 
@@ -163,32 +139,14 @@ export function resolveRingParticleMaterialState(
     };
 }
 
-export function normalizeRingParticleSettings(settings: RingParticleSettingsInput): RingParticleSettings {
-    return {
-        enabled: Boolean(settings.enabled),
-        count: Math.max(8, Math.min(512, Math.round(settings.count))),
-        density: Math.max(5, Math.min(60, settings.density)),
-        size: Math.max(0.03, Math.min(3, settings.size)),
-        speed: Math.max(-2, Math.min(2, settings.speed)),
-        intensity: Math.max(0, Math.min(8, settings.intensity)),
-        colorA: clampColor(settings.colorA),
-        colorB: clampColor(settings.colorB),
-        colorC: clampColor(settings.colorC ?? settings.colorB),
-    };
-}
-
 export class RingParticleController {
     private settings: RingParticleSettings = structuredClone(DEFAULT_RING_PARTICLE_SETTINGS);
     private readonly texture: RawTexture;
-    private readonly meshes: [Mesh, Mesh, Mesh];
-    private readonly materials: [StandardMaterial, StandardMaterial, StandardMaterial];
-    private readonly matrixBuffers: [Float32Array, Float32Array, Float32Array] = [
-        new Float32Array(),
-        new Float32Array(),
-        new Float32Array(),
-    ];
+    private readonly mesh: Mesh;
+    private readonly material: StandardMaterial;
+    private readonly particleIndexOffset: number;
+    private matrixBuffer = new Float32Array();
     private observer: Observer<Scene> | null = null;
-    private allocatedCount = -1;
     private lastFrame = Number.NaN;
     private lastCameraRotation = new Quaternion(Number.NaN, Number.NaN, Number.NaN, Number.NaN);
 
@@ -196,35 +154,31 @@ export class RingParticleController {
         private readonly scene: Scene,
         private readonly camera: Camera,
         private readonly getFrame: () => number,
+        instanceId = "ringParticles",
     ) {
+        this.particleIndexOffset = getParticleIndexOffset(instanceId);
         this.texture = createSoftParticleTexture(scene);
-        this.materials = [0, 1, 2].map((group) => {
-            const material = new StandardMaterial(`ringParticleMaterial${group}`, scene);
-            material.disableLighting = true;
-            material.backFaceCulling = false;
-            material.disableDepthWrite = true;
-            material.forceDepthWrite = false;
-            material.diffuseTexture = this.texture;
-            material.emissiveTexture = this.texture;
-            material.useAlphaFromDiffuseTexture = true;
-            material.transparencyMode = Material.MATERIAL_ALPHABLEND;
-            // An additive sprite becomes white/invisible over a bright background.
-            // Keep a colored alpha-blended core; Luminous adds the optional halo.
-            material.alphaMode = Constants.ALPHA_COMBINE;
-            material.specularColor = Color3.Black();
-            material.ambientColor = Color3.Black();
-            Object.assign(material, { mmdLuminousExplicitSource: true, mmdLuminousPreserveChroma: true });
-            return material;
-        }) as [StandardMaterial, StandardMaterial, StandardMaterial];
-        this.meshes = [0, 1, 2].map((group) => {
-            const mesh = CreatePlane(`ringParticleMesh${group}`, { size: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
-            mesh.material = this.materials[group];
-            mesh.isPickable = false;
-            mesh.receiveShadows = false;
-            mesh.alwaysSelectAsActiveMesh = true;
-            mesh.setEnabled(false);
-            return mesh;
-        }) as [Mesh, Mesh, Mesh];
+        this.material = new StandardMaterial(`AutoLuminous ring particle ${instanceId}`, scene);
+        this.material.disableLighting = true;
+        this.material.backFaceCulling = false;
+        this.material.disableDepthWrite = true;
+        this.material.forceDepthWrite = false;
+        this.material.diffuseTexture = this.texture;
+        this.material.useAlphaFromDiffuseTexture = true;
+        this.material.transparencyMode = Material.MATERIAL_ALPHABLEND;
+        // Alpha blending preserves the colored core on bright backgrounds. Luminous adds the halo.
+        this.material.alphaMode = Constants.ALPHA_COMBINE;
+        this.material.diffuseColor = Color3.Black();
+        this.material.specularColor = Color3.Black();
+        this.material.ambientColor = Color3.Black();
+        Object.assign(this.material, { mmdLuminousExplicitSource: true, mmdLuminousPreserveChroma: true });
+
+        this.mesh = CreatePlane(`ringParticleMesh:${instanceId}`, { size: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
+        this.mesh.material = this.material;
+        this.mesh.isPickable = false;
+        this.mesh.receiveShadows = false;
+        this.mesh.alwaysSelectAsActiveMesh = true;
+        this.mesh.setEnabled(false);
         this.observer = scene.onBeforeRenderObservable.add(() => this.update());
         this.applyMaterialState();
     }
@@ -233,15 +187,21 @@ export class RingParticleController {
         return structuredClone(this.settings);
     }
 
-    public setSettings(settings: RingParticleSettingsInput): void {
-        this.settings = normalizeRingParticleSettings(settings);
-        this.lastFrame = Number.NaN;
-        if (this.allocatedCount !== this.settings.count) {
-            this.rebuildBuffers();
+    public setSettings(settings: RingParticleSettings): void {
+        const prev = this.settings;
+        const next = normalizeRingParticleSettings(settings);
+        this.settings = next;
+        if (prev.intensity !== next.intensity || prev.color.r !== next.color.r
+            || prev.color.g !== next.color.g || prev.color.b !== next.color.b) {
+            this.applyMaterialState();
         }
-        this.applyMaterialState();
-        this.applyEnabledState();
-        this.update(true);
+        const enabled = next.enabled && next.intensity > 1e-4;
+        const wasEnabled = prev.enabled && prev.intensity > 1e-4;
+        if (enabled !== wasEnabled) this.mesh.setEnabled(enabled);
+        if (enabled && (!wasEnabled || prev.count !== next.count || prev.density !== next.density
+            || prev.size !== next.size || prev.speed !== next.speed)) {
+            this.update(true);
+        }
     }
 
     public dispose(): void {
@@ -249,58 +209,25 @@ export class RingParticleController {
             this.scene.onBeforeRenderObservable.remove(this.observer);
             this.observer = null;
         }
-        for (const mesh of this.meshes) mesh.dispose(false, false);
-        for (const material of this.materials) material.dispose(false, false);
+        this.mesh.dispose(false, false);
+        this.material.dispose(false, false);
         this.texture.dispose();
     }
 
-    private applyEnabledState(): void {
-        const enabled = this.settings.enabled && this.settings.intensity > 1e-4;
-        for (const mesh of this.meshes) mesh.setEnabled(enabled);
-    }
-
     private applyMaterialState(): void {
-        const colors = [
-            clampColor(this.settings.colorA),
-            clampColor(this.settings.colorB),
-            clampColor(this.settings.colorC),
-        ];
-        for (let group = 0; group < 3; group++) {
-            const material = this.materials[group];
-            const state = resolveRingParticleMaterialState(colors[group], this.settings.intensity);
-            // Explicitly opted into Classic / FrameGraph Luminous at construction.
-            // Without Luminous this remains a colored alpha-blended emissive particle.
-            material.name = `AutoLuminous ring particle ${group}`;
-            // disableLighting materials need an emissive contribution to remain
-            // visible without Luminous. The diffuse texture supplies the soft alpha
-            // and multiplies this constant tint in StandardMaterial's final color.
-            material.diffuseColor.copyFrom(Color3.Black());
-            material.emissiveTexture = null;
-            material.emissiveColor.copyFrom(state.color);
-            material.ambientColor.copyFrom(Color3.Black());
-            material.alpha = state.alpha;
-            material.markAsDirty(Material.AllDirtyFlag);
-        }
-    }
-
-    private rebuildBuffers(): void {
-        const counts: [number, number, number] = [0, 0, 0];
-        for (let index = 0; index < this.settings.count; index++) {
-            counts[resolveRingParticleColorGroup(index)] += 1;
-        }
-        this.matrixBuffers[0] = new Float32Array(counts[0] * 16);
-        this.matrixBuffers[1] = new Float32Array(counts[1] * 16);
-        this.matrixBuffers[2] = new Float32Array(counts[2] * 16);
-        for (let group = 0; group < 3; group++) {
-            this.meshes[group].thinInstanceSetBuffer("matrix", this.matrixBuffers[group], 16, false);
-            this.meshes[group].thinInstanceCount = counts[group];
-        }
-        this.allocatedCount = this.settings.count;
+        const state = resolveRingParticleMaterialState(this.settings.color, this.settings.intensity);
+        this.material.emissiveColor.copyFrom(state.color);
+        this.material.alpha = state.alpha;
+        this.material.markAsDirty(Material.AllDirtyFlag);
     }
 
     private update(force = false): void {
         if (!this.settings.enabled || this.settings.intensity <= 1e-4) return;
-        if (this.allocatedCount !== this.settings.count) this.rebuildBuffers();
+        if (this.matrixBuffer.length !== this.settings.count * 16) {
+            this.matrixBuffer = new Float32Array(this.settings.count * 16);
+            this.mesh.thinInstanceSetBuffer("matrix", this.matrixBuffer, 16, false);
+            this.mesh.thinInstanceCount = this.settings.count;
+        }
         const frame = this.getFrame();
         const rotation = this.camera.absoluteRotation ?? Quaternion.Identity();
         const cameraMoved = rotation.x !== this.lastCameraRotation.x
@@ -311,20 +238,16 @@ export class RingParticleController {
         this.lastFrame = frame;
         this.lastCameraRotation.copyFrom(rotation);
 
-        const offsets: [number, number, number] = [0, 0, 0];
         const scale = new Vector3();
         const translation = new Vector3();
         const matrix = new Matrix();
         for (let index = 0; index < this.settings.count; index++) {
-            const sample = sampleRingParticle(index, frame, this.settings);
+            const sample = sampleRingParticle(this.particleIndexOffset + index, frame, this.settings);
             scale.set(sample.scale, sample.scale, sample.scale);
             translation.set(sample.x, sample.y, sample.z);
             Matrix.ComposeToRef(scale, rotation, translation, matrix);
-            matrix.copyToArray(this.matrixBuffers[sample.colorGroup], offsets[sample.colorGroup] * 16);
-            offsets[sample.colorGroup] += 1;
+            matrix.copyToArray(this.matrixBuffer, index * 16);
         }
-        for (let group = 0; group < 3; group++) {
-            this.meshes[group].thinInstanceBufferUpdated("matrix");
-        }
+        this.mesh.thinInstanceBufferUpdated("matrix");
     }
 }

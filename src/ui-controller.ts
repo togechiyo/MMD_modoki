@@ -10,7 +10,7 @@ import { getTimelineTrackDisplayName, type Timeline, type TimelineBoneTrackSelec
 import { createTimelineSelectionScopeKey } from "./editor/timeline-key-selection";
 import { EffectTimelineViewState } from "./editor/effect-timeline-view-state";
 import type { BottomPanel } from "./bottom-panel";
-import { applyI18nToDom, getLocale, setLocale, t } from "./i18n";
+import { applyI18nToDom, getEffectInstanceDisplayName, getLocale, setLocale, t } from "./i18n";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type {
     InterpolationChannelPreview,
@@ -5677,7 +5677,7 @@ export class UIController {
             this.refreshFrameGraphPostAddUi();
             return;
         }
-        if (isEffectInstanceType(effectId) && !EFFECT_TIMELINE_ENABLED) {
+        if (isEffectInstanceType(effectId) && (!EFFECT_TIMELINE_ENABLED || effectId === "ringParticles")) {
             this.actionDispatcher.dispatch({ type: "effect.instanceEdit", source: "panel", operation: { action: "add", effectType: effectId } });
             return;
         }
@@ -6231,18 +6231,14 @@ export class UIController {
             }
             case "ringParticles": {
                 const settings = this.mmdManager.getRingParticleSettings();
-                const colorA = this.toEffectStackHexColor(settings.colorA);
-                const colorB = this.toEffectStackHexColor(settings.colorB);
-                const colorC = this.toEffectStackHexColor(settings.colorC);
+                const particleColor = this.toEffectStackHexColor(settings.color);
                 rows.push(
                     range("ringParticleCount", label("particleCount"), settings.count, String(toFrameGraphEffectSliderValue("ringParticleCount", settings.count))),
                     range("ringParticleDensity", label("particleDensity"), settings.density, String(toFrameGraphEffectSliderValue("ringParticleDensity", settings.density))),
                     range("ringParticleSize", label("particleSize"), settings.size, String(toFrameGraphEffectSliderValue("ringParticleSize", settings.size))),
                     range("ringParticleSpeed", label("particleSpeed"), settings.speed, String(toFrameGraphEffectSliderValue("ringParticleSpeed", settings.speed))),
                     range("ringParticleIntensity", label("emissionStrength"), settings.intensity, String(toFrameGraphEffectSliderValue("ringParticleIntensity", settings.intensity))),
-                    color("ringParticleColorA", label("primaryColor"), colorA, colorA),
-                    color("ringParticleColorB", label("secondaryColor"), colorB, colorB),
-                    color("ringParticleColorC", label("tertiaryColor"), colorC, colorC),
+                    color("ringParticleColor", label("color"), particleColor, particleColor),
                 );
                 break;
             }
@@ -6522,20 +6518,12 @@ export class UIController {
                 });
                 break;
             }
-            case "ringParticleColorA":
-            case "ringParticleColorB":
-            case "ringParticleColorC": {
+            case "ringParticleColor": {
                 const colorValue = this.readEffectStackHexColor(String(rawValue));
                 if (!colorValue) return;
-                const settings = this.mmdManager.getRingParticleSettings();
-                const propertyByField = {
-                    ringParticleColorA: "colorA",
-                    ringParticleColorB: "colorB",
-                    ringParticleColorC: "colorC",
-                } as const;
                 this.mmdManager.setRingParticleSettings({
-                    ...settings,
-                    [propertyByField[field]]: colorValue,
+                    ...this.mmdManager.getRingParticleSettings(),
+                    color: colorValue,
                 });
                 break;
             }
@@ -6706,9 +6694,7 @@ export class UIController {
             case "ringParticleSize":
             case "ringParticleSpeed":
             case "ringParticleIntensity":
-            case "ringParticleColorA":
-            case "ringParticleColorB":
-            case "ringParticleColorC":
+            case "ringParticleColor":
                 return "ringParticles";
             case "offsetShadowStrength":
             case "offsetShadowOffsetX":
@@ -6920,19 +6906,9 @@ export class UIController {
                 valueElement.textContent = String(toFrameGraphEffectSliderValue(field, settings[propertyByField[field]]));
                 break;
             }
-            case "ringParticleColorA":
+            case "ringParticleColor":
                 valueElement.textContent = this.toEffectStackHexColor(
-                    this.mmdManager.getRingParticleSettings().colorA,
-                );
-                break;
-            case "ringParticleColorB":
-                valueElement.textContent = this.toEffectStackHexColor(
-                    this.mmdManager.getRingParticleSettings().colorB,
-                );
-                break;
-            case "ringParticleColorC":
-                valueElement.textContent = this.toEffectStackHexColor(
-                    this.mmdManager.getRingParticleSettings().colorC,
+                    this.mmdManager.getRingParticleSettings().color,
                 );
                 break;
             case "offsetShadowStrength":
@@ -8620,8 +8596,9 @@ export class UIController {
         this.lensEffectController?.refresh();
         this.colorPostFxController?.refreshVignetteUi();
         this.colorPostFxController?.refreshSharpenUi();
-        for (const definition of EFFECT_KEYFRAME_DEFINITIONS.filter(definition => definition.id !== "dof" && definition.id !== "motionBlur")) {
+        for (const definition of EFFECT_KEYFRAME_DEFINITIONS) {
             const effectId = definition.id;
+            if (effectId === "dof" || effectId === "motionBlur" || effectId === "ringParticles") continue;
             const value = this.mmdManager.captureCurrentEffectKeyframePayload(effectId);
             const toggle = this.postEffectStackList?.querySelector<HTMLInputElement>(`[data-effect-stack-toggle="${effectId}"]`);
             if (toggle) { toggle.checked = value.value.enabled; toggle.disabled = this.mmdManager.isPlaying; }
@@ -11006,7 +10983,9 @@ export class UIController {
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.mmdManager.captureCurrentEffectKeyframePayload(track.name);
         if (this.getKeyframeRegistrationDecision(before, after) !== "proceed") return;
-        const label = this.mmdManager.isEffectInstance(track.name) ? this.mmdManager.getEffectInstanceLabel(track.name) : t(`effect.frameGraphPost.effects.${track.name}`);
+        const label = this.mmdManager.isEffectInstance(track.name)
+            ? getEffectInstanceDisplayName(after.effectId, this.mmdManager.getEffectInstanceLabel(track.name))
+            : t(`effect.frameGraphPost.effects.${track.name}`);
         const command = this.createKeyframePasteCommand(track, frame, before, after, `Register ${label} keyframe at frame ${frame}`);
         if (!executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }))) return;
         this.commandHistory.push(command);

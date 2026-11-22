@@ -19,6 +19,7 @@ import type {
     TimelineTarget,
 } from "../types";
 import type { FrameGraphPostEffectStackEntry } from "../shared/frame-graph-post-effect-stack";
+import { DEFAULT_RING_PARTICLE_SETTINGS } from "../shared/ring-particle-settings";
 import type { EnvironmentLightingPresetId } from "../shared/environment-lighting-presets";
 import type { MmdMaterialPipelinePreset } from "../shared/mmd-material-pipeline";
 import type { MmdRenderOrderMode } from "../shared/mmd-render-order";
@@ -642,17 +643,7 @@ export function exportProjectState(host: ProjectExportHost): MmdModokiProjectFil
             fogDensity: host.postEffectFogDensity,
             fogOpacity: host.postEffectFogOpacity,
             fogColor: host.getPostEffectFogColor(),
-            ringParticles: host.getRingParticleSettings?.() ?? {
-                enabled: false,
-                count: 180,
-                density: 32.5,
-                size: 0.335,
-                speed: 0.05,
-                intensity: 4,
-                colorA: { r: 1, g: 1, b: 1 },
-                colorB: { r: 1, g: 1, b: 1 },
-                colorC: { r: 1, g: 1, b: 1 },
-            },
+            ringParticles: host.getRingParticleSettings?.() ?? structuredClone(DEFAULT_RING_PARTICLE_SETTINGS),
             frameGraphPostStack: host.getFrameGraphPostEffectStackEntries?.(),
             rcSceneEffectsInStack: true,
             ...(effectInstances ? { frameGraphInstances: effectInstances } : {}),

@@ -16,7 +16,7 @@
  *   - Bidirectional scroll sync: labelsEl ↔ trackScrollEl
  */
 import type { KeyframeTrack, TimelineRotationOverlay, TrackCategory } from "./types";
-import { t } from "./i18n";
+import { getEffectInstanceDisplayName, t } from "./i18n";
 import {
     createTimelineKeySelectionKey,
     createTimelineRowSelectionKey,
@@ -115,7 +115,7 @@ export function getTimelineTrackDisplayName(track: Pick<KeyframeTrack, "name" | 
         case "gravity":
             return t("section.gravity");
         case "effect":
-            if (track.effectInstance) return track.effectInstance.label;
+            if (track.effectInstance) return getEffectInstanceDisplayName(track.effectInstance.type, track.effectInstance.label);
             return t(`effect.frameGraphPost.effects.${track.name}`);
         case "property":
             return "表示・IK";

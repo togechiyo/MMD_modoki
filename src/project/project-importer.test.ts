@@ -418,7 +418,11 @@ describe("importProjectState", () => {
         expect(host.loadCameraVMD).toHaveBeenCalledWith("C:/motions/camera.bvmd");
     });
 
-    it("旧2色パーティクルは第3色へ第2色を補完する", async () => {
+    it.each([
+        [{ colorA: { r: 1, g: 0, b: 0 }, colorB: { r: 0, g: 1, b: 0 } }, { r: 1, g: 0, b: 0 }],
+        [{ colorA: { r: 0, g: 0, b: 1 }, colorB: { r: 1, g: 0, b: 0 }, colorC: { r: 0, g: 1, b: 0 } }, { r: 0, g: 0, b: 1 }],
+        [{ color: { r: 0.7, g: 0.1, b: 0.4 } }, { r: 0.7, g: 0.1, b: 0.4 }],
+    ] as const)("旧2色・3色の主色と単色プロジェクトの指定色を読み込む %#", async (colors, expectedColor) => {
         const host = createHost();
         const project = createProject({
             effects: {
@@ -430,19 +434,17 @@ describe("importProjectState", () => {
                     size: 0.335,
                     speed: 0.05,
                     intensity: 4,
-                    colorA: { r: 1, g: 0, b: 0 },
-                    colorB: { r: 0, g: 0.5, b: 1 },
+                    ...colors,
                 },
             },
         });
 
         await importProjectState(host, project);
 
-        expect(host.setRingParticleSettings).toHaveBeenCalledWith(expect.objectContaining({
-            colorA: { r: 1, g: 0, b: 0 },
-            colorB: { r: 0, g: 0.5, b: 1 },
-            colorC: { r: 0, g: 0.5, b: 1 },
-        }));
+        expect(host.setRingParticleSettings).toHaveBeenCalledWith({
+            enabled: true, count: 180, density: 32.5, size: 0.335, speed: 0.05, intensity: 4,
+            color: expectedColor,
+        });
     });
 
     it("restores modoki-owned light keyframes", async () => {

@@ -24,6 +24,7 @@ import type {
     ProjectRingParticleState,
 } from "../types";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
+import { normalizeRingParticleSettings } from "../shared/ring-particle-settings";
 import { createCameraAnimationFromTrack, deserializeCameraTrack, deserializeModelAnimation } from "./project-codec";
 import {
     addFrameGraphPostEffectId,
@@ -1521,30 +1522,11 @@ export async function importProjectState(
         host.setPostEffectFogColor(data.effects.fogColor.r, data.effects.fogColor.g, data.effects.fogColor.b);
     }
     const ringParticles = data.effects.ringParticles;
-    const ringParticleColorB = {
-        r: readFiniteNumber(ringParticles?.colorB?.r, 1),
-        g: readFiniteNumber(ringParticles?.colorB?.g, 1),
-        b: readFiniteNumber(ringParticles?.colorB?.b, 1),
-    };
-    host.setRingParticleSettings?.({
-        enabled: typeof ringParticles?.enabled === "boolean" ? ringParticles.enabled : false,
-        count: readFiniteNumber(ringParticles?.count, 180),
-        density: readFiniteNumber(ringParticles?.density, 32.5),
-        size: readFiniteNumber(ringParticles?.size, 0.335),
-        speed: readFiniteNumber(ringParticles?.speed, 0.05),
-        intensity: readFiniteNumber(ringParticles?.intensity, 4),
-        colorA: {
-            r: readFiniteNumber(ringParticles?.colorA?.r, 1),
-            g: readFiniteNumber(ringParticles?.colorA?.g, 1),
-            b: readFiniteNumber(ringParticles?.colorA?.b, 1),
-        },
-        colorB: ringParticleColorB,
-        colorC: {
-            r: readFiniteNumber(ringParticles?.colorC?.r, ringParticleColorB.r),
-            g: readFiniteNumber(ringParticles?.colorC?.g, ringParticleColorB.g),
-            b: readFiniteNumber(ringParticles?.colorC?.b, ringParticleColorB.b),
-        },
-    });
+    // colorA was the primary color in both the two- and three-color formats.
+    const color = ringParticles && typeof ringParticles === "object"
+        ? ("color" in ringParticles ? ringParticles.color : ringParticles.colorA)
+        : undefined;
+    host.setRingParticleSettings?.(normalizeRingParticleSettings({ ...ringParticles, color }));
     const rcStackEntries = migrateRcSceneEffectStack({ rcSceneEffectsInStack: data.effects.rcSceneEffectsInStack,
         stack: data.effects.frameGraphPostStack, lighting: data.lighting, animations: data.keyframes?.effectAnimations });
     if (!Array.isArray(data.effects.frameGraphPostStack) && data.effects.rcSceneEffectsInStack !== true && rcStackEntries.length) {

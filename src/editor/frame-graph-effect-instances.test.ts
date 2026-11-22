@@ -105,7 +105,7 @@ describe("FrameGraph effect instances", () => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, "luminous");
         expect(store.staticValue("fx-a")).toEqual({ enabled: true, intensity: 1, threshold: 0.15, radius: 48 });
     });
-    it.each(["luminous", "ssao", "ssgi", "ssr", "motionBlur"] as const)("interpolates %s values, steps enabled and preserves independent fixed settings on restore", type => {
+    it.each(["luminous", "ssao", "ssgi", "ssr", "motionBlur", "ringParticles"] as const)("interpolates %s values, steps enabled and preserves independent fixed settings on restore", type => {
         const store = new FrameGraphEffectInstances(); store.add("fx-a", undefined, undefined, type); store.add("fx-b", undefined, undefined, type);
         const definition = getEffectDefinition(type);
         const from = store.capture("fx-a", 0), to = store.capture("fx-a", 20);
@@ -121,6 +121,21 @@ describe("FrameGraph effect instances", () => {
         expect(copy?.fixedSettings).toEqual(before.instances[0].fixedSettings);
         store.restore(before); expect(store.serialize()).toEqual(before);
         expect(store.frames("fx-b")).toHaveLength(0);
+    });
+    it("keeps a duplicated particle layer's color independent after a project round trip", () => {
+        const store = new FrameGraphEffectInstances();
+        store.add("fx-red", undefined, undefined, "ringParticles");
+        expect(store.fixedSettings("fx-red")).toEqual({ color: { r: 1, g: 1, b: 1 } });
+        store.setFixedSettings("fx-red", { color: { r: 1, g: 0, b: 0 } });
+        store.duplicate("fx-red", "fx-blue");
+        store.setFixedSettings("fx-blue", { color: { r: 0, g: 0, b: 1 } });
+        store.setValue("fx-blue", { ...store.staticValue("fx-blue"), count: 80 }, 0);
+        const restored = new FrameGraphEffectInstances();
+        restored.restore(store.serialize());
+        expect(restored.order()).toEqual(["fx-red", "fx-blue"]);
+        expect(restored.renderState("fx-red", 0, false)).toMatchObject({ fixedSettings: { color: { r: 1, g: 0, b: 0 } }, value: { count: 180 } });
+        expect(restored.renderState("fx-blue", 0, false)).toMatchObject({ fixedSettings: { color: { r: 0, g: 0, b: 1 } }, value: { count: 80 } });
+        expect(effectKeyframePayloadSchema.safeParse({ ...store.capture("fx-red", 0), instanceId: undefined }).success).toBe(false);
     });
     it.each(["grain", "sharpen", "chromatic", "vignette", "edgeBlur", "distortion", "bloom", "lut", "aerialPerspective", "directionalLightShafts", "offsetShadow", "offsetHighlight", "luminous", "ssao", "ssgi", "ssr", "motionBlur"] as const)("owns independent %s settings and tracks", type => {
         const store = new FrameGraphEffectInstances();

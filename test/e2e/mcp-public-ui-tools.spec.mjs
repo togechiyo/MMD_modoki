@@ -132,7 +132,7 @@ for (const pbr of [false, true]) test(`MCP public tools materials and effects (P
         await control("luminous.intensity", 0.7);
         await control("aerialPerspective.color", { r: 0.2, g: 0.3, b: 0.4 });
         const extraControls = [["motionBlur.samples", 24], ["offsetShadow.x", 10], ["offsetHighlight.strength", 0.4],
-            ["ringParticles.count", 80], ["ringParticles.colorA", { r: 0.2, g: 0.5, b: 0.8 }],
+            ["ringParticles.count", 80], ["ringParticles.color", { r: 0.2, g: 0.5, b: 0.8 }],
             ["directionalLightShafts.phaseG", 0.3], ["ssr.strength", 1.5], ["ssr.step", 4],
             ["luminous.threshold", 0.8], ["luminous.radius", 48], ["dof.lensSize", 800], ["lut.intensity", 0.6],
             ["motionBlur.strength", 2.5], ["ssgi.strength", 0.45], ["aerialPerspective.strength", 0.2],
@@ -141,7 +141,7 @@ for (const pbr of [false, true]) test(`MCP public tools materials and effects (P
             ["offsetShadow.maxDepth", 0.5], ["offsetShadow.depthScale", 0.4],
             ["offsetHighlight.x", 20], ["offsetHighlight.y", -16], ["offsetHighlight.depthScale", 0.6],
             ["ringParticles.density", 20], ["ringParticles.size", 0.3], ["ringParticles.speed", 0.2], ["ringParticles.intensity", 1.5],
-            ...["ringParticles.colorB", "ringParticles.colorC", "directionalLightShafts.lightColor", "directionalLightShafts.shadowColor",
+            ...["directionalLightShafts.lightColor", "directionalLightShafts.shadowColor",
                 "offsetShadow.color", "offsetHighlight.color"].map(id => [id, { r: 0.3, g: 0.4, b: 0.6 }])];
         for (const [id, value] of extraControls) await control(id, value);
         for (const [id, value] of extraControls) {

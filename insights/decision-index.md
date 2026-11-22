@@ -8,6 +8,7 @@
 
 | Outcome | Decision | Use when |
 | --- | --- | --- |
+| adopted | [パーティクルの色は個体ごとに指定する](./decisions/particles-use-one-color-per-instance.md) | 光粒の配色、重ねがけ、保存仕様を変更する |
 | adopted | [WebGL2 の AA 単独時はカメラ FXAA を使う](./decisions/webgl2-camera-fxaa-for-aa-only.md) | AA 単独時と、他の効果を合成する場合の実行経路を選ぶ |
 | adopted | [v0.2.5はエフェクトのキー登録を仕上げる](./decisions/v025-finishes-effect-key-registration.md) | 11/14午前の目標を撤回し、11/19に11月中（11/30まで）の公開目標へ変更。キー0個なら再生中もGUIで調整できるよう共通側で修正し、カメラ・照明と挙動を合わせる。Electron更新も対象で、11/13に読込経路も対応してMPRを維持する方針を選択。軽めの追加効果は余裕があれば扱う。公開許可は別 |
 | adopted | [Sky Ambientは材質色・テクスチャを保って柔らかな陰影を付ける](./decisions/sky-ambient-preserves-material-colors.md) | 街角の参考画像の陰影を通常材質へ付ける。FrameGraphエフェクト。11/10の操作数削減により開発用範囲・品質等は通常欄から外す。加算専用化は取り下げ。GI RCを明るくする側、Sky Ambient RCを暗くする側として、標準影を保ち補助光に遮蔽を効かせる改良を指定。11/09の画像から暫定既定値を設定し、明示保存値・未追加OFFは維持。11/13、モーフ登録と各骨1キーの配置を維持する修正を依頼し、動的モデルは遮蔽物・受け手の両方から暫定除外する方針を採用。Stage Standardも受け手へ追加。範囲は原点近くを細かく遠方を粗くし、モデル寸法への自動追従を避け、同原因のGIも一緒に修正する指定。固定距離での領域配分はagentの調整値で、影キー連動の採用とはしない。全sceneの品質・性能了承には広げない |

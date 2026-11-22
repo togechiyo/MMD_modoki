@@ -1,30 +1,26 @@
 import { selectTimelineTrack } from "../electron-app.mjs";
 
 export function effectStackRow(page, type) {
-  return page.locator(type === "ringParticles"
-    ? '[data-effect-stack-row="ringParticles"]'
-    : `[data-effect-instance-type="${type}"]`);
+  return page.locator(`[data-effect-instance-type="${type}"]`);
 }
 
 export function effectStackToggle(page, type) {
-  return effectStackRow(page, type).locator(type === "ringParticles"
-    ? '[data-effect-stack-toggle="ringParticles"]'
-    : '[data-instance-field="enabled"]');
+  return effectStackRow(page, type).locator('[data-instance-field="enabled"]');
 }
 
 export function effectInstanceRuntimeState() {
   const state = window.mmdModokiE2e.getFrameGraphPostEffectsState();
   const effects = window.mmdModokiE2e.exportProjectState().effects.frameGraphInstances;
   const controller = window.mmdModokiDiagnostics.dumpPerformanceSnapshot().frameGraphPostEffects.controller;
-  const types = new Map(controller?.instances.map(instance => [instance.instanceId, instance.type]) ?? []);
-  const instanceTypes = new Set(types.values());
+  const authoredTypes = new Map(effects?.instances.map(instance => [instance.instanceId, instance.type]) ?? []);
+  const postEffectTypes = new Set(controller?.instances.map(instance => instance.type));
   return {
     backend: state.backend,
     ready: state.ready,
     hasExecuted: state.executedFrameCount >= 2,
-    stack: (effects?.order ?? []).map(id => types.get(id) ?? id).join(","),
+    stack: (effects?.order ?? []).map(id => authoredTypes.get(id) ?? id).join(","),
     // The graph also connects built-in passes that are absent from the authored stack.
-    connectedInstanceOrder: controller?.connectedOrder.filter(type => instanceTypes.has(type)),
+    connectedInstanceOrder: controller?.connectedOrder.filter(type => postEffectTypes.has(type)),
   };
 }
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_RC_SKY_AMBIENT_SETTINGS } from "../render/rc-sky-ambient-settings";
 import { RING_PARTICLE_PARAMETERS } from "../shared/ring-particle-settings";
 import { fromFrameGraphEffectSliderValue, toFrameGraphEffectSliderValue, type FrameGraphEffectSliderField } from "../ui/frame-graph-effect-slider-mapping";
 
@@ -108,7 +109,11 @@ export const EFFECT_KEYFRAME_DEFINITIONS: readonly EffectDefinition[] = [
     { id: "luminousRadiance", fields: { enabled: { kind: "step", default: false } }, sliders: [] },
     { id: "rcSkyOcclusion", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 0.75, min: 0, max: 1 } },
         sliders: [{ field: "strength", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 }] },
-    { id: "rcSkyAmbient", fields: { enabled: { kind: "step", default: false }, strength: { kind: "linear", default: 1, min: 0, max: 2 }, opacity: { kind: "linear", default: 1, min: 0, max: 1 } },
+    { id: "rcSkyAmbient", fields: {
+        enabled: { kind: "step", default: DEFAULT_RC_SKY_AMBIENT_SETTINGS.enabled },
+        strength: { kind: "linear", default: DEFAULT_RC_SKY_AMBIENT_SETTINGS.strength, min: 0, max: 2 },
+        opacity: { kind: "linear", default: DEFAULT_RC_SKY_AMBIENT_SETTINGS.opacity, min: 0, max: 1 },
+    },
         sliders: [
             { field: "opacity", labelKey: "experiment.rcSkyAmbient.opacity", min: 0, max: 100, toValue: position => position / 100, toPosition: value => value * 100 },
             { field: "strength", min: 0, max: 100, toValue: position => position / 50, toPosition: value => value * 50 },

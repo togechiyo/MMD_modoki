@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/sky-ambient
 confidence: high
-last_verified: 2026-11-14
+last_verified: 2026-11-22
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-11-08
@@ -44,6 +44,8 @@ superseded_by: null
 2026-11-13、追加指定でStage StandardもSky Ambientの受け手へ含める。動的モデルの暫定除外は維持し、他の独自shader全般へ対応範囲を広げない。
 
 同日、広域ステージの分解能不足を受け、計算範囲は原点近くを細かく、遠方を粗くする方針を指定した。モデルboundsにスケールを自動で合わせず、world原点を基準にする。その後「GI RCも同じ感じなら一緒に修正」と依頼し、同じ全域fitによる粗大化が確認できたGIへも適用する。絶対固定または影欄の距離値を参考にする二案のうち、agentは固定距離で実装した。具体的な距離・段数はagentの調整値で、所有者の厳密な数値指定や影キー連動の採用とは扱わない。以前のモデル自動fit既定をこの方針より優先しない。
+
+2026-11-22、2バウンスGIの色移りと庇下の陰影を両立させるため、所有者はシェーダーごとに調整する手間を減らせる乗算主体の合成へ組み直すよう依頼した。対応する材質の共通処理で補助光を遮蔽し、GIの反射光を独立して足す。陰影強さや空加算の具体的な初期値は実装上の調整値として扱う。
 
 ## 避けること
 

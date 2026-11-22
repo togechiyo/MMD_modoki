@@ -139,7 +139,7 @@ test("RC origin volumes keep world resolution through scene size, boundaries and
     const view = await cameraAt(page);
     await lightDirection(page, [0, 0, -1]);
     const initial = await project(page);
-    expect(initial.lighting.rcSkyAmbient).toMatchObject({ volume: null, rangeScale: 2, quality: "high", skyBrightness: 1 });
+    expect(initial.lighting.rcSkyAmbient).toMatchObject({ volume: null, rangeScale: 2, quality: "high", skyBrightness: 0 });
     expect(initial.lighting.rcDiffuseGi).toMatchObject({ volume: null, strength: .5 });
     const auto = page.locator("#btn-auto-key");
     if (await auto.getAttribute("aria-pressed") === "true") await auto.click();

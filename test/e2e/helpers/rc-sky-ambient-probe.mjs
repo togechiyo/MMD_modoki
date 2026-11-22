@@ -1,7 +1,7 @@
 import { EngineStore } from "@babylonjs/core/Engines/engineStore";
 
 // Test-only observation of the exact material program used by the fixture.
-// A ready field alone does not prove that the common Toon hooks were reached.
+// Retain the shader compiled for each fixture material when diagnosing its image.
 export function inspectSkyAmbientMaterials() {
   const scene = EngineStore.LastCreatedScene;
   return scene.meshes.filter(mesh => mesh.skeleton && mesh.getTotalVertices() > 0).flatMap(mesh =>

@@ -21,6 +21,7 @@ describe("Sky Ambient RC scene keys", () => {
         expect(effectKeyframePayloadSchema.safeParse({ ...payload, instanceId: "fx-sky" }).success).toBe(false);
         expect(effectKeyframePayloadSchema.safeParse({ ...payload, value: { ...payload.value, fill: 0.1 } }).success).toBe(false);
         expect(getEffectDefinition(id).sliders[0].toValue(100)).toBe(1);
+        expect(makeEffectPayload(id, {}).value).toEqual({ enabled: false, strength: 0.6, opacity: 1 });
     });
 
     it("interpolates strength, steps enabled, and keeps authored ON demand through OFF previews", () => {

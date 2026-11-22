@@ -7,6 +7,10 @@ describe("Sky Ambient RC saved settings", () => {
             expect(normalizeRcSkyAmbientSettings(raw)).toEqual(DEFAULT_RC_SKY_AMBIENT_SETTINGS);
         }
     });
+    it("starts a new sky effect with moderate shading and no added skylight", () => {
+        expect(normalizeRcSkyAmbientSettings({ enabled: true }))
+            .toMatchObject({ enabled: true, opacity: 1, strength: 0.6, fill: 0.05, skyBrightness: 0 });
+    });
     it("keeps OFF values and clamps independent shading and residual fill", () => {
         expect(normalizeRcSkyAmbientSettings({ enabled: false, strength: 1.6, fill: 0.07 }))
             .toEqual({ ...DEFAULT_RC_SKY_AMBIENT_SETTINGS, enabled: false, strength: 1.6, fill: 0.07 });
@@ -20,7 +24,7 @@ describe("Sky Ambient RC saved settings", () => {
     });
     it("preserves legacy control values and normalizes density and development settings independently", () => {
         expect(normalizeRcSkyAmbientSettings({ enabled: true, strength: 1.2 }))
-            .toMatchObject({ opacity: 1, skyBrightness: 1, rangeScale: 2, quality: "high" });
+            .toMatchObject({ opacity: 1, skyBrightness: 0, rangeScale: 2, quality: "high" });
         expect(normalizeRcSkyAmbientSettings({ opacity: 0, rangeScale: 0.5, quality: "low" }))
             .toMatchObject({ opacity: 0, rangeScale: 0.5, quality: "low" });
         expect(normalizeRcSkyAmbientSettings({ opacity: 2, rangeScale: 100, quality: "high" }))
@@ -30,18 +34,20 @@ describe("Sky Ambient RC saved settings", () => {
         expect(normalizeRcSkyAmbientSettings({ opacity: NaN, rangeScale: Infinity, quality: null }))
             .toEqual(DEFAULT_RC_SKY_AMBIENT_SETTINGS);
     });
-    it("preserves explicitly saved earlier defaults instead of upgrading their look and quality", () => {
+    it("preserves explicitly saved shading, skylight and quality from earlier projects", () => {
         const earlier = { enabled: true, opacity: 1, strength: 0.95, fill: 0.035, skyBrightness: 0,
             baseLight: 0.25, rangeScale: 1, quality: "standard", volume: null };
         expect(normalizeRcSkyAmbientSettings(earlier)).toEqual(earlier);
+        const withSkylight = { ...DEFAULT_RC_SKY_AMBIENT_SETTINGS, enabled: true, strength: 1, skyBrightness: 1 };
+        expect(normalizeRcSkyAmbientSettings(withSkylight)).toEqual(withSkylight);
     });
     it("keeps additive sky independently adjustable from legacy base lighting", () => {
-        expect(normalizeRcSkyAmbientSettings({ baseLight: 0.8 })).toMatchObject({ skyBrightness: 1, baseLight: 0.8 });
+        expect(normalizeRcSkyAmbientSettings({ baseLight: 0.8 })).toMatchObject({ skyBrightness: 0, baseLight: 0.8 });
         expect(normalizeRcSkyAmbientSettings({ skyBrightness: 1.6, strength: 0, fill: 0.2 }))
             .toMatchObject({ skyBrightness: 1.6, strength: 0, fill: 0.2 });
         expect(normalizeRcSkyAmbientSettings({ skyBrightness: 5 }).skyBrightness).toBe(2);
         expect(normalizeRcSkyAmbientSettings({ skyBrightness: -1 }).skyBrightness).toBe(0);
-        for (const value of [NaN, Infinity, "1.2"]) expect(normalizeRcSkyAmbientSettings({ skyBrightness: value }).skyBrightness).toBe(1);
+        for (const value of [NaN, Infinity, "1.2"]) expect(normalizeRcSkyAmbientSettings({ skyBrightness: value }).skyBrightness).toBe(0);
     });
     it("copies bounded volumes and rejects invalid coordinates", () => {
         const raw = { volume: { min: [-4, -2, -4], size: 32 } };

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { importProjectState, restoreProjectRcDiffuseGiSettings, restoreProjectRcSkyOcclusionSettings, restoreProjectRcSkyAmbientSettings } from "./project-importer";
 import type { MmdModokiProjectFileV1 } from "../types";
 import type { RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
+import { DEFAULT_RC_SKY_AMBIENT_SETTINGS } from "../render/rc-sky-ambient-settings";
 import { DEFAULT_SKYDOME_BACKGROUND_STYLE } from "../shared/skydome-background-style";
 
 function createProject(overrides: Partial<MmdModokiProjectFileV1> = {}): MmdModokiProjectFileV1 {
@@ -218,7 +219,7 @@ describe("importProjectState", () => {
         await importProjectState(host as unknown as Parameters<typeof importProjectState>[0], project);
         expect(host.setFrameGraphPostEffectStackEntries).toHaveBeenLastCalledWith([]);
         restoreProjectRcSkyAmbientSettings(host, createProject().lighting);
-        expect(setRcSkyAmbientSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 1, fill: 0.05, skyBrightness: 1, baseLight: 0.25, opacity: 1, rangeScale: 2, quality: "high", volume: null });
+        expect(setRcSkyAmbientSettings).toHaveBeenLastCalledWith(DEFAULT_RC_SKY_AMBIENT_SETTINGS);
     });
     it("preserves inferred legacy Bloom when adding RC to a project without a saved stack", async () => {
         const host = { ...createHost(), postEffectBloomEnabled: false,

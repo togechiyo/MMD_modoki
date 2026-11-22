@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exportProjectState } from "./project-serializer";
+import { DEFAULT_RC_SKY_AMBIENT_SETTINGS } from "../render/rc-sky-ambient-settings";
 import type { ProjectMotionImport } from "../types";
 
 function createHost() {
@@ -315,7 +316,7 @@ describe("exportProjectState", () => {
         expect(project.lighting.rcSkyAmbient?.volume?.min[0]).toBe(-4);
         expect(project.lighting.rcSkyOcclusion?.volume).toBeNull();
         expect(exportProjectState(createHost()).lighting.rcSkyAmbient)
-            .toEqual({ enabled: false, strength: 1, fill: 0.05, skyBrightness: 1, baseLight: 0.25, opacity: 1, rangeScale: 2, quality: "high", volume: null });
+            .toEqual(DEFAULT_RC_SKY_AMBIENT_SETTINGS);
     });
     it("marks RC card presence authoritative while retaining OFF cards", () => {
         const project = exportProjectState({ ...createHost(), getFrameGraphPostEffectStackEntries: () => [

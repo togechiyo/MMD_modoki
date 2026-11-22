@@ -50,18 +50,18 @@ fn rcSkyAmbientScreenIrradiance(position: vec3f, normal: vec3f) -> f32 {
     return clamp(irradiance / total, 0.0, 1.0);
 }
 
-fn rcSkyAmbientDarkenDiffuse(diffuse: vec3f, base: vec3f, factor: f32, oldDarkening: vec3f) -> vec3f {
-    // Shadow Depth RC already removed part of the same auxiliary light. Take
-    // the larger attenuation instead of subtracting it twice from direct light.
-    return diffuse - max(base * (1.0 - factor) - oldDarkening, vec3f(0.0));
+fn rcSkyAmbientMultiplyFill(diffuse: vec3f, direct: vec3f, factor: f32, oldDarkening: vec3f) -> vec3f {
+    // Reconstruct the unshaded fill before taking the larger of the two RC
+    // attenuations. Old projects may still have Shadow Depth RC enabled.
+    let fill = max(diffuse + oldDarkening - direct, vec3f(0.0));
+    return diffuse - max(fill * (1.0 - factor) - oldDarkening, vec3f(0.0));
 }
 #endif
 `;
 
 export const MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL = /* wgsl */`
 #ifdef RC_SKY_AMBIENT
-var rcSkyAmbientBase = vec3f(0.0);
-var rcSkyAmbientIsHemi = false;
+var rcSkyAmbientDirect = vec3f(0.0);
 var rcSkyAmbientFactor = 1.0;
 var rcSkyAmbientIrradiance = -1.0;
 #ifndef PREPASS
@@ -115,7 +115,7 @@ function blendDiffusePatch(skyDiffuse: string): string {
     return `
 $0
 #ifdef RC_SKY_AMBIENT
-if (uniforms.rcSkyAmbientControl.w > 0.0) {
+if (rcSkyAmbientFactor < 1.0 && uniforms.rcSkyAmbientControl.w > 0.0) {
     var rcSkyAmbientMixedDiffuse = finalDiffuse;
     {
         var rcSkyAmbientOldDarkening = vec3f(0.0);
@@ -141,47 +141,36 @@ if (uniforms.rcSkyAmbientControl.w > 0.0) {
 // original expression is not attenuated by a later regex replacement.
 export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)(rcSkyApplyDiffuse\\(diffuseBase, rcSkyResidual, rcSkyFactor\\)|\\bdiffuseBase\\b)((?:(?!uniforms\\.vAmbientColor)[^;\\n])*);";
 export const MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATCH = blendDiffusePatch(
-    "var finalDiffuse: vec3f=clamp($1rcSkyAmbientDarkenDiffuse($2, rcSkyAmbientBase, rcSkyAmbientFactor, rcSkyAmbientOldDarkening)$3;");
+    "var finalDiffuse: vec3f=clamp($1rcSkyAmbientMultiplyFill($2, rcSkyAmbientDirect, rcSkyAmbientFactor, rcSkyAmbientOldDarkening)$3;");
 export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATTERN = "!var finalDiffuse: vec3f=clamp\\(([^;\\n]*?)(rcSkyApplyDiffuse\\(diffuseBase, rcSkyResidual, rcSkyFactor\\)|\\bdiffuseBase\\b)([^;\\n]*?)\\+uniforms\\.vAmbientColor([^;\\n]*);";
 export const MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATCH = blendDiffusePatch(
-    "var finalDiffuse: vec3f=clamp($1rcSkyAmbientDarkenDiffuse($2, rcSkyAmbientBase, rcSkyAmbientFactor, rcSkyAmbientOldDarkening)$3+(uniforms.vAmbientColor * rcSkyAmbientFactor)$4;");
+    "var finalDiffuse: vec3f=clamp($1rcSkyAmbientMultiplyFill($2, rcSkyAmbientDirect, rcSkyAmbientFactor, rcSkyAmbientOldDarkening)$3+(uniforms.vAmbientColor * rcSkyAmbientFactor)$4;");
 
-// Capture the common MMD Toon shadow floor B separately from its directional
-// contrast D. The original light sum remains available to sphere/specular/GI.
-// These match expanded shader statements: no unresolved light{X} identifiers
-// are introduced after Babylon has expanded the light includes.
-export const MMD_RADIANCE_SKY_AMBIENT_HEMI_PATTERN = "!info=computeHemisphericLighting(\\([^;\\n]*\\));";
-export const MMD_RADIANCE_SKY_AMBIENT_HEMI_PATCH = `info = computeHemisphericLighting$1;
+// Wrap Babylon's diffuse accumulation once per expanded light. The preset may
+// shade that light however it chooses. Preserve at most the direct light it
+// actually contributed, so a dark Toon band cannot protect some other light's fill.
+const LIGHT_DIFFUSE_SECTION = "!(#ifdef SHADOWCSMDEBUG(\\d+)\\s*\\ndiffuseBase\\+=info\\.diffuse\\*shadowDebug\\d+;[\\s\\S]*?)\\n(?=#ifdef SS_TRANSLUCENCY\\s*\\ndiffuseTransmissionBase\\+=info\\.diffuseTransmission\\*shadow;)";
+const MULTIPLY_LIGHT_PATCH = `
 #ifdef RC_SKY_AMBIENT
-rcSkyAmbientIsHemi = true;
+{
+    let rcSkyAmbientBeforeLight = diffuseBase;
 #endif
-`;
-export const MMD_RADIANCE_SKY_AMBIENT_TOON_PATTERN = "!let shadowTerm=info\\.diffuse\\*mix\\(one,toonShadowBand,shadowMask\\);";
-// Do not retain the exact matched statement: Babylon iterates matches from a
-// snapshot but replaces the first identical string in the evolving shader.
-// Distinct spelling prevents every light's hook from accumulating on light 0.
-export const MMD_RADIANCE_SKY_AMBIENT_TOON_PATCH = `let shadowTerm = info.diffuse * mix(one, toonShadowBand, shadowMask);
+$1
 #ifdef RC_SKY_AMBIENT
-rcSkyAmbientBase += select(info.diffuse * toonShadowBand, shadowTerm, rcSkyAmbientIsHemi);
-rcSkyAmbientIsHemi = false;
+#ifndef HEMILIGHT$2
+    if (rcSkyAmbientFactor < 1.0) {
+        var directVisibility = clamp(shadow, 0.0, 1.0);
+#ifdef TOON_TEXTURE
+        // MMD Toon lights supply N.L separately. Standard lights already
+        // include it in info.diffuse.
+        directVisibility *= mix(1.0, clamp(info.ndl, 0.0, 1.0), info.isToon);
 #endif
-`;
-export const MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATTERN = "!diffuseBase\\+=mix\\(info\\.diffuse\\*shadow,toonNdl\\*info\\.diffuse,info\\.isToon\\);";
-export const MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATCH = `diffuseBase += mix(info.diffuse * shadow, toonNdl * info.diffuse, info.isToon);
-#ifdef RC_SKY_AMBIENT
-if (rcSkyAmbientIsHemi) { rcSkyAmbientBase += info.diffuse * shadow; }
-rcSkyAmbientIsHemi = false;
-#endif
-`;
-export const MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATTERN = "!diffuseBase\\+=(\\(info\\.diffuse\\*shadow\\)|info\\.diffuse);";
-export const MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATCH = `{
-let rcSkyAmbientPlainContribution = $1;
-diffuseBase += rcSkyAmbientPlainContribution;
-#ifdef RC_SKY_AMBIENT
-if (rcSkyAmbientIsHemi) { rcSkyAmbientBase += rcSkyAmbientPlainContribution; }
-rcSkyAmbientIsHemi = false;
+        let contribution = max(diffuseBase - rcSkyAmbientBeforeLight, vec3f(0.0));
+        rcSkyAmbientDirect += min(contribution, max(info.diffuse, vec3f(0.0)) * directVisibility);
+    }
 #endif
 }
+#endif
 `;
 
 export const MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL = /* wgsl */`
@@ -207,10 +196,7 @@ export const MMD_RADIANCE_SKY_AMBIENT_CUSTOM_CODE: Record<string, string> = {
     CUSTOM_FRAGMENT_DEFINITIONS: MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL,
     CUSTOM_FRAGMENT_BEFORE_LIGHTS: MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL,
     CUSTOM_FRAGMENT_BEFORE_FOG: MMD_RADIANCE_SKY_AMBIENT_BEFORE_FOG_WGSL,
-    [MMD_RADIANCE_SKY_AMBIENT_HEMI_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_HEMI_PATCH,
-    [MMD_RADIANCE_SKY_AMBIENT_TOON_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_TOON_PATCH,
-    [MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_PLAIN_PATCH,
-    [MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_NO_TOON_PATCH,
+    [LIGHT_DIFFUSE_SECTION]: MULTIPLY_LIGHT_PATCH,
     [MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_DIFFUSE_PATCH,
     [MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATTERN]: MMD_RADIANCE_SKY_AMBIENT_AMBIENT_PATCH,
 };

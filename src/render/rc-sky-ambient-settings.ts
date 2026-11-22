@@ -17,7 +17,7 @@ export type RcSkyAmbientSettings = {
 };
 
 export const DEFAULT_RC_SKY_AMBIENT_SETTINGS: Readonly<RcSkyAmbientSettings> = Object.freeze({
-    enabled: false, opacity: 1, strength: 1, fill: 0.05, skyBrightness: 1, baseLight: 0.25, rangeScale: 2, quality: "high", volume: null,
+    enabled: false, opacity: 1, strength: 0.6, fill: 0.05, skyBrightness: 0, baseLight: 0.25, rangeScale: 2, quality: "high", volume: null,
 });
 
 export function normalizeRcSkyAmbientSettings(value: unknown): RcSkyAmbientSettings {

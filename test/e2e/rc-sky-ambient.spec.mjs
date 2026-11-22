@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki } from "./electron-app.mjs";
 import { camera, capture, difference, initialState, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { decodeRcWebm, exportRcPng, exportRcWebm } from "./helpers/rc-file-output.mjs";
 import { addRcLighting, closeRcLighting, openPostEffects, openRcLighting, rcLightingInput, rcLightingRow,
   rcLightingStatus, registerRcLighting } from "./helpers/rc-lighting-controls.mjs";
 import { measureSkyAmbientGiRetention, measureSkyAmbientRegions, skyAmbientRegions } from "./helpers/rc-sky-ambient-regions.mjs";
@@ -124,7 +125,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await expect(row(page).locator("p:not([role='status'])")).toHaveCount(0);
     await expect(input(page, "BaseLight")).toHaveCount(0);
     for (const field of ["Fill", "RangeScale", "Quality", "MinX", "MinY", "MinZ", "Size"]) await expect(input(page, field)).toHaveCount(0);
-    for (const [field, value] of [["Opacity", "100"], ["Strength", "50"], ["SkyBrightness", "50"]]) {
+    for (const [field, value] of [["Opacity", "100"], ["Strength", "30"], ["SkyBrightness", "0"]]) {
       await expect(input(page, field)).toHaveValue(value);
       await expect(input(page, field).locator("..")).toHaveClass(/effect-layer-control-row/);
       await expect(input(page, field)).toHaveAttribute("min", "0");
@@ -133,7 +134,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await expect(input(page, "Opacity")).toHaveAccessibleName(/^(濃度|Opacity)$/);
     await expect(input(page, "Strength")).toHaveAccessibleName(/^(陰影の強さ|Shading strength)$/);
     await expect(input(page, "SkyBrightness")).toHaveAccessibleName(/^(空の明るさ|Sky brightness)$/);
-    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: 1, fill: .05, baseLight: .25, skyBrightness: 1,
+    expect(await settings(page)).toEqual({ enabled: true, opacity: 1, strength: .6, fill: .05, baseLight: .25, skyBrightness: 0,
       rangeScale: 2, quality: "high", volume: null });
     await expect(status(page)).toHaveAttribute("data-automatic-volume", "true");
     await expect(status(page)).toHaveAttribute("data-probe-grid", "32");
@@ -146,10 +147,14 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await closeRcLighting(page);
     const defaultOn = await take("default-sky-ambient-on");
     expect(compare("defaultOnVsNeutral", defaultOn, neutral)).toBeGreaterThan(.15);
-    // The provisional defaults include sky light. Isolate attenuation for the
-    // open-sky neutrality and bypass checks below. Brightness uses the public
-    // slider; range/quality are a saved-project fixture for the rendering checks.
-    await slider(page, "SkyBrightness", 0);
+    const regions = skyAmbientRegions(report.camera);
+    const baselineRegions = measureSkyAmbientRegions(neutral, regions);
+    const defaultRegions = measureSkyAmbientRegions(defaultOn, regions);
+    report.checkpoints.defaultRegions = { baseline: baselineRegions, on: defaultRegions };
+    expect(baselineRegions.canopy.mean - defaultRegions.canopy.mean).toBeGreaterThan(2);
+    expect(Math.abs(defaultRegions.open.mean - baselineRegions.open.mean)).toBeLessThan(1);
+    // Use the former strength setting for save/restore and keyed edits.
+    await slider(page, "Strength", 50);
     await hiddenFixture(page, { rangeScale: 1, quality: "standard" }); await ready(page);
     expect(defaultVolume).toEqual({ min: [-64, -64, -64], size: 128 });
     expect(await effectiveVolume()).toEqual(defaultVolume);
@@ -162,11 +167,10 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     });
     report.checkpoints.materials = materialPrograms.map(({ fragment, ...material }, index) => {
       writeFileSync(testInfo.outputPath(`material-${index}.wgsl`), fragment);
-      return { ...material, ambientBaseHooks: (fragment.match(/rcSkyAmbientBase \+=/g) ?? []).length };
+      return material;
     });
     expect(compare("darkeningOnVsNeutral", darkeningOn, neutral)).toBeGreaterThan(.15);
-    const regions = skyAmbientRegions(report.camera);
-    const baselineRegions = measureSkyAmbientRegions(neutral, regions), darkeningRegions = measureSkyAmbientRegions(darkeningOn, regions);
+    const darkeningRegions = measureSkyAmbientRegions(darkeningOn, regions);
     report.checkpoints.darkeningRegions = { baseline: baselineRegions, on: darkeningRegions };
     expect(baselineRegions.canopy.mean - darkeningRegions.canopy.mean).toBeGreaterThan(2);
     expect(Math.abs(baselineRegions.open.mean - darkeningRegions.open.mean)).toBeLessThan(1);
@@ -357,40 +361,13 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
 
     if (withWebm) {
       const webm = testInfo.outputPath("sky-ambient-keys.webm");
-      await launched.app.evaluate(({ dialog }, path) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: path }); }, webm);
-      await fileMenu(page, "file.webmExportSettings"); await page.locator("#webm-output-use-playback-range").uncheck();
-      for (const [name, value] of [["width", 640], ["height", 360], ["start-frame", 0], ["end-frame", 60]]) {
-        await page.locator(`#webm-output-${name}`).fill(String(value)); await page.locator(`#webm-output-${name}`).press("Enter");
-      }
-      await page.locator("#webm-output-fps").selectOption("30"); await page.locator("#webm-output-include-audio").uncheck();
-      await page.getByRole("button", { name: /^(WebM出力|Export WebM)$/ }).click();
-      await expect.poll(() => existsSync(webm) && statSync(webm).size > 1000, { timeout: 90000 }).toBe(true);
-      await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 30000 });
-      const frames = await page.evaluate(async path => {
-        const bytes = await window.electronAPI.readBinaryFile(path), video = document.createElement("video"), canvas = document.createElement("canvas");
-        canvas.width = 640; canvas.height = 360;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        if (!context) throw new Error("2D context unavailable");
-        const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "video/webm" }));
-        try {
-          const loaded = new Promise((resolve, reject) => {
-            video.onloadeddata = resolve; video.onerror = () => reject(new Error("Sky Ambient RC WebM decode failed"));
-          });
-          video.src = url; await loaded;
-          const result = [];
-          for (const frame of [0, 20, 40, 60]) {
-            const sought = new Promise(resolve => { video.onseeked = resolve; });
-            video.currentTime = (frame + .1) / 30; await sought;
-            context.drawImage(video, 0, 0); result.push(Array.from(context.getImageData(0, 0, 640, 360).data));
-          }
-          return result;
-        } finally { video.removeAttribute("src"); video.load(); URL.revokeObjectURL(url); }
-      }, webm);
+      const keyFrames = [0, 20, 40, 60];
+      await exportRcWebm(launched, page, webm, { startFrame: 0, endFrame: 60 });
+      const frames = await decodeRcWebm(page, webm, { startFrame: 0, frames: keyFrames });
       const references = [key0, key20, key40, key20];
-      frames.forEach((pixels, index) => writeFileSync(testInfo.outputPath(`webm-frame-${index * 20}.png`),
-        PNG.sync.write({ width: 640, height: 360, data: Buffer.from(pixels) })));
-      report.webm = { requested: true, path: webm, frames: frames.map((frame, index) => ({ frame: index * 20,
-        matching: difference(frame, references[index]), opposite: difference(frame, index % 2 ? key0 : key20) })) };
+      frames.forEach((image, index) => writeFileSync(testInfo.outputPath(`webm-frame-${keyFrames[index]}.png`), PNG.sync.write(image)));
+      report.webm = { requested: true, path: webm, frames: frames.map((image, index) => ({ frame: keyFrames[index],
+        matching: difference(image, references[index]), opposite: difference(image, index % 2 ? key0 : key20) })) };
       for (const result of report.webm.frames) {
         expect(result.matching).toBeLessThan(result.opposite);
         // Bound absolute error too: a darkened export could still be closer to the ON reference.
@@ -401,9 +378,8 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     }
     await page.evaluate(() => window.mmdModokiE2e.setAutoRenderEnabled(true));
 
-    // Isolate material lighting from FXAA's contrast-dependent edge weights.
-    // The authored fixture has shared toon01 and cast/receive-shadow flags.
-    // Give its Toon floor an explicit neutral color, without changing app defaults.
+    // Use the same canopy, open platform and light as the composition comparison.
+    // Disable AA for the per-pixel GI measurement; enable it again for public file exports.
     const lightingMatrix = report.checkpoints.lightingMatrix = { regions: {}, shadows: {} };
     const matrixImages = {};
     for (const shadowEnabled of [false, true]) {
@@ -412,10 +388,10 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
         state.viewport.antialiasEnabled = false;
         Object.assign(state.lighting, { shadowEnabled, shadowColor: { r: .5, g: .5, b: .5 },
           toonShadowInfluence: 0, ambientIntensity: 0 });
-        Object.assign(state.lighting.rcSkyAmbient, { enabled: true, opacity: 1, strength: .95, fill: .035,
-          skyBrightness: 0, rangeScale: 1, quality: "standard", volume: null });
+        Object.assign(state.lighting.rcSkyAmbient, { enabled: true, opacity: 1, strength: .6, fill: .05,
+          skyBrightness: 0, rangeScale: 2, quality: "high", volume: null });
         state.lighting.rcSkyOcclusion.enabled = false;
-        Object.assign(state.lighting.rcDiffuseGi, { enabled: false, strength: .08 });
+        Object.assign(state.lighting.rcDiffuseGi, { enabled: false, strength: .5, volume: null });
         if (state.keyframes?.effectAnimations) state.keyframes.effectAnimations.tracks =
           state.keyframes.effectAnimations.tracks.filter(track => track.effectId !== "rcSkyAmbient");
         await window.mmdModokiE2e.importProjectState(state);
@@ -443,14 +419,16 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     expect(skyDrop, "Sky visibility must darken the canopy's auxiliary light").toBeGreaterThan(2);
     expect(measured.shadowOnly.canopy.mean - measured.both.canopy.mean).toBeGreaterThan(2);
     expect(measured.skyOnly.canopy.mean - measured.both.canopy.mean).toBeGreaterThan(2);
-    // The removed common floor is independent of raster shadow: its direct-light
-    // contrast survives instead of shrinking with the Sky Ambient density.
-    expect(Math.abs(combinedShadowDrop - ordinaryShadowDrop)).toBeLessThan(1.5);
+    // The shadowed box top provides the attenuation of its fill. Removing the roof's
+    // raster shadow must restore more direct light than multiplying the whole pixel would.
+    const luminance = region => region.linearMean.reduce((sum, channel) => sum + channel, 0) / 3;
+    const shadowedFillRatio = luminance(measured.both.canopy) / luminance(measured.shadowOnly.canopy);
+    const multipliedWhole = luminance(measured.neither.canopy) * shadowedFillRatio;
+    expect(luminance(measured.skyOnly.canopy)).toBeGreaterThan(multipliedWhole + .002);
     expect(Math.abs(measured.neither.open.mean - measured.skyOnly.open.mean)).toBeLessThan(1);
     expect(Math.abs(measured.shadowOnly.open.mean - measured.both.open.mean)).toBeLessThan(1);
 
-    // Retain GI's independent linear addition after the auxiliary-light shading.
-    // A small authored GI gain avoids output clipping hiding a lost contribution.
+    // Inspect unsaturated pixels receiving both sky shading and GI at its default strength.
     await openRcLighting(page, "rcDiffuseGi"); await rcLightingInput(page, "rcDiffuseGi", "Enabled").check();
     await expect(rcLightingStatus(page, "rcDiffuseGi")).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await closeRcLighting(page);
@@ -465,8 +443,36 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     expect(retention.meanGain).toBeGreaterThan(.002);
     expect(retention.meanAbsoluteError).toBeLessThan(Math.max(.0015, retention.meanGain * .15));
 
-    // A hemisphere-only fixture distinguishes auxiliary illumination from the
-    // directional Toon floor tested above. It must respond to the same sky mask.
+    if (withWebm) {
+      // Export the same frame from the file menu. Enable the editor's usual AA
+      // for direct comparison to the original 640x360 composition study.
+      await page.evaluate(async () => {
+        const state = window.mmdModokiE2e.exportProjectState();
+        state.viewport.antialiasEnabled = true;
+        await window.mmdModokiE2e.importProjectState(state);
+      });
+      await seek(page, 0);
+      await ready(page); await closeRcLighting(page);
+      const combined = await exportRcPng(launched, page, testInfo.outputPath("lighting-gi-and-sky.png"));
+      await open(page); await input(page, "Enabled").uncheck(); await closeRcLighting(page);
+      const giAlone = await exportRcPng(launched, page, testInfo.outputPath("lighting-gi-only.png"));
+      const combinedRegions = measureSkyAmbientRegions(combined, regions);
+      const giRegions = measureSkyAmbientRegions(giAlone, regions);
+      expect(giRegions.canopy.mean - combinedRegions.canopy.mean).toBeGreaterThan(2);
+      expect(Math.abs(giRegions.open.mean - combinedRegions.open.mean)).toBeLessThan(1);
+      await open(page); await input(page, "Enabled").check(); await ready(page); await closeRcLighting(page);
+      const moviePath = testInfo.outputPath("lighting-gi-and-sky.webm");
+      await exportRcWebm(launched, page, moviePath, { startFrame: 0, endFrame: 2 });
+      const [decoded] = await decodeRcWebm(page, moviePath, { startFrame: 0, frames: [1] });
+      writeFileSync(testInfo.outputPath("lighting-gi-and-sky-decoded.png"), PNG.sync.write(decoded));
+      const videoRegions = measureSkyAmbientRegions(decoded, regions);
+      expect(Math.abs(videoRegions.canopy.mean - combinedRegions.canopy.mean))
+        .toBeLessThan(Math.abs(videoRegions.canopy.mean - giRegions.canopy.mean));
+      expect(difference(decoded, combined)).toBeLessThan(difference(decoded, giAlone));
+      lightingMatrix.files = { giOnly: giRegions, combined: combinedRegions, webm: videoRegions };
+    }
+
+    // Hemisphere-only illumination responds to the same sky mask.
     await page.evaluate(async () => {
       const state = window.mmdModokiE2e.exportProjectState();
       state.viewport.antialiasEnabled = false;

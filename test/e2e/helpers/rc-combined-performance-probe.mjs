@@ -106,6 +106,33 @@ export async function prepareCombinedPerformance({ width = 1280, height = 720 } 
   manager.setAutoRenderEnabled(true); return combinedPerformanceState();
 }
 
+/** Observe successive drawn frames during ordinary playback before installing GPU/CPU timing instrumentation. */
+export async function measurePlaybackCadence({ warmFrames, frames }) {
+  const { scene, engine } = context();
+  if (engine.enableGPUTimingMeasurements) throw new Error("Ordinary playback window requires GPU timing to be off");
+  const intervals = [];
+  let observed = 0, previous, firstFrame;
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      scene.onBeforeRenderObservable.remove(observer);
+      reject(new Error(`Only ${intervals.length}/${frames} ordinary playback frames were observed`));
+    }, 90000);
+    const observer = scene.onBeforeRenderObservable.add(() => {
+      if (observed++ < warmFrames) return;
+      const now = performance.now();
+      if (previous === undefined) firstFrame = manager.currentFrame;
+      else intervals.push(now - previous);
+      previous = now;
+      if (intervals.length !== frames) return;
+      clearTimeout(timeout);
+      scene.onBeforeRenderObservable.remove(observer);
+      const intervalMs = summary(intervals);
+      resolve({ intervalMs, fps: 1000 / intervalMs.mean, firstFrame, lastFrame: manager.currentFrame,
+        playing: manager.isPlaying, warmFrames, size: [engine.getRenderWidth(), engine.getRenderHeight()], samples: intervals });
+    });
+  });
+}
+
 /** Observes normal render/seek work. Never forces a dirty field or a full receiver update. */
 export async function measureCombinedPerformance({ moving = false, warmFrames = 12, frames = 40, completionFrames = 12 } = {}) {
   const { scene, engine, post, sky, gi, graphs, sources } = context(), restores = [], loops = engine.activeRenderLoops.slice();

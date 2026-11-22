@@ -33,6 +33,8 @@ WindowsのWebGPU実機（NVIDIA Ampere）、1280×720、既定の原点4領域�
 
 ボーン移動では1フレームのGI dispatch数が24回から26回に増えた。静止中はどちらも0回。表は上記シーンのGI更新分に限り、FPS換算やモデル全体の変形・描画時間の推計には使わない。
 
+より重いシーンの通常再生FPS・フレーム間隔・CPU形状更新時間は[GI RCの高負荷連続再生テスト](./rc-diffuse-gi-stress-playback-2026-11-22.md)に記録した。
+
 ローカルのGPU環境で次のPowerShellコマンドから再確認できる。1つ目は画面外からの色移り、2つ目は高密度・ボーン移動の計測。環境変数 `MMD_RC_GI_PERF_DENSE` を省くと36三角形を使う。
 
 ```powershell

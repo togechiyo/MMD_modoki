@@ -22,3 +22,9 @@ FrameGraph は scene-color 入力、Classic は export surface を検査する�
 - E2E は fidelity / multi-model / accessory / camera-external-parent を対象とする。multi-model の既存の復元直後 position race は、同じ 12 の分離値を polling してから出力検査へ進む（閾値変更なし）。
 
 この調査では導入 commit は特定していない。履歴・現行の両 endpoint で間欠的に再現したため、回帰の commit 範囲や macOS 固有性は断定しない。
+
+## 複数材質を持つモデルの動画出力
+
+11月22日のWindows / WebGPU実機では、アリシアのダンスをGIオフでWebMに書き出すと、最初のフレームの描画準備が8秒で打ち切られた。Babylon.js 9.2.0 の `ObjectRenderer._checkReadiness` は未準備のメッシュを見つけるとそのパスの走査を終える。非表示の出力ウィンドウでは次の検査まで約1秒空き、髪・リボン・身体などの材質コンパイルが順番に始まっていた。[Babylon.jsのObjectRenderer](https://github.com/BabylonJS/Babylon.js/blob/master/packages/dev/core/src/Rendering/objectRenderer.ts)
+
+出力前の検査に限り、Babylonが対象とした各メッシュの準備結果を記録し、未準備でも同じパスの後続メッシュを検査する。対象メッシュすべてとBabylon側のパーティクル検査が成功した時点でキャプチャを許可する。元のカスタム判定には同じレシーバー・引数を渡し、検査後は描画リストと判定関数を復元する。既存の8秒期限内で、起動直後に11材質のコンパイル完了通知が60 msの範囲に収まり、GIオフのWebMを31フレームまで書き出せた。[実装](../src/render/export-render-surface.ts)・[描画パス・可視性・例外・パーティクルの単体テスト](../src/render/export-render-surface.test.ts)・[ダンスの画像・動画比較](./rc-diffuse-gi-two-bounce-2026-11-22.md#pngとwebmへの書き出し)

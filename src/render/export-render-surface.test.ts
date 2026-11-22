@@ -1,9 +1,91 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Scene } from "@babylonjs/core/scene";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
+import { Scene } from "@babylonjs/core/scene";
+import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
+import { RenderTargetTexture } from "@babylonjs/core/Materials/Textures/renderTargetTexture";
+import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
+import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { isCaptureRenderTargetReady, normalizeExportRgbaAlpha, normalizeExportRgbaRows, unpremultiplyExportRgba } from "./export-render-surface";
 
 describe("isCaptureRenderTargetReady", () => {
     const mesh = { name: "restored-model" } as Scene["meshes"][number];
+    const engines: NullEngine[] = [];
+    afterEach(() => { for (const engine of engines.splice(0)) engine.dispose(); });
+    function captureScene() {
+        const engine = new NullEngine();
+        engines.push(engine);
+        const scene = new Scene(engine);
+        scene.activeCamera = new FreeCamera("camera", Vector3.Zero(), scene);
+        const target = new RenderTargetTexture("capture", 16, scene);
+        target.renderList = null;
+        return { engine, scene, target };
+    }
+
+    it("starts readiness on every visible mesh in the capture pass while the first material is compiling", () => {
+        const { engine, scene, target } = captureScene();
+        const first = CreateBox("pending", {}, scene);
+        const hidden = CreateBox("hidden", {}, scene); hidden.isVisible = false;
+        const last = CreateBox("also needs compilation", {}, scene);
+        const probe = (ready: boolean) => (completeCheck?: boolean) => {
+            expect(completeCheck).toBe(true);
+            expect(engine.currentRenderPassId).toBe(target.renderPassId);
+            return ready;
+        };
+        const firstReady = vi.spyOn(first, "isReady").mockImplementation(probe(false));
+        const hiddenReady = vi.spyOn(hidden, "isReady");
+        const lastReady = vi.spyOn(last, "isReady").mockImplementation(probe(true));
+        const previousPass = engine.currentRenderPassId;
+        expect(isCaptureRenderTargetReady(target, scene.meshes)).toBe(false);
+        expect(lastReady).toHaveBeenCalledOnce();
+        expect(hiddenReady).not.toHaveBeenCalled();
+        expect(target.renderList).toBeNull();
+        expect(engine.currentRenderPassId).toBe(previousPass);
+        firstReady.mockImplementation(probe(true));
+        expect(isCaptureRenderTargetReady(target, scene.meshes)).toBe(true);
+        expect(lastReady).toHaveBeenCalledTimes(2);
+    });
+
+    it("honors an explicit list and custom readiness callback, including its native receiver, arguments and errors", () => {
+        const { scene, target } = captureScene();
+        const first = CreateBox("first", {}, scene), last = CreateBox("last", {}, scene);
+        const skipped = CreateBox("outside explicit list", {}, scene);
+        const fallback = vi.spyOn(first, "isReady");
+        const callback = vi.fn<NonNullable<typeof target.customIsReadyFunction>>().mockReturnValue(true);
+        target.customIsReadyFunction = callback;
+        target.renderList = [first];
+        expect(target.isReadyForRendering()).toBe(true);
+        const receiver = callback.mock.contexts[0];
+        expect(receiver).toBeDefined();
+        callback.mockClear(); callback.mockImplementation(mesh => mesh !== first);
+        const explicit = [first, last];
+        target.renderList = explicit;
+        expect(isCaptureRenderTargetReady(target, [skipped])).toBe(false);
+        expect(callback.mock.calls.map(([mesh, rate, preWarm]) => [mesh.name, rate, preWarm]))
+            .toEqual([[first.name, target.refreshRate, true], [last.name, target.refreshRate, true]]);
+        expect(callback.mock.contexts.every(context => context === receiver)).toBe(true);
+        expect(fallback).not.toHaveBeenCalled();
+        expect(target.customIsReadyFunction).toBe(callback);
+        expect(target.renderList).toBe(explicit);
+        callback.mockImplementation(() => { throw Error("material failed"); });
+        expect(() => isCaptureRenderTargetReady(target, [skipped])).toThrow("material failed");
+        expect(target.customIsReadyFunction).toBe(callback);
+        expect(target.renderList).toBe(explicit);
+    });
+
+    it("remains unready when the native particle check fails after its meshes are ready", () => {
+        const { scene, target } = captureScene();
+        const mesh = CreateBox("ready", {}, scene);
+        const meshReady = vi.spyOn(mesh, "isReady").mockReturnValue(true);
+        const particles = new ParticleSystem("pending particles", 2, scene);
+        const particleReady = vi.spyOn(particles, "isReady").mockReturnValue(false);
+        target.particleSystemList = [particles];
+        expect(isCaptureRenderTargetReady(target, [mesh])).toBe(false);
+        expect(meshReady).toHaveBeenCalledWith(true);
+        expect(particleReady).toHaveBeenCalledOnce();
+        particleReady.mockReturnValue(true);
+        expect(isCaptureRenderTargetReady(target, [mesh])).toBe(true);
+    });
 
     it.each([true, false])("checks restored scene meshes without an active-mesh list (ready=%s)", (ready) => {
         const meshes = [mesh];

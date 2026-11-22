@@ -3,6 +3,7 @@ import type { Camera } from "@babylonjs/core/Cameras/camera";
 import type { InternalTexture } from "@babylonjs/core/Materials/Textures/internalTexture";
 import { RenderTargetTexture } from "@babylonjs/core/Materials/Textures/renderTargetTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import type { ObjectRenderer } from "@babylonjs/core/Rendering/objectRenderer";
 import type { Scene } from "@babylonjs/core/scene";
 
 export type RenderedExportFrame = {
@@ -26,15 +27,26 @@ export type ExportRenderSurfaceDiagnostics = {
 const DEFAULT_READBACK_TIMEOUT_MS = 8_000;
 
 export const isCaptureRenderTargetReady = (
-    target: Pick<RenderTargetTexture, "renderList" | "isReadyForRendering">,
+    target: Pick<RenderTargetTexture, "renderList" | "isReadyForRendering"> & Partial<Pick<RenderTargetTexture, "customIsReadyFunction">>,
     meshes: Scene["meshes"],
 ): boolean => {
     const renderList = target.renderList;
+    const originalReady = target.customIsReadyFunction;
+    let meshesReady = true;
     try {
         // Active meshes can still belong to the scene before project import.
         target.renderList = renderList ?? meshes;
-        return target.isReadyForRendering();
+        // Babylon stops at the first unready mesh. Start all material programs
+        // in their actual render passes, including in a throttled hidden exporter.
+        target.customIsReadyFunction = function (this: ObjectRenderer, mesh, refreshRate, preWarm) {
+            const ready = originalReady ? originalReady.call(this, mesh, refreshRate, preWarm) : mesh.isReady(preWarm || refreshRate === 0);
+            if (!preWarm) return ready;
+            if (!ready) meshesReady = false;
+            return true;
+        };
+        return target.isReadyForRendering() && meshesReady;
     } finally {
+        target.customIsReadyFunction = originalReady;
         target.renderList = renderList;
     }
 };

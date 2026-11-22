@@ -165,11 +165,9 @@ test("GI reaches the moving Alicia character in saved stills, image sequences an
     expect(report.errors).toEqual([]);
     expect(report.consoleErrors).toEqual([]);
     expect(Object.values(report.webm).filter(job => job.status !== "decoded")).toEqual([]);
-  } catch (error) {
-    preserveLog("editor-export.log");
-    throw error;
   } finally {
     mkdirSync(testInfo.outputDir, { recursive: true });
+    preserveLog("editor-export.log");
     saveReport();
     await launched.close();
   }

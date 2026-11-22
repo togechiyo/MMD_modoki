@@ -28,6 +28,48 @@ function fixture(skinned = true) {
 }
 
 describe("RC CPU pose reuse", () => {
+    it("skips a moving zero-weight bone until an in-place binding edit makes it relevant", () => {
+        const { mesh, cache } = fixture();
+        const indices = mesh.getVerticesData(VertexBuffer.MatricesIndicesKind);
+        const weights = mesh.getVerticesData(VertexBuffer.MatricesWeightsKind);
+        if (!mesh.skeleton || !indices || !weights) throw new Error("fixture skinning data missing");
+        const [root, child] = mesh.skeleton.bones;
+        mesh.numBoneInfluencers = 1;
+        for (let i = 0; i < weights.length; i += 4) {
+            weights[i] = 1; weights[i + 1] = 0;
+        }
+        const native = mesh.getPositionData.bind(mesh, true, true);
+        const deform = vi.spyOn(mesh, "getPositionData");
+        const initial = cache.read(mesh);
+        deform.mockClear();
+        child.setPosition(new Vector3(2, 0, 0));
+        expect(cache.read(mesh).positions).toBe(initial.positions);
+        expect(deform).not.toHaveBeenCalled();
+
+        // Babylon reads all four primary slots even with one requested influencer.
+        // All vertices now follow only the child, including its inherited parent transform.
+        for (let i = 0; i < weights.length; i += 4) {
+            weights[i] = 0; weights[i + 1] = 1;
+        }
+        const bound = cache.read(mesh);
+        expect(bound.positions).toEqual(native());
+        expect(bound.signature).not.toBe(initial.signature);
+        child.setPosition(new Vector3(3, 0, 0));
+        expect(cache.read(mesh).positions).toEqual(native());
+        root.setPosition(new Vector3(0, 2, 0));
+        expect(cache.read(mesh).positions).toEqual(native());
+        root.setPosition(Vector3.Zero());
+        child.setPosition(new Vector3(2, 0, 0));
+        expect(cache.read(mesh).positions).toEqual(bound.positions);
+
+        for (let i = 1; i < indices.length; i += 4) indices[i] = 0;
+        const unbound = cache.read(mesh);
+        expect(unbound.positions).toEqual(initial.positions);
+        deform.mockClear();
+        child.setPosition(new Vector3(4, 0, 0));
+        expect(cache.read(mesh).positions).toBe(unbound.positions);
+        expect(deform).not.toHaveBeenCalled();
+    });
     it("avoids repeat deformation but detects bone matrices, raw vertices and weight changes in place", () => {
         const { mesh, cache } = fixture(), read = vi.spyOn(mesh, "getPositionData");
         const first = cache.read(mesh); read.mockClear();
@@ -64,16 +106,44 @@ describe("RC CPU pose reuse", () => {
             expect(pose.positions).toEqual(expected); expect(cache.read(mesh)).toBe(pose);
         }
     });
-    it("includes extra bone influences and preserves the signature when unused bones change", () => {
-        const { mesh, cache } = fixture(); mesh.numBoneInfluencers = 8;
-        mesh.setVerticesData(VertexBuffer.MatricesIndicesExtraKind, new Float32Array(mesh.getTotalVertices() * 4).fill(1));
-        const extra = new Float32Array(mesh.getTotalVertices() * 4); extra[0] = 0.25;
-        mesh.setVerticesData(VertexBuffer.MatricesWeightsExtraKind, extra);
-        expect(cache.read(mesh).positions).toEqual(mesh.getPositionData(true, true));
-        extra[0] = 0.5; expect(cache.read(mesh).positions).toEqual(mesh.getPositionData(true, true));
+    it("tracks a bone used only by the extra influences when they are enabled", () => {
+        const { mesh, cache } = fixture();
         if (!mesh.skeleton) throw new Error("fixture skeleton missing");
-        const unused = new Bone("unused", mesh.skeleton, null, Matrix.Identity()), before = cache.read(mesh);
-        unused.setPosition(new Vector3(20, 0, 0)); const after = cache.read(mesh);
-        expect(after.signature).toBe(before.signature); expect(after.positions).toBe(before.positions);
+        const extraBone = new Bone("extra", mesh.skeleton, null, Matrix.Identity());
+        mesh.setVerticesData(VertexBuffer.MatricesIndicesExtraKind, new Float32Array(mesh.getTotalVertices() * 4).fill(2));
+        const extra = new Float32Array(mesh.getTotalVertices() * 4); extra[3] = 0.25;
+        mesh.setVerticesData(VertexBuffer.MatricesWeightsExtraKind, extra);
+        mesh.numBoneInfluencers = 4;
+        const before = cache.read(mesh);
+        const native = mesh.getPositionData.bind(mesh, true, true);
+        const deform = vi.spyOn(mesh, "getPositionData");
+        extraBone.setPosition(new Vector3(0, 4, 0));
+        expect(cache.read(mesh).signature).toBe(before.signature);
+        expect(deform).not.toHaveBeenCalled();
+
+        // Babylon reads all four extra slots for any numBoneInfluencers greater than four.
+        mesh.numBoneInfluencers = 5;
+        expect(cache.read(mesh).positions).toEqual(native());
+        extraBone.setPosition(new Vector3(0, 8, 0));
+        expect(cache.read(mesh).positions).toEqual(native());
+        extra[3] = 0.5;
+        expect(cache.read(mesh).positions).toEqual(native());
+    });
+    it("preserves Babylon's offset semantics for a fractional matrix index", () => {
+        const { mesh, cache } = fixture();
+        const indices = mesh.getVerticesData(VertexBuffer.MatricesIndicesKind);
+        const weights = mesh.getVerticesData(VertexBuffer.MatricesWeightsKind);
+        if (!mesh.skeleton || !indices || !weights) throw new Error("fixture skinning data missing");
+        for (let i = 1; i < weights.length; i += 4) weights[i] = 0;
+        const palette = mesh.skeleton.getTransformMatrices(mesh).slice();
+        vi.spyOn(mesh.skeleton, "getTransformMatrices").mockReturnValue(palette);
+        // A fractional index reads across two matrix slots in Babylon's CPU skinning path.
+        indices[0] = 0.5;
+        palette[23] = 1;
+        const before = cache.read(mesh);
+        palette[20] += 3;
+        const after = cache.read(mesh);
+        expect(after.positions).toEqual(mesh.getPositionData(true, true));
+        expect(after.signature).not.toBe(before.signature);
     });
 });

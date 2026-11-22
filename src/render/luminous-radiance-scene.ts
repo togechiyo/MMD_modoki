@@ -9,7 +9,7 @@ import type { FloatArray } from "@babylonjs/core/types";
 import type { LuminousRadianceSettings } from "./luminous-radiance-settings";
 import { radianceTriangleBudget, RADIANCE_TRIANGLE_STRIDE, createRadianceIndexedPositions,
     type RadianceIndexedPositions } from "./triangle-radiance-bvh";
-import { MeshRadianceBvh } from "./mesh-radiance-bvh";
+import { MeshRadianceBvh, type RadianceBufferRange } from "./mesh-radiance-bvh";
 import { LuminousRadianceTextures } from "./luminous-radiance-textures";
 import { RadianceInputSnapshot } from "./luminous-radiance-input-cache";
 import { acquireRadianceGeometry, type RadianceGeometryLease } from "./radiance-geometry-cache";
@@ -24,6 +24,18 @@ type MeshInput = { key: Mesh; poseSnapshot: RadianceInputSnapshot; surfaceSnapsh
     emitters: number; emitterRanges: Array<[number, number]>; emitterBounds?: Bounds };
 
 function emptyBounds(): Bounds { return { low: [Infinity, Infinity, Infinity], high: [-Infinity, -Infinity, -Infinity] }; }
+
+/** The BVH returns ordered views of its packed mirror. Submit each uninterrupted span once. */
+function uploadChangedRanges(buffer: StorageBuffer, mirror: Float32Array, ranges: readonly RadianceBufferRange[]): void {
+    for (let i = 0; i < ranges.length;) {
+        const first = ranges[i++];
+        let end = first.byteOffset + first.data.byteLength;
+        while (i < ranges.length && ranges[i].byteOffset === end) end += ranges[i++].data.byteLength;
+        const data = end === first.byteOffset + first.data.byteLength ? first.data
+            : mirror.subarray(first.byteOffset / Float32Array.BYTES_PER_ELEMENT, end / Float32Array.BYTES_PER_ELEMENT);
+        buffer.update(data, first.byteOffset);
+    }
+}
 
 function measureEmitterBounds(chunk: MeshInput): Bounds {
     const bounds = emptyBounds();
@@ -253,8 +265,8 @@ export class LuminousRadianceSceneSource {
             this.nodeBuffer.dispose(); this.nodeCapacity = this.bvh.nodes.byteLength;
             this.nodeBuffer = new StorageBuffer(this.scene.getEngine() as WebGPUEngine, this.nodeCapacity);
         }
-        for (const range of changes.triangles) this.triangleBuffer.update(range.data, range.byteOffset);
-        for (const range of changes.nodes) this.nodeBuffer.update(range.data, range.byteOffset);
+        uploadChangedRanges(this.triangleBuffer, this.bvh.triangles, changes.triangles);
+        uploadChangedRanges(this.nodeBuffer, this.bvh.nodes, changes.nodes);
         this.updates++; this.revision++;
     }
 

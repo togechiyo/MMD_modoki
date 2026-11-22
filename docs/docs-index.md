@@ -400,6 +400,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 - [RC GI: 方向光1反射の通常MMD材質への実装 2026-10-30](./rc-diffuse-gi-implementation-2026-10-30.md)
 - [GI RCの近距離2バウンスとGPU負荷の比較 2026-11-22](./rc-diffuse-gi-two-bounce-2026-11-22.md)
 - [GI RCの高負荷連続再生テスト 2026-11-22](./rc-diffuse-gi-stress-playback-2026-11-22.md)
+- [GI RCの頂点変形の再利用とアリシアのダンス再生 2026-11-22](./rc-gi-pose-cache-alicia-2026-11-22.md)
 - [窓付き室内・XアクセサリのRC GI / 天空遮蔽検証 2026-10-31](./rc-window-room-verification-2026-10-31.md)
 - [Xアクセサリの不透明PNG・Accessory ToonへのRC対応 2026-11-01](./rc-x-accessory-support-2026-11-01.md)
 - [RC GI・天空遮蔽を併用したダンス再生の負荷軽減 2026-11-03](./rc-playback-performance-2026-11-03.md)

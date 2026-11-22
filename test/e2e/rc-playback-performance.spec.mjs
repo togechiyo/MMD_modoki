@@ -1,19 +1,19 @@
 import { test, expect } from "@playwright/test";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
 import { camera, difference, giVolume, initialState, numberControl, seek } from "./helpers/rc-diffuse-gi-controls.mjs";
 import { closeRcLighting, openPostEffects, setRcLightingEnabled } from "./helpers/rc-lighting-controls.mjs";
 import { measurePlaybackAppLog } from "./helpers/rc-playback-app-log.mjs";
+import { aliciaDanceFiles, hasAliciaDance, loadAliciaDance } from "./helpers/rc-alicia-dance.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const fixture = resolve(root, "test/fixtures/rc-diffuse-gi-stage/rc-diffuse-gi-red.pmx");
 const alicia = process.env.MMD_RC_PLAYBACK_ALICIA === "1";
 const appLog = process.env.MMD_RC_PLAYBACK_APP_LOG === "1";
 const cpuProfile = process.env.MMD_RC_PLAYBACK_CPU_PROFILE === "1";
-const character = resolve(root, "local-references/model/Alicia/MMD/Alicia_solid.pmx");
-const motion = resolve(root, "local-references/model/Alicia/MMD Motion/2分ループステップ20.vmd");
+const aliciaFiles = aliciaDanceFiles(root);
 const probeUrl = "/test/e2e/helpers/rc-combined-performance-probe.mjs";
 const invoke = (page, method, value) => page.evaluate(async ({ method, value, probeUrl }) => {
   const probe = await import(probeUrl);
@@ -46,15 +46,6 @@ async function capturePlaybackCpuProfile(page, directory, id) {
     finally { await session.detach(); }
   }
 }
-async function loadAliciaDance(app, page) {
-  await page.evaluate(path => window.mmdModokiE2e.loadModel(path), character);
-  await page.locator("#info-model-select").selectOption("1");
-  await app.app.evaluate(({ dialog }, path) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] }); }, motion);
-  await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
-  await page.locator('[data-menu-command="file.openMotion"]').click();
-  await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.models[1]?.motionImports), { timeout: 45000 })
-    .toContainEqual({ type: "vmd", path: motion });
-}
 function visibleMotion(first, second) {
   let pixels = 0, maximum = 0;
   for (let i = 0; i < first.data.length; i += 4) {
@@ -73,7 +64,7 @@ for (const setting of cases) {
   const { gi, sky } = setting, id = `${alicia ? "alicia-" : ""}${setting.id}${appLog ? "-app-log" : ""}`;
   // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
   test(`RC normal playback: ${id}`, async ({}, testInfo) => {
-    test.skip(alicia && (!existsSync(character) || !existsSync(motion)), "Optional Alicia PMX and bundled motion are not installed");
+    test.skip(alicia && !hasAliciaDance(aliciaFiles), "Optional Alicia PMX and bundled motion are not installed");
     test.setTimeout(240000);
     const app = await launchMmdModoki(root);
     const report = { id, errors: [], consoleErrors: [], captures: {} };
@@ -110,7 +101,7 @@ for (const setting of cases) {
       }, { volume: alicia ? { min: [-16, -4, -16], size: 32 } : giVolume, appLog });
       await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixture);
       if (alicia) {
-        await loadAliciaDance(app, page);
+        await loadAliciaDance(app, page, aliciaFiles);
       } else {
         await page.locator("#info-model-select").selectOption("0");
         const category = await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().find(track => track.name === "光遮蔽板")?.category);

@@ -22,6 +22,9 @@ export async function openRcLighting(page, id) {
     // Rendering compatibility tests restore the retired card from a project
     // fixture. Only the remaining public effects exercise the Add picker.
     if (id === "rcSkyOcclusion") {
+      // The runtime import doesn't redraw the open stack. Re-enter the Post
+      // tab after the import so its normal tab-change handler mounts the card.
+      await page.locator('[data-effect-tab="materials"]').click();
       await restoreRetiredRcLightingFixture(page, id);
       await openPostEffects(page);
     } else await addRcLighting(page, id);

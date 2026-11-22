@@ -361,9 +361,14 @@ export async function profileRadianceProbe(frames = 30, change) {
     try { return updateScene.apply(this, args); } finally { counts.updates += this.updates - before; }
   };
   undo.push(() => { LuminousRadianceScene.prototype.update = updateScene; });
-  const updateBvh = TriangleRadianceBvh.prototype.update;
-  TriangleRadianceBvh.prototype.update = function (input) { counts.refittedTriangles += input.length / 24; return updateBvh.call(this, input); };
-  undo.push(() => { TriangleRadianceBvh.prototype.update = updateBvh; });
+  // Full builds and both position-only paths refit the mesh tree once; emission-only edits skip it.
+  const refit = TriangleRadianceBvh.prototype.refit;
+  TriangleRadianceBvh.prototype.refit = function (...args) {
+    const result = refit.apply(this, args);
+    counts.refittedTriangles += this.triangleCount;
+    return result;
+  };
+  undo.push(() => { TriangleRadianceBvh.prototype.refit = refit; });
   const upload = StorageBuffer.prototype.update;
   StorageBuffer.prototype.update = function (data, offset, length) {
     if (buffers.has(this)) counts.uploadedBytes += length ?? data.byteLength;

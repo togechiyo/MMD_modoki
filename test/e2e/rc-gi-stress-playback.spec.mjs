@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { launchMmdModoki, selectTimelineTrack } from "./electron-app.mjs";
 import { camera, capture, difference, initialState, numberControl, seek, setGi } from "./helpers/rc-diffuse-gi-controls.mjs";
+import { aliciaDanceFiles, hasAliciaDance, loadAliciaDance } from "./helpers/rc-alicia-dance.mjs";
 import { createRcGiStressScene, rcGiStressScene } from "../fixtures/rc-diffuse-gi-stage/stress-scene.mjs";
 import { writePmx } from "../../scripts/generate-external-parent-test-models.mjs";
 
@@ -15,11 +17,14 @@ const width = Number(process.env.MMD_RC_GI_STRESS_WIDTH ?? 1920);
 const height = width * 9 / 16;
 const modelCount = Number(process.env.MMD_RC_GI_STRESS_MODELS ?? 1);
 const warmFrames = 30, frames = 120;
+const ensemble = process.env.MMD_RC_GI_STRESS_ALICIA === "ensemble";
+const alicia = ensemble || process.env.MMD_RC_GI_STRESS_ALICIA === "1";
+const aliciaFiles = aliciaDanceFiles(root);
 
-function placeStressScene(scale, x) {
+function placeStressScene(scale, x, z) {
   const model = createRcGiStressScene();
-  if (scale === 1 && x === 0) return model;
-  const point = ([px, py, pz]) => [px * scale + x, py * scale, pz * scale];
+  if (scale === 1 && x === 0 && z === 0) return model;
+  const point = ([px, py, pz]) => [px * scale + x, py * scale, pz * scale + z];
   for (const vertex of model.vertices) vertex.position = point(vertex.position);
   for (const bone of model.bones) bone.position = point(bone.position ?? [0, 0, 0]);
   for (const morph of model.vertexMorphs) {
@@ -56,21 +61,53 @@ async function keyStressMotion(page, modelIndex, scale) {
   await seek(page, 0);
 }
 
+async function prepareStressFixture(launched, page) {
+  if (alicia && !ensemble) {
+    const stage = resolve(root, "test/fixtures/rc-diffuse-gi-stage/rc-diffuse-gi-red.pmx");
+    expect(await page.evaluate(path => window.mmdModokiE2e.loadModel(path), stage)).not.toBeNull();
+    await loadAliciaDance(launched, page, aliciaFiles);
+    await seek(page, 0);
+    return { fixture: { character: basename(aliciaFiles.character), motion: basename(aliciaFiles.motion), stage: basename(stage), stageTriangles: 36 },
+      modelCount: 2, camera: await camera(page, { tx: 0, ty: 9, rx: -4, ry: 10, camDistance: 44 }) };
+  }
+  expect([1, 3]).toContain(modelCount);
+  const xOffsets = modelCount === 3 ? [-38, 0, 38] : [0];
+  const scale = modelCount === 3 ? 0.55 : 1;
+  // The camera looks from negative Z. Put the rooms behind the dancer and inside the nearest GI volume.
+  const zOffset = ensemble ? 27 : 0;
+  for (const [index, x] of xOffsets.entries()) {
+    const modelPath = resolve(launched.tempDir, modelCount === 1 ? "rc-gi-stress.pmx" : `rc-gi-stress-${index}.pmx`);
+    writeFileSync(modelPath, writePmx(placeStressScene(scale, x, zOffset)));
+    expect(await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath)).not.toBeNull();
+    await keyStressMotion(page, index, scale);
+  }
+  const cameraPose = modelCount === 3 ? { ...rcGiStressScene.camera, ty: 5, ry: 0, camDistance: 135 } : rcGiStressScene.camera;
+  if (ensemble) {
+    await loadAliciaDance(launched, page, aliciaFiles);
+    await seek(page, 0);
+    const fixture = { character: basename(aliciaFiles.character), motion: basename(aliciaFiles.motion),
+      stageRooms: modelCount, stageTriangles: modelCount * rcGiStressScene.triangleCount,
+      movingStageTriangles: modelCount * rcGiStressScene.movingTriangles };
+    const view = { ...cameraPose, ty: 9, rx: -5, ry: 0, camDistance: modelCount === 3 ? 115 : 75 };
+    return { fixture, modelCount: modelCount + 1, xOffsets, zOffset, scale, camera: await camera(page, view) };
+  }
+  return { fixture: rcGiStressScene, modelCount, xOffsets, scale, triangleCount: modelCount * rcGiStressScene.triangleCount,
+    camera: await camera(page, cameraPose) };
+}
+
 for (const enabled of [false, true]) {
-  const id = `gi-${enabled ? "on" : "off"}-${width}x${height}${modelCount === 1 ? "" : "-" + modelCount + "models"}`;
+  const roomSuffix = ensemble || (!alicia && modelCount !== 1) ? `-${modelCount}models` : "";
+  const suffix = roomSuffix + (alicia ? "-alicia" : "");
+  const id = `gi-${enabled ? "on" : "off"}-${width}x${height}${suffix}`;
   // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
   test(`GI stress playback: GI ${enabled ? "on" : "off"}`, async ({}, testInfo) => {
     test.skip(process.env.MMD_RC_GI_STRESS !== "1", "Opt in to the high-load local WebGPU benchmark");
+    test.skip(alicia && !hasAliciaDance(aliciaFiles), "Optional Alicia PMX and bundled motion are not installed");
     test.setTimeout(300000);
     expect([1280, 1920]).toContain(width);
-    expect([1, 3]).toContain(modelCount);
-    const xOffsets = modelCount === 3 ? [-38, 0, 38] : [0];
-    const scale = modelCount === 3 ? 0.55 : 1;
-    const triangleCount = modelCount * rcGiStressScene.triangleCount;
     const launched = await launchMmdModoki(root);
     const directory = process.env.MMD_RC_GI_STRESS_OUTPUT ? resolve(process.env.MMD_RC_GI_STRESS_OUTPUT) : testInfo.outputDir;
-    const report = { id, fixture: rcGiStressScene, modelCount, triangleCount, xOffsets, scale,
-      enabled, width, height, warmFrames, frames, errors: [], consoleErrors: [], captures: {} };
+    const report = { id, enabled, width, height, warmFrames, frames, errors: [], consoleErrors: [], captures: {}, rgbaSha256: {} };
     try {
       const page = await launched.app.firstWindow();
       await page.addInitScript(() => {
@@ -89,21 +126,18 @@ for (const enabled of [false, true]) {
       await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
       await page.evaluate(url => import(url).then(() => true), probeUrl);
       await initialState(page, { fixed: false });
-      for (const [index, x] of xOffsets.entries()) {
-        const modelPath = resolve(launched.tempDir, modelCount === 1 ? "rc-gi-stress.pmx" : `rc-gi-stress-${index}.pmx`);
-        writeFileSync(modelPath, writePmx(placeStressScene(scale, x)));
-        expect(await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath)).not.toBeNull();
-        await keyStressMotion(page, index, scale);
-      }
-      expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.models.length)).toBe(modelCount);
-      const cameraPose = modelCount === 3 ? { ...rcGiStressScene.camera, ty: 5, ry: 0, camDistance: 135 } : rcGiStressScene.camera;
-      report.camera = await camera(page, cameraPose);
+      Object.assign(report, await prepareStressFixture(launched, page));
+      expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().scene.models.length)).toBe(report.modelCount);
       await setGi(page, enabled);
       report.prepared = await invoke(page, "prepareCombinedPerformance", { width, height });
       expect(report.prepared.size).toEqual([width, height]);
       expect(report.prepared.gi.status).toBe(enabled ? "ready" : "off");
       if (enabled) {
-        expect(report.prepared.gi.triangleCount).toBe(triangleCount);
+        if (alicia) {
+          // Translucent character surfaces do not participate in the GI producer.
+          expect(report.prepared.gi.triangleCount).toBeGreaterThan(report.fixture.stageTriangles);
+          report.triangleCount = report.prepared.gi.triangleCount;
+        } else expect(report.prepared.gi.triangleCount).toBe(report.triangleCount);
         expect(report.prepared.gi.volumes).toHaveLength(4);
       }
 
@@ -124,7 +158,7 @@ for (const enabled of [false, true]) {
       expect(report.diagnostic.validationAfterCleanup.count).toBe(0);
       if (realtime.state.deviceTimestampQuery) expect(realtime.gpu.completeFrames).toBe(frames);
       if (enabled) {
-        expect(realtime.state.gi.triangleCount).toBe(triangleCount);
+        expect(realtime.state.gi.triangleCount).toBe(report.triangleCount);
         expect(realtime.counts.sourceUpdates).toBeGreaterThan(5);
         expect(realtime.counts.computeDispatches).toBeGreaterThan(0);
       } else {
@@ -133,12 +167,31 @@ for (const enabled of [false, true]) {
       }
       await play.click();
       const images = [];
+      const dancerPositions = [];
       for (const frame of [0, 60]) {
         await invoke(page, "setCombinedReferencePose", frame);
-        images.push(await capture(page, testInfo, report, "frame-" + frame));
+        const image = await capture(page, testInfo, report, "frame-" + frame);
+        report.rgbaSha256[frame] = createHash("sha256").update(image.data).digest("hex");
+        images.push(image);
+        if (ensemble) {
+          const center = await page.evaluate(index => window.mmdModokiE2e.getModelBoneRenderedPosition(index, "センター"), modelCount);
+          expect(center).not.toBeNull();
+          dancerPositions.push(center);
+        }
       }
       report.motionImageMae = difference(...images);
-      expect(report.motionImageMae, "The keyed surfaces must visibly move in the measured camera").toBeGreaterThan(0.1);
+      expect(report.motionImageMae, "The animation must visibly move in the measured camera").toBeGreaterThan(0.1);
+      if (ensemble) {
+        const [a, b] = dancerPositions;
+        report.dancerCenterDistance = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+        expect(report.dancerCenterDistance, "The VMD must move Alicia alongside the animated stage").toBeGreaterThan(0.05);
+      }
+      if (alicia) {
+        await invoke(page, "setCombinedReferencePose", 0);
+        const rewound = await capture(page, testInfo, report, "frame-0-rewind");
+        report.rewindSha256 = createHash("sha256").update(rewound.data).digest("hex");
+        expect(report.rewindSha256).toBe(report.rgbaSha256[0]);
+      }
       expect(report.errors).toEqual([]);
       expect(report.consoleErrors).toEqual([]);
     } finally {

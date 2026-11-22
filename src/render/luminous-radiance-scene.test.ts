@@ -37,6 +37,40 @@ function fixture() {
 }
 
 describe("RC separates emission and geometry input", () => {
+    it("uploads adjacent changed meshes together and preserves gaps in the triangle and node buffers", () => {
+        const { scene, mesh, data } = fixture();
+        const boxes = [mesh, ...["next", "fixed", "last"].map(name => {
+            const box = CreateBox(name, {}, scene); box.material = mesh.material; return box;
+        })];
+        const beforeResize = data.triangleBuffer;
+        data.update(settings);
+        expect(data.triangleBuffer).not.toBe(beforeResize);
+        const firstTriangles = data.bvh.triangles.slice(), firstNodes = data.bvh.nodes.slice();
+        const triangleWrites = vi.mocked(data.triangleBuffer.update), nodeWrites = vi.mocked(data.nodeBuffer.update);
+        expect(triangleWrites).toHaveBeenCalledOnce(); expect(nodeWrites).toHaveBeenCalledOnce();
+        triangleWrites.mockClear(); nodeWrites.mockClear();
+        for (const i of [0, 1, 3]) boxes[i].position.x = 10 + i;
+        scene.incrementRenderId(); data.update(settings);
+        const checkWrites = (writes: typeof triangleWrites, mirror: Float32Array, current: Float32Array, prefixLength: number) => {
+            const meshLength = (current.length - prefixLength) / boxes.length;
+            const expectedOffsets = [0, (prefixLength + 3 * meshLength) * Float32Array.BYTES_PER_ELEMENT];
+            expect(writes.mock.calls.map(([, offset]) => offset)).toEqual(expectedOffsets);
+            const lengths: number[] = [];
+            for (const [view, offset = 0] of writes.mock.calls) {
+                if (!(view instanceof Float32Array)) throw new Error("Expected float BVH data");
+                lengths.push(view.length); expect(view.buffer).toBe(current.buffer);
+                mirror.set(view, offset / Float32Array.BYTES_PER_ELEMENT);
+            }
+            expect(lengths).toEqual([prefixLength + 2 * meshLength, meshLength]);
+            expect(mirror).toEqual(current);
+        };
+        checkWrites(triangleWrites, firstTriangles, data.bvh.triangles, 0);
+        checkWrites(nodeWrites, firstNodes, data.bvh.nodes, 12 * (boxes.length - 1));
+        triangleWrites.mockClear(); nodeWrites.mockClear(); data.update(settings);
+        expect(triangleWrites).not.toHaveBeenCalled(); expect(nodeWrites).not.toHaveBeenCalled();
+        data.dispose();
+    });
+
     it("keeps sky geometry stable while excluded receivers move, and updates explicitly selected casters", () => {
         const { scene, mesh: caster, data } = fixture();
         const receiver = CreateBox("receiver", {}, scene);

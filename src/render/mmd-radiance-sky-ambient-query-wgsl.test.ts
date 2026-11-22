@@ -275,6 +275,21 @@ describe("Sky Ambient multiplies the auxiliary part of common diffuse lighting",
         }
     });
 
+    it("uses MMD's unshaded no-Toon contribution as fill regardless of shadow-map visibility", async () => {
+        const source = inject(inject(lightSection(0), [mmd]), [ambient]);
+        const light = await preprocessed(source, ["RC_SKY_AMBIENT", "IGNORE_DIFFUSE_WHEN_TOON_TEXTURE_DISABLED"]);
+        const multiply = shaderFunction(MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL, "rcSkyAmbientMultiplyFill");
+        const evaluate = multiply + "\n" + scalarStatements(light)
+            + "\nrcSkyAmbientMultiplyFill(diffuseBase, rcSkyAmbientDirect, rcSkyAmbientFactor, 0);";
+        for (const shadow of [0.05, 0.5, 1]) {
+            const shaded = runInNewContext(evaluate, {
+                info: { diffuse: 0.8 }, shadow, diffuseBase: 0,
+                rcSkyAmbientDirect: 0, rcSkyAmbientFactor: 0.5, ...spatialMath, min: Math.min,
+            });
+            expect(shaded).toBeCloseTo(0.4, 12);
+        }
+    });
+
     it("bounds each light by its own shaded contribution and treats every hemispheric light as fill", async () => {
         const source = [
             lightSection(0, "diffuseBase += 0.9;"),  // Hemispheric
@@ -299,8 +314,12 @@ describe("Sky Ambient multiplies the auxiliary part of common diffuse lighting",
         }
     });
 
-    it("treats unsupported downward directions as dark while invalid probes and bounds stay neutral", async () => {
-        const source = await preprocessed(MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL, ["RC_SKY_AMBIENT"]);
+    it.each([
+        { material: "standard", defines: [], flat: false },
+        { material: "MMD with a Toon ramp", defines: ["IGNORE_DIFFUSE_WHEN_TOON_TEXTURE_DISABLED", "TOON_TEXTURE"], flat: false },
+        { material: "flat MMD", defines: ["IGNORE_DIFFUSE_WHEN_TOON_TEXTURE_DISABLED"], flat: true },
+    ])("attenuates open, occluded and downward faces for $material", async ({ defines, flat }) => {
+        const source = await preprocessed(MMD_RADIANCE_SKY_AMBIENT_BEFORE_LIGHTS_WGSL, ["RC_SKY_AMBIENT", ...defines]);
         // Unit normals are supplied directly; scalar coordinates stand in for
         // an interior/outside point. Execute the actual exposure/factor branches.
         const helpers = spatialFunctions(MMD_RADIANCE_SKY_AMBIENT_QUERY_WGSL,
@@ -326,6 +345,14 @@ describe("Sky Ambient multiplies the auxiliary part of common diffuse lighting",
             expect(evaluate(y, -1)).toEqual({ factor: 1 - 0.965 * 0.95, exposure: 0, reads: 0 });
         }
         expect(evaluate(1, 1)).toEqual({ factor: 1, exposure: 1, reads: 1 });
+        // A vertical face receives half the irradiance of an upward one even
+        // when fully exposed. Only flat MMD fill discounts that orientation.
+        for (const visibility of [1, 0.25]) {
+            const exposure = 0.5 * visibility;
+            const factor = expect.closeTo(1 - 0.965 * 0.95 * (1 - (flat ? visibility : exposure)), 12);
+            expect(evaluate(0, visibility)).toEqual({ factor, exposure, reads: 1 });
+            expect(evaluate(0, -1, 0.5, false, exposure)).toEqual({ factor, exposure, reads: 0 });
+        }
         expect(evaluate(1, 0).factor).toBeCloseTo(0.08325, 12);
         expect(evaluate(1, -1)).toEqual({ factor: 1, exposure: -1, reads: 1 });
         expect(evaluate(-1, 0, 2)).toEqual({ factor: 1, exposure: -1, reads: 0 });

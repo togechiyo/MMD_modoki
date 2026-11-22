@@ -90,8 +90,15 @@ if (uniforms.rcSkyAmbientControl.w > 0.0) {
             }
         }
         if (rcSkyAmbientIrradiance >= 0.0) {
+#if !defined(TOON_TEXTURE) && defined(IGNORE_DIFFUSE_WHEN_TOON_TEXTURE_DISABLED)
+            // Flat MMD lighting is independent of the surface angle. Attenuate
+            // only the fraction of the available sky that geometry blocks.
+            let attenuationExposure = clamp(rcSkyAmbientIrradiance / max(openSky, 0.00001), 0.0, 1.0);
+#else
+            let attenuationExposure = rcSkyAmbientIrradiance;
+#endif
             rcSkyAmbientFactor = 1.0 - (1.0 - uniforms.rcSkyAmbientControl.y)
-                * clamp(uniforms.rcSkyAmbientControl.x * (1.0 - rcSkyAmbientIrradiance), 0.0, 1.0);
+                * clamp(uniforms.rcSkyAmbientControl.x * (1.0 - attenuationExposure), 0.0, 1.0);
             // Fade both attenuation and added sky fill to the unmodified material
             // at the outer edge. Visibility is blended before either contribution.
             let coverage = rcSkyAmbientSpatialCoverage(fragmentInputs.vPositionW);
@@ -157,7 +164,9 @@ const MULTIPLY_LIGHT_PATCH = `
 #endif
 $1
 #ifdef RC_SKY_AMBIENT
-#ifndef HEMILIGHT$2
+// Native MMD without a Toon ramp can add the light color as flat fill.
+// Only reserve shadowed direct light when the material uses that lighting.
+#if !defined(HEMILIGHT$2) && (defined(TOON_TEXTURE) || !defined(IGNORE_DIFFUSE_WHEN_TOON_TEXTURE_DISABLED))
     if (rcSkyAmbientFactor < 1.0) {
         var directVisibility = clamp(shadow, 0.0, 1.0);
 #ifdef TOON_TEXTURE

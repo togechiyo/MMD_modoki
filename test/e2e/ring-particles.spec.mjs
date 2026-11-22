@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { PNG } from "playwright-core/lib/utilsBundle";
 import { expandEffectInstance } from "./helpers/effect-instance-controls.mjs";
+import { decodeRcWebm } from "./helpers/rc-file-output.mjs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -17,86 +18,40 @@ async function waitForExportFile(page, filePath, minimumBytes = 100) {
   await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/, { timeout: 30_000 });
 }
 
-async function comparePngFramesWithWebm(page, startPngPath, expectedPngPath, webmPath, timeSeconds) {
-  return page.evaluate(async ({ startPath, expectedPath, videoPath, targetTime }) => {
-    const readBytes = async (path) => {
-      const bytes = await window.electronAPI.readBinaryFile(path);
-      if (!bytes) throw new Error(`Export output unavailable: ${path}`);
-      return new Uint8Array(bytes);
-    };
-    const loadImage = async (path) => {
-      const url = URL.createObjectURL(new Blob([await readBytes(path)], { type: "image/png" }));
-      const image = new Image();
-      image.src = url;
-      await image.decode();
-      return { drawable: image, url };
-    };
-    const loadVideo = async (path) => {
-      const url = URL.createObjectURL(new Blob([await readBytes(path)], { type: "video/webm" }));
-      const video = document.createElement("video");
-      video.muted = true;
-      video.src = url;
-      await new Promise((resolveLoaded, rejectLoaded) => {
-        video.addEventListener("loadeddata", resolveLoaded, { once: true });
-        video.addEventListener("error", () => rejectLoaded(new Error("WebM decode failed")), { once: true });
-      });
-      video.currentTime = Math.min(targetTime, Math.max(0, video.duration - 0.05));
-      await new Promise((resolveSeeked, rejectSeeked) => {
-        video.addEventListener("seeked", resolveSeeked, { once: true });
-        video.addEventListener("error", () => rejectSeeked(new Error("WebM seek failed")), { once: true });
-      });
-      if (typeof video.requestVideoFrameCallback === "function") {
-        const frameReady = new Promise((resolveFrame) => video.requestVideoFrameCallback(resolveFrame));
-        await video.play();
-        await frameReady;
-        video.pause();
-      }
-      return { drawable: video, url, currentTime: video.currentTime };
-    };
-    const start = await loadImage(startPath);
-    const expected = await loadImage(expectedPath);
-    const video = await loadVideo(videoPath);
-    try {
-      const width = 320;
-      const height = 180;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      const pixels = (drawable) => {
-        context.clearRect(0, 0, width, height);
-        context.drawImage(drawable, 0, 0, width, height);
-        return context.getImageData(0, 0, width, height).data;
-      };
-      const startPixels = pixels(start.drawable);
-      const expectedPixels = pixels(expected.drawable);
-      const videoPixels = pixels(video.drawable);
-      const meanDifference = (first, second) => {
-        let total = 0;
-        for (let index = 0; index < first.length; index += 4) {
-          total += Math.abs(first[index] - second[index]);
-          total += Math.abs(first[index + 1] - second[index + 1]);
-          total += Math.abs(first[index + 2] - second[index + 2]);
-        }
-        return total / (width * height * 3);
-      };
-      return {
-        pngStartToExpected: meanDifference(startPixels, expectedPixels),
-        webmToStart: meanDifference(videoPixels, startPixels),
-        webmToExpected: meanDifference(videoPixels, expectedPixels),
-        videoTime: video.currentTime,
-      };
-    } finally {
-      URL.revokeObjectURL(start.url);
-      URL.revokeObjectURL(expected.url);
-      URL.revokeObjectURL(video.url);
-    }
-  }, {
-    startPath: startPngPath,
-    expectedPath: expectedPngPath,
-    videoPath: webmPath,
-    targetTime: timeSeconds,
-  });
+// Compare the colored particles over time. The neutral background and model occupy most of the frame.
+function particleExportMotion([pngStart, pngEnd], [videoStart, videoEnd], channel) {
+  const otherChannel = channel === 0 ? 2 : 0;
+  const colorExcess = (image, offset) => Math.max(0, image.data[offset + channel]
+    - Math.max(image.data[offset + 1], image.data[offset + otherChannel]));
+  let pixels = 0;
+  let startMatch = 0, startOpposite = 0, endMatch = 0, endOpposite = 0;
+  let sumPngDelta = 0, sumVideoDelta = 0;
+  let sumPngSquared = 0, sumVideoSquared = 0, sumProducts = 0;
+  for (let offset = 0; offset < pngStart.data.length; offset += 4) {
+    const pngStartColor = colorExcess(pngStart, offset);
+    const pngEndColor = colorExcess(pngEnd, offset);
+    const videoStartColor = colorExcess(videoStart, offset);
+    const videoEndColor = colorExcess(videoEnd, offset);
+    if (Math.max(pngStartColor, pngEndColor, videoStartColor, videoEndColor) <= 24) continue;
+    pixels++;
+    startMatch += Math.abs(videoStartColor - pngStartColor);
+    startOpposite += Math.abs(videoStartColor - pngEndColor);
+    endMatch += Math.abs(videoEndColor - pngEndColor);
+    endOpposite += Math.abs(videoEndColor - pngStartColor);
+    const pngDelta = pngEndColor - pngStartColor;
+    const videoDelta = videoEndColor - videoStartColor;
+    sumPngDelta += pngDelta;
+    sumVideoDelta += videoDelta;
+    sumPngSquared += pngDelta * pngDelta;
+    sumVideoSquared += videoDelta * videoDelta;
+    sumProducts += pngDelta * videoDelta;
+  }
+  // Pearson correlation of the two frame-to-frame color changes across the selected pixels.
+  const pngVariance = pixels * sumPngSquared - sumPngDelta * sumPngDelta;
+  const videoVariance = pixels * sumVideoSquared - sumVideoDelta * sumVideoDelta;
+  const denominator = Math.sqrt(pngVariance * videoVariance);
+  return { pixels, startMatch, startOpposite, endMatch, endOpposite,
+    correlation: denominator > 0 ? (pixels * sumProducts - sumPngDelta * sumVideoDelta) / denominator : 0 };
 }
 
 test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能に描画する", async () => {
@@ -208,9 +163,15 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
     expect(frame240.pixelChecksum).not.toBe(frame120.pixelChecksum);
 
     const exportProject = structuredClone(state);
-    // A short clip with visible motion is enough to compare the same output time.
-    for (const item of exportProject.effects.frameGraphInstances.instances) {
-      if (item.type === "ringParticles") item.settings.speed = 1.5;
+    // IDs seed the particle positions. Only the output fixture uses fixed seeds,
+    // so the red and blue particles are visible at both sampled times on each run.
+    const outputStack = exportProject.effects.frameGraphInstances;
+    const outputIds = new Map(particles.map((item, i) => [item.instanceId, i === 0
+      ? "fx-particle-diagnostic-red" : "fx-particle-diagnostic-blue"]));
+    outputStack.order = outputStack.order.map(id => outputIds.get(id) ?? id);
+    for (const item of outputStack.instances) if (item.type === "ringParticles") {
+      item.instanceId = outputIds.get(item.instanceId);
+      item.settings.speed = 1.5;
     }
     const pngPrefix = "ring_particle_webm_sync";
     const pngStartPath = resolve(launched.tempDir, `${pngPrefix}_0000.png`);
@@ -266,16 +227,15 @@ test("豆腐モデル周囲の光粒をFrameGraphスタックから再現可能�
       await page.evaluate(() => window.__disposeRingParticleWebmDiagnostics());
     }
 
-    const exportComparison = await comparePngFramesWithWebm(
-      page,
-      pngStartPath,
-      pngExpectedPath,
-      webmPath,
-      0.6,
-    );
-    console.log(`[ring-particle-webm-sync] ${JSON.stringify(exportComparison)}`);
-    expect(exportComparison.pngStartToExpected).toBeGreaterThan(0.5);
-    expect(exportComparison.webmToExpected).toBeLessThan(exportComparison.webmToStart);
+    const stills = [pngStartPath, pngExpectedPath].map(path => PNG.sync.read(readFileSync(path)));
+    const video = await decodeRcWebm(page, webmPath, { startFrame: 0, frames: [0, 18], fps: 30, width: 320, height: 180 });
+    for (const [name, channel] of [["red", 0], ["blue", 2]]) {
+      const motion = particleExportMotion(stills, video, channel);
+      expect(motion.pixels, name).toBeGreaterThan(0);
+      expect(motion.startMatch, name).toBeLessThan(motion.startOpposite);
+      expect(motion.endMatch, name).toBeLessThan(motion.endOpposite);
+      expect(motion.correlation, name).toBeGreaterThan(0.5);
+    }
 
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics()))
       .toEqual({ count: 0, messages: [] });

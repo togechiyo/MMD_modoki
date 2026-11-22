@@ -448,6 +448,7 @@ PBR Skin SSSは描画経路の動作と不具合対策まで確認したが、�
 
 ## 出力 / エンコード
 
+- [PNG encoder の Node ベンチマーク 2026-11-22](./png-encoder-node-benchmark-2026-11-22.md)
 - [WebGL2の主機能・画像／動画出力確認 2026-11-19](./webgl-core-output-verification-2026-11-19.md)
 - [WebGL2 / WebGPU 再生・出力性能比較 2026-11-19](./webgl-backend-performance-2026-11-19.md)
 - [Alicia・物理ONでのWebGL2 / WebGPU性能比較 2026-11-19](./alicia-backend-performance-2026-11-19.md)

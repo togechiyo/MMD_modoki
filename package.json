@@ -19,6 +19,7 @@
     "generate:x-test-fixtures": "node scripts/generate-x-accessory-fixtures.mjs",
     "smoke:launch": "node scripts/smoke-launch.mjs",
     "benchmark:export-rgba": "node scripts/benchmark-export-rgba.mjs",
+    "benchmark:png-encoder-node": "node scripts/benchmark-png-encoder-node.mjs",
     "test:e2e": "playwright test",
     "test:stress:png": "node scripts/run-png-export-stress.mjs",
     "log:tail": "node scripts/show-app-log.mjs --latest-session --lines 120",

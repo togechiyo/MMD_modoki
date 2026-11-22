@@ -14,8 +14,19 @@ fn rcGiProbeBlocked(position: vec3f, probe: vec3f, candidates: vec2f) -> bool {
         if (abs(determinant) < 0.0000001) { continue; }
         let s = position - triangle.a.xyz; let u = dot(s, h) / determinant;
         let q = cross(s, edge1); let v = dot(segment, q) / determinant;
-        let t = dot(edge2, q) / determinant;
-        if (u >= -0.00001 && v >= -0.00001 && u + v <= 1.00001 && t > 0.0001 / distance && t <= 1.00001) { return true; }
+        let numerator = dot(edge2, q);
+        let t = numerator / determinant;
+        if (u >= -0.00001 && v >= -0.00001 && u + v <= 1.00001 && t > 0.0001 / distance && t <= 1.00001) {
+            // At a grazing angle a few ULPs of receiver-plane error can put an
+            // apparent crossing far along the segment. Compare perpendicular
+            // distance using the same world-space tolerance as the sky query.
+            let positionMagnitude = max(abs(position.x), max(abs(position.y), abs(position.z)));
+            let edgeMagnitude = max(max(abs(edge1.x), max(abs(edge1.y), abs(edge1.z))),
+                max(abs(edge2.x), max(abs(edge2.y), abs(edge2.z))));
+            let tolerance = max(0.0001, (positionMagnitude + edgeMagnitude) * 0.000000476837158203125);
+            let planeNormal = cross(edge1, edge2);
+            if (numerator * numerator > tolerance * tolerance * dot(planeNormal, planeNormal)) { return true; }
+        }
     }
     return false;
 }
@@ -23,18 +34,20 @@ fn rcGiIrradianceInVolume(worldPosition: vec3f, normal: vec3f, volume: vec4f, le
     let volumeMin = volume.xyz; let size = volume.w;
     if (!(size > 0.0 && all(worldPosition >= volumeMin) && all(worldPosition <= volumeMin + vec3f(size)))) { return vec3f(0.0); }
     let normalWeights = normal * normal;
-    let columns = vec3i(select(1, 0, normal.x >= 0.0), select(3, 2, normal.y >= 0.0), select(5, 4, normal.z >= 0.0)) * 16;
-    let coordinate = clamp((worldPosition - volumeMin) / size * 16.0 - 0.5, vec3f(0.0), vec3f(15.0));
+    let grid = textureDimensions(${nearest}, 0).x;
+    let last = grid - 1u;
+    let columns = vec3i(select(1, 0, normal.x >= 0.0), select(3, 2, normal.y >= 0.0), select(5, 4, normal.z >= 0.0)) * i32(grid);
+    let coordinate = clamp((worldPosition - volumeMin) / size * f32(grid) - 0.5, vec3f(0.0), vec3f(f32(last)));
     let low = vec3u(floor(coordinate)); let fraction = fract(coordinate);
     var result = vec3f(0.0); var weightSum = 0.0;
     for (var z = 0u; z < 2u; z++) { for (var y = 0u; y < 2u; y++) { for (var x = 0u; x < 2u; x++) {
-        let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(15u));
+        let offset = vec3u(x, y, z); let probe = min(low + offset, vec3u(last));
         let weights = select(vec3f(1.0) - fraction, fraction, offset == vec3u(1u));
-        let probePosition = volumeMin + (vec3f(probe) + vec3f(0.5)) * (size / 16.0);
-        let facing = clamp(dot(probePosition - worldPosition, normal) * (16.0 / size) * 4.0 + 0.5, 0.0, 1.0);
+        let probePosition = volumeMin + (vec3f(probe) + vec3f(0.5)) * (size / f32(grid));
+        let facing = clamp(dot(probePosition - worldPosition, normal) * (f32(grid) / size) * 4.0 + 0.5, 0.0, 1.0);
         let weight = weights.x * weights.y * weights.z * facing;
         if (weight <= 0.0) { continue; }
-        let pixel = vec2i(i32(probe.x), i32(probe.z * 16u + probe.y + level * 256u));
+        let pixel = vec2i(i32(probe.x), i32(probe.z * grid + probe.y + level * grid * grid));
         let a = textureLoad(${field}, pixel + vec2i(columns.x, 0), 0);
         let b = textureLoad(${field}, pixel + vec2i(columns.y, 0), 0);
         let c = textureLoad(${field}, pixel + vec2i(columns.z, 0), 0);

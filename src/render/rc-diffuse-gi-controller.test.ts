@@ -6,7 +6,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
 import { RcDiffuseGiController } from "./rc-diffuse-gi-controller";
-import type { RcDiffuseGiSettings } from "./rc-diffuse-gi-settings";
+import { DEFAULT_RC_DIFFUSE_GI_SETTINGS, type RcDiffuseGiSettings } from "./rc-diffuse-gi-settings";
 
 const engines: NullEngine[] = [];
 afterEach(() => { for (const engine of engines.splice(0)) engine.dispose(); });
@@ -16,7 +16,7 @@ function fixture(volume: RcDiffuseGiSettings["volume"] = null) {
     engine.getCaps().supportComputeShaders = true;
     const scene = new Scene(engine);
     scene.activeCamera = new FreeCamera("camera", Vector3.Zero(), scene);
-    const settings: RcDiffuseGiSettings = { enabled: true, strength: 0.5, volume };
+    const settings: RcDiffuseGiSettings = { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS, enabled: true, strength: 0.5, volume };
     const controller = new RcDiffuseGiController(scene, () => settings, () => true, () => true, () => null);
     return { scene, controller, settings };
 }
@@ -41,6 +41,10 @@ it("keeps origin-centered domains independent of mesh scale, placement, camera a
     controller.settingsChanged(false);
     expect(controller.isReadyForCapture).toBe(false);
     expect(controller.diagnostics.volumes).toEqual(initial);
+    settings.rangeScale = 0.5; controller.settingsChanged();
+    expect(controller.diagnostics.volumes).toEqual([{ min: [-32, -32, -32], size: 64 }, ...initial.slice(1)]);
+    expect(controller.diagnostics.grid).toBe(0);
+    settings.rangeScale = 1;
     controller.settingsChanged(true);
     expect(controller.isReadyForCapture).toBe(false);
     expect(controller.diagnostics.volumes).toEqual(initial);
@@ -80,6 +84,10 @@ it("retains a saved manual cube and restores origin domains when manual settings
     controller.settingsChanged();
     expect(controller.diagnostics.spatialMode).toBe("manual");
     expect(controller.diagnostics.volumes).toEqual([manual]);
+    settings.rangeScale = 2; controller.settingsChanged();
+    expect(controller.diagnostics.volumes).toEqual([{ min: [-16, -10, -16], size: 32 }]);
+    expect(settings.volume).toEqual({ min: [-8, -2, -8], size: 16 });
+    settings.rangeScale = 1; controller.settingsChanged();
     expect(controller.isReadyForCapture).toBe(false);
     settings.volume = null; controller.settingsChanged();
     expect(controller.diagnostics.spatialMode).toBe("origin");

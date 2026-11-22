@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/radiance-cascades
 confidence: high
-last_verified: 2026-11-10
+last_verified: 2026-11-22
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-10-29
@@ -14,6 +14,7 @@ source_docs:
   - ../../docs/radiance-cascades-lighting-implementation-plan-2026-10-28.md
   - ../../docs/rc-sky-occlusion-implementation-2026-10-29.md
   - ../../docs/rc-diffuse-gi-implementation-2026-10-30.md
+  - ../../docs/rc-diffuse-gi-two-bounce-2026-11-22.md
   - ../../docs/framegraph-post-stack-current-spec-2026-07-01.md
 superseded_by: null
 ---
@@ -47,6 +48,8 @@ RC共通基盤の後に、天空遮蔽・GIなどの派生効果の作業単位�
 2026-11-10、所有者はRC系の操作数を1エフェクトあたりスライダー3本程度へ絞るよう指定し、範囲・品質・座標などを「通常のエフェクト欄から外す」案を選択した。折り畳み詳細へ残すだけにしない。具体的にどの3値を残すかは実装上の選定であり、所有者による個別値の指定とは区別する。非表示項目の保存値・既定値・キーを変更する指示には広げない。
 
 同日その後、所有者は「影の深み RC」を没扱いとしてしまう意向を示した。以後は通常の新規追加候補から外し、改良や再公開を既定の残件に戻さない。過去の採用・名称・検証記録は履歴として保持する。既存projectのカード・値・キー・描画を互換用に残すのは実装上の方針であり、所有者が保存データの削除やSky Ambientへの自動変換を指定したとは扱わない。
+
+2026-11-22、所有者はGI RCの粗さを調整しやすくするため、強度のほかにスライダーを約2本追加してよいと指定した。「精細さ」「近景の広さ」と各段階の値は今回の実装で選定した。[操作と描画の対応](../../docs/rc-diffuse-gi-two-bounce-2026-11-22.md#精細さと近景の広さ)
 
 ## 避けること
 

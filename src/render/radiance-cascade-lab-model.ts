@@ -25,10 +25,10 @@ export type RadianceCascadeLayout = {
     end: number;
 };
 
-export function createRadianceCascadeLayouts(): RadianceCascadeLayout[] {
+export function createRadianceCascadeLayouts(baseGrid = 16): RadianceCascadeLayout[] {
     let start = 0;
     return Array.from({ length: 4 }, (_, level) => {
-        const grid = 16 >> level;
+        const grid = baseGrid >> level;
         const directionsX = 8 << level;
         const directionsY = 4 << level;
         const end = start + 0.5 * 4 ** level;

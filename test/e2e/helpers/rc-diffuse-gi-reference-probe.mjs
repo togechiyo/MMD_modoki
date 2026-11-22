@@ -174,8 +174,9 @@ function triangleSummary(source) {
 
 function colorSummary(pixels, predicate, width, lobe = null) {
   const sum = [0, 0, 0], max = [0, 0, 0]; let count = 0, valid = 0, nonzero = 0, invalidRGB = 0;
+  const lobeWidth = width / 6;
   for (let offset = 0; offset < pixels.length; offset += 4) {
-    if (lobe !== null && Math.floor(((offset / 4) % width) / 16) !== lobe) continue;
+    if (lobe !== null && Math.floor(((offset / 4) % width) / lobeWidth) !== lobe) continue;
     count++;
     const rgb = [pixels[offset], pixels[offset + 1], pixels[offset + 2]];
     if (!rgb.every(Number.isFinite)) { invalidRGB++; continue; }

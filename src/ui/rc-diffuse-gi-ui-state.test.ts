@@ -1,8 +1,23 @@
 import { expect, it } from "vitest";
 import { DEFAULT_RC_DIFFUSE_GI_SETTINGS } from "../render/rc-diffuse-gi-settings";
-import { getRcDiffuseGiUiState } from "./rc-diffuse-gi-ui-state";
+import { getRcDiffuseGiUiState, getRcGiSliderPatch, getRcGiSliderPosition } from "./rc-diffuse-gi-ui-state";
 
 const translate = (key: string) => key;
+it("round-trips every detail tier and near-range position without rewriting manual bounds", () => {
+    const settings = { ...DEFAULT_RC_DIFFUSE_GI_SETTINGS, volume: { min: [1, 2, 3] as [number, number, number], size: 8 } };
+    for (const [position, quality] of ["low", "standard", "high"].entries()) {
+        const patch = getRcGiSliderPatch("quality", position);
+        expect(patch).toEqual({ quality });
+        expect(getRcGiSliderPosition("quality", { ...settings, ...patch })).toBe(position);
+    }
+    expect(getRcGiSliderPatch("rangeScale", 0)).toEqual({ rangeScale: 0.5 });
+    expect(getRcGiSliderPatch("rangeScale", 50)).toEqual({ rangeScale: 1 });
+    expect(getRcGiSliderPatch("rangeScale", 100)).toEqual({ rangeScale: 2 });
+    for (let position = 0; position <= 100; position++) {
+        const patch = getRcGiSliderPatch("rangeScale", position);
+        expect(getRcGiSliderPosition("rangeScale", { ...settings, ...patch })).toBe(position);
+    }
+});
 it("explains known zero contribution while enabled and hides stale reasons while off", () => {
     for (const [reason, key] of [["Zero strength", "zeroStrength"], ["No direct light", "noDirectLight"]]) {
         const state = getRcDiffuseGiUiState(DEFAULT_RC_DIFFUSE_GI_SETTINGS, { status: "ready", reason, volume: null }, translate);

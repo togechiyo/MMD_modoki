@@ -1,4 +1,27 @@
-import type { RcDiffuseGiSettings, RcDiffuseGiVolume } from "../render/rc-diffuse-gi-settings";
+import { RC_DIFFUSE_GI_QUALITIES, type RcDiffuseGiSettings, type RcDiffuseGiVolume } from "../render/rc-diffuse-gi-settings";
+
+export type RcGiSliderField = "strength" | "quality" | "rangeScale";
+
+export function getRcGiSliderPosition(field: RcGiSliderField, settings: RcDiffuseGiSettings): number {
+    switch (field) {
+        case "strength": return Math.round(settings.strength * 50);
+        case "quality": return RC_DIFFUSE_GI_QUALITIES.indexOf(settings.quality);
+        case "rangeScale": return Math.round(50 + 50 * Math.log2(settings.rangeScale));
+    }
+}
+
+/** Near range uses equal slider travel per doubling. */
+export function rcGiRangeScaleAtPosition(position: number): number {
+    return 2 ** ((position - 50) / 50);
+}
+
+export function getRcGiSliderPatch(field: RcGiSliderField, position: number): Partial<RcDiffuseGiSettings> {
+    switch (field) {
+        case "strength": return { strength: position / 50 };
+        case "quality": return { quality: RC_DIFFUSE_GI_QUALITIES[position] };
+        case "rangeScale": return { rangeScale: rcGiRangeScaleAtPosition(position) };
+    }
+}
 
 type DiagnosticState = { status: "off" | "preparing" | "ready" | "unsupported" | "error"; reason: string | null; volume: RcDiffuseGiVolume | null };
 const REASON_KEYS: Readonly<Record<string, string>> = {

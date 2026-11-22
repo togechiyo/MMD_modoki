@@ -104,6 +104,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] Sky Ambient RCで床内部のprobeが開放上面を暗くする補間を修正。法線の表側を参照し、Sky専用の4近傍候補で薄い屋根の遮光を維持。自作15配置、部分更新と全再計算の一致、既存材質・壁面・キーの回帰と許可済み実モデルのPNGを確認。11/14、所有者が現状を了承し、RC系改修はいったん一区切り（[原因・検証・限界](./sky-ambient-rc-implementation-2026-11-08.md#2026-11-14-重なった床の開放上面が暗くなる問題)、2026-11-14）。
 - [x] Sky Ambient RCの受け手へStage Standardを追加。独自Toonの補助光を捕捉し、動的モデル除外を維持。GUI割当・減衰/加算・中立化・保存復元・backend往復を自作fixtureで確認（[対応と検証](./sky-ambient-rc-implementation-2026-11-08.md#2026-11-13-stage-standardへの対応)、2026-11-13）。
 - [x] Sky Ambient RCを対応材質に共通の乗算へ再編。庇下の補助光を弱め、開放面と2バウンスGIの色移りを保つ。新規の「陰影の強さ」は0.6、「空の明るさ」は0。明示保存値とキーの復元、同じ場面のPNG・WebMを確認。[合成式と実測](./sky-ambient-rc-implementation-2026-11-08.md#2026-11-22-乗算合成と2バウンスgiの比較)
+- [x] GI RCの強度に「精細さ」「近景の広さ」を追加。原点付近のプローブ間隔と2バウンスが届く範囲を調整できる。既存プロジェクトの標準・1倍を保持。[調整範囲と白壁での比較](./rc-diffuse-gi-two-bounce-2026-11-22.md#精細さと近景の広さ)
 - [x] LPV / DFAO の仕組み・公式実装の制約を調査し、既存 RSM GI / IBL Shadows / 3D RC との関係、PMX の変形追従、未着手の比較案を記録（[調査メモ](./lpv-dfao-research-2026-10-25.md)。採用・速度改善は未確定）
 - [x] Radiance Cascades の GI・媒質・太陽大気スペクトル応用と WebGPU 実装を調査。Split RC / voxel RC / TypeGPU HRC / DexRT の関連ソースと制約、公開 WebGPU の実描画、通常 MMD の屋内への設計案を記録（[調査メモ](./radiance-cascades-applications-webgpu-research-2026-10-25.md)。統合・速度改善は未確定）
 - [x] 3D RCのGI・天空・反射・媒質への応用と複数エフェクトの共有境界を整理。現行の個体別BVH/field、非線形合成・寄与分離・visibility履歴の条件を記録（[設計案](./radiance-cascades-shared-effects-design-2026-10-28.md)。採用・実装・新規性能計測は未実施）

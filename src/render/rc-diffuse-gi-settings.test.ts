@@ -5,9 +5,18 @@ describe("RC diffuse GI settings", () => {
     it("defaults old projects to OFF and clamps finite strength independently of sky", () => {
         expect(normalizeRcDiffuseGiSettings(undefined)).toEqual(DEFAULT_RC_DIFFUSE_GI_SETTINGS);
         expect(normalizeRcDiffuseGiSettings({ enabled: 1, strength: Infinity })).toEqual(DEFAULT_RC_DIFFUSE_GI_SETTINGS);
-        expect(normalizeRcDiffuseGiSettings({ enabled: true, strength: 8, minimum: 0.7 })).toEqual({ enabled: true, strength: 2, volume: null });
+        expect(normalizeRcDiffuseGiSettings({ enabled: true, strength: 8, minimum: 0.7 })).toEqual({
+            enabled: true, strength: 2, volume: null, quality: "standard", rangeScale: 1,
+        });
         expect(normalizeRcDiffuseGiSettings({ strength: -1 }).strength).toBe(0);
         expect(normalizeRcDiffuseGiSettings({ strength: 1.6 }).strength).toBe(1.6);
+    });
+
+    it("keeps the fixed detail and near range in bounds independently of strength and legacy volume", () => {
+        const volume = { min: [-8, 0, -8], size: 16 };
+        expect(normalizeRcDiffuseGiSettings({ quality: "high", rangeScale: 0.25, volume })).toMatchObject({ quality: "high", rangeScale: 0.5, volume });
+        expect(normalizeRcDiffuseGiSettings({ quality: "low", rangeScale: 4 })).toMatchObject({ quality: "low", rangeScale: 2 });
+        expect(normalizeRcDiffuseGiSettings({ quality: "other", rangeScale: Infinity })).toEqual(DEFAULT_RC_DIFFUSE_GI_SETTINGS);
     });
 
     it("keeps automatic volume null, rejects invalid bounds and owns fixed bounds", () => {

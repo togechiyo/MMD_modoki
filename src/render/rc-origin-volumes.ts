@@ -7,6 +7,12 @@ export type RcSpatialVolume = { min: [number, number, number]; size: number };
 const ORIGIN_VOLUME_SIZES = [128, 512, 2048, 32768] as const;
 export const RC_ORIGIN_VOLUME_COUNT = ORIGIN_VOLUME_SIZES.length;
 
+export function scaleRcVolumeAboutCenter(volume: { min: readonly [number, number, number]; size: number },
+    scale: number): RcSpatialVolume {
+    const size = volume.size * scale, offset = (volume.size - size) / 2;
+    return { min: [volume.min[0] + offset, volume.min[1] + offset, volume.min[2] + offset], size };
+}
+
 export function createRcOriginVolumes(): RcSpatialVolume[] {
     return ORIGIN_VOLUME_SIZES.map(size => ({ min: [-size / 2, -size / 2, -size / 2], size }));
 }

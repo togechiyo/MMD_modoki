@@ -24,20 +24,20 @@ describe("RC GI six-axis quadrature", () => {
             weights.slice().sort((a, b) => a - b).forEach((value, index) => expect(value).toBeCloseTo(opposite[index], 12));
         }
     });
-    it("writes all six lobes into disjoint atlas slices without changing the single-volume layout", () => {
+    it.each([8, 16, 24])("writes six lobes per probe into disjoint atlas slices for grid %i", grid => {
         // Evaluate the actual output address expression; GPU compilation remains an E2E check.
         const expression = RC_DIFFUSE_GI_IRRADIANCE_WGSL.match(/let pixel = (.*);\s*textureStore\(irradiance/);
         expect(expression).not.toBeNull();
         const source = expression?.[1].replace(/(\d+)u\b/g, "$1") ?? "";
-        const pixels = new Set<string>();
+        const pixels = new Set<string>(), slice = grid * grid, last = grid - 1;
         for (let level = 0; level < 3; level++) {
-            for (const probe of [{ x: 0, y: 0, z: 0 }, { x: 15, y: 15, z: 15 }]) {
+            for (const probe of [{ x: 0, y: 0, z: 0 }, { x: last, y: last, z: last }]) {
                 for (let axis = 0; axis < 6; axis++) {
-                    const pixel = runInNewContext(source, { probe, axis, atlasOffset: { y: level * 256 },
+                    const pixel = runInNewContext(source, { probe, axis, grid, atlasOffset: { y: level * slice },
                         i32: Math.trunc, vec2i: (x: number, y: number) => [x, y] }) as [number, number];
-                    expect(pixel[0]).toBe(probe.x + axis * 16);
-                    expect(pixel[1]).toBe(level * 256 + (probe.x === 0 ? 0 : 255));
-                    expect(pixel[0]).toBeLessThan(96); expect(pixel[1]).toBeLessThan(768);
+                    expect(pixel[0]).toBe(probe.x + axis * grid);
+                    expect(pixel[1]).toBe(level * slice + probe.y + probe.z * grid);
+                    expect(pixel[0]).toBeLessThan(6 * grid); expect(pixel[1]).toBeLessThan(3 * slice);
                     pixels.add(pixel.join(","));
                 }
             }

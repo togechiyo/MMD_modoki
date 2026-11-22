@@ -17,6 +17,7 @@ async function menu(page, command) {
 async function history(page, action) { await page.locator(`.app-menu-quick-button[data-menu-command="edit.${action}"]`).click(); }
 async function register(page) { await registerRcLighting(page, "rcDiffuseGi"); }
 
+// eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture parameter.
 test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and optional WebM", async ({}, testInfo) => {
   test.setTimeout(withWebm ? 300000 : 180000);
   const launched = await launchMmdModoki(root), report = { errors: [], consoleErrors: [], captures: {}, webm: { requested: withWebm } };
@@ -29,11 +30,15 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
     page.on("console", message => { if (message.type() === "error") report.consoleErrors.push(message.text()); });
     await initialState(page, { fixed: false }); await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixture);
     const view = await camera(page); report.projectionCamera = view; report.camera = (await project(page)).camera;
-    await openGi(page); expect(await giSettings(page)).toEqual({ enabled: false, strength: 0.5, volume: null });
+    await openGi(page); expect(await giSettings(page)).toEqual({ enabled: false, strength: 0.5, quality: "standard", rangeScale: 1, volume: null });
     await expect(giInput(page, "Strength")).toHaveValue("25");
+    await expect(giInput(page, "Quality")).toHaveValue("1");
+    await expect(giInput(page, "RangeScale")).toHaveValue("50");
+    await expect(giInput(page, "RangeScale")).toHaveAttribute("aria-valuetext", "×1");
+    await expect(giSection(page).getByText("×1", { exact: true })).toBeVisible();
     await giInput(page, "Enabled").check(); await expect(giStatus(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await expect(giStatus(page)).toHaveAttribute("data-automatic-volume", "true");
-    await expect(giSection(page).locator('input[type="range"]')).toHaveCount(1);
+    await expect(giSection(page).locator('input[type="range"]')).toHaveCount(3);
     await expect(giSection(page).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
     await expect(giSection(page).getByRole("button", { name: /自動範囲|Automatic volume|範囲を再計算|Recalculate volume/ })).toHaveCount(0);
     expect((await giSettings(page)).volume).toBeNull();
@@ -45,6 +50,23 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
     await setRcLightingFixtureSettings(page, "rcDiffuseGi", { volume: fixed });
     expect((await giSettings(page)).volume).toEqual(fixed);
     report.hiddenSettingsFixture = { preparation: "project import hook", volume: fixed };
+
+    // The two field settings remain authored across keys. The saved manual volume
+    // itself stays intact while its effective width and probe spacing change.
+    await openGi(page);
+    await giInput(page, "Quality").press("End");
+    await giInput(page, "RangeScale").press("End");
+    await expect(giInput(page, "RangeScale")).toHaveAttribute("aria-valuetext", "×2");
+    await expect(giSection(page).getByText("×2", { exact: true })).toBeVisible();
+    expect(await giSettings(page)).toMatchObject({ quality: "high", rangeScale: 2, volume: fixed });
+    await history(page, "undo");
+    await expect(giInput(page, "RangeScale")).toHaveValue("50");
+    await history(page, "undo");
+    await expect(giInput(page, "Quality")).toHaveValue("1");
+    await history(page, "redo"); await history(page, "redo");
+    await expect(giInput(page, "Quality")).toHaveValue("2");
+    await expect(giInput(page, "RangeScale")).toHaveValue("100");
+    await closeGi(page);
 
     await seek(page, 0); await openGi(page); await giSlider(page, 0); await register(page); await closeGi(page);
     await history(page, "undo"); expect((await giKeys(page))?.keys ?? []).toEqual([]);
@@ -79,7 +101,7 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
     await menu(page, "file.saveProject"); await expect.poll(() => existsSync(path)).toBe(true);
     await expect(page.locator("#status-text")).toHaveText("Project saved");
     const saved = JSON.parse(readFileSync(path, "utf8")); expect(saved.camera).toEqual(report.camera);
-    expect(saved.lighting.rcDiffuseGi.volume).toEqual(fixed);
+    expect(saved.lighting.rcDiffuseGi).toMatchObject({ quality: "high", rangeScale: 2, volume: fixed });
     expect(saved.keyframes.effectAnimations.tracks.find(track => track.effectId === "rcDiffuseGi").keys).toEqual(expectedKeys);
     await openGi(page); await giInput(page, "Enabled").uncheck(); await closeGi(page);
     await menu(page, "file.loadProject"); await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
@@ -98,6 +120,7 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
         await expect(giSection(page)).toHaveCount(0);
       } else {
         await openGi(page); await expect(giInput(page,"Enabled")).toBeChecked(); await expect(giInput(page,"Strength")).toHaveValue("25");
+        await expect(giInput(page,"Quality")).toHaveValue("2"); await expect(giInput(page,"RangeScale")).toHaveValue("100");
         await expect(giStatus(page)).toHaveAttribute("data-state","ready",{timeout:45000}); await closeGi(page);
       }
     }

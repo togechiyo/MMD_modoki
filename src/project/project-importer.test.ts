@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { importProjectState, restoreProjectRcDiffuseGiSettings, restoreProjectRcSkyOcclusionSettings, restoreProjectRcSkyAmbientSettings } from "./project-importer";
 import type { MmdModokiProjectFileV1 } from "../types";
 import type { RcSkyOcclusionSettings } from "../render/rc-sky-occlusion-settings";
+import { DEFAULT_RC_DIFFUSE_GI_SETTINGS } from "../render/rc-diffuse-gi-settings";
 import { DEFAULT_RC_SKY_AMBIENT_SETTINGS } from "../render/rc-sky-ambient-settings";
 import { DEFAULT_SKYDOME_BACKGROUND_STYLE } from "../shared/skydome-background-style";
 
@@ -258,9 +259,12 @@ describe("importProjectState", () => {
         const host = { setRcDiffuseGiSettings }, project = createProject();
         project.lighting.rcDiffuseGi = { enabled: true, strength: 1.6, volume: { min: [-8, 0, -8], size: 16 } };
         restoreProjectRcDiffuseGiSettings(host, project.lighting);
+        expect(setRcDiffuseGiSettings).toHaveBeenLastCalledWith({ ...project.lighting.rcDiffuseGi, quality: "standard", rangeScale: 1 });
+        Object.assign(project.lighting.rcDiffuseGi, { quality: "high", rangeScale: 0.5 });
+        restoreProjectRcDiffuseGiSettings(host, project.lighting);
         expect(setRcDiffuseGiSettings).toHaveBeenLastCalledWith(project.lighting.rcDiffuseGi);
         restoreProjectRcDiffuseGiSettings(host, createProject().lighting);
-        expect(setRcDiffuseGiSettings).toHaveBeenLastCalledWith({ enabled: false, strength: 0.5, volume: null });
+        expect(setRcDiffuseGiSettings).toHaveBeenLastCalledWith(DEFAULT_RC_DIFFUSE_GI_SETTINGS);
     });
     it("restores RC sky settings and resets a subsequent legacy project to OFF", () => {
         const setRcSkyOcclusionSettings = vi.fn<(settings: Partial<RcSkyOcclusionSettings>) => void>();

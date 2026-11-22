@@ -3446,6 +3446,10 @@ body.png-capture-mode .model-comment-notice {
   font-size: 11px;
 }
 
+.rc-lighting-effect-with-value {
+  grid-template-columns: minmax(58px, 0.35fr) minmax(32px, 1fr) minmax(5ch, auto);
+}
+
 .effect-layer-control-slider {
   width: 100%;
   min-width: 0;

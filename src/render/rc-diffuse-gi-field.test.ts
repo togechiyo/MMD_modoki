@@ -17,6 +17,7 @@ const boundary = vi.hoisted(() => {
     }
     class Task {
         disabled = false;
+        dispatchSize?: { x: number; y: number; z: number };
         execute: () => void = () => undefined;
         dispose = vi.fn();
         uniforms = new Map<string, Map<string, number[]>>();
@@ -71,30 +72,41 @@ function task(name: string) {
     return found;
 }
 
-it("keeps one scene source while writing each spatial level to its own shared atlas slice", () => {
-    const field = new RcDiffuseGiField(scene, { volumes });
+it.each([["low", 8], ["standard", 16], ["high", 24]] as const)(
+    "%s quality uses grid %i in the cascades, two-bounce field, guard and shared atlas slices", (quality, grid) => {
+    const field = new RcDiffuseGiField(scene, { volumes, quality }), slice = grid * grid;
+    expect(field.grid).toBe(grid);
     expect(field.volumeCount).toBe(4);
     expect(boundary.sources).toHaveLength(1);
-    expect(field.irradianceField).toMatchObject({ width: 96, height: 1024 });
-    expect(field.nearestSurfaceField).toMatchObject({ width: 16, height: 1024 });
+    expect(field.irradianceField).toMatchObject({ width: grid * 6, height: 4 * slice });
+    expect(field.nearestSurfaceField).toMatchObject({ width: grid, height: 4 * slice });
     expect(field.baseField.name).toBe("rcDiffuseGiLevel0Cascade0");
     expect(field.execute(light)).toBe(26);
     const nearFirst = boundary.textures.find(texture => texture.name === "rcDiffuseGiFirstIrradiance");
-    expect(nearFirst).toMatchObject({ width: 96, height: 256 });
-    expect(boundary.guards.map(guard => guard.atlasOffsetY)).toEqual([0, 256, 512, 768]);
+    expect(nearFirst).toMatchObject({ width: grid * 6, height: slice });
+    expect(boundary.guards.map(guard => guard.atlasOffsetY)).toEqual([0, slice, 2 * slice, 3 * slice]);
     for (const [level, volume] of volumes.entries()) {
         const cascade = task(`rcDiffuseGiLevel${level}Cascade0`);
+        for (let index = 0; index < 4; index++) {
+            const probes = grid >> index, directionsX = 8 << index, directionsY = 4 << index;
+            const width = probes * directionsX, height = probes * probes * directionsY;
+            const pass = task(`rcDiffuseGiLevel${level}Cascade${index}`);
+            expect(pass.textures.get("outputField")).toMatchObject({ width, height });
+            expect(pass.dispatchSize).toMatchObject({ x: Math.ceil(width / 8), y: Math.ceil(height / 8), z: 1 });
+            expect(pass.uniforms.get("params")?.get("shape")).toEqual([probes, directionsX, directionsY, 12]);
+        }
         expect(cascade.buffers.get("triangles")).toBe(boundary.sources[0].triangleBuffer);
         expect(cascade.buffers.get("albedoPixels")).toBe(boundary.sources[0].emissionBuffer);
         expect(cascade.uniforms.get("params")?.get("volumeMin")).toEqual([...volume.min, 0]);
-        expect(cascade.uniforms.get("params")?.get("interval")).toEqual([0, volume.size / 4, 1, 0]);
+        expect(cascade.uniforms.get("params")?.get("interval")).toEqual([0, 4 * volume.size / grid, 1, 0]);
         const integrate = task(`rcDiffuseGiLevel${level}Irradiance`);
         expect(integrate.textures.get("directionalField")?.name).toBe(`rcDiffuseGiLevel${level}Cascade0`);
         expect(integrate.textures.get("irradiance")).toBe(level === 0 ? nearFirst : field.irradianceField);
-        expect(integrate.uniforms.get("atlasOffset")?.get("offset")).toEqual([0, level * 256, 0, 0]);
+        expect(integrate.uniforms.get("atlasOffset")?.get("offset")).toEqual([0, level * slice, 0, 0]);
+        expect(integrate.dispatchSize).toMatchObject({ x: grid / 4, y: grid / 4, z: grid / 4 });
         const guard = boundary.guards[level];
         expect(guard.source).toBe(boundary.sources[0]);
-        expect(guard.atlasOffsetY).toBe(level * 256);
+        expect(guard.atlasOffsetY).toBe(level * slice);
         expect(guard.prepareVolume).toHaveBeenCalledWith(volume);
         expect(guard.markSubmitted).toHaveBeenCalledOnce();
     }
@@ -102,7 +114,8 @@ it("keeps one scene source while writing each spatial level to its own shared at
     expect(bounce.textures.get("firstIrradiance")).toBe(nearFirst);
     expect(bounce.textures.get("nearestSurface")).toBe(field.nearestSurfaceField);
     expect(bounce.buffers.get("nodes")).toBe(boundary.sources[0].nodeBuffer);
-    expect(bounce.uniforms.get("params")?.get("shape")).toEqual([16, 8, 4, 12]);
+    expect(bounce.uniforms.get("params")?.get("shape")).toEqual([grid, 8, 4, 12]);
+    expect(bounce.textures.get("outputField")).toMatchObject({ width: 8 * grid, height: 4 * slice });
     const combine = task("rcDiffuseGiLevel0CombineIrradiance");
     expect(combine.textures.get("directionalField")).toBe(bounce.textures.get("outputField"));
     expect(combine.textures.get("firstIrradiance")).toBe(nearFirst);

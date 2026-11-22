@@ -34,16 +34,17 @@ export async function setGi(page, enabled) {
   await openGi(page); await giInput(page, "Enabled").setChecked(enabled);
   await expect(giStatus(page)).toHaveAttribute("data-state", enabled ? "ready" : "off", { timeout: 45000 }); await closeGi(page);
 }
-export async function initialState(page, { fixed = true } = {}) {
+export async function initialState(page, { fixed = true, quality } = {}) {
   await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
-  await page.evaluate(async ({ volume, fixed }) => {
+  await page.evaluate(async ({ volume, fixed, quality }) => {
     const state = window.mmdModokiE2e.exportProjectState(); state.physics.enabled = false;
     Object.assign(state.viewport, { groundVisible: false, skydomeVisible: false, backgroundDisplayMode: "black" });
     // Explicit setup fixture state: no change to the application's shadow defaults.
     Object.assign(state.lighting, { x: -1, y: -1, z: 0, intensity: 0.6, ambientIntensity: 0, shadowEnabled: false,
       lightColor: { r: 1, g: 1, b: 1 }, rcDiffuseGi: { enabled: false, strength: 0.5, volume: fixed ? volume : null } });
+    if (quality) state.lighting.rcDiffuseGi.quality = quality;
     await window.mmdModokiE2e.importProjectState(state);
-  }, { volume: giVolume, fixed });
+  }, { volume: giVolume, fixed, quality });
 }
 export async function capture(page, testInfo, report, name) {
   const directory = testInfo.outputPath(name); mkdirSync(directory, { recursive: true });

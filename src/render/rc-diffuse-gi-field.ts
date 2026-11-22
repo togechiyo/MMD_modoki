@@ -13,10 +13,11 @@ import { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
 import { createRadianceCascadeLayouts, type RadianceCascadeLayout } from "./radiance-cascade-lab-model";
 import { RadianceNearestSurfaceTask } from "./radiance-nearest-surface-task";
 import { RC_DIFFUSE_GI_CASCADE_WGSL, RC_DIFFUSE_GI_SECOND_BOUNCE_WGSL } from "./rc-diffuse-gi-shaders";
-import { RC_DIFFUSE_GI_COMBINE_IRRADIANCE_WGSL, RC_DIFFUSE_GI_GRID, RC_DIFFUSE_GI_IRRADIANCE_WGSL } from "./rc-diffuse-gi-irradiance";
+import { RC_DIFFUSE_GI_COMBINE_IRRADIANCE_WGSL, RC_DIFFUSE_GI_IRRADIANCE_WGSL } from "./rc-diffuse-gi-irradiance";
 import { createRcDiffuseGiIntervals } from "./rc-diffuse-gi-intervals";
 import { readRcDiffuseGiReflectance } from "./rc-diffuse-gi-source";
 import type { RcDiffuseGiLight } from "./rc-diffuse-gi-light";
+import type { RcDiffuseGiSettings } from "./rc-diffuse-gi-settings";
 
 type Volume = { min: readonly [number, number, number]; size: number };
 type FieldTexture = { internal: InternalTexture; handle: FrameGraphTextureHandle };
@@ -29,6 +30,8 @@ export class RcDiffuseGiField {
     public readonly irradianceField: RawTexture;
     public readonly nearestSurfaceField: RawTexture;
     public readonly volumeCount: number;
+    public readonly quality: RcDiffuseGiSettings["quality"];
+    public readonly grid: number;
     private readonly tasks: FrameGraphComputeShaderTask[] = [];
     private readonly textures: RawTexture[] = [];
     private volumes: readonly Volume[];
@@ -37,11 +40,14 @@ export class RcDiffuseGiField {
     private readonly nearestTasks: RadianceNearestSurfaceTask[] = [];
     private disposed = false;
 
-    constructor(scene: Scene, options: { volume?: Volume; volumes?: readonly Volume[]; acceptsMaterial?: (material: Material) => boolean }) {
+    constructor(scene: Scene, options: { volume?: Volume; volumes?: readonly Volume[]; quality?: RcDiffuseGiSettings["quality"];
+        acceptsMaterial?: (material: Material) => boolean }) {
         this.volumes = [...(options.volumes ?? (options.volume ? [options.volume] : []))];
         this.volumeCount = this.volumes.length;
         if (!this.volumeCount) throw new Error("RC GI requires at least one volume");
-        this.intervals = this.volumes.map(volume => createRcDiffuseGiIntervals(volume.size));
+        this.quality = options.quality ?? "standard";
+        this.grid = this.quality === "high" ? 24 : this.quality === "low" ? 8 : 16;
+        this.intervals = this.volumes.map(volume => createRcDiffuseGiIntervals(volume.size, this.grid));
         this.graph = new FrameGraph(scene); this.graph.name = "rcDiffuseGi";
         this.source = new LuminousRadianceSceneSource(scene, () => null,
             material => !material.needAlphaTesting() && !material.needAlphaBlending(),
@@ -56,8 +62,8 @@ export class RcDiffuseGiField {
             return { texture, internal, handle: this.graph.textureManager.importTexture(name, internal) };
         };
         try {
-            const layouts = createRadianceCascadeLayouts();
-            const grid = RC_DIFFUSE_GI_GRID, atlasHeight = grid * grid * this.volumeCount;
+            const grid = this.grid, layouts = createRadianceCascadeLayouts(grid);
+            const atlasHeight = grid * grid * this.volumeCount;
             const irradiance = allocate("rcDiffuseGiIrradiance", grid * 6, atlasHeight, Constants.TEXTURETYPE_HALF_FLOAT);
             this.irradianceField = irradiance.texture;
             const nearFirst = allocate("rcDiffuseGiFirstIrradiance", grid * 6, grid * grid, Constants.TEXTURETYPE_HALF_FLOAT);
@@ -126,7 +132,7 @@ export class RcDiffuseGiField {
             atlasOffset: { group: 0, binding: 2 }, ...(firstBounce && { firstIrradiance: { group: 0, binding: 3 } }),
         } });
         this.tasks.push(task); this.graph.addTask(task);
-        const grid = RC_DIFFUSE_GI_GRID;
+        const grid = this.grid;
         const groups = Math.ceil(grid / 4);
         const atlasOffset = task.createUniformBuffer("atlasOffset", { offset: 4 });
         task.execute = () => atlasOffset.updateFloat4("offset", 0, level * grid * grid, 0, 0);
@@ -179,7 +185,7 @@ export class RcDiffuseGiField {
     public setVolumes(volumes: readonly Volume[]): void {
         if (volumes.length !== this.volumeCount) throw new Error("RC GI volume count requires a new field allocation");
         this.volumes = [...volumes];
-        this.intervals = volumes.map(volume => createRcDiffuseGiIntervals(volume.size));
+        this.intervals = volumes.map(volume => createRcDiffuseGiIntervals(volume.size, this.grid));
     }
 
     public execute(light: RcDiffuseGiLight, updateField = true): number {

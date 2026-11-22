@@ -1,12 +1,19 @@
 export type RcDiffuseGiVolume = { min: [number, number, number]; size: number };
-export type RcDiffuseGiSettings = {
+export const RC_DIFFUSE_GI_QUALITIES = ["low", "standard", "high"] as const;
+export type RcDiffuseGiQuality = typeof RC_DIFFUSE_GI_QUALITIES[number];
+
+/** Earlier projects stored only enabled, strength and the optional manual bounds. */
+export type SavedRcDiffuseGiSettings = {
     enabled: boolean;
     strength: number;
     volume: RcDiffuseGiVolume | null;
+    quality?: RcDiffuseGiQuality;
+    rangeScale?: number;
 };
+export type RcDiffuseGiSettings = Required<SavedRcDiffuseGiSettings>;
 
 export const DEFAULT_RC_DIFFUSE_GI_SETTINGS: Readonly<RcDiffuseGiSettings> = Object.freeze({
-    enabled: false, strength: 0.5, volume: null,
+    enabled: false, strength: 0.5, volume: null, quality: "standard", rangeScale: 1,
 });
 
 export function normalizeRcDiffuseGiSettings(value: unknown): RcDiffuseGiSettings {
@@ -19,6 +26,9 @@ export function normalizeRcDiffuseGiSettings(value: unknown): RcDiffuseGiSetting
         enabled: raw.enabled === true,
         strength: typeof raw.strength === "number" && Number.isFinite(raw.strength)
             ? Math.max(0, Math.min(2, raw.strength)) : DEFAULT_RC_DIFFUSE_GI_SETTINGS.strength,
+        quality: RC_DIFFUSE_GI_QUALITIES.find(quality => quality === raw.quality) ?? DEFAULT_RC_DIFFUSE_GI_SETTINGS.quality,
+        rangeScale: typeof raw.rangeScale === "number" && Number.isFinite(raw.rangeScale)
+            ? Math.max(0.5, Math.min(2, raw.rangeScale)) : DEFAULT_RC_DIFFUSE_GI_SETTINGS.rangeScale,
         volume: validVolume ? {
             min: min.map(component => Math.max(-1e6, Math.min(1e6, component))) as [number, number, number],
             size: Math.max(0.1, Math.min(100000, candidate.size as number)),

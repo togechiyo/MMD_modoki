@@ -13,6 +13,7 @@ import { createRcOriginVolumes } from "./rc-origin-volumes";
 
 type FieldBoundary = {
     volumeCount: number; irradianceField: object; disposedWhileBound: boolean;
+    grid: number; quality: RcDiffuseGiSettings["quality"]; execute: ReturnType<typeof vi.fn>;
     finishBuild: () => void; failBuild: (reason: Error) => void; finishReady: () => void;
     graph: { buildAsync: ReturnType<typeof vi.fn>; whenReadyAsync: ReturnType<typeof vi.fn> };
     dispose: ReturnType<typeof vi.fn>;
@@ -23,6 +24,8 @@ const boundary = vi.hoisted(() => ({ instances: [] as FieldBoundary[], waitForBu
 // Mock only GPU allocation/binding. Scene, receiver membership and controller transitions stay real.
 vi.mock("./rc-diffuse-gi-field", () => ({ RcDiffuseGiField: class {
     volumeCount: number;
+    grid: number;
+    quality: RcDiffuseGiSettings["quality"];
     irradianceField = {}; nearestSurfaceField = {}; disposedWhileBound = false;
     finishBuild: () => void = () => undefined;
     failBuild: (reason: Error) => void = () => undefined;
@@ -34,7 +37,9 @@ vi.mock("./rc-diffuse-gi-field", () => ({ RcDiffuseGiField: class {
         ? new Promise<void>((resolve, reject) => { this.finishBuild = resolve; this.failBuild = reject; }) : Promise.resolve()),
     whenReadyAsync: vi.fn(() => boundary.waitForReady
         ? new Promise<void>(resolve => { this.finishReady = resolve; }) : Promise.resolve()) };
-    constructor(_scene: unknown, options: { volumes: unknown[] }) {
+    constructor(_scene: unknown, options: { volumes: unknown[]; quality: RcDiffuseGiSettings["quality"] }) {
+        this.quality = options.quality;
+        this.grid = options.quality === "high" ? 24 : options.quality === "low" ? 8 : 16;
         this.volumeCount = options.volumes.length; boundary.instances.push(this);
     }
 } }));
@@ -67,6 +72,50 @@ function fixture(manual: boolean) {
 }
 
 describe("RC GI field allocation cancellation", () => {
+    it("cancels a quality switch in flight, unbinds the old atlas, and only publishes the latest grid", async () => {
+        const { controller, settings } = fixture(false);
+        await controller.prewarm(); controller.prepareFrame();
+        const original = boundary.instances[0];
+        expect(controller.diagnostics.grid).toBe(16);
+        boundary.waitForBuild = true;
+        settings.quality = "high"; controller.settingsChanged();
+        const first = controller.prewarm(), high = boundary.instances[1];
+        expect(original.disposedWhileBound).toBe(false);
+        expect(original.dispose).toHaveBeenCalledOnce();
+        expect(controller.diagnostics.grid).toBe(0);
+        expect(controller.isReadyForCapture).toBe(false);
+        settings.quality = "low"; controller.settingsChanged();
+        const second = controller.prewarm(), low = boundary.instances[2];
+        expect(boundary.provider?.()).toBeNull();
+        await first;
+        low.finishBuild(); await second; controller.prepareFrame();
+        expect(controller.diagnostics.grid).toBe(8);
+        expect(boundary.provider?.()?.field).toBe(low.irradianceField);
+        high.finishBuild();
+        await vi.waitFor(() => expect(high.dispose).toHaveBeenCalledOnce());
+        expect(boundary.provider?.()?.field).toBe(low.irradianceField);
+    });
+
+    it("updates the near range in place and skips transport for strength-only changes and zero strength", async () => {
+        const { controller, settings } = fixture(false);
+        await controller.prewarm(); controller.prepareFrame();
+        const field = boundary.instances[0];
+        expect(field.execute).toHaveBeenCalledOnce();
+        settings.strength = 0;
+        settings.rangeScale = 2; controller.settingsChanged(); controller.prepareFrame();
+        expect(field.execute).toHaveBeenCalledOnce();
+        expect(boundary.provider?.()).toBeNull();
+        settings.strength = 1; controller.settingsChanged(); controller.prepareFrame();
+        expect(field.execute).toHaveBeenCalledTimes(2);
+        expect(boundary.provider?.()?.volumes).toEqual([
+            { min: [-128, -128, -128], size: 256 }, ...createRcOriginVolumes().slice(1),
+        ]);
+        settings.strength = 1.5; controller.settingsChanged(); controller.prepareFrame();
+        expect(field.execute).toHaveBeenCalledTimes(2);
+        expect(boundary.provider?.()?.strength).toBe(1.5);
+        expect(boundary.instances).toHaveLength(1);
+    });
+
     it.each([
         { from: "manual", phase: "build" }, { from: "origin", phase: "build" },
         { from: "manual", phase: "ready" }, { from: "origin", phase: "ready" },

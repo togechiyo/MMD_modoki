@@ -112,7 +112,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     // Review the ordinary card layout at the app's default panel width.
     for (const id of ids) {
       await expect(rcLightingRow(page, id).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
-      await expect(rcLightingRow(page, id).locator('input[type="range"]')).toHaveCount(id === "rcSkyOcclusion" ? 2 : 1);
+      await expect(rcLightingRow(page, id).locator('input[type="range"]')).toHaveCount(id === "rcSkyOcclusion" ? 2 : 3);
     }
     const skyHeader = rcLightingRow(page, "rcSkyOcclusion").locator('[data-effect-stack-item="rcSkyOcclusion"]');
     if (await skyHeader.getAttribute("aria-expanded") === "true") await skyHeader.click();
@@ -125,7 +125,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     report.panelBounds = await page.locator("#shader-panel").boundingBox();
     await page.screenshot({ path: testInfo.outputPath("rc-lighting-panel.png") });
     expect((await project(page)).lighting.rcSkyOcclusion).toEqual({ enabled: true, strength: .75, minimum: .2, volume: null });
-    expect((await project(page)).lighting.rcDiffuseGi).toEqual({ enabled: true, strength: .5, volume: null });
+    expect((await project(page)).lighting.rcDiffuseGi).toEqual({ enabled: true, strength: .5, quality: "standard", rangeScale: 1, volume: null });
     report.sliderEdits = [];
     for (const [id, field, setting, position, scale] of [["rcSkyOcclusion", "Strength", "strength", 75, 100],
       ["rcSkyOcclusion", "Minimum", "minimum", 20, 100], ["rcDiffuseGi", "Strength", "strength", 25, 50]]) {

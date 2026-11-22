@@ -1,3 +1,4 @@
+/* global GPUAdapter -- The renderer exposes this WebGPU interface inside page.addInitScript. */
 import { test, expect } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -12,9 +13,18 @@ const fixedVolume=process.env.MMD_RC_GI_PERF_VOLUME!=="origin";
 const denseFixture = process.env.MMD_RC_GI_PERF_DENSE === "1";
 const subdivisions = denseFixture ? 24 : 1;
 const triangleCount = 36 * subdivisions ** 2;
-const invoke=(page,name,value)=>page.evaluate(async({name,value})=>(await import("/test/e2e/helpers/rc-diffuse-gi-performance-probe.mjs"))[name](value),{name,value});
+const invoke = (page, name, value) => page.evaluate(async ({ name, value }) =>
+  // eslint-disable-next-line import/no-unresolved -- Served by the fixture Vite server.
+  (await import("/test/e2e/helpers/rc-diffuse-gi-performance-probe.mjs"))[name](value), { name, value });
 const configurations=[{width:640,height:360,moving:false,enabled:false},...[640,1280].flatMap(width=>[false,true].map(moving=>({width,height:width*9/16,moving,enabled:true})))];
-for(const configuration of configurations){const id=`${configuration.width}x${configuration.height}-${configuration.moving?"moving":"static"}-${configuration.enabled?"on":"off"}`;
+if (process.env.MMD_RC_GI_PERF_COMPARE_QUALITY === "1") {
+  for (const quality of ["low", "high"]) {
+    configurations.push({ width: 1280, height: 720, moving: true, enabled: true, quality });
+  }
+}
+for(const configuration of configurations){const id=`${configuration.width}x${configuration.height}-${configuration.moving?"moving":"static"}-${configuration.enabled?"on":"off"}`
+  + (configuration.quality ? `-${configuration.quality}` : "");
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture parameter.
   test(`RC diffuse GI performance: ${id}`,async({},testInfo)=>{
     test.setTimeout(180000);
     const launched=await launchMmdModoki(root),report={configuration,triangleCount,volumeMode:fixedVolume?"manual":"origin",errors:[],consoleErrors:[],
@@ -30,13 +40,17 @@ for(const configuration of configurations){const id=`${configuration.width}x${co
         modelPath = resolve(launched.tempDir, "rc-diffuse-gi-dense.pmx");
         writeFileSync(modelPath, writePmx(createRcDiffuseGiStage(undefined, subdivisions)));
       }
-      await initialState(page,{fixed:fixedVolume});await page.evaluate(path=>window.mmdModokiE2e.loadModel(path),modelPath);
+      await initialState(page,{fixed:fixedVolume, quality:configuration.quality});await page.evaluate(path=>window.mmdModokiE2e.loadModel(path),modelPath);
       await page.locator("#info-model-select").selectOption("0");
       const category=await page.evaluate(()=>window.mmdModokiE2e.getTimelineTracks().find(track=>track.name==="光遮蔽板")?.category);expect(category).toBeTruthy();
       for(const [frame,x] of [[0,0],[60,-20]]){await seek(page,frame);await selectTimelineTrack(page,category,"光遮蔽板");await numberControl(page,"tx",x);await page.locator("#btn-bone-keyframe").click();}
       await camera(page);await seek(page,0);await setGi(page,configuration.enabled);
       report.prepared=await invoke(page,"prepareGiPerformance",configuration);expect(report.prepared.size).toEqual([configuration.width,configuration.height]);
-      if (configuration.enabled) expect(report.prepared.diagnostics.triangleCount).toBe(triangleCount);
+      if (configuration.enabled) {
+        expect(report.prepared.diagnostics.triangleCount).toBe(triangleCount);
+        const grid = { low: 8, standard: 16, high: 24 }[configuration.quality ?? "standard"];
+        expect(report.prepared.diagnostics.grid).toBe(grid);
+      }
       report.measurement=await invoke(page,"measureGiPerformance",{moving:configuration.moving,warmFrames:12,frames:40,completionFrames:12});
       for(const [name,count] of [["realtime",40],["completion",12]]){
         const result=report.measurement[name];expect(result.frames).toBe(count);expect(result.state.size).toEqual([configuration.width,configuration.height]);

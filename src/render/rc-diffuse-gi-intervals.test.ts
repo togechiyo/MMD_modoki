@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createRcDiffuseGiIntervals } from "./rc-diffuse-gi-intervals";
-import { RC_DIFFUSE_GI_GRID } from "./rc-diffuse-gi-irradiance";
 
 describe("RC diffuse GI intervals", () => {
-    it("keeps the first four probe cells in the finest cascade", () => {
+    it.each([8, 16, 24])("keeps the first four probe cells in a %i-cell grid's finest cascade", grid => {
         for (const size of [0.1, 16, 57.84, 128]) {
-            const first = createRcDiffuseGiIntervals(size)[0];
+            const first = createRcDiffuseGiIntervals(size, grid)[0];
             expect(first.start).toBe(0);
-            expect(first.end / (size / RC_DIFFUSE_GI_GRID)).toBeCloseTo(4);
+            expect(first.end / (size / grid)).toBeCloseTo(4);
         }
     });
 

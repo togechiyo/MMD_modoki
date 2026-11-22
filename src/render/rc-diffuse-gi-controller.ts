@@ -10,12 +10,12 @@ import { RcDiffuseGiField } from "./rc-diffuse-gi-field";
 import { registerMmdRadianceDiffuseGi, type MmdRadianceDiffuseGiView } from "./mmd-radiance-diffuse-gi-plugin";
 import type { RcDiffuseGiSettings, RcDiffuseGiVolume } from "./rc-diffuse-gi-settings";
 import { fitRcDiffuseGiVolume } from "./rc-diffuse-gi-volume";
-import { createRcOriginVolumes, RC_ORIGIN_VOLUME_COUNT } from "./rc-origin-volumes";
+import { createRcOriginVolumes, RC_ORIGIN_VOLUME_COUNT, scaleRcVolumeAboutCenter } from "./rc-origin-volumes";
 
 type Status = "off" | "preparing" | "ready" | "unsupported" | "error";
 export type RcDiffuseGiDiagnostics = {
     status: Status; reason: string | null; volume: RcDiffuseGiVolume | null;
-    triangleCount: number; fieldRevision: number; supportedMaterialCount: number;
+    triangleCount: number; fieldRevision: number; supportedMaterialCount: number; grid: number;
     spatialMode: "origin" | "manual"; volumes: RcDiffuseGiVolume[];
 };
 
@@ -56,7 +56,7 @@ export class RcDiffuseGiController {
             const material = sub.getMaterial(); return material && this.acceptsMaterial(material) ? [material] : [];
         })));
         const volumes = this.resolveVolumes();
-        return { status: this.status, reason: this.reason, volume: volumes[0] ?? null, volumes,
+        return { status: this.status, reason: this.reason, volume: volumes[0] ?? null, volumes, grid: this.field?.grid ?? 0,
             spatialMode: this.settings().volume ? "manual" : "origin",
             triangleCount: this.field?.source.bvh.triangleCount ?? 0, fieldRevision: this.fieldRevision,
             supportedMaterialCount: materials.size };
@@ -92,13 +92,22 @@ export class RcDiffuseGiController {
     private resolveVolumes(): RcDiffuseGiVolume[] {
         const receivers = this.receivers();
         if (!receivers.length) return [];
-        const manual = this.settings().volume;
-        return manual ? [manual] : createRcOriginVolumes();
+        const { volume, rangeScale } = this.settings();
+        const volumes = volume ? [volume] : createRcOriginVolumes();
+        // The first spatial volume controls near detail and is the only two-bounce domain.
+        // Replace the entry in this local list; preserve saved manual bounds and the outer ranges.
+        if (rangeScale !== 1) volumes[0] = scaleRcVolumeAboutCenter(volumes[0], rangeScale);
+        return volumes;
+    }
+
+    private matchesLayout(field: RcDiffuseGiField): boolean {
+        const settings = this.settings();
+        return field.volumeCount === (settings.volume ? 1 : RC_ORIGIN_VOLUME_COUNT) && field.quality === settings.quality;
     }
 
     private synchronizeLayout(): void {
-        const count = this.settings().volume ? 1 : RC_ORIGIN_VOLUME_COUNT;
-        if (this.field && this.field.volumeCount !== count || this.pending && this.pending.volumeCount !== count) this.release();
+        const field = this.field ?? this.pending;
+        if (field && !this.matchesLayout(field)) this.release();
     }
 
     private supported(): boolean {
@@ -108,7 +117,7 @@ export class RcDiffuseGiController {
     /** A keyed OFF frame retains its generation so the first subsequent ON draw is synchronous. */
     public get isReadyForCapture(): boolean {
         if (!this.settings().enabled && !this.keepResourcesWhileOff() || !this.supported() || !this.resolveVolumes().length) return true;
-        if (!this.field || this.field.volumeCount !== (this.settings().volume ? 1 : RC_ORIGIN_VOLUME_COUNT)) return false;
+        if (!this.field || !this.matchesLayout(this.field)) return false;
         // A diffuse texture may finish loading while automatic rendering is paused.
         // Revisit the source during capture preparation to start/finish its readback;
         // otherwise its first ON draw could discover that work too late.
@@ -224,7 +233,7 @@ export class RcDiffuseGiController {
         const generation = ++this.generation;
         let candidate: RcDiffuseGiField | null = null;
         try {
-            candidate = new RcDiffuseGiField(this.scene, { volumes, acceptsMaterial: this.acceptsSourceMaterial });
+            candidate = new RcDiffuseGiField(this.scene, { volumes, quality: this.settings().quality, acceptsMaterial: this.acceptsSourceMaterial });
             this.pending = candidate;
             candidate.source.update();
             const cancelled = new Promise<void>(resolve => { this.cancelPending = resolve; });

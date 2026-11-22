@@ -15,7 +15,7 @@
 | adopted | [低〜中性能PCで使いやすい軽量なリアルタイムMMDを優先する](./decisions/prioritize-lightweight-realtime-mmd-defaults.md) | アマチュアMMD利用者向けの既定動作、品質と負荷、操作の複雑さを判断する。具体的な方式・FPS・最低動作環境は別途確認 |
 | accepted-with-constraints | [3D RC は通常 Luminous から分離して最適化を再開する](./decisions/defer-further-radiance-cascade-optimization.md) | 通常GlowとRCを分け、保存互換と独立動作を維持する。2026-10-31、Luminous・天空遮蔽・GIの3効果を対象に効率化・高速化を再依頼。手軽なリアルタイムMMD用途を維持する |
 | adopted | [RCはアプリから目視できる1エフェクト単位で完成させる](./decisions/complete-rc-effects-one-at-a-time-for-visual-review.md) | 共通基盤後の派生効果をアプリで操作・比較できる単位へ仕上げる。11/10、各RCをスライダー3本程度へ整理し、範囲・品質・座標等は通常欄から外す。同日「影の深み RC」は没扱いとし新規追加候補から撤去。既存project互換は維持。再公開を既定の残件に戻さず、過去の採用・実機確認は履歴として区別する |
-| adopted | [RC GIは推しモデルが映える強い演出を許容する](./decisions/rc-gi-allows-strong-effects-for-favorite-models.md) | GIの効きが見分けにくい場合に、くどいくらい強い演出も許容して調整する。全効果の無条件増幅や軽量方針の撤回には広げない |
+| adopted | [RC GIは推しモデルが映える強い演出を許容する](./decisions/rc-gi-allows-strong-effects-for-favorite-models.md) | GIの効きが見分けにくい場合に、くどいくらい強い演出も許容して調整する。全効果の無条件増幅や軽量方針の撤回には広げない。11/22にSSGIとの差を見るため近距離2バウンスの試作を依頼 |
 | adopted | [Luminous RCの発光色は2D Luminousを基準にする](./decisions/rc-emission-color-follows-2d-luminous.md) | 2DとRCの色を揃える。補正前の材質色を別基準として固定しない |
 | adopted | [Luminous / RCの入力挙動をAutoLuminousへ寄せる](./decisions/luminous-inputs-follow-autoluminous.md) | 原典調査に続き、まず2Dの材質発光条件を対応。RCの同時置換や原典不整合の再現まで広げない |
 | adopted | [FrameGraph SSAOはシンプル階調に一本化する](./decisions/framegraph-ssao-uses-simple-tone.md) | 強度は線形0〜2、色合成を維持し、従来階調・切替UI・保存フラグを復活させない |

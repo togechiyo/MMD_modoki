@@ -1,6 +1,8 @@
-// Independent direct-bounce transport: packed color means linear reflectance,
-// never Luminous emission. Alpha is transmittance, with -1 for invalid input.
-export const RC_DIFFUSE_GI_CASCADE_WGSL = `
+import { rcGiVolumeQueryWgsl } from "./mmd-radiance-gi-query-wgsl";
+
+// Both transports trace the same geometry and read linear diffuse reflectance.
+// Alpha is transmittance, with -1 for invalid input.
+const RC_DIFFUSE_GI_TRACE_WGSL = `
 struct Params { volumeMin: vec4f, volumeSize: vec4f, shape: vec4f, interval: vec4f,
     lightDirection: vec4f, lightColor: vec4f };
 struct Triangle { a: vec4f, b: vec4f, c: vec4f, reflectance: vec4f, uvAB: vec4f, uvSource: vec4f };
@@ -9,7 +11,6 @@ struct Hit { index: u32, distance: f32, uv: vec2f, valid: u32 };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> triangles: array<Triangle>;
 @group(0) @binding(2) var<storage, read> nodes: array<Node>;
-@group(0) @binding(3) var parentField: texture_2d<f32>;
 @group(0) @binding(4) var outputField: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(5) var<storage, read> albedoPixels: array<vec4f>;
 const PI = 3.141592653589793;
@@ -87,6 +88,19 @@ fn giAlbedo(triangle: Triangle, hitUv: vec2f) -> vec4f {
     } }
     return vec4f(clamp(triangle.reflectance.rgb * color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
+fn giFacingNormal(triangle: Triangle, ray: vec3f) -> vec3f {
+    let crossNormal = cross(triangle.b.xyz - triangle.a.xyz, triangle.c.xyz - triangle.a.xyz);
+    let normalLength = length(crossNormal);
+    if (!(normalLength > 1e-10)) { return vec3f(0.0); }
+    let normal = crossNormal / normalLength;
+    // Opaque thin surfaces reflect light arriving on the queried side.
+    return select(normal, -normal, dot(normal, -ray) < 0.0);
+}
+`;
+
+export const RC_DIFFUSE_GI_CASCADE_WGSL = `
+${RC_DIFFUSE_GI_TRACE_WGSL}
+@group(0) @binding(3) var parentField: texture_2d<f32>;
 fn giLocalRadiance(origin: vec3f, ray: vec3f) -> vec4f {
     // The outermost interval reaches the scene exit; a finite-range miss is black.
     let end = select(1e30, params.interval.y, params.interval.z > 0.5);
@@ -95,12 +109,7 @@ fn giLocalRadiance(origin: vec3f, ray: vec3f) -> vec4f {
     if (hit.index == MISS) { return vec4f(0.0, 0.0, 0.0, 1.0); }
     let triangle = triangles[hit.index];
     if (all(triangle.reflectance.rgb <= vec3f(0.0))) { return vec4f(0.0); }
-    var normal = cross(triangle.b.xyz - triangle.a.xyz, triangle.c.xyz - triangle.a.xyz);
-    let normalLength = length(normal);
-    if (!(normalLength > 1e-10)) { return vec4f(0.0); }
-    normal /= normalLength;
-    // Opaque thin surfaces reflect on the queried side; never use opposite-side lighting.
-    if (dot(normal, -ray) < 0.0) { normal = -normal; }
+    let normal = giFacingNormal(triangle, ray);
     let cosine = max(0.0, dot(normal, params.lightDirection.xyz));
     if (cosine <= 0.0) { return vec4f(0.0); }
     let albedo = giAlbedo(triangle, hit.uv);
@@ -150,5 +159,41 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         if (!valid) { result = vec4f(0.0, 0.0, 0.0, -1.0); }
     }
     textureStore(outputField, vec2i(id.xy), vec4f(clamp(result.rgb, vec3f(0.0), vec3f(65504.0)), result.a));
+}
+`;
+
+export const RC_DIFFUSE_GI_SECOND_BOUNCE_WGSL = `
+${RC_DIFFUSE_GI_TRACE_WGSL}
+@group(0) @binding(6) var firstIrradiance: texture_2d<f32>;
+@group(0) @binding(7) var nearestSurface: texture_2d<f32>;
+${rcGiVolumeQueryWgsl("triangles", "firstIrradiance", "nearestSurface")}
+
+fn giSecondRadiance(origin: vec3f, ray: vec3f) -> vec4f {
+    let end = giBounds(origin, ray, params.volumeMin.xyz, params.volumeMin.xyz + params.volumeSize.xyz).y;
+    let hit = giTrace(origin, ray, 0.0, end, MISS, false);
+    if (hit.valid == 0u) { return vec4f(0.0, 0.0, 0.0, -1.0); }
+    if (hit.index == MISS) { return vec4f(0.0, 0.0, 0.0, 1.0); }
+    let triangle = triangles[hit.index];
+    if (all(triangle.reflectance.rgb <= vec3f(0.0))) { return vec4f(0.0); }
+    let albedo = giAlbedo(triangle, hit.uv);
+    if (albedo.a < 0.5) { return vec4f(0.0, 0.0, 0.0, -1.0); }
+    if (all(albedo.rgb <= vec3f(0.0))) { return vec4f(0.0); }
+    let normal = giFacingNormal(triangle, ray);
+    if (all(normal == vec3f(0.0))) { return vec4f(0.0); }
+    let position = origin + ray * hit.distance;
+    let volume = vec4f(params.volumeMin.xyz, params.volumeSize.x);
+    // The first field is irradiance/pi. Multiply by the relay surface's
+    // reflectance exactly once, with no direct light or display gain here.
+    let incoming = rcGiIrradianceInVolume(position, normal, volume, 0u);
+    return vec4f(incoming * albedo.rgb, 0.0);
+}
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+    let grid = u32(params.shape.x); let columns = u32(params.shape.y); let rows = u32(params.shape.z);
+    if (id.x >= grid * columns || id.y >= grid * grid * rows) { return; }
+    let angular = vec2u(id.x % columns, id.y % rows);
+    let flat = id.y / rows; let probe = vec3u(id.x / columns, flat % grid, flat / grid);
+    let position = params.volumeMin.xyz + (vec3f(probe) + 0.5) / f32(grid) * params.volumeSize.xyz;
+    textureStore(outputField, vec2i(id.xy), giSecondRadiance(position, giDirection(angular, columns, rows)));
 }
 `;

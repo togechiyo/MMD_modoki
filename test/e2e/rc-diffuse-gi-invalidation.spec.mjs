@@ -10,7 +10,8 @@ const browserProbe = "/test/e2e/helpers/rc-diffuse-gi-invalidation-probe.mjs";
 const invoke = (page, name, value) => page.evaluate(async ({ name, value, module }) =>
   (await import(module))[name](value), { name, value, module: browserProbe });
 const nearestTask = "rcDiffuseGiNearestSurface";
-const lightingTasks = ["rcDiffuseGiCascade3", "rcDiffuseGiCascade2", "rcDiffuseGiCascade1", "rcDiffuseGiCascade0", "rcDiffuseGiIrradiance"];
+const lightingTasks = ["rcDiffuseGiCascade3", "rcDiffuseGiCascade2", "rcDiffuseGiCascade1", "rcDiffuseGiCascade0",
+  "rcDiffuseGiIrradiance", "rcDiffuseGiSecondBounce", "rcDiffuseGiCombineIrradiance"];
 
 // Playwright's first callback parameter is a destructured fixtures object.
 // eslint-disable-next-line no-empty-pattern
@@ -30,40 +31,40 @@ test("RC GI reuses geometric guards for light/color edits and refreshes before n
     report.prepared = await invoke(page, "prepareGiInvalidationProbe");
     const sample = async (action, expected, sourceCalls) => {
       const result = await invoke(page, "measureGiInvalidation", action); report.samples.push(result);
-      const names = expected === 6 ? [...lightingTasks, nearestTask] : expected === 5 ? lightingTasks : [];
-      expect(result.dispatches).toEqual(Object.fromEntries(names.map(name => [name, 1])));
+      expect(result.dispatches).toEqual(Object.fromEntries(expected.map(name => [name, 1])));
       if (sourceCalls !== undefined) expect(result.sourceCalls).toBe(sourceCalls);
       expect(result.nearest.finite).toBe(true); expect(result.irradiance.finite).toBe(true);
       expect(result.validation.count).toBe(0); expect(result.diagnostics.status).toBe("ready");
       return result;
     };
-    const idle = await sample("idle", 0);
-    const light = await sample("light", 5);
+    const geometryTasks = [...lightingTasks, nearestTask];
+    const idle = await sample("idle", []);
+    const light = await sample("light", lightingTasks);
     expect(light.after.geometry).toBe(idle.after.geometry);
     expect(light.nearest).toEqual(idle.nearest);
     expect(light.irradiance.hash).not.toBe(idle.irradiance.hash);
-    const color = await sample("color", 5);
+    const color = await sample("color", lightingTasks);
     expect(color.after.source).toBeGreaterThan(light.after.source);
     expect(color.after.geometry).toBe(light.after.geometry);
     expect(color.nearest).toEqual(light.nearest);
     expect(color.irradiance.hash).not.toBe(light.irradiance.hash);
-    const moved = await sample("geometry", 6);
+    const moved = await sample("geometry", geometryTasks);
     expect(moved.after.geometry).toBeGreaterThan(color.after.geometry);
-    const dark = await sample("dark", 0, 0);
+    const dark = await sample("dark", [], 0);
     expect(dark.diagnostics.reason).toBe("No direct light");
-    const movedDark = await sample("geometry", 0, 0);
+    const movedDark = await sample("geometry", [], 0);
     expect(movedDark.after).toEqual(dark.after);
-    const relit = await sample("light-restored", 6);
+    const relit = await sample("light-restored", geometryTasks);
     expect(relit.after.geometry).toBeGreaterThan(movedDark.after.geometry);
-    const volume = await sample("volume", 6);
+    const volume = await sample("volume", geometryTasks);
     expect(volume.after.geometry).toBe(relit.after.geometry);
-    const zero = await sample("zero-strength", 0, 0);
+    const zero = await sample("zero-strength", [], 0);
     expect(zero.diagnostics.reason).toBe("Zero strength");
-    const movedZero = await sample("geometry", 0, 0);
+    const movedZero = await sample("geometry", [], 0);
     expect(movedZero.after).toEqual(zero.after);
-    const restored = await sample("strength-restored", 6);
+    const restored = await sample("strength-restored", geometryTasks);
     expect(restored.after.geometry).toBeGreaterThan(movedZero.after.geometry);
-    await sample("idle", 0);
+    await sample("idle", []);
     expect(report.errors).toEqual([]); expect(report.consoleErrors).toEqual([]);
   } finally {
     if (page && !page.isClosed()) await invoke(page, "disposeGiInvalidationProbe").catch(() => undefined);

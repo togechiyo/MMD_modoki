@@ -11,11 +11,23 @@ export const RC_DIFFUSE_GI_AXIS_WEIGHTS = axes.map(axis => {
     return weights.map(value => value / total);
 });
 
-/** Six cosine-normalized incoming RGB lobes: irradiance / pi, not outgoing material color. */
-export const RC_DIFFUSE_GI_IRRADIANCE_WGSL = `
+const combineBounces = `
+@group(0) @binding(3) var firstIrradiance: texture_2d<f32>;
+fn combineIrradiance(pixel: vec2i, second: vec3f, valid: f32) -> vec4f {
+    let first = textureLoad(firstIrradiance, pixel, 0);
+    if (first.a <= 0.5 || valid <= 0.5) { return first; }
+    return vec4f(clamp(first.rgb + second, vec3f(0.0), vec3f(65504.0)), first.a);
+}
+`;
+
+/** Six cosine-normalized incoming RGB lobes (irradiance / pi). The optional
+ * second pass integrates the nearest slice and adds the original lobes once. */
+function irradianceShader(secondBounce: boolean): string {
+    return `
 @group(0) @binding(0) var directionalField: texture_2d<f32>;
 @group(0) @binding(1) var irradiance: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(2) var<uniform> atlasOffset: vec4f;
+${secondBounce ? combineBounces : ""}
 const WEIGHTS = array<f32, 192>(${RC_DIFFUSE_GI_AXIS_WEIGHTS.flat().map(value => value.toFixed(10)).join(", ")});
 @compute @workgroup_size(4, 4, 4)
 fn main(@builtin(global_invocation_id) probe: vec3u) {
@@ -29,7 +41,12 @@ fn main(@builtin(global_invocation_id) probe: vec3u) {
     }
     for (var axis = 0u; axis < 6u; axis++) {
         let pixel = vec2i(i32(probe.x + axis * 16u), i32(probe.z * 16u + probe.y) + i32(atlasOffset.y));
-        textureStore(irradiance, pixel, vec4f(clamp(colors[axis], vec3f(0.0), vec3f(65504.0)), valid));
+        textureStore(irradiance, pixel, ${secondBounce ? "combineIrradiance(pixel, colors[axis], valid)"
+            : "vec4f(clamp(colors[axis], vec3f(0.0), vec3f(65504.0)), valid)"});
     }
 }
 `;
+}
+
+export const RC_DIFFUSE_GI_IRRADIANCE_WGSL = irradianceShader(false);
+export const RC_DIFFUSE_GI_COMBINE_IRRADIANCE_WGSL = irradianceShader(true);

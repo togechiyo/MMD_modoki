@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { writePmx } from "./generate-external-parent-test-models.mjs";
 
 /** Original flat-shaded boxes; no external model, texture, physics or toon dependency. */
-export function createRcDiffuseGiStage(sourceColor = [0.9, 0.025, 0.025]) {
+export function createRcDiffuseGiStage(sourceColor = [0.9, 0.025, 0.025], subdivisions = 1) {
   const vertices = [], materialGroups = [];
   const material = (name, color) => {
     const group = { name, englishName: name, diffuse: [...color, 1], ambient: [0, 0, 0], edge: false, indices: [] };
@@ -25,8 +25,24 @@ export function createRcDiffuseGiStage(sourceColor = [0.9, 0.025, 0.025]) {
       [[[l,b,n],[r,b,n],[r,b,f],[l,b,f]], [0,-1,0]],
     ]) {
       const first = vertices.length;
-      points.forEach((position, i) => vertices.push({ position, normal, uv: [[0,0],[0,1],[1,1],[1,0]][i], boneIndex }));
-      group.indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+      if (subdivisions === 1) {
+        points.forEach((position, i) => vertices.push({ position, normal, uv: [[0,0],[0,1],[1,1],[1,0]][i], boneIndex }));
+        group.indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+        continue;
+      }
+      const [origin, across, , down] = points;
+      const stride = subdivisions + 1;
+      for (let row = 0; row <= subdivisions; row++) {
+        for (let column = 0; column <= subdivisions; column++) {
+          const u = row / subdivisions, v = column / subdivisions;
+          const position = origin.map((start, axis) => start + v * (across[axis] - start) + u * (down[axis] - start));
+          vertices.push({ position, normal, uv: [u, v], boneIndex });
+          if (row < subdivisions && column < subdivisions) {
+            const a = first + row * stride + column;
+            group.indices.push(a, a + 1, a + stride + 1, a, a + stride + 1, a + stride);
+          }
+        }
+      }
     }
   };
   box(receiver, [-2, -0.2, -3], [2, 0, 3]);
@@ -35,7 +51,7 @@ export function createRcDiffuseGiStage(sourceColor = [0.9, 0.025, 0.025]) {
   // above every receiver→source segment, so those two visibility tests differ.
   box(blocker, [17, 5, -4], [25, 5.2, 4], 1);
   return { modelName: "RC拡散GI確認ステージ", englishModelName: "RC Diffuse GI Test Stage", noToon: true,
-    comment: "MMD_modoki自作・再配布可能。白receiver、色source、黒遮光板の3箱/36三角形。外部assetなし。遮光板bone tx=-20でsourceの直接光だけ遮蔽。",
+    comment: `MMD_modoki自作・再配布可能。白receiver、色source、黒遮光板の3箱/${36 * subdivisions ** 2}三角形。外部assetなし。遮光板bone tx=-20でsourceの直接光だけ遮蔽。`,
     vertices, materialGroups, bones: [
       { name: "センター", englishName: "Center", parentBoneIndex: -1 },
       { name: "光遮蔽板", englishName: "Light Blocker", parentBoneIndex: 0 },

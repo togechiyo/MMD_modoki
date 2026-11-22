@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/radiance-cascades/gi
 confidence: high
-last_verified: 2026-10-30
+last_verified: 2026-11-22
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-10-30
@@ -12,6 +12,7 @@ evidence:
   - conversation-explicit-instruction
 source_docs:
   - ../../docs/rc-diffuse-gi-implementation-2026-10-30.md
+  - ../../docs/rc-diffuse-gi-two-bounce-2026-11-22.md
 superseded_by: null
 ---
 
@@ -36,6 +37,8 @@ RC GIの効きが見分けにくいという報告を受け、次の目視比較
 ## 根拠
 
 2026-10-30、RC GIを次の目視比較まで修正する依頼で、所有者はアプリの目的をミクさんをはじめとする推しモデルを映えさせることと説明し、効果をくどいくらい強くしてよいと明示した。実装値と確認結果は[GI実装メモ](../../docs/rc-diffuse-gi-implementation-2026-10-30.md)へ記録する。
+
+2026-11-22、SSGIとの見た目の差を出すため、近距離で2バウンスを試す提案に対して所有者が実装を依頼した。今回の判断は試作を進める範囲であり、変更後の画質と負荷は別に評価する。
 
 ## 再確認条件
 

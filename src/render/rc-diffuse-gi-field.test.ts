@@ -78,7 +78,9 @@ it("keeps one scene source while writing each spatial level to its own shared at
     expect(field.irradianceField).toMatchObject({ width: 96, height: 1024 });
     expect(field.nearestSurfaceField).toMatchObject({ width: 16, height: 1024 });
     expect(field.baseField.name).toBe("rcDiffuseGiLevel0Cascade0");
-    expect(field.execute(light)).toBe(24);
+    expect(field.execute(light)).toBe(26);
+    const nearFirst = boundary.textures.find(texture => texture.name === "rcDiffuseGiFirstIrradiance");
+    expect(nearFirst).toMatchObject({ width: 96, height: 256 });
     expect(boundary.guards.map(guard => guard.atlasOffsetY)).toEqual([0, 256, 512, 768]);
     for (const [level, volume] of volumes.entries()) {
         const cascade = task(`rcDiffuseGiLevel${level}Cascade0`);
@@ -88,7 +90,7 @@ it("keeps one scene source while writing each spatial level to its own shared at
         expect(cascade.uniforms.get("params")?.get("interval")).toEqual([0, volume.size / 4, 1, 0]);
         const integrate = task(`rcDiffuseGiLevel${level}Irradiance`);
         expect(integrate.textures.get("directionalField")?.name).toBe(`rcDiffuseGiLevel${level}Cascade0`);
-        expect(integrate.textures.get("irradiance")).toBe(field.irradianceField);
+        expect(integrate.textures.get("irradiance")).toBe(level === 0 ? nearFirst : field.irradianceField);
         expect(integrate.uniforms.get("atlasOffset")?.get("offset")).toEqual([0, level * 256, 0, 0]);
         const guard = boundary.guards[level];
         expect(guard.source).toBe(boundary.sources[0]);
@@ -96,6 +98,19 @@ it("keeps one scene source while writing each spatial level to its own shared at
         expect(guard.prepareVolume).toHaveBeenCalledWith(volume);
         expect(guard.markSubmitted).toHaveBeenCalledOnce();
     }
+    const bounce = task("rcDiffuseGiLevel0SecondBounce");
+    expect(bounce.textures.get("firstIrradiance")).toBe(nearFirst);
+    expect(bounce.textures.get("nearestSurface")).toBe(field.nearestSurfaceField);
+    expect(bounce.buffers.get("nodes")).toBe(boundary.sources[0].nodeBuffer);
+    expect(bounce.uniforms.get("params")?.get("shape")).toEqual([16, 8, 4, 12]);
+    const combine = task("rcDiffuseGiLevel0CombineIrradiance");
+    expect(combine.textures.get("directionalField")).toBe(bounce.textures.get("outputField"));
+    expect(combine.textures.get("firstIrradiance")).toBe(nearFirst);
+    expect(combine.textures.get("irradiance")).toBe(field.irradianceField);
+    expect(nearFirst).not.toBe(field.irradianceField);
+    expect(boundary.tasks.indexOf(bounce)).toBeGreaterThan(boundary.tasks.indexOf(boundary.guards[0]));
+    expect(boundary.tasks.indexOf(combine)).toBeGreaterThan(boundary.tasks.indexOf(bounce));
+    expect(boundary.tasks.filter(item => item.name.endsWith("SecondBounce"))).toHaveLength(1);
     expect(boundary.sources[0].update).not.toHaveBeenCalled();
     field.dispose(); field.dispose();
     expect(boundary.sources[0].dispose).toHaveBeenCalledOnce();
@@ -107,7 +122,7 @@ it("updates all volumes and light inputs without reallocating or reusing another
     const resized = volumes.map(volume => ({ ...volume, size: volume.size * 2 }));
     field.setVolumes(resized);
     boundary.guards[1].disabled = true;
-    expect(field.execute(light)).toBe(23);
+    expect(field.execute(light)).toBe(25);
     expect(boundary.sources).toHaveLength(1);
     for (const [level, volume] of resized.entries()) {
         const params = task(`rcDiffuseGiLevel${level}Cascade0`).uniforms.get("params");
@@ -129,7 +144,9 @@ it("preserves the single-volume texture layout and setter for saved manual volum
     expect(field.irradianceField).toMatchObject({ width: 96, height: 256 });
     expect(field.nearestSurfaceField).toMatchObject({ width: 16, height: 256 });
     field.setVolume({ min: [-16, -4, -16], size: 32 });
-    expect(field.execute(light)).toBe(6);
+    expect(field.execute(light)).toBe(8);
+    expect(task("rcDiffuseGiSecondBounce").uniforms.get("params")?.get("volumeMin")).toEqual([-16, -4, -16, 0]);
+    expect(task("rcDiffuseGiSecondBounce").uniforms.get("params")?.get("volumeSize")).toEqual([32, 32, 32, 0]);
     expect(task("rcDiffuseGiIrradiance").uniforms.get("atlasOffset")?.get("offset")).toEqual([0, 0, 0, 0]);
     expect(task("rcDiffuseGiCascade0").uniforms.get("params")?.get("interval")).toEqual([0, 8, 1, 0]);
     field.dispose();

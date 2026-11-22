@@ -1,24 +1,27 @@
 import "@babylonjs/core/Engines/WebGPU/Extensions/engine.computeShader";
 import { Constants } from "@babylonjs/core/Engines/constants";
 import { FrameGraph } from "@babylonjs/core/FrameGraph/frameGraph";
+import type { FrameGraphTextureHandle } from "@babylonjs/core/FrameGraph/frameGraphTypes";
 import { FrameGraphComputeShaderTask } from "@babylonjs/core/FrameGraph/Tasks/Misc/computeShaderTask";
 import type { Material } from "@babylonjs/core/Materials/material";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
+import type { InternalTexture } from "@babylonjs/core/Materials/Textures/internalTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Scene } from "@babylonjs/core/scene";
 import { LuminousRadianceSceneSource } from "./luminous-radiance-scene";
-import { createRadianceCascadeLayouts } from "./radiance-cascade-lab-model";
+import { createRadianceCascadeLayouts, type RadianceCascadeLayout } from "./radiance-cascade-lab-model";
 import { RadianceNearestSurfaceTask } from "./radiance-nearest-surface-task";
-import { RC_DIFFUSE_GI_CASCADE_WGSL } from "./rc-diffuse-gi-shaders";
-import { RC_DIFFUSE_GI_GRID, RC_DIFFUSE_GI_IRRADIANCE_WGSL } from "./rc-diffuse-gi-irradiance";
+import { RC_DIFFUSE_GI_CASCADE_WGSL, RC_DIFFUSE_GI_SECOND_BOUNCE_WGSL } from "./rc-diffuse-gi-shaders";
+import { RC_DIFFUSE_GI_COMBINE_IRRADIANCE_WGSL, RC_DIFFUSE_GI_GRID, RC_DIFFUSE_GI_IRRADIANCE_WGSL } from "./rc-diffuse-gi-irradiance";
 import { createRcDiffuseGiIntervals } from "./rc-diffuse-gi-intervals";
 import { readRcDiffuseGiReflectance } from "./rc-diffuse-gi-source";
 import type { RcDiffuseGiLight } from "./rc-diffuse-gi-light";
 
 type Volume = { min: readonly [number, number, number]; size: number };
+type FieldTexture = { internal: InternalTexture; handle: FrameGraphTextureHandle };
 
-/** One-bounce directional-light source, independent of emission and sky visibility. */
+/** Directional-light transport with a second diffuse bounce in the nearest volume. */
 export class RcDiffuseGiField {
     public readonly graph: FrameGraph;
     public readonly source: LuminousRadianceSceneSource;
@@ -57,6 +60,7 @@ export class RcDiffuseGiField {
             const grid = RC_DIFFUSE_GI_GRID, atlasHeight = grid * grid * this.volumeCount;
             const irradiance = allocate("rcDiffuseGiIrradiance", grid * 6, atlasHeight, Constants.TEXTURETYPE_HALF_FLOAT);
             this.irradianceField = irradiance.texture;
+            const nearFirst = allocate("rcDiffuseGiFirstIrradiance", grid * 6, grid * grid, Constants.TEXTURETYPE_HALF_FLOAT);
             const nearest = allocate("rcDiffuseGiNearestSurface", grid, atlasHeight, Constants.TEXTURETYPE_FLOAT);
             this.nearestSurfaceField = nearest.texture;
             const boundary = allocate("rcDiffuseGiBoundary", 1, 1, Constants.TEXTURETYPE_HALF_FLOAT);
@@ -99,24 +103,73 @@ export class RcDiffuseGiField {
                         params.updateFloat4("lightColor", ...this.light.color, 0);
                     };
                 }
-                const integrate = new FrameGraphComputeShaderTask(`${prefix}Irradiance`, this.graph,
-                    { computeSource: RC_DIFFUSE_GI_IRRADIANCE_WGSL }, { bindingsMapping: {
-                        directionalField: { group: 0, binding: 0 }, irradiance: { group: 0, binding: 1 },
-                        atlasOffset: { group: 0, binding: 2 },
-                    } });
-                this.tasks.push(integrate); this.graph.addTask(integrate);
-                const atlasOffset = integrate.createUniformBuffer("atlasOffset", { offset: 4 });
-                integrate.execute = () => atlasOffset.updateFloat4("offset", 0, level * grid * grid, 0, 0);
-                integrate.dispatchSize = new Vector3(Math.ceil(grid / 4), Math.ceil(grid / 4), Math.ceil(grid / 4));
-                integrate.dependencies = new Set([fields[0].handle, irradiance.handle]);
-                integrate.onTexturesAllocatedObservable.add(() => {
-                    integrate.setInternalTexture("directionalField", fields[0].internal); integrate.setInternalTexture("irradiance", irradiance.internal);
-                });
+                this.addIrradianceTask(`${prefix}Irradiance`, level, fields[0], level === 0 ? nearFirst : irradiance);
                 const guard = new RadianceNearestSurfaceTask(`${prefix}NearestSurface`, this.graph, this.source, grid, nearest, level * grid * grid);
                 this.nearestTasks.push(guard);
                 this.tasks.push(guard); this.graph.addTask(guard);
+                if (level === 0) {
+                    const base = layouts[0];
+                    const directions = allocate("rcDiffuseGiSecondDirections", base.width, base.height, Constants.TEXTURETYPE_HALF_FLOAT);
+                    this.addSecondBounceTask(`${prefix}SecondBounce`, base, nearFirst, nearest, directions);
+                    this.addIrradianceTask(`${prefix}CombineIrradiance`, level, directions, irradiance, nearFirst);
+                }
             }
         } catch (error) { this.dispose(); throw error; }
+    }
+
+    private addIrradianceTask(name: string, level: number, directions: FieldTexture,
+        target: FieldTexture, firstBounce?: FieldTexture): void {
+        const task = new FrameGraphComputeShaderTask(name, this.graph, {
+            computeSource: firstBounce ? RC_DIFFUSE_GI_COMBINE_IRRADIANCE_WGSL : RC_DIFFUSE_GI_IRRADIANCE_WGSL,
+        }, { bindingsMapping: {
+            directionalField: { group: 0, binding: 0 }, irradiance: { group: 0, binding: 1 },
+            atlasOffset: { group: 0, binding: 2 }, ...(firstBounce && { firstIrradiance: { group: 0, binding: 3 } }),
+        } });
+        this.tasks.push(task); this.graph.addTask(task);
+        const grid = RC_DIFFUSE_GI_GRID;
+        const groups = Math.ceil(grid / 4);
+        const atlasOffset = task.createUniformBuffer("atlasOffset", { offset: 4 });
+        task.execute = () => atlasOffset.updateFloat4("offset", 0, level * grid * grid, 0, 0);
+        task.dispatchSize = new Vector3(groups, groups, groups);
+        task.dependencies = new Set([directions.handle, target.handle]);
+        if (firstBounce) task.dependencies.add(firstBounce.handle);
+        task.onTexturesAllocatedObservable.add(() => {
+            task.setInternalTexture("directionalField", directions.internal);
+            task.setInternalTexture("irradiance", target.internal);
+            if (firstBounce) task.setInternalTexture("firstIrradiance", firstBounce.internal);
+        });
+    }
+
+    private addSecondBounceTask(name: string, layout: RadianceCascadeLayout,
+        firstBounce: FieldTexture, nearest: FieldTexture, target: FieldTexture): void {
+        const task = new FrameGraphComputeShaderTask(name, this.graph, {
+            computeSource: RC_DIFFUSE_GI_SECOND_BOUNCE_WGSL,
+        }, { bindingsMapping: {
+            params: { group: 0, binding: 0 }, triangles: { group: 0, binding: 1 }, nodes: { group: 0, binding: 2 },
+            outputField: { group: 0, binding: 4 }, albedoPixels: { group: 0, binding: 5 },
+            firstIrradiance: { group: 0, binding: 6 }, nearestSurface: { group: 0, binding: 7 },
+        } });
+        this.tasks.push(task); this.graph.addTask(task);
+        const params = task.createUniformBuffer("params", { volumeMin: 4, volumeSize: 4, shape: 4,
+            interval: 4, lightDirection: 4, lightColor: 4 });
+        task.dispatchSize = new Vector3(Math.ceil(layout.width / 8), Math.ceil(layout.height / 8), 1);
+        task.dependencies = new Set([firstBounce.handle, nearest.handle, target.handle]);
+        const bind = () => {
+            task.setStorageBuffer("triangles", this.source.triangleBuffer);
+            task.setStorageBuffer("nodes", this.source.nodeBuffer);
+            task.setStorageBuffer("albedoPixels", this.source.emissionBuffer);
+            task.setInternalTexture("firstIrradiance", firstBounce.internal);
+            task.setInternalTexture("nearestSurface", nearest.internal);
+            task.setInternalTexture("outputField", target.internal);
+        };
+        task.onTexturesAllocatedObservable.add(bind);
+        task.execute = () => {
+            bind();
+            const volume = this.volumes[0];
+            params.updateFloat4("volumeMin", ...volume.min, 0);
+            params.updateFloat4("volumeSize", volume.size, volume.size, volume.size, 0);
+            params.updateFloat4("shape", layout.grid, layout.directionsX, layout.directionsY, this.source.bvh.triangleCount);
+        };
     }
 
     public setVolume(volume: Volume): void {

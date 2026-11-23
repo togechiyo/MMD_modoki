@@ -86,6 +86,16 @@ renderer用Vite設定では `babylon-mmd/esm/Loader/dxBmpTextureLoader` を `opt
 
 なお、`ERR_FILE_NOT_FOUND` の場合は別原因なので、前項のtexture配置確認を行う。
 
+### Console にエラーが出ず、BMP 材質が無地になる場合
+
+2026-11-23 の開発版では、PMX を開いても BMP を使う材質が無地になった。アプリのログには PMX が参照するテクスチャ名が残り、材質の `diffuseTexture` は読み込み完了後も `null` だった。同じセッションで PNG・TGA を使う材質は表示されていた。
+
+このとき Electron は、前日にキャッシュした Babylon.js 本体と、当日取得した BMP ローダーを組み合わせていた。配信時の HTTP ステータスはどちらも 200 だった。ローダーが別の `AbstractEngine` を参照したため、本体が登録した画像読み込み関数を呼べず、BMP のデコード前に `FileTools needs to be imported before as it contains a side-effect required by your code.` という例外が起きた。
+
+独立した Electron / WebGPU 環境で、同じ PMX と非圧縮 24 ビット BMP を使って確認した。当時の BMP ローダーと依存モジュールを再生すると材質が無地になり、ローダーの参照先を本体と同じ `AbstractEngine` に揃えると 512×512 のテクスチャが読み込まれた。新しいキャッシュで通常起動した場合も読み込みに成功した。
+
+復旧するには、編集中のプロジェクトを保存し、DevTools の **Network → Disable cache** にチェックを入れる。DevTools を開いたままアプリ画面を再読み込みし、プロジェクトまたは PMX を開き直す。[Vite 7 のブラウザーキャッシュ](https://v7.vite.dev/guide/dep-pre-bundling#browser-cache)・[Chrome DevTools のキャッシュ無効化](https://developer.chrome.com/docs/devtools/network/reference#disable-cache)
+
 ## Xアクセサリーが白黒/市松になる
 
 ### 症状

@@ -27,11 +27,11 @@ test("lists an X accessory in Info and uses the former slot for gravity", async 
       modelPath,
     )).not.toBeNull();
 
-    const loaded = await page.evaluate(
-      async (filePath) => window.mmdModokiE2e.loadAccessory(filePath),
-      accessoryPath,
-    );
-    expect(loaded).toBe(true);
+    await launched.app.evaluate(({ dialog }, path) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, accessoryPath);
+    await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+    await page.locator('[data-menu-command="file.openFile"]').click();
     await expect(page.locator("#viewport-overlay")).toBeHidden();
     await expect(page.locator(".viewport-axis-handle-tool")).toHaveCount(6);
 
@@ -49,6 +49,12 @@ test("lists an X accessory in Info and uses the former slot for gravity", async 
     });
     expect(accessoryLayoutEdgeDelta).toBeLessThan(3);
     await expect(page.locator("#accessory-info-content")).toBeVisible();
+    const accessoryVertices = page.locator("#info-accessory-vertices");
+    const accessoryTriangles = page.locator("#info-accessory-triangles");
+    await expect(accessoryVertices).toBeVisible();
+    await expect(accessoryVertices).toHaveText("3");
+    await expect(accessoryTriangles).toBeVisible();
+    await expect(accessoryTriangles).toHaveText("1");
     await expect(page.locator("#accessory-transform-content")).toBeVisible();
     await expect(page.locator("#accessory-pos-x")).toBeEnabled();
     await expect(page.locator("#accessory-scale")).toHaveValue("1");
@@ -138,6 +144,13 @@ test("lists an X accessory in Info and uses the former slot for gravity", async 
     await expect(targetSelect).toHaveValue("__accessory__:0");
     await expect(page.locator(".bottom-panel-inner")).toHaveAttribute("data-bottom-panel-mode", "accessory");
     await expect(page.locator("#btn-toolbar-mode-toggle")).toHaveText(/カメラ編/);
+    await targetSelect.selectOption("0");
+    await expect(page.locator("#info-vertices")).toBeVisible();
+    await expect(page.locator("#info-vertices")).toHaveText("27");
+    await expect(accessoryVertices).toBeHidden();
+    await targetSelect.selectOption("__accessory__:0");
+    await expect(accessoryTriangles).toBeVisible();
+    await expect(accessoryTriangles).toHaveText("1");
     expect(pageErrors).toEqual([]);
   } finally {
     await launched.close();

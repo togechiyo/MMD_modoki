@@ -13,6 +13,10 @@ type AccessoryPanelElements = {
     transformContent: HTMLElement | null;
     name: HTMLElement | null;
     kind: HTMLElement | null;
+    vertexLabel: HTMLElement | null;
+    vertices: HTMLElement | null;
+    triangleItem: HTMLElement | null;
+    triangles: HTMLElement | null;
     parentModelSelect: HTMLSelectElement | null;
     parentBoneSelect: HTMLSelectElement | null;
     chkVisibility: HTMLInputElement | null;
@@ -36,6 +40,10 @@ function resolveAccessoryPanelElements(): AccessoryPanelElements {
         transformContent: document.getElementById("accessory-transform-content"),
         name: document.getElementById("info-accessory-name"),
         kind: document.getElementById("info-accessory-kind"),
+        vertexLabel: document.getElementById("info-accessory-vertex-label"),
+        vertices: document.getElementById("info-accessory-vertices"),
+        triangleItem: document.getElementById("info-accessory-triangle-item"),
+        triangles: document.getElementById("info-accessory-triangles"),
         parentModelSelect: document.getElementById("accessory-parent-model") as HTMLSelectElement | null,
         parentBoneSelect: document.getElementById("accessory-parent-bone") as HTMLSelectElement | null,
         chkVisibility: document.getElementById("chk-accessory-visibility") as HTMLInputElement | null,
@@ -208,6 +216,16 @@ export class AccessoryPanelController {
                 ? `${accessory.kind.toUpperCase()}${accessory.contentKind === "point-cloud" ? ` (${t("accessory.pointCloud")})` : accessory.contentKind === "gaussian-splat" ? " (Gaussian Splat)" : ""}`
                 : "-";
         }
+        const { vertexLabel, vertices, triangleItem, triangles } = this.elements;
+        if (vertexLabel) {
+            const label = accessory?.contentKind === "point-cloud" ? "accessory.points"
+                : accessory?.contentKind === "gaussian-splat" ? "accessory.splats" : "accessory.vertices";
+            vertexLabel.dataset.i18n = label;
+            vertexLabel.textContent = t(label);
+        }
+        if (vertices) vertices.textContent = accessory?.vertexCount.toLocaleString() ?? "-";
+        if (triangleItem) triangleItem.hidden = accessory?.triangleCount == null;
+        if (triangles) triangles.textContent = accessory?.triangleCount?.toLocaleString() ?? "-";
     }
 
     private setupControls(): void {

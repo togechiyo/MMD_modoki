@@ -10,7 +10,7 @@ import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
-import type { Material } from "@babylonjs/core/Materials/material";
+import { Material } from "@babylonjs/core/Materials/material";
 import { MultiMaterial } from "@babylonjs/core/Materials/multiMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
@@ -57,6 +57,8 @@ export type AccessoryState = {
     castsShadow: boolean;
     kind: AccessoryKind;
     contentKind?: PlyContentKind;
+    vertexCount: number;
+    triangleCount: number | null;
 };
 
 export type AccessoryTransformState = {
@@ -157,6 +159,8 @@ type AccessoryEntry = {
     offset: TransformNode;
     baseScale: number;
     meshes: AbstractMesh[];
+    vertexCount: number;
+    triangleCount: number | null;
     defaultShaderPresetId: WgslMaterialShaderPresetId;
     castsShadow: boolean;
     parentModelRef: object | null;
@@ -342,6 +346,24 @@ function getManagedAccessoryMeshes(meshes: AbstractMesh[]): AbstractMesh[] {
         managedMeshes.push(mesh);
     }
     return managedMeshes;
+}
+
+function countAccessoryTriangles(mesh: AbstractMesh): number {
+    let triangles = 0;
+    for (const subMesh of mesh.subMeshes) {
+        const mode = subMesh.getMaterial(false)?.fillMode ?? Material.TriangleFillMode;
+        switch (mode) {
+            case Material.TriangleFillMode:
+            case Material.WireFrameFillMode:
+                triangles += Math.floor(subMesh.indexCount / 3);
+                break;
+            case Material.TriangleStripDrawMode:
+            case Material.TriangleFanDrawMode:
+                triangles += Math.max(0, subMesh.indexCount - 2);
+                break;
+        }
+    }
+    return triangles;
 }
 
 function toFloat32VertexData(
@@ -1065,6 +1087,8 @@ function createAccessoryEntryFromImport(
         offset,
         baseScale,
         meshes: managedMeshes,
+        vertexCount: managedMeshes.reduce((sum, mesh) => sum + mesh.getTotalVertices(), 0),
+        triangleCount: nonSurface ? null : managedMeshes.reduce((sum, mesh) => sum + countAccessoryTriangles(mesh), 0),
         defaultShaderPresetId,
         castsShadow,
         parentModelRef: null,
@@ -1603,6 +1627,8 @@ if (!mmdManagerProto.getLoadedAccessories) {
             castsShadow: entry.castsShadow,
             kind: entry.kind,
             contentKind: entry.contentKind,
+            vertexCount: entry.vertexCount,
+            triangleCount: entry.triangleCount,
         }));
     };
 }

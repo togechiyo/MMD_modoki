@@ -18,6 +18,9 @@ async function seek(page, frame) {
 }
 async function assertGaussian(page, reference) {
   await expect(page.locator("#info-accessory-kind")).toHaveText(`${reference.kind.toUpperCase()} (Gaussian Splat)`);
+  await expect(page.locator("#info-accessory-vertex-label")).toHaveText("スプラット数");
+  await expect(page.locator("#info-accessory-vertices")).toHaveText(reference.count.toLocaleString());
+  await expect(page.locator("#info-accessory-triangles")).toBeHidden();
   await expect(page.locator("#chk-accessory-shadow")).toBeDisabled();
   await expect(page.locator("#chk-accessory-shadow")).not.toBeChecked();
   await page.waitForFunction(() => window.mmdModokiE2e.getAccessoryMaterialDiagnostics().some(mesh => mesh.ready));

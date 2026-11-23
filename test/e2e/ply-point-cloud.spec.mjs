@@ -16,6 +16,9 @@ async function seek(page, frame) {
 }
 async function assertPointMode(page) {
   await expect(page.locator("#info-accessory-kind")).toHaveText("PLY (点群)");
+  await expect(page.locator("#info-accessory-vertices")).toBeVisible();
+  await expect(page.locator("#info-accessory-vertices")).toHaveText("441");
+  await expect(page.locator("#info-accessory-triangles")).toBeHidden();
   await expect(page.locator("#chk-accessory-shadow")).toBeDisabled();
   await expect(page.locator("#chk-accessory-shadow")).not.toBeChecked();
   const materials = await page.evaluate(() => window.mmdModokiE2e.getAccessoryMaterialDiagnostics());

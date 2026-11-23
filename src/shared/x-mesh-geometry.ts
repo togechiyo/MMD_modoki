@@ -30,34 +30,22 @@ function matchingFaceLayout(left: PackedXFaces, right: PackedXFaces): boolean {
     return left.indices.length === right.indices.length;
 }
 
+function normalsFollowPositions(x: XGeometrySource, source: NonNullable<XGeometrySource["normals"]>, redundant: Uint8Array): boolean {
+    if (source.values.length !== x.pos.length || (x.uvs && x.uvs.length !== x.pos.length / 3 * 2)) return false;
+    const { offsets, indices } = x.faces;
+    for (let face = 0; face < redundant.length; face++) {
+        if (redundant[face]) continue;
+        for (let corner = offsets[face]; corner < offsets[face + 1]; corner++) {
+            if (indices[corner] !== source.faces.indices[corner]) return false;
+        }
+    }
+    return true;
+}
+
 function indexedNormals(x: XGeometrySource, source: NonNullable<XGeometrySource["normals"]>, redundant: Uint8Array) {
     const { offsets, indices } = x.faces;
     const numPositions = x.pos.length / 3;
     const numNormals = source.values.length / 3;
-    // Standard vertex-aligned normals can use the source buffers directly. Check that all
-    // positions remain referenced so discarded polygons cannot enlarge the mesh bounds.
-    if (numNormals === numPositions && (!x.uvs || x.uvs.length === numPositions * 2)) {
-        const used = new Uint8Array(numPositions);
-        let usedCount = 0;
-        let aligned = true;
-        for (let face = 0; face < redundant.length && aligned; face++) {
-            if (redundant[face]) continue;
-            for (let corner = offsets[face]; corner < offsets[face + 1]; corner++) {
-                const position = indices[corner];
-                if (position !== source.faces.indices[corner] || position >= numPositions) {
-                    aligned = false;
-                    break;
-                }
-                if (!used[position]) {
-                    used[position] = 1;
-                    usedCount++;
-                }
-            }
-        }
-        if (aligned && usedCount === numPositions) {
-            return { positions: float32(x.pos), normals: float32(source.values), uvs: x.uvs ? float32(x.uvs) : null, corners: indices };
-        }
-    }
     const heads = new Uint32Array(numPositions);
     const corners = new Uint32Array(indices.length);
     // Group corners by position. Each link is replaced by its output vertex once visited.
@@ -112,6 +100,59 @@ function indexedNormals(x: XGeometrySource, source: NonNullable<XGeometrySource[
     return { positions, normals, uvs, corners };
 }
 
+/** Pack from the original attributes so discarded vertices never need float32 copies. */
+function packReferencedVertices(x: XGeometrySource, normalValues: ArrayLike<number> | null, indices: Uint32Array) {
+    const vertexCount = x.pos.length / 3;
+    const sourceUvs = x.uvs?.length === vertexCount * 2 ? x.uvs : null;
+    const used = new Uint8Array(vertexCount);
+    let usedCount = 0;
+    for (let i = 0; i < indices.length && usedCount < vertexCount; i++) {
+        const vertex = indices[i];
+        if (!used[vertex]) {
+            used[vertex] = 1;
+            usedCount++;
+        }
+    }
+    if (usedCount === vertexCount) {
+        return {
+            positions: float32(x.pos),
+            normals: normalValues ? float32(normalValues) : null,
+            uvs: sourceUvs ? float32(sourceUvs) : null,
+        };
+    }
+
+    const positions = new Float32Array(usedCount * 3);
+    const normals = normalValues ? new Float32Array(usedCount * 3) : null;
+    const uvs = sourceUvs ? new Float32Array(usedCount * 2) : null;
+    // Reuse the usage bytes as local offsets. One base per 256 source vertices avoids
+    // allocating a second, full-size uint32 remap alongside the parsed geometry.
+    const blockSize = 256;
+    const base = new Uint32Array(Math.ceil(vertexCount / blockSize));
+    let target = 0;
+    for (let block = 0; block < base.length; block++) {
+        base[block] = target;
+        const end = Math.min((block + 1) * blockSize, vertexCount);
+        for (let source = block * blockSize; source < end; source++) {
+            if (!used[source]) continue;
+            used[source] = target - base[block];
+            for (let axis = 0; axis < 3; axis++) {
+                positions[target * 3 + axis] = x.pos[source * 3 + axis];
+                if (normals && normalValues) normals[target * 3 + axis] = normalValues[source * 3 + axis];
+            }
+            if (uvs && sourceUvs) {
+                uvs[target * 2] = sourceUvs[source * 2];
+                uvs[target * 2 + 1] = sourceUvs[source * 2 + 1];
+            }
+            target++;
+        }
+    }
+    for (let i = 0; i < indices.length; i++) {
+        const source = indices[i];
+        indices[i] = base[Math.floor(source / blockSize)] + used[source];
+    }
+    return { positions, normals, uvs };
+}
+
 export function buildXMeshGeometry(x: XGeometrySource, redundant: Uint8Array): XGeometry {
     const { offsets } = x.faces;
     const materialCount = Math.max(1, x.mats.length);
@@ -134,9 +175,10 @@ export function buildXMeshGeometry(x: XGeometrySource, redundant: Uint8Array): X
         start += count;
     }
 
-    const explicit = x.normals && matchingFaceLayout(x.faces, x.normals.faces)
-        ? indexedNormals(x, x.normals, redundant) : null;
-    const corners = explicit?.corners ?? x.faces.indices;
+    const normalSource = x.normals && matchingFaceLayout(x.faces, x.normals.faces) ? x.normals : null;
+    const split = normalSource && !normalsFollowPositions(x, normalSource, redundant)
+        ? indexedNormals(x, normalSource, redundant) : null;
+    const corners = split?.corners ?? x.faces.indices;
     const indices = new Uint32Array(indexCount);
     const vertexCount = x.pos.length / 3;
     for (let face = 0; face < offsets.length - 1; face++) {
@@ -148,10 +190,10 @@ export function buildXMeshGeometry(x: XGeometrySource, redundant: Uint8Array): X
         let output = cursors[material];
         const pivot = corners[first];
         let previous = corners[first + 1];
-        if (!explicit && (pivot >= vertexCount || previous >= vertexCount)) throw new Error("X face vertex index is out of range");
+        if (!split && (pivot >= vertexCount || previous >= vertexCount)) throw new Error("X face vertex index is out of range");
         for (let corner = first + 2; corner < end; corner++) {
             const next = corners[corner];
-            if (!explicit && next >= vertexCount) throw new Error("X face vertex index is out of range");
+            if (!split && next >= vertexCount) throw new Error("X face vertex index is out of range");
             indices[output++] = pivot;
             indices[output++] = previous;
             indices[output++] = next;
@@ -159,13 +201,8 @@ export function buildXMeshGeometry(x: XGeometrySource, redundant: Uint8Array): X
         }
         cursors[material] = output;
     }
-    return {
-        positions: explicit?.positions ?? float32(x.pos),
-        normals: explicit?.normals ?? null,
-        uvs: explicit ? explicit.uvs : x.uvs && x.uvs.length === vertexCount * 2 ? float32(x.uvs) : null,
-        indices,
-        ranges,
-    };
+    const { positions, normals, uvs } = split ?? packReferencedVertices(x, normalSource?.values ?? null, indices);
+    return { positions, normals, uvs, indices, ranges };
 }
 
 // Partition only when a vertex or index buffer would exceed the device's allocation limit.

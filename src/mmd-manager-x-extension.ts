@@ -638,16 +638,23 @@ function ensureAccessoryFallbackMaterial(
     }
 }
 
-function prepareManagedAccessoryMeshes(host: XLoadHost, meshes: AbstractMesh[], castShadows: boolean): AbstractMesh[] {
+function prepareManagedAccessoryMeshes(host: XLoadHost, meshes: AbstractMesh[], kind: AccessoryKind, castShadows: boolean): void {
     for (const mesh of meshes) {
         const nonSurface = isStaticPointCloudMesh(mesh) || isGaussianAccessoryMesh(mesh);
         mesh.visibility = 1;
         mesh.isVisible = true;
-        mesh.alwaysSelectAsActiveMesh = true;
+        mesh.alwaysSelectAsActiveMesh = kind !== "x";
         mesh.receiveShadows = !nonSurface;
         mesh.showBoundingBox = GLB_DEBUG_SHOW_BOUNDING_BOX;
         if (!nonSurface) {
-            stabilizeLargeThinLoadedMesh(mesh);
+            if (kind === "x") {
+                // The X loader has already built local bounds. Apply the import hierarchy
+                // before the first camera cull, including for wide, flat stages.
+                mesh.computeWorldMatrix(true);
+                mesh.cullingStrategy = Mesh.CULLINGSTRATEGY_STANDARD;
+            } else {
+                stabilizeLargeThinLoadedMesh(mesh);
+            }
             normalizeAccessoryMaterialVisibility(mesh.material);
         }
         if (GLB_DEBUG_SHOW_EDGES && mesh instanceof Mesh) {
@@ -659,7 +666,6 @@ function prepareManagedAccessoryMeshes(host: XLoadHost, meshes: AbstractMesh[], 
             host.shadowGenerator.addShadowCaster(mesh, false);
         }
     }
-    return meshes;
 }
 
 function excludeGlbAccessoryMeshesFromDepthAndShadow(host: XLoadHost, meshes: readonly AbstractMesh[]): void {
@@ -1024,7 +1030,8 @@ function createAccessoryEntryFromImport(
         normalizeObjAccessoryMaterialsToMmd(host.scene, managedMeshes);
     }
     forceAccessoryHierarchyEnabled([...result.transformNodes, ...hierarchyMeshes, ...managedMeshes]);
-    prepareManagedAccessoryMeshes(host, managedMeshes, kind !== "glb" && !nonSurface);
+    const castsShadow = kind !== "glb" && !nonSurface;
+    prepareManagedAccessoryMeshes(host, managedMeshes, kind, castsShadow);
     if (kind !== "glb" && !nonSurface) {
         const accessoryMaterials = collectAccessoryMaterials(managedMeshes);
         applyWgslShaderPresetToMaterials(
@@ -1059,7 +1066,7 @@ function createAccessoryEntryFromImport(
         baseScale,
         meshes: managedMeshes,
         defaultShaderPresetId,
-        castsShadow: kind !== "glb" && !nonSurface,
+        castsShadow,
         parentModelRef: null,
         parentModelName: null,
         parentBoneName: null,

@@ -6,6 +6,11 @@ function sceneContext() {
   const scene = handle.getScene(); handle.dispose(); return scene;
 }
 
+export function cameraActiveMeshNames() {
+  const active = sceneContext().getActiveMeshes();
+  return active.data.slice(0, active.length).map(mesh => mesh.name);
+}
+
 export function capacityState() {
   const scene = sceneContext(), engine = scene.getEngine();
   const shadow = scene.lights.flatMap(light => [...(light.getShadowGenerators()?.values() ?? [])])[0];

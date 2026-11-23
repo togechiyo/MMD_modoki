@@ -46,6 +46,32 @@ describe("packed X mesh geometry", () => {
         expect(out.positions).toBe(square.pos);
     });
 
+    it("packs only vertices used by surviving triangles before computing normals", () => {
+        const pos = Float64Array.of(-50,0,0, 0,0,0, 0,1,0, 1,0,0, 50,0,0, 0,0,0);
+        const uvs = Float64Array.of(0,0, 0,0, 0,1, 1,0, 0,0, 1,1);
+        const mesh = { ...square, pos, uvs, faces: faces([1,2,3], [3,2,5], [4,0,2], [0,4]), faceMats: [1,0,0,1] };
+        const out = buildXMeshGeometry(mesh, Uint8Array.of(0,0,1,0));
+        expect(out.positions).toEqual(Float32Array.of(0,0,0, 0,1,0, 1,0,0, 0,0,0));
+        // Coincident positions on either side of a texture seam keep distinct IDs.
+        expect(out.uvs).toEqual(Float32Array.of(0,0, 0,1, 1,0, 1,1));
+        expect(out.normals).toBeNull();
+        expect([...out.indices]).toEqual([2,1,3, 0,1,2]);
+        expect(out.ranges).toEqual([{ material: 0, start: 0, count: 3 }, { material: 1, start: 3, count: 3 }]);
+    });
+
+    it("keeps explicit aligned normals when packing vertices across 256-vertex blocks", () => {
+        const pos = Float64Array.from({ length: 515 * 3 }, (_, i) => i);
+        const normals = Float64Array.from(pos, value => -value);
+        const indices = [...Array.from({ length: 256 }, (_, i) => i), 511, 513, 514];
+        const sourceFaces = faces(indices);
+        const mesh = { ...square, pos, uvs: null, faces: sourceFaces, normals: { values: normals, faces: sourceFaces } };
+        const out = buildXMeshGeometry(mesh, Uint8Array.of(0));
+        expect(out.positions.length / 3).toBe(indices.length);
+        expect(out.positions.slice(-9)).toEqual(Float32Array.from([511,513,514].flatMap(i => [...pos.slice(i * 3, i * 3 + 3)])));
+        expect(out.normals).toEqual(Float32Array.from(out.positions, value => -value));
+        expect([...out.indices.slice(-6)]).toEqual([0, 256, 257, 0, 257, 258]);
+    });
+
     it("keeps shared buffers for vertex-aligned normals", () => {
         const normals = { values: new Float32Array(square.pos.length), faces: square.faces };
         const out = buildXMeshGeometry({ ...square, normals }, new Uint8Array(2));

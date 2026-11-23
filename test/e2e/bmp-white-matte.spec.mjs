@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { writePmx } from "../../scripts/generate-external-parent-test-models.mjs";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -21,12 +21,10 @@ function createWhiteMattedBmp() {
   return bytes;
 }
 
-test("normal PMX BMP loading unmattes white edge texels without a material override", async ({}, testInfo) => {
-  test.setTimeout(600_000);
-  const launched = await launchMmdModoki(root);
-  try {
-    const modelPath = resolve(launched.tempDir, "white-matte.pmx");
-    writeFileSync(resolve(launched.tempDir, "white-matte.bmp"), createWhiteMattedBmp());
+function writeWhiteMattedQuad(directory) {
+    const modelPath = resolve(directory, "white-matte.pmx");
+    const bmp = createWhiteMattedBmp();
+    writeFileSync(resolve(directory, "white-matte.bmp"), bmp);
     writeFileSync(modelPath, writePmx({
       modelName: "White matte quad", englishModelName: "White matte quad", comment: "Generated distributable fixture",
       diffuseTexture: "white-matte.bmp", noToon: true,
@@ -36,6 +34,14 @@ test("normal PMX BMP loading unmattes white edge texels without a material overr
       materialGroups: [{ name: "Quad", englishName: "Quad", diffuse: [1, 1, 1, 1], ambient: [1, 1, 1],
         indices: [0, 1, 2, 0, 2, 3], doubleSided: true, edge: false }],
     }));
+    return { modelPath, bmp };
+}
+
+test("normal PMX BMP loading unmattes white edge texels without a material override", async ({}, testInfo) => {
+  test.setTimeout(600_000);
+  const launched = await launchMmdModoki(root);
+  try {
+    const { modelPath } = writeWhiteMattedQuad(launched.tempDir);
     const page = await launched.app.firstWindow();
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -57,5 +63,28 @@ test("normal PMX BMP loading unmattes white edge texels without a material overr
     await page.locator("#render-canvas").screenshot({ path: testInfo.outputPath("white-matte-canvas.png") });
     expect(errors).toEqual([]);
     expect((await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).count).toBe(0);
+  } finally { await launched.close(); }
+});
+
+test("BPMX conversion embeds original white-matted BMP bytes", async () => {
+  test.setTimeout(600_000);
+  const launched = await launchMmdModoki(root);
+  try {
+    const { modelPath, bmp } = writeWhiteMattedQuad(launched.tempDir);
+    await launched.app.evaluate(({ dialog }, path) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, modelPath);
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e), null, { timeout: 600_000 });
+    await page.locator('.app-menu-trigger[data-i18n="menu.tools"]').click();
+    await page.locator('[data-menu-command="tools.mmdOptimizedFormat"]').click();
+    const dialog = page.locator('[data-popup-id="mmd-optimized-format"]');
+    await dialog.locator('[data-optimized-format-file="model"]').click();
+    await dialog.locator('[data-optimized-format-convert="model"]').click();
+    const bpmxPath = resolve(launched.tempDir, "user-data/white-matte.bpmx");
+    await expect.poll(() => existsSync(bpmxPath), { timeout: 120_000 }).toBe(true);
+    const bpmx = readFileSync(bpmxPath);
+    expect(bpmx.subarray(0, 4).toString("ascii")).toBe("BPMX");
+    expect(bpmx.includes(bmp)).toBe(true);
   } finally { await launched.close(); }
 });

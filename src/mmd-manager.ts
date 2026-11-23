@@ -11151,13 +11151,15 @@ ${beforeFogAppendBlock}
         decoded: DecodedBmpTexture,
         scene: unknown,
         assetContainer: unknown,
-        options: { invertY?: boolean; samplingMode?: number },
+        options: { invertY?: boolean; samplingMode?: number; deleteBuffer?: boolean },
+        sourceBuffer: ArrayBuffer,
     ): Promise<Texture | null> {
         const invertY = options.invertY ?? true;
         const cacheKey = `${textureName}|${invertY}|${options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE}`;
         const cached = this.webGpuTextureFallbackCache.get(cacheKey);
         if (cached) {
             const texture = await cached;
+            if (texture && options.deleteBuffer === false) texture._buffer = sourceBuffer;
             if (texture) this.addTextureToAssetContainer(texture, assetContainer);
             return texture;
         }
@@ -11173,6 +11175,7 @@ ${beforeFogAppendBlock}
                 options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE,
             );
             texture.name = textureName;
+            if (options.deleteBuffer === false) texture._buffer = sourceBuffer;
             texture.hasAlpha = decoded.hasAlpha;
             texture.metadata = {
                 ...(texture.metadata as Record<string, unknown> | null ?? {}),
@@ -11219,6 +11222,7 @@ ${beforeFogAppendBlock}
             invertY?: boolean;
             samplingMode?: number;
             forcedExtension?: string;
+            deleteBuffer?: boolean;
         };
         const textureLoader = ((builder as { [key: string]: unknown })._textureLoader as {
             loadTextureAsync?: (
@@ -11297,10 +11301,11 @@ ${beforeFogAppendBlock}
                         const loadOfficial = () => originalLoadTextureAsync(
                             uniqueId, rootUrl, relativeTexturePathOrIndex, scene, assetContainer, textureOptions,
                         );
-                        return buffer ? loadBmpTextureWithAlphaCorrection(
-                            buffer,
+                        const sourceBuffer = buffer;
+                        return sourceBuffer ? loadBmpTextureWithAlphaCorrection(
+                            sourceBuffer,
                             loadOfficial,
-                            decoded => this.createBmpAlphaTexture(textureUrl, decoded, scene, assetContainer, textureOptions),
+                            decoded => this.createBmpAlphaTexture(textureUrl, decoded, scene, assetContainer, textureOptions, sourceBuffer),
                         ) : loadOfficial();
                     }
                 }
@@ -11364,7 +11369,7 @@ ${beforeFogAppendBlock}
                         () => originalLoadTextureFromBufferAsync(
                             uniqueId, textureName, arrayBufferOrBlob, scene, assetContainer, textureOptions, applyPathNormalization,
                         ),
-                        decoded => this.createBmpAlphaTexture(textureName, decoded, scene, assetContainer, textureOptions),
+                        decoded => this.createBmpAlphaTexture(textureName, decoded, scene, assetContainer, textureOptions, buffer),
                     );
                 }
                 const isDdsTexture = isDdsTexturePath(textureName)

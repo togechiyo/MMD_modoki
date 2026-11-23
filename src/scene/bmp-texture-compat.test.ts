@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { decodeBmpTextureToRgba, isBmpTexturePath } from "./bmp-texture-compat";
+import { describe, expect, it, vi } from "vitest";
+import { decodeBmpTextureToRgba, isBmpTexturePath, loadBmpTextureWithAlphaCorrection } from "./bmp-texture-compat";
 
 function create32BitBmp(width: number, height: number, pixelsBottomUpBgra: readonly number[]): ArrayBuffer {
     const rowStride = width * 4;
@@ -93,5 +93,63 @@ describe("bmp texture compatibility", () => {
         new DataView(buffer).setUint16(28, 24, true);
 
         expect(decodeBmpTextureToRgba(buffer)).toBeNull();
+    });
+});
+
+describe("BMP texture loader selection", () => {
+    it("decodes white-matted alpha before the official loader and preserves alpha", async () => {
+        const data = create32BitBmp(81, 1, [
+            ...Array.from({ length: 64 }, () => [255, 255, 255, 0]).flat(),
+            ...Array.from({ length: 16 }, () => [239, 239, 255, 16]).flat(),
+            0, 0, 255, 255,
+        ]);
+        const official = vi.fn(async () => "official");
+        const create = vi.fn(async (decoded: NonNullable<ReturnType<typeof decodeBmpTextureToRgba>>) => {
+            expect(decoded.whiteMattedAlpha).toBe(true);
+            expect(decoded.hasAlpha).toBe(true);
+            expect([...decoded.rgba.slice(64 * 4, 65 * 4)]).toEqual([255, 0, 0, 16]);
+            return "decoded";
+        });
+        expect(await loadBmpTextureWithAlphaCorrection(data, official, create)).toBe("decoded");
+        expect(official).not.toHaveBeenCalled();
+        expect(create).toHaveBeenCalledOnce();
+    });
+
+    it("keeps non-white-matted alpha on the official path when it succeeds", async () => {
+        const create = vi.fn(async () => "decoded");
+        const official = vi.fn(async () => "official");
+        expect(await loadBmpTextureWithAlphaCorrection(
+            create32BitBmp(1, 1, [0, 0, 255, 64]), official, create,
+        )).toBe("official");
+        expect(official).toHaveBeenCalledOnce();
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it("uses non-white-matted alpha CPU fallback only after official failure", async () => {
+        const calls: string[] = [];
+        expect(await loadBmpTextureWithAlphaCorrection(
+            create32BitBmp(1, 1, [0, 0, 255, 64]),
+            async () => { calls.push("official"); return null; },
+            async () => { calls.push("decoded"); return "decoded"; },
+        )).toBe("decoded");
+        expect(calls).toEqual(["official", "decoded"]);
+    });
+
+    it.each([new ArrayBuffer(0), create32BitBmp(1, 1, [0, 0, 255, 255])])(
+        "does not CPU-fallback for invalid or opaque data after official failure", async data => {
+            const create = vi.fn(async () => "decoded");
+            const official = vi.fn(async () => null);
+            expect(await loadBmpTextureWithAlphaCorrection(data, official, create)).toBeNull();
+            expect(official).toHaveBeenCalledOnce();
+            expect(create).not.toHaveBeenCalled();
+        },
+    );
+
+    it("preserves official loader errors instead of silently changing paths", async () => {
+        const create = vi.fn(async () => "decoded");
+        await expect(loadBmpTextureWithAlphaCorrection(new ArrayBuffer(0), async () => {
+            throw new Error("official failed");
+        }, create)).rejects.toThrow("official failed");
+        expect(create).not.toHaveBeenCalled();
     });
 });

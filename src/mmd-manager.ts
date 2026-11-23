@@ -472,8 +472,9 @@ import {
     shouldSkipDdsTextureForWebGpu,
 } from "./scene/dds-texture-compat";
 import {
-    decodeBmpTextureToRgba,
+    type DecodedBmpTexture,
     isBmpTexturePath,
+    loadBmpTextureWithAlphaCorrection,
 } from "./scene/bmp-texture-compat";
 import { GlobalIlluminationController } from "./render/global-illumination-controller";
 import { normalizeEnvironmentLightingRotation } from "./shared/environment-lighting-rotation";
@@ -11145,9 +11146,9 @@ ${beforeFogAppendBlock}
         return texture;
     }
 
-    private async createWebGpuBmpAlphaFallbackTexture(
+    private async createBmpAlphaTexture(
         textureName: string,
-        arrayBufferOrBlob: ArrayBuffer | Blob,
+        decoded: DecodedBmpTexture,
         scene: unknown,
         assetContainer: unknown,
         options: { invertY?: boolean; samplingMode?: number },
@@ -11161,12 +11162,6 @@ ${beforeFogAppendBlock}
             return texture;
         }
 
-        const arrayBuffer = arrayBufferOrBlob instanceof Blob ? await arrayBufferOrBlob.arrayBuffer() : arrayBufferOrBlob;
-        const decoded = decodeBmpTextureToRgba(arrayBuffer);
-        if (!decoded?.hasAlpha) {
-            return null;
-        }
-
         const promise = Promise.resolve().then(() => {
             const texture = RawTexture.CreateRGBATexture(
                 decoded.rgba,
@@ -11178,7 +11173,7 @@ ${beforeFogAppendBlock}
                 options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE,
             );
             texture.name = textureName;
-            texture.hasAlpha = true;
+            texture.hasAlpha = decoded.hasAlpha;
             texture.metadata = {
                 ...(texture.metadata as Record<string, unknown> | null ?? {}),
                 mmdModokiDecodedBmpAlphaFallback: true,
@@ -11195,7 +11190,7 @@ ${beforeFogAppendBlock}
                 this.webGpuTextureFallbackCache.delete(cacheKey);
             });
 
-            logWarn("asset", "32-bit BMP texture decoded on CPU for WebGPU alpha", {
+            logWarn("asset", "32-bit BMP texture decoded on CPU for alpha correction", {
                 textureName,
                 width: decoded.width,
                 height: decoded.height,
@@ -11217,9 +11212,7 @@ ${beforeFogAppendBlock}
     }
 
     public configureMmdTextureLoaderForWebGpuForBuilder(builder: object): void {
-        if (!this.isWebGpuEngine()) {
-            return;
-        }
+        const isWebGpu = this.isWebGpuEngine();
 
         type TextureLoaderOptions = {
             noMipmap?: boolean;
@@ -11258,7 +11251,8 @@ ${beforeFogAppendBlock}
                 const textureOptions = { ...options };
                 if (typeof relativeTexturePathOrIndex === "string") {
                     const textureUrl = PathNormalize(rootUrl + relativeTexturePathOrIndex);
-                    if (originalLoadTextureFromBufferAsync && this.fileUrlToLocalPath(textureUrl)) {
+                    if ((isWebGpu || isBmpTexturePath(textureUrl))
+                        && originalLoadTextureFromBufferAsync && this.fileUrlToLocalPath(textureUrl)) {
                         let buffer: ArrayBuffer;
                         try {
                             buffer = await this.loadArrayBufferFromUrl(textureUrl);
@@ -11270,7 +11264,7 @@ ${beforeFogAppendBlock}
                             uniqueId, textureUrl, buffer, scene, assetContainer, textureOptions,
                         ) ?? null;
                     }
-                    if (this.shouldInspectDdsTextureUrlForWebGpuFallback(textureUrl, textureOptions.forcedExtension)) {
+                    if (isWebGpu && this.shouldInspectDdsTextureUrlForWebGpuFallback(textureUrl, textureOptions.forcedExtension)) {
                         try {
                             const arrayBuffer = await this.loadArrayBufferFromUrl(textureUrl);
                             const ddsFallbackTexture = await this.createWebGpuDdsFallbackTexture(
@@ -11291,42 +11285,29 @@ ${beforeFogAppendBlock}
                         }
                     }
                     if (this.shouldTryBmpAlphaFallbackTextureUrl(textureUrl)) {
-                        const officialTexture = await originalLoadTextureAsync(
-                            uniqueId,
-                            rootUrl,
-                            relativeTexturePathOrIndex,
-                            scene,
-                            assetContainer,
-                            textureOptions,
-                        );
-                        if (officialTexture) {
-                            return officialTexture;
-                        }
+                        let buffer: ArrayBuffer | undefined;
                         try {
-                            const arrayBuffer = await this.loadArrayBufferFromUrl(textureUrl);
-                            const bmpAlphaTexture = await this.createWebGpuBmpAlphaFallbackTexture(
-                                textureUrl,
-                                arrayBuffer,
-                                scene,
-                                assetContainer,
-                                textureOptions,
-                            );
-                            if (bmpAlphaTexture) {
-                                return bmpAlphaTexture;
-                            }
+                            buffer = await this.loadArrayBufferFromUrl(textureUrl);
                         } catch (err) {
-                            logWarn("asset", "BMP alpha texture fallback load failed", {
+                            logWarn("asset", "BMP alpha inspection failed; continuing with Babylon.js", {
                                 textureUrl,
                                 ...toLogErrorData(err),
                             });
                         }
-                        return null;
+                        const loadOfficial = () => originalLoadTextureAsync(
+                            uniqueId, rootUrl, relativeTexturePathOrIndex, scene, assetContainer, textureOptions,
+                        );
+                        return buffer ? loadBmpTextureWithAlphaCorrection(
+                            buffer,
+                            loadOfficial,
+                            decoded => this.createBmpAlphaTexture(textureUrl, decoded, scene, assetContainer, textureOptions),
+                        ) : loadOfficial();
                     }
                 }
                 const textureUrl = PathNormalize(rootUrl + relativeTexturePathOrIndex);
                 const isDdsTexture = isDdsTexturePath(textureUrl)
                     || textureOptions.forcedExtension?.toLowerCase() === ".dds";
-                if (!textureOptions.noMipmap && !isDdsTexture) {
+                if (isWebGpu && !textureOptions.noMipmap && !isDdsTexture) {
                     if (typeof relativeTexturePathOrIndex === "number") {
                         textureOptions.noMipmap = true;
                     } else {
@@ -11358,13 +11339,15 @@ ${beforeFogAppendBlock}
                 const textureOptions = { ...options };
                 let ddsFallbackTexture: Texture | null = null;
                 try {
-                    ddsFallbackTexture = await this.createWebGpuDdsFallbackTexture(
-                        textureName,
-                        arrayBufferOrBlob,
-                        scene,
-                        assetContainer,
-                        textureOptions,
-                    );
+                    if (isWebGpu) {
+                        ddsFallbackTexture = await this.createWebGpuDdsFallbackTexture(
+                            textureName,
+                            arrayBufferOrBlob,
+                            scene,
+                            assetContainer,
+                            textureOptions,
+                        );
+                    }
                 } catch (err) {
                     logWarn("asset", "DDS texture fallback inspection failed; continuing with Babylon.js", {
                         textureName,
@@ -11375,33 +11358,18 @@ ${beforeFogAppendBlock}
                     return ddsFallbackTexture;
                 }
                 if (this.shouldTryBmpAlphaFallbackTextureUrl(textureName)) {
-                    const officialTexture = await originalLoadTextureFromBufferAsync(
-                        uniqueId,
-                        textureName,
-                        arrayBufferOrBlob,
-                        scene,
-                        assetContainer,
-                        textureOptions,
-                        applyPathNormalization,
+                    const buffer = arrayBufferOrBlob instanceof Blob ? await arrayBufferOrBlob.arrayBuffer() : arrayBufferOrBlob;
+                    return loadBmpTextureWithAlphaCorrection(
+                        buffer,
+                        () => originalLoadTextureFromBufferAsync(
+                            uniqueId, textureName, arrayBufferOrBlob, scene, assetContainer, textureOptions, applyPathNormalization,
+                        ),
+                        decoded => this.createBmpAlphaTexture(textureName, decoded, scene, assetContainer, textureOptions),
                     );
-                    if (officialTexture) {
-                        return officialTexture;
-                    }
-                    const bmpAlphaTexture = await this.createWebGpuBmpAlphaFallbackTexture(
-                        textureName,
-                        arrayBufferOrBlob,
-                        scene,
-                        assetContainer,
-                        textureOptions,
-                    );
-                    if (bmpAlphaTexture) {
-                        return bmpAlphaTexture;
-                    }
-                    return null;
                 }
                 const isDdsTexture = isDdsTexturePath(textureName)
                     || textureOptions.forcedExtension?.toLowerCase() === ".dds";
-                if (!textureOptions.noMipmap && !isDdsTexture) {
+                if (isWebGpu && !textureOptions.noMipmap && !isDdsTexture) {
                     const cacheKey = applyPathNormalization ? PathNormalize(textureName) : textureName;
                     textureOptions.noMipmap = !(await this.shouldGenerateMipmapsForWebGpuTextureBuffer(cacheKey, arrayBufferOrBlob));
                 }
@@ -11418,8 +11386,10 @@ ${beforeFogAppendBlock}
             };
             textureLoader.loadTextureFromBufferAsync = async (...args) => {
                 const sourceName = args[1];
-                args[1] = await textureContentKey(sourceName, args[2]);
-                args[6] = false; // The key is a buffer identity, never a file request URL.
+                if (isWebGpu || isBmpTexturePath(sourceName)) {
+                    args[1] = await textureContentKey(sourceName, args[2]);
+                    args[6] = false; // The key is a buffer identity, never a file request URL.
+                }
                 const texture = await loadTextureFromBufferWithOptions(...args);
                 if (texture instanceof Texture) texture.name = sourceName;
                 return texture;

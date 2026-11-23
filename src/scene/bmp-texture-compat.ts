@@ -20,6 +20,18 @@ export function isBmpTexturePath(path: string): boolean {
     return withoutQuery.toLowerCase().endsWith(".bmp");
 }
 
+export async function loadBmpTextureWithAlphaCorrection<T>(
+    data: ArrayBuffer,
+    loadOfficial: () => Promise<T | null>,
+    createDecoded: (decoded: DecodedBmpTexture) => Promise<T | null>,
+): Promise<T | null> {
+    const decoded = decodeBmpTextureToRgba(data);
+    if (decoded?.whiteMattedAlpha) return createDecoded(decoded);
+    const officialTexture = await loadOfficial();
+    if (officialTexture) return officialTexture;
+    return decoded?.hasAlpha ? createDecoded(decoded) : null;
+}
+
 export function decodeBmpTextureToRgba(data: ArrayBuffer | ArrayBufferView): DecodedBmpTexture | null {
     const view = data instanceof ArrayBuffer
         ? new DataView(data)

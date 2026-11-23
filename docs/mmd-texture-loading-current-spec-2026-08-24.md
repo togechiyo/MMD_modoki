@@ -26,7 +26,7 @@ PMX / PMD モデルが参照するテクスチャについて、2026-08-24 時�
 | --- | --- | --- |
 | PNG / JPEG / GIF / WebP など | Babylon.js / babylon-mmd 標準 loader | WebGPU では寸法を確認し、通常画像の mipmap 生成可否を判定する |
 | TGA などBabylon.js対応形式 | Babylon.js / babylon-mmd 標準 loader | ブラウザ画像要素での事前寸法確認には依存しない |
-| BMP | babylon-mmd DirectX互換BMP loader | 標準読み込みが失敗した場合だけ、対応する32bit BMPをCPU decodeする |
+| BMP | white matte検出時はCPU補正、それ以外はbabylon-mmd DirectX互換BMP loader | white matte以外は標準読み込みが失敗した場合だけ、対応する32bit BMPをCPU decodeする |
 | DDS、S3TC / BC対応GPU | Babylon.js標準DDS loader | 圧縮状態とDDS内蔵mipmapを保持してGPUへ渡す |
 | DDS、S3TC非対応GPU、DXT1 / DXT3 / DXT5 | header確認後にMMD_modokiのCPU decoder | base levelをRGBA8 `RawTexture`へ展開する |
 | DDS、S3TC非対応GPU、上記以外 | Babylon.js標準DDS loader | 非圧縮DDSや未対応FourCCを自前decoderで横取りしない |
@@ -35,9 +35,9 @@ PMX / PMD モデルが参照するテクスチャについて、2026-08-24 時�
 
 起動時にbabylon-mmdの `RegisterDxBmpTextureLoader()` を登録する。MMD material builderはBMPに対して `.dxbmp` を指定でき、32bit `BITMAPINFOHEADER` / `BI_RGB` の4 byte目をDirectX系MMDモデルで使われるalphaとして扱える。
 
-標準BMP loaderがテクスチャを返さなかった場合だけ、MMD_modokiのCPU fallbackを試す。fallbackの対象は32bit / `BI_RGB` BMPで、実際に255未満のalphaを含む場合に限る。
+WebGPU / WebGL2とも、URL / bufferの両経路で32bit / `BI_RGB` BMPを事前確認し、`decodeBmpTextureToRgba(...).whiteMattedAlpha === true` の場合だけ標準loaderより先にCPUでwhite matte解除とRGB bleedを行う。それ以外は従来どおり公式 `.dxbmp` loaderを優先し、テクスチャを返さなかった場合だけCPU fallbackを試す。fallbackの対象は32bit / `BI_RGB` BMPで、実際に255未満のalphaを含む場合に限る。DDS / mipmapのWebGPU専用処理はWebGL2へ広げない。
 
-CPU fallbackでは次を行う。
+CPU補正 / fallbackでは次を行う。
 
 - BGRAをRGBAへ変換する。
 - `minAlpha` / `maxAlpha` と透明画素の割合を診断metadataへ保存する。
@@ -46,6 +46,8 @@ CPU fallbackでは次を行う。
 - alpha値そのものは変更しない。
 
 BMP decode結果だけを理由に、材質を一律でAlpha Blend、両面、shadowなしにはしない。最終的なPMX / PMD材質の透過分類はbabylon-mmd material builderのalpha評価を正本とする。
+
+2026-11-22のmacOS **VM**（物理Macではない）で、自作128px赤円BMP / 単一quad PMXを通常読込すると、両backendで公式 `.dxbmp` がwhite matteを保持し白縁が出た。同じunlit / alpha blend条件のedge帯（元alpha 10..200）では、公式textureの平均RGB `(68.21, 38.58, 38.58)` に対し、CPU補正controlは `(68.21, 0, 0)`、理想合成は `(67.13, 0, 0)` だった。補正後の通常経路も両backendで `(68.21, 0, 0)`、G/B差分は0になった。ただし通常材質はこのfixtureでOpaque評価のままで、alpha 0領域も描画される。材質再分類は行わず、texture自体の比較は材質条件を揃えている。物理実機や全モデルでの保証ではない。
 
 公式情報:
 
@@ -105,8 +107,8 @@ GET file:///... net::ERR_FILE_NOT_FOUND
 
 - `compressed DDS texture decoded on CPU for WebGPU`: S3TC非対応環境でDXT fallbackを使用した。
 - `DDS texture fallback inspection failed; continuing with Babylon.js`: 自前検査に失敗し、標準DDS経路へ戻した。
-- `32-bit BMP texture decoded on CPU for WebGPU alpha`: 公式BMP loaderの後でalpha BMP CPU fallbackを使用した。
-- `BMP alpha texture fallback load failed`: 公式BMP経路とCPU fallbackの双方で読み込めなかった可能性がある。
+- `32-bit BMP texture decoded on CPU for alpha correction`: 両backend共通。`whiteMattedAlpha: true` は通常経路のwhite matte補正、それ以外は公式loader失敗後のalpha BMP CPU fallbackを示す。
+- `BMP alpha inspection failed; continuing with Babylon.js`: URLの事前読込に失敗し、公式BMP経路へ戻した。
 - `texture file missing or unreadable; skipped for model load`: 通常画像の存在またはdecode確認に失敗し、そのtextureだけをスキップした。
 
 ## 制約と今後の確認

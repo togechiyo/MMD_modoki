@@ -395,8 +395,9 @@ export function writePmx(model) {
         else writer.uint16(index);
     }
 
-    writer.int32(model.toonTexture ? 1 : 0);
-    if (model.toonTexture) writer.text(model.toonTexture);
+    const textures = [...new Set([model.toonTexture, model.diffuseTexture].filter(Boolean))];
+    writer.int32(textures.length);
+    for (const texture of textures) writer.text(texture);
     writer.int32(model.materialGroups.length);
     for (const material of model.materialGroups) {
         writer.text(material.name);
@@ -411,7 +412,7 @@ export function writePmx(model) {
         writer.uint8(flags);
         writer.vector([0.08, 0.08, 0.08, 1]);
         writer.float32(material.edge === false ? 0 : 0.25);
-        writer.int8(-1); // texture
+        writer.int8(model.diffuseTexture ? textures.indexOf(model.diffuseTexture) : -1);
         writer.int8(-1); // sphere texture
         writer.uint8(0); // sphere mode off
         writer.uint8(model.toonTexture || model.noToon ? 0 : 1); // custom or shared toon

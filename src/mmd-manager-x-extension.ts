@@ -4,6 +4,8 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
+import { Tools } from "@babylonjs/core/Misc/tools";
+import { localPathToFileUrl } from "./shared/local-asset-url";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -1332,14 +1334,14 @@ if (!mmdManagerProto.loadX) {
     mmdManagerProto.loadX = async function(filePath: string): Promise<boolean> {
         const host = this as unknown as XLoadHost;
         try {
-            const { fileName, fileUrl } = splitFilePath(filePath);
+            const { fileName } = splitFilePath(filePath);
+            const fileUrl = localPathToFileUrl(filePath);
             logInfo("asset", "x accessory load started", { filePath, fileName });
-            const data = await window.electronAPI.readBinaryFile(filePath);
-            if (!data) {
-                throw new Error(`Unable to read X file: ${filePath}`);
-            }
-
-            const result = await loadXIntoScene(host.scene, data, fileUrl);
+            // A missing project accessory must not resolve to a nearby file with the same name.
+            if (!await window.electronAPI.fileExists(filePath)) throw new Error(`Unable to read X file: ${filePath}`);
+            // Use the local asset URL so large files do not cross the Electron IPC bridge as a single copied value.
+            const data = await Tools.LoadFileAsync(fileUrl, true);
+            const result = await loadXIntoScene(host.scene, data, new URL(".", fileUrl).href);
 
             if (result.meshes.length === 0) {
                 throw new Error("No mesh data found in X file");

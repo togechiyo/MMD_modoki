@@ -21,11 +21,14 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MmdStandardMaterial } from "babylon-mmd/esm/Loader/mmdStandardMaterial";
 import { MmdPluginMaterialSphereTextureBlendMode } from "babylon-mmd/esm/Loader/mmdPluginMaterial";
 import { resolveXMaterialRenderPolicy } from "./shared/x-material-render-policy";
-import { findRedundantXFaceIndices } from "./shared/x-face-deduplication";
+import { findRedundantPackedXFaces } from "./shared/x-face-deduplication";
+import { buildXMeshGeometry, splitXMeshGeometry } from "./shared/x-mesh-geometry";
+import type { PackedXFaces } from "./shared/x-packed-faces";
+import { XTextReader, X_TEXT_HEADER } from "./shared/x-text-reader";
+import { localPathToFileUrl } from "./shared/local-asset-url";
 import { createXTextureAlphaCache } from "./shared/x-texture-alpha";
 import { inspectXTextureAlpha } from "./scene/x-texture-alpha-inspection";
 
-type Tok = { t: "id" | "num" | "str" | "sym"; v: string };
 type XMat = {
     name: string;
     diffuse: Color4;
@@ -39,107 +42,34 @@ type XMat = {
     sphereTextureUrl: string | null;
     sphereTextureMode: "multiply" | "add" | null;
 };
-type XMeshNormals = { values: number[]; faces: number[][] };
+type XMeshNormals = { values: Float64Array; faces: PackedXFaces };
 type XMesh = {
     name: string;
-    pos: number[];
-    faces: number[][];
-    uvs: number[] | null;
+    pos: Float64Array;
+    faces: PackedXFaces;
+    uvs: Float64Array | null;
     normals: XMeshNormals | null;
     mats: XMat[];
-    faceMats: number[];
+    faceMats: Int32Array;
 };
 type XFrame = { name: string; matrix: number[] | null; frames: XFrame[]; meshes: XMesh[] };
 type XScene = { root: XFrame };
 
-const META = { name: "xfile", extensions: { ".x": { isBinary: false } } } as const;
-const HEADER = /^\s*xof\s+([0-9]{4})(txt|bin|tzip|bzip)\s+([0-9]{4})/i;
-const NUM = /^[+-]?(?:\d+\.\d*|\d+|\.\d+)(?:[eE][+-]?\d+)?[fFdD]?/;
+const META = { name: "xfile", extensions: { ".x": { isBinary: true } } } as const;
 const NON_TOON_SHADOW_AMBIENT = new Color3(1, 1, 1);
 const X_DEFAULT_TOON_TEXTURE_HEIGHT = 256;
 const xDefaultToonTextureCache = new WeakMap<Scene, DynamicTexture>();
 
-function lex(s: string): Tok[] {
-    const out: Tok[] = [];
-    const syms = new Set(["{", "}", ";", ",", "<", ">", "[", "]", "(", ")"]);
-    let i = 0;
-    while (i < s.length) {
-        const c = s[i];
-        if (/\s/.test(c)) {
-            i += 1;
-            continue;
-        }
-        if (c === "/" && s[i + 1] === "/") {
-            i += 2;
-            while (i < s.length && s[i] !== "\n") i += 1;
-            continue;
-        }
-        if (c === "#") {
-            while (i < s.length && s[i] !== "\n") i += 1;
-            continue;
-        }
-        if (c === "\"") {
-            i += 1;
-            let v = "";
-            while (i < s.length) {
-                if (s[i] === "\\") {
-                    const next = s[i + 1];
-                    if (next === undefined) {
-                        i += 1;
-                        continue;
-                    }
-                    if (next === "\\" || next === "\"") {
-                        v += next;
-                    } else {
-                        v += `\\${next}`;
-                    }
-                    i += 2;
-                    continue;
-                }
-                if (s[i] === "\"") {
-                    i += 1;
-                    break;
-                }
-                v += s[i];
-                i += 1;
-            }
-            out.push({ t: "str", v });
-            continue;
-        }
-        if (syms.has(c)) {
-            out.push({ t: "sym", v: c });
-            i += 1;
-            continue;
-        }
-        const nm = NUM.exec(s.slice(i));
-        if (nm) {
-            out.push({ t: "num", v: nm[0] });
-            i += nm[0].length;
-            continue;
-        }
-        const id = /^[^\s{};,()[\]<>"]+/.exec(s.slice(i));
-        if (id) {
-            out.push({ t: "id", v: id[0] });
-            i += id[0].length;
-            continue;
-        }
-        i += 1;
-    }
-    return out;
-}
-
-class P {
-    private i = 0;
+class XParser {
     private readonly mats = new Map<string, XMat>();
-    public constructor(private readonly tk: Tok[]) {}
+    public constructor(private readonly reader: XTextReader) {}
 
     public parse(): XScene {
         const root: XFrame = { name: "__x_root__", matrix: null, frames: [], meshes: [] };
-        while (!this.eof()) {
-            this.sep();
+        while (this.reader.peek()) {
             const id = this.peekId();
             if (!id) {
-                this.i += 1;
+                this.reader.take();
                 continue;
             }
             if (id === "frame") root.frames.push(this.frame());
@@ -155,8 +85,7 @@ class P {
         const name = this.optName();
         this.expectSym("{");
         const f: XFrame = { name: name || "Frame", matrix: null, frames: [], meshes: [] };
-        while (!this.eof()) {
-            this.sep();
+        while (this.reader.peek()) {
             if (this.takeSym("}")) break;
             const id = this.peekId();
             if (id === "frametransformmatrix") f.matrix = this.frameMatrix();
@@ -164,7 +93,6 @@ class P {
             else if (id === "mesh") f.meshes.push(this.mesh());
             else this.skipObj();
         }
-        this.sep();
         return f;
     }
 
@@ -175,7 +103,6 @@ class P {
         const m: number[] = [];
         for (let k = 0; k < 16; k += 1) m.push(this.num());
         this.expectSym("}");
-        this.sep();
         return m;
     }
 
@@ -183,23 +110,13 @@ class P {
         this.expectId("mesh");
         const name = this.optName();
         this.expectSym("{");
-        const vc = this.int();
-        const pos: number[] = [];
-        for (let k = 0; k < vc; k += 1) pos.push(this.num(), this.num(), this.num());
-        const fc = this.int();
-        const faces: number[][] = [];
-        for (let k = 0; k < fc; k += 1) {
-            const n = this.int();
-            const f: number[] = [];
-            for (let j = 0; j < n; j += 1) f.push(this.int());
-            faces.push(f);
-        }
-        let uvs: number[] | null = null;
+        const pos = this.vectors(3);
+        const faces = this.faces(pos.length / 3);
+        let uvs: Float64Array | null = null;
         let normals: XMeshNormals | null = null;
         let mats: XMat[] = [];
-        let faceMats: number[] = [];
-        while (!this.eof()) {
-            this.sep();
+        let faceMats: Int32Array = new Int32Array(0);
+        while (this.reader.peek()) {
             if (this.takeSym("}")) break;
             const id = this.peekId();
             if (id === "meshtexturecoords") uvs = this.meshUv();
@@ -207,39 +124,62 @@ class P {
             else if (id === "meshnormals") normals = this.meshNormals();
             else this.skipObj();
         }
-        this.sep();
         return { name: name || "Mesh", pos, faces, uvs, normals, mats, faceMats };
     }
 
-    private meshUv(): number[] {
+    private vectors(size: number): Float64Array {
+        const values = new Float64Array(this.reader.count(size) * size);
+        for (let i = 0; i < values.length; i++) values[i] = this.num();
+        return values;
+    }
+
+    private faces(vertexCount?: number): PackedXFaces {
+        const count = this.reader.count();
+        const offsets = new Uint32Array(count + 1);
+        let indices = new Uint32Array(Math.min(count * 3, this.reader.remainingLength));
+        let used = 0;
+        for (let face = 0; face < count; face++) {
+            const corners = this.reader.count();
+            const end = used + corners;
+            if (end > 0xffffffff) throw new Error("Too many X polygon corners");
+            if (end > indices.length) {
+                const expanded = new Uint32Array(Math.max(end, Math.ceil(indices.length * 1.5)));
+                expanded.set(indices);
+                indices = expanded;
+            }
+            while (used < end) {
+                const index = this.num();
+                if (vertexCount !== undefined && (!Number.isInteger(index) || index < 0 || index >= vertexCount)) {
+                    throw new Error("Invalid X vertex index " + index);
+                }
+                // Some exporters leave a missing normal index. Its components default to zero.
+                indices[used++] = index < 0 || index > 0xffffffff ? 0xffffffff : index;
+            }
+            offsets[face + 1] = used;
+        }
+        return { indices: indices.subarray(0, used), offsets };
+    }
+
+    private meshUv(): Float64Array {
         this.expectId("meshtexturecoords");
         this.optName();
         this.expectSym("{");
-        const n = this.int();
-        const uvs: number[] = [];
-        for (let k = 0; k < n; k += 1) {
-            const u = this.num();
-            const v = this.num();
-            // .x assets commonly use DirectX-style V orientation, so flip V
-            // when mapping into Babylon's standard UV space.
-            uvs.push(u, 1 - v);
-        }
+        const uvs = this.vectors(2);
+        // Map DirectX-style V orientation to Babylon UV space.
+        for (let i = 1; i < uvs.length; i += 2) uvs[i] = 1 - uvs[i];
         this.expectSym("}");
-        this.sep();
         return uvs;
     }
 
-    private meshMats(): { mats: XMat[]; faceMats: number[] } {
+    private meshMats(): { mats: XMat[]; faceMats: Int32Array } {
         this.expectId("meshmateriallist");
         this.optName();
         this.expectSym("{");
-        const nMat = this.int();
-        const nFace = this.int();
-        const faceMats: number[] = [];
-        for (let k = 0; k < nFace; k += 1) faceMats.push(this.int());
+        const nMat = this.reader.count();
+        const faceMats = new Int32Array(this.reader.count());
+        for (let i = 0; i < faceMats.length; i++) faceMats[i] = this.num();
         const mats: XMat[] = [];
-        while (!this.eof()) {
-            this.sep();
+        while (this.reader.peek()) {
             if (this.takeSym("}")) break;
             const id = this.peekId();
             if (id === "material") {
@@ -247,8 +187,8 @@ class P {
                 continue;
             }
             if (this.takeSym("{")) {
-                const ref = this.take();
-                while (!this.eof() && !this.takeSym("}")) this.i += 1;
+                const ref = this.reader.take();
+                while (this.reader.peek() && !this.takeSym("}")) this.reader.take();
                 const v = ref && (ref.t === "id" || ref.t === "str") ? ref.v : "";
                 if (v) {
                     const found = this.mats.get(v);
@@ -259,7 +199,6 @@ class P {
             this.skipObj();
         }
         while (mats.length < nMat) mats.push(this.defaultMat(`material_${mats.length}`));
-        this.sep();
         return { mats, faceMats };
     }
 
@@ -272,8 +211,7 @@ class P {
         const specular = new Color3(this.num(), this.num(), this.num());
         const emissive = new Color3(this.num(), this.num(), this.num());
         let texture: string | null = null;
-        while (!this.eof()) {
-            this.sep();
+        while (this.reader.peek()) {
             if (this.takeSym("}")) break;
             const id = this.peekId();
             if (id === "texturefilename") {
@@ -295,7 +233,6 @@ class P {
             sphereTextureMode: null,
         };
         if (name) this.mats.set(name, mat);
-        this.sep();
         return mat;
     }
 
@@ -303,10 +240,9 @@ class P {
         this.expectId("texturefilename");
         this.optName();
         this.expectSym("{");
-        const t = this.take();
+        const t = this.reader.take();
         const v = t && (t.t === "str" || t.t === "id") ? t.v : "";
         this.expectSym("}");
-        this.sep();
         return v;
     }
 
@@ -314,37 +250,23 @@ class P {
         this.expectId("meshnormals");
         this.optName();
         this.expectSym("{");
-        const normalCount = this.int();
-        const values: number[] = [];
-        for (let i = 0; i < normalCount; i += 1) {
-            values.push(this.num(), this.num(), this.num());
-        }
-        const fn = this.int();
-        const faces: number[][] = [];
-        for (let i = 0; i < fn; i += 1) {
-            const c = this.int();
-            const face: number[] = [];
-            for (let j = 0; j < c; j += 1) face.push(this.int());
-            faces.push(face);
-        }
+        const values = this.vectors(3);
+        const faces = this.faces();
         this.expectSym("}");
-        this.sep();
         return { values, faces };
     }
 
     private skipObj(): void {
-        this.take();
+        this.reader.take();
         this.optName();
-        this.sep();
         if (!this.takeSym("{")) return;
         let d = 1;
-        while (!this.eof() && d > 0) {
-            const t = this.take();
+        while (this.reader.peek() && d > 0) {
+            const t = this.reader.take();
             if (!t || t.t !== "sym") continue;
             if (t.v === "{") d += 1;
             if (t.v === "}") d -= 1;
         }
-        this.sep();
     }
 
     private defaultMat(name: string): XMat {
@@ -363,233 +285,39 @@ class P {
     }
 
     private optName(): string {
-        this.sep();
-        const t = this.peek();
+        const t = this.reader.peek();
         if (!t || (t.t !== "id" && t.t !== "str")) return "";
-        const n = this.peekNext(1);
+        const n = this.reader.peek(1);
         if (!n || n.t !== "sym" || n.v !== "{") return "";
-        this.i += 1;
+        this.reader.take();
         return t.v;
     }
 
     private expectId(v: string): void {
-        this.sep();
-        const t = this.take();
+        const t = this.reader.take();
         if (!t || t.t !== "id" || t.v.toLowerCase() !== v) throw new Error(`Expected ${v}`);
     }
 
     private expectSym(v: string): void {
-        this.sep();
-        const t = this.take();
+        const t = this.reader.take();
         if (!t || t.t !== "sym" || t.v !== v) throw new Error(`Expected '${v}'`);
     }
 
     private takeSym(v: string): boolean {
-        this.sep();
-        const t = this.peek();
+        const t = this.reader.peek();
         if (!t || t.t !== "sym" || t.v !== v) return false;
-        this.i += 1;
+        this.reader.take();
         return true;
     }
 
-    private int(): number {
-        return Math.trunc(this.num());
-    }
-
     private num(): number {
-        this.sep();
-        const t = this.take();
-        if (!t || (t.t !== "num" && t.t !== "id")) throw new Error("Expected number");
-        const n = Number(t.v.replace(/[fFdD]$/, ""));
-        if (!Number.isFinite(n)) throw new Error(`Invalid number '${t.v}'`);
-        return n;
+        return this.reader.number();
     }
 
     private peekId(): string | null {
-        this.sep();
-        const t = this.peek();
-        return t && t.t === "id" ? t.v.toLowerCase() : null;
+        const t = this.reader.peek();
+        return t?.t === "id" ? t.v.toLowerCase() : null;
     }
-
-    private sep(): void {
-        while (!this.eof()) {
-            const t = this.peek();
-            if (!t || t.t !== "sym" || (t.v !== ";" && t.v !== ",")) break;
-            this.i += 1;
-        }
-    }
-
-    private peek(): Tok | null {
-        return this.tk[this.i] ?? null;
-    }
-
-    private take(): Tok | null {
-        const t = this.tk[this.i] ?? null;
-        if (t) this.i += 1;
-        return t;
-    }
-
-    private peekNext(offset: number): Tok | null {
-        let idx = this.i;
-        while (idx < this.tk.length && this.tk[idx].t === "sym" && (this.tk[idx].v === ";" || this.tk[idx].v === ",")) idx += 1;
-        while (offset > 0) {
-            idx += 1;
-            while (idx < this.tk.length && this.tk[idx].t === "sym" && (this.tk[idx].v === ";" || this.tk[idx].v === ",")) idx += 1;
-            offset -= 1;
-        }
-        return this.tk[idx] ?? null;
-    }
-
-    private eof(): boolean {
-        return this.i >= this.tk.length;
-    }
-}
-
-function parseX(data: string): XScene {
-    const m = HEADER.exec(data);
-    if (!m) throw new Error("Invalid X header");
-    const format = m[2].toLowerCase();
-    if (format !== "txt") throw new Error(`Unsupported X format '${format}'`);
-    return new P(lex(data.slice(m.index + m[0].length))).parse();
-}
-
-function decodeXText(bytes: Uint8Array): string {
-    const utf8 = new TextDecoder("utf-8").decode(bytes);
-    const utf8ReplacementCount = (utf8.match(/\uFFFD/g) ?? []).length;
-    if (utf8ReplacementCount === 0) return utf8;
-
-    const shiftJis = new TextDecoder("shift-jis").decode(bytes);
-    const shiftJisReplacementCount = (shiftJis.match(/\uFFFD/g) ?? []).length;
-    return shiftJisReplacementCount < utf8ReplacementCount ? shiftJis : utf8;
-}
-
-function dataToText(data: unknown): string {
-    if (typeof data === "string") return data;
-    if (data instanceof ArrayBuffer) return decodeXText(new Uint8Array(data));
-    if (ArrayBuffer.isView(data)) {
-        return decodeXText(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-    }
-    throw new Error("X loader expects text data");
-}
-
-function tri(faces: number[][], redundantFaceIndices: ReadonlySet<number>): { idx: number[]; faceId: number[] } {
-    const idx: number[] = [];
-    const faceId: number[] = [];
-    for (let fi = 0; fi < faces.length; fi += 1) {
-        if (redundantFaceIndices.has(fi)) continue;
-        const f = faces[fi];
-        if (!f || f.length < 3) continue;
-        for (let i = 1; i < f.length - 1; i += 1) {
-            idx.push(f[0], f[i], f[i + 1]);
-            faceId.push(fi);
-        }
-    }
-    return { idx, faceId };
-}
-
-type TriangulatedMeshData = {
-    positions: number[];
-    indices: number[];
-    faceId: number[];
-    uvs: number[] | null;
-    normals: number[] | null;
-    redundantFaceCount: number;
-};
-
-function canUseExplicitNormals(x: XMesh): boolean {
-    if (!x.normals) return false;
-    if (x.normals.faces.length !== x.faces.length) return false;
-
-    for (let faceIndex = 0; faceIndex < x.faces.length; faceIndex += 1) {
-        const face = x.faces[faceIndex];
-        const normalFace = x.normals.faces[faceIndex];
-        if (!face || !normalFace || face.length < 3 || normalFace.length !== face.length) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-function buildTriangulatedMeshData(x: XMesh): TriangulatedMeshData {
-    const redundantFaceIndices = findRedundantXFaceIndices({
-        positions: x.pos,
-        uvs: x.uvs,
-        faces: x.faces,
-        faceMaterials: x.faceMats,
-    });
-
-    if (!canUseExplicitNormals(x) || !x.normals) {
-        const { idx, faceId } = tri(x.faces, redundantFaceIndices);
-        return {
-            positions: x.pos.slice(),
-            indices: idx,
-            faceId,
-            uvs: x.uvs ? x.uvs.slice() : null,
-            normals: null,
-            redundantFaceCount: redundantFaceIndices.size,
-        };
-    }
-
-    const positions: number[] = [];
-    const indices: number[] = [];
-    const faceId: number[] = [];
-    const uvs = x.uvs ? [] as number[] : null;
-    const normals: number[] = [];
-    const normalValues = x.normals.values;
-    let vertexIndex = 0;
-
-    for (let faceIndex = 0; faceIndex < x.faces.length; faceIndex += 1) {
-        if (redundantFaceIndices.has(faceIndex)) continue;
-        const face = x.faces[faceIndex];
-        const normalFace = x.normals.faces[faceIndex];
-        if (!face || !normalFace || face.length < 3 || normalFace.length !== face.length) {
-            continue;
-        }
-
-        for (let cornerIndex = 1; cornerIndex < face.length - 1; cornerIndex += 1) {
-            const vertexTriplet = [face[0], face[cornerIndex], face[cornerIndex + 1]];
-            const normalTriplet = [normalFace[0], normalFace[cornerIndex], normalFace[cornerIndex + 1]];
-
-            for (let triCorner = 0; triCorner < 3; triCorner += 1) {
-                const sourceVertexIndex = vertexTriplet[triCorner];
-                const sourceNormalIndex = normalTriplet[triCorner];
-                const posOffset = sourceVertexIndex * 3;
-                const normalOffset = sourceNormalIndex * 3;
-
-                positions.push(
-                    x.pos[posOffset] ?? 0,
-                    x.pos[posOffset + 1] ?? 0,
-                    x.pos[posOffset + 2] ?? 0,
-                );
-                normals.push(
-                    normalValues[normalOffset] ?? 0,
-                    normalValues[normalOffset + 1] ?? 0,
-                    normalValues[normalOffset + 2] ?? 0,
-                );
-                if (uvs) {
-                    const uvOffset = sourceVertexIndex * 2;
-                    uvs.push(
-                        x.uvs?.[uvOffset] ?? 0,
-                        x.uvs?.[uvOffset + 1] ?? 0,
-                    );
-                }
-                indices.push(vertexIndex);
-                vertexIndex += 1;
-            }
-
-            faceId.push(faceIndex);
-        }
-    }
-
-    return {
-        positions,
-        indices,
-        faceId,
-        uvs,
-        normals,
-        redundantFaceCount: redundantFaceIndices.size,
-    };
 }
 
 function textureUrl(rootUrl: string, name: string): string {
@@ -617,17 +345,12 @@ function fileUrlToLocalPath(url: string): string | null {
         const parsed = new URL(url);
         if (parsed.protocol !== "file:") return null;
         let p = decodeURIComponent(parsed.pathname);
+        if (parsed.hostname) return "//" + parsed.hostname + p;
         if (/^\/[A-Za-z]:\//.test(p)) p = p.slice(1);
         return p;
     } catch {
         return null;
     }
-}
-
-function localPathToFileUrl(pathText: string): string {
-    const normalized = pathText.replace(/\\/g, "/");
-    if (/^[A-Za-z]:\//.test(normalized)) return `file:///${normalized}`;
-    return `file://${normalized}`;
 }
 
 export function getDefaultAccessoryToonTexture(scene: Scene): DynamicTexture {
@@ -809,10 +532,18 @@ async function resolveSceneTextureUrls(scene: Scene, rootUrl: string, parsed: XS
     }
 }
 
-function buildMat(scene: Scene, m: XMat, cache: Map<XMat, MmdStandardMaterial>): MmdStandardMaterial {
-    const c = cache.get(m);
+type XBuild = {
+    meshes: Mesh[];
+    nodes: TransformNode[];
+    materials: Material[];
+    cache: Map<XMat, MmdStandardMaterial>;
+};
+
+function buildMat(scene: Scene, m: XMat, build: XBuild): MmdStandardMaterial {
+    const c = build.cache.get(m);
     if (c) return c;
     const mat = new MmdStandardMaterial(m.name || "x_material", scene);
+    build.materials.push(mat);
     mat.toonTexture = getDefaultAccessoryToonTexture(scene);
     mat.ignoreDiffuseWhenToonTextureIsNull = true;
     mat.diffuseColor = new Color3(m.diffuse.r, m.diffuse.g, m.diffuse.b);
@@ -850,99 +581,73 @@ function buildMat(scene: Scene, m: XMat, cache: Map<XMat, MmdStandardMaterial>):
             ? MmdPluginMaterialSphereTextureBlendMode.Add
             : MmdPluginMaterialSphereTextureBlendMode.Multiply;
     }
-    cache.set(m, mat);
+    build.cache.set(m, mat);
     return mat;
 }
 
-function buildMesh(scene: Scene, x: XMesh, parent: TransformNode | null, cache: Map<XMat, MmdStandardMaterial>): Mesh | null {
-    if (x.pos.length < 3 || x.faces.length === 0) return null;
-    const geometry = buildTriangulatedMeshData(x);
-    if (geometry.indices.length === 0) return null;
-
-    const mesh = new Mesh(x.name || "x_mesh", scene);
-    if (parent) mesh.parent = parent;
-    mesh.metadata = {
-        ...(mesh.metadata && typeof mesh.metadata === "object" ? mesh.metadata : {}),
-        mmdModokiXRedundantFaceCount: geometry.redundantFaceCount,
-    };
-
-    const vd = new VertexData();
-    vd.positions = geometry.positions;
-    vd.indices = geometry.indices.slice();
-    if (geometry.uvs && geometry.uvs.length === (geometry.positions.length / 3) * 2) {
-        vd.uvs = geometry.uvs;
+function buildMesh(scene: Scene, x: XMesh, parent: TransformNode | null, build: XBuild): void {
+    if (x.pos.length < 3 || x.faces.indices.length === 0) return;
+    const redundant = findRedundantPackedXFaces({
+        positions: x.pos,
+        uvs: x.uvs,
+        faces: x.faces,
+        faceMaterials: x.faceMats,
+    });
+    const geometry = buildXMeshGeometry(x, redundant);
+    if (!geometry.indices.length) return;
+    if (!geometry.normals) {
+        geometry.normals = new Float32Array(geometry.positions.length);
+        VertexData.ComputeNormals(geometry.positions, geometry.indices, geometry.normals);
     }
-    if (geometry.normals && geometry.normals.length === geometry.positions.length) {
-        vd.normals = geometry.normals;
-    } else {
-        const normals: number[] = [];
-        VertexData.ComputeNormals(vd.positions, vd.indices, normals);
-        vd.normals = normals;
-    }
-    vd.applyToMesh(mesh, true);
 
-    if (x.mats.length > 0) {
-        const groups = new Map<number, number[]>();
-        for (let tri = 0; tri < geometry.faceId.length; tri += 1) {
-            const sourceFace = geometry.faceId[tri];
-            const rawMatIndex = x.faceMats[sourceFace] ?? 0;
-            const matIndex = Math.max(0, Math.min(x.mats.length - 1, rawMatIndex));
-            const g = groups.get(matIndex) ?? [];
-            const base = tri * 3;
-            g.push(geometry.indices[base], geometry.indices[base + 1], geometry.indices[base + 2]);
-            groups.set(matIndex, g);
-        }
-
-        if (groups.size <= 1) {
-            const matIndex = groups.size === 1 ? Array.from(groups.keys())[0] : 0;
-            const mat = x.mats[Math.max(0, Math.min(x.mats.length - 1, matIndex))] ?? x.mats[0];
-            mesh.material = buildMat(scene, mat, cache);
-        } else {
-            const multi = new MultiMaterial(`${mesh.name}_multi`, scene);
-            const sorted = Array.from(groups.entries()).sort((a, b) => a[0] - b[0]);
-
-            const rebuilt: number[] = [];
-            const ranges: Array<{ sub: number; start: number; count: number }> = [];
-
-            for (let si = 0; si < sorted.length; si += 1) {
-                const [matIndex, triIndices] = sorted[si];
-                if (triIndices.length === 0) continue;
-                const mat = x.mats[Math.max(0, Math.min(x.mats.length - 1, matIndex))] ?? x.mats[0];
-                const sub = buildMat(scene, mat, cache);
-                const subIndex = multi.subMaterials.length;
-                multi.subMaterials.push(sub);
-
-                const start = rebuilt.length;
-                for (let i = 0; i < triIndices.length; i += 1) {
-                    rebuilt.push(triIndices[i]);
-                }
-                ranges.push({ sub: subIndex, start, count: triIndices.length });
-            }
-
-            if (rebuilt.length > 0) {
-                mesh.setIndices(rebuilt);
-                mesh.releaseSubMeshes();
-                const vertexCount = geometry.positions.length / 3;
-                for (const r of ranges) {
-                    new SubMesh(r.sub, 0, vertexCount, r.start, r.count, mesh);
-                }
-                mesh.material = multi;
-            } else {
-                const mat = x.mats[0];
-                mesh.material = buildMat(scene, mat, cache);
-            }
-        }
-    } else {
-        const mat = new MmdStandardMaterial(`${mesh.name}_mat`, scene);
+    const name = x.name || "x_mesh";
+    let material: Material;
+    const materialSlots = new Map<number, number>();
+    if (x.mats.length === 0) {
+        const mat = new MmdStandardMaterial(`${name}_mat`, scene);
+        build.materials.push(mat);
         mat.toonTexture = getDefaultAccessoryToonTexture(scene);
         mat.ignoreDiffuseWhenToonTextureIsNull = true;
         mat.diffuseColor = new Color3(0.8, 0.8, 0.8);
         mat.ambientColor = NON_TOON_SHADOW_AMBIENT.clone();
         mat.backFaceCulling = false;
-        mesh.material = mat;
+        material = mat;
+    } else if (geometry.ranges.length === 1) {
+        material = buildMat(scene, x.mats[geometry.ranges[0].material], build);
+    } else {
+        const multi = new MultiMaterial(`${name}_multi`, scene);
+        build.materials.push(multi);
+        for (const range of geometry.ranges) {
+            materialSlots.set(range.material, multi.subMaterials.length);
+            multi.subMaterials.push(buildMat(scene, x.mats[range.material], build));
+        }
+        material = multi;
     }
 
-    return mesh;
+    const engine = scene.getEngine() as { currentLimits?: { maxBufferSize: number } };
+    const maxBufferBytes = engine.currentLimits?.maxBufferSize ?? 256 * 1024 * 1024;
+    let partNumber = 0;
+    const redundantFaceCount = redundant.reduce((sum, value) => sum + value, 0);
+    for (const part of splitXMeshGeometry(geometry, maxBufferBytes)) {
+        partNumber++;
+        const mesh = new Mesh(partNumber === 1 ? name : `${name}_part${partNumber}`, scene);
+        build.meshes.push(mesh);
+        mesh.parent = parent;
+        mesh.metadata = { mmdModokiXRedundantFaceCount: partNumber === 1 ? redundantFaceCount : 0 };
+        const vd = new VertexData();
+        vd.positions = part.positions;
+        vd.indices = part.indices;
+        vd.normals = part.normals;
+        if (part.uvs) vd.uvs = part.uvs;
+        vd.applyToMesh(mesh, true);
+        mesh.material = material;
+        if (material instanceof MultiMaterial) {
+            mesh.releaseSubMeshes();
+            for (const range of part.ranges) {
+                new SubMesh(materialSlots.get(range.material) ?? 0, 0, part.positions.length / 3, range.start, range.count, mesh);
+            }
+        }
+    }
 }
 
 function applyMatrix(node: TransformNode, m: number[]): void {
@@ -956,28 +661,33 @@ function applyMatrix(node: TransformNode, m: number[]): void {
     node.position.copyFrom(p);
 }
 
-function buildFrame(scene: Scene, f: XFrame, parent: TransformNode | null, meshes: Mesh[], nodes: TransformNode[], cache: Map<XMat, MmdStandardMaterial>): void {
-    const node = new TransformNode(f.name || `x_frame_${nodes.length}`, scene);
+function buildFrame(scene: Scene, f: XFrame, parent: TransformNode | null, build: XBuild): void {
+    const node = new TransformNode(f.name || `x_frame_${build.nodes.length}`, scene);
+    build.nodes.push(node);
     node.parent = parent;
-    nodes.push(node);
     if (f.matrix && f.matrix.length === 16) applyMatrix(node, f.matrix);
-    for (const m of f.meshes) {
-        const mesh = buildMesh(scene, m, node, cache);
-        if (mesh) meshes.push(mesh);
-    }
-    for (const c of f.frames) buildFrame(scene, c, node, meshes, nodes, cache);
+    for (const m of f.meshes) buildMesh(scene, m, node, build);
+    for (const c of f.frames) buildFrame(scene, c, node, build);
 }
 
 function buildScene(scene: Scene, parsed: XScene): { meshes: Mesh[]; nodes: TransformNode[] } {
-    const meshes: Mesh[] = [];
-    const nodes: TransformNode[] = [];
-    const cache = new Map<XMat, MmdStandardMaterial>();
-    for (const m of parsed.root.meshes) {
-        const mesh = buildMesh(scene, m, null, cache);
-        if (mesh) meshes.push(mesh);
+    const build: XBuild = { meshes: [], nodes: [], materials: [], cache: new Map() };
+    try {
+        for (const m of parsed.root.meshes) buildMesh(scene, m, null, build);
+        for (const f of parsed.root.frames) buildFrame(scene, f, null, build);
+        return { meshes: build.meshes, nodes: build.nodes };
+    } catch (error) {
+        for (const mesh of build.meshes) mesh.dispose(true, false);
+        for (const node of build.nodes) node.dispose(true);
+        for (const mat of build.materials) {
+            if (mat instanceof MmdStandardMaterial) {
+                mat.diffuseTexture?.dispose();
+                mat.sphereTexture?.dispose();
+            }
+            mat.dispose(false, false);
+        }
+        throw error;
     }
-    for (const f of parsed.root.frames) buildFrame(scene, f, null, meshes, nodes, cache);
-    return { meshes, nodes };
 }
 
 function collectMats(meshes: Mesh[]): StandardMaterial[] {
@@ -1002,7 +712,7 @@ export async function loadXIntoScene(
     data: unknown,
     rootUrl: string,
 ): Promise<ISceneLoaderAsyncResult> {
-    const parsed = parseX(dataToText(data));
+    const parsed = new XParser(new XTextReader(data)).parse();
     await resolveSceneTextureUrls(scene, rootUrl, parsed);
     const built = buildScene(scene, parsed);
     return {
@@ -1027,7 +737,7 @@ export class XFileLoader implements ISceneLoaderPluginAsync, ISceneLoaderPluginF
     }
 
     public canDirectLoad(data: string): boolean {
-        return HEADER.test(data);
+        return X_TEXT_HEADER.test(data);
     }
 
     public importMeshAsync(

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { fromLocalAssetUrl, toLocalAssetUrl } from "./local-asset-url";
+import { fromLocalAssetUrl, localPathToFileUrl, toLocalAssetUrl } from "./local-asset-url";
 
 describe("local asset delivery URLs", () => {
+    it.each([
+        ["D:\\庭 #1\\50%.x", "file:///D:/%E5%BA%AD%20%231/50%25.x"],
+        ["/home/user/foo?.x", "file:///home/user/foo%3F.x"],
+        ["\\\\server\\share\\stage.x", "file://server/share/stage.x"],
+    ])("converts the selected local path %s", (path, url) => {
+        expect(localPathToFileUrl(path)).toBe(url);
+    });
+
     it.each([
         ["file:///D:/models/%E7%99%BD%20%23%25/model.pmx", "mmd-local://local/D:/models/%E7%99%BD%20%23%25/model.pmx"],
         ["file:///home/user/models/texture.png", "mmd-local://local/home/user/models/texture.png"],

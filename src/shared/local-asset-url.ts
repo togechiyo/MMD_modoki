@@ -1,6 +1,14 @@
 /** Local file identities stay canonical; only renderer resource requests use this scheme. */
 export const LOCAL_ASSET_SCHEME = "mmd-local";
 
+/** Convert a native absolute path from a file dialog, preserving literal #, ? and %. */
+export function localPathToFileUrl(path: string): string {
+    const normalized = path.replace(/\\/g, "/");
+    const escaped = encodeURI(normalized).replace(/#/g, "%23").replace(/\?/g, "%3F");
+    if (normalized.startsWith("//")) return "file:" + escaped;
+    return (normalized.startsWith("/") ? "file://" : "file:///") + escaped;
+}
+
 export function toLocalAssetUrl(value: string): string {
     try {
         const url = new URL(value);

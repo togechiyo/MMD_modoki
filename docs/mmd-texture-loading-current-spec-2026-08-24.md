@@ -41,6 +41,7 @@ WebGPU / WebGL2とも、URL / bufferの両経路で32bit / `BI_RGB` BMPを事前
 
 CPU補正 / fallbackでは次を行う。
 
+- white matteを補正したテクスチャはUVをリピートし、モデルのmipmap設定に従う。白マットのないBMPで公式loaderが失敗した場合のfallbackは、クランプ・mipmapなしで描画する。
 - BGRAをRGBAへ変換する。
 - `minAlpha` / `maxAlpha` と透明画素の割合を診断metadataへ保存する。
 - 画像統計からwhite matteが確認できた場合、low alpha画素のRGBをwhite matte解除する。

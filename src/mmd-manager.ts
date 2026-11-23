@@ -11152,12 +11152,16 @@ ${beforeFogAppendBlock}
         decoded: DecodedBmpTexture,
         scene: unknown,
         assetContainer: unknown,
-        options: { invertY?: boolean; samplingMode?: number; deleteBuffer?: boolean },
+        options: { noMipmap?: boolean; invertY?: boolean; samplingMode?: number; deleteBuffer?: boolean },
         sourceBuffer: ArrayBuffer,
         cache: Map<string, Promise<Texture | null>>,
     ): Promise<Texture | null> {
         const invertY = options.invertY ?? true;
-        const cacheKey = `${textureName}|${invertY}|${options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE}`;
+        const samplingMode = options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE;
+        // White-matte correction replaces a regular MMD Texture; the failed-load fallback uses its legacy sampler.
+        const generateMipMaps = decoded.whiteMattedAlpha && !options.noMipmap;
+        const wrap = decoded.whiteMattedAlpha ? Texture.WRAP_ADDRESSMODE : Texture.CLAMP_ADDRESSMODE;
+        const cacheKey = `${textureName}|${invertY}|${samplingMode}|${generateMipMaps}`;
         const cached = cache.get(cacheKey);
         if (cached) {
             const texture = await cached;
@@ -11172,9 +11176,9 @@ ${beforeFogAppendBlock}
                 decoded.width,
                 decoded.height,
                 scene as Scene,
-                false,
+                generateMipMaps,
                 invertY,
-                options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE,
+                samplingMode,
             );
             texture.name = textureName;
             if (options.deleteBuffer === false) texture._buffer = sourceBuffer;
@@ -11189,8 +11193,8 @@ ${beforeFogAppendBlock}
                 mmdModokiDecodedLowAlphaPixelRatio: decoded.lowAlphaPixelRatio,
                 mmdModokiDecodedWhiteMattedAlpha: decoded.whiteMattedAlpha,
             };
-            texture.wrapU = Texture.CLAMP_ADDRESSMODE;
-            texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+            texture.wrapU = wrap;
+            texture.wrapV = wrap;
             texture.onDisposeObservable.addOnce(() => {
                 cache.delete(cacheKey);
             });
@@ -11205,7 +11209,8 @@ ${beforeFogAppendBlock}
                 lowAlphaPixelRatio: decoded.lowAlphaPixelRatio,
                 whiteMattedAlpha: decoded.whiteMattedAlpha,
                 invertY,
-                wrap: "clamp",
+                generateMipMaps,
+                wrap: decoded.whiteMattedAlpha ? "repeat" : "clamp",
             });
             return texture;
         });

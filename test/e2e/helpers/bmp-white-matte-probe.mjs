@@ -1,5 +1,6 @@
 import { EngineStore } from "@babylonjs/core/Engines/engineStore";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 
 let disposalCount = 0;
 
@@ -17,6 +18,7 @@ export function getQuadTextureDisposalCount() {
 
 export async function observe() {
   const scene = EngineStore.LastCreatedScene;
+  await scene.whenReadyAsync();
   const mesh = scene.meshes.find(mesh => mesh.skeleton && mesh.getTotalVertices() === 4);
   const material = mesh?.material?.subMaterials?.[0] ?? mesh?.material;
   const texture = material?.diffuseTexture;
@@ -34,21 +36,20 @@ export async function observe() {
   return {
     isWebGPU: scene.getEngine().isWebGPU, webGLVersion: scene.getEngine().webGLVersion,
     raw: texture instanceof RawTexture, metadata: texture.metadata, hasAlpha: texture.hasAlpha,
+    sampler: { wrapU: texture.wrapU, wrapV: texture.wrapV, noMipmap: texture.noMipmap,
+      invertY: texture.invertY, samplingMode: texture.samplingMode },
     name: texture.name, uniqueId: texture.uniqueId, minAlpha, maxAlpha, edgePixels: count, edge: edge.map(value => value / count),
   };
 }
 
-export async function frameQuad() {
+export function tileSamplePoints() {
   const scene = EngineStore.LastCreatedScene;
   const quad = scene.meshes.find(mesh => mesh.skeleton && mesh.getTotalVertices() === 4);
-  for (const mesh of scene.meshes) if (mesh !== quad) mesh.setEnabled(false);
-  scene.clearColor.set(0, 0, 0, 1);
   const camera = scene.activeCamera;
-  camera.setTarget(camera.target.constructor.FromArray([0, 5, 0]));
-  camera.alpha = -Math.PI / 2; camera.beta = Math.PI / 2; camera.radius = 20;
-  camera.mode = 1;
-  const aspect = scene.getEngine().getRenderWidth() / scene.getEngine().getRenderHeight();
-  camera.orthoTop = 6; camera.orthoBottom = -6; camera.orthoLeft = -6 * aspect; camera.orthoRight = 6 * aspect;
-  await scene.whenReadyAsync();
-  await new Promise(resolve => scene.onAfterRenderObservable.addOnce(resolve));
+  const viewport = camera.viewport.toGlobal(1, 1);
+  return [-4.5, 4.5].map(x => [0, 35, 58].map(radius => {
+    const point = Vector3.Project(new Vector3(x, 10 + 9 * radius / 128, 0),
+      quad.getWorldMatrix(), scene.getTransformMatrix(), viewport);
+    return [point.x, point.y];
+  }));
 }

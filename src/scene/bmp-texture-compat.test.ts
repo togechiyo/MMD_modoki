@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { decodeBmpTextureToRgba, isBmpTexturePath, loadBmpTextureWithAlphaCorrection } from "./bmp-texture-compat";
+import { decodeBmpTextureToRgba, inspectBmpTextureAlpha, isBmpTexturePath, loadBmpTextureWithAlphaCorrection } from "./bmp-texture-compat";
 
 function create32BitBmp(width: number, height: number, pixelsBottomUpBgra: readonly number[]): ArrayBuffer {
     const rowStride = width * 4;
@@ -104,25 +104,29 @@ describe("BMP texture loader selection", () => {
             0, 0, 255, 255,
         ]);
         const official = vi.fn(async () => "official");
+        const decode = vi.fn(decodeBmpTextureToRgba);
         const create = vi.fn(async (decoded: NonNullable<ReturnType<typeof decodeBmpTextureToRgba>>) => {
             expect(decoded.whiteMattedAlpha).toBe(true);
             expect(decoded.hasAlpha).toBe(true);
             expect([...decoded.rgba.slice(64 * 4, 65 * 4)]).toEqual([255, 0, 0, 16]);
             return "decoded";
         });
-        expect(await loadBmpTextureWithAlphaCorrection(data, official, create)).toBe("decoded");
+        expect(await loadBmpTextureWithAlphaCorrection(data, official, create, decode)).toBe("decoded");
         expect(official).not.toHaveBeenCalled();
         expect(create).toHaveBeenCalledOnce();
+        expect(decode).toHaveBeenCalledExactlyOnceWith(data);
     });
 
     it("keeps non-white-matted alpha on the official path when it succeeds", async () => {
         const create = vi.fn(async () => "decoded");
         const official = vi.fn(async () => "official");
+        const decode = vi.fn(() => { throw new Error("full decode must not run on official success"); });
         expect(await loadBmpTextureWithAlphaCorrection(
-            create32BitBmp(1, 1, [0, 0, 255, 64]), official, create,
+            create32BitBmp(1, 1, [0, 0, 255, 64]), official, create, decode,
         )).toBe("official");
         expect(official).toHaveBeenCalledOnce();
         expect(create).not.toHaveBeenCalled();
+        expect(decode).not.toHaveBeenCalled();
     });
 
     it("uses non-white-matted alpha CPU fallback only after official failure", async () => {
@@ -131,25 +135,79 @@ describe("BMP texture loader selection", () => {
             create32BitBmp(1, 1, [0, 0, 255, 64]),
             async () => { calls.push("official"); return null; },
             async () => { calls.push("decoded"); return "decoded"; },
+            data => { calls.push("decode"); return decodeBmpTextureToRgba(data); },
         )).toBe("decoded");
-        expect(calls).toEqual(["official", "decoded"]);
+        expect(calls).toEqual(["official", "decode", "decoded"]);
     });
 
     it.each([new ArrayBuffer(0), create32BitBmp(1, 1, [0, 0, 255, 255])])(
         "does not CPU-fallback for invalid or opaque data after official failure", async data => {
             const create = vi.fn(async () => "decoded");
             const official = vi.fn(async () => null);
-            expect(await loadBmpTextureWithAlphaCorrection(data, official, create)).toBeNull();
+            const decode = vi.fn(decodeBmpTextureToRgba);
+            expect(await loadBmpTextureWithAlphaCorrection(data, official, create, decode)).toBeNull();
             expect(official).toHaveBeenCalledOnce();
             expect(create).not.toHaveBeenCalled();
+            expect(decode).not.toHaveBeenCalled();
         },
     );
 
     it("preserves official loader errors instead of silently changing paths", async () => {
         const create = vi.fn(async () => "decoded");
+        const decode = vi.fn(decodeBmpTextureToRgba);
         await expect(loadBmpTextureWithAlphaCorrection(new ArrayBuffer(0), async () => {
             throw new Error("official failed");
-        }, create)).rejects.toThrow("official failed");
+        }, create, decode)).rejects.toThrow("official failed");
         expect(create).not.toHaveBeenCalled();
+        expect(decode).not.toHaveBeenCalled();
     });
+});
+
+describe("BMP alpha inspection", () => {
+    it.each([
+        [64, 16, 245, 235, true],
+        [63, 16, 245, 235, false],
+        [64, 15, 245, 235, false],
+        [64, 16, 244, 235, false],
+        [64, 16, 245, 234, false],
+    ] as const)("matches decoder classification at threshold boundaries (%s, %s, %s, %s)", (transparent, low, white, matte, expected) => {
+        const pixels = [
+            ...Array.from({ length: transparent }, () => [white, white, white, 0]).flat(),
+            ...Array.from({ length: low }, () => [matte, matte, matte, 64]).flat(),
+            0, 0, 255, 255,
+        ];
+        const buffer = create32BitBmp(1, transparent + low + 1, pixels);
+        new DataView(buffer).setInt32(22, -(transparent + low + 1), true);
+        const padded = new Uint8Array(buffer.byteLength + 8);
+        padded.set(new Uint8Array(buffer), 4);
+        const slice = padded.subarray(4, -4);
+        const before = slice.slice();
+        const inspection = inspectBmpTextureAlpha(slice);
+        const decoded = decodeBmpTextureToRgba(slice);
+        expect(inspection).toEqual({ hasAlpha: true, whiteMattedAlpha: expected });
+        expect(decoded?.whiteMattedAlpha).toBe(inspection?.whiteMattedAlpha);
+        expect(decoded?.hasAlpha).toBe(inspection?.hasAlpha);
+        expect(slice).toEqual(before);
+    });
+
+    it("recognizes opaque BMPs without requiring a decoded RGBA image", () => {
+        expect(inspectBmpTextureAlpha(create32BitBmp(1, 1, [0, 0, 255, 255])))
+            .toEqual({ hasAlpha: false, whiteMattedAlpha: false });
+    });
+
+    it.each(["empty", "truncated", "non-bmp", "24-bit", "compressed", "zero-width", "zero-height"])(
+        "rejects %s data consistently with the decoder", kind => {
+            let data = create32BitBmp(1, 1, [0, 0, 255, 64]);
+            const view = new DataView(data);
+            if (kind === "empty") data = new ArrayBuffer(0);
+            if (kind === "truncated") data = data.slice(0, -1);
+            if (kind === "non-bmp") view.setUint16(0, 0, true);
+            if (kind === "24-bit") view.setUint16(28, 24, true);
+            if (kind === "compressed") view.setUint32(30, 3, true);
+            if (kind === "zero-width") view.setInt32(18, 0, true);
+            if (kind === "zero-height") view.setInt32(22, 0, true);
+            expect(inspectBmpTextureAlpha(data)).toBeNull();
+            expect(decodeBmpTextureToRgba(data)).toBeNull();
+        },
+    );
 });

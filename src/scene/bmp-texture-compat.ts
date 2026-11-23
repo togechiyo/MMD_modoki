@@ -24,15 +24,19 @@ export async function loadBmpTextureWithAlphaCorrection<T>(
     data: ArrayBuffer,
     loadOfficial: () => Promise<T | null>,
     createDecoded: (decoded: DecodedBmpTexture) => Promise<T | null>,
+    decode = decodeBmpTextureToRgba,
 ): Promise<T | null> {
-    const decoded = decodeBmpTextureToRgba(data);
-    if (decoded?.whiteMattedAlpha) return createDecoded(decoded);
-    const officialTexture = await loadOfficial();
-    if (officialTexture) return officialTexture;
-    return decoded?.hasAlpha ? createDecoded(decoded) : null;
+    const alpha = inspectBmpTextureAlpha(data);
+    if (!alpha?.whiteMattedAlpha) {
+        const officialTexture = await loadOfficial();
+        if (officialTexture) return officialTexture;
+    }
+    if (!alpha?.hasAlpha) return null;
+    const decoded = decode(data);
+    return decoded ? createDecoded(decoded) : null;
 }
 
-export function decodeBmpTextureToRgba(data: ArrayBuffer | ArrayBufferView): DecodedBmpTexture | null {
+function readBmpLayout(data: ArrayBuffer | ArrayBufferView) {
     const view = data instanceof ArrayBuffer
         ? new DataView(data)
         : new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -57,6 +61,20 @@ export function decodeBmpTextureToRgba(data: ArrayBuffer | ArrayBufferView): Dec
     const requiredBytes = dataOffset + rowStride * height;
     if (requiredBytes > view.byteLength) return null;
 
+    return { view, dataOffset, width, height, topDown, rowStride };
+}
+
+export function inspectBmpTextureAlpha(data: ArrayBuffer | ArrayBufferView): Pick<DecodedBmpTexture, "hasAlpha" | "whiteMattedAlpha"> | null {
+    const layout = readBmpLayout(data);
+    if (!layout) return null;
+    const { view, dataOffset, width, height } = layout;
+    return classifyAlphaPixels(new Uint8Array(view.buffer, view.byteOffset + dataOffset, width * height * 4));
+}
+
+export function decodeBmpTextureToRgba(data: ArrayBuffer | ArrayBufferView): DecodedBmpTexture | null {
+    const layout = readBmpLayout(data);
+    if (!layout) return null;
+    const { view, dataOffset, width, height, topDown, rowStride } = layout;
     const rgba = new Uint8Array(width * height * 4);
     let hasAlpha = false;
     let minAlpha = 255;
@@ -84,7 +102,7 @@ export function decodeBmpTextureToRgba(data: ArrayBuffer | ArrayBufferView): Dec
         }
     }
 
-    const whiteMattedAlpha = looksWhiteMattedAlphaTexture(rgba);
+    const { whiteMattedAlpha } = classifyAlphaPixels(rgba);
     if (whiteMattedAlpha) {
         unmatteWhiteRgb(rgba);
     }
@@ -104,28 +122,30 @@ export function decodeBmpTextureToRgba(data: ArrayBuffer | ArrayBufferView): Dec
     };
 }
 
-function looksWhiteMattedAlphaTexture(rgba: Uint8Array): boolean {
+function classifyAlphaPixels(pixels: Uint8Array): Pick<DecodedBmpTexture, "hasAlpha" | "whiteMattedAlpha"> {
+    let hasAlpha = false;
     let transparentCount = 0;
     let transparentRgb = 0;
     let lowAlphaCount = 0;
     let lowAlphaRgb = 0;
 
-    for (let index = 0; index < rgba.length; index += 4) {
-        const alpha = rgba[index + 3];
+    for (let index = 0; index < pixels.length; index += 4) {
+        const alpha = pixels[index + 3];
+        hasAlpha ||= alpha < 255;
         if (alpha === 0) {
             transparentCount += 1;
-            transparentRgb += rgba[index] + rgba[index + 1] + rgba[index + 2];
+            transparentRgb += pixels[index] + pixels[index + 1] + pixels[index + 2];
         } else if (alpha < RGB_BLEED_ALPHA_THRESHOLD) {
             lowAlphaCount += 1;
-            lowAlphaRgb += rgba[index] + rgba[index + 1] + rgba[index + 2];
+            lowAlphaRgb += pixels[index] + pixels[index + 1] + pixels[index + 2];
         }
     }
 
-    if (transparentCount < 64 || lowAlphaCount < 16) return false;
+    if (transparentCount < 64 || lowAlphaCount < 16) return { hasAlpha, whiteMattedAlpha: false };
 
     const transparentAverage = transparentRgb / (transparentCount * 3);
     const lowAlphaAverage = lowAlphaRgb / (lowAlphaCount * 3);
-    return transparentAverage >= 245 && lowAlphaAverage >= 235;
+    return { hasAlpha, whiteMattedAlpha: transparentAverage >= 245 && lowAlphaAverage >= 235 };
 }
 
 function unmatteWhiteRgb(rgba: Uint8Array): void {

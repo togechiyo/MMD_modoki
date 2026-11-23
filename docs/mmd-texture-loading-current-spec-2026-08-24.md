@@ -37,6 +37,8 @@ PMX / PMD モデルが参照するテクスチャについて、2026-08-24 時�
 
 WebGPU / WebGL2とも、URL / bufferの両経路で32bit / `BI_RGB` BMPを事前確認し、`decodeBmpTextureToRgba(...).whiteMattedAlpha === true` の場合だけ標準loaderより先にCPUでwhite matte解除とRGB bleedを行う。それ以外は従来どおり公式 `.dxbmp` loaderを優先し、テクスチャを返さなかった場合だけCPU fallbackを試す。fallbackの対象は32bit / `BI_RGB` BMPで、実際に255未満のalphaを含む場合に限る。DDS / mipmapのWebGPU専用処理はWebGL2へ広げない。
 
+事前確認は元のBGRA byte列のalpha / RGB集計だけで行い、RGBA展開・white matte解除・最大16回のRGB bleedはCPU textureを生成する場合だけ実行する。BPMX変換では補正済みRGBAではなく元のBMP byte列を保持・埋め込み、再読込時に同じ補正を適用する。変換用CPU texture cacheは表示中モデルと分離し、変換用AssetContainerの破棄で表示中textureを破棄しない。
+
 CPU補正 / fallbackでは次を行う。
 
 - BGRAをRGBAへ変換する。

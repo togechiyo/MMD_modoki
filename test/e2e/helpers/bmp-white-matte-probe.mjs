@@ -1,6 +1,20 @@
 import { EngineStore } from "@babylonjs/core/Engines/engineStore";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 
+let disposalCount = 0;
+
+export function watchQuadTextureDisposal() {
+  const scene = EngineStore.LastCreatedScene;
+  const mesh = scene.meshes.find(mesh => mesh.skeleton && mesh.getTotalVertices() === 4);
+  const material = mesh.material.subMaterials?.[0] ?? mesh.material;
+  disposalCount = 0;
+  material.diffuseTexture.onDisposeObservable.addOnce(() => disposalCount++);
+}
+
+export function getQuadTextureDisposalCount() {
+  return disposalCount;
+}
+
 export async function observe() {
   const scene = EngineStore.LastCreatedScene;
   const mesh = scene.meshes.find(mesh => mesh.skeleton && mesh.getTotalVertices() === 4);
@@ -20,7 +34,7 @@ export async function observe() {
   return {
     isWebGPU: scene.getEngine().isWebGPU, webGLVersion: scene.getEngine().webGLVersion,
     raw: texture instanceof RawTexture, metadata: texture.metadata, hasAlpha: texture.hasAlpha,
-    name: texture.name, minAlpha, maxAlpha, edgePixels: count, edge: edge.map(value => value / count),
+    name: texture.name, uniqueId: texture.uniqueId, minAlpha, maxAlpha, edgePixels: count, edge: edge.map(value => value / count),
   };
 }
 

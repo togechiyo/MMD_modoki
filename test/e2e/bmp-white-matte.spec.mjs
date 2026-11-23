@@ -66,7 +66,7 @@ test("normal PMX BMP loading unmattes white edge texels without a material overr
   } finally { await launched.close(); }
 });
 
-test("BPMX conversion embeds original white-matted BMP bytes", async () => {
+test("BPMX conversion embeds original white-matted BMP bytes without disposing the live texture", async ({}, testInfo) => {
   test.setTimeout(600_000);
   const launched = await launchMmdModoki(root);
   try {
@@ -76,6 +76,13 @@ test("BPMX conversion embeds original white-matted BMP bytes", async () => {
     }, modelPath);
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e), null, { timeout: 600_000 });
+    expect(await page.evaluate(path => window.mmdModokiE2e.loadModel(path), modelPath)).not.toBeNull();
+    const before = await page.evaluate(async () => {
+      const probe = await import("/test/e2e/helpers/bmp-white-matte-probe.mjs");
+      await probe.frameQuad();
+      probe.watchQuadTextureDisposal();
+      return probe.observe();
+    });
     await page.locator('.app-menu-trigger[data-i18n="menu.tools"]').click();
     await page.locator('[data-menu-command="tools.mmdOptimizedFormat"]').click();
     const dialog = page.locator('[data-popup-id="mmd-optimized-format"]');
@@ -86,5 +93,9 @@ test("BPMX conversion embeds original white-matted BMP bytes", async () => {
     const bpmx = readFileSync(bpmxPath);
     expect(bpmx.subarray(0, 4).toString("ascii")).toBe("BPMX");
     expect(bpmx.includes(bmp)).toBe(true);
+    expect(await page.evaluate(async () => (await import("/test/e2e/helpers/bmp-white-matte-probe.mjs")).getQuadTextureDisposalCount())).toBe(0);
+    expect(await page.evaluate(async () => (await import("/test/e2e/helpers/bmp-white-matte-probe.mjs")).observe())).toEqual(before);
+    await dialog.locator(".app-menu-dialog-close").click();
+    await page.locator("#render-canvas").screenshot({ path: testInfo.outputPath("live-texture-after-conversion.png") });
   } finally { await launched.close(); }
 });

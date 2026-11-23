@@ -9924,7 +9924,7 @@ ${beforeFogAppendBlock}
         return await convertPmxFileToBpmxImpl(
             this.scene,
             filePath,
-            (builder) => this.configureMmdTextureLoaderForWebGpuForBuilder(builder),
+            (builder) => this.configureMmdTextureLoaderForWebGpuForBuilder(builder, true),
         );
     }
 
@@ -11076,6 +11076,7 @@ ${beforeFogAppendBlock}
         scene: unknown,
         assetContainer: unknown,
         options: { invertY?: boolean; samplingMode?: number },
+        cache: Map<string, Promise<Texture | null>>,
     ): Promise<Texture | null> {
         if (this.supportsS3tcCompressedTextures()) {
             return null;
@@ -11083,7 +11084,7 @@ ${beforeFogAppendBlock}
 
         const invertY = options.invertY ?? true;
         const cacheKey = `${textureName}|${invertY}|${options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE}`;
-        const cached = this.webGpuTextureFallbackCache.get(cacheKey);
+        const cached = cache.get(cacheKey);
         if (cached) {
             const texture = await cached;
             if (texture) this.addTextureToAssetContainer(texture, assetContainer);
@@ -11123,7 +11124,7 @@ ${beforeFogAppendBlock}
             texture.wrapU = Texture.CLAMP_ADDRESSMODE;
             texture.wrapV = Texture.CLAMP_ADDRESSMODE;
             texture.onDisposeObservable.addOnce(() => {
-                this.webGpuTextureFallbackCache.delete(cacheKey);
+                cache.delete(cacheKey);
             });
 
             logWarn("asset", "compressed DDS texture decoded on CPU for WebGPU", {
@@ -11139,7 +11140,7 @@ ${beforeFogAppendBlock}
             });
             return texture;
         });
-        this.webGpuTextureFallbackCache.set(cacheKey, promise);
+        cache.set(cacheKey, promise);
 
         const texture = await promise;
         if (texture) this.addTextureToAssetContainer(texture, assetContainer);
@@ -11153,10 +11154,11 @@ ${beforeFogAppendBlock}
         assetContainer: unknown,
         options: { invertY?: boolean; samplingMode?: number; deleteBuffer?: boolean },
         sourceBuffer: ArrayBuffer,
+        cache: Map<string, Promise<Texture | null>>,
     ): Promise<Texture | null> {
         const invertY = options.invertY ?? true;
         const cacheKey = `${textureName}|${invertY}|${options.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE}`;
-        const cached = this.webGpuTextureFallbackCache.get(cacheKey);
+        const cached = cache.get(cacheKey);
         if (cached) {
             const texture = await cached;
             if (texture && options.deleteBuffer === false) texture._buffer = sourceBuffer;
@@ -11190,7 +11192,7 @@ ${beforeFogAppendBlock}
             texture.wrapU = Texture.CLAMP_ADDRESSMODE;
             texture.wrapV = Texture.CLAMP_ADDRESSMODE;
             texture.onDisposeObservable.addOnce(() => {
-                this.webGpuTextureFallbackCache.delete(cacheKey);
+                cache.delete(cacheKey);
             });
 
             logWarn("asset", "32-bit BMP texture decoded on CPU for alpha correction", {
@@ -11207,14 +11209,14 @@ ${beforeFogAppendBlock}
             });
             return texture;
         });
-        this.webGpuTextureFallbackCache.set(cacheKey, promise);
+        cache.set(cacheKey, promise);
 
         const texture = await promise;
         if (texture) this.addTextureToAssetContainer(texture, assetContainer);
         return texture;
     }
 
-    public configureMmdTextureLoaderForWebGpuForBuilder(builder: object): void {
+    public configureMmdTextureLoaderForWebGpuForBuilder(builder: object, isolateCpuTextures = false): void {
         const isWebGpu = this.isWebGpuEngine();
 
         type TextureLoaderOptions = {
@@ -11247,6 +11249,7 @@ ${beforeFogAppendBlock}
             return;
         }
         this.webGpuConfiguredMmdTextureLoaders.add(textureLoader);
+        const textureCache = isolateCpuTextures ? new Map<string, Promise<Texture | null>>() : this.webGpuTextureFallbackCache;
 
         const originalLoadTextureAsync = textureLoader.loadTextureAsync?.bind(textureLoader);
         const originalLoadTextureFromBufferAsync = textureLoader.loadTextureFromBufferAsync?.bind(textureLoader);
@@ -11277,6 +11280,7 @@ ${beforeFogAppendBlock}
                                 scene,
                                 assetContainer,
                                 textureOptions,
+                                textureCache,
                             );
                             if (ddsFallbackTexture) {
                                 return ddsFallbackTexture;
@@ -11305,7 +11309,7 @@ ${beforeFogAppendBlock}
                         return sourceBuffer ? loadBmpTextureWithAlphaCorrection(
                             sourceBuffer,
                             loadOfficial,
-                            decoded => this.createBmpAlphaTexture(textureUrl, decoded, scene, assetContainer, textureOptions, sourceBuffer),
+                            decoded => this.createBmpAlphaTexture(textureUrl, decoded, scene, assetContainer, textureOptions, sourceBuffer, textureCache),
                         ) : loadOfficial();
                     }
                 }
@@ -11351,6 +11355,7 @@ ${beforeFogAppendBlock}
                             scene,
                             assetContainer,
                             textureOptions,
+                            textureCache,
                         );
                     }
                 } catch (err) {
@@ -11369,7 +11374,7 @@ ${beforeFogAppendBlock}
                         () => originalLoadTextureFromBufferAsync(
                             uniqueId, textureName, arrayBufferOrBlob, scene, assetContainer, textureOptions, applyPathNormalization,
                         ),
-                        decoded => this.createBmpAlphaTexture(textureName, decoded, scene, assetContainer, textureOptions, buffer),
+                        decoded => this.createBmpAlphaTexture(textureName, decoded, scene, assetContainer, textureOptions, buffer, textureCache),
                     );
                 }
                 const isDdsTexture = isDdsTexturePath(textureName)

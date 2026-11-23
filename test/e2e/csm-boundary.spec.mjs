@@ -7,6 +7,19 @@ import { launchMmdModoki } from "./electron-app.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const probePath = "/test/e2e/helpers/csm-boundary-probe.mjs";
+const precisionProbe = "/test/e2e/helpers/rc-moire-shadow-precision-probe.mjs";
+
+async function expectShadowTarget(page, mode, penumbra) {
+  const state = await page.evaluate(async path => (await import(path)).inspectShadowPrecision(), precisionProbe);
+  const cascaded = mode === "cascaded";
+  const fullPrecision = cascaded && !penumbra && state.renderableFloat32;
+  const size = Math.min(state.maxTextureSize, fullPrecision ? 6144 : 8192);
+  const legacyFormat = cascaded ? "r16float" : "rgba16float";
+  expect(state).toMatchObject({ size: [size, size], layers: cascaded ? 3 : 1, penumbra,
+    colorFormat: fullPrecision ? "r32float" : legacyFormat });
+  if (fullPrecision) expect(state.samplingMode).toBe(1); // Babylon Texture.NEAREST_SAMPLINGMODE
+  return state.casterIds;
+}
 
 async function inspect(page, phase = "actual") {
   return page.evaluate(async ({ phase, probePath }) => {
@@ -70,6 +83,7 @@ for (const backend of ["classic", "frameGraph"]) for (const penumbra of [false, 
       expect(await page.evaluate(() => window.mmdModokiE2e.getShadowRuntimeDiagnostics())).toMatchObject({
         effectiveMode: "cascaded", filter: penumbra ? "pcss" : "none", engine: "WebGPU",
       });
+      await expectShadowTarget(page, "cascaded", penumbra);
       const state = await inspect(page);
       expect(state.falloff).toBe(0);
       expect(state.blend).toBeGreaterThan(0);
@@ -87,8 +101,10 @@ for (const backend of ["classic", "frameGraph"]) for (const penumbra of [false, 
       expect(maximumShadowRatio(exported, exportClear, state)).toBeLessThan(0.4);
       await inspect(page);
       await selectShadowMode(page, "standard");
+      await expectShadowTarget(page, "standard", penumbra);
       expect((await inspect(page)).falloff).toBe(0.26);
       await selectShadowMode(page, "cascaded");
+      await expectShadowTarget(page, "cascaded", penumbra);
       expect((await inspect(page)).falloff).toBe(0);
       expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics())).toMatchObject({ count: 0 });
       expect(errors).toEqual([]);
@@ -129,6 +145,13 @@ test("stops and restores shadow sampling when fixture casters are deleted and re
       await page.evaluate(path => window.mmdModokiE2e.loadModel(path), pmx);
       await expectCasterSampling(page, mode, true);
       await page.evaluate(path => window.mmdModokiE2e.loadAccessory(path), obj);
+      const casters = await expectShadowTarget(page, mode, false);
+      expect(casters.length).toBeGreaterThan(1);
+      for (const penumbra of [true, false]) {
+        await page.evaluate(async ([path, enabled]) => (await import(path)).setScenePenumbra(enabled), [precisionProbe, penumbra]);
+        await expectCasterSampling(page, mode, true);
+        expect(await expectShadowTarget(page, mode, penumbra)).toEqual(casters);
+      }
       await deleteCaster(page, "pmx");
       await expectCasterSampling(page, mode, true);
       await deleteCaster(page, "obj");

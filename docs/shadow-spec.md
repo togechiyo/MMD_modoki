@@ -79,7 +79,8 @@ WGSL CSM PCF 経路だけを避ける互換処理です。代償として WebGPU
 
 共通設定:
 
-- マップ解像度: `min(8192, GPU上限)`
+- WebGPU の CSM で半影がオフのときは、影の深度を `R32F` に書き、解像度を `min(6144, GPU上限)` とする。照明方向で動く壁の暗点を減らすための設定。硬い影は最近傍サンプリングで読むので、デバイスのオプション機能 `float32-filterable` を必要としない。[壁と接地影での比較](./csm-wall-shadow-precision-2026-11-23.md)・[WebGPUの形式別機能](https://www.w3.org/TR/webgpu/#texture-format-caps)
+- 半影オン、WebGL2、通常の `ShadowGenerator`、上記の形式に対応しないGPUでは、Babylon.jsの既定のテクスチャ形式と `min(8192, GPU上限)` を使う。
 - フィルタ既定:
   - 通常 `ShadowGenerator`: `PCF`
   - WebGL CSM: `PCF`

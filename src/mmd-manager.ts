@@ -401,6 +401,7 @@ import {
     type FrameGraphPostEffectId,
     type FrameGraphPostEffectStackEntry,
 } from "./shared/frame-graph-post-effect-stack";
+import { createDirectionalShadowGenerator } from "./scene/directional-shadow-map";
 import {
     MAX_DIRECTIONAL_LIGHT_INTENSITY,
     applyLightColorTemperature as applyLightColorTemperatureImpl,
@@ -4672,13 +4673,9 @@ ${beforeFogAppendBlock}
     }
 
     private createConfiguredShadowGenerator(dirLight: DirectionalLight): ShadowGenerator {
-        const maxTextureSize = this.engine.getCaps().maxTextureSize ?? 4096;
-        const shadowMapSize = Math.min(8192, maxTextureSize);
         const useCascaded = this.shadowModeValue === "cascaded" && CascadedShadowGenerator.IsSupported;
         this.configureDirectionalShadowProjection(dirLight, useCascaded);
-        const shadowGenerator = useCascaded
-            ? new CascadedShadowGenerator(shadowMapSize, dirLight, undefined, this.camera)
-            : new ShadowGenerator(shadowMapSize, dirLight);
+        const shadowGenerator = createDirectionalShadowGenerator(dirLight, this.camera, useCascaded, this.shadowPenumbraEnabledValue);
         configureThinTranslucencyShadow(shadowGenerator);
 
         if (shadowGenerator instanceof CascadedShadowGenerator) {

@@ -50,14 +50,29 @@ test("compares CSM precision on walls under moving light with a shared Toon ramp
     const projected = Object.fromEntries(Object.entries(wallRegions).map(([id, world]) => [id, projectPoints(report.view, world)]));
     await expect.poll(() => page.evaluate(() => window.roomProbe.roomState().gi.view), { timeout: 45000 }).toBe(true);
     baseline = await invoke(page, "inspectShadowPrecision");
-    expect(baseline).toMatchObject({ depthClamp: false, filter: 0, colorFormat: "r16float", enabled: true });
+    test.skip(!baseline.renderableFloat32 || baseline.maxTextureSize < 8192, "Comparing the full-size historical 8192 targets requires 8K float RTTs");
+    expect(baseline).toMatchObject({ depthClamp: false, filter: 0, colorFormat: "r32float", size: [6144,6144], layers: 3, enabled: true });
     expect(baseline.casterIds).toHaveLength(6);
+    // Exercise the actual default before any test-only texture substitutions.
+    report.default = { state: baseline, grayBack: [] };
+    for (const z of [...directions.map(v => v[2]), .62, ...additionalLightZ]) {
+      await changeDirection(page, [-.2, -.65, z]);
+      await page.evaluate(async () => {
+        // eslint-disable-next-line import/no-unresolved -- Renderer-side Vite module.
+        await (await import("/test/e2e/helpers/csm-boundary-probe.mjs")).waitForShadowFrames();
+      });
+      const png = PNG.sync.read(await page.locator("#render-canvas").screenshot());
+      const { pixels, darkCount } = measureRegion(png, projected.grayBack).stats;
+      report.default.grayBack.push({ z, pixels, darkCount });
+      expect(pixels).toBeGreaterThan(10000);
+      expect(darkCount / pixels, `default flat gray wall at Z=${z}`).toBeLessThan(.0005);
+    }
     const sweepOnly = process.env.MMD_CSM_SHADOW_SWEEP_ONLY === "1";
     const variants = sweepOnly ? [] : ["clear", "hard-baseline", "hard-clamp-on", "hard-float32", "pcss"];
     for (const variant of variants) {
       const surfaces = report.cases[variant] = {};
       const requestedSize = /^hard-float32-(\d+)$/.exec(variant);
-      const expectedSize = requestedSize ? Number(requestedSize[1]) : baseline.size[0];
+      const expectedSize = requestedSize ? Number(requestedSize[1]) : variant === "clear" ? baseline.size[0] : 8192;
       for (const values of [...directions, [-.2,-.65,.62]]) {
         await changeDirection(page, values);
         const state = await invoke(page, "setShadowPrecisionVariant", variant);
@@ -65,7 +80,7 @@ test("compares CSM precision on walls under moving light with a shared Toon ramp
           casterIds: baseline.casterIds, numCascades: baseline.numCascades, layers: baseline.layers,
           bias: baseline.bias, normalBias: baseline.normalBias, shadowMaxZ: baseline.shadowMaxZ,
           size: [expectedSize,expectedSize],
-          depthClamp: variant === "hard-clamp-on", colorFormat: variant.startsWith("hard-float32") ? "r32float" : baseline.colorFormat,
+          depthClamp: variant === "hard-clamp-on", colorFormat: variant === "clear" || variant.startsWith("hard-float32") ? "r32float" : "r16float",
           enabled: variant !== "clear", filter: variant === "pcss" ? 7 : 0,
         });
         if (variant !== "pcss") expect(state).toMatchObject({ stabilizeCascades: baseline.stabilizeCascades,
@@ -99,9 +114,9 @@ test("compares CSM precision on walls under moving light with a shared Toon ramp
     // Keep the camera fixed and measure the flat unoccluded gray wall at each one.
     report.additionalLightDirections = {};
     const sweepVariants = [
-      ["hard-baseline", baseline.size[0], baseline.colorFormat],
+      ["hard-baseline", 8192, "r16float"],
       ["hard-float32-6144", 6144, "r32float"],
-      ["hard-float32", baseline.size[0], "r32float"],
+      ["hard-float32", 8192, "r32float"],
     ];
     for (const [variant,size,format] of sweepVariants) {
       const results = [];
@@ -118,7 +133,7 @@ test("compares CSM precision on walls under moving light with a shared Toon ramp
       report.additionalLightDirections[variant] = { results,
         worst: results.reduce((max, value) => value.darkCount > max.darkCount ? value : max) };
       if (variant === "hard-float32" && report.additionalLightDirections["hard-float32-6144"].worst.darkCount > 0) {
-        sweepVariants.push(["pcss", baseline.size[0], baseline.colorFormat]);
+        sweepVariants.push(["pcss", 8192, "r16float"]);
       }
     }
     report.validation = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());

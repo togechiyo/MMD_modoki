@@ -4,6 +4,7 @@ import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
+import { createDirectionalShadowGenerator, updateCascadedShadowMapForPenumbra } from "./directional-shadow-map";
 import { configureThinTranslucencyShadow } from "../render/thin-translucency-shadow";
 import { releaseWebGpuEffects } from "../render/material-effect-invalidation";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -40,7 +41,6 @@ type LightShadowHostStatics = {
 
 type LightShadowHost = {
     engine: {
-        getCaps(): { maxTextureSize?: number };
         isWebGPU?: boolean;
         useReverseDepthBuffer?: boolean;
         releaseEffects?: () => void;
@@ -282,12 +282,8 @@ function applyShadowFilterSettings(host: LightShadowHost): void {
 }
 
 function createShadowGenerator(host: LightShadowHost, dirLight: DirectionalLight): ShadowGenerator {
-    const maxTextureSize = host.engine.getCaps().maxTextureSize ?? 4096;
-    const shadowMapSize = Math.min(8192, maxTextureSize);
     const camera = host.camera ?? host.scene?.activeCamera ?? null;
-    const shadowGenerator = CascadedShadowGenerator.IsSupported
-        ? new CascadedShadowGenerator(shadowMapSize, dirLight, undefined, camera)
-        : new ShadowGenerator(shadowMapSize, dirLight);
+    const shadowGenerator = createDirectionalShadowGenerator(dirLight, camera, CascadedShadowGenerator.IsSupported, host.shadowPenumbraEnabledValue);
     configureThinTranslucencyShadow(shadowGenerator);
     if (shadowGenerator instanceof CascadedShadowGenerator) {
         shadowGenerator.numCascades = DEFAULT_CSM_CASCADE_COUNT;
@@ -610,6 +606,7 @@ export function getShadowPenumbraEnabled(host: LightShadowHost): boolean {
 
 export function setShadowPenumbraEnabled(host: LightShadowHost, enabled: boolean): void {
     host.shadowPenumbraEnabledValue = Boolean(enabled);
+    updateCascadedShadowMapForPenumbra(host.shadowGenerator, host.shadowPenumbraEnabledValue);
     applyShadowFilterSettings(host);
     releaseWebGpuEffects(host.engine);
 }

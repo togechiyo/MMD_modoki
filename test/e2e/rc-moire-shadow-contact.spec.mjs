@@ -97,6 +97,10 @@ test("measures cast shadow contact on touching PMX fixtures across CSM precision
     await select.selectOption("__camera__");
     const set = variant => page.evaluate(async ([path, id]) => (await import(path)).setShadowPrecisionVariant(id), [precisionProbe, variant]);
     const baseline = await page.evaluate(async path => (await import(path)).inspectShadowPrecision(), precisionProbe);
+    test.skip(!baseline.renderableFloat32 || baseline.maxTextureSize < 8192, "Comparing the full-size historical 8192 targets requires 8K float RTTs");
+    expect(baseline).toMatchObject({ colorFormat: "r32float", size: [6144, 6144], filter: 0 });
+    const defaultFrame = await capture("default");
+    report.casterOnly = contactProfile(report.view, casterOff, defaultFrame);
     const variants = ["hard-baseline", "hard-clamp-on", "hard-float32", "pcss", "hard-float32-4096", "hard-float32-6144"];
     try {
       expect((await set("clear")).enabled).toBe(false);
@@ -104,13 +108,13 @@ test("measures cast shadow contact on touching PMX fixtures across CSM precision
       expect(await cameraPose()).toEqual(report.view);
       for (const variant of variants) {
         const settings = await set(variant);
-        const resolution = Number(variant.match(/-(\d+)$/)?.[1]) || baseline.size[0];
+        const resolution = Number(variant.match(/-(\d+)$/)?.[1]) || 8192;
         expect(settings).toMatchObject({ enabled: true, size: [resolution, resolution], casterIds: baseline.casterIds,
+          colorFormat: variant.startsWith("hard-float32") ? "r32float" : "r16float",
           numCascades: baseline.numCascades, bias: baseline.bias, normalBias: baseline.normalBias, shadowMaxZ: baseline.shadowMaxZ });
         const image = await capture(variant);
         report.variants[variant] = { settings, ...contactProfile(report.view, clear, image) };
         expect(report.variants[variant].plateau, variant + " cast shadow on the plate").toBeGreaterThan(5);
-        if (variant === "hard-baseline") report.casterOnly = contactProfile(report.view, casterOff, image);
       }
     } finally {
       expect(await page.evaluate(async path => (await import(path)).restoreShadowPrecision(), precisionProbe)).toEqual(baseline);
@@ -119,6 +123,8 @@ test("measures cast shadow contact on touching PMX fixtures across CSM precision
     // The positive control compares the same visible objects, with only the
     // tofu's caster flag toggled. It isolates its cast shadow from plate acne.
     expect(report.casterOnly.plateau).toBeGreaterThan(5);
+    expect(report.casterOnly.near).toBeGreaterThan(.8 * report.casterOnly.inner);
+    expect(report.casterOnly.gapTo20Pct).toBeLessThanOrEqual(.02);
     expect(report.casterOnly.edge50).toBeGreaterThan(.65);
     expect(report.casterOnly.edge50).toBeLessThan(1.05);
     expect(report.validation.count).toBe(0);

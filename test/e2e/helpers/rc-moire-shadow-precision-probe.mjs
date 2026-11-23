@@ -17,17 +17,19 @@ function context() {
   finally { MmdManager.prototype.getShadowRuntimeDiagnostics = original; }
   const generator = manager?.shadowGenerator;
   if (generator?.getClassName() !== "CascadedShadowGenerator") throw new Error("Expected a test scene with CSM");
-  baseline = { manager, generator, type: generator._textureType, size: generator.mapSize, clamp: generator.depthClamp,
-    penumbra: manager.shadowPenumbraEnabled, enabled: generator.getLight().shadowEnabled,
-    casters: [...generator.getShadowMap().renderList] };
+  baseline = { manager, type: generator._textureType, size: generator.mapSize, clamp: generator.depthClamp,
+    penumbra: manager.shadowPenumbraEnabled, enabled: generator.getLight().shadowEnabled };
   return baseline;
 }
 
 export function inspectShadowPrecision() {
-  const { manager, generator } = context();
+  const { manager } = context(), generator = manager.shadowGenerator;
+  const engine = manager.scene.getEngine(), caps = engine.getCaps();
   const map = generator.getShadowMap(), internal = map.getInternalTexture();
   const gpu = internal._hardwareTexture.underlyingResource, depth = map.depthStencilTexture?._hardwareTexture?.underlyingResource;
   return { colorFormat: gpu.format, depthFormat: depth?.format ?? null, internalType: internal.type,
+    maxTextureSize: caps.maxTextureSize, renderableFloat32: caps.textureFloatRender,
+    deviceFloat32Filterable: engine._device.features.has("float32-filterable"), samplingMode: internal.samplingMode,
     size: [gpu.width, gpu.height], layers: gpu.depthOrArrayLayers, depthClamp: generator.depthClamp,
     casterIds: map.renderList.map(mesh => mesh.uniqueId).sort((a,b) => a-b),
     numCascades: generator.numCascades, bias: generator.bias, normalBias: generator.normalBias, shadowMaxZ: generator.shadowMaxZ,
@@ -35,24 +37,32 @@ export function inspectShadowPrecision() {
     penumbra: manager.shadowPenumbraEnabled, enabled: generator.getLight().shadowEnabled };
 }
 
+// The saved-project and automation control both use this public manager setter.
+export function setScenePenumbra(enabled) {
+  context().manager.shadowPenumbraEnabled = enabled;
+}
+
 export function inspectShadowTransforms() {
-  const { generator } = context();
+  const generator = context().manager.shadowGenerator;
   return { splits: Array.from(generator._viewSpaceFrustumsZ),
     matrices: Array.from({ length: generator.numCascades }, (_, i) => Array.from(generator.getCascadeTransformMatrix(i).m)) };
 }
 
 async function apply(type, size, clamp, penumbra, enabled) {
-  const { manager, generator, casters } = context();
+  const { manager } = context();
   if (manager.shadowPenumbraEnabled !== penumbra) manager.shadowPenumbraEnabled = penumbra;
+  const generator = manager.shadowGenerator;
   generator.depthClamp = clamp;
   if (generator._textureType !== type || generator.mapSize !== size) {
     // Babylon 9.2's public useFloat32TextureType setter disposes the whole CSM,
     // including the caster callbacks installed by the application. Recreate only
     // its RTT with the requested color format and retain the original generator.
+    const casters = [...generator.getShadowMap().renderList];
+    generator._usefullFloatFirst = type === Constants.TEXTURETYPE_FLOAT;
     generator._textureType = type;
     if (generator.mapSize !== size) generator.mapSize = size;
     else generator.recreateShadowMap();
-    generator.getShadowMap().renderList = [...casters];
+    generator.getShadowMap().renderList = casters;
   }
   generator.getLight().shadowEnabled = enabled;
   await manager.scene.whenReadyAsync();
@@ -64,13 +74,14 @@ export async function setShadowPrecisionVariant(variant) {
   const b = context();
   switch (variant) {
     case "clear": return apply(b.type, b.size, b.clamp, false, false);
-    case "hard-baseline": return apply(b.type, b.size, b.clamp, false, true);
-    case "hard-clamp-on": return apply(b.type, b.size, true, false, true);
-    case "hard-float32": return apply(Constants.TEXTURETYPE_FLOAT, b.size, false, false, true);
+    // Retain the original R16F 8192 control for reproducing historical comparisons.
+    case "hard-baseline": return apply(Constants.TEXTURETYPE_HALF_FLOAT, 8192, false, false, true);
+    case "hard-clamp-on": return apply(Constants.TEXTURETYPE_HALF_FLOAT, 8192, true, false, true);
+    case "hard-float32": return apply(Constants.TEXTURETYPE_FLOAT, 8192, false, false, true);
     case "hard-float32-4096": return apply(Constants.TEXTURETYPE_FLOAT, 4096, false, false, true);
     case "hard-float32-6144": return apply(Constants.TEXTURETYPE_FLOAT, 6144, false, false, true);
     case "hard-float32-7040": return apply(Constants.TEXTURETYPE_FLOAT, 7040, false, false, true);
-    case "pcss": return apply(b.type, b.size, false, true, true);
+    case "pcss": return apply(Constants.TEXTURETYPE_HALF_FLOAT, 8192, false, true, true);
     default: throw new Error("Unknown precision variant: " + variant);
   }
 }

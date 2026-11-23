@@ -4,7 +4,7 @@ status: decision
 priority: high
 scope: rendering/shadows
 confidence: high
-last_verified: 2026-11-13
+last_verified: 2026-11-23
 evidence:
   - project-owner-directive
   - repeated-owner-directive
@@ -17,6 +17,7 @@ source_docs:
   - ../../docs/custom-shadow-system-concept-2026-08-22.md
   - ../../docs/csm-wall-band-investigation-2026-11-11.md
   - ../../docs/csm-seam-parameters-and-official-sources-2026-11-13.md
+  - ../../docs/csm-wall-shadow-precision-2026-11-23.md
 superseded_by: null
 decision_owner: project-owner
 decision: accepted-with-constraints
@@ -49,6 +50,8 @@ CSMのdepthClampだけをfalseへ変更し、起動・再生成・半影切替�
 
 その後の残存報告で、所有者は指定したローカルPMXを使った追加検証を許可し、ドキュメントへモデル名を記載しないよう明示した。
 対象PMXと参照textureだけをローカルで扱い、元path・名称・画像・モデルとテクスチャの実データはcommitへ含めない。診断資料はignoredのlocal-referencesへ置く。
+
+2026-11-23、壁の暗点・接地影・負荷の比較結果を受け、所有者はWebGPUのCSMで半影オフ時の推奨値（R32F・6144角）を採用した。対象はこの条件の影マップ形式と解像度に限る。
 
 ## 避けること
 

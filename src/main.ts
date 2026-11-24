@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, protocol, screen, session, shell, type IpcMainEvent, type Session } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, protocol, screen, session, shell, type IpcMainEvent, type Session, type WebContents } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { isProjectFilePath } from './project/project-drop';
@@ -21,6 +21,7 @@ import type {
   PngSequenceExportRequest,
   PngSequenceExportState,
   PngSaveTarget,
+  UiLocale,
   WebmCaptureMode,
   WebmExportLaunchResult,
   WebmExportProgress,
@@ -42,6 +43,25 @@ import { AutomationError, toAutomationFailure } from './automation/diagnostics';
 import type { AutomationPermission, AutomationVideoOptions } from './automation/ui-operation-schema';
 import { LOCAL_ASSET_SCHEME } from './shared/local-asset-url';
 import { createLocalAssetProtocolHandler } from './main/local-asset-protocol';
+import { DEFAULT_UI_LOCALE, isUiLocale, uiTranslations } from './shared/ui-locales';
+
+const localeBySender = new WeakMap<WebContents, UiLocale>();
+ipcMain.on('window:setUiLocale', (event, locale: unknown) => {
+  if (isUiLocale(locale)) localeBySender.set(event.sender, locale);
+});
+
+function getDialogText(sender: WebContents) {
+  return uiTranslations[localeBySender.get(sender) ?? DEFAULT_UI_LOCALE];
+}
+
+function getPngSaveOptions(sender: WebContents, safeName: string): Electron.SaveDialogOptions {
+  const text = getDialogText(sender);
+  return {
+    title: text['dialog.pngExport.title'],
+    defaultPath: path.join(app.getPath('pictures'), safeName),
+    filters: [{ name: text['output.png.label'], extensions: ['png'] }],
+  };
+}
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -1088,14 +1108,15 @@ const createWindow = (projectFilePath?: string): BrowserWindow => {
     if (activeExports <= 0) return;
 
     event.preventDefault();
+    const text = getDialogText(mainWindow.webContents);
     void dialog.showMessageBox(mainWindow, {
       type: 'warning',
       buttons: ['OK'],
       defaultId: 0,
       cancelId: 0,
-      title: 'Background Export In Progress',
-      message: 'A background export is running.',
-      detail: 'Please wait until export finishes before closing the main window.',
+      title: text['export.closeWarning.title'],
+      message: text['export.closeWarning.message'],
+      detail: text['export.closeWarning.detail'],
       noLink: true,
     });
   });
@@ -1206,8 +1227,9 @@ ipcMain.handle('dialog:openFile', async (_event, filters: { name: string; extens
   return result.filePaths[0];
 });
 
-ipcMain.handle('dialog:openDirectory', async () => {
+ipcMain.handle('dialog:openDirectory', async (_event, title?: string) => {
   const result = await dialog.showOpenDialog({
+    title: typeof title === 'string' ? title : undefined,
     properties: ['openDirectory', 'createDirectory'],
   });
   if (result.canceled || result.filePaths.length === 0) {
@@ -1216,7 +1238,7 @@ ipcMain.handle('dialog:openDirectory', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('dialog:savePngTarget', async (_event, defaultFileName?: string): Promise<PngSaveTarget | null> => {
+ipcMain.handle('dialog:savePngTarget', async (event, defaultFileName?: string): Promise<PngSaveTarget | null> => {
   try {
     const requestedName = defaultFileName?.trim() || 'mmd_capture.png';
     const baseName = path.basename(requestedName);
@@ -1230,11 +1252,7 @@ ipcMain.handle('dialog:savePngTarget', async (_event, defaultFileName?: string):
       };
     }
 
-    const result = await dialog.showSaveDialog({
-      title: 'Save PNG Image',
-      defaultPath: path.join(app.getPath('pictures'), safeName),
-      filters: [{ name: 'PNG Image', extensions: ['png'] }],
-    });
+    const result = await dialog.showSaveDialog(getPngSaveOptions(event.sender, safeName));
     if (result.canceled || !result.filePath) return null;
     const selectedPath = result.filePath.toLowerCase().endsWith('.png')
       ? result.filePath
@@ -1249,7 +1267,7 @@ ipcMain.handle('dialog:savePngTarget', async (_event, defaultFileName?: string):
   }
 });
 
-ipcMain.handle('dialog:saveWebm', async (_event, defaultFileName?: string) => {
+ipcMain.handle('dialog:saveWebm', async (event, defaultFileName?: string) => {
   try {
     const safeName = (defaultFileName && defaultFileName.toLowerCase().endsWith('.webm'))
       ? defaultFileName
@@ -1257,10 +1275,11 @@ ipcMain.handle('dialog:saveWebm', async (_event, defaultFileName?: string) => {
     writeAppLog('info', 'webm', 'save dialog opened', {
       defaultFileName: safeName,
     });
+    const text = getDialogText(event.sender);
     const result = await dialog.showSaveDialog({
-      title: 'Save WebM',
+      title: text['dialog.webmExport.title'],
       defaultPath: path.join(app.getPath('videos'), safeName),
-      filters: [{ name: 'WebM Video', extensions: ['webm'] }],
+      filters: [{ name: text['output.webm.label'], extensions: ['webm'] }],
     });
     if (result.canceled || !result.filePath) {
       writeAppLog('info', 'webm', 'save dialog canceled');
@@ -1865,7 +1884,7 @@ const hasPngSignature = (bytes: Uint8Array): boolean => {
 ipcMain.handle(
   'file:savePngBytes',
   async (
-    _event,
+    event,
     pngBytes: Uint8Array,
     defaultFileName?: string,
   ) => {
@@ -1882,11 +1901,7 @@ ipcMain.handle(
         await fs.promises.writeFile(e2eFilePath, pngBytes);
         return e2eFilePath;
       }
-      const result = await dialog.showSaveDialog({
-        title: 'Save PNG Image',
-        defaultPath: path.join(app.getPath('pictures'), safeName),
-        filters: [{ name: 'PNG Image', extensions: ['png'] }],
-      });
+      const result = await dialog.showSaveDialog(getPngSaveOptions(event.sender, safeName));
 
       if (result.canceled || !result.filePath) return null;
       await fs.promises.writeFile(result.filePath, pngBytes);

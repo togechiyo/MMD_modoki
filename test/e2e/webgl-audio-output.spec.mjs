@@ -139,7 +139,7 @@ test("WebGL2 GUI WebM export preserves video timing and a 440 Hz audio track", a
       await page.locator(`[data-menu-command="${command}"]`).click();
     };
     await menu("file.openAudio");
-    await expect(page.locator("#status-text")).toHaveText("Audio loaded");
+    await expect(page.locator("#status-text")).toHaveAttribute("data-i18n", "status.audioLoaded");
     await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().assets.audioPath)).toBe(audioPath);
     await menu("file.webmExportSettings");
     const dialog = page.locator('[data-popup-id="webm-export"]');

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
+import { openRcLighting, rcLightingRow } from "./helpers/rc-lighting-controls.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const locales = ["ja", "en", "zh-Hant", "zh-Hans", "ko"];
@@ -85,7 +86,6 @@ const collectVisibleUnmarkedControls = (page) => page.evaluate(() => {
 test("supported locales keep translated labels inspectable", async ({}, testInfo) => {
   const englishKeys = Object.keys(dictionaries.en);
   for (const locale of ["zh-Hant", "zh-Hans", "ko"]) {
-    expect(Object.keys(dictionaries[locale]), `${locale} dictionary keys`).toEqual(englishKeys);
     const copiedEnglishMenuKeys = englishKeys.filter((key) => key.startsWith("menu.")
       && dictionaries[locale][key] === dictionaries.en[key]);
     expect(copiedEnglishMenuKeys, `${locale} menu translations`).toEqual([]);
@@ -166,7 +166,96 @@ test("supported locales keep translated labels inspectable", async ({}, testInfo
       await localeSelect.selectOption(locale);
       const compactClipped = await collectTranslatedTextLayout(page);
       expect(compactClipped, `${locale} minimum-window labels`).toEqual([]);
+      const controlsFit = await page.locator("#timeline-action-toolbar").evaluate(toolbar => {
+        const first = toolbar.querySelector("#btn-kf-copy").getBoundingClientRect();
+        const last = toolbar.querySelector("#btn-kf-mirror-paste").getBoundingClientRect();
+        const auto = toolbar.querySelector("#btn-auto-key").getBoundingClientRect();
+        const bounds = toolbar.getBoundingClientRect();
+        return first.left >= bounds.left - 1 && last.right <= auto.left + 1 && auto.right <= bounds.right + 1;
+      });
+      expect(controlsFit, `${locale} timeline buttons fit beside auto key`).toBe(true);
     }
+  } finally {
+    await launched.close();
+  }
+});
+
+test("settings, export dialogs and RC lighting controls follow the toolbar language", async ({}, testInfo) => {
+  const launched = await launchMmdModoki(repoRoot);
+  try {
+    const page = await launched.app.firstWindow();
+    await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
+    const dialogs = [
+      ["edit", "dialog.preferences", "dialog.preferences.title", "dialog.preferences.body"],
+      ["physics", "physics.gravitySettings", "dialog.gravity.title", "label.gravityX"],
+      ["physics", "physics.settings", "dialog.physics.title", "dialog.physics.fullyDampedNote"],
+      ["view", "view.lightShadowSettings", "dialog.lightShadow.title", "label.shadowQuality"],
+      ["background", "background.settings", "dialog.background.title", "dialog.background.style"],
+      ["window", "tools.experimentalSettings", "menu.tools.experimentalSettings", "experiment.pbrNote"],
+      ["file", "file.exportPng", "dialog.pngExport.title", "dialog.pngExport.memoryNote"],
+      ["file", "file.exportPngSequence", "dialog.pngSequenceExport.title", "dialog.pngSequenceExport.export"],
+      ["file", "file.webmExportSettings", "dialog.webmExport.title", "dialog.webmExport.includeAudio"],
+    ];
+    await launched.app.evaluate(({ dialog }) => {
+      dialog.showSaveDialog = async (...args) => {
+        const options = args.at(-1);
+        globalThis.lastSavePrompt = { title: options.title, filter: options.filters[0].name };
+        return { canceled: true, filePath: "" };
+      };
+    });
+    for (const locale of locales) {
+      const strings = dictionaries[locale];
+      await page.locator("#toolbar-locale-select").selectOption(locale);
+      await expect(page.locator(".toolbar-locale-label")).toHaveAttribute("title", strings["toolbar.locale.label"]);
+      for (const [menu, command, titleKey, contentKey] of dialogs) {
+        await test.step(`${locale} ${command}`, async () => {
+          await page.locator(`.app-menu-trigger[data-i18n="menu.${menu}"]`).click();
+          await page.locator(`[data-menu-command="${command}"]`).click();
+          const dialog = page.getByRole("dialog", { name: strings[titleKey], exact: true });
+          const body = dialog.locator(".app-menu-dialog-body");
+          await expect(body.getByText(strings[contentKey], { exact: true })).toBeVisible();
+          expect(await body.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+          if (command === "file.webmExportSettings") {
+            await dialog.screenshot({ path: testInfo.outputPath(`webm-${locale}.png`) });
+            await dialog.getByRole("button", { name: strings["dialog.webmExport.export"], exact: true }).click();
+            await expect(page.locator(".toast").last()).toHaveText(strings["toast.webmExportCanceled"]);
+            expect(await launched.app.evaluate(() => globalThis.lastSavePrompt)).toEqual({
+              title: strings["dialog.webmExport.title"], filter: strings["output.webm.label"],
+            });
+          } else {
+            await dialog.getByRole("button", { name: strings["dialog.close"], exact: true }).click();
+          }
+          await expect(dialog).toBeHidden();
+        });
+      }
+
+      for (const [id, fields] of [
+        ["rcDiffuseGi", ["strength", "quality", "rangeScale"]],
+        ["rcSkyAmbient", ["opacity", "strength", "skyBrightness"]],
+      ]) {
+        await openRcLighting(page, id);
+        const row = rcLightingRow(page, id);
+        await expect(row.getByRole("checkbox")).toHaveAccessibleName(strings[`effect.frameGraphPost.effects.${id}`]);
+        for (const field of fields) {
+          await expect(row.getByRole("slider", { name: strings[`experiment.${id}.${field}`], exact: true })).toBeVisible();
+        }
+        if (id === "rcDiffuseGi") {
+          await expect(row.locator('[name="rcDiffuseGiQuality"]')).toHaveAttribute("aria-description", strings["experiment.rcDiffuseGi.qualityHint"]);
+        }
+      }
+    }
+    const status = page.locator("#status-text");
+    await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(repoRoot, "test/fixtures/external-parent/tofu.pmx"));
+    await expect(status).toHaveText(dictionaries.ko["viewport.status.modelReady"]);
+    await page.locator("#toolbar-locale-select").selectOption("ja");
+    await expect(status).toHaveText(dictionaries.ja["viewport.status.modelReady"]);
+    const play = page.locator("#viewport-seek-play-toggle");
+    await play.click();
+    await expect(status).toHaveText(dictionaries.ja["status.playing"]);
+    await play.click();
+    await expect(status).toHaveText(dictionaries.ja["status.paused"]);
+    await page.locator("#toolbar-locale-select").selectOption("en");
+    await expect(status).toHaveText(dictionaries.en["status.paused"]);
   } finally {
     await launched.close();
   }

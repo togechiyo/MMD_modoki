@@ -4,6 +4,7 @@ import type {
     AppLogData,
     AppLogScope,
     ElectronAPI,
+    UiLocale,
     PngSequenceExportProgress,
     PngSequenceExportRequest,
     PngSequenceExportState,
@@ -35,6 +36,7 @@ const automation: AutomationApi = {
     operationCompleted: notice => { ipcRenderer.send('automation:operationCompleted', notice); },
 };
 contextBridge.exposeInMainWorld('electronAPI', {
+    setUiLocale: (locale: UiLocale) => ipcRenderer.send('window:setUiLocale', locale),
     automation,
     wgslRecovery: {
         state: () => ipcRenderer.invoke('wgsl:state'),
@@ -51,8 +53,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readEffectPackage: (filePath: string) => ipcRenderer.invoke('file:readEffectPackage', filePath),
     openFileDialog: (filters: { name: string; extensions: string[] }[]) =>
         ipcRenderer.invoke('dialog:openFile', filters),
-    openDirectoryDialog: () =>
-        ipcRenderer.invoke('dialog:openDirectory'),
+    openDirectoryDialog: (title?: string) =>
+        ipcRenderer.invoke('dialog:openDirectory', title),
     choosePngSaveTarget: (defaultFileName?: string) =>
         ipcRenderer.invoke('dialog:savePngTarget', defaultFileName),
     saveWebmDialog: (defaultFileName?: string) =>

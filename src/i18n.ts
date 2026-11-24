@@ -1,25 +1,10 @@
 import { createInstance, type Resource } from "i18next";
 import type { UiLocale } from "./types";
-import jaTranslation from "../language/ja.json";
-import enTranslation from "../language/en.json";
-import zhHantTranslation from "../language/zh-Hant.json";
-import zhHansTranslation from "../language/zh-Hans.json";
-import koTranslation from "../language/ko.json";
+import { DEFAULT_UI_LOCALE as DEFAULT_LOCALE, isUiLocale as isLocale, uiTranslations as translations } from "./shared/ui-locales";
 
 export type { UiLocale } from "./types";
 
-type TranslationTable = Record<string, string>;
-
 const STORAGE_KEY = "mmd.ui.locale";
-const DEFAULT_LOCALE: UiLocale = "ja";
-
-const translations: Record<UiLocale, TranslationTable> = {
-    ja: jaTranslation as TranslationTable,
-    en: enTranslation as TranslationTable,
-    "zh-Hant": zhHantTranslation as TranslationTable,
-    "zh-Hans": zhHansTranslation as TranslationTable,
-    ko: koTranslation as TranslationTable,
-};
 
 const resources: Resource = {
     ja: { translation: translations.ja },
@@ -33,14 +18,6 @@ const i18nInstance = createInstance();
 
 let currentLocale: UiLocale = DEFAULT_LOCALE;
 let i18nInitialized = false;
-
-const isLocale = (value: string | null | undefined): value is UiLocale => {
-    return value === "ja"
-        || value === "en"
-        || value === "zh-Hant"
-        || value === "zh-Hans"
-        || value === "ko";
-};
 
 const resolveLocaleFromEnvironment = (): UiLocale => {
     const stored = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
@@ -126,6 +103,7 @@ export const setLocale = (
     const emitEvent = options?.emitEvent ?? true;
 
     currentLocale = locale;
+    if (typeof window !== "undefined") window.electronAPI?.setUiLocale?.(locale);
     ensureI18nInitialized(locale);
     syncDocumentLocale(locale);
     if (i18nInstance.language !== locale) {

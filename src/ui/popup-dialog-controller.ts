@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 export type PopupSurface = "modal";
 export type PopupSize = "sm" | "md" | "lg" | "wide";
 
@@ -42,7 +44,7 @@ export class PopupDialogController {
             <section class="app-menu-dialog" role="dialog" aria-modal="true" aria-labelledby="app-menu-dialog-title">
                 <header class="app-menu-dialog-header">
                     <h2 id="app-menu-dialog-title" class="app-menu-dialog-title"></h2>
-                    <button class="app-menu-dialog-close" type="button" aria-label="Close">&times;</button>
+                    <button class="app-menu-dialog-close" type="button" data-i18n-aria-label="dialog.close">&times;</button>
                 </header>
                 <div class="app-menu-dialog-body"></div>
             </section>
@@ -81,6 +83,7 @@ export class PopupDialogController {
         this.restoreFocusTo = options.restoreFocusTo ?? null;
         this.closeOnBackdrop = options.closeOnBackdrop ?? true;
         this.titleElement.textContent = options.title;
+        this.closeButton.setAttribute("aria-label", t("dialog.close"));
         this.dialog.dataset.popupId = options.id;
         this.dialog.dataset.popupSize = options.size ?? "md";
         this.bodyElement.replaceChildren();

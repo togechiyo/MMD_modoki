@@ -122,7 +122,7 @@ type ExportUiElements = {
 export type ExportUiControllerDeps = {
     mmdManager: MmdManager;
     buildProjectState: () => MmdModokiProjectFileV1;
-    setStatus: (text: string, loading?: boolean) => void;
+    setLocalizedStatus: (keyOrFormatter: string | (() => string), loading?: boolean) => void;
     showToast: (message: string, type?: ToastType) => void;
     isPlaybackActive: () => boolean;
     onPausePlayback: () => void;
@@ -147,7 +147,7 @@ function resolveExportUiElements(): ExportUiElements {
     };
 }
 
-function formatWebmExportPhaseLabel(phase: WebmExportProgress["phase"]): string {
+function formatWebmExportPhaseLabel(phase: WebmExportProgress["phase"]): string | null {
     switch (phase) {
         case "initializing": return t("webm.phase.initializing");
         case "loading-project": return t("webm.phase.loadingProject");
@@ -161,7 +161,7 @@ function formatWebmExportPhaseLabel(phase: WebmExportProgress["phase"]): string 
         case "canceled": return t("webm.phase.canceled");
         case "completed": return t("webm.phase.completed");
         case "failed": return t("webm.phase.failed");
-        default: return phase;
+        default: return null;
     }
 }
 
@@ -188,7 +188,7 @@ export class ExportUiController {
     private readonly elements: ExportUiElements;
     private readonly mmdManager: MmdManager;
     private readonly buildProjectState: () => MmdModokiProjectFileV1;
-    private readonly setStatus: (text: string, loading?: boolean) => void;
+    private readonly setLocalizedStatus: ExportUiControllerDeps["setLocalizedStatus"];
     private readonly showToast: (message: string, type?: ToastType) => void;
     private readonly isPlaybackActive: () => boolean;
     private readonly onPausePlayback: () => void;
@@ -244,7 +244,7 @@ export class ExportUiController {
         this.elements = resolveExportUiElements();
         this.mmdManager = deps.mmdManager;
         this.buildProjectState = deps.buildProjectState;
-        this.setStatus = deps.setStatus;
+        this.setLocalizedStatus = deps.setLocalizedStatus;
         this.showToast = deps.showToast;
         this.isPlaybackActive = deps.isPlaybackActive;
         this.onPausePlayback = deps.onPausePlayback;
@@ -440,7 +440,7 @@ export class ExportUiController {
     }
 
     public async exportPNG(automationTarget?: { filePath: string; overwrite: boolean; permission: AutomationPermission }): Promise<Record<string, unknown> | void> {
-        this.setStatus("Exporting PNG...", true);
+        this.setLocalizedStatus("busy.exportingPng", true);
 
         const outputSettings = this.getOutputSettings();
         const captureWidth = Math.max(320, Math.round(outputSettings.width * outputSettings.qualityScale));
@@ -472,8 +472,9 @@ export class ExportUiController {
             } else savedPath = await window.electronAPI.savePngBytesFile(encoded.pngBuffer, fileName);
         } catch (error: unknown) {
             logError("ui", "PNG snapshot encode or save failed", { error: error instanceof Error ? error.message : String(error) });
-            this.setStatus("PNG export failed", false);
-            this.showToast("PNG export failed", "error");
+            const message = () => t("export.failed", { format: "PNG" });
+            this.setLocalizedStatus(message);
+            this.showToast(message(), "error");
             if (automationTarget) throw error;
             return;
         } finally {
@@ -482,14 +483,15 @@ export class ExportUiController {
             document.body.classList.remove("png-capture-mode");
         }
         if (!savedPath) {
-            this.setStatus("Ready", false);
-            this.showToast("PNG export canceled", "info");
+            const message = () => t("export.canceled", { format: "PNG" });
+            this.setLocalizedStatus(message);
+            this.showToast(message(), "info");
             return;
         }
 
         const basename = savedPath.replace(/^.*[\\/]/, "");
-        this.setStatus("PNG saved", false);
-        this.showToast(`Saved PNG: ${basename}`, "success");
+        this.setLocalizedStatus("export.pngSaved");
+        this.showToast(t("export.savedFile", { fileName: basename }), "success");
         return { filePath: savedPath, width: captureWidth, height: captureHeight };
     }
 
@@ -500,8 +502,9 @@ export class ExportUiController {
         const defaultFileName = this.buildPngFileName(outputWidth, outputHeight);
         const saveTarget = await window.electronAPI.choosePngSaveTarget(defaultFileName);
         if (!saveTarget) {
-            this.setStatus("Ready", false);
-            this.showToast("PNG export canceled", "info");
+            const message = () => t("export.canceled", { format: "PNG" });
+            this.setLocalizedStatus(message);
+            this.showToast(message(), "info");
             return;
         }
 
@@ -516,7 +519,7 @@ export class ExportUiController {
             outputHeight,
             fileName: saveTarget.fileName,
         });
-        this.setStatus("Launching high-resolution PNG export...", true);
+        this.setLocalizedStatus("busy.exportingPng", true);
         const result = await window.electronAPI.startPngSequenceExportWindow({
             project,
             externalWgslEnabled: this.mmdManager.getExternalWgslService().enabled,
@@ -541,13 +544,14 @@ export class ExportUiController {
                 outputHeight,
                 fileName: saveTarget.fileName,
             });
-            this.setStatus("PNG export launch failed", false);
-            this.showToast("Failed to start high-resolution PNG export", "error");
+            const message = () => t("export.launchFailed", { format: "PNG" });
+            this.setLocalizedStatus(message);
+            this.showToast(message(), "error");
             return;
         }
 
-        this.setStatus("PNG export started", false);
-        this.showToast(`PNG export started: ${saveTarget.fileName}`, "success");
+        this.setLocalizedStatus(() => t("export.started", { format: "PNG" }));
+        this.showToast(t("export.startedFile", { fileName: saveTarget.fileName }), "success");
     }
 
     private async waitForNextPaint(): Promise<void> {
@@ -556,9 +560,9 @@ export class ExportUiController {
     }
 
     public async exportPNGSequence(automationTarget?: { outputDirectoryPath: string; permission: AutomationPermission }): Promise<import("../types").PngSequenceExportLaunchResult | void> {
-        const directoryPath = automationTarget?.outputDirectoryPath ?? await window.electronAPI.openDirectoryDialog();
+        const directoryPath = automationTarget?.outputDirectoryPath ?? await window.electronAPI.openDirectoryDialog(t("dialog.pngSequenceExport.title"));
         if (!directoryPath) {
-            this.showToast("PNG sequence export canceled", "info");
+            this.showToast(t("export.canceled", { format: t("export.pngSequence") }), "info");
             return;
         }
 
@@ -573,7 +577,7 @@ export class ExportUiController {
             frameList.push(frame);
         }
         if (frameList.length === 0) {
-            this.showToast("No frames to export", "error");
+            this.showToast(t("export.noFrames"), "error");
             return;
         }
 
@@ -589,7 +593,7 @@ export class ExportUiController {
         project.assets.audioPath = null;
         const externalLut = this.mmdManager.getPostEffectExternalLutAsset();
 
-        this.setStatus("Launching PNG sequence export window...", true);
+        this.setLocalizedStatus("busy.exportingPngSequence", true);
         const result = await window.electronAPI.startPngSequenceExportWindow({
             project,
             externalWgslEnabled: this.mmdManager.getExternalWgslService().enabled,
@@ -607,24 +611,25 @@ export class ExportUiController {
         }, automationTarget?.permission);
 
         if (automationTarget && !result?.jobId) {
-            this.setStatus("PNG sequence export launch failed", false);
+            this.setLocalizedStatus(() => t("export.launchFailed", { format: t("export.pngSequence") }));
             return result ?? { jobId: "", errorCode: "PNG_EXPORT_FAILED" };
         }
         if (!result) {
-            this.setStatus("PNG sequence export launch failed", false);
-            this.showToast("Failed to start PNG sequence export window", "error");
+            const message = () => t("export.launchFailed", { format: t("export.pngSequence") });
+            this.setLocalizedStatus(message);
+            this.showToast(message(), "error");
             return;
         }
 
-        this.setStatus("PNG sequence export started", false);
-        this.showToast(`PNG sequence export started (${frameList.length} files)`, "success");
+        this.setLocalizedStatus(() => t("export.started", { format: t("export.pngSequence") }));
+        this.showToast(t("export.startedFrames", { format: t("export.pngSequence"), count: frameList.length }), "success");
         return result;
     }
 
     public async exportWebm(automationTarget?: { filePath: string; overwrite: boolean; permission: AutomationPermission }): Promise<import("../types").WebmExportLaunchResult | void> {
         if (!window.isSecureContext) {
             logError("webm", "export blocked by insecure context");
-            this.showToast("WebM export requires a secure context", "error");
+            this.showToast(t("export.secureContext"), "error");
             if (automationTarget) throw new Error("WebM secure context unavailable");
             return;
         }
@@ -636,7 +641,7 @@ export class ExportUiController {
                 startFrame,
                 endFrame,
             });
-            this.showToast("No frames to export", "error");
+            this.showToast(t("export.noFrames"), "error");
             return;
         }
 
@@ -692,7 +697,7 @@ export class ExportUiController {
             initialPhysicsFrame: initialPhysicsState?.capturedFrame ?? null,
         });
 
-        this.setStatus(t("busy.webmExportLaunching"), true);
+        this.setLocalizedStatus("busy.webmExportLaunching", true);
         const result = await window.electronAPI.startWebmExportWindow({
             project,
             externalLut,
@@ -710,14 +715,15 @@ export class ExportUiController {
         }, automationTarget ? { permission: automationTarget.permission, overwrite: automationTarget.overwrite } : undefined);
 
         if (result?.errorCode) {
-            this.setStatus("WebM export launch failed", false);
-            this.showToast(`WebM export failed: ${result.errorCode}`, "error");
+            this.setLocalizedStatus(() => t("export.launchFailed", { format: "WebM" }));
+            this.showToast(`${t("export.failed", { format: "WebM" })} (${result.errorCode})`, "error");
             return result;
         }
         if (!result) {
             logError("webm", "export launch failed", { outputFilePath });
-            this.setStatus("WebM export launch failed", false);
-            this.showToast("Failed to start WebM export window", "error");
+            const message = () => t("export.launchFailed", { format: "WebM" });
+            this.setLocalizedStatus(message);
+            this.showToast(message(), "error");
             return;
         }
 
@@ -725,8 +731,8 @@ export class ExportUiController {
             jobId: result.jobId,
             totalOutputFrames,
         });
-        this.setStatus("WebM export started", false);
-        this.showToast(`WebM export started (${totalOutputFrames} frames)`, "success");
+        this.setLocalizedStatus(() => t("export.started", { format: "WebM" }));
+        this.showToast(t("export.startedFrames", { format: "WebM", count: totalOutputFrames }), "success");
         return result;
     }
 
@@ -1236,26 +1242,24 @@ export class ExportUiController {
                 const phaseLabel = formatWebmExportPhaseLabel(progress.phase);
                 const encodedCount = Math.max(0, Math.min(progress.total, progress.encoded));
                 const outputTotal = Math.max(0, progress.total);
+                let ratio = 0;
+                let baseText: string;
                 if (outputTotal > 0) {
-                    const ratio = Math.min(100, Math.max(0, (encodedCount / outputTotal) * 100));
-                    const baseText = t("busy.webmProgress", {
-                        phase: phaseLabel,
+                    ratio = Math.min(100, Math.max(0, (encodedCount / outputTotal) * 100));
+                    baseText = t("busy.webmProgress", {
+                        phase: phaseLabel ?? progress.phase,
                         encoded: encodedCount,
                         total: outputTotal,
                         ratio: ratio.toFixed(1),
                         frame: currentFrame,
                     });
-                    const detailText = typeof progress.message === "string" && progress.message.trim().length > 0
-                        ? progress.message.trim()
-                        : "";
-                    busyText.textContent = detailText.length > 0
-                        ? `${baseText}\n${detailText}`
-                        : baseText;
-                    this.updateWebmBusyControls(progress, ratio);
-                    return;
+                } else {
+                    baseText = `WebM ${phaseLabel ?? progress.phase}`;
                 }
-                busyText.textContent = t("busy.webmExportRunning");
-                this.updateWebmBusyControls(progress, 0);
+                // The worker's normal status messages are diagnostics in its own language.
+                const detail = (progress.phase === "failed" || phaseLabel === null) && progress.message?.trim();
+                busyText.textContent = detail ? `${baseText}\n${detail}` : baseText;
+                this.updateWebmBusyControls(progress, ratio);
                 return;
             }
             if (this.webmExportActiveCount > 1) {
@@ -1279,8 +1283,7 @@ export class ExportUiController {
                 );
                 if (totalCount > 0) {
                     const ratio = Math.min(100, Math.max(0, (progressCount / totalCount) * 100));
-                    busyText.textContent = t("busy.webmProgress", {
-                        phase: "PNG",
+                    busyText.textContent = t("busy.pngProgress", {
                         encoded: progressCount,
                         total: totalCount,
                         ratio: ratio.toFixed(1),
@@ -1290,7 +1293,7 @@ export class ExportUiController {
                 }
             }
             if (this.pngSequenceExportActiveCount > 1) {
-                busyText.textContent = t("busy.webmExportActive", { count: this.pngSequenceExportActiveCount });
+                busyText.textContent = t("busy.pngExportActive", { count: this.pngSequenceExportActiveCount });
                 return;
             }
             busyText.textContent = progress?.exportKind === "sequence"

@@ -81,6 +81,11 @@ test("メニューのPNG出力で解像度詳細を設定して再表示でき�
     expect([...pngBytes.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
     expect(pngBytes.readUInt32BE(16)).toBe(640);
     expect(pngBytes.readUInt32BE(20)).toBe(360);
+    await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/);
+    const status = page.locator("#status-text");
+    await expect(status).toHaveText("PNG出力を開始しました");
+    await page.locator("#toolbar-locale-select").selectOption("en");
+    await expect(status).toHaveText("Started PNG export");
   } finally {
     await launched.close();
   }

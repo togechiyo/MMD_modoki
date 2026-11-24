@@ -1721,6 +1721,7 @@ body.shader-resizing #shader-resizer::before {
 
 .timeline-key-dock-button-grid {
   display: grid;
+  flex: 0 1 222px;
   gap: 3px;
   min-width: 0;
 }
@@ -1734,12 +1735,12 @@ body.shader-resizing #shader-resizer::before {
 }
 
 .timeline-key-dock-command-row {
-  grid-template-columns: repeat(3, 72px);
+  grid-template-columns: 1fr 1fr minmax(max-content, 1fr);
   justify-content: center;
 }
 
 .timeline-key-dock-register-row {
-  grid-template-columns: repeat(3, 58px);
+  grid-template-columns: repeat(3, minmax(0, 58px));
   justify-content: center;
 }
 

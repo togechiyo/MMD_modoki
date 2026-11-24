@@ -14,11 +14,12 @@ export type MmdOptimizedFileSaveResult =
     | { status: "failed"; message: string };
 
 export interface ElectronAPI {
+    setUiLocale: (locale: UiLocale) => void;
     wgslRecovery: import("./external-wgsl/recovery-state").WgslRecoveryApi;
     automation: import("./automation/contracts").AutomationApi;
     readEffectPackage: (filePath: string) => Promise<{ asset?: import("./external-wgsl/contract").EffectAsset; error?: string }>;
     openFileDialog: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
-    openDirectoryDialog: () => Promise<string | null>;
+    openDirectoryDialog: (title?: string) => Promise<string | null>;
     choosePngSaveTarget: (defaultFileName?: string) => Promise<PngSaveTarget | null>;
     saveWebmDialog: (defaultFileName?: string) => Promise<string | null>;
     openNewProjectWindow: (projectFilePath?: string) => Promise<number | null>;

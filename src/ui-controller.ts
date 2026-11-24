@@ -652,7 +652,9 @@ export class UIController {
     private projectDropPending = false;
     private lastModelSideTargetValue: string | null = null;
     private suppressNextModelLoadErrorToast = false;
+    private currentStatusFormatter: (() => string) | null = null;
     private readonly onLocaleChanged = (): void => {
+        if (this.currentStatusFormatter) this.statusText.textContent = this.currentStatusFormatter();
         this.applyLocalizedUiState();
         this.timeline.refreshLocale();
         this.viewportSeekBarController?.refreshLocale();
@@ -809,7 +811,7 @@ export class UIController {
         this.exportUiController = new ExportUiController({
             mmdManager: this.mmdManager,
             buildProjectState: () => this.buildProjectStateForPersistence(),
-            setStatus: (text, loading) => this.setStatus(text, loading),
+            setLocalizedStatus: (keyOrFormatter, loading) => this.setLocalizedStatus(keyOrFormatter, loading),
             showToast: (message, type) => this.showToast(message, type),
             isPlaybackActive: () => this.mmdManager.isPlaying,
             onPausePlayback: () => this.pause(false),
@@ -1906,7 +1908,7 @@ export class UIController {
 
         // Active model changed
         this.mmdManager.onModelLoaded = () => {
-            this.setStatus("Model ready", false);
+            this.setLocalizedStatus("viewport.status.modelReady");
             this.viewportOverlay.classList.add("hidden");
             if (this.mmdManager.getTimelineTarget() === "camera") {
                 this.applyCameraSelectionUI();
@@ -1921,7 +1923,7 @@ export class UIController {
 
         // Any model loaded into scene
         this.mmdManager.onSceneModelLoaded = (info: ModelInfo, totalCount: number, active: boolean) => {
-            this.setStatus("Model loaded", false);
+            this.setLocalizedStatus("viewport.status.modelReady");
             this.viewportOverlay.classList.add("hidden");
             if (active) {
                 this.applyActiveModelSelectionUI();
@@ -1933,8 +1935,8 @@ export class UIController {
             this.dofPanelController?.refreshFocusTargetControls();
             this.refreshShaderPanel();
             this.runtimeFeatureUiController?.refreshRigidBodies();
-            const activeLabel = active ? " [active]" : "";
-            this.showToast(`Loaded model: ${info.name} (${totalCount})${activeLabel}`, "success");
+            const toastKey = active ? "toast.activeModelLoaded" : "toast.modelLoaded";
+            this.showToast(t(toastKey, { name: info.name, total: totalCount }), "success");
         };
 
         this.mmdManager.onModelLoadStage = (event: ModelLoadStageEvent) => {
@@ -1948,19 +1950,19 @@ export class UIController {
 
         // Motion loaded
         this.mmdManager.onMotionLoaded = (info: MotionInfo) => {
-            this.setStatus("Motion loaded", false);
+            this.setLocalizedStatus("status.motionLoaded");
             this.timeline.setTotalFrames(info.frameCount);
             this.totalFramesEl.textContent = String(info.frameCount);
             this.exportUiController?.syncFrameRangeFromTimeline();
-            this.showToast(`Loaded motion: ${info.name}`, "success");
+            this.showToast(t("toast.motionLoaded", { name: info.name }), "success");
         };
 
         this.mmdManager.onCameraMotionLoaded = (info: MotionInfo) => {
-            this.setStatus("Camera motion loaded", false);
+            this.setLocalizedStatus("status.cameraMotionLoaded");
             this.timeline.setTotalFrames(info.frameCount);
             this.totalFramesEl.textContent = String(info.frameCount);
             this.exportUiController?.syncFrameRangeFromTimeline();
-            this.showToast(`Loaded camera motion: ${info.name}`, "success");
+            this.showToast(t("toast.cameraMotionLoaded", { name: info.name }), "success");
         };
 
         // Keyframe data loaded
@@ -1996,8 +1998,8 @@ export class UIController {
 
         // Audio loaded
         this.mmdManager.onAudioLoaded = (name: string) => {
-            this.setStatus("Audio loaded", false);
-            this.showToast(`Loaded audio: ${name}`, "success");
+            this.setLocalizedStatus("status.audioLoaded");
+            this.showToast(t("toast.audioLoaded", { name }), "success");
             void this.refreshTimelineWaveformFromAudio();
         };
 
@@ -12967,7 +12969,7 @@ export class UIController {
         this.updateSectionKeyframeButtons();
         this.btnPlay.style.display = "none";
         this.btnPause.style.display = "flex";
-        if (updateStatus) this.setStatus("Playing", false);
+        if (updateStatus) this.setLocalizedStatus("status.playing");
         this.refreshViewportBottomBar();
     }
 
@@ -12980,7 +12982,7 @@ export class UIController {
         this.updateTimelineEditState();
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
-        if (updateStatus) this.setStatus("Paused", false);
+        if (updateStatus) this.setLocalizedStatus("status.paused");
         this.refreshViewportBottomBar();
     }
 
@@ -12996,7 +12998,7 @@ export class UIController {
         this.updateTimelineEditState();
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
-        this.setStatus("Stopped", false);
+        this.setLocalizedStatus("status.stopped");
         this.refreshViewportBottomBar();
     }
 
@@ -13008,7 +13010,7 @@ export class UIController {
         this.updateTimelineEditState();
         this.btnPlay.style.display = "flex";
         this.btnPause.style.display = "none";
-        this.setStatus("Stopped", false);
+        this.setLocalizedStatus("status.stopped");
         this.refreshViewportBottomBar();
     }
 
@@ -13019,7 +13021,7 @@ export class UIController {
         }
 
         this.mmdManager.seekToBoundary(startFrame);
-        this.setStatus("Playing", false);
+        this.setLocalizedStatus("status.playing");
         this.refreshViewportBottomBar();
     }
 
@@ -13137,13 +13139,13 @@ export class UIController {
     private handleModelLoadStage(event: ModelLoadStageEvent): void {
         if (event.stage === "failed") {
             this.suppressNextModelLoadErrorToast = true;
-            this.setStatus(t("viewport.status.modelLoadFailed"), false);
+            this.setLocalizedStatus("viewport.status.modelLoadFailed");
             this.showModelLoadFailure(event.fileName);
             return;
         }
 
         if (event.stage === "complete") {
-            this.setStatus(t("viewport.status.modelReady"), false);
+            this.setLocalizedStatus("viewport.status.modelReady");
             this.viewportRuntimeStatusController.show({
                 level: "success",
                 titleKey: "viewport.status.modelReady",
@@ -13162,7 +13164,7 @@ export class UIController {
             scene: "viewport.status.modelLoadScene",
         };
         const titleKey = titleKeyByStage[event.stage];
-        this.setStatus(t(titleKey), true);
+        this.setLocalizedStatus(titleKey, true);
         this.viewportRuntimeStatusController.show({
             level: "loading",
             titleKey,
@@ -13182,7 +13184,19 @@ export class UIController {
         });
     }
 
+    private setLocalizedStatus(keyOrFormatter: string | (() => string), loading = false): void {
+        if (typeof keyOrFormatter === "string") {
+            this.setStatus(t(keyOrFormatter), loading);
+            this.statusText.dataset.i18n = keyOrFormatter;
+        } else {
+            this.setStatus(keyOrFormatter(), loading);
+            this.currentStatusFormatter = keyOrFormatter;
+        }
+    }
+
     private setStatus(text: string, loading: boolean): void {
+        this.currentStatusFormatter = null;
+        delete this.statusText.dataset.i18n;
         this.statusText.textContent = text;
         if (loading) {
             this.statusDot.classList.add("loading");

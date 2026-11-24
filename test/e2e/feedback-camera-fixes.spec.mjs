@@ -121,6 +121,7 @@ test("a camera-named morph VMD falls back without a false camera error", async (
     const page = await launched.app.firstWindow();
     await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), fixture("expression-test"));
+    await page.locator("#toolbar-locale-select").selectOption("en");
     await page.locator("#info-model-select").selectOption("__camera__");
     const path = resolve(launched.tempDir, "camera-expression.vmd"); writeFileSync(path, createMorphVmd());
     const picker = page.locator('input[data-test-vmd-drop]');

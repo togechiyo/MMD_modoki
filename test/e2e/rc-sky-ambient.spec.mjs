@@ -120,8 +120,8 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
     await expect(row(page).locator('input[type="range"]:visible')).toHaveCount(3);
     await expect(input(page, "Opacity")).toBeVisible();
     await expect(status(page)).toBeVisible();
-    await expect(row(page).locator('details, input[type="number"]')).toHaveCount(0);
-    await expect(row(page).locator(".range-number-input")).toHaveCount(0);
+    await expect(row(page).locator('details')).toHaveCount(0);
+    await expect(row(page).locator(".range-number-input")).toHaveCount(3);
     await expect(row(page).locator("p:not([role='status'])")).toHaveCount(0);
     await expect(input(page, "BaseLight")).toHaveCount(0);
     for (const field of ["Fill", "RangeScale", "Quality", "MinX", "MinY", "MinZ", "Size"]) await expect(input(page, field)).toHaveCount(0);

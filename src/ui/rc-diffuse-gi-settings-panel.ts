@@ -76,6 +76,7 @@ export function mountRcDiffuseGiSettings(parent: HTMLElement, host: Host, dispat
                 slider.syncValueText();
             }
             slider.input.disabled = details.disabled || (host.isPlaying && slider.field !== "strength");
+            options.syncSlider(slider.input);
         }
         status.dataset.state = diagnostics.status;
         status.dataset.fieldRevision = String(diagnostics.fieldRevision);

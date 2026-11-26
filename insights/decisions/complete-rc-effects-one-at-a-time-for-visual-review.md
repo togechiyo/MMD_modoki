@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: rendering/radiance-cascades
 confidence: high
-last_verified: 2026-11-22
+last_verified: 2026-11-26
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-10-29
@@ -26,6 +26,8 @@ superseded_by: null
 RC共通基盤の後に、天空遮蔽・GIなどの派生効果の作業単位と提示の区切りを決めるとき。
 
 ## 判断
+
+2026-11-26、所有者がエフェクトのスライダー横の数値ボックスをv0.2.4の仕様に沿って戻すよう指定した。RC操作行にも適用する。以下の10/31・11/10の数値欄非表示は過去の判断。非公開の詳細設定は引き続き旧projectとの互換用に保持する。
 
 アプリから確認できる1エフェクト単位で完成させ、所有者が目視比較しやすい進め方にする。共通基盤や診断用表示の完成と、利用者が操作して効果を確かめられる状態の完成を区別する。
 

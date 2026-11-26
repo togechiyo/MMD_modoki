@@ -80,7 +80,8 @@ for (const pose of [
     await addRcLighting(page, "rcSkyAmbient");
     await openRcLighting(page, "rcSkyAmbient");
     await expect(rcLightingRow(page, "rcSkyAmbient").locator('input[type="range"]')).toHaveCount(3);
-    await expect(rcLightingRow(page, "rcSkyAmbient").locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+    await expect(rcLightingRow(page, "rcSkyAmbient").locator('.range-number-input')).toHaveCount(3);
+    await expect(rcLightingRow(page, "rcSkyAmbient").locator('[data-rc-volume-controls]')).toHaveCount(0);
     // Addition prepares the automatic field; no manual volume recalculation UI remains.
     await expect(rcLightingStatus(page, "rcSkyAmbient")).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await closeRcLighting(page);

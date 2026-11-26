@@ -50,6 +50,7 @@ export function mountRcSkyOcclusionSettings(parent: HTMLElement, host: Host, dis
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * 100));
             slider.input.disabled = details.disabled;
+            options.syncSlider(slider.input);
         }
         status.dataset.state = diagnostics.status;
         status.dataset.fieldRevision = String(diagnostics.fieldRevision);

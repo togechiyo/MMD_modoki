@@ -10,6 +10,7 @@ FrameGraph / PostFX まわりは、DoF / Bloom / LUT / SSAO / SSR に加えて�
 
 ## 現行の基本方針
 
+- 2026-11-26、RC GI・Sky Ambient RC・旧プロジェクトの「影の深み RC」にも、v0.2.4のエフェクト操作と同じ数値欄を復元した。スライダー右の数値は操作目盛りを表し、Enterで反映、Escape・未確定のフォーカス移動で取り消す。GIの精細さは段階番号と品質名、近景の広さは操作目盛りと倍率を表示する。10/31・11/10のスライダー単独表示は当時の仕様。
 - 既存の MMD scene render は維持し、FrameGraph は主に post effect stack の backend として扱う。
 - 2026-07-06 以降、新規環境や不正な保存値では PostFX backend の既定を `frameGraph` にする。明示的に保存済みの `classic` は互換用に尊重する。
 - UI の効果一覧は `frameGraphPostStack` を持ち、各 entry は `{ id, enabled }` で管理する。

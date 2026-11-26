@@ -52,10 +52,15 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
       if (id !== "rcSkyOcclusion") await addRcLighting(page, id);
       await openRcLighting(page, id);
       const card = rcLightingRow(page, id);
-      await expect(card.locator('input[type="range"]:visible')).toHaveCount([3, 2, 1][index]);
-      await expect(card.locator('input[type="number"], details, [data-rc-volume-controls]')).toHaveCount(0);
+      const count = [3, 2, 3][index];
+      await expect(card.locator('input[type="range"]:visible')).toHaveCount(count);
+      await expect(card.locator('input[type="range"] + .range-number-input:visible')).toHaveCount(count);
+      for (const number of await card.locator('.range-number-input:visible').all()) {
+        expect(await number.evaluate(input => input.getBoundingClientRect().right <= input.parentElement.getBoundingClientRect().right + 1)).toBe(true);
+      }
+      await expect(card.locator('details, [data-rc-volume-controls]')).toHaveCount(0);
       for (const field of ["Fill", "BaseLight", "RangeScale", "Quality", "MinX", "MinY", "MinZ", "Size"]) {
-        await expect(rcLightingInput(page, id, field)).toHaveCount(0);
+        if (id !== "rcDiffuseGi" || !["Quality", "RangeScale"].includes(field)) await expect(rcLightingInput(page, id, field)).toHaveCount(0);
       }
     }
     await page.locator("#btn-effect-add-post").click();
@@ -71,7 +76,9 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
     await openRcLighting(page, "rcSkyAmbient");
     for (const [field, value] of [["Opacity", "80"], ["Strength", "35"], ["SkyBrightness", "30"]]) await expect(rcLightingInput(page, "rcSkyAmbient", field)).toHaveValue(value);
     const before = snapshot(await project(page)), opacity = rcLightingInput(page, "rcSkyAmbient", "Opacity");
-    await opacity.focus(); await opacity.press("ArrowLeft");
+    const opacityNumber = opacity.locator("..").getByRole("spinbutton");
+    await opacityNumber.fill("79");
+    await opacityNumber.press("Enter");
     await expect(opacity).toHaveValue("79");
     expect((await project(page)).lighting.rcSkyAmbient.opacity).toBe(.79);
     const edited = snapshot(await project(page));
@@ -105,6 +112,7 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
     await openRcLighting(page, "rcSkyAmbient");
     await expect(rcLightingRow(page, "rcSkyAmbient").locator('input[type="range"]:visible')).toHaveCount(3);
     await expect(opacity).toHaveValue("79");
+    await expect(opacityNumber).toHaveValue("79");
     expect(errors).toEqual([]);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
   } finally { await launched.close(); }

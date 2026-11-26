@@ -4,18 +4,19 @@ import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from ".
 export type RcLightingEffectCardOptions = {
     expanded: boolean;
     keyframeState: () => SectionKeyframeButtonState;
+    syncSlider: (slider: HTMLInputElement) => void;
 };
 
-/** Share the effect slider style, with the remaining row width devoted to dragging. */
+/** Use the effect panel's paired range and numeric controls. */
 export function createRcLightingSlider(name: string, labelText: string) {
     const row = document.createElement("div");
-    row.className = "effect-layer-control-row effect-layer-control-row--slider-only";
+    row.className = "effect-layer-control-row";
     const label = document.createElement("span");
     label.className = "effect-layer-control-label"; label.textContent = labelText;
     const input = document.createElement("input");
     input.type = "range"; input.className = "effect-layer-control-slider";
     input.name = name; input.min = "0"; input.max = "100"; input.step = "1";
-    input.dataset.rangeNumberInput = "false";
+    input.dataset.rangeCommitChange = "true";
     input.setAttribute("aria-label", labelText);
     row.append(label, input);
     return { row, input };

@@ -86,7 +86,8 @@ test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend 
     await expect(status(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await expect(status(page)).toHaveAttribute("data-automatic-volume", "true");
     await expect(section(page).locator('input[type="range"]')).toHaveCount(2);
-    await expect(section(page).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+    await expect(section(page).locator('.range-number-input')).toHaveCount(2);
+    await expect(section(page).locator('[data-rc-volume-controls]')).toHaveCount(0);
     await expect(section(page).getByRole("button", { name: /自動範囲|Automatic volume|範囲を再計算|Recalculate volume/ })).toHaveCount(0);
     expect((await settings(page)).volume).toBeNull();
     await close(page);

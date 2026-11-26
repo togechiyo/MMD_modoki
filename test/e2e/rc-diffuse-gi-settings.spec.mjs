@@ -39,7 +39,8 @@ test("RC diffuse GI settings: GUI, Undo, singleton keys, save, backend, PNG and 
     await giInput(page, "Enabled").check(); await expect(giStatus(page)).toHaveAttribute("data-state", "ready", { timeout: 45000 });
     await expect(giStatus(page)).toHaveAttribute("data-automatic-volume", "true");
     await expect(giSection(page).locator('input[type="range"]')).toHaveCount(3);
-    await expect(giSection(page).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+    await expect(giSection(page).locator('.range-number-input')).toHaveCount(3);
+    await expect(giSection(page).locator('[data-rc-volume-controls]')).toHaveCount(0);
     await expect(giSection(page).getByRole("button", { name: /自動範囲|Automatic volume|範囲を再計算|Recalculate volume/ })).toHaveCount(0);
     expect((await giSettings(page)).volume).toBeNull();
     await closeGi(page); await history(page, "undo"); expect((await giSettings(page)).enabled).toBe(false);

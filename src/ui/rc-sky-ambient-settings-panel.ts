@@ -52,6 +52,7 @@ export function mountRcSkyAmbientSettings(parent: HTMLElement, host: Host, dispa
         for (const slider of sliders) {
             if (activeSlider !== slider.input) slider.input.value = String(Math.round(settings[slider.field] * slider.scale));
             slider.input.disabled = details.disabled;
+            options.syncSlider(slider.input);
         }
         status.dataset.state = diagnostics.status;
         status.dataset.fieldRevision = String(diagnostics.fieldRevision);

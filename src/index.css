@@ -3423,12 +3423,11 @@ body.png-capture-mode .model-comment-notice {
 }
 
 .effect-layer-control-row.range-has-number {
-  grid-template-columns: minmax(58px, 0.35fr) minmax(72px, 1fr) 52px;
+  grid-template-columns: minmax(58px, 0.35fr) minmax(0, 1fr) 52px;
   gap: 6px;
 }
 
-.effect-layer-control-row--fixed,
-.effect-layer-control-row--slider-only {
+.effect-layer-control-row--fixed {
   grid-template-columns: minmax(58px, 0.35fr) minmax(72px, 1fr);
   gap: 6px;
 }
@@ -3442,13 +3441,8 @@ body.png-capture-mode .model-comment-notice {
   white-space: nowrap;
 }
 
-.effect-layer-control-row.range-has-number .effect-layer-control-label,
-.effect-layer-control-row--slider-only .effect-layer-control-label {
+.effect-layer-control-row.range-has-number .effect-layer-control-label {
   font-size: 11px;
-}
-
-.rc-lighting-effect-with-value {
-  grid-template-columns: minmax(58px, 0.35fr) minmax(32px, 1fr) minmax(5ch, auto);
 }
 
 .effect-layer-control-slider {
@@ -3547,6 +3541,11 @@ body.png-capture-mode .model-comment-notice {
 
 .effect-layer-control-row.range-has-number .effect-layer-control-value {
   display: none;
+}
+
+.rc-lighting-effect-with-value.range-has-number .effect-layer-control-value {
+  display: block;
+  grid-column: 2 / -1;
 }
 
 .effect-layer-control-row.range-has-number .range-number-input {

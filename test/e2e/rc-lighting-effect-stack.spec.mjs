@@ -111,7 +111,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await verifyRows(page);
     // Review the ordinary card layout at the app's default panel width.
     for (const id of ids) {
-      await expect(rcLightingRow(page, id).locator('input[type="number"], [data-rc-volume-controls]')).toHaveCount(0);
+      await expect(rcLightingRow(page, id).locator('[data-rc-volume-controls]')).toHaveCount(0);
       await expect(rcLightingRow(page, id).locator('input[type="range"]')).toHaveCount(id === "rcSkyOcclusion" ? 2 : 3);
     }
     const skyHeader = rcLightingRow(page, "rcSkyOcclusion").locator('[data-effect-stack-item="rcSkyOcclusion"]');
@@ -133,7 +133,16 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
       await expect(rcLightingRow(page, id).locator("p:not([role='status'])")).toHaveCount(0);
       const range = rcLightingInput(page, id, field), before = rcState(await project(page));
       await expect(range.locator("..")).toHaveClass(/effect-layer-control-row/);
-      await expect(rcLightingRow(page, id).locator(".range-number-input")).toHaveCount(0);
+      const number = range.locator("..").getByRole("spinbutton");
+      await expect(number).toHaveValue(String(position));
+      await number.fill("64"); await number.press("Escape");
+      await expect(number).toHaveValue(String(position));
+      await number.fill("63"); await range.focus();
+      await expect(number).toHaveValue(String(position));
+      await number.fill("62"); await number.press("Enter");
+      await expect(range).toHaveValue("62");
+      expect((await project(page)).lighting[id][setting]).toBe(62 / scale);
+      await history(page, "undo"); await expect(number).toHaveValue(String(position));
       await expect(range).toHaveAttribute("min", "0"); await expect(range).toHaveAttribute("max", "100");
       await expect(range).toHaveValue(String(position));
       await range.focus(); await range.press("ArrowRight");
@@ -166,7 +175,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
       await openRcLighting(page, id);
       await expect(rcLightingRow(page, id).locator("details")).toHaveCount(0);
       report.narrowControls[id] = await controlGeometry(rcLightingInput(page, id, "Strength"));
-      await expect(rcLightingRow(page, id).locator(".range-number-input")).toHaveCount(0);
+      await expect(rcLightingInput(page, id, "Strength").locator("..").getByRole("spinbutton")).toBeInViewport();
       await expect(rcLightingInput(page, id, "Strength")).toBeInViewport();
       await page.screenshot({ path: testInfo.outputPath(`rc-lighting-narrow-${id}.png`) });
     }
@@ -179,11 +188,11 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     }
     for (const id of ids) {
       const dimensions = report.narrowControls[id], ordinary = report.narrowControls.gamma;
-      expect(dimensions.number).toBeNull(); expect(dimensions.labelFont).toEqual(ordinary.labelFont);
+      expect(dimensions.labelFont).toEqual(ordinary.labelFont);
       for (const dimension of ["x", "height"]) expect(Math.abs(dimensions.label[dimension] - ordinary.label[dimension])).toBeLessThan(1.1);
       expect(Math.abs(dimensions.range.height - ordinary.range.height)).toBeLessThan(1.1);
-      expect(dimensions.range.width).toBeGreaterThan(ordinary.range.width + 40);
-      expect(Math.abs(dimensions.range.x + dimensions.range.width - dimensions.width)).toBeLessThan(1.1);
+      expect(Math.abs(dimensions.number.width - ordinary.number.width)).toBeLessThan(1.1);
+      expect(dimensions.number.x).toBeGreaterThan(dimensions.range.x + dimensions.range.width);
     }
     await expandEffectInstance(gamma); await gamma.locator('[data-instance-action="delete"]').click();
     await expect(gamma).toHaveCount(0); await setPanelWidth(page, report.panelBounds.width);
@@ -217,7 +226,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     await seek(page, 10);
     for (const id of ids) {
       await openRcLighting(page, id); await expect(rcLightingInput(page, id, "Strength")).toHaveValue("50");
-      await expect(rcLightingRow(page, id).locator(".range-number-input")).toHaveCount(0);
+      await expect(rcLightingInput(page, id, "Strength").locator("..").getByRole("spinbutton")).toHaveValue("50");
     }
     await seek(page, 20); await closeRcLighting(page);
     const both = await capture(page, testInfo, report, "both-key-20"), saved = await project(page);

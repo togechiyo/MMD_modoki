@@ -171,6 +171,7 @@ import { refreshSectionKeyframeButton, type SectionKeyframeButtonState } from ".
 type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "accessory" | "light" | "shadow" | "gravity";
 type NumericArrayLike = ArrayLike<number> | null | undefined;
 const FIXED_DOF_FSTOP = 2.0;
+const MODEL_FILE_EXTENSIONS = ["pmx", "pmd", "bpmx", "x", "obj", "ply", "stl", "splat", "spz"];
 type SelectedBonePoseSnapshot = {
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
@@ -2685,7 +2686,7 @@ export class UIController {
         this.actionDispatcher.register("project.dropFiles", (action) => {
             void this.loadDroppedFiles(action.filePaths);
         });
-        this.actionDispatcher.register("project.openModel", () => this.loadPMX());
+        this.actionDispatcher.register("project.openModel", () => this.loadModelFromDialog());
         this.actionDispatcher.register("project.openMotion", () => this.loadVMD());
         this.actionDispatcher.register("project.openCameraMotion", () => this.loadCameraVMD());
         this.actionDispatcher.register("project.openAudio", () => this.loadMP3());
@@ -3829,7 +3830,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: ["pmx", "pmd", "bpmx", "x", "obj", "ply", "stl", "splat", "spz", "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
+            { name: "Supported files", extensions: [...MODEL_FILE_EXTENSIONS, "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3969,15 +3970,17 @@ export class UIController {
         }
     }
 
-    private async loadPMX(): Promise<void> {
+    private async loadModelFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "PMX/PMD/BPMX model", extensions: ["pmx", "pmd", "bpmx"] },
-            { name: "All files", extensions: ["*"] },
+            { name: t("dialog.modelFiles"), extensions: MODEL_FILE_EXTENSIONS },
         ]);
 
         if (!filePath) return;
-
-        await this.loadModelInteractively(filePath);
+        if (!MODEL_FILE_EXTENSIONS.includes(this.getFileExtension(filePath))) {
+            this.showToast(t("dialog.unsupportedModelFile"), "error");
+            return;
+        }
+        await this.loadFileByPath(filePath, "dialog");
     }
 
     private buildModelVmdDefaultFileName(modelPath: string, fallbackName: string): string {

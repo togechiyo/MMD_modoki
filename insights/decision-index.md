@@ -71,7 +71,7 @@
 | adopted | [保存済みMCPポートが使用中なら空きポートを再取得する](./decisions/recover-busy-mcp-port.md) | MCP起動時のポート競合、自動再取得、接続先の案内を変更する |
 | adopted | [MCPの連続取得は数秒分の画像をまとめて動きを評価する](./decisions/mcp-sequences-return-short-image-batches.md) | VLM向け連続画像の用途・batchとライブ配信の範囲を決める |
 | adopted | [MCPの設定保持と使い勝手を優先して再整理する](./decisions/prioritize-mcp-usability-reassessment.md) | 再起動で有効化が外れる次版修正、既存軽量化後の改善余地と最新標準を見直す。重くしない条件で実行負荷とAI情報量を評価し、AIから使いやすくする既存MCPの最適化を実装へ進める。権限保存範囲・SDK版・標準拡張の採用は別途判断 |
-| adopted | [書き出しメニューは形式名から始める](./decisions/export-menu-labels-start-with-format.md) | VMD・BVMD・VPD・PNG・WebMの書き出し表記を変更する |
+| adopted | [書き出しメニューは形式名から始める](./decisions/export-menu-labels-start-with-format.md) | VMD出力はβ表記を外し、BVMD出力にUTF-8を併記。VPD・PNG・WebMも形式名を先頭に置く |
 
 ## 却下
 

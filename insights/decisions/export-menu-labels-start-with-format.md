@@ -4,7 +4,7 @@ status: decision
 priority: normal
 scope: ui/localization
 confidence: high
-last_verified: 2026-09-18
+last_verified: 2026-11-26
 decision_owner: project-owner
 decision: adopted
 decided_on: 2026-09-18
@@ -24,6 +24,8 @@ superseded_by: null
 ファイルメニューのモーション・ポーズ・画像・動画の書き出し表記を変更するとき。
 
 ## 判断
+
+2026-11-26の指定で、モデル・カメラのVMD出力からβ表記を外し、BVMD出力には「（UTF-8）」を付ける。UTF-8はBVMD内のトラック名の文字コードを示す。VPDのβ表記は継続する。
 
 形式名を先頭に置き、その後に対象・内容と書き出し操作の説明を続ける。例は「VMDモデルモーション書き出し」。VMD、BVMD、VPD、PNG、WebMを識別しやすくする。対応する他言語も同じ順序で表記する。
 

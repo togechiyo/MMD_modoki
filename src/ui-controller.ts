@@ -172,6 +172,7 @@ type SectionKeyframeSection = "info" | "interpolation" | "bone" | "morph" | "acc
 type NumericArrayLike = ArrayLike<number> | null | undefined;
 const FIXED_DOF_FSTOP = 2.0;
 const MODEL_FILE_EXTENSIONS = ["pmx", "pmd", "bpmx", "x", "obj", "ply", "stl", "splat", "spz"];
+const BACKGROUND_MEDIA_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi"];
 type SelectedBonePoseSnapshot = {
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
@@ -2690,6 +2691,7 @@ export class UIController {
         this.actionDispatcher.register("project.openMotion", () => this.loadVMD());
         this.actionDispatcher.register("project.openCameraMotion", () => this.loadCameraVMD());
         this.actionDispatcher.register("project.openAudio", () => this.loadMP3());
+        this.actionDispatcher.register("project.openBackground", () => this.loadBackgroundFromDialog());
         this.actionDispatcher.register("project.save", (action) => {
             void this.saveProject(action.forceChoosePath ?? false);
         });
@@ -3830,7 +3832,7 @@ export class UIController {
 
     private async loadFileFromDialog(): Promise<void> {
         const filePath = await window.electronAPI.openFileDialog([
-            { name: "Supported files", extensions: [...MODEL_FILE_EXTENSIONS, "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", "png", "jpg", "jpeg", "bmp", "webp", "webm", "mp4", "avi", "hdr", "env", "dds"] },
+            { name: "Supported files", extensions: [...MODEL_FILE_EXTENSIONS, "vmd", "bvmd", "vpd", "mp3", "wav", "ogg", ...BACKGROUND_MEDIA_EXTENSIONS, "hdr", "env", "dds"] },
             { name: "All files", extensions: ["*"] },
         ]);
 
@@ -3845,6 +3847,18 @@ export class UIController {
         ]);
         if (!filePath) return;
         await this.loadEnvironmentHdrByPath(filePath);
+    }
+
+    private async loadBackgroundFromDialog(): Promise<void> {
+        const filePath = await window.electronAPI.openFileDialog([
+            { name: t("dialog.backgroundMediaFiles"), extensions: BACKGROUND_MEDIA_EXTENSIONS },
+        ]);
+        if (!filePath) return;
+        if (!BACKGROUND_MEDIA_EXTENSIONS.includes(this.getFileExtension(filePath))) {
+            this.showToast(t("dialog.unsupportedBackgroundMedia"), "error");
+            return;
+        }
+        await this.loadFileByPath(filePath, "dialog");
     }
 
     private async loadEnvironmentHdrByPath(filePath: string): Promise<boolean> {

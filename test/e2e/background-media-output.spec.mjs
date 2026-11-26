@@ -7,19 +7,24 @@ import { observeCsp } from "./csp-observer.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
-async function loadBackground(page, file, video) {
-    const imported = await page.evaluate(async ({ file, video }) => {
+async function loadBackground(app, page, file, video) {
+    const imported = await page.evaluate(async () => {
         const project = window.mmdModokiE2e.exportProjectState();
         Object.assign(project.viewport, {
             groundVisible: false, skydomeVisible: false, backgroundDisplayMode: "black",
-            backgroundImagePath: video ? null : file, backgroundVideoPath: video ? file : null,
-            backgroundMediaVisible: true,
         });
         project.effects.gamma = 1.2;
         project.effects.frameGraphPostStack = [{ id: "gamma", enabled: true }];
         return await window.mmdModokiE2e.importProjectState(project);
-    }, { file, video });
+    });
     expect(imported.warnings).toEqual([]);
+    await app.evaluate(({ dialog }, path) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+    }, file);
+    await page.locator('.app-menu-trigger[data-i18n="menu.file"]').click();
+    await page.getByRole("menuitem", { name: "背景画像・動画読込..." }).click();
+    await expect.poll(() => page.evaluate(key => window.mmdModokiE2e.exportProjectState().viewport[key],
+        video ? "backgroundVideoPath" : "backgroundImagePath")).toBe(file);
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().viewport.backgroundMediaVisible)).toBe(true);
 }
 
@@ -104,7 +109,7 @@ for (const backend of ["classic", "frameGraph"]) {
             await page.reload();
             await page.waitForFunction(() => Boolean(window.mmdModokiE2e));
             expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().backend)).toBe(backend);
-            await loadBackground(page, await createMedia(page, launched.tempDir, video), video);
+            await loadBackground(launched.app, page, await createMedia(page, launched.tempDir, video), video);
             const preview = resolve(launched.tempDir, "preview.png");
             await expect.poll(async () => {
                 await page.locator("#render-canvas").screenshot({ path: preview });

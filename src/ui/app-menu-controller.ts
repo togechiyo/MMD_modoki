@@ -410,6 +410,9 @@ export class AppMenuController {
             case "file.openAudio":
                 this.dispatchAction({ type: "project.openAudio", source: "menu" });
                 return;
+            case "file.openBackground":
+                this.dispatchAction({ type: "project.openBackground", source: "menu" });
+                return;
             case "file.loadProject":
                 this.dispatchAction({ type: "project.load", source: "menu" });
                 return;

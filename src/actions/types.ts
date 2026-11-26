@@ -90,6 +90,7 @@ export type ProjectAction =
     | { type: "project.openMotion"; source: ActionSource }
     | { type: "project.openCameraMotion"; source: ActionSource }
     | { type: "project.openAudio"; source: ActionSource }
+    | { type: "project.openBackground"; source: ActionSource }
     | { type: "project.save"; source: ActionSource; forceChoosePath?: boolean }
     | { type: "project.load"; source: ActionSource }
     | { type: "project.exportModelVmd"; source: ActionSource }

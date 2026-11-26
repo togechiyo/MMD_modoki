@@ -124,6 +124,7 @@ export function canExecuteEditorAction(
         case "project.openMotion":
         case "project.openCameraMotion":
         case "project.openAudio":
+        case "project.openBackground":
         case "project.save":
         case "project.load":
         case "project.exportPng":

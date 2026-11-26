@@ -1,0 +1,3 @@
+import type { EffectInstanceType } from "./frame-graph-instance-effects";
+
+export const INSTANCE_EFFECT_NAMES: Record<EffectInstanceType, string> = { gamma: "Gamma", grain: "Grain", sharpen: "Sharpen", chromatic: "Chromatic Aberration", vignette: "Vignette", edgeBlur: "Edge Blur", distortion: "Lens Distortion", bloom: "Bloom", lut: "LUT", aerialPerspective: "Aerial Perspective", directionalLightShafts: "Directional Light Shafts", offsetShadow: "Offset Shadow", offsetHighlight: "Offset Highlight", dof: "DoF", luminous: "Luminous", luminousRadiance: "Luminous RC", ssao: "SSAO", ssgi: "SSGI", ssr: "SSR", motionBlur: "Motion Blur", ringParticles: "Particles" };

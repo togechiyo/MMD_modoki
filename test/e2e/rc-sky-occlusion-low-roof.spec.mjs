@@ -69,7 +69,7 @@ function regionDifference(off, on, polygon, openOff = null) {
 
 test("RC sky low-roof quality: 0.2 / 0.5 / 0.9-cell gaps above a fixed receiver", async ({}, testInfo) => {
   test.setTimeout(180000);
-  const launched = await launchMmdModoki(root), report = { errors: [], cases: [], volume, cell,
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true }), report = { errors: [], cases: [], volume, cell,
     interpretation: "Quality comparison, not a claim that interpolation cannot leak. Fixed opaque original PMX, 0.2m roof thickness. Top CPU visibility oracle is independent of GPU; screenshot ROI reports shadow-side color change separately." };
   try {
     const page = await launched.app.firstWindow(); page.on("pageerror", error => report.errors.push(error.stack ?? error.message));

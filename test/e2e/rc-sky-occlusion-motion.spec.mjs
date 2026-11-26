@@ -41,7 +41,7 @@ function stationaryReceiverChange(off0, off10, on0, on10) {
 // eslint-disable-next-line no-empty-pattern -- Playwright requires its fixture argument to be destructured.
 test("RC sky occlusion follows GUI bone/morph keys on the first direct PNG after manual seeks", async ({}, testInfo) => {
   test.setTimeout(180000);
-  const launched = await launchMmdModoki(root), report = { errors: [], captures: {}, traces: [], normalPose: {}, comparisons: {} };
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true }), report = { errors: [], captures: {}, traces: [], normalPose: {}, comparisons: {} };
   let page;
   try {
     page = await launched.app.firstWindow(); page.on("pageerror", error => report.errors.push(error.stack ?? error.message));

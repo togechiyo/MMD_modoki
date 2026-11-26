@@ -76,7 +76,7 @@ test("MCP effect instance edits share GUI history, display order, and project pe
         expect(added.isError, JSON.stringify(added)).not.toBe(true);
         expect(added.structuredContent.status).toBe("applied");
         const bloomId = added.structuredContent.control.instanceId;
-        await expect(row(bloomId).locator(".effect-layer-name")).toHaveText("Bloom");
+        await expect(row(bloomId).locator(".effect-layer-name")).toHaveText("ブルーム");
         expect(await item(bloomId)).toMatchObject({ instanceId: bloomId, effectType: "bloom", label: "Bloom", suspended: false });
         expect((await item(bloomId)).publicFields).toMatchObject({ value: expect.arrayContaining(["enabled"]), fixed: ["bloomColor"] });
         const retried = await rpc("mmd_edit_effect_instances", addRequest);

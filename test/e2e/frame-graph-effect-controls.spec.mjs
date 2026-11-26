@@ -32,12 +32,12 @@ test("FrameGraph詳細操作と並べ替え後もruntimeを維持できる", asy
     ]);
 
     const addSsgiButton = page.locator('[data-effect-add-post="ssgi"]');
-    await expect(addSsgiButton).toHaveText("SSGI");
+    await expect(addSsgiButton).toHaveText("間接光 (SSGI)");
     await addSsgiButton.click();
 
     const ssgiRow = effectStackRow(page, "ssgi");
     await expect(ssgiRow).toBeVisible();
-    await expect(ssgiRow.locator(".effect-layer-name")).toHaveText("SSGI");
+    await expect(ssgiRow.locator(".effect-layer-name")).toHaveText("間接光 (SSGI)");
 
     const sliders = ssgiRow.locator('input[type="range"][data-instance-field], input[type="range"][data-instance-fixed]');
     await expect(sliders).toHaveCount(2);

@@ -38,6 +38,9 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
     // subsequent value edits use the public GUI.
     await page.evaluate(async () => {
       const state = window.mmdModokiE2e.exportProjectState();
+      const shadowKey = { enabled: true, strength: .75 };
+      state.keyframes.effectAnimations = { version: 1, tracks: [{ effectId: "rcSkyOcclusion", valueVersion: 1,
+        base: shadowKey, keys: [{ frame: 10, value: shadowKey }] }] };
       Object.assign(state.lighting.rcSkyAmbient, { enabled: false, opacity: .8, strength: .7, skyBrightness: .6,
         fill: .13, baseLight: .31, rangeScale: 1.5, quality: "low", volume: { min: [-10, -2, -10], size: 20 } });
       Object.assign(state.lighting.rcSkyOcclusion, { enabled: false, volume: { min: [-8, -2, -8], size: 16 } });
@@ -48,11 +51,13 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
     const retained = hidden(await project(page));
     await page.evaluate(path => window.mmdModokiE2e.loadModel(path), resolve(root, "test/fixtures/external-parent/tofu.pmx"));
     await page.locator("#info-model-select").selectOption("__camera__");
-    for (const [index, id] of ids.entries()) {
-      if (id !== "rcSkyOcclusion") await addRcLighting(page, id);
+    expect(await page.evaluate(() => window.mmdModokiE2e.getTimelineTracks().map(track => track.name))).not.toContain("rcSkyOcclusion");
+    for (const id of ["rcSkyAmbient", "rcDiffuseGi"]) {
+      await addRcLighting(page, id);
       await openRcLighting(page, id);
+      await expect(rcLightingRow(page, "rcSkyOcclusion")).toHaveCount(0);
       const card = rcLightingRow(page, id);
-      const count = [3, 2, 3][index];
+      const count = 3;
       await expect(card.locator('input[type="range"]:visible')).toHaveCount(count);
       await expect(card.locator('input[type="range"] + .range-number-input:visible')).toHaveCount(count);
       for (const number of await card.locator('.range-number-input:visible').all()) {
@@ -113,6 +118,11 @@ test("Compact RC cards retain hidden legacy settings through GUI edits and proje
     await expect(rcLightingRow(page, "rcSkyAmbient").locator('input[type="range"]:visible')).toHaveCount(3);
     await expect(opacity).toHaveValue("79");
     await expect(opacityNumber).toHaveValue("79");
+    await expect(rcLightingRow(page, "rcSkyOcclusion")).toHaveCount(0);
+    const restored = await project(page);
+    expect(restored.lighting.rcSkyOcclusion.enabled).toBe(true);
+    expect(restored.keyframes.effectAnimations.tracks.find(track => track.effectId === "rcSkyOcclusion").keys)
+      .toEqual([{ frame: 10, value: { enabled: true, strength: .75 } }]);
     expect(errors).toEqual([]);
     expect(await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics().count)).toBe(0);
   } finally { await launched.close(); }

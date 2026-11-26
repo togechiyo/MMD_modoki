@@ -30,7 +30,7 @@ function delta(active, off) {
 // Each resolution/state gets its own process; timings are diagnostic, not a CI speed threshold.
 for (const configuration of configurations) test(`RC sky realtime performance: ${configuration.id}`, async ({}, testInfo) => {
   test.setTimeout(180000);
-  const launched = await launchMmdModoki(root), report = { label, configuration, errors: [], consoleErrors: [], timestampRequest: timestamps,
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true }), report = { label, configuration, errors: [], consoleErrors: [], timestampRequest: timestamps,
     revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
     interpretation: "Independent warmed process. Static ON-OFF includes fragment query and source checks; moving ON-OFF adds source deformation/BVH/field updates. GPU pass sums exclude submission gaps; completion wall includes CPU and GPU wait. Small original fixture, not large-PMX or low-end-device FPS." };
   let page;

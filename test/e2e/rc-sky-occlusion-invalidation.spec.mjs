@@ -16,7 +16,7 @@ const tasks = ["skyVisibilityCascade3", "skyVisibilityCascade2", "skyVisibilityC
 // eslint-disable-next-line no-empty-pattern
 test("RC sky skips neutral strength/minimum work and refreshes the moved geometry on the first active draw", async ({}, testInfo) => {
   test.setTimeout(180000);
-  const launched = await launchMmdModoki(root), report = { errors: [], consoleErrors: [], samples: [] };
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true }), report = { errors: [], consoleErrors: [], samples: [] };
   let page;
   try {
     page = await launched.app.firstWindow();

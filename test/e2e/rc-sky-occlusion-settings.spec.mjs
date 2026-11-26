@@ -40,7 +40,7 @@ function difference(a, b) {
 
 test("RC sky occlusion settings: GUI, singleton keys, Undo, project and backend roundtrip", async ({}, testInfo) => {
   test.setTimeout(withWebm ? 300000 : 180000);
-  const launched = await launchMmdModoki(root); // No developer lighting/timeline flags.
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true });
   const report = { errors: [], consoleErrors: [], checkpoints: {}, captures: {}, webm: { requested: withWebm } };
   let page;
   try {

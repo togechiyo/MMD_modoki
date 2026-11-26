@@ -161,7 +161,7 @@ test("Unkeyed effect instances stay editable during playback, including empty tr
 
 test("All three RC effects use their own key count to lock playback values", async () => {
   test.setTimeout(180000);
-  const launched = await launchMmdModoki(root), errors = [];
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true }), errors = [];
   const cases = [["rcSkyAmbient", "Opacity", "opacity", 1], ["rcSkyOcclusion", "Strength", "strength", 1], ["rcDiffuseGi", "Strength", "strength", 2]];
   try {
     const page = await launched.app.firstWindow();

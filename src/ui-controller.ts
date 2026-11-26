@@ -154,7 +154,7 @@ import {
 } from "./project/runtime-reload-project-state";
 import { canReuseProjectWindow, classifyProjectDrop, projectDropSnapshot } from "./project/project-drop";
 
-import { EFFECT_TIMELINE_ENABLED } from "./editor/effect-timeline-availability";
+import { EFFECT_TIMELINE_ENABLED, showEffectInEditor } from "./editor/effect-timeline-availability";
 import { FrameGraphInstanceController } from "./ui/frame-graph-instance-controller";
 import { mountRcSkyOcclusionSettings } from "./ui/rc-sky-occlusion-settings-panel";
 import { mountRcSkyAmbientSettings } from "./ui/rc-sky-ambient-settings-panel";
@@ -7004,7 +7004,7 @@ export class UIController {
         const stackEffectIds = [...this.mmdManager.getFrameGraphPostEffectStackIds()];
         const effectById = new Map(FRAME_GRAPH_POST_ADD_EFFECTS.map((effect) => [effect.id, effect]));
         const stackEffects = stackEffectIds
-            .filter((id) => !HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS.has(id))
+            .filter((id) => !HIDDEN_FRAME_GRAPH_POST_EFFECT_IDS.has(id) && showEffectInEditor(id))
             .map((id) => effectById.get(id) ?? null)
             .filter((effect): effect is FrameGraphPostAddEffect => effect !== null)
             .reverse();

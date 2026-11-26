@@ -18,7 +18,7 @@ const pluginConfig = {
   ],
 };
 
-export async function launchMmdModoki(repoRoot, { effectTimeline = false, radianceLightingLab = false } = {}) {
+export async function launchMmdModoki(repoRoot, { effectTimeline = false, radianceLightingLab = false, retiredEffectUi = false } = {}) {
   const tempDir = mkdtempSync(join(tmpdir(), "mmd-modoki-e2e-"));
   const devServers = [];
   const generator = new ViteConfigGenerator(pluginConfig, repoRoot, false);
@@ -42,6 +42,7 @@ export async function launchMmdModoki(repoRoot, { effectTimeline = false, radian
           "@babylonjs/core/Engines/engineStore",
         ] },
         define: { ...config.define,
+          "import.meta.env.VITE_MMD_TEST_RETIRED_EFFECT_UI": JSON.stringify(retiredEffectUi ? "1" : "0"),
           "import.meta.env.VITE_MMD_EFFECT_TIMELINE": JSON.stringify(effectTimeline ? "1" : "0"),
           "import.meta.env.VITE_MMD_RADIANCE_LIGHTING_LAB": JSON.stringify(radianceLightingLab ? "1" : "0"),
         },

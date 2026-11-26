@@ -59,7 +59,7 @@ async function controlGeometry(range) {
 // eslint-disable-next-line no-empty-pattern -- Playwright requires its fixture argument to be destructured.
 test("RC lighting cards: singleton lifecycle, keys, legacy project and backend compatibility", async ({}, testInfo) => {
   test.setTimeout(300000);
-  const launched = await launchMmdModoki(root), report = { errors: [], consoleErrors: [], captures: {} };
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true }), report = { errors: [], consoleErrors: [], captures: {} };
   try {
     const page = await launched.app.firstWindow();
     page.on("pageerror", error => report.errors.push(error.stack ?? error.message));

@@ -113,9 +113,9 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     expect(await page.evaluate(() => window.mmdModokiE2e.exportProjectState().version)).toBe(2);
     const row = id => page.locator(`[data-effect-instance-row="${id}"]`);
     const select = async id => { await selectEffectInstance(row(id)); await expect(row(id).locator(".effect-layer-details")).toBeVisible(); await expect(page.locator("#effect-key-controls")).toHaveCount(0); };
-    await expect(row(a).locator(".effect-layer-name")).toHaveText("Gamma");
-    await expect(row(b).locator(".effect-layer-name")).toHaveText("Gamma 2");
-    await expect(row(bloom).locator(".effect-layer-name")).toHaveText("Bloom");
+    await expect(row(a).locator(".effect-layer-name")).toHaveText("ガンマ");
+    await expect(row(b).locator(".effect-layer-name")).toHaveText("ガンマ 2");
+    await expect(row(bloom).locator(".effect-layer-name")).toHaveText("ブルーム");
     await expect(page.locator('[data-instance-field="label"], [data-instance-action="up"], [data-instance-action="down"]')).toHaveCount(0);
     await expect(row(a).locator(".effect-layer-details")).toBeHidden();
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
@@ -165,13 +165,13 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     expect(await page.evaluate(() => window.mmdModokiE2e.getFrameGraphPostEffectsState().buildGeneration)).toBe(generation);
     await add("gamma");
     const c = (await state()).instances.find(item => ![a, b, bloom].includes(item.instanceId)).instanceId;
-    await expect(row(c).locator(".effect-layer-name")).toHaveText("Gamma 3");
+    await expect(row(c).locator(".effect-layer-name")).toHaveText("ガンマ 3");
     expect((await state()).instances.find(item => item.instanceId === c).animation.tracks).toEqual([]);
     await row(c).locator('[data-instance-action="delete"]').click();
     await page.locator('.app-menu-quick-button[data-menu-command="edit.undo"]').click();
     expect((await state()).instances.some(item => item.instanceId === c)).toBe(true);
     await page.locator('.app-menu-quick-button[data-menu-command="edit.redo"]').click();
-    await select(a); await expect(row(a).locator(".effect-layer-name")).toHaveText("Gamma");
+    await select(a); await expect(row(a).locator(".effect-layer-name")).toHaveText("ガンマ");
     await dragEffectStackRow(row(a), row(bloom), "after");
     expect((await state()).order).toEqual([a, bloom, b]);
     await expandEffectInstance(row(bloom));
@@ -282,7 +282,7 @@ test("Gamma instances: separate keys, lifecycle history, stack order, project an
     await select(a);
     for (const locale of ["en", "zh-Hant", "zh-Hans", "ko", "ja"]) {
       await page.locator("#toolbar-locale-select").selectOption(locale);
-      await expect(row(a).locator('.effect-layer-name')).toHaveText("Gamma");
+      await expect(row(a).locator('.effect-layer-name')).toHaveText(({"en":"Gamma","ja":"ガンマ","ko":"감마","zh-Hant":"伽瑪","zh-Hans":"伽马"})[locale]);
       expect(await row(a).locator('[data-instance-action="delete"]').textContent()).not.toContain("effect.instance");
     }
     await row(a).locator('[data-instance-action="select"]').click();

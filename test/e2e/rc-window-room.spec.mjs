@@ -203,7 +203,7 @@ for (const variant of ["pmx","plain","opaque-png","opaque-jpg"]) {
   // eslint-disable-next-line no-empty-pattern -- Playwright requires its fixture argument to be a destructured object.
   test(`RC window room: ${variant} material eligibility and indoor light`,async({},testInfo)=>{
     test.setTimeout(300000);
-    const launched=await launchMmdModoki(root);
+    const launched=await launchMmdModoki(root, { retiredEffectUi: true });
     const report={variant,errors:[],consoleErrors:[],captures:{},cases:{},
       scope:"Original identical 26-triangle room. GUI effects, default AccessoryToon, opaque texture classification and transport. PMX noToon stays neutral for Sky."};
     try {
@@ -318,7 +318,7 @@ for(const variant of ["alpha254","cutout","blend"]) {
   // eslint-disable-next-line no-empty-pattern -- Playwright fixture argument.
   test(`RC window room: ${variant} transparency is preserved and excluded`,async({},testInfo)=>{
     test.setTimeout(180000);
-    const launched=await launchMmdModoki(root),report={variant,errors:[],consoleErrors:[],captures:{},cases:{}};
+    const launched=await launchMmdModoki(root, { retiredEffectUi: true }),report={variant,errors:[],consoleErrors:[],captures:{},cases:{}};
     try {
       const page=await launched.app.firstWindow();
       page.on("pageerror",e=>report.errors.push(e.stack??e.message));

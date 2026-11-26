@@ -78,7 +78,7 @@ async function savedProject(path) {
 // eslint-disable-next-line no-empty-pattern -- Playwright requires its fixture argument to be destructured.
 test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/backend lifecycle", async ({}, testInfo) => {
   test.setTimeout(withWebm ? 420000 : 300000);
-  const launched = await launchMmdModoki(root); // Public FrameGraph route, no experimental feature flags.
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true });
   const report = { errors: [], consoleErrors: [], captures: {}, differences: {}, checkpoints: {}, webm: { requested: withWebm } };
   let page;
   try {
@@ -114,7 +114,7 @@ test("Sky Ambient RC: GUI controls, neutral bypass, singleton keys and project/b
 
     await openPostEffects(page); await expect(row(page)).toHaveCount(0);
     await addRcLighting(page, id); await ready(page);
-    await expect(row(page).locator(`[data-effect-stack-item="${id}"]`)).toHaveText("Sky Ambient RC");
+    await expect(row(page).locator(`[data-effect-stack-item="${id}"]`)).toHaveText("天空環境光 RC");
     await expect(input(page, "Enabled")).toBeChecked();
     await expect(row(page).locator('input[type="range"]')).toHaveCount(3);
     await expect(row(page).locator('input[type="range"]:visible')).toHaveCount(3);

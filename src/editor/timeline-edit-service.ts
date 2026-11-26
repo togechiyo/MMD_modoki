@@ -1,3 +1,4 @@
+import { showEffectInEditor } from "./effect-timeline-availability";
 import { MmdAnimation } from "babylon-mmd/esm/Loader/Animation/mmdAnimation";
 import { MmdBoneAnimationTrack, MmdCameraAnimationTrack, MmdMorphAnimationTrack, MmdMovableBoneAnimationTrack, MmdPropertyAnimationTrack } from "babylon-mmd/esm/Loader/Animation/mmdAnimationTrack";
 import type { KeyframeTrack, ModelInfo, TimelineTarget, TrackCategory } from "../types";
@@ -756,7 +757,7 @@ export function getCameraTimelineTracks(host: TimelineEditHost): KeyframeTrack[]
             category: "gravity",
             frames: gravityFrames,
         },
-        ...(host.getEffectTimelineTracks?.() ?? []),
+        ...(host.getEffectTimelineTracks?.() ?? []).filter(track => showEffectInEditor(track.name)),
     ];
 }
 

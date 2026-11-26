@@ -27,7 +27,7 @@ for (const geometry of ["pmx", "dense"]) for (const mode of ["all", "luminous", 
   // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixture argument.
   test(`RC combined performance: ${id}`, async ({}, testInfo) => {
     test.skip(filter && !filter.test(id), "Selected cases only"); test.setTimeout(240000);
-    const launched = await launchMmdModoki(root), report = { id, geometry, mode, moving, size: [1280, 720], errors: [], consoleErrors: [], captures: {}, comparisons: {},
+    const launched = await launchMmdModoki(root, { retiredEffectUi: true }), report = { id, geometry, mode, moving, size: [1280, 720], errors: [], consoleErrors: [], captures: {}, comparisons: {},
       interpretation: "Independent warmed diagnostic device per case. Same original PMX, material, light, fixed volume and camera. CPU columns overlap; do not add them. GPU pass sums exclude queue gaps; completion wall includes CPU/submission/wait. Tiny fixtures are not a device FPS guarantee." }; let page;
     try {
       page = await launched.app.firstWindow();

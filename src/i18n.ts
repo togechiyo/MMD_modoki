@@ -1,4 +1,5 @@
 import { createInstance, type Resource } from "i18next";
+import { INSTANCE_EFFECT_NAMES } from "./editor/effect-instance-names";
 import type { UiLocale } from "./types";
 import { DEFAULT_UI_LOCALE as DEFAULT_LOCALE, isUiLocale as isLocale, uiTranslations as translations } from "./shared/ui-locales";
 
@@ -72,9 +73,12 @@ export const t = (key: string, params?: Record<string, string | number>): string
 export const getLocale = (): UiLocale => currentLocale;
 
 export function getEffectInstanceDisplayName(type: string, label: string): string {
-    if (type !== "ringParticles") return label;
-    const defaultName = /^Particles( [1-9]\d*)?$/.exec(label);
-    return defaultName ? t("effect.frameGraphPost.effects.ringParticles") + (defaultName[1] ?? "") : label;
+    if (!Object.prototype.hasOwnProperty.call(INSTANCE_EFFECT_NAMES, type)) return label;
+    const base = INSTANCE_EFFECT_NAMES[type as keyof typeof INSTANCE_EFFECT_NAMES];
+    if (!label.startsWith(base)) return label;
+    const suffix = label.slice(base.length);
+    return suffix === "" || /^ [1-9]\d*$/.test(suffix)
+        ? t(`effect.frameGraphPost.effects.${type}`) + suffix : label;
 }
 
 export const applyI18nToDom = (root: ParentNode = document): void => {

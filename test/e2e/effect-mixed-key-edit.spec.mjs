@@ -28,7 +28,7 @@ async function selectFrameKeys(page, frame) {
 
 test("mixed effect keys keep their values through batch history and reject a deleted paste target", async () => {
   test.setTimeout(120000);
-  const launched = await launchMmdModoki(root);
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true });
   try {
     const page = await launched.app.firstWindow();
     const errors = [];

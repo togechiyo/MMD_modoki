@@ -66,7 +66,7 @@ for (const setting of cases) {
   test(`RC normal playback: ${id}`, async ({}, testInfo) => {
     test.skip(alicia && !hasAliciaDance(aliciaFiles), "Optional Alicia PMX and bundled motion are not installed");
     test.setTimeout(240000);
-    const app = await launchMmdModoki(root);
+    const app = await launchMmdModoki(root, { retiredEffectUi: true });
     const report = { id, errors: [], consoleErrors: [], captures: {} };
     const directory = output ? resolve(output) : testInfo.outputDir;
     mkdirSync(directory, { recursive: true });

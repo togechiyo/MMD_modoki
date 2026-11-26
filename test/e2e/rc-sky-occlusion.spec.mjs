@@ -31,7 +31,7 @@ function difference(a, b) {
 test("RC sky occlusion: normal MMD material, UI, neutral off and PNG", async ({}, testInfo) => {
   test.setTimeout(180000);
   // Neither the old effect timeline nor the fixed-floor lighting lab flag is enabled.
-  const launched = await launchMmdModoki(root);
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true });
   const report = { errors: [], consoleErrors: [], captures: {} };
   try {
     const page = await launched.app.firstWindow();

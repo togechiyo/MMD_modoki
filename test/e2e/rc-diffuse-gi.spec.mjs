@@ -18,7 +18,7 @@ async function lightExtreme(page, id, maximum) {
 
 for (const variant of ["red", "black", "textured-red"]) test(`RC diffuse GI transport: ${variant} source, directional bounce and isolation`, async ({}, testInfo) => {
   test.setTimeout(240000);
-  const launched = await launchMmdModoki(root), report = { errors: [], consoleErrors: [], captures: {}, cases: {}, variant };
+  const launched = await launchMmdModoki(root, { retiredEffectUi: true }), report = { errors: [], consoleErrors: [], captures: {}, cases: {}, variant };
   try {
     const page = await launched.app.firstWindow();
     page.on("pageerror", error => report.errors.push(error.stack ?? error.message));

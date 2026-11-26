@@ -20,12 +20,13 @@ test("omits empty help entries and ends with Physics, Window, Tools", async () =
     const toolsGroup = page.locator(".app-menu-group", {
       has: page.locator('.app-menu-trigger[data-i18n="menu.tools"]'),
     });
+    await toolsGroup.locator(".app-menu-trigger").click();
+    await expect(toolsGroup.getByRole("menuitem")).toHaveCount(2);
     expect(await toolsGroup.locator("[data-menu-command]").evaluateAll(
       (elements) => elements.map((element) => element.dataset.menuCommand),
     )).toEqual([
       "tools.mmdOptimizedFormat",
       "tools.vmdRetarget",
-      "tools.radianceCascadeLab",
     ]);
     await expect(page.locator('[data-menu-command="dialog.shortcuts"]')).toHaveCount(0);
     await expect(page.locator('[data-menu-command="dialog.about"]')).toHaveCount(0);

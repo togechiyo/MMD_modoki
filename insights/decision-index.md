@@ -15,6 +15,7 @@
 | adopted | [低〜中性能PCで使いやすい軽量なリアルタイムMMDを優先する](./decisions/prioritize-lightweight-realtime-mmd-defaults.md) | アマチュアMMD利用者向けの既定動作、品質と負荷、操作の複雑さを判断する。具体的な方式・FPS・最低動作環境は別途確認 |
 | accepted-with-constraints | [3D RC は通常 Luminous から分離して最適化を再開する](./decisions/defer-further-radiance-cascade-optimization.md) | 通常GlowとRCを分け、保存互換と独立動作を維持する。2026-10-31、Luminous・天空遮蔽・GIの3効果を対象に効率化・高速化を再依頼。手軽なリアルタイムMMD用途を維持する |
 | adopted | [日本語のエフェクト名は括弧で併記しない](../docs/framegraph-post-stack-current-spec-2026-07-01.md#現行の基本方針) | 追加メニュー・カード・タイムラインでSSAOなどの略称を単独表記する |
+| adopted | [AL照明の3D RC検証画面は開発用とする](../docs/radiance-cascade-al-lab-2026-10-11.md) | 通常のツールメニューから隠し、開発時の照明検証に使う |
 | adopted | [RCはアプリから目視できる1エフェクト単位で完成させる](./decisions/complete-rc-effects-one-at-a-time-for-visual-review.md) | RCの通常操作はスライダー3本程度。11/22、GIは強度のほかに約2本の調整を許容。11/26、各スライダー横に数値入力を復元。「影の深み RC」は既存projectでも通常UIから隠し、描画・保存互換を維持 |
 | adopted | [RC GIは推しモデルが映える強い演出を許容する](./decisions/rc-gi-allows-strong-effects-for-favorite-models.md) | GIの効きが見分けにくい場合に、くどいくらい強い演出も許容して調整する。全効果の無条件増幅や軽量方針の撤回には広げない。11/22にSSGIとの差を見るため近距離2バウンスの試作を依頼 |
 | adopted | [Luminous RCの発光色は2D Luminousを基準にする](./decisions/rc-emission-color-follows-2d-luminous.md) | 2DとRCの色を揃える。補正前の材質色を別基準として固定しない |

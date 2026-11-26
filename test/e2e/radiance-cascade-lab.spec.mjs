@@ -44,7 +44,7 @@ function shadowFloorBlue(png) {
 
 for (const backend of ["classic", "frameGraph"]) {
   test(`3D RC lab: offscreen emission, controls and settings (${backend})`, async ({}, testInfo) => {
-    const launched = await launchMmdModoki(root);
+    const launched = await launchMmdModoki(root, { radianceLightingLab: true });
     const errors = [];
     try {
       const page = await launched.app.firstWindow();

@@ -29,6 +29,7 @@ import { ModelBodyMotionCorrectionDialogController } from "./model-body-motion-c
 import { MmdOptimizedFormatDialogController } from "./mmd-optimized-format-dialog-controller";
 import { VmdRetargetDialogController } from "./vmd-retarget-dialog-controller";
 import { RadianceCascadeLabDialogController } from "./radiance-cascade-lab-dialog-controller";
+import { RADIANCE_LIGHTING_LAB_ENABLED } from "../render/radiance-sky-visibility-availability";
 import type { ModelBodyMotionCorrectionPreview } from "../editor/model-body-motion-correction";
 import type { TrackCategory } from "../types";
 
@@ -68,6 +69,11 @@ type AppMenuElements = {
 
 function resolveElements(): AppMenuElements {
     const root = document.getElementById("app-menu-bar");
+    const labButton = root?.querySelector<HTMLButtonElement>('[data-menu-command="tools.radianceCascadeLab"]');
+    if (labButton) {
+        if (RADIANCE_LIGHTING_LAB_ENABLED) labButton.hidden = false;
+        else labButton.remove();
+    }
     return {
         root,
         groups: root ? Array.from(root.querySelectorAll<HTMLElement>(".app-menu-group")) : [],
@@ -99,7 +105,7 @@ export class AppMenuController {
     private readonly previewKeyframeCorrection: (correction: KeyframeValueCorrection) => KeyframeValueCorrectionPreview;
     private readonly previewBodyMotionCorrection: (sourceModelIndex: number) => ModelBodyMotionCorrectionPreview;
     private readonly popupDialogController: PopupDialogController;
-    private readonly radianceCascadeLab = new RadianceCascadeLabDialogController();
+    private readonly radianceCascadeLab = RADIANCE_LIGHTING_LAB_ENABLED ? new RadianceCascadeLabDialogController() : null;
     private openGroup: HTMLElement | null = null;
 
     constructor(deps: AppMenuControllerDeps) {
@@ -689,6 +695,7 @@ export class AppMenuController {
                 this.openVmdRetargetDialog(invoker ?? null);
                 return;
             case "tools.radianceCascadeLab":
+                if (!this.radianceCascadeLab) return;
                 this.popupDialogController.open({
                     id: "radiance-cascade-lab", surface: "modal", size: "wide",
                     title: t("radianceLab.title"), restoreFocusTo: invoker ?? null,

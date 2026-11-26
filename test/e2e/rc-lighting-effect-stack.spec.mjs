@@ -279,7 +279,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     expect(report.migrated.settings).toEqual(report.authored.settings); expect(report.migrated.tracks).toEqual(report.authored.tracks);
     expect(difference(both, await capture(page, testInfo, report, "legacy-restored"))).toBeLessThan(.15);
     const migratedPath = testInfo.outputPath("rc-stack-migrated.json");
-    await chooseFile(migratedPath); await fileMenu(page, "file.saveProject");
+    await chooseFile(migratedPath); await fileMenu(page, "file.saveProjectAs");
     const migratedFile = await savedProject(migratedPath);
     expect(migratedFile.effects.rcSceneEffectsInStack).toBe(true); expect(rcState(migratedFile)).toEqual(report.migrated);
     await fileMenu(page, "file.loadProject"); await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
@@ -295,7 +295,7 @@ test("RC lighting cards: singleton lifecycle, keys, legacy project and backend c
     // The current-format marker distinguishes an intentionally deleted OFF effect from legacy migration.
     await openRcLighting(page, "rcDiffuseGi"); await rcLightingRow(page, "rcDiffuseGi").locator('[data-effect-stack-remove="rcDiffuseGi"]').click();
     const removedPath = testInfo.outputPath("rc-stack-deleted.json"); await chooseFile(removedPath);
-    await fileMenu(page, "file.saveProject"); await savedProject(removedPath);
+    await fileMenu(page, "file.saveProjectAs"); await savedProject(removedPath);
     await fileMenu(page, "file.loadProject"); await expect(page.locator("#status-text")).toContainText(/Project loaded|プロジェクト/);
     await openPostEffects(page); await expect(rcLightingRow(page, "rcDiffuseGi")).toHaveCount(0); await expect(rcLightingRow(page, "rcSkyOcclusion")).toHaveCount(1);
     expect(tracks(await project(page)).some(track => track.effectId === "rcDiffuseGi")).toBe(false);

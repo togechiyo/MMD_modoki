@@ -423,6 +423,9 @@ export class AppMenuController {
                 this.dispatchAction({ type: "project.load", source: "menu" });
                 return;
             case "file.saveProject":
+                this.dispatchAction({ type: "project.save", source: "menu" });
+                return;
+            case "file.saveProjectAs":
                 this.dispatchAction({ type: "project.save", source: "menu", forceChoosePath: true });
                 return;
             case "file.exportModelVmd":

@@ -110,7 +110,7 @@ for (const scenario of ["model never loaded", "last model removed"]) {
       await pause(page);
       expect((await project(page)).accessories[0].transform.position.x).toBeGreaterThan(6.1);
 
-      // The file menu chooses a path; Ctrl+S overwrites the current project.
+      // A new project prompts once. Save and Ctrl+S then write to the same file.
       await seek(page, 300);
       const firstPath = resolve(launched.tempDir, "accessory-camera.mmdproj");
       await launched.app.evaluate(({ dialog }, filePath) => {
@@ -131,8 +131,20 @@ for (const scenario of ["model never loaded", "last model removed"]) {
         dialog.showSaveDialog = async () => ({ canceled: false, filePath });
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] });
       }, secondPath);
+      await seek(page, 334);
+      await fileMenu(page, "file.saveProject");
+      await savedProject(firstPath, 334);
+      await fileMenu(page, "file.saveProjectAs");
+      await savedProject(secondPath, 334);
+      await launched.app.evaluate(({ dialog }) => {
+        dialog.showSaveDialog = async () => ({ canceled: true });
+      });
+      await fileMenu(page, "file.saveProjectAs");
+      await expect(page.locator("#status-text")).toHaveText("Ready");
+      await seek(page, 333);
       await fileMenu(page, "file.saveProject");
       const saved = await savedProject(secondPath, 333);
+      await savedProject(firstPath, 334);
       await fileMenu(page, "file.loadProject");
       await expect(page.locator("#status-text")).toContainText("Project loaded");
       await expect(page.locator("#current-frame")).toHaveValue("333");

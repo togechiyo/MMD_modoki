@@ -1188,7 +1188,7 @@ export class UIController {
             this.actionDispatcher.dispatch({ type: "project.openFile", source: "button" });
         });
         this.btnSaveProject.addEventListener("click", () => {
-            this.actionDispatcher.dispatch({ type: "project.save", source: "button", forceChoosePath: true });
+            this.actionDispatcher.dispatch({ type: "project.save", source: "button" });
         });
         this.btnLoadProject.addEventListener("click", () => {
             this.actionDispatcher.dispatch({ type: "project.load", source: "button" });

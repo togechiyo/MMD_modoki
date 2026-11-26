@@ -76,7 +76,7 @@ test("shelved RC distance softness stays OFF and hidden after legacy load, undo 
     await capture("old-on-restored-off");
     const saved = testInfo.outputPath("normalized.json");
     await launched.app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, saved);
-    await menu("file.saveProject"); await expect.poll(() => existsSync(saved)).toBe(true);
+    await menu("file.saveProjectAs"); await expect.poll(() => existsSync(saved)).toBe(true);
     const normalized = JSON.parse(readFileSync(saved, "utf8"));
     expect(normalized.effects.luminousRadiance.distanceSoftness).toBe(false);
     expect(normalized.effects.frameGraphInstances.instances.find(item => item.type === "luminousRadiance").fixedSettings.radiance).toEqual(report.initial.settings);

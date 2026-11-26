@@ -67,7 +67,7 @@ export async function verifyEffectShapeKeys(page, app, testInfo, effectId, selec
   };
   const saved = testInfo.outputPath("shape-project.json");
   await app.evaluate(({ dialog }, filePath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath }); }, saved);
-  await menu("file.saveProject");
+  await menu("file.saveProjectAs");
   await expect.poll(() => existsSync(saved)).toBe(true);
   const expected = await track();
   await app.evaluate(({ dialog }, filePath) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] }); }, saved);

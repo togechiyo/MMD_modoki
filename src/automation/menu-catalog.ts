@@ -20,6 +20,7 @@ export const menuItems: readonly MenuItem[] = [
         { kind: "loadAsset", assetKind: name[0].toLowerCase() + name.slice(1) }, "filePath必須。モデルモーションは対象modelInstanceIdも指定。")),
     operation("file.newProjectWindow", { kind: "newProjectWindow" }, "新ウィンドウのMCPはOFF。ユーザーが有効化するまで公開しない。"),
     operation("file.loadProject", { kind: "loadProject" }), operation("file.saveProject", { kind: "saveProject" }),
+    operation("file.saveProjectAs", { kind: "saveProject" }, "保存先のfilePathとoverwriteを指定する。"),
     ...(["ModelVmd", "ModelBvmd", "CameraVmd", "CameraBvmd", "ModelVpd"] as const).map(name => operation("file.export" + name,
         { kind: "exportMotion", format: name.replace(/^(Model|Camera)/, "").toLowerCase(), scope: { kind: name.startsWith("Model") ? "model" : "camera" } },
         "filePath・overwrite、モデルならscope.modelInstanceIdを指定。VPDは選択ボーン。")),

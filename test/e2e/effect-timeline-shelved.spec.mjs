@@ -71,7 +71,7 @@ test("shelved effect keys stay hidden and inert while static effects and saved d
     expect((await state()).keyframes.effectAnimations).toEqual(archived);
     const savedPath = testInfo.outputPath("saved-project.json");
     await launched.app.evaluate(({ dialog }, path) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: path }); }, savedPath);
-    await menu("file.saveProject");
+    await menu("file.saveProjectAs");
     await expect.poll(() => existsSync(savedPath)).toBe(true);
     expect(JSON.parse(readFileSync(savedPath, "utf8")).keyframes.effectAnimations).toEqual(archived);
     for (const backend of ["classic", "frameGraph"]) {

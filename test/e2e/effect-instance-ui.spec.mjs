@@ -45,7 +45,7 @@ test("automatic effect names and shared stack UI at narrow width", async ({}, te
     await expect(page.locator('[data-instance-action="keyEdit"], [data-instance-action="duplicate"], [data-instance-action="suspend"]')).toHaveCount(0);
     expect(await effectRows()).toEqual([]);
     await expect(page.locator("#effect-key-controls")).toHaveCount(0);
-    await expect(row(b).locator(".effect-layer-name")).toHaveText("接触陰影 (SSAO) 2");
+    await expect(row(b).locator(".effect-layer-name")).toHaveText("SSAO 2");
     await expect(row(b).locator(".effect-layer-details")).toBeVisible();
     await expect(row(a).locator(".effect-layer-details")).toBeHidden();
     await expect.poll(() => row(b).evaluate(element => [...element.querySelectorAll('.effect-instance-actions button')].every(button => button.scrollWidth <= button.clientWidth))).toBe(true);

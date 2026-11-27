@@ -10603,7 +10603,8 @@ ${beforeFogAppendBlock}
     }
 
     get hasReachedRuntimeEnd(): boolean {
-        return this._isPlaying && !this.manualPlaybackWithoutAudio && !this.mmdRuntime.isAnimationPlaying
+        return !this.manualPlaybackWithoutAudio && !this.mmdRuntime.isAnimationPlaying
+            && this._currentFrame === Math.floor(this.mmdRuntime.animationFrameTimeDuration)
             && this.mmdRuntime.currentFrameTime >= this.mmdRuntime.animationFrameTimeDuration;
     }
 

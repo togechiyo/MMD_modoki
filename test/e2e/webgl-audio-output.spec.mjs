@@ -167,6 +167,12 @@ test("WebGL2 GUI WebM export preserves video timing and a 440 Hz audio track", a
     await expect(play).toHaveAccessibleName(/一時停止|Pause/);
     await expect(page.locator("#current-frame")).toHaveValue("30");
     await expect(play).toHaveAccessibleName(/^(再生|Play)$/);
+    await play.click();
+    await expect.poll(async () => {
+      const frame = Number(await frameInput.inputValue());
+      return frame > 0 && frame < 30;
+    }).toBe(true);
+    await expect(play).toHaveAccessibleName(/^(再生|Play)$/);
     await menu("file.webmExportSettings");
     const dialog = page.locator('[data-popup-id="webm-export"]');
     await expect(dialog).toBeVisible();

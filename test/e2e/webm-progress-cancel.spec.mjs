@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchMmdModoki } from "./electron-app.mjs";
@@ -58,7 +58,27 @@ test("V022-051: WebM progress shows rate and ETA, cancels safely, and permits re
     await expect(page.locator("#ui-busy-overlay")).toHaveClass(/hidden/);
     await expect.poll(() => existsSync(canceledPath), { timeout: 10_000 }).toBe(false);
 
-    const retryPath = resolve(launched.tempDir, "retry_after_cancel.webm");
+    const interruptedPath = resolve(launched.tempDir, "interrupted.webm");
+    const original = Buffer.from("previous export");
+    writeFileSync(interruptedPath, original);
+    const interrupted = await page.evaluate(({ project, outputFilePath }) => window.electronAPI.startWebmExportWindow({
+      project, outputFilePath, startFrame: 0, endFrame: 8000, fps: 30, outputWidth: 320,
+      outputHeight: 180, includeAudio: false, preferredVideoCodec: "vp8", captureMode: "rgba-surface",
+    }), { project, outputFilePath: interruptedPath });
+    expect(interrupted?.jobId).toBeTruthy();
+    await expect.poll(async () => Number(await page.locator("#ui-busy-progress").getAttribute("aria-valuenow")), { timeout: 45_000 })
+      .toBeGreaterThan(0);
+    await launched.app.evaluate(({ BrowserWindow }, jobId) => {
+      const exporter = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes(jobId));
+      if (!exporter) throw new Error("Export window missing");
+      exporter.destroy();
+    }, interrupted.jobId);
+    await expect(page.locator("#status-text")).toHaveText(/WebM出力に失敗|WebM export failed/i);
+    await expect(page.locator("#app")).not.toHaveClass(/ui-export-lock/);
+    expect(readFileSync(interruptedPath)).toEqual(original);
+    expect(readdirSync(launched.tempDir).filter(name => name.startsWith(".mmd-webm-"))).toEqual([]);
+
+    const retryPath = interruptedPath;
     const retry = await page.evaluate(async ({ requestProject, outputFilePath }) => (
       window.electronAPI.startWebmExportWindow({
         project: requestProject,

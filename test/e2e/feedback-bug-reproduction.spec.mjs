@@ -10,7 +10,7 @@ import { createMorphVmd, createSwatchBmp } from "../fixtures/feedback-reproducti
 test.skip(process.env.MMD_MODOKI_FEEDBACK_REPRO !== "1", "Explicit feedback reproduction run only");
 const root = resolve(import.meta.dirname, "../..");
 const fixture = name => resolve(root, "test/fixtures/external-parent", `${name}.pmx`);
-const output = resolve(root, "artifacts/e2e/feedback-reproduction-2026-10-19");
+const output = resolve(root, process.env.MMD_FEEDBACK_REPORT_DIR ?? "artifacts/e2e/feedback-reproduction-2026-10-19");
 const screenshotStyle = "#viewport-overlay, .toast { visibility: hidden !important; }";
 
 function unpack(value) {

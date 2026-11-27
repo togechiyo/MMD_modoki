@@ -200,6 +200,7 @@ export class ExportUiController {
     private pngSequenceExportProgressUnsubscribe: (() => void) | null = null;
     private webmExportStateUnsubscribe: (() => void) | null = null;
     private webmExportProgressUnsubscribe: (() => void) | null = null;
+    private webmExportResultUnsubscribe: (() => void) | null = null;
     private isPngSequenceExportActive = false;
     private pngSequenceExportActiveCount = 0;
     private latestPngSequenceExportProgress: PngSequenceExportProgress | null = null;
@@ -268,6 +269,8 @@ export class ExportUiController {
         this.webmExportStateUnsubscribe = null;
         this.webmExportProgressUnsubscribe?.();
         this.webmExportProgressUnsubscribe = null;
+        this.webmExportResultUnsubscribe?.();
+        this.webmExportResultUnsubscribe = null;
         this.elements.busyCancel?.removeEventListener("click", this.onWebmCancelClick);
         if (this.backgroundExportMonitorIntervalId !== null) {
             window.clearInterval(this.backgroundExportMonitorIntervalId);
@@ -727,6 +730,7 @@ export class ExportUiController {
             return;
         }
 
+        if (result.finishedDuringLaunch) return result;
         logInfo("webm", "export launch completed", {
             jobId: result.jobId,
             totalOutputFrames,
@@ -1121,6 +1125,14 @@ export class ExportUiController {
         this.webmExportProgressUnsubscribe?.();
         this.webmExportProgressUnsubscribe = window.electronAPI.onWebmExportProgress((progress) => {
             this.applyWebmExportProgress(progress);
+        });
+        this.webmExportResultUnsubscribe?.();
+        this.webmExportResultUnsubscribe = window.electronAPI.onWebmExportResult(result => {
+            if (result.status !== "failed") return;
+            const message = () => t("export.failed", { format: "WebM" });
+            this.setLocalizedStatus(message);
+            this.showToast(message(), "error");
+            logError("webm", "export failed", { jobId: result.jobId, errorCode: result.errorCode, failure: result.failure });
         });
     }
 

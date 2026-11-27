@@ -265,7 +265,7 @@
     "timeline.keyDock.physicsToggle":  "Physics",
     "timeline.keyDock.auto":  "Auto",
     "viewport.empty.title":  "Load a file or drag and drop",
-    "viewport.empty.hint":  "Use toolbar \u0027Load File\u0027 or drag and drop a file into the window",
+    "viewport.empty.hint":  "Choose File → Open File, or drop a file into the window",
     "viewport.modelComment.title": "Model information: {name}",
     "viewport.modelComment.close": "Close",
     "viewport.modelComment.unnamed": "Unnamed model",

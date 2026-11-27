@@ -265,7 +265,7 @@
     "timeline.keyDock.physicsToggle":  "物理",
     "timeline.keyDock.auto":  "Auto",
     "viewport.empty.title":  "ファイル読込 か ドラッグ\u0026ドロップしてください",
-    "viewport.empty.hint":  "ツールバーの「ファイル読込」ボタン、またはウィンドウへドラッグ\u0026ドロップ",
+    "viewport.empty.hint":  "「ファイル」→「ファイル読込」を選ぶか、ウィンドウにファイルをドロップしてください",
     "viewport.modelComment.title": "モデル情報: {name}",
     "viewport.modelComment.close": "閉じる",
     "viewport.modelComment.unnamed": "名称未設定モデル",

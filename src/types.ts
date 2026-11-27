@@ -1145,6 +1145,7 @@ export interface ExportExternalLutAsset {
 export interface WebmExportLaunchResult {
     jobId: string;
     errorCode?: string;
+    finishedDuringLaunch?: boolean;
 }
 
 export interface WebmExportResult {

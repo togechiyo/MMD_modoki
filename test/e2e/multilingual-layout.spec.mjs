@@ -103,6 +103,7 @@ test("supported locales keep translated labels inspectable", async ({}, testInfo
       await page.locator(".toast").evaluateAll((elements) => elements.forEach((element) => element.remove()));
       await localeSelect.selectOption(locale);
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      await expect(page.locator("#shader-panel-toggle-text")).toHaveText("Effect");
 
       const clipped = await collectTranslatedTextLayout(page);
       expect(clipped, `${locale} main labels`).toEqual([]);
@@ -249,6 +250,14 @@ test("settings, export dialogs and RC lighting controls follow the toolbar langu
     await expect(status).toHaveText(dictionaries.ko["viewport.status.modelReady"]);
     await page.locator("#toolbar-locale-select").selectOption("ja");
     await expect(status).toHaveText(dictionaries.ja["viewport.status.modelReady"]);
+    // A static scene now stops at its natural end. Give the playback status a real duration.
+    await page.locator("#info-model-select").selectOption("__camera__");
+    const frame = page.locator("#current-frame");
+    await frame.fill("180");
+    await frame.press("Enter");
+    await page.locator("#btn-kf-add").click();
+    await frame.fill("0");
+    await frame.press("Enter");
     const play = page.locator("#viewport-seek-play-toggle");
     await play.click();
     await expect(status).toHaveText(dictionaries.ja["status.playing"]);

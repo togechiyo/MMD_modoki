@@ -7,6 +7,10 @@ import { AutomationError } from "../../automation/diagnostics";
 export async function prepareAutomationVideoOutput(filePath: string, overwrite: boolean, authorized: () => boolean) {
     if (!automationLocalPathSchema.safeParse(filePath).success || !path.isAbsolute(filePath) || path.extname(filePath).toLowerCase() !== ".webm" || typeof overwrite !== "boolean") throw new AutomationError("INVALID_OUTPUT");
     if (!authorized()) throw new AutomationError("ACCESS_REVOKED");
+    return prepareVideoOutput(filePath, overwrite, authorized);
+}
+
+export async function prepareVideoOutput(filePath: string, overwrite: boolean, authorized: () => boolean) {
     if (!overwrite) {
         const exists = await access(filePath).then(() => true, () => false);
         if (exists) throw new AutomationError("OUTPUT_EXISTS");

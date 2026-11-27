@@ -12976,10 +12976,13 @@ export class UIController {
     }
 
     private play(updateStatus = true): void {
-        const { startFrame } = this.getPlaybackFrameRange();
-        if (this.isPlaybackFrameStartEnabled()) {
+        const { startFrame, endFrame } = this.getPlaybackFrameRange();
+        const useStart = this.isPlaybackFrameStartEnabled();
+        const frame = this.mmdManager.currentFrame;
+        if (useStart || (frame > 0 && (frame >= endFrame || this.mmdManager.hasReachedRuntimeEnd))) {
             this.mmdManager.pause();
-            this.mmdManager.seekTo(startFrame);
+            if (useStart) this.mmdManager.seekTo(startFrame);
+            else this.mmdManager.seekToBoundary(0);
         }
         this.mmdManager.play();
         this.refreshEffectKeyframeUi();

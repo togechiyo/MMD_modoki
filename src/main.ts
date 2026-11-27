@@ -37,7 +37,7 @@ import { serializeVmd } from './export/vmd-serializer';
 import type { VpdExportDocument, VpdSaveResult } from './export/vpd-export-document';
 import { serializeVpd } from './export/vpd-serializer';
 import { installAutomationAppBridge } from './main/automation/app-bridge';
-import { prepareAutomationVideoOutput } from './main/automation/video-output';
+import { prepareAutomationVideoOutput, prepareVideoOutput } from './main/automation/video-output';
 import { prepareAutomationPngOutput, type AutomationPngOutput } from './main/automation/png-output';
 import { AutomationError, toAutomationFailure } from './automation/diagnostics';
 import type { AutomationPermission, AutomationVideoOptions } from './automation/ui-operation-schema';
@@ -2222,7 +2222,6 @@ ipcMain.handle(
         exporterFinished = webmExportTerminalByJobId.has(jobId);
         try {
           if (result.status === 'completed' && output) Object.assign(result, await output.publish());
-          else if (result.status === 'completed') result.filePath = request.outputFilePath;
           if (result.status === 'failed') {
             result.failure = webmExportFailureByJobId.get(jobId);
             result.errorCode = result.failure?.code ?? 'VIDEO_EXPORT_FAILED';
@@ -2260,8 +2259,13 @@ ipcMain.handle(
       if (automation) {
         if (event.senderFrame !== event.sender.mainFrame) throw new AutomationError('ACCESS_REVOKED');
         output = await prepareAutomationVideoOutput(request.outputFilePath, automation.overwrite, () => automationBridge.canEdit(event.sender.id, automation.permission));
-        sanitized.outputFilePath = output.temporaryPath;
+      } else {
+        // The save dialog already handles overwrite confirmation. Keep the previous video
+        // until the encoder has closed the stream and the job reports completion.
+        output = await prepareVideoOutput(sanitized.outputFilePath, true, () => true);
       }
+      const destinationPath = sanitized.outputFilePath;
+      sanitized.outputFilePath = output.temporaryPath;
 
       const ownerWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
       releaseOwnerExport = retainWebmExportOwner(ownerWindow);
@@ -2273,7 +2277,7 @@ ipcMain.handle(
       }
       writeAppLog('info', 'webm', 'starting WebM export window', {
         jobId,
-        outputFilePath: sanitized.outputFilePath,
+        outputFilePath: destinationPath,
         startFrame: sanitized.startFrame,
         endFrame: sanitized.endFrame,
         fps: sanitized.fps,
@@ -2315,7 +2319,8 @@ ipcMain.handle(
       exportWindow.on('closed', () => {
         void cleanup();
       });
-      exportWindow.webContents.on('render-process-gone', () => {
+      exportWindow.webContents.on('render-process-gone', (_event, details) => {
+        writeAppLog('error', 'webm', 'export renderer exited', { jobId, reason: details.reason, exitCode: details.exitCode });
         if (exportWindow && !exportWindow.isDestroyed()) exportWindow.close();
         void cleanup();
       });
@@ -2323,7 +2328,7 @@ ipcMain.handle(
       await loadEditorWindow(exportWindow, { mode: 'webm-exporter', jobId });
       writeAppLog('debug', 'webm', 'WebM export window loaded', { jobId });
 
-      return { jobId };
+      return { jobId, finishedDuringLaunch: Boolean(cleanupPromise) };
     } catch (err) {
       await cleanup();
       if (exportWindow && !exportWindow.isDestroyed()) {
@@ -2331,7 +2336,7 @@ ipcMain.handle(
       }
       // A fast terminal result can close the renderer before loadFile resolves.
       // Its already-delivered result, not ERR_FAILED from closing, is authoritative.
-      if (exporterFinished && jobId) return { jobId };
+      if (exporterFinished && jobId) return { jobId, finishedDuringLaunch: true };
       writeAppLog('error', 'webm', 'failed to start WebM export window', createLogErrorData(err));
       return automation ? { jobId: '', errorCode: toAutomationFailure(err).code } : null;
     }

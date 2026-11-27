@@ -30,13 +30,13 @@ describe("static PLY mesh reader", () => {
     it.each([true, false])("reads binary PLY (little endian=%s)", little => {
         expect(parsePlyMesh(binaryPly(little))).toEqual(parsePlyMesh(encode(fixture)));
     });
-    it("handles CRLF, Unicode comments and unknown scalar/list properties", () => {
-        const text = fixture.replace("CC0", "CC0 日本語")
+    it.each(["\n", "\r\n"])("handles Unicode comments and unknown properties with line ending %j", lineEnding => {
+        const text = fixture.replace(/\r\n/g, "\n").replace("CC0", "CC0 日本語")
             .replace("property uchar blue", "property uchar blue\nproperty float quality\nproperty list uchar float ignored")
             .replace("255 0 0\n", "255 0 0 1 2 4 5\n")
             .replace("0 255 0\n", "0 255 0 1 0\n")
             .replace("0 0 255\n", "0 0 255 1 1 4\n");
-        expect(parsePlyMesh(encode(text.replace(/\n/g, "\r\n")))).toEqual(parsePlyMesh(encode(fixture)));
+        expect(parsePlyMesh(encode(text.replace(/\n/g, lineEnding)))).toEqual(parsePlyMesh(encode(fixture)));
     });
     it("keeps the triangle-only API from returning point clouds", () => {
         expect(() => parsePlyMesh(encode(fixture.replace("element face 1", "element face 0")))).toThrow("Point-cloud PLY");

@@ -6,7 +6,7 @@ MMD modoki は、Babylon.js と `babylon-mmd` をベースにした、MMD 風の
 
 ## ダウンロード
 
-v0.2.4のリリース準備中です。以下はv0.2.4向けソースの説明です。変更点は[リリースノート](./docs/v0.2.4-release-note.md)、公開済みの配布物はRelease一覧を参照してください。
+以下はv0.2.5公開候補の説明です。変更点は[リリースノート](./docs/v0.2.5-release-note.md)、公開済みの配布物は[Release一覧](https://github.com/togechiyo/MMD_modoki/releases)を参照してください。
 
 - Release 一覧: https://github.com/togechiyo/MMD_modoki/releases
 - 初めて使う方: [よくある質問](./docs/faq.md)
@@ -67,7 +67,7 @@ Linux:
 - DoF、Bloom、LUT、SSR、fog、レンズ歪みなどのポストエフェクト調整
 - `AlphaCutOff` や `Luminous` を含む材質シェーダープリセットの切り替え
 - PNG 画像、連番 PNG、WebM 動画の書き出し
-- モデル / カメラVMD（β）・BVMDと選択ボーンVPDの書き出し
+- モデル・カメラのVMD・BVMDと選択ボーンVPDの書き出し
 - PMX / PMDからBPMX、VMDからBVMDへの変換
 - 設定 → 実験設定からPBR材質、外部WGSL材質、ローカルMCP連携を有効化
 
@@ -76,7 +76,7 @@ Linux:
 - `.vmd` は内容に応じてモデルモーションまたはカメラモーションとして読み込みます。
 - `.x` はテキスト形式の DirectX X ファイルを想定しています。
 - SSAOなどの高負荷エフェクトは、GPUや解像度に応じて調整してください。
-- ポストエフェクトのキー編集は開発用のオプトインに隔離しており、通常UIでは公開していません。
+- EffectパネルからFrameGraphのエフェクトごとにキーを登録できます。キーがない効果は再生中も調整できます。
 
 ## 読み込めるファイル
 

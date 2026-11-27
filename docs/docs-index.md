@@ -69,6 +69,7 @@
 
 - [macOS v0.2.5向けE2E全件実行の記録（2026年11月）](./macos-e2e-v025-full-run-record-2026-11.md)
 - [v0.2.5へ向けた棚卸し・キー登録の仕上げ・日程案 2026-11-10](./v0.2.5-release-plan-2026-11-10.md)
+- [v0.2.5 リリースノート](./v0.2.5-release-note.md)
 - [v0.2.4 リリースノート](./v0.2.4-release-note.md)
 - [v0.2.4 リリース前確認 2026-09-18](./v0.2.4-release-preflight-2026-09-18.md)
 - [Codex Agent Skills 調査・初回導入メモ 2026-08-20](./codex-agent-skills-adoption-note-2026-08-20.md)

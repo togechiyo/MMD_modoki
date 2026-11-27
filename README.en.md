@@ -6,7 +6,7 @@ It is being developed as a practical alternative for environments where the orig
 
 ## Download
 
-The v0.2.4 release is in preparation. This README describes the source prepared for v0.2.4. See the [release notes](./docs/v0.2.4-release-note.md) for changes; published downloads are listed on GitHub Releases.
+This README describes the v0.2.5 release candidate. See the [release notes](./docs/v0.2.5-release-note.md) and [published downloads](https://github.com/togechiyo/MMD_modoki/releases).
 
 - Releases: https://github.com/togechiyo/MMD_modoki/releases
 
@@ -65,7 +65,7 @@ Linux:
 - Adjust post effects such as DoF, Bloom, LUT, SSR, fog, and lens distortion
 - Use material shader presets including `AlphaCutOff` and `Luminous`
 - Export PNG images, numbered PNG sequences, and WebM videos
-- Export model/camera VMD files (beta), BVMD files, and selected-bone VPD poses
+- Export model/camera VMD files, BVMD files, and selected-bone VPD poses
 - Convert PMX/PMD models to BPMX and VMD motions to BVMD
 - Enable experimental PBR materials, external WGSL materials, and local MCP integration from Settings → Experimental settings
 
@@ -74,7 +74,7 @@ Notes:
 - `.vmd` files are routed as model motion or camera motion depending on their contents.
 - `.x` files are expected to be text-format DirectX X files.
 - Adjust expensive effects such as SSAO to suit your GPU and resolution.
-- Post-effect keyframe editing is restricted to a development opt-in and is not available in the normal UI.
+- Register keys for individual FrameGraph effects in the Effect panel. Effects without keys remain editable during playback.
 
 ## Supported File Types
 

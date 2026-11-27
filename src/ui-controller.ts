@@ -213,6 +213,8 @@ type BatchKeyframeClipboard = {
 
 type KeyframeClipboard = SingleKeyframeClipboard | BatchKeyframeClipboard;
 
+type InterpolationTrackRef = CommandTrackRef & Partial<Pick<KeyframeTrack, "frames">>;
+
 type RuntimeMovableBoneTrackLike = {
     name: string;
     frameNumbers: ArrayLike<number>;
@@ -1855,8 +1857,8 @@ export class UIController {
                 this.refreshEffectKeyframeUi();
                 this.refreshPlaybackFrameBar();
                 const { startFrame, endFrame } = this.getPlaybackFrameRange();
-                if (this.isPlaybackFrameStopEnabled() && frame >= endFrame) {
-                    this.handlePlaybackEnd(startFrame, endFrame);
+                if (this.isPlaybackFrameStopEnabled() && (frame >= endFrame || this.mmdManager.hasReachedRuntimeEnd)) {
+                    this.handlePlaybackEnd(startFrame, Math.min(frame, endFrame));
                 }
                 return;
             }
@@ -7794,7 +7796,7 @@ export class UIController {
             parentModelPath,
             parentBoneName: parentModelPath ? parentBoneName : null,
         };
-        const curves = this.captureInterpolationCurveSnapshot({ ...track, frames: new Uint32Array() }, frame);
+        const curves = this.captureInterpolationCurveSnapshot(track, frame);
         const before = this.mmdManager.readTimelineKeyframePayload(track, frame);
         const after = this.createBoneKeyframePayload(
             track,
@@ -7813,6 +7815,9 @@ export class UIController {
         const registered = executeCommand(command, "apply", this.createCommandExecutionContext({ seekToFrame: false }));
         if (!registered) return false;
 
+        const pendingPoseKey = this.getPendingBonePoseKey(childBoneName, this.getActiveModelInstanceId());
+        if (pendingPoseKey) this.pendingBonePoseSnapshots.delete(pendingPoseKey);
+        this.bottomPanel.syncSelectedBoneSlidersFromSnapshot(pose, true);
         this.commandHistory.push(command);
         this.clearRegisteredKeySelection();
         this.refreshSelectedTrackRotationOverlay();
@@ -10062,7 +10067,7 @@ export class UIController {
         this.updateInterpolationActionButtons();
     }
 
-    private buildInterpolationPreviewFromRuntime(track: KeyframeTrack, frame: number): TimelineInterpolationPreview {
+    private buildInterpolationPreviewFromRuntime(track: InterpolationTrackRef, frame: number): TimelineInterpolationPreview {
         this.interpolationChannelBindings.clear();
         if (track.category === "effect") {
             return { source: "none", frame: Math.max(0, Math.floor(frame)), hasKeyframe: this.mmdManager.hasTimelineKeyframe(track, frame), hasCurveData: false, channels: [] };
@@ -10071,10 +10076,16 @@ export class UIController {
         const managerInternal = this.mmdManager as unknown as Partial<MmdManagerInternalView>;
         const linear = this.createLinearCurve();
         const cameraFrames = managerInternal.cameraSourceAnimation?.cameraTrack?.frameNumbers;
+        const currentModel = managerInternal.currentModel ?? null;
+        const modelAnimation = currentModel && track.category !== "camera" && track.category !== "morph"
+            ? managerInternal.modelSourceAnimationsByModel?.get(currentModel)
+            : null;
+        const movableTrack = modelAnimation?.movableBoneTracks?.find(candidate => candidate.name === track.name);
+        const boneTrack = movableTrack ? null : modelAnimation?.boneTracks?.find(candidate => candidate.name === track.name);
         const previewSourceFrames =
             track.category === "camera" && cameraFrames && cameraFrames.length > 0
                 ? cameraFrames
-                : track.frames;
+                : track.frames ?? movableTrack?.frameNumbers ?? boneTrack?.frameNumbers ?? [];
         const previewFrame = this.resolveInterpolationReferenceFrame(
             previewSourceFrames,
             normalizedFrame,
@@ -10131,12 +10142,6 @@ export class UIController {
             };
         }
 
-        const currentModel = managerInternal.currentModel ?? null;
-        const modelAnimation = currentModel
-            ? managerInternal.modelSourceAnimationsByModel?.get(currentModel) ?? null
-            : null;
-
-        const movableTrack = modelAnimation?.movableBoneTracks?.find((candidate) => candidate.name === track.name) ?? null;
         if (movableTrack) {
             const keyIndex = this.findFrameIndex(movableTrack.frameNumbers, previewFrame);
             const hasCurveData = keyIndex >= 0;
@@ -10158,7 +10163,6 @@ export class UIController {
             };
         }
 
-        const boneTrack = modelAnimation?.boneTracks?.find((candidate) => candidate.name === track.name) ?? null;
         if (boneTrack) {
             const keyIndex = this.findFrameIndex(boneTrack.frameNumbers, previewFrame);
             const hasCurveData = keyIndex >= 0;
@@ -11251,11 +11255,7 @@ export class UIController {
                 const track = this.boneTrackSelectionRefToCommandTrack(selectedTrack);
                 const poseSnapshot = this.captureCurrentBonePoseSnapshot(track.name);
                 if (!poseSnapshot) return null;
-                const interpolationSnapshot = this.captureInterpolationCurveSnapshot({
-                    name: track.name,
-                    category: track.category,
-                    frames: new Uint32Array(),
-                }, frame);
+                const interpolationSnapshot = this.captureInterpolationCurveSnapshot(track, frame);
                 const after = this.createBoneKeyframePayload(track, poseSnapshot, interpolationSnapshot, physicsToggle);
                 return {
                     track,
@@ -11678,7 +11678,7 @@ export class UIController {
         );
     }
 
-    private captureInterpolationCurveSnapshot(track: KeyframeTrack, frame: number): Map<string, InterpolationCurve> {
+    private captureInterpolationCurveSnapshot(track: InterpolationTrackRef, frame: number): Map<string, InterpolationCurve> {
         const preview = this.buildInterpolationPreviewFromRuntime(track, frame);
         const snapshot = new Map<string, InterpolationCurve>();
         for (const channel of preview.channels) {

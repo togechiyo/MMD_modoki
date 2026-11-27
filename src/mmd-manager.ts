@@ -10602,6 +10602,11 @@ ${beforeFogAppendBlock}
         return this._isPlaying || this.effectPlaybackPreparation.pending;
     }
 
+    get hasReachedRuntimeEnd(): boolean {
+        return this._isPlaying && !this.manualPlaybackWithoutAudio && !this.mmdRuntime.isAnimationPlaying
+            && this.mmdRuntime.currentFrameTime >= this.mmdRuntime.animationFrameTimeDuration;
+    }
+
     get currentFrame(): number {
         return this._currentFrame;
     }

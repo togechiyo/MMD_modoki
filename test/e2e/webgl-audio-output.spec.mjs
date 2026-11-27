@@ -126,6 +126,17 @@ test("WebGL2 GUI WebM export preserves video timing and a 440 Hz audio track", a
       try { return { available: true, info: await app.getGPUInfo("basic") }; }
       catch (error) { return { available: false, reason: String(error) }; }
     });
+    await page.evaluate(async () => {
+      const project = window.mmdModokiE2e.exportProjectState();
+      const curves = Array(3).fill([20, 107, 20, 107]).flat();
+      project.keyframes.cameraAnimation = {
+        frameNumbers: [0, 10, 60], positions: [0, 2, 0, 1, 2, 0, 2, 2, 0], rotations: Array(9).fill(0),
+        distances: [-30, -30, -30], fovs: [30, 30, 30],
+        positionInterpolations: [...curves, ...curves, ...curves],
+        rotationInterpolations: curves, distanceInterpolations: curves, fovInterpolations: curves,
+      };
+      await window.mmdModokiE2e.importProjectState(project);
+    });
     expect(await page.evaluate(filePath => window.mmdModokiE2e.loadModel(filePath),
       resolve(root, "test/fixtures/external-parent/tofu.pmx"))).not.toBeNull();
 
@@ -141,6 +152,21 @@ test("WebGL2 GUI WebM export preserves video timing and a 440 Hz audio track", a
     await menu("file.openAudio");
     await expect(page.locator("#status-text")).toHaveAttribute("data-i18n", "status.audioLoaded");
     await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.exportProjectState().assets.audioPath)).toBe(audioPath);
+    await page.locator("#info-model-select").selectOption("__camera__");
+    const frameInput = page.locator("#current-frame");
+    await frameInput.fill("60");
+    await frameInput.press("Enter");
+    await page.locator('.app-menu-trigger[data-i18n="menu.edit"]').click();
+    await page.locator('[data-menu-command="edit.deleteFrameColumn"]').click();
+    await expect.poll(() => page.evaluate(() => window.mmdModokiE2e.getTimelineTracks()
+      .find(track => track.category === "camera")?.frames)).toEqual([0, 10]);
+    await frameInput.fill("0");
+    await frameInput.press("Enter");
+    const play = page.locator("#viewport-seek-play-toggle");
+    await play.click();
+    await expect(play).toHaveAccessibleName(/一時停止|Pause/);
+    await expect(page.locator("#current-frame")).toHaveValue("30");
+    await expect(play).toHaveAccessibleName(/^(再生|Play)$/);
     await menu("file.webmExportSettings");
     const dialog = page.locator('[data-popup-id="webm-export"]');
     await expect(dialog).toBeVisible();

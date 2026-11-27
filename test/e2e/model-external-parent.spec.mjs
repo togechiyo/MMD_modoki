@@ -19,6 +19,20 @@ test("豆腐モデルの外部親をフレーム単位で登録・解除でき�
       await window.mmdModokiE2e.loadModel(plate);
     }, { tofu: tofuPath, plate: platePath });
 
+    const curves = await page.evaluate(async () => {
+      const project = window.mmdModokiE2e.exportProjectState();
+      project.keyframes.modelAnimations[0].animation = {
+        name: "curved-center", boneTracks: [], morphTracks: [],
+        movableBoneTracks: [{ name: "センター", frameNumbers: [0], positions: [0, 0, 0],
+          rotations: [0, 0, 0, 1], rotationInterpolations: [8, 77, 39, 114],
+          positionInterpolations: [12, 90, 45, 118, 25, 83, 36, 111, 5, 74, 31, 109], physicsToggles: [0] }],
+        propertyTrack: { frameNumbers: [], visibles: [], ikBoneNames: [], ikStates: [] },
+      };
+      await window.mmdModokiE2e.importProjectState(project);
+      const track = window.mmdModokiE2e.exportProjectState().keyframes.modelAnimations[0].animation.movableBoneTracks[0];
+      return [track.positionInterpolations, track.rotationInterpolations];
+    });
+
     const modelSelect = page.locator("#info-model-select");
     await expect(modelSelect.locator("option")).toHaveCount(3);
 
@@ -37,6 +51,11 @@ test("豆腐モデルの外部親をフレーム単位で登録・解除でき�
     await parentModelSelect.selectOption("1");
     await expect(parentBoneSelect).toHaveValue("センター");
     await page.locator("[data-testid='model-external-parent-register']").click();
+
+    expect(await page.evaluate(() => {
+      const track = window.mmdModokiE2e.exportProjectState().keyframes.modelAnimations[0].animation.movableBoneTracks[0];
+      return [track.positionInterpolations, track.rotationInterpolations];
+    })).toEqual(curves);
 
     const registered = await page.evaluate(() => window.mmdModokiE2e.getModelExternalParent(0));
     expect(registered).toMatchObject({

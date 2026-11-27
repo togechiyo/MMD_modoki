@@ -32,7 +32,7 @@ v0.2.4後の新機能候補、以前の構想・保留項目の入口は [次バ
 - [x] 最奥の廊下壁に残るCSMの影抜けを修正。WebGPU reverse depthのprojection係数と深度復元の差で自動範囲が過小になり、最奥壁が脱落していた。該当経路のauto boundsを止め、指定ローカルPMXの初期値で影の復帰を確認。自作再現・既存影経路のE2E計15件、関連unit39件、lint、既存型診断から差分0/critical0、WebGPU smokeを確認。bias / normalBiasは固定、モデル名・元path・画像等は公開しない。11/13、所有者実機でも修正後の改善を確認（[原因・比較・対処](./csm-seam-parameters-and-official-sources-2026-11-13.md)）。
 - [ ] 公開候補で自作壁/屋根の1フレームWebMの影を再確認する。11/11には影ON/OFFが同じ画像だったが、11/21のWindows / WebGPU作業ツリーでは、近景の輝度比がPNG 0.8044、WebM 0.8065となり既存診断に合格。再現条件が戻った場合は先頭・後続フレームを比較する（[条件と比較](./csm-wall-band-investigation-2026-11-11.md#webm比較で見つかった既存の別件)）。
 - [x] 通常20個体効果と現行RC2種、互換用の旧「影の深み RC」の登録値・固定値、補間、混在キーの編集・Undo/RedoをWindows開発版で確認した。コピー元の個体削除後の一括貼り付けでRCのキーが一部だけ残る問題を修正した（[通し確認](./v0.2.5-release-plan-2026-11-10.md#2026-11-21-エフェクトキーと出力の通し確認)）。
-- [ ] 最終公開候補の代表sceneで保存/読込・再生・PNG/WebMを再確認する。11/21のWindows開発版ではキー0個のBloomとキーありのGammaを同時に保存・復元し、全体OFF/ON・Classic往復と同じframeのviewport・PNG・WebMをWebGPU／WebGL2で確認済み（[通し確認](./v0.2.5-release-plan-2026-11-10.md#2026-11-21-エフェクトキーと出力の通し確認)）。
+- [x] 11/27、公開候補 `6560d09` のWindows開発版でエフェクトキー関連の単体228件・Electron E2E 17件が成功。登録・補間・逆向きシーク・移動・削除・Undo/Redo、キー0個の再生中編集とRC混在を確認。キーありのガンマ2個とキーなしのブルームを同じファイルに保存・再読込し、WebGPU／WebGL2の両方で0・20フレームの画面と復号したWebMが各フレームのPNGに対応することを画素で確認した（[代表シーンのE2E](../test/e2e/effect-instances.spec.mjs)）。
 - [x] 中韓辞書の欠落311件を補い、RC・物理・画像／動画出力などの英語残存を翻訳した。11/24、全5辞書1,269キーの一致と、Windows開発版の5言語切替・共通画面・設定・出力を確認した。[翻訳とGUIの確認範囲](./v0.2.5-release-plan-2026-11-10.md#5言語の画面確認)
 - [ ] 開始時に残るSSAO/輪郭・PBR順等の未commit差分を検証し、公開候補への収録を整理する。無関係な差分・生成物を混ぜない。
 - [ ] v0.2.5の版情報・release note・README・known issues・台帳を整合し、最終候補のlint/unit/typecheck/critical・GPU環境のsmoke/E2Eを記録する。

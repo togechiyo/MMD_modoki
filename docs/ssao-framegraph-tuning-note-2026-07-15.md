@@ -64,6 +64,8 @@ FPS はまだ下がるが、SSAO はオプション扱いなので、現時点�
 
 ## MMD エッジとの併用
 
+追記（2026-09-08）: 以下は当時の暫定制限の記録。FrameGraphのgeometry passにMMD outline除外guardを適用し、FrameGraph SSAOとの排他は解除した。[修正と確認結果](./framegraph-outline-audit-2026-09-07.md#ssaoの両立対応2026-09-08)を参照。Classic側の既存guardは維持する。
+
 FrameGraph の他の多くのエフェクトは、既に描画済みの scene color に対する後処理である。
 
 一方、SSAO は `viewDepth` と `viewNormal` を必要とするため、`FrameGraphGeometryRendererTask` でシーンをもう一度描いて深度/法線を作る。
@@ -96,4 +98,3 @@ v0.2.1 前の暫定対応として、MMD エッジと FrameGraph SSAO は同時 
 - `npm.cmd run lint`
 - `npm.cmd run test:unit -- src\shared\frame-graph-post-effect-stack.test.ts src\project\project-importer.test.ts src\project\project-serializer.test.ts`
 - `npm.cmd run typecheck:critical`
-

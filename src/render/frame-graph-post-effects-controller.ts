@@ -2422,7 +2422,7 @@ export class FrameGraphPostEffectsController {
             // depth/normal capture free of outlines without changing model edges.
             const keyedSsao = (initialSettings.ssaoPrepared === true && resourcePlan.activeEffects.includes("ssao"))
                 || initialSettings.effectInstances?.some(instance => instanceNeedsViewDepth(instance.type));
-            if (resourcePlan.needsLuminousRadiance || keyedSsao || resourcePlan.activeEffects.some(id => id === "ssgi" || id === "ssr")) {
+            if (resourcePlan.needsLuminousRadiance || keyedSsao || resourcePlan.activeEffects.some(id => id === "ssao" || id === "ssgi" || id === "ssr")) {
                 // Babylon's enableOutlineRendering controls its own mesh outlines,
                 // not babylon-mmd's material-based after-mesh stage. Guard this
                 // task instance only, preserving its rendering order and cleanup.

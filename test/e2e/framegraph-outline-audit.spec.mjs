@@ -34,7 +34,7 @@ function compare(aPath, bPath) {
   }
   return { changed, black, pixels: a.width * a.height };
 }
-for (const id of (regression ? ["ssgi", "ssr"] : detail ? ["motionBlur", "aerialPerspective", "distortion", "edgeBlur", "offsetShadow", "offsetHighlight"] : ids)) test(`FrameGraph outline compatibility audit: ${id}`, async () => {
+for (const id of (regression ? ["ssao", "ssgi", "ssr"] : detail ? ["motionBlur", "aerialPerspective", "distortion", "edgeBlur", "offsetShadow", "offsetHighlight"] : ids)) test(`FrameGraph outline compatibility audit: ${id}`, async () => {
   test.skip(!existsSync(model), "Repository fixture not installed");
   const output = resolve(root, regression ? "local-references/framegraph-outline-fixed-2026-09-07" : detail ? "local-references/framegraph-outline-detail-2026-09-07" : "local-references/framegraph-outline-audit-2026-09-07", id);
   mkdirSync(output, { recursive: true });
@@ -107,6 +107,8 @@ for (const id of (regression ? ["ssgi", "ssr"] : detail ? ["motionBlur", "aerial
     report.exportPath = exported.path;
     report.exportValidation = await page.evaluate(() => window.mmdModokiE2e.getWebGpuValidationDiagnostics());
     if (regression) {
+      expect(report.states["effect-added-after-edge"].effects.modelEdgeWidth).toBe(1);
+      expect(report.states["effect-added-after-edge"].toggles).toContainEqual({ id, checked: true });
       expect(report.exportValidation.count).toBe(0);
       expect(report.errors).toEqual([]);
       expect(report.states["effect-edge-on"].effects.modelEdgeWidth).toBe(1);
@@ -123,6 +125,27 @@ for (const id of (regression ? ["ssgi", "ssr"] : detail ? ["motionBlur", "aerial
       await edge(page, 100);
       await effectStackToggle(page, id).uncheck(); await settle(page);
       await effectStackToggle(page, id).check(); await capture("reenabled");
+      if (id === "ssao") {
+        const saved = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
+        await edge(page, 0);
+        await effectStackToggle(page, "ssao").uncheck();
+        await page.evaluate(async state => window.mmdModokiE2e.importProjectState(state), saved);
+        // The manager-only import hook does not refresh the open UI panel.
+        await page.locator('[data-effect-tab="materials"]').click();
+        await page.locator('[data-effect-tab="post"]').click();
+        await capture("project-restored");
+        expect(report.states["project-restored"].effects.modelEdgeWidth).toBe(1);
+        expect(report.states["project-restored"].toggles).toContainEqual({ id, checked: true });
+        for (const extra of ["ssgi", "ssr"]) {
+          await page.locator("#btn-effect-add-post").click();
+          await page.locator(`[data-effect-add-post="${extra}"]`).click();
+        }
+        await capture("ssao-ssgi-ssr");
+        for (const effect of ["ssao", "ssgi", "ssr"]) {
+          expect(report.states["ssao-ssgi-ssr"].toggles).toContainEqual({ id: effect, checked: true });
+        }
+        expect(report.states["ssao-ssgi-ssr"].effects.modelEdgeWidth).toBe(1);
+      }
       if (id === "ssr") {
         await page.locator("#btn-effect-add-post").click();
         await page.locator('[data-effect-add-post="ssgi"]').click();

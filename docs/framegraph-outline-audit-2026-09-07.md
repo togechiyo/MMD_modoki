@@ -4,7 +4,7 @@
 
 以下は修正前の調査結果。後続の所有者依頼によるSSGI / SSRの修正・再検証は末尾に記載する。
 
-**SSGI / SSRはエッジ併用で黒画面。SSAOはUI操作によって相互排他になる。** その他は今回のfixtureで画面・PNG出力が完走したが、モーションブラーは移動時の輪郭品質に確認点が残る。
+**初回調査ではSSGI / SSRはエッジ併用で黒画面、SSAOはUI操作によって相互排他だった。** 後述の修正でFrameGraphの3種類ともエッジ併用を確認済み。その他は今回のfixtureで画面・PNG出力が完走したが、モーションブラーは移動時の輪郭品質に確認点が残る。
 
 修正は行っていない。追加物は調査用E2E、fixtureを移動させるtest helper、この報告と索引のみ。
 
@@ -116,4 +116,20 @@ $env:MMD_FRAMEGRAPH_OUTLINE_FIXED = '1'
 npm.cmd run test:e2e -- framegraph-outline-audit.spec.mjs
 ```
 
-このモードはSSGI / SSRに絞り、GPUエラー、エッジ状態、画像差分、PNG、再有効化・同時使用をassertする。証拠は `local-references/framegraph-outline-fixed-2026-09-07/`。配布fixtureによる確認であり、透明な実モデルや動画出力は未確認。
+このモードは現在SSAO / SSGI / SSRに絞り、GPUエラー、エッジ状態、画像差分、PNG、再有効化・同時使用をassertする。証拠は `local-references/framegraph-outline-fixed-2026-09-07/`。配布fixtureによる確認であり、透明な実モデルや動画出力は未確認。
+
+## SSAOの両立対応（2026-09-08）
+
+SSGI / SSR用のgeometry capture guardをSSAOにも適用した。深度・法線へのMMD outline混入を防ぎ、通常のscene colorにはエッジを残す。SSAO追加時のエッジ幅リセットと、エッジ変更時のSSAO無効化を撤去。従来のSSAO enabled setterもFrameGraph時はエッジ幅を保持する。Classicは今回の検証対象外なので、そのsetterの既存guardは維持した。AOの強度・半径・合成式は変更していない。
+
+配布fixture `test/fixtures/external-parent/tofu.pmx` をローカルPlaywright Electron / WebGPUで確認:
+
+- エッジを先にON、SSAOを先にONの両順序で、SSAO有効とエッジ幅100%を維持。
+- viewportと1152×648 PNGでエッジON/OFF差分あり、黒画面なし。viewportのエッジ差分は1,456画素。画像を目視確認した。fixtureの細い輪郭には従来からの点状表示があり、線品質全般の改善を意味しない。
+- SSAO ON/OFFによる画像差分も確認（78,372画素）。エッジOFFへ戻すと元画像へ復帰。
+- SSAOのOFF/ON再構築、project stateのexport/import後も両立。manager-only import hookはパネル更新を行わないため、材質タブへ切り替えてUI更新後にチェック表示を検証した。OSファイルダイアログを含む保存読込操作は未試験。
+- SSAO＋SSGI＋SSR＋エッジの同時有効化を確認。全工程のWebGPU validation error 0件。
+- SSAOの最終E2E 1件成功（19.1秒）。同じguard変更下でSSGI / SSRの既存回帰2件も成功。
+- lint成功、guard unit 2件成功。typecheck:critical成功、全体型検査の既存エラーは残る。
+
+初回E2Eの保存復元チェックは、復元されたruntime状態と更新前のUI表示が異なり失敗した。上記のUI更新をテストに加えた後は成功。透明な実モデル、複雑な遮蔽、動画出力、Classicとのbackend切替は未確認。

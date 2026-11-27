@@ -12388,10 +12388,6 @@ ${beforeFogAppendBlock}
             return;
         }
         const next = Boolean(enabled);
-        if (id === "ssao" && next && this.modelEdgeWidthValue > 0.0001) {
-            this.modelEdgeWidthValue = 0;
-            this.applyModelEdgeToAllModels();
-        }
         if (!this.getFrameGraphPostEffectStackIds().includes(id)) {
             this.setFrameGraphPostEffectStackIds(addFrameGraphPostEffectId(this.getFrameGraphPostEffectStackIds(), id));
         }
@@ -12979,7 +12975,8 @@ ${beforeFogAppendBlock}
     set postEffectSsaoEnabled(v: boolean) {
         if (this.effectSceneTracks.has("ssao")) { this.setEffectScenePreview("ssao", { ...this.captureCurrentEffectKeyframePayload("ssao").value, enabled: v }); return; }
         this.postEffectSsaoEnabledValue = Boolean(v);
-        if (this.postEffectSsaoEnabledValue && this.modelEdgeWidthValue > 0.0001) {
+        // The capture guard belongs to FrameGraph; preserve the legacy backend guard.
+        if (this.postEffectBackend !== "frameGraph" && this.postEffectSsaoEnabledValue && this.modelEdgeWidthValue > 0.0001) {
             this.modelEdgeWidthValue = 0;
             this.applyModelEdgeToAllModels();
         }
@@ -14148,10 +14145,6 @@ ${beforeFogAppendBlock}
     }
     set modelEdgeWidth(v: number) {
         this.modelEdgeWidthValue = Math.max(0, Math.min(2, v));
-        if (this.modelEdgeWidthValue > 0.0001 && this.isFrameGraphPostEffectActive("ssao")) {
-            this.frameGraphPostEffectStackEnabledValue.set("ssao", false);
-            this.refreshFrameGraphPostEffectsBackendForStackStateChange();
-        }
         this.applyModelEdgeToAllModels();
     }
 

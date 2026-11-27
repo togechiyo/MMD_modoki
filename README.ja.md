@@ -6,7 +6,7 @@ MMD modoki は、Babylon.js と `babylon-mmd` をベースにした、MMD 風の
 
 ## ダウンロード
 
-以下はv0.2.5公開候補の説明です。変更点は[リリースノート](./docs/v0.2.5-release-note.md)、公開済みの配布物は[Release一覧](https://github.com/togechiyo/MMD_modoki/releases)を参照してください。
+v0.2.5では、エフェクトごとにタイムラインでキーを打てます。[リリースノート](./docs/v0.2.5-release-note.md)・[v0.2.5のダウンロード](https://github.com/togechiyo/MMD_modoki/releases/tag/v0.2.5)
 
 - Release 一覧: https://github.com/togechiyo/MMD_modoki/releases
 - 初めて使う方: [よくある質問](./docs/faq.md)
@@ -40,7 +40,7 @@ Windows:
 macOS:
 
 - `MMD modoki.app`
-- 現在の開発版はElectron更新に伴い **macOS 13 Ventura以降** が必要です。次回配布版から適用され、公開済みv0.2.4の要件は変更しません。
+- v0.2.5の動作には **macOS 13 Ventura以降** が必要です。
 
 Linux:
 

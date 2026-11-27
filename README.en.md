@@ -6,7 +6,7 @@ It is being developed as a practical alternative for environments where the orig
 
 ## Download
 
-This README describes the v0.2.5 release candidate. See the [release notes](./docs/v0.2.5-release-note.md) and [published downloads](https://github.com/togechiyo/MMD_modoki/releases).
+In v0.2.5, you can keyframe individual effects on the timeline. See the [release notes](./docs/v0.2.5-release-note.md) and [v0.2.5 downloads](https://github.com/togechiyo/MMD_modoki/releases/tag/v0.2.5).
 
 - Releases: https://github.com/togechiyo/MMD_modoki/releases
 
@@ -38,7 +38,7 @@ Windows:
 macOS:
 
 - `MMD modoki.app`
-- The current development build requires **macOS 13 Ventura or later** after the Electron upgrade. This applies to the next release; requirements for the published v0.2.4 build are unchanged.
+- v0.2.5 requires **macOS 13 Ventura or later**.
 
 Linux:
 

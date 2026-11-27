@@ -2,7 +2,7 @@
 
 MMD modoki is a local editing tool inspired by MMD, built on Babylon.js and `babylon-mmd`.
 
-The v0.2.5 release candidate adds timeline keys for individual effects. See the [release notes](./docs/v0.2.5-release-note.md) and [published downloads](https://github.com/togechiyo/MMD_modoki/releases).
+v0.2.5 adds timeline keys for individual effects. See the [release notes](./docs/v0.2.5-release-note.md) and [v0.2.5 downloads](https://github.com/togechiyo/MMD_modoki/releases/tag/v0.2.5).
 
 The current source can:
 

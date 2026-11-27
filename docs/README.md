@@ -20,7 +20,7 @@
 ## どこに書くか
 
 - 利用者向けのよくある質問: [faq.md](./faq.md)
-- [v0.2.5 リリースノート](./v0.2.5-release-note.md)
+- v0.2.5の変更点と配布物は[リリースノート](./v0.2.5-release-note.md)・[ダウンロード](https://github.com/togechiyo/MMD_modoki/releases/tag/v0.2.5)を参照してください。
 - 公開済みv0.2.4のリリースノート: [v0.2.4-release-note.md](./v0.2.4-release-note.md)
 - v0.2.4公開前の確認記録: [v0.2.4-release-preflight-2026-09-18.md](./v0.2.4-release-preflight-2026-09-18.md)
 - 公開後の報告・対応の入口: [v0.2.4-post-release-ledger.md](./v0.2.4-post-release-ledger.md)

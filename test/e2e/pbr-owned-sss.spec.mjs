@@ -38,7 +38,9 @@ for (const backend of ["classic", "frameGraph"]) test(`PBR owned SSS ${backend}`
     await page.locator('[data-effect-tab="materials"]').click();
     expect(await page.locator('#shader-preset-select option[value="pbr-skin-sss"]').count()).toBe(0);
     await expect(page.locator("#shader-preset-select")).toHaveValue("pbr-mmd-like");
-    await expect(page.locator("#shader-preset-select option").last()).toHaveAttribute("value", "pbr-base");
+    await expect(page.locator("#shader-preset-select option").nth(1)).toHaveAttribute("value", "pbr-base");
+    await expect(page.locator("#shader-preset-select option").nth(2)).toHaveAttribute("value", "pbr-no-shadow");
+    await expect(page.locator("#shader-preset-select option").last()).toHaveAttribute("value", "pbr-clay-white");
     const initial = await page.evaluate(() => window.mmdModokiE2e.exportProjectState());
     expect(initial.scene.models[0].materialShaders.every(entry => entry.presetId === "pbr-mmd-like")).toBe(true);
     const settle = async () => {

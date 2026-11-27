@@ -89,6 +89,16 @@ function createPbrPresetCatalog(): Array<{ id: string; label: string; descriptio
             description: t("shader.pbrMaterial.mmdLikeDescription"),
         },
         {
+            id: "pbr-base",
+            label: t("shader.pbrPreset.standard"),
+            description: t("shader.pbrMaterial.baseDescription"),
+        },
+        {
+            id: "pbr-no-shadow",
+            label: t("shader.pbrPreset.noShadow"),
+            description: t("shader.pbrMaterial.noShadowDescription"),
+        },
+        {
             id: "pbr-skin",
             label: t("shader.pbrPreset.skin"),
             description: t("shader.pbrMaterial.skinDescription"),
@@ -103,22 +113,11 @@ function createPbrPresetCatalog(): Array<{ id: string; label: string; descriptio
             label: t("shader.pbrPreset.wax"),
             description: t("shader.pbrMaterial.waxDescription"),
         },
-        {
-            id: "pbr-no-shadow",
-            label: t("shader.pbrPreset.noShadow"),
-            description: t("shader.pbrMaterial.noShadowDescription"),
-        },
-        {
-            id: "pbr-base",
-            label: t("shader.pbrPreset.standard"),
-            description: t("shader.pbrMaterial.baseDescription"),
-        },
     ];
-    presets.splice(presets.length - 1, 0, ...[
+    presets.push(...[
         ["pbr-metal-polished", "Metal Polished"],
         ["pbr-metal-satin", "Metal Satin"],
         ["pbr-plastic-glossy", "Plastic Glossy"],
-        ["pbr-clay-white", "Clay White"],
         ["pbr-cotton", "Cotton"],
         ["pbr-satin", "Satin"],
         ["pbr-velvet", "Velvet"],
@@ -128,6 +127,11 @@ function createPbrPresetCatalog(): Array<{ id: string; label: string; descriptio
         ["pbr-candy-coat", "Candy Coat"],
         ["pbr-aurora", "Aurora"],
     ].map(([id, label]) => ({ id, label, description: t(`shader.pbrMaterial.${id}Description`) })));
+    presets.push({
+        id: "pbr-clay-white",
+        label: "Clay White",
+        description: t("shader.pbrMaterial.pbr-clay-whiteDescription"),
+    });
     return presets;
 }
 
